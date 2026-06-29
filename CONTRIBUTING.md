@@ -1,10 +1,8 @@
 # Contributing to AION Agent
 
-Thank you for contributing. This is the **only** active repository:
+Thank you for contributing. This is the active repository:
 
 `https://github.com/AION-by-ASA-Computer/AION_Agent`
-
-The private **AION_Agent_V1** repo is a frozen archive (pre-cutover history). Do not push or open PRs there.
 
 ## Prerequisites
 
