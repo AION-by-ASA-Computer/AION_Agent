@@ -22,7 +22,7 @@ jobs:
           submodules: false
 
       - name: Install actionlint
-        run: bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) v1.7.7
+        run: bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.7
 
       - name: Lint GitHub Actions workflows
         run: ./actionlint -color
@@ -38,4 +38,18 @@ jobs:
           submodules: false
 
       - name: Check spelling
-        uses: crate-ci/typos@v1.34.0
+        uses: crate-ci/typos@v1.47.2
+        with:
+          files: |
+            ./README.md
+            ./CONTRIBUTING.md
+            ./SECURITY.md
+            ./CHANGELOG.md
+            ./NOTICE
+            ./AGENTS.md
+            ./docs/opensource
+            ./.github/workflows
+            ./.github/dependabot.yml
+            ./.github/BRANCH_PROTECTION.md
+            ./.github/pull_request_template.md
+            ./security-insights.yml
