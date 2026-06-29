@@ -2,32 +2,46 @@
 
 Target: **`main`** on [AION-by-ASA-Computer/AION_Agent](https://github.com/AION-by-ASA-Computer/AION_Agent).
 
+CI runs on **GitHub-hosted runners** (`ubuntu-latest`) — no self-hosted runner required.
+
+## Prerequisites
+
+1. At least one **green CI run** on `main` (so job names exist for required checks).
+2. Repository secret **`GITLEAKS_LICENSE`** — same as the previous setup; required by `gitleaks/gitleaks-action@v2`.
+   - **Settings → Secrets and variables → Actions → New repository secret**
+   - Name: `GITLEAKS_LICENSE`
+   - Value: license from [gitleaks.io](https://gitleaks.io)
+
 ## Required settings (GitHub UI)
 
-**Settings → Branches → Branch protection rules → `main`**
+**Settings → Branches → Branch protection rules → Add rule → Branch name pattern: `main`**
 
 | Setting | Value |
 |---------|-------|
 | Require a pull request before merging | On |
 | Required approvals | 1 |
 | Dismiss stale approvals | On |
-| Require status checks | On |
-| Require branch up to date | On |
+| Require status checks to pass | On |
+| Require branches to be up to date before merging | On |
 | Required checks | See below |
-| Require conversation resolution | On |
+| Require conversation resolution before merging | On |
+| Do not allow bypassing the above settings | On (recommended) |
 | Restrict force pushes | On |
-| Include administrators | Off (recommended) |
+| Allow force pushes | Off |
+| Allow deletions | Off |
 
 ### Required status checks
 
-Enable after the first green CI run on `main`:
+Add these **job names** exactly as shown in the Actions tab (after a green run):
 
 - `Backend Linting and Testing`
 - `Frontend Packages Build`
 - `Security Vulnerability Scanning`
 - `Test Docker Builds`
 
-## CLI setup (maintainers)
+## CLI setup (maintainers with admin access)
+
+Run once after CI has passed at least once on `main`:
 
 ```bash
 gh api \
@@ -44,6 +58,13 @@ gh api \
   -f restrictions=null
 ```
 
-## Archive repo (AION_Agent_V1)
+If the API returns `404`, enable branch protection via the UI first, or confirm you have admin rights on the repository.
 
-No branch protection changes needed — repository is read-only archive. Do not push new work there.
+## Workflow after protection is enabled
+
+1. Branch from `main`: `git checkout -b feature/my-change`
+2. Push and open a PR to `main`
+3. Wait for all four CI jobs to pass
+4. Get one approval, merge via squash or merge commit
+
+Direct pushes to `main` are blocked once protection is active.

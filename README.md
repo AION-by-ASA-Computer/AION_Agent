@@ -4,8 +4,68 @@ Self-hosted AI agent platform with MCP tool integration, multi-level memory (STM
 YAML profiles, skills, and Plan Mode for structured multi-step work.
 
 [![CI](https://github.com/AION-by-ASA-Computer/AION_Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AION-by-ASA-Computer/AION_Agent/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Haystack](https://img.shields.io/badge/Haystack-Agent-FFBE00)](https://haystack.deepset.ai/)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js&logoColor=white)](https://nextjs.org/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![Redis](https://img.shields.io/badge/Redis-optional-DC382D?logo=redis&logoColor=white)](https://redis.io/)
+[![SQLite](https://img.shields.io/badge/SQLite-FTS5-003B57?logo=sqlite&logoColor=white)](https://www.sqlite.org/)
+[![MCP](https://img.shields.io/badge/MCP-stdio%2FSSE-8B5CF6)](docs/mcp/)
+[![Caddy](https://img.shields.io/badge/Caddy-reverse%20proxy-1F88C0)](https://caddyserver.com/)
 
-**Commercial site:** [https://aion-asa.com](https://aion-asa.com) · **Italian README:** [README.it.md](README.it.md)
+**Commercial site:** [https://aion-asa.com](https://aion-asa.com) · **Italian README:** [README.it.md](README.it.md) · **Docs:** [docs/](docs/)
+
+## Quick start (Docker)
+
+The recommended way to run AION is the full Docker stack (Caddy + backend + chat-ui + admin-ui + docs + Redis).
+
+### Local (HTTP, no domain)
+
+```bash
+git clone https://github.com/AION-by-ASA-Computer/AION_Agent.git
+cd AION_Agent
+
+cp .env.example .env
+# Required: set your LLM endpoint (see DEPLOY DOCKER section in .env.example)
+#   AION_API_URL=http://host.docker.internal:11434/v1   # Ollama on the host
+#   AION_MODEL=llama3.2
+#   DOMAIN=:80
+
+./scripts/setup-aion-env.sh --docker
+docker compose up -d --build
+```
+
+| URL | Service |
+|-----|---------|
+| http://localhost/ | Chat UI |
+| http://localhost/admin | Admin UI |
+| http://localhost/docs/ | Documentation |
+| http://localhost/api/health | Backend health |
+
+### Production (HTTPS via Let's Encrypt)
+
+```bash
+cp .env.example .env
+# Set DOMAIN=your.example.com, LETS_ENCRYPT_EMAIL, AION_PUBLIC_API_URL, secrets
+./scripts/setup-aion-env.sh --docker
+docker compose up -d --build
+```
+
+Caddy provisions TLS automatically. One DNS `A` record pointing at the server is enough.
+
+Details: [docs/deployment/docker.md](docs/deployment/docker.md)
+
+### Development compose (hot reload)
+
+API + chat-ui + Redis only — run admin-ui and docs via `pnpm dev` when needed:
+
+```bash
+docker compose -f docker-compose.dev.yml up
+```
 
 ## Features
 
@@ -19,99 +79,17 @@ YAML profiles, skills, and Plan Mode for structured multi-step work.
 | **Plan Mode** | Tool-first plans, human approval, background execution |
 | **Docker** | Production stack with Caddy path routing; dev compose with hot reload |
 
-## Prerequisites
+## Default credentials
 
-- **Python 3.13+**
-- **[uv](https://github.com/astral-sh/uv)** (recommended) or `venv` + `pip`
-- **[pnpm](https://pnpm.io/) 9+** (for `chat-ui`, `admin-ui`, `website`)
-- **OpenAI-compatible LLM** (Ollama, vLLM, LiteLLM, cloud API)
+When admin auth is enabled (default): **`admin` / `admin`** — change password on first login.
 
-## Quick start (local, ~10 minutes)
-
-### 1. Clone and configure
-
-```bash
-git clone https://github.com/AION-by-ASA-Computer/AION_Agent.git
-cd AION_Agent
-
-cp .env.example .env
-# Required: set your LLM endpoint
-#   AION_API_URL=http://localhost:11434/v1    # Ollama example
-#   AION_MODEL=llama3.2
-#   AION_LLM_API_KEY=placeholder-token         # or your provider key
-
-./scripts/setup-aion-env.sh
-```
-
-`setup-aion-env.sh` syncs `config_std/` → `config/` and `mcp_servers_std/` → `mcp_servers/`.
-The API **refuses to start** without `AION_API_URL` set.
+Chat auth is optional (`AION_CHAT_PASSWORD_AUTH=0` opens chat without login; useful for local dev).
 
 Generate secrets for production:
 
 ```bash
 openssl rand -hex 32   # AION_CHAT_AUTH_SECRET (if chat password auth enabled)
 ```
-
-### 2. Install backend dependencies
-
-```bash
-uv venv && uv pip install -r requirements.txt
-# Optional: uv pip install pytest pytest-asyncio ruff
-```
-
-### 3. Run services
-
-**Terminal 1 — API (port 8001, single worker required):**
-
-```bash
-uvicorn src.api.main:app --reload --reload-exclude data/sessions
-```
-
-**Terminal 2 — Chat UI (port 8003):**
-
-```bash
-cd chat-ui && pnpm install && pnpm dev
-```
-
-Open http://localhost:8003
-
-**Optional — Admin UI (port 3870):**
-
-```bash
-cd admin-ui && pnpm install && pnpm dev --webpack
-```
-
-### Default credentials
-
-When admin auth is enabled (default): **`admin` / `admin`** — change password on first login.
-
-Chat auth is optional (`AION_CHAT_PASSWORD_AUTH=0` opens chat without login; useful for local dev).
-
-## Docker
-
-### Local full stack (HTTP, no domain)
-
-```bash
-cp .env.example .env
-# Edit AION_API_URL, DOMAIN=:80, and LLM settings (see DEPLOY DOCKER section in .env.example)
-./scripts/setup-aion-env.sh --docker
-docker compose up -d --build
-```
-
-| URL | Service |
-|-----|---------|
-| http://localhost/ | Chat UI |
-| http://localhost/admin | Admin UI |
-| http://localhost/docs/ | Documentation |
-| http://localhost/api/health | Backend health |
-
-### Development compose (API + chat-ui + Redis, hot reload)
-
-```bash
-docker compose -f docker-compose.dev.yml up
-```
-
-Details: [docs/deployment/docker.md](docs/deployment/docker.md)
 
 ## Project layout
 
@@ -128,36 +106,42 @@ data/             Runtime data (gitignored; eval fixtures whitelisted)
 
 See [docs/architecture/source-tree.md](docs/architecture/source-tree.md).
 
-## Development
+## Local development (without Docker)
+
+**Prerequisites:** Python 3.13+, [uv](https://github.com/astral-sh/uv), [pnpm](https://pnpm.io/) 9+, OpenAI-compatible LLM.
+
+```bash
+cp .env.example .env
+# Set AION_API_URL, AION_MODEL, AION_LLM_API_KEY
+
+./scripts/setup-aion-env.sh
+uv venv && uv pip install -r requirements.txt
+
+# Terminal 1 — API (port 8001, single worker required)
+uvicorn src.api.main:app --reload --reload-exclude data/sessions
+
+# Terminal 2 — Chat UI (port 8003)
+cd chat-ui && pnpm install && pnpm dev
+```
+
+Open http://localhost:8003. Optional admin UI: `cd admin-ui && pnpm dev --webpack` (port 3870).
 
 ```bash
 # Curated CI test suite (no live LLM)
 ./scripts/run_ci_tests.sh
 
-# Full test tree (many tests need .env / mocks)
-python -m pytest src/test/ -v
-
 # Lint
 uv run ruff check --config ruff.toml src/
 uv run ruff format --check --config ruff.toml src/
-
-# Ensure data/ runtime files are not tracked
-python scripts/check_data_git_tracking.py
 ```
 
-**Constraints:**
-
-- Backend must run with **one worker** (`--workers 1`); in-process MCP pools and agent cache are not multiprocess-safe.
-- Use **pnpm** in JS packages (not npm/yarn).
-- Import `src.aion_env` before reading `os.environ` in scripts.
+**Constraints:** backend must run with **one worker**; use **pnpm** in JS packages; import `src.aion_env` before reading `os.environ` in scripts.
 
 Assistant onboarding: [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md).
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md). Open PRs against **`main`** on this repository.
-
-The private **AION_Agent_V1** repo is an archived snapshot only — do not use it for new work. See [docs/opensource/repository-model.md](docs/opensource/repository-model.md).
 
 ## Documentation
 
@@ -182,3 +166,7 @@ Report vulnerabilities privately — [SECURITY.md](SECURITY.md).
 ## License
 
 [Apache License 2.0](LICENSE). Third-party notices: [NOTICE](NOTICE).
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=AION-by-ASA-Computer/AION_Agent&type=date&legend=top-left)](https://www.star-history.com/#AION-by-ASA-Computer/AION_Agent&type=date&legend=top-left)
