@@ -19,6 +19,20 @@ YAML profiles, skills, and Plan Mode for structured multi-step work.
 
 **Commercial site:** [https://aion-asa.com](https://aion-asa.com) · **Italian README:** [README.it.md](README.it.md) · **Docs:** [docs/](docs/)
 
+## Screenshots
+
+### Chat UI
+
+<p align="center">
+  <img src="assets/images/chat-ui.png" alt="AION Chat UI: streaming chat, plan dock, attachments" width="900" />
+</p>
+
+### Admin UI
+
+<p align="center">
+  <img src="assets/images/admin-panel.png" alt="AION Admin UI: profiles, users, memory, agent DB" width="900" />
+</p>
+
 ## Quick start (Docker)
 
 The recommended way to run AION is the full Docker stack (Caddy + backend + chat-ui + admin-ui + docs + Redis).
@@ -162,6 +176,14 @@ OpenTelemetry and Opik hooks exist but are **off by default** (`AION_OTEL_ENABLE
 ## Security
 
 Report vulnerabilities privately — [SECURITY.md](SECURITY.md).
+
+## Disclaimer
+
+**AION Agent is under active development.** APIs, configuration, and behavior may change between releases without prior notice.
+
+The software is provided **“as is”**, without warranty of any kind. AION / ASA Computer **assumes no liability** for damages, data loss, security incidents, or operational issues arising from the use of this project in any environment (including production).
+
+You are responsible for evaluating fitness for your use case, securing your deployment, and complying with applicable laws and third-party license terms.
 
 ## License
 
