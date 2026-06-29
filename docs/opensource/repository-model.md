@@ -26,6 +26,6 @@ git checkout main
 
 1. Branch from `main`
 2. Open PR → review → merge to `main`
-3. Tag releases on `main` when ready
+3. Tag releases on `main` when ready (automated via [release-please](https://github.com/googleapis/release-please); see [releases.md](releases.md))
 
-Branch ruleset on `main` is documented in [`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md).
+Branch ruleset on `main`: [`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md).
