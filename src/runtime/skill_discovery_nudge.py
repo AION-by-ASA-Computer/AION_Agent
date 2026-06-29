@@ -32,21 +32,15 @@ def should_inject_skill_discovery_nudge(
 
 
 def build_skill_discovery_nudge(user_message: str) -> str:
-    hint = "docx"
-    if re.search(r"\bpdf\b", user_message, re.I):
-        hint = "pdf"
-    elif re.search(r"\bxlsx|excel\b", user_message, re.I):
-        hint = "xlsx"
-    elif re.search(r"\bpptx|powerpoint\b", user_message, re.I):
-        hint = "pptx"
+    del user_message  # nudge is generic; profile skills vary
     return (
         "[System instruction — skill discovery]\n"
         "Before writing code or files in the workspace for this task, you must use skills_hub: "
-        f"`skill_search` with a relevant query, then `skill_view` for the skill (e.g. `{hint}` or related).\n"
-        "If `skill_search` finds nothing but the profile lists the skill, call "
-        f'`skill_view("{hint}")`.\n'
-        "After `skill_view`, skill scripts (e.g. `scripts/office/unpack.py`) are in the session; "
-        "use `sandbox_exec_allowlisted` with paths relative to the session root.\n"
+        "`skill_search` with a relevant query, then `skill_view` for the matching profile skill.\n"
+        "If `skill_search` finds nothing but the profile lists a relevant skill, call "
+        '`skill_view` with that slug.\n'
+        "After `skill_view`, any skill scripts are materialized in the session; "
+        "use `sandbox_exec_allowlisted` with paths relative to the session root when needed.\n"
         "Only after loading the skill proceed with mutating tools or artifacts.\n\n"
     )
 
@@ -65,6 +59,6 @@ def build_plan_mode_skill_hint(user_message: str) -> str:
         f"1. At most **{budget}** read-only tools (e.g. list workspace) if strictly needed.\n"
         "2. **Do not** call `skill_view` (blocked) or a series of thematic `web_search`.\n"
         "3. Output = **only** `<plan>...</plan>` for the sidebar, then STOP.\n"
-        "4. In the plan: tasks for `skill_view(docx)`, web research, chapters, bibliography **after** Approve Plan.\n"
+        "4. In the plan: tasks for `skill_view` (relevant skills), web research, chapters, bibliography **after** Approve Plan.\n"
         "5. `## Goal` = **current** request; do not reuse old forecasting/commercial templates.\n\n"
     )

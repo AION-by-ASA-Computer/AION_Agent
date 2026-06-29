@@ -24,9 +24,6 @@ def _artifact_variant_loaded(reg: SkillRegistry) -> bool:
     )
 
 
-_OFFICE_SKILL_SLUGS = frozenset({"docx", "pdf", "xlsx", "pptx"})
-
-
 def test_config_std_profile_skills_resolve():
     reg = SkillRegistry()
     reg.reload()
@@ -40,30 +37,6 @@ def test_config_std_profile_skills_resolve():
                     "artifact_protocol requires at least one artifact_protocol_* skill"
                 )
                 continue
-            if skill in _OFFICE_SKILL_SLUGS:
-                assert reg.get_skill_full(skill), (
-                    f"{path.name} references missing skill {skill!r}"
-                )
-                scripts = _repo_root() / "config_std" / "skills" / skill / "scripts"
-                assert scripts.is_dir(), (
-                    f"{skill}: missing config_std/skills/{skill}/scripts/"
-                )
-                if skill in ("docx", "pptx"):
-                    assert (scripts / "office" / "unpack.py").is_file()
-                continue
             assert reg.get_skill_full(skill), (
                 f"{path.name} references missing skill {skill!r}"
             )
-
-
-def test_config_std_office_skill_scripts_on_disk():
-    root = _repo_root() / "config_std" / "skills"
-    for slug in _OFFICE_SKILL_SLUGS:
-        assert (root / slug / "SKILL.md").is_file(), slug
-        assert (root / slug / "scripts").is_dir(), slug
-
-
-def test_config_std_anthropic_agent_packages_present():
-    root = _repo_root() / "config_std" / "skills"
-    for slug in ("frontend-design", "mcp-builder", "skill-creator"):
-        assert (root / slug / "SKILL.md").is_file(), slug

@@ -77,7 +77,7 @@ For production: start from `fs_policy.example.yaml`, adapt allowlist and paths, 
 
 ### Promo PNG and exec
 
-PNG export **does not** use `sandbox_exec`: it uses Playwright in the `promo_render` MCP process. The exec policy is used for other workflows (grep on workspace, **docx unpack** via `scripts/office/unpack.py` after `skill_view` — see [Skill and system prompt](./skills-and-prompts.md#skill-office-docx-pdf-xlsx-pptx)).
+PNG export **does not** use `sandbox_exec`: it uses Playwright in the `promo_render` MCP process. The exec policy is used for other workflows (grep on workspace, allowlisted Python scripts under `scripts/` after `skill_view` — see [Skill and system prompt](./skills-and-prompts.md)).
 
 ---
 
