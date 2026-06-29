@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Open-source community files: LICENSE (Apache-2.0), CONTRIBUTING, SECURITY, CODE_OF_CONDUCT
 - CI check preventing tracked runtime files under `data/`
 - Integration smoke tests for `/v1/chat/stream` with fake LLM
+- Release automation: release-please, GHCR image publish, `docker-compose.ghcr.yml`
 
 ### Changed
 
@@ -26,7 +27,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Legacy stream loop indentation regression in `agent_pipeline.py`
 - JSON recovery patch uses Haystack-scoped proxy (thread-safe, no global `json.loads` mutation)
-
-## [1.0.0] — TBD
-
-Initial public open-source release.

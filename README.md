@@ -73,6 +73,18 @@ Caddy provisions TLS automatically. One DNS `A` record pointing at the server is
 
 Details: [docs/deployment/docker.md](docs/deployment/docker.md)
 
+### Pre-built images (GHCR)
+
+Published on each [GitHub Release](https://github.com/AION-by-ASA-Computer/AION_Agent/releases). Pin a version in production:
+
+```bash
+export AION_VERSION=0.1.0
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
+```
+
+See [docs/opensource/releases.md](docs/opensource/releases.md).
+
 ### Development compose (hot reload)
 
 API + chat-ui + Redis only — run admin-ui and docs via `pnpm dev` when needed:
