@@ -21,15 +21,19 @@ from datetime import datetime, timezone
 from pathlib import Path
 from sse_starlette.sse import EventSourceResponse
 
+
 class FlowList(list):
     pass
 
+
 def flow_list_representer(dumper, data):
-    return dumper.represent_sequence('tag:yaml.org,2002:seq', data, flow_style=True)
+    return dumper.represent_sequence("tag:yaml.org,2002:seq", data, flow_style=True)
+
 
 yaml.add_representer(FlowList, flow_list_representer, Dumper=yaml.SafeDumper)
 try:
     from yaml import CSafeDumper
+
     yaml.add_representer(FlowList, flow_list_representer, Dumper=CSafeDumper)
 except ImportError:
     pass
@@ -58,7 +62,16 @@ from ..data.message_roles import (
     looks_like_raw_plan_content,
     normalize_message_role,
 )
-from ..data.models import ApiKey, Conversation, Message, Step, Attachment, SecurityScan, TrustedPath, McpServerConfig
+from ..data.models import (
+    ApiKey,
+    Conversation,
+    Message,
+    Step,
+    Attachment,
+    SecurityScan,
+    TrustedPath,
+    McpServerConfig,
+)
 from ..data.ids import new_uuid7_str
 from sqlalchemy import select, delete, func, desc
 
@@ -137,7 +150,11 @@ def _find_marketplace_item(item_id: str) -> Optional[Dict[str, Any]]:
                 return True
         if low.startswith("npx:") and item.get("install_type") == "npx":
             wanted_pkg = wanted.split(":", 1)[-1].strip().lower()
-            item_pkg = (item.get("npx_package") or item.get("id", "").split(":", 1)[-1]).strip().lower()
+            item_pkg = (
+                (item.get("npx_package") or item.get("id", "").split(":", 1)[-1])
+                .strip()
+                .lower()
+            )
             if wanted_pkg and item_pkg == wanted_pkg:
                 return True
         return False
@@ -156,6 +173,7 @@ def _find_marketplace_item(item_id: str) -> Optional[Dict[str, Any]]:
 
 # --- MODELS ---
 
+
 class ProfileUpdate(BaseModel):
     name: str
     description: str
@@ -165,13 +183,16 @@ class ProfileUpdate(BaseModel):
     mcp_servers: List[str]
     native_tool_groups: Optional[List[str]] = None
 
+
 class SkillUpdate(BaseModel):
     name: str
     content: str
     metadata: Optional[Dict[str, Any]] = None
 
+
 class RegistryUpdate(BaseModel):
     servers: Dict[str, Any]
+
 
 class MCPUpdate(BaseModel):
     model_config = {"extra": "ignore"}
@@ -185,15 +206,18 @@ class MCPUpdate(BaseModel):
     type: Optional[str] = None
     url: Optional[str] = None
 
+
 class MCPInstallRequest(BaseModel):
     name: str
     script_path: str
     dependencies: Optional[List[str]] = []
     is_sandboxed: Optional[bool] = False
 
+
 class ScanRequest(BaseModel):
     path: str
     persist: Optional[bool] = True
+
 
 class TrustRequest(BaseModel):
     path: str
@@ -205,6 +229,7 @@ class StmConsolidateBody(BaseModel):
     user_id: str = "default"
     prune_after: bool = False
 
+
 router = APIRouter(
     prefix="/admin",
     tags=["admin"],
@@ -212,6 +237,8 @@ router = APIRouter(
     # Disabilitabile via AION_ADMIN_PASSWORD_AUTH=0 (escape hatch dev).
     dependencies=[Depends(require_admin_role)],
 )
+
+
 def _message_render_reason_codes(role: str | None, content: str | None) -> List[str]:
     nr = normalize_message_role(role)
     codes: List[str] = []
@@ -302,6 +329,7 @@ def _legacy_security_reports_dir() -> Path:
     """Vecchia ubicazione (static/admin); usata solo per leggere report già salvati."""
     return _project_root() / "static" / "admin" / "reports"
 
+
 @router.get("/security/investigate")
 async def investigate_code(path: str, profile: str = "Security Officer"):
     """
@@ -311,11 +339,9 @@ async def investigate_code(path: str, profile: str = "Security Officer"):
 
     logger.info(f"QUI VAAA")
 
-
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="File not found")
-        
-    
+
     try:
         with open(path, "r", encoding="utf-8") as f:
             code_content = f.read()
@@ -323,15 +349,14 @@ async def investigate_code(path: str, profile: str = "Security Officer"):
         raise HTTPException(status_code=500, detail=f"Could not read file: {str(e)}")
 
     set_event_loop(asyncio.get_running_loop())
-    
+
     # Generate a UNIQUE session ID for each investigation to ensure a fresh context (no history)
     audit_id = f"audit_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{os.getpid()}"
-    
+
     # Initialize the selected agent profile with the unique session ID
     agent_instance, profile_name = await get_agent(
         profile, session_id=audit_id, user_id="audit"
     )
-    
 
     pipeline = AgentPipeline(
         agent=agent_instance,
@@ -350,29 +375,26 @@ async def investigate_code(path: str, profile: str = "Security Officer"):
         # Use the same audit_id generated at the top for the report filename and metadata
         report_id = audit_id
         filename = f"{report_id}.json"
-        
+
         try:
             async for chunk in pipeline.run_stream(prompt):
                 # The pipeline yields 'token' type for text content
                 if chunk.get("type") == "token":
                     full_report_content += chunk.get("content", "")
-                
-                yield {
-                    "event": "message",
-                    "data": json.dumps(chunk)
-                }
-            
+
+                yield {"event": "message", "data": json.dumps(chunk)}
+
             # Save the report after generation
             report_data = {
                 "id": report_id,
                 "timestamp": datetime.now().isoformat(),
                 "path": path,
                 "profile": profile,
-                "content": full_report_content
+                "content": full_report_content,
             }
             with open(REPORTS_DIR / filename, "w", encoding="utf-8") as f:
                 json.dump(report_data, f, indent=2)
-            
+
             # Also save a markdown version for easier reading
             with open(REPORTS_DIR / f"{report_id}.md", "w", encoding="utf-8") as f:
                 f.write(f"# Security Audit Report: {path}\n")
@@ -380,19 +402,17 @@ async def investigate_code(path: str, profile: str = "Security Officer"):
                 f.write(f"- Profile: {profile}\n\n")
                 f.write("--- \n\n")
                 f.write(full_report_content)
-                
+
         except Exception as e:
             logger.error(f"Audit generation failed: {e}")
-            yield {
-                "event": "error",
-                "data": json.dumps({"error": str(e)})
-            }
+            yield {"event": "error", "data": json.dumps({"error": str(e)})}
 
     return EventSourceResponse(
         event_generator(),
         ping=15,
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
 
 @router.get("/security/reports")
 async def list_security_reports():
@@ -425,6 +445,7 @@ async def list_security_reports():
     reports.sort(key=lambda x: x["timestamp"], reverse=True)
     return {"reports": reports}
 
+
 @router.get("/security/report/{report_id}")
 async def get_security_report(report_id: str):
     """Retrieves a specific security audit report."""
@@ -436,6 +457,7 @@ async def get_security_report(report_id: str):
 
     with open(report_path, "r") as f:
         return json.load(f)
+
 
 @router.get("/security/scans")
 async def list_security_scans(limit: int = 50):
@@ -449,11 +471,12 @@ async def list_security_scans(limit: int = 50):
                     "id": r.id,
                     "timestamp": r.timestamp,
                     "target_path": r.target_path,
-                    "is_safe": r.is_safe
+                    "is_safe": r.is_safe,
                 }
                 for r in rows
             ]
         }
+
 
 @router.get("/security/scans/{scan_id}")
 async def get_security_scan(scan_id: str):
@@ -462,14 +485,15 @@ async def get_security_scan(scan_id: str):
         r = await session.get(SecurityScan, scan_id)
         if not r:
             raise HTTPException(status_code=404, detail="Scan not found")
-        
+
         return {
             "id": r.id,
             "timestamp": r.timestamp,
             "target_path": r.target_path,
             "is_safe": r.is_safe,
-            "violations": json.loads(r.results_json)
+            "violations": json.loads(r.results_json),
         }
+
 
 @router.post("/security/scans/{scan_id}/trust")
 async def trust_security_scan(scan_id: str, req: TrustRequest):
@@ -478,30 +502,36 @@ async def trust_security_scan(scan_id: str, req: TrustRequest):
         r = await session.get(SecurityScan, scan_id)
         if not r:
             raise HTTPException(status_code=404, detail="Scan not found")
-        
+
         violations = json.loads(r.results_json)
         if req.path in violations:
             violations[req.path]["is_trusted"] = True
-            
+
             # Recalculate is_safe for the record
             r.is_safe = all(
-                v.get("is_trusted", False) or 
-                not any(violation["severity"] in ["high", "critical"] for violation in v.get("list", []))
+                v.get("is_trusted", False)
+                or not any(
+                    violation["severity"] in ["high", "critical"]
+                    for violation in v.get("list", [])
+                )
                 for v in violations.values()
             )
             r.results_json = json.dumps(violations)
             await session.commit()
-            
+
         return {"ok": True, "is_safe": r.is_safe}
+
 
 # --- ROUTES ---
 
 
 # --- PROFILES ---
 
+
 @router.get("/profiles")
 async def list_profiles():
     return profile_manager.list_profiles()
+
 
 @router.get("/profiles/{name}")
 async def get_profile(name: str):
@@ -518,6 +548,7 @@ async def get_profile(name: str):
         "native_tool_groups": list(getattr(p, "native_tool_groups", None) or []),
         "critical_skills": p.critical_skills,
     }
+
 
 @router.post("/profiles")
 async def save_profile(p: ProfileUpdate):
@@ -573,11 +604,13 @@ async def save_profile(p: ProfileUpdate):
     profile_manager.load_all_if_stale(force=True)
     return {"status": "success", "file": str(file_path), "slug": slug}
 
+
 @router.delete("/profiles/{name}")
 async def delete_profile(name: str):
     if not profile_manager.delete_profile(name):
         raise HTTPException(status_code=404, detail="Profile not found")
     return {"status": "success"}
+
 
 @router.get("/profiles/{name}/export")
 async def export_profile_yaml(name: str):
@@ -593,18 +626,19 @@ async def export_profile_yaml(name: str):
             "instructions": p.instructions,
             "skills": p.skills,
             "mcp_servers": p.mcp_servers,
-            "critical_skills": p.critical_skills
+            "critical_skills": p.critical_skills,
         }
         content = yaml.dump(data, allow_unicode=True, sort_keys=False)
     else:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
-            
+
     return Response(
-        content=content, 
+        content=content,
         media_type="application/x-yaml",
-        headers={"Content-Disposition": f"attachment; filename={p.slug}.yaml"}
+        headers={"Content-Disposition": f"attachment; filename={p.slug}.yaml"},
     )
+
 
 @router.get("/profiles/export/all")
 async def export_all_profiles_zip():
@@ -621,15 +655,19 @@ async def export_all_profiles_zip():
                     "instructions": p.instructions,
                     "skills": p.skills,
                     "mcp_servers": p.mcp_servers,
-                    "critical_skills": p.critical_skills
+                    "critical_skills": p.critical_skills,
                 }
-                z.writestr(f"{p.slug}.yaml", yaml.dump(data, allow_unicode=True, sort_keys=False))
+                z.writestr(
+                    f"{p.slug}.yaml",
+                    yaml.dump(data, allow_unicode=True, sort_keys=False),
+                )
     buf.seek(0)
     return Response(
         content=buf.getvalue(),
         media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=all_profiles.zip"}
+        headers={"Content-Disposition": "attachment; filename=all_profiles.zip"},
     )
+
 
 @router.post("/profiles/import-preview")
 async def import_profile_preview(file: UploadFile = File(...)):
@@ -638,12 +676,18 @@ async def import_profile_preview(file: UploadFile = File(...)):
         data = yaml.safe_load(content)
         # Assicuriamoci che i campi minimi esistano
         if not isinstance(data, dict) or "name" not in data:
-            raise ValueError("Il file YAML non sembra contenere un profilo valido (manca il campo 'name')")
+            raise ValueError(
+                "Il file YAML non sembra contenere un profilo valido (manca il campo 'name')"
+            )
         return data
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Errore nel parsing YAML: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail=f"Errore nel parsing YAML: {str(e)}"
+        )
+
 
 # --- SKILLS ---
+
 
 @router.get("/skills")
 async def list_skills(status: Optional[str] = Query(None)):
@@ -687,6 +731,7 @@ async def promote_skill(name: str):
     skill_registry.reload()
     return {"status": "verified", "name": name}
 
+
 @router.get("/skills/{name}")
 async def get_skill(name: str):
     skill_registry.reload()
@@ -703,12 +748,17 @@ async def get_skill(name: str):
         },
     }
 
+
 @router.post("/skills")
 async def save_skill(s: SkillUpdate):
     existing_path = skill_registry.get_skill_path(s.name)
     if existing_path:
         rel_path = None
-        for base_dir in (skill_registry.curated_dir, skill_registry.curated_fallback_dir, skill_registry.generated_dir):
+        for base_dir in (
+            skill_registry.curated_dir,
+            skill_registry.curated_fallback_dir,
+            skill_registry.generated_dir,
+        ):
             try:
                 rel_path = existing_path.relative_to(base_dir)
                 break
@@ -731,20 +781,20 @@ async def save_skill(s: SkillUpdate):
     except Exception:
         content_body = s.content
         meta = {}
-        
+
     # Get existing metadata from registry
     existing_meta = skill_registry.get_meta(s.name)
     merged_meta = {}
     if existing_meta:
         merged_meta.update(existing_meta)
-        
+
     # Merge metadata passed explicitly in the request
     if s.metadata:
         merged_meta.update(s.metadata)
-        
+
     # Update with parsed meta (which takes precedence)
     merged_meta.update(meta)
-    
+
     # Ensure minimal keys
     if "name" not in merged_meta:
         merged_meta["name"] = s.name
@@ -758,18 +808,19 @@ async def save_skill(s: SkillUpdate):
         merged_meta["source"] = "curated"
     if "version" not in merged_meta:
         merged_meta["version"] = 1
-        
+
     if "tags" in merged_meta and isinstance(merged_meta["tags"], list):
         merged_meta["tags"] = FlowList(merged_meta["tags"])
 
     new_post = frontmatter.Post(content=content_body, **merged_meta)
     serialized = frontmatter.dumps(new_post)
-    
+
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(serialized)
-        
+
     skill_registry.reload()
     return {"status": "success"}
+
 
 @router.delete("/skills/{name}")
 async def delete_skill(name: str):
@@ -788,25 +839,28 @@ async def delete_skill(name: str):
             detail={
                 "error": "skill_in_use",
                 "message": f"Impossibile eliminare la skill. È in uso nei seguenti profili: {', '.join(referencing_profiles)}",
-                "profiles": referencing_profiles
-            }
+                "profiles": referencing_profiles,
+            },
         )
 
     if not skill_registry.delete_skill(name):
         raise HTTPException(status_code=404, detail="Skill not found")
     return {"status": "success"}
 
+
 @router.get("/skills/{name}/export")
 async def export_skill_md(name: str):
     skill_registry.reload()
     path = skill_registry.get_skill_path(name)
-    
+
     if path and path.is_file():
         try:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Could not read skill file: {e}")
+            raise HTTPException(
+                status_code=500, detail=f"Could not read skill file: {e}"
+            )
     else:
         # Fallback if file not found physically, serialize in memory
         body = skill_registry.get_skill_full(name)
@@ -815,12 +869,13 @@ async def export_skill_md(name: str):
         meta = skill_registry.get_meta(name) or {}
         new_post = frontmatter.Post(content=body, **meta)
         content = frontmatter.dumps(new_post)
-        
+
     return Response(
         content=content,
         media_type="text/markdown",
-        headers={"Content-Disposition": f"attachment; filename={name}.md"}
+        headers={"Content-Disposition": f"attachment; filename={name}.md"},
     )
+
 
 @router.get("/skills/export/all")
 async def export_all_skills_zip():
@@ -844,20 +899,23 @@ async def export_all_skills_zip():
     return Response(
         content=buf.getvalue(),
         media_type="application/zip",
-        headers={"Content-Disposition": "attachment; filename=all_skills.zip"}
+        headers={"Content-Disposition": "attachment; filename=all_skills.zip"},
     )
+
 
 @router.post("/skills/import-preview")
 async def import_skill_preview(file: UploadFile = File(...)):
     filename = file.filename or "imported_skill.md"
     if not filename.endswith(".md"):
-        raise HTTPException(status_code=400, detail="Only .md files are supported for preview.")
-    
+        raise HTTPException(
+            status_code=400, detail="Only .md files are supported for preview."
+        )
+
     content = await file.read()
     try:
         text_content = content.decode("utf-8")
         name = filename.replace(".md", "")
-        
+
         try:
             post = frontmatter.loads(text_content)
             content_body = post.content or ""
@@ -865,13 +923,16 @@ async def import_skill_preview(file: UploadFile = File(...)):
         except Exception:
             content_body = text_content
             metadata = {}
-            
+
         return {"name": name, "content": content_body, "metadata": metadata}
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Errore nella lettura del file: {str(e)}")
+        raise HTTPException(
+            status_code=400, detail=f"Errore nella lettura del file: {str(e)}"
+        )
 
 
 # --- MODULAR MCP HUB ---
+
 
 @router.get("/registry")
 async def get_registry():
@@ -883,10 +944,13 @@ async def get_registry():
         res[name] = c
     return res
 
+
 @router.get("/native-tools")
 async def get_native_tools():
     from ..runtime.native_tools.registry_io import load_merged_native_tool_registry
+
     return load_merged_native_tool_registry()
+
 
 @router.get("/mcp/connector-catalog")
 async def mcp_connector_catalog():
@@ -930,7 +994,9 @@ class McpIntegrationAdviseBody(BaseModel):
     admin_message: Optional[str] = None
 
 
-def _mcp_integration_to_dict(r: McpServerConfig, *, in_registry: bool) -> Dict[str, Any]:
+def _mcp_integration_to_dict(
+    r: McpServerConfig, *, in_registry: bool
+) -> Dict[str, Any]:
     return {
         "id": r.id,
         "server_slug": r.server_slug,
@@ -964,7 +1030,9 @@ async def admin_list_mcp_integrations():
             _mcp_integration_to_dict(r, in_registry=r.server_slug in registry_servers)
             for r in rows
         ],
-        "registry_servers_not_configured": [s for s in registry_servers if s not in configured_slugs],
+        "registry_servers_not_configured": [
+            s for s in registry_servers if s not in configured_slugs
+        ],
     }
 
 
@@ -973,12 +1041,31 @@ async def admin_create_mcp_integration(body: McpIntegrationCreate):
     new_id: str
     async with get_async_session_maker()() as session:
         exists = (
-            await session.execute(select(McpServerConfig).where(McpServerConfig.server_slug == body.server_slug))
-        ).scalars().first()
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == body.server_slug
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
         if exists:
-            raise HTTPException(status_code=409, detail="Integration with this server_slug already exists")
-        mode = body.credential_mode if body.credential_mode in ("none", "org_shared", "per_user") else "none"
-        req_creds = body.requires_user_credentials if body.requires_user_credentials else mode == "per_user"
+            raise HTTPException(
+                status_code=409,
+                detail="Integration with this server_slug already exists",
+            )
+        mode = (
+            body.credential_mode
+            if body.credential_mode in ("none", "org_shared", "per_user")
+            else "none"
+        )
+        req_creds = (
+            body.requires_user_credentials
+            if body.requires_user_credentials
+            else mode == "per_user"
+        )
         new_cfg = McpServerConfig(
             id=new_uuid7_str(),
             server_slug=body.server_slug,
@@ -1011,8 +1098,16 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
     mcp_manager.load_registry()
     async with get_async_session_maker()() as session:
         row = (
-            await session.execute(select(McpServerConfig).where(McpServerConfig.server_slug == server_slug))
-        ).scalars().first()
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == server_slug
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
         if not row:
             raise HTTPException(status_code=404, detail="Integration not found")
         if body.display_name is not None:
@@ -1025,7 +1120,11 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
             row.category = body.category
         if body.is_enabled_for_users is not None:
             row.is_enabled_for_users = body.is_enabled_for_users
-        if body.credential_mode is not None and body.credential_mode in ("none", "org_shared", "per_user"):
+        if body.credential_mode is not None and body.credential_mode in (
+            "none",
+            "org_shared",
+            "per_user",
+        ):
             row.credential_mode = body.credential_mode
             if body.requires_user_credentials is None:
                 row.requires_user_credentials = body.credential_mode == "per_user"
@@ -1037,7 +1136,9 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
                 catalog = load_mcp_connector_catalog()
                 cfg = mcp_manager._registry.get(server_slug) or {}
                 conn = resolve_connector_row_for_mcp_server(server_slug, cfg, catalog)
-                row.credential_schema_json = json.dumps(credential_schema_from_connector(conn))
+                row.credential_schema_json = json.dumps(
+                    credential_schema_from_connector(conn)
+                )
             else:
                 row.credential_schema_json = json.dumps(body.credential_schema)
         if body.oauth_config is not None:
@@ -1063,7 +1164,10 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
 
 @router.post("/mcp-integrations/sync-from-registry")
 async def admin_sync_mcp_integrations_from_registry(server_slug: Optional[str] = None):
-    from ..mcp_integration_sync import sync_all_mcp_server_configs_from_registry, sync_mcp_server_config_from_registry
+    from ..mcp_integration_sync import (
+        sync_all_mcp_server_configs_from_registry,
+        sync_mcp_server_config_from_registry,
+    )
 
     if server_slug:
         row = await sync_mcp_server_config_from_registry(server_slug)
@@ -1074,7 +1178,9 @@ async def admin_sync_mcp_integrations_from_registry(server_slug: Optional[str] =
 
 
 @router.get("/mcp-integrations/{server_slug}/preview")
-async def admin_preview_mcp_integration(server_slug: str, credential_mode: Optional[str] = None):
+async def admin_preview_mcp_integration(
+    server_slug: str, credential_mode: Optional[str] = None
+):
     from ..mcp_integration_sync import build_integration_preview
 
     preview = build_integration_preview(server_slug, credential_mode=credential_mode)
@@ -1092,7 +1198,10 @@ async def admin_preview_mcp_integration(server_slug: str, credential_mode: Optio
 
 @router.post("/mcp-integrations/advise")
 async def admin_advise_mcp_integration(body: McpIntegrationAdviseBody):
-    from ..mcp_integration_sync import build_integration_preview, load_mcp_connector_catalog
+    from ..mcp_integration_sync import (
+        build_integration_preview,
+        load_mcp_connector_catalog,
+    )
 
     _log = logging.getLogger("aion.admin.advise")
 
@@ -1108,7 +1217,9 @@ async def admin_advise_mcp_integration(body: McpIntegrationAdviseBody):
         except Exception as e:
             _log.warning("Errore risoluzione connector_id: %s", e)
     if not slug:
-        raise HTTPException(status_code=400, detail="server_slug or connector_id required")
+        raise HTTPException(
+            status_code=400, detail="server_slug or connector_id required"
+        )
 
     # --- build_integration_preview con error handling ---
     preview: dict = {}
@@ -1123,15 +1234,26 @@ async def admin_advise_mcp_integration(body: McpIntegrationAdviseBody):
             detail=preview.get("error", f"Server '{slug}' not in registry"),
         )
 
-    mode: str = (preview.get("credential_mode") or "none")
-    schema: list = (preview.get("credential_schema") or [])
-    connector: dict = (preview.get("connector") or {})
-    current_env: dict = (preview.get("current_env") or {})
-    warnings_list: list = (preview.get("warnings") or [])
-    discovery_info: dict = (preview.get("discovery") or {})
+    mode: str = preview.get("credential_mode") or "none"
+    schema: list = preview.get("credential_schema") or []
+    connector: dict = preview.get("connector") or {}
+    current_env: dict = preview.get("current_env") or {}
+    warnings_list: list = preview.get("warnings") or []
+    discovery_info: dict = preview.get("discovery") or {}
 
-    yaml_env = (preview.get("suggested_env_per_user" if mode == "per_user" else "suggested_env_org_shared") or {})
-    env_yaml = "\n".join(f"    {k}: \"{v}\"" for k, v in yaml_env.items()) if yaml_env else "    # nessuna"
+    yaml_env = (
+        preview.get(
+            "suggested_env_per_user"
+            if mode == "per_user"
+            else "suggested_env_org_shared"
+        )
+        or {}
+    )
+    env_yaml = (
+        "\n".join(f'    {k}: "{v}"' for k, v in yaml_env.items())
+        if yaml_env
+        else "    # nessuna"
+    )
 
     # --- AI analysis via LLM (async) ---
     steps_md = ""
@@ -1142,7 +1264,12 @@ async def admin_advise_mcp_integration(body: McpIntegrationAdviseBody):
 
     if llm_available:
         try:
-            _log.info("Chiamata LLM advise per %s (mode=%s, schema=%d campi)", slug, mode, len(schema))
+            _log.info(
+                "Chiamata LLM advise per %s (mode=%s, schema=%d campi)",
+                slug,
+                mode,
+                len(schema),
+            )
             steps_md, llm_error = await _call_llm_advise_async(
                 slug,
                 mode,
@@ -1191,9 +1318,15 @@ async def admin_advise_mcp_integration(body: McpIntegrationAdviseBody):
         config_suggestion = {
             "credential_mode": ai_mode,
             "requires_user_credentials": ai_mode == "per_user",
-            "is_enabled_for_users": ai_config.get("is_enabled_for_users", ai_mode != "none"),
-            "user_may_disable": ai_config.get("user_may_disable", ai_mode == "per_user"),
-            "apply_suggested_env": ai_config.get("apply_suggested_env", ai_mode in ("per_user", "org_shared")),
+            "is_enabled_for_users": ai_config.get(
+                "is_enabled_for_users", ai_mode != "none"
+            ),
+            "user_may_disable": ai_config.get(
+                "user_may_disable", ai_mode == "per_user"
+            ),
+            "apply_suggested_env": ai_config.get(
+                "apply_suggested_env", ai_mode in ("per_user", "org_shared")
+            ),
             "suggested_env": ai_env,
             "credential_schema": ai_schema,
             "warnings": ai_config.get("warnings") or warnings_list,
@@ -1208,15 +1341,21 @@ async def admin_advise_mcp_integration(body: McpIntegrationAdviseBody):
     else:
         config_suggestion = _config_suggestion_from_preview(slug, preview)
         if llm_error:
-            config_suggestion["warnings"] = list(config_suggestion.get("warnings") or []) + [
-                f"Analisi LLM: {llm_error}"
-            ]
+            config_suggestion["warnings"] = list(
+                config_suggestion.get("warnings") or []
+            ) + [f"Analisi LLM: {llm_error}"]
 
-    config_suggestion = _reconcile_config_with_discovery(config_suggestion, slug, preview)
+    config_suggestion = _reconcile_config_with_discovery(
+        config_suggestion, slug, preview
+    )
     mode = config_suggestion.get("credential_mode", mode)
     schema = config_suggestion.get("credential_schema") or schema
     yaml_env = config_suggestion.get("suggested_env") or yaml_env
-    env_yaml = "\n".join(f"    {k}: \"{v}\"" for k, v in yaml_env.items()) if yaml_env else "    # nessuna"
+    env_yaml = (
+        "\n".join(f'    {k}: "{v}"' for k, v in yaml_env.items())
+        if yaml_env
+        else "    # nessuna"
+    )
 
     return {
         "server_slug": slug,
@@ -1295,14 +1434,21 @@ def _parse_ai_json_from_markdown(markdown_text: str) -> dict | None:
 
 def _config_suggestion_from_preview(slug: str, preview: dict) -> dict:
     """Config strutturata da discovery/preview (wizard funziona anche senza LLM)."""
-    from ..mcp_integration_sync import suggest_registry_env_for_org_shared, suggest_registry_env_for_per_user
+    from ..mcp_integration_sync import (
+        suggest_registry_env_for_org_shared,
+        suggest_registry_env_for_per_user,
+    )
 
     mode = preview.get("credential_mode") or "none"
     schema = preview.get("credential_schema") or []
     if mode == "per_user":
-        suggested_env = preview.get("suggested_env_per_user") or suggest_registry_env_for_per_user(slug, schema)
+        suggested_env = preview.get(
+            "suggested_env_per_user"
+        ) or suggest_registry_env_for_per_user(slug, schema)
     elif mode == "org_shared":
-        suggested_env = preview.get("suggested_env_org_shared") or suggest_registry_env_for_org_shared(schema)
+        suggested_env = preview.get(
+            "suggested_env_org_shared"
+        ) or suggest_registry_env_for_org_shared(schema)
     else:
         suggested_env = {}
     return {
@@ -1319,7 +1465,9 @@ def _config_suggestion_from_preview(slug: str, preview: dict) -> dict:
     }
 
 
-def _build_discovery_advise_markdown(slug: str, preview: dict, llm_error: str | None = None) -> str:
+def _build_discovery_advise_markdown(
+    slug: str, preview: dict, llm_error: str | None = None
+) -> str:
     """Report wizard quando l'LLM non risponde in tempo."""
     mode = preview.get("credential_mode") or "none"
     schema = preview.get("credential_schema") or []
@@ -1362,13 +1510,23 @@ def _build_discovery_advise_markdown(slug: str, preview: dict, llm_error: str | 
             ]
         )
     else:
-        lines.append("Nessuna credenziale env rilevata; verifica README (config file vs env).")
+        lines.append(
+            "Nessuna credenziale env rilevata; verifica README (config file vs env)."
+        )
     if llm_error:
         lines.extend(["", f"---\n⚠️ Analisi LLM non disponibile: {llm_error}"])
     cfg = _config_suggestion_from_preview(slug, preview)
     import json as _json
 
-    lines.extend(["", "## Configurazione JSON", "```json", _json.dumps(cfg, indent=2, ensure_ascii=False), "```"])
+    lines.extend(
+        [
+            "",
+            "## Configurazione JSON",
+            "```json",
+            _json.dumps(cfg, indent=2, ensure_ascii=False),
+            "```",
+        ]
+    )
     return "\n".join(lines)
 
 
@@ -1382,7 +1540,10 @@ def _reconcile_config_with_discovery(config: dict, slug: str, preview: dict) -> 
     preview_schema = preview.get("credential_schema") or []
     preview_mode = preview.get("credential_mode") or "none"
     out = dict(config)
-    if out.get("credential_mode") in ("none", "org_shared") and preview_mode == "per_user":
+    if (
+        out.get("credential_mode") in ("none", "org_shared")
+        and preview_mode == "per_user"
+    ):
         out["credential_mode"] = "per_user"
         out["requires_user_credentials"] = True
         out["apply_suggested_env"] = True
@@ -1390,7 +1551,9 @@ def _reconcile_config_with_discovery(config: dict, slug: str, preview: dict) -> 
         if not out.get("credential_schema"):
             out["credential_schema"] = preview_schema
         if not out.get("suggested_env") and preview_schema:
-            out["suggested_env"] = suggest_registry_env_for_per_user(slug, preview_schema)
+            out["suggested_env"] = suggest_registry_env_for_per_user(
+                slug, preview_schema
+            )
         warns = list(out.get("warnings") or [])
         warns.append(
             "Correzione automatica: rilevate variabili d'ambiente per credenziali nel server; "
@@ -1443,11 +1606,14 @@ async def _call_llm_advise_async(
     connector_info = ""
     if connector:
         try:
-            connector_info = _json.dumps({
-                "title": connector.get("title", ""),
-                "category": connector.get("category", ""),
-                "credential_fields": connector.get("credential_fields", []),
-            }, indent=2)
+            connector_info = _json.dumps(
+                {
+                    "title": connector.get("title", ""),
+                    "category": connector.get("category", ""),
+                    "credential_fields": connector.get("credential_fields", []),
+                },
+                indent=2,
+            )
         except Exception:
             pass
 
@@ -1475,11 +1641,11 @@ async def _call_llm_advise_async(
         '  "env_variables": {\n'
         '    "NOME_VAR": "${AION_USER_SLUG__NOME_VAR}" (se per_user) oppure "${NOME_VAR}" (se org_shared),\n'
         '    "...": "..."\n'
-        '  },\n'
+        "  },\n"
         '  "credential_schema": [\n'
         '    {"key": "EMAIL_USER", "label": "Email", "type": "text", "required": true},\n'
         '    {"key": "EMAIL_PASSWORD", "label": "Password", "type": "password", "required": true}\n'
-        '  ],\n'
+        "  ],\n"
         '  "rationale": "spiegazione del perché questa modalità"\n'
         "}\n```"
     )
@@ -1491,7 +1657,9 @@ async def _call_llm_advise_async(
         f"- **Schema credenziali dal catalogo:** {len(schema)} campi\n"
     )
     if server_files_context:
-        user_prompt += f"\n### File del server MCP (fonte primaria)\n{server_files_context}\n"
+        user_prompt += (
+            f"\n### File del server MCP (fonte primaria)\n{server_files_context}\n"
+        )
     if connector_info:
         user_prompt += f"\n### Connettore catalogato\n```json\n{connector_info}\n```\n"
     if schema:
@@ -1511,7 +1679,11 @@ async def _call_llm_advise_async(
         except Exception:
             pass
     if warnings:
-        user_prompt += "\n### Avvertenze automatiche\n" + "\n".join(f"- ⚠ {w}" for w in warnings) + "\n"
+        user_prompt += (
+            "\n### Avvertenze automatiche\n"
+            + "\n".join(f"- ⚠ {w}" for w in warnings)
+            + "\n"
+        )
     if discovery_info:
         try:
             user_prompt += (
@@ -1555,7 +1727,9 @@ async def _call_llm_advise_async(
         # thinking. Usa enable_thinking=False (vLLM-native) invece di reasoning_effort=none
         # (OpenAI compat, non sempre supportato da backend come vLLM/Qwen).
         # Env var AION_MCP_ADVISE_DISABLE_REASONING (default: 1) — imposta a 0 per abilitare reasoning.
-        _disable_reasoning = os.getenv("AION_MCP_ADVISE_DISABLE_REASONING", "1").strip().lower()
+        _disable_reasoning = (
+            os.getenv("AION_MCP_ADVISE_DISABLE_REASONING", "1").strip().lower()
+        )
         if _disable_reasoning not in ("0", "false", "no", "off"):
             extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
         else:
@@ -1584,7 +1758,10 @@ async def _call_llm_advise_async(
             r = await client.post(
                 url,
                 json=payload,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": "application/json",
+                },
             )
         _log.info("LLM response status=%d", r.status_code)
         if r.status_code != 200:
@@ -1593,10 +1770,16 @@ async def _call_llm_advise_async(
             return "", f"HTTP {r.status_code}: {body_preview[:200]}"
         r.raise_for_status()
         data = r.json()
-        _log.info("LLM response keys: %s", list(data.keys()) if isinstance(data, dict) else type(data).__name__)
+        _log.info(
+            "LLM response keys: %s",
+            list(data.keys()) if isinstance(data, dict) else type(data).__name__,
+        )
         choices = data.get("choices") or []
         if not choices:
-            _log.warning("LLM response: empty choices. Full: %s", _json.dumps(data, ensure_ascii=False)[:500])
+            _log.warning(
+                "LLM response: empty choices. Full: %s",
+                _json.dumps(data, ensure_ascii=False)[:500],
+            )
             return "", f"Nessuna scelta nella risposta LLM."
         msg = choices[0].get("message") or {}
         content = msg.get("content")
@@ -1606,17 +1789,28 @@ async def _call_llm_advise_async(
         if content is None:
             # Fallback: alcuni modelli reasoning mettono output nel campo reasoning
             if isinstance(reasoning, str) and len(reasoning.strip()) > 100:
-                _log.info("LLM: content null, uso reasoning come fallback (%d caratteri)", len(reasoning))
+                _log.info(
+                    "LLM: content null, uso reasoning come fallback (%d caratteri)",
+                    len(reasoning),
+                )
 
                 # Strategia A: cerca blocco ```json nell'intero reasoning
                 import re as _re
-                json_block = _re.search(r"```json\s*\n(.*?)\n```", reasoning, _re.DOTALL)
+
+                json_block = _re.search(
+                    r"```json\s*\n(.*?)\n```", reasoning, _re.DOTALL
+                )
                 if json_block:
-                    _log.info("LLM: trovato blocco JSON nel reasoning (%d caratteri)", len(json_block.group(0)))
+                    _log.info(
+                        "LLM: trovato blocco JSON nel reasoning (%d caratteri)",
+                        len(json_block.group(0)),
+                    )
                     return json_block.group(0).strip(), None
 
                 # Strategia B: cerca credential_mode e prova a estrarre JSON bilanciato
-                cred_match = _re.search(r'"credential_mode"\s*:\s*"(?:none|org_shared|per_user)"', reasoning)
+                cred_match = _re.search(
+                    r'"credential_mode"\s*:\s*"(?:none|org_shared|per_user)"', reasoning
+                )
                 if cred_match:
                     # Cerca la parentesi graffa di apertura più vicina prima del match
                     start = reasoning.rfind("{", 0, cred_match.start())
@@ -1629,7 +1823,7 @@ async def _call_llm_advise_async(
                             elif reasoning[i] == "}":
                                 depth -= 1
                                 if depth == 0:
-                                    candidate = reasoning[start:i + 1]
+                                    candidate = reasoning[start : i + 1]
                                     try:
                                         _json.loads(candidate)
                                         _log.info(
@@ -1644,7 +1838,10 @@ async def _call_llm_advise_async(
                 # Strategia C: prendi l'ultimo terzo del reasoning (più probabile la risposta finale)
                 third = max(len(reasoning) // 3, 500)
                 fallback = reasoning[-third:].strip()
-                _log.info("LLM: fallback ultimo terzo del reasoning (%d caratteri)", len(fallback))
+                _log.info(
+                    "LLM: fallback ultimo terzo del reasoning (%d caratteri)",
+                    len(fallback),
+                )
                 return fallback, None
 
             # Secondo fallback: riprova con max_tokens aumentato e reasoning disabilitato
@@ -1686,9 +1883,14 @@ async def _call_llm_advise_async(
             )
         if isinstance(content, str) and len(content.strip()) > 50:
             return content.strip(), None
-        return "", f"Risposta LLM troppo breve ({len(str(content))} caratteri, finish={finish})"
+        return (
+            "",
+            f"Risposta LLM troppo breve ({len(str(content))} caratteri, finish={finish})",
+        )
     except httpx.TimeoutException:
-        tout = float(os.getenv("AION_MCP_ADVISE_TIMEOUT", os.getenv("AION_LLM_TIMEOUT", "120")))
+        tout = float(
+            os.getenv("AION_MCP_ADVISE_TIMEOUT", os.getenv("AION_LLM_TIMEOUT", "120"))
+        )
         _log.warning("Timeout LLM advise per %s dopo %.0fs", slug, tout)
         return "", f"Timeout ({tout:.0f}s) — il server LLM non risponde in tempo"
     except httpx.HTTPStatusError as e:
@@ -1700,11 +1902,15 @@ async def _call_llm_advise_async(
 
 
 @router.post("/mcp-integrations/{server_slug}/apply-suggested-env")
-async def admin_apply_suggested_env(server_slug: str, credential_mode: str = "per_user"):
+async def admin_apply_suggested_env(
+    server_slug: str, credential_mode: str = "per_user"
+):
     from ..mcp_integration_sync import apply_integration_config
 
     if credential_mode not in ("per_user", "org_shared"):
-        raise HTTPException(status_code=400, detail="credential_mode must be per_user or org_shared")
+        raise HTTPException(
+            status_code=400, detail="credential_mode must be per_user or org_shared"
+        )
     result = await apply_integration_config(
         server_slug,
         credential_mode=credential_mode,
@@ -1719,37 +1925,48 @@ async def admin_apply_suggested_env(server_slug: str, credential_mode: str = "pe
 @router.delete("/mcp-integrations/{server_slug}")
 async def admin_delete_mcp_integration(server_slug: str):
     async with get_async_session_maker()() as session:
-        await session.execute(delete(McpServerConfig).where(McpServerConfig.server_slug == server_slug))
+        await session.execute(
+            delete(McpServerConfig).where(McpServerConfig.server_slug == server_slug)
+        )
         await session.commit()
     return {"ok": True}
+
 
 @router.get("/market/search")
 async def search_market(q: str = ""):
     """Searches across integrated MCP marketplaces."""
     return hub_aggregator.search_all(q)
 
+
 # --- SECURITY & TRUST ---
+
 
 @router.post("/security/trust")
 async def add_trust(req: TrustRequest):
     """Mark a path as trusted."""
     from ..security.trust_manager import trust_manager
+
     await trust_manager.add_trust(req.path)
     return {"status": "success"}
+
 
 @router.delete("/security/trust")
 async def remove_trust(path: str):
     """Remove trust from a path."""
     from ..security.trust_manager import trust_manager
+
     await trust_manager.remove_trust(path)
     return {"status": "success"}
 
+
 # --- MEMORY MANAGEMENT ---
+
 
 @router.get("/memory/queries")
 async def get_verified_queries(limit: int = 100):
     """List most recent queries from QueryMemory."""
     from ..query_memory import memory
+
     return await memory.get_recent(limit=limit)
 
 
@@ -1779,6 +1996,7 @@ async def stm_consolidate_alias(body: StmConsolidateBody):
 async def verify_query(id: int):
     """Mark a query as verified manually."""
     from ..query_memory import memory
+
     success = await memory.update_entry(id, is_verified=True)
     return {"status": "success" if success else "failed"}
 
@@ -1787,9 +2005,11 @@ async def verify_query(id: int):
 async def delete_query(entry_id: int):
     """Delete a query from memory."""
     from ..query_memory import memory
+
     if await memory.delete_entry(entry_id):
         return {"status": "success"}
     raise HTTPException(status_code=404, detail="Entry not found")
+
 
 @router.get("/memory/facts")
 async def get_mempalace_facts(query: str = ""):
@@ -1798,45 +2018,54 @@ async def get_mempalace_facts(query: str = ""):
         # Build parameters for the mempalace server
         config = mcp_manager.get_server_config("mempalace")
         if not config:
-            return {"facts": [], "status": "offline", "message": "Server mempalace non configurato"}
-        
+            return {
+                "facts": [],
+                "status": "offline",
+                "message": "Server mempalace non configurato",
+            }
+
         # Get session using the new hybrid context manager
         async with mcp_manager.session_context("mempalace") as session:
             # DYNAMIC TOOL DISCOVERY
             tools_result = await session.list_tools()
             available_tools = [t.name for t in tools_result.tools]
-            
+
             tool_to_call = None
             args = {}
-            
+
             if query:
                 if "mempalace_search" in available_tools:
                     tool_to_call = "mempalace_search"
                     args = {"query": query, "limit": 20}
-            
+
             if not tool_to_call:
                 if "mempalace_diary_read" in available_tools:
                     tool_to_call = "mempalace_diary_read"
                     args = {"agent_name": "AION", "last_n": 50}
                 elif "mempalace_status" in available_tools:
                     tool_to_call = "mempalace_status"
-            
+
             if not tool_to_call:
-                return {"facts": [], "status": "partial", "message": "Reading tools not found"}
-                
+                return {
+                    "facts": [],
+                    "status": "partial",
+                    "message": "Reading tools not found",
+                }
+
             res = await session.call_tool(tool_to_call, arguments=args)
-            
+
             facts_list = []
             if hasattr(res, "content"):
                 facts_list = [c.text for c in res.content if hasattr(c, "text")]
             else:
                 facts_list = [str(res)]
-                
+
             return {"facts": facts_list, "status": "online", "type": "project"}
 
     except Exception as e:
         logger.error(f"Error calling Mempalace: {e}")
         return {"facts": [], "status": "error", "message": str(e)}
+
 
 @router.post("/mcp/scan")
 async def scan_mcp(req: ScanRequest):
@@ -1847,15 +2076,23 @@ async def scan_mcp(req: ScanRequest):
     else:
         _, list_v = await AIONAntivirus.scan_file(path)
         raw_violations = {path: list_v} if list_v else {}
-    
+
     # Format violations with is_trusted=False for initial scan
     violations = {
-        p: {"list": v_list, "is_trusted": False}
-        for p, v_list in raw_violations.items()
+        p: {"list": v_list, "is_trusted": False} for p, v_list in raw_violations.items()
     }
-    
-    is_safe = all(not any(violation["severity"] in ["high", "critical"] for violation in v.get("list", [])) 
-                 for v in violations.values()) if violations else True
+
+    is_safe = (
+        all(
+            not any(
+                violation["severity"] in ["high", "critical"]
+                for violation in v.get("list", [])
+            )
+            for v in violations.values()
+        )
+        if violations
+        else True
+    )
 
     # Persist scan result to DB if requested
     scan_id = f"scan_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
@@ -1865,34 +2102,28 @@ async def scan_mcp(req: ScanRequest):
                 id=scan_id,
                 target_path=path,
                 is_safe=is_safe,
-                results_json=json.dumps(violations)
+                results_json=json.dumps(violations),
             )
             session.add(new_scan)
             await session.commit()
-    
-    return {
-        "id": scan_id,
-        "is_safe": is_safe,
-        "violations": violations
-    }
+
+    return {"id": scan_id, "is_safe": is_safe, "violations": violations}
+
 
 @router.post("/mcp/install")
 async def install_mcp(req: MCPInstallRequest):
     """Installs a modular MCP with venv isolation."""
     try:
         success = mcp_manager.install_stdio_server(
-            req.name, 
-            req.script_path, 
-            dependencies=req.dependencies
+            req.name, req.script_path, dependencies=req.dependencies
         )
         if success and req.is_sandboxed:
-            mcp_manager.update_server_config(
-                req.name, {"security": {"sandbox": True}}
-            )
+            mcp_manager.update_server_config(req.name, {"security": {"sandbox": True}})
 
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 def build_remote_bridge_registry_config(
     url: str,
@@ -1901,8 +2132,9 @@ def build_remote_bridge_registry_config(
     auth_type: str = "oauth2",
 ) -> dict:
     import re
+
     slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_").upper()
-    
+
     args = [
         "node_modules/mcp-remote/dist/proxy.js",
         url,
@@ -1924,7 +2156,6 @@ def build_remote_bridge_registry_config(
         env[env_var] = "${" + env_var + "}"
     # Se auth_type è "none": nessun header di autorizzazione, nessuna variabile d'ambiente OAuth.
 
-
     return {
         "type": "remote-bridge",
         "command": "node",
@@ -1934,6 +2165,7 @@ def build_remote_bridge_registry_config(
         "aion_market_install": "remote",
         "description": description,
     }
+
 
 async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -> str:
     """Installa un record marketplace (da ricerca o URL GitHub manuale). Ritorna lo slug."""
@@ -1956,7 +2188,10 @@ async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -
     linked_cid = infer_connector_id_for_registry_name(name, catalog)
 
     sid = item_id or str(target.get("id") or "")
-    config: Dict[str, Any] = {"description": target.get("description"), "source_id": sid}
+    config: Dict[str, Any] = {
+        "description": target.get("description"),
+        "source_id": sid,
+    }
     if linked_cid:
         config["aion_connector_id"] = linked_cid
 
@@ -1987,16 +2222,20 @@ async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -
             config["command"] = cmd
             config["args"] = args
         except FileNotFoundError:
-            logger.warning("git install %s: entrypoint non rilevato, normalize post-install", name)
+            logger.warning(
+                "git install %s: entrypoint non rilevato, normalize post-install", name
+            )
         mcp_manager._registry_local[name] = config
         mcp_manager._rebuild_merged()
         mcp_manager.save_registry()
     elif target.get("install_type") == "npx":
         config["aion_market_install"] = "npx"
-        config.update({
-            "command": "npx",
-            "args": npx_invoke_args(target),
-        })
+        config.update(
+            {
+                "command": "npx",
+                "args": npx_invoke_args(target),
+            }
+        )
         mcp_manager._registry_local[name] = config
         mcp_manager._rebuild_merged()
         mcp_manager.save_registry()
@@ -2006,26 +2245,36 @@ async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -
         config["_meta"] = target.get("_meta") or {}
         sse_url = ""
         for r in remotes:
-            if isinstance(r, dict) and r.get("type") in ("sse", "streamable-http", "streamable_http"):
+            if isinstance(r, dict) and r.get("type") in (
+                "sse",
+                "streamable-http",
+                "streamable_http",
+            ):
                 sse_url = r.get("url") or ""
                 break
         if not sse_url and remotes:
             sse_url = remotes[0].get("url") if isinstance(remotes[0], dict) else ""
-        
+
         import asyncio
         from ..mcp_credential_discovery import probe_remote_url_sync
-        
+
         auth_type = "oauth2"
         if sse_url:
             try:
                 meta = target.get("_meta") or {}
-                probe_res = await asyncio.to_thread(probe_remote_url_sync, sse_url, meta)
+                probe_res = await asyncio.to_thread(
+                    probe_remote_url_sync, sse_url, meta
+                )
                 auth_type = probe_res.get("type") or "oauth2"
                 if auth_type not in ("none", "oauth2", "api-key", "basic"):
                     auth_type = "oauth2"
             except Exception as e:
-                logger.warning("Failed to probe remote URL %s: %s. Defaulting to oauth2", sse_url, e)
-        
+                logger.warning(
+                    "Failed to probe remote URL %s: %s. Defaulting to oauth2",
+                    sse_url,
+                    e,
+                )
+
         remote_config = build_remote_bridge_registry_config(
             sse_url, name, target.get("description") or "", auth_type=auth_type
         )
@@ -2087,7 +2336,12 @@ async def install_from_github_url(body: GitHubInstallBody):
             target.get("id"),
         )
         raise HTTPException(status_code=500, detail=str(e)) from e
-    return {"status": "success", "name": name, "server_slug": name, "url": target.get("url")}
+    return {
+        "status": "success",
+        "name": name,
+        "server_slug": name,
+        "url": target.get("url"),
+    }
 
 
 class RemoteInstallBody(BaseModel):
@@ -2100,11 +2354,14 @@ async def install_from_remote_url(body: RemoteInstallBody):
     """Installa e registra un server MCP remoto da un URL diretto (usando mcp-remote bridge)."""
     url = body.url.strip()
     if not (url.startswith("http://") or url.startswith("https://")):
-        raise HTTPException(status_code=400, detail="L'URL deve iniziare con http:// o https://")
+        raise HTTPException(
+            status_code=400, detail="L'URL deve iniziare con http:// o https://"
+        )
 
     # Estrae il nome dell'host o un valore di default
     if not body.display_name:
         import urllib.parse
+
         try:
             parsed = urllib.parse.urlparse(url)
             name_parts = parsed.netloc.split(".")
@@ -2125,19 +2382,16 @@ async def install_from_remote_url(body: RemoteInstallBody):
         "description": f"MCP remoto connesso a {url}",
         "url": url,
         "install_type": "remote",
-        "remotes": [
-            {
-                "type": "sse",
-                "url": url
-            }
-        ]
+        "remotes": [{"type": "sse", "url": url}],
     }
     try:
         name = await _install_market_record(target, item_id=str(target.get("id") or ""))
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("install-remote failed url=%r id=%r", body.url, target.get("id"))
+        logger.exception(
+            "install-remote failed url=%r id=%r", body.url, target.get("id")
+        )
         raise HTTPException(status_code=500, detail=str(e)) from e
     return {"status": "success", "name": name, "server_slug": name, "url": url}
 
@@ -2156,7 +2410,9 @@ async def install_mcp_from_catalog_endpoint(connector_id: str):
 
     result = await install_mcp_from_catalog(connector_id.strip())
     if not result.get("ok"):
-        raise HTTPException(status_code=404, detail=result.get("error", "Install failed"))
+        raise HTTPException(
+            status_code=404, detail=result.get("error", "Install failed")
+        )
     preview = result.pop("preview", None)
     if isinstance(preview, dict) and preview.get("connector"):
         preview = {**preview, "connector_id": preview.get("aion_connector_id")}
@@ -2187,7 +2443,9 @@ async def mcp_install_wizard_start(body: McpInstallWizardStartBody):
     if market_id:
         slug = await _install_marketplace_item(market_id)
     elif not slug:
-        raise HTTPException(status_code=400, detail="server_slug or market_item_id required")
+        raise HTTPException(
+            status_code=400, detail="server_slug or market_item_id required"
+        )
 
     mcp_manager.load_registry()
     if slug not in mcp_manager._registry:
@@ -2195,6 +2453,7 @@ async def mcp_install_wizard_start(body: McpInstallWizardStartBody):
 
     # Normalizza command/args se mancanti (es. progetti TS senza dist/ dopo git clone)
     from ..mcp_registry_normalize import normalize_installed_server_registry
+
     try:
         normalize_installed_server_registry(slug)
     except Exception:
@@ -2234,8 +2493,16 @@ async def mcp_install_wizard_commit(body: McpInstallWizardCommitBody):
         mode = "none"
     schema_override = bool(policy.get("schema_override", False))
     cred_schema = policy.get("credential_schema") if schema_override else None
-    env_override = policy.get("suggested_env") if isinstance(policy.get("suggested_env"), dict) else None
-    oauth_config = policy.get("oauth_config") if isinstance(policy.get("oauth_config"), dict) else None
+    env_override = (
+        policy.get("suggested_env")
+        if isinstance(policy.get("suggested_env"), dict)
+        else None
+    )
+    oauth_config = (
+        policy.get("oauth_config")
+        if isinstance(policy.get("oauth_config"), dict)
+        else None
+    )
 
     result = await apply_integration_config(
         slug,
@@ -2257,24 +2524,36 @@ async def mcp_install_wizard_commit(body: McpInstallWizardCommitBody):
 
     async with get_async_session_maker()() as session:
         exists = (
-            await session.execute(
-                select(McpServerConfig.id).where(McpServerConfig.server_slug == slug)
+            (
+                await session.execute(
+                    select(McpServerConfig.id).where(
+                        McpServerConfig.server_slug == slug
+                    )
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
     if not exists:
         create_body = McpIntegrationCreate(
             server_slug=slug,
             display_name=policy.get("display_name") or slug.replace("_", " ").title(),
             is_enabled_for_users=bool(policy.get("is_enabled_for_users")),
             credential_mode=mode,
-            requires_user_credentials=bool(policy.get("requires_user_credentials", mode == "per_user")),
+            requires_user_credentials=bool(
+                policy.get("requires_user_credentials", mode == "per_user")
+            ),
             credential_schema=cred_schema or [],
             user_may_disable=policy.get("user_may_disable", True),
             oauth_config=oauth_config,
         )
         await admin_create_mcp_integration(create_body)
 
-    return {"status": "success", "server_slug": slug, **{k: v for k, v in result.items() if k != "ok"}}
+    return {
+        "status": "success",
+        "server_slug": slug,
+        **{k: v for k, v in result.items() if k != "ok"},
+    }
 
 
 @router.post("/mcp/{name}/probe")
@@ -2290,7 +2569,10 @@ async def probe_mcp_server(name: str):
     if t == "remote-bridge":
         import shutil
         import os
-        local_path = os.path.join(os.getcwd(), "node_modules", "mcp-remote", "dist", "proxy.js")
+
+        local_path = os.path.join(
+            os.getcwd(), "node_modules", "mcp-remote", "dist", "proxy.js"
+        )
         has_local = os.path.exists(local_path)
         if has_local:
             if not shutil.which("node"):
@@ -2299,7 +2581,7 @@ async def probe_mcp_server(name: str):
                     "server_slug": name,
                     "error": "node command not found. Node.js is required to run remote-bridge.",
                     "tools": [],
-                    "tool_count": 0
+                    "tool_count": 0,
                 }
         else:
             if not shutil.which("npx"):
@@ -2308,22 +2590,33 @@ async def probe_mcp_server(name: str):
                     "server_slug": name,
                     "error": "npx command not found and local mcp-remote not installed. Node.js/npm is required.",
                     "tools": [],
-                    "tool_count": 0
+                    "tool_count": 0,
                 }
     try:
-        tools = await build_mcp_tools(name, cfg, session_id="mcp-probe", user_id="admin-probe")
+        tools = await build_mcp_tools(
+            name, cfg, session_id="mcp-probe", user_id="admin-probe"
+        )
         return {
             "ok": True,
             "server_slug": name,
             "tool_count": len(tools),
             "tools": [
-                {"name": getattr(t, "name", ""), "description": getattr(t, "description", "") or ""}
+                {
+                    "name": getattr(t, "name", ""),
+                    "description": getattr(t, "description", "") or "",
+                }
                 for t in tools
             ],
         }
     except Exception as e:
         logger.exception("MCP probe failed for %s", name)
-        return {"ok": False, "server_slug": name, "error": str(e), "tools": [], "tool_count": 0}
+        return {
+            "ok": False,
+            "server_slug": name,
+            "error": str(e),
+            "tools": [],
+            "tool_count": 0,
+        }
 
 
 @router.put("/mcp/{name}")
@@ -2338,14 +2631,23 @@ async def update_mcp_config(name: str, config: MCPUpdate):
     if update_data:
         async with get_async_session_maker()() as session:
             row = (
-                await session.execute(
-                    select(McpServerConfig).where(McpServerConfig.server_slug == name)
+                (
+                    await session.execute(
+                        select(McpServerConfig).where(
+                            McpServerConfig.server_slug == name
+                        )
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
 
         if row and row.credential_mode == "none":
             cfg = mcp_manager.get_server_config(name) or {}
-            is_remote = cfg.get("type") == "remote-bridge" or cfg.get("aion_market_install") == "remote"
+            is_remote = (
+                cfg.get("type") == "remote-bridge"
+                or cfg.get("aion_market_install") == "remote"
+            )
 
             if is_remote:
                 # 1) Rimuovi env (non serve quando credential_mode è "none")
@@ -2377,29 +2679,33 @@ async def update_mcp_config(name: str, config: MCPUpdate):
     await sync_mcp_server_config_from_registry(name)
     return {"status": "success", "config": updated}
 
+
 @router.get("/stats")
 async def get_stats():
     """Aggregates system-wide statistics for the dashboard."""
     profiles = profile_manager.list_profiles()
-    
+
     skill_registry.reload()
     skills_count = len(skill_registry.get_all_names())
-        
+
     mcp_count = len(mcp_manager._registry)
-    
+
     return {
         "active_profiles": len(profiles),
         "total_skills": skills_count,
         "installed_mcp": mcp_count,
-        "security_score": "100%", # Placeholder for future dynamic score
-        "recent_scans": 5 # Placeholder
+        "security_score": "100%",  # Placeholder for future dynamic score
+        "recent_scans": 5,  # Placeholder
     }
+
 
 @router.delete("/mcp/{name}")
 async def delete_mcp(name: str):
     """Rimuove il server dal registry locale e, se installato dal marketplace, elimina clone/binario."""
     if name in mcp_manager._registry_base:
-        raise HTTPException(status_code=400, detail="Impossibile eliminare i moduli MCP di sistema.")
+        raise HTTPException(
+            status_code=400, detail="Impossibile eliminare i moduli MCP di sistema."
+        )
 
     from ..agent_profile import profile_manager
 
@@ -2416,8 +2722,8 @@ async def delete_mcp(name: str):
             detail={
                 "error": "mcp_in_use",
                 "message": f"Impossibile eliminare il server MCP. È in uso nei seguenti profili: {', '.join(referencing_profiles)}",
-                "profiles": referencing_profiles
-            }
+                "profiles": referencing_profiles,
+            },
         )
 
     cfg = copy.deepcopy(mcp_manager._registry.get(name) or {})
@@ -2426,7 +2732,9 @@ async def delete_mcp(name: str):
     _remove_market_mcp_artifacts(name, cfg)
     # Pulisci anche la riga McpServerConfig (policy) se presente
     async with get_async_session_maker()() as session:
-        await session.execute(delete(McpServerConfig).where(McpServerConfig.server_slug == name))
+        await session.execute(
+            delete(McpServerConfig).where(McpServerConfig.server_slug == name)
+        )
         await session.commit()
     return {"status": "success"}
 
@@ -2436,7 +2744,11 @@ async def admin_list_plugins():
     root = _project_root() / "data" / "plugins"
     if not root.is_dir():
         return {"plugins": []}
-    return {"plugins": [p.stem for p in sorted(root.glob("*.py")) if not p.name.startswith("_")]}
+    return {
+        "plugins": [
+            p.stem for p in sorted(root.glob("*.py")) if not p.name.startswith("_")
+        ]
+    }
 
 
 @router.post("/plugins/reload")
@@ -2458,19 +2770,22 @@ async def list_subagents():
             body = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
         except Exception:
             body = {}
-        out.append({"name": p.stem, "file": str(p.relative_to(_project_root())), "meta": body})
+        out.append(
+            {"name": p.stem, "file": str(p.relative_to(_project_root())), "meta": body}
+        )
     return {"subagents": out}
 
 
 # --- V2 ADDITIONS ---
 
+
 @router.get("/system/health")
 async def get_system_health():
     """Detailed health info for V2 components."""
     from ..storage.factory import get_storage_backend
-    
+
     r_status = redis_status()
-    
+
     # DB Status
     db_url = os.getenv("AION_DB_URL", "sqlite+aiosqlite:///data/aion.db")
     db_size = -1
@@ -2478,21 +2793,21 @@ async def get_system_health():
         db_path = db_url.split("///")[-1]
         if os.path.exists(db_path):
             db_size = os.path.getsize(db_path)
-            
+
     storage = get_storage_backend()
     storage_type = "s3" if hasattr(storage, "bucket") else "local"
-    
+
     return {
         "redis": r_status,
         "database": {
             "url": db_url.split("@")[-1] if "@" in db_url else db_url,
             "size_bytes": db_size,
-            "unified": os.getenv("AION_UNIFIED_DB", "1") == "1"
+            "unified": os.getenv("AION_UNIFIED_DB", "1") == "1",
         },
         "storage": {
             "backend": storage_type,
-            "local_root": os.getenv("AION_STORAGE_LOCAL_ROOT", "data")
-        }
+            "local_root": os.getenv("AION_STORAGE_LOCAL_ROOT", "data"),
+        },
     }
 
 
@@ -2534,6 +2849,7 @@ async def list_users():
     """List all users in the unified database."""
     from ..data.models import User
     from ..data.user_password import get_roles
+
     async with get_async_session_maker()() as session:
         q = select(User).order_by(User.created_at.desc())
         rows = (await session.execute(q)).scalars().all()
@@ -2546,13 +2862,16 @@ async def list_users():
                     "display_name": r.display_name,
                     "email": r.email,
                     "roles": get_roles(r),
-                    "must_change_password": bool(getattr(r, "must_change_password", False)),
+                    "must_change_password": bool(
+                        getattr(r, "must_change_password", False)
+                    ),
                     "created_at": r.created_at,
                     "last_active_at": r.last_active_at,
                 }
                 for r in rows
             ]
         }
+
 
 @router.post("/users")
 async def create_user(body: UserCreate):
@@ -2605,6 +2924,7 @@ async def update_user(user_id: str, body: UserUpdate):
 async def delete_user(user_id: str):
     """Delete a user."""
     from ..data.models import User
+
     async with get_async_session_maker()() as session:
         await session.execute(delete(User).where(User.id == user_id))
         await session.commit()
@@ -2641,14 +2961,14 @@ async def create_api_key(body: ApiKeyCreate):
     from ..data.ids import new_uuid7_str
     from ..api.auth.api_key import generate_api_key_pair, hash_api_key
     from datetime import timedelta
-    
+
     raw_key, prefix, secret = generate_api_key_pair()
     hashed = hash_api_key(raw_key)
-    
+
     expires_at = None
     if body.expires_in_days:
         expires_at = datetime.now() + timedelta(days=body.expires_in_days)
-        
+
     async with get_async_session_maker()() as session:
         new_key = ApiKey(
             id=new_uuid7_str(),
@@ -2657,18 +2977,18 @@ async def create_api_key(body: ApiKeyCreate):
             prefix=prefix,
             hash=hashed,
             scopes_json=json.dumps(body.scopes),
-            expires_at=expires_at
+            expires_at=expires_at,
         )
         session.add(new_key)
         await session.commit()
-        
+
     return {
         "id": new_key.id,
         "name": new_key.name,
-        "key": raw_key, # RETURNED ONLY ONCE
+        "key": raw_key,  # RETURNED ONLY ONCE
         "prefix": prefix,
         "scopes": body.scopes,
-        "expires_at": expires_at
+        "expires_at": expires_at,
     }
 
 
@@ -2696,7 +3016,7 @@ async def list_conversations_global(limit: int = 50):
                     "title": r.title,
                     "message_count": r.message_count,
                     "updated_at": r.updated_at,
-                    "metadata": json.loads(r.metadata_json or "{}")
+                    "metadata": json.loads(r.metadata_json or "{}"),
                 }
                 for r in rows
             ]
@@ -2708,43 +3028,59 @@ async def get_conversation_messages(conv_id: str, include_internal: bool = False
     """Retrieve full message history for a conversation including steps and artifacts."""
     async with get_async_session_maker()() as session:
         # Fetch Messages
-        q_msg = select(Message).where(Message.conversation_id == conv_id).order_by(Message.seq.asc())
+        q_msg = (
+            select(Message)
+            .where(Message.conversation_id == conv_id)
+            .order_by(Message.seq.asc())
+        )
         msgs = (await session.execute(q_msg)).scalars().all()
-        
+
         # Fetch Steps
-        q_steps = select(Step).where(Step.conversation_id == conv_id).order_by(Step.created_at.asc())
+        q_steps = (
+            select(Step)
+            .where(Step.conversation_id == conv_id)
+            .order_by(Step.created_at.asc())
+        )
         steps = (await session.execute(q_steps)).scalars().all()
-        
+
         # Fetch Attachments
-        q_att = select(Attachment).where(Attachment.conversation_id == conv_id).order_by(Attachment.created_at.asc())
+        q_att = (
+            select(Attachment)
+            .where(Attachment.conversation_id == conv_id)
+            .order_by(Attachment.created_at.asc())
+        )
         atts = (await session.execute(q_att)).scalars().all()
-        
+
         # Group steps and attachments by message_id
         steps_by_msg = {}
         for s in steps:
             mid = s.message_id or "orphan"
-            steps_by_msg.setdefault(mid, []).append({
-                "id": s.id,
-                "name": s.name,
-                "type": s.type,
-                "input": s.input,
-                "output": s.output,
-                "is_error": bool(s.is_error),
-                "created_at": s.created_at
-            })
-            
+            steps_by_msg.setdefault(mid, []).append(
+                {
+                    "id": s.id,
+                    "name": s.name,
+                    "type": s.type,
+                    "input": s.input,
+                    "output": s.output,
+                    "is_error": bool(s.is_error),
+                    "created_at": s.created_at,
+                }
+            )
+
         atts_by_msg = {}
         for a in atts:
             mid = a.message_id or "orphan"
-            atts_by_msg.setdefault(mid, []).append({
-                "id": a.id,
-                "storage_key": a.storage_key,
-                "original_name": a.original_name,
-                "mime": a.mime,
-                "size_bytes": a.size_bytes,
-                "kind": a.kind,
-                "created_at": a.created_at
-            })
+            atts_by_msg.setdefault(mid, []).append(
+                {
+                    "id": a.id,
+                    "storage_key": a.storage_key,
+                    "original_name": a.original_name,
+                    "mime": a.mime,
+                    "size_bytes": a.size_bytes,
+                    "kind": a.kind,
+                    "created_at": a.created_at,
+                }
+            )
 
         data = []
         orphan_steps = list(steps_by_msg.get("orphan", []))
@@ -2752,7 +3088,7 @@ async def get_conversation_messages(conv_id: str, include_internal: bool = False
 
         for r in msgs:
             nr = normalize_message_role(r.role)
-            
+
             # Collect steps and attachments for this message
             current_steps = steps_by_msg.get(r.id, [])
             current_atts = atts_by_msg.get(r.id, [])
@@ -2764,7 +3100,7 @@ async def get_conversation_messages(conv_id: str, include_internal: bool = False
                 or is_empty_technical_message(nr, r.content)
             ):
                 continue
-            
+
             final_steps = current_steps
             final_atts = current_atts
             if nr == "assistant":
@@ -2773,7 +3109,7 @@ async def get_conversation_messages(conv_id: str, include_internal: bool = False
                 final_atts = orphan_atts + final_atts
                 orphan_steps = []
                 orphan_atts = []
-            
+
             data.append(
                 {
                     "id": r.id,
@@ -2799,15 +3135,27 @@ async def get_conversation_render_audit(conv_id: str):
     """
     async with get_async_session_maker()() as session:
         msg_rows = (
-            await session.execute(
-                select(Message).where(Message.conversation_id == conv_id).order_by(Message.seq.asc())
+            (
+                await session.execute(
+                    select(Message)
+                    .where(Message.conversation_id == conv_id)
+                    .order_by(Message.seq.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         step_rows = (
-            await session.execute(
-                select(Step).where(Step.conversation_id == conv_id).order_by(Step.created_at.asc())
+            (
+                await session.execute(
+                    select(Step)
+                    .where(Step.conversation_id == conv_id)
+                    .order_by(Step.created_at.asc())
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     msg_summary: Dict[str, int] = {}
     hidden_internal = 0
@@ -2844,7 +3192,9 @@ async def get_conversation_render_audit(conv_id: str):
                     "seq": m.seq,
                     "role_raw": m.role,
                     "role_normalized": nr,
-                    "ui_visible": not (hidden_role or hidden_marker or is_raw_plan or is_empty_tech),
+                    "ui_visible": not (
+                        hidden_role or hidden_marker or is_raw_plan or is_empty_tech
+                    ),
                     "hidden_by_role": hidden_role,
                     "hidden_by_content_marker": hidden_marker,
                     "hidden_by_raw_plan": is_raw_plan,
@@ -2891,16 +3241,20 @@ async def get_conversation_render_audit(conv_id: str):
         "step_samples": step_samples,
     }
 
+
 @router.get("/profiling/bottlenecks")
 async def get_profiling_bottlenecks():
     """Restituisce le analisi e i colli di bottiglia basati sui JSONL del profiler."""
     from ..profiling.bottleneck import detector
+
     return detector.detect()
+
 
 @router.get("/eval/runs")
 async def list_eval_runs(limit: int = 20):
     """List recent evaluation runs."""
     from ..data.models import EvalRun
+
     async with get_async_session_maker()() as session:
         q = select(EvalRun).order_by(EvalRun.created_at.desc()).limit(limit)
         rows = (await session.execute(q)).scalars().all()
@@ -2911,16 +3265,18 @@ async def list_eval_runs(limit: int = 20):
                     "dataset_name": r.dataset_name,
                     "profile_name": r.profile_name,
                     "overall_score": r.overall_score,
-                    "created_at": r.created_at
+                    "created_at": r.created_at,
                 }
                 for r in rows
             ]
         }
 
+
 @router.get("/eval/runs/{run_id}/results")
 async def get_eval_results(run_id: str):
     """Get detailed results for a specific evaluation run."""
     from ..data.models import EvalResult
+
     async with get_async_session_maker()() as session:
         q = select(EvalResult).where(EvalResult.run_id == run_id)
         rows = (await session.execute(q)).scalars().all()
@@ -2931,7 +3287,7 @@ async def get_eval_results(run_id: str):
                     "input_text": r.input_text,
                     "score": r.score,
                     "reasoning": r.reasoning,
-                    "latency_sec": r.latency_sec
+                    "latency_sec": r.latency_sec,
                 }
                 for r in rows
             ]

@@ -48,7 +48,11 @@ class SessionChartQueue:
         try:
             r.ping()
         except Exception:
-            if os.getenv("AION_REDIS_FALLBACK_LOCAL", "1").lower() in ("1", "true", "yes"):
+            if os.getenv("AION_REDIS_FALLBACK_LOCAL", "1").lower() in (
+                "1",
+                "true",
+                "yes",
+            ):
                 self._redis = False
                 return None
             raise
@@ -59,7 +63,7 @@ class SessionChartQueue:
     def push(cls, session_id: str, data: Any):
         """Pushes a chart (dict or ChartData object) to the queue."""
         inst = cls()
-        
+
         # Convert ChartData object to serializable dict immediately
         if hasattr(data, "dataframe") and hasattr(data, "query"):
             serialized = {
@@ -81,7 +85,11 @@ class SessionChartQueue:
         else:
             serialized = data if isinstance(data, dict) else {"query": "", "data": []}
 
-        if isinstance(serialized, dict) and "query" in serialized and "data" in serialized:
+        if (
+            isinstance(serialized, dict)
+            and "query" in serialized
+            and "data" in serialized
+        ):
             serialized = normalize_chart_dict(serialized)
 
         r = inst._get_redis()

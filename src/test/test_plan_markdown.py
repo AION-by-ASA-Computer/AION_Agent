@@ -32,8 +32,16 @@ def test_plan_markdown_roundtrip():
     plan = ExecutionPlan(
         goal="Write docs",
         tasks=[
-            ExecutionTask(id="t1", title="Outline", description="Create structure", depends_on=[]),
-            ExecutionTask(id="t2", title="Draft", description="Write pages", depends_on=["t1"], target_profile="planner"),
+            ExecutionTask(
+                id="t1", title="Outline", description="Create structure", depends_on=[]
+            ),
+            ExecutionTask(
+                id="t2",
+                title="Draft",
+                description="Write pages",
+                depends_on=["t1"],
+                target_profile="planner",
+            ),
         ],
     )
     md = plan_to_markdown(plan)
@@ -48,7 +56,15 @@ def test_normalize_payload_markdown():
         {
             "plan_markdown": "## Goal\nx\n## Tasks\n- [ ] `a` **A** (profile: -) (deps: -)",
             "annotations": {"a": "ok"},
-            "todos": [{"id": "a", "title": "A", "status": "pending", "depends_on": [], "target_profile": ""}],
+            "todos": [
+                {
+                    "id": "a",
+                    "title": "A",
+                    "status": "pending",
+                    "depends_on": [],
+                    "target_profile": "",
+                }
+            ],
         }
     )
     assert "## Goal" in md
@@ -59,7 +75,15 @@ def test_normalize_payload_markdown():
 def test_todos_conversion_roundtrip():
     plan = ExecutionPlan(
         goal="goal demo",
-        tasks=[ExecutionTask(id="x1", title="Task 1", description="do", depends_on=[], target_profile="aion_std")],
+        tasks=[
+            ExecutionTask(
+                id="x1",
+                title="Task 1",
+                description="do",
+                depends_on=[],
+                target_profile="aion_std",
+            )
+        ],
     )
     todos = plan_to_todos(plan)
     rebuilt = todos_to_plan(markdown_goal(plan_to_markdown(plan)), todos)
@@ -132,4 +156,3 @@ Demo
     out = mark_task_checked(md, "t1", checked=True)
     assert "- [x] `t1`" in out
     assert "- [ ] `t2`" in out
-

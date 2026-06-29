@@ -14,11 +14,13 @@ from typing import Any, AsyncGenerator, Dict, List, Optional, Union
 try:
     from opik import track
 except ImportError:
+
     def track(*_args, **_kwargs):
         def decorator(fn):
             return fn
 
         return decorator
+
 
 import requests
 from haystack.dataclasses import ChatMessage, FileContent, ImageContent
@@ -67,7 +69,12 @@ logger.setLevel(logging.INFO)
 
 # Haystack Agent su errore serializza gli input del chat_generator: niente closure annidate.
 from .runtime.context import clear_context, get_context, set_context
-from .runtime.turn_compaction import clear_turn_runtime, maybe_compact_after_reasoning, set_turn_runtime
+from .runtime.turn_compaction import (
+    clear_turn_runtime,
+    maybe_compact_after_reasoning,
+    set_turn_runtime,
+)
+
 
 def _agent_debug_log(
     hypothesis_id: str,
@@ -86,7 +93,13 @@ def _chunk_counters(chunk_type: str, event_type: str = "") -> tuple[int, int]:
     """Return (control_events_inc, output_events_inc) for stream budgeting."""
     if chunk_type == "tool_event":
         return (1, 0)
-    if chunk_type in ("token", "reasoning", "artifact_start", "artifact_content", "artifact_end"):
+    if chunk_type in (
+        "token",
+        "reasoning",
+        "artifact_start",
+        "artifact_content",
+        "artifact_end",
+    ):
         return (0, 1)
     if chunk_type == "stream_end":
         return (1, 0)
@@ -100,7 +113,9 @@ def _chunk_counters(chunk_type: str, event_type: str = "") -> tuple[int, int]:
 _PLAN_TAG_IN_PAYLOAD_RE = re.compile(r"<plan\b", re.IGNORECASE)
 
 
-def _is_plan_artifact_payload(artifact_id: str, artifact_type: str, content: str = "") -> bool:
+def _is_plan_artifact_payload(
+    artifact_id: str, artifact_type: str, content: str = ""
+) -> bool:
     a_type = (artifact_type or "").strip().lower()
     if a_type == "plan":
         return True
@@ -295,41 +310,55 @@ def haystack_agent_streaming_callback(chunk: Any) -> None:
     _handle_haystack_stream_chunk(chunk, from_async=False)
 
 
-def _find_input_end_index(messages: List[ChatMessage], turn_messages: List[ChatMessage]) -> int:
+def _find_input_end_index(
+    messages: List[ChatMessage], turn_messages: List[ChatMessage]
+) -> int:
     if not messages:
         return -1
     target = messages[-1]
     target_text = chat_message_text(target)
-    target_role = target.role.value if hasattr(target.role, "value") else str(target.role)
-    
+    target_role = (
+        target.role.value if hasattr(target.role, "value") else str(target.role)
+    )
+
     # Cerca prima per identità di oggetto (più veloce e sicuro)
     for i in range(len(turn_messages) - 1, -1, -1):
         if turn_messages[i] is target:
             return i
-            
+
     # Fallback: cerca per contenuto e ruolo partendo dalla fine
     for i in range(len(turn_messages) - 1, -1, -1):
         m = turn_messages[i]
         m_role = m.role.value if hasattr(m.role, "value") else str(m.role)
         if m_role == target_role and chat_message_text(m) == target_text:
             return i
-            
+
     return -1
 
 
 def _chat_multimodal_attachments_enabled() -> bool:
     """When true, session images (and optionally PDFs) are embedded as native Haystack ChatMessage parts."""
-    return os.getenv("AION_CHAT_MULTIMODAL_ATTACHMENTS", "0").strip().lower() in ("1", "true", "yes")
+    return os.getenv("AION_CHAT_MULTIMODAL_ATTACHMENTS", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
 
 def _chat_multimodal_pdf_embed_enabled() -> bool:
     """Haystack FileContent → OpenAI 'file' parts; many OpenAI-compat servers (e.g. vLLM) return 501."""
-    return os.getenv("AION_CHAT_MULTIMODAL_PDF", "0").strip().lower() in ("1", "true", "yes")
+    return os.getenv("AION_CHAT_MULTIMODAL_PDF", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
 
 def _chat_multimodal_pdf_compat_enabled() -> bool:
     """Rasterize PDF pages to PNG ImageContent (vision-only stacks that reject native file parts)."""
-    return os.getenv("AION_CHAT_MULTIMODAL_PDF_COMPATIBILITY_MODE", "0").strip().lower() in (
+    return os.getenv(
+        "AION_CHAT_MULTIMODAL_PDF_COMPATIBILITY_MODE", "0"
+    ).strip().lower() in (
         "1",
         "true",
         "yes",
@@ -347,7 +376,9 @@ def _pdf_pages_as_image_contents(
     try:
         import fitz  # PyMuPDF
     except ImportError:
-        logger.warning("PyMuPDF (fitz) missing: cannot use PDF compatibility raster mode")
+        logger.warning(
+            "PyMuPDF (fitz) missing: cannot use PDF compatibility raster mode"
+        )
         return []
 
     out: List[ImageContent] = []
@@ -370,7 +401,9 @@ def _pdf_pages_as_image_contents(
                 pix = page.get_pixmap(matrix=mat, alpha=False)
                 png_bytes = pix.tobytes("png")
             except Exception as ex:
-                logger.warning("PDF raster failed %s page=%s: %s", relative_path, i + 1, ex)
+                logger.warning(
+                    "PDF raster failed %s page=%s: %s", relative_path, i + 1, ex
+                )
                 continue
             b64 = base64.b64encode(png_bytes).decode("ascii")
             out.append(
@@ -468,8 +501,13 @@ def _build_user_turn_chat_message(
                 logger.warning("Multimodal skip (image %s): %s", rel, ex)
         elif mime == "application/pdf" or ext == ".pdf":
             if _chat_multimodal_pdf_compat_enabled():
-                max_pages_cfg = max(1, int(os.getenv("AION_CHAT_MULTIMODAL_PDF_MAX_PAGES", "5")))
-                max_side = max(256, int(os.getenv("AION_CHAT_MULTIMODAL_PDF_RASTER_MAX_SIDE", "2048")))
+                max_pages_cfg = max(
+                    1, int(os.getenv("AION_CHAT_MULTIMODAL_PDF_MAX_PAGES", "5"))
+                )
+                max_side = max(
+                    256,
+                    int(os.getenv("AION_CHAT_MULTIMODAL_PDF_RASTER_MAX_SIDE", "2048")),
+                )
                 rendered = _pdf_pages_as_image_contents(
                     path, rel, max_pages=max_pages_cfg, max_side_px=max_side
                 )
@@ -487,7 +525,10 @@ def _build_user_turn_chat_message(
                         FileContent.from_file_path(
                             path,
                             filename=str(fname)[:512],
-                            extra={"relative_path": rel, "source": "session_attachment"},
+                            extra={
+                                "relative_path": rel,
+                                "source": "session_attachment",
+                            },
                         )
                     )
                     n_embedded += 1
@@ -530,9 +571,14 @@ class AgentPipeline:
         self.user_id = user_id
         self.agent_mode = (agent_mode or "normal").strip().lower()
 
-    def _format_attachments_block(self, attachments: Optional[List[Dict[str, Any]]]) -> str:
-        if not attachments: return ""
-        lines = ["## Files available in the session (sandbox: write `workspace/*.py` + `sandbox_run_python_file` to run):"]
+    def _format_attachments_block(
+        self, attachments: Optional[List[Dict[str, Any]]]
+    ) -> str:
+        if not attachments:
+            return ""
+        lines = [
+            "## Files available in the session (sandbox: write `workspace/*.py` + `sandbox_run_python_file` to run):"
+        ]
         for a in attachments:
             rp = a.get("relative_path", "")
             orp = a.get("original_relative_path", "")
@@ -546,15 +592,30 @@ class AgentPipeline:
 
     async def _augment_user_input(self, user_input: str) -> str:
         """
-        Dynamically augments the user prompt with turn-level metadata (last turn's tool execution summary and 
+        Dynamically augments the user prompt with turn-level metadata (last turn's tool execution summary and
         active workspace file manifest) for LLM consumption, keeping the DB/UI clean.
         """
         from datetime import datetime, timezone
         import json
 
-        op_enabled = os.getenv("AION_MEMORY_OPERATIONAL_SUMMARY", "1").lower() in ("1", "true", "yes", "on")
-        manifest_enabled = os.getenv("AION_MEMORY_WORKSPACE_MANIFEST", "1").lower() in ("1", "true", "yes", "on")
-        orch_ctx_enabled = os.getenv("AION_ORCHESTRATION_CONTEXT", "1").lower() in ("1", "true", "yes", "on")
+        op_enabled = os.getenv("AION_MEMORY_OPERATIONAL_SUMMARY", "1").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        manifest_enabled = os.getenv("AION_MEMORY_WORKSPACE_MANIFEST", "1").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
+        orch_ctx_enabled = os.getenv("AION_ORCHESTRATION_CONTEXT", "1").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
 
         if not op_enabled and not manifest_enabled and not orch_ctx_enabled:
             return user_input
@@ -586,7 +647,11 @@ class AgentPipeline:
                     if active:
                         rec = await odb.fetch_plan_record(active)
                         md = (
-                            (rec.get("approved_markdown") or rec.get("draft_markdown") or "")
+                            (
+                                rec.get("approved_markdown")
+                                or rec.get("draft_markdown")
+                                or ""
+                            )
                             if rec
                             else ""
                         ).strip()
@@ -610,7 +675,7 @@ class AgentPipeline:
                         name = step.get("name") or "tool"
                         type_ = step.get("type") or "tool"
                         is_err = bool(step.get("is_error"))
-                        
+
                         # Format input preview
                         raw_input = step.get("input") or ""
                         try:
@@ -618,12 +683,14 @@ class AgentPipeline:
                             inp_obj = json.loads(raw_input)
                             if isinstance(inp_obj, dict):
                                 # Clean up common long inputs or formatting
-                                inp_desc = ", ".join(f"{k}={repr(v)[:150]}" for k, v in inp_obj.items())
+                                inp_desc = ", ".join(
+                                    f"{k}={repr(v)[:150]}" for k, v in inp_obj.items()
+                                )
                             else:
                                 inp_desc = str(inp_obj)[:300]
                         except Exception:
                             inp_desc = raw_input[:300]
-                        
+
                         # Format output/error preview
                         raw_output = step.get("output") or ""
                         out_desc = ""
@@ -632,7 +699,11 @@ class AgentPipeline:
                         else:
                             if name in ("read_file", "view_file"):
                                 out_desc = f"Successfully read file contents ({len(raw_output)} chars)."
-                            elif name in ("write_to_file", "replace_file_content", "multi_replace_file_content"):
+                            elif name in (
+                                "write_to_file",
+                                "replace_file_content",
+                                "multi_replace_file_content",
+                            ):
                                 out_desc = "Successfully updated file."
                             else:
                                 out_desc = raw_output[:300]
@@ -657,6 +728,7 @@ class AgentPipeline:
         if manifest_enabled:
             try:
                 from src.session_workspace import session_root
+
                 root_path = session_root(self.session_id)
                 if root_path.exists():
                     files_info = []
@@ -670,29 +742,37 @@ class AgentPipeline:
                                         rel_path = p.relative_to(root_path)
                                         stat = p.stat()
                                         size_bytes = stat.st_size
-                                        mtime = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
-                                        
+                                        mtime = datetime.fromtimestamp(
+                                            stat.st_mtime, tz=timezone.utc
+                                        )
+
                                         # Human readable size
                                         if size_bytes < 1024:
                                             sz_str = f"{size_bytes} B"
                                         elif size_bytes < 1024 * 1024:
-                                            sz_str = f"{size_bytes/1024:.1f} KB"
+                                            sz_str = f"{size_bytes / 1024:.1f} KB"
                                         else:
-                                            sz_str = f"{size_bytes/(1024*1024):.1f} MB"
-                                            
-                                        files_info.append({
-                                            "path": str(rel_path).replace("\\", "/"),
-                                            "size": sz_str,
-                                            "size_bytes": size_bytes,
-                                            "mtime": mtime,
-                                        })
+                                            sz_str = (
+                                                f"{size_bytes / (1024 * 1024):.1f} MB"
+                                            )
+
+                                        files_info.append(
+                                            {
+                                                "path": str(rel_path).replace(
+                                                    "\\", "/"
+                                                ),
+                                                "size": sz_str,
+                                                "size_bytes": size_bytes,
+                                                "mtime": mtime,
+                                            }
+                                        )
                                     except Exception:
                                         pass
-                    
+
                     if files_info:
                         # Order by most recently modified
                         files_info.sort(key=lambda x: x["mtime"], reverse=True)
-                        
+
                         # Limit to top 15 files to avoid clutter
                         manifest_lines = []
                         for f in files_info[:15]:
@@ -722,7 +802,9 @@ class AgentPipeline:
         )
         return context_header + user_input
 
-    async def _pre_compact_transcript(self, transcript: str, *, head_count: int) -> None:
+    async def _pre_compact_transcript(
+        self, transcript: str, *, head_count: int
+    ) -> None:
         await ltm_orchestrator.precompact_flush(
             self.session_id,
             self.user_id,
@@ -735,12 +817,16 @@ class AgentPipeline:
                 tenant_id="default",
                 conversation_id=self.session_id,
                 user_id=self.user_id,
-                payload={"head_messages": head_count, "transcript_chars": len(transcript)},
+                payload={
+                    "head_messages": head_count,
+                    "transcript_chars": len(transcript),
+                },
             ),
         )
 
     async def _reload_stm_window(self) -> List[ChatMessage]:
         from .settings import get_settings as _gs
+
         _s = _gs()
         max_turns = _s.stm_max_turns
         tbudget = str(_s.stm_token_budget) if _s.stm_token_budget is not None else None
@@ -775,7 +861,10 @@ class AgentPipeline:
         if not enabled and not force:
             return messages, False, False
 
-        from src.runtime.user_language import load_user_ui_language, resolve_compaction_language
+        from src.runtime.user_language import (
+            load_user_ui_language,
+            resolve_compaction_language,
+        )
 
         db_lang = await load_user_ui_language(self.user_id)
         user_lang = resolve_compaction_language(self.user_id, db_lang)
@@ -876,7 +965,9 @@ class AgentPipeline:
                 )
                 if before > 0 and after_stats["total"] < before:
                     try:
-                        from src.observability.metrics import aion_context_compression_ratio
+                        from src.observability.metrics import (
+                            aion_context_compression_ratio,
+                        )
 
                         aion_context_compression_ratio.labels(
                             profile=self.profile_name
@@ -911,9 +1002,9 @@ class AgentPipeline:
             try:
                 from src.observability.metrics import aion_context_compression_ratio
 
-                aion_context_compression_ratio.labels(profile=self.profile_name).observe(
-                    after / before
-                )
+                aion_context_compression_ratio.labels(
+                    profile=self.profile_name
+                ).observe(after / before)
             except Exception:
                 pass
         if after < before and persist:
@@ -936,9 +1027,9 @@ class AgentPipeline:
 
     @track(name="run_stream", ignore_arguments=["self"])
     async def run_stream(
-        self, 
-        user_input: str, 
-        attachments: Optional[List[Dict[str, Any]]] = None, 
+        self,
+        user_input: str,
+        attachments: Optional[List[Dict[str, Any]]] = None,
         turn_attachments: Optional[List[Dict[str, Any]]] = None,
         reasoning_effort: Optional[str] = None,
         user_message_id: Optional[str] = None,
@@ -958,6 +1049,7 @@ class AgentPipeline:
         )
 
         from .settings import get_settings as _gs
+
         opt_req = _gs().web_search_require_client_opt_in
         if web_search_enabled is None:
             _wse = not opt_req
@@ -989,15 +1081,22 @@ class AgentPipeline:
             from opik.opik_context import update_current_trace
             from src.observability.opik_setup import get_or_create_prompt
 
-            prompt_name = f"profile-{self.profile_name.replace(' ', '_').lower()}-prompt"
+            prompt_name = (
+                f"profile-{self.profile_name.replace(' ', '_').lower()}-prompt"
+            )
             system_prompt_template = (
                 self.agent.system_prompt
-                if (hasattr(self, "agent") and self.agent and hasattr(self.agent, "system_prompt"))
+                if (
+                    hasattr(self, "agent")
+                    and self.agent
+                    and hasattr(self.agent, "system_prompt")
+                )
                 else f"Instructions for the agent based on profile {self.profile_name}"
             )
             prompt_obj = get_or_create_prompt(
                 prompt_name=prompt_name,
-                template_content=system_prompt_template + "\n\nUser request: {{user_input}}",
+                template_content=system_prompt_template
+                + "\n\nUser request: {{user_input}}",
             )
             update_current_trace(
                 thread_id=self.session_id,
@@ -1012,9 +1111,12 @@ class AgentPipeline:
                 prompts=[prompt_obj],
             )
         except Exception as opik_err:
-            logger.warning("Errore durante l'inizializzazione del tracciamento Opik: %s", opik_err)
+            logger.warning(
+                "Errore durante l'inizializzazione del tracciamento Opik: %s", opik_err
+            )
 
         from .settings import get_settings as _gs
+
         otel_enabled = _gs().otel_enabled
         span = None
         otel_token = None
@@ -1077,7 +1179,11 @@ class AgentPipeline:
                 yield _track_sse(plan_controller.sse_phase("clarifying"))
 
             _msg_src = (message_source or "user_input").strip()
-            user_role = "user" if _msg_src in ("user_input", "scheduled_trigger") else "internal"
+            user_role = (
+                "user"
+                if _msg_src in ("user_input", "scheduled_trigger")
+                else "internal"
+            )
             _plan_meta_json = _plan_turn_metadata_json(plan_id, plan_execution_task_id)
 
             try:
@@ -1093,7 +1199,9 @@ class AgentPipeline:
             except Exception as user_persist_exc:
                 logger.warning("Early user message upsert failed: %s", user_persist_exc)
 
-            persist_atts_early = turn_attachments if turn_attachments is not None else attachments
+            persist_atts_early = (
+                turn_attachments if turn_attachments is not None else attachments
+            )
             if persist_atts_early:
                 for a in persist_atts_early:
                     rp = a.get("relative_path")
@@ -1112,7 +1220,9 @@ class AgentPipeline:
                             message_id=user_message_id,
                         )
                     except Exception as att_exc:
-                        logger.warning("Early user attachment persist failed: %s", att_exc)
+                        logger.warning(
+                            "Early user attachment persist failed: %s", att_exc
+                        )
 
             logger.info(
                 "--- [START] Pipeline Turn for session %s mode=%s (stored=%s source=%s) ---",
@@ -1155,11 +1265,17 @@ class AgentPipeline:
 
             _prof_row = _pm_qm.get_profile(self.profile_name)
             _qm_profile_slug = (
-                _prof_row.slug if _prof_row else self.profile_name.replace(" ", "_").lower()
+                _prof_row.slug
+                if _prof_row
+                else self.profile_name.replace(" ", "_").lower()
             )
             try:
-                from src.runtime.query_memory_hooks import profile_has_memory_capability_by_slug
-                from src.runtime.sql_query_project_scope import verify_user_project_access
+                from src.runtime.query_memory_hooks import (
+                    profile_has_memory_capability_by_slug,
+                )
+                from src.runtime.sql_query_project_scope import (
+                    verify_user_project_access,
+                )
 
                 if profile_has_memory_capability_by_slug(_qm_profile_slug):
                     _acc_err = await verify_user_project_access(
@@ -1193,16 +1309,26 @@ class AgentPipeline:
             # #endregion
             loop = asyncio.get_running_loop()
             set_event_loop(loop)
-            
+
             # Kill switch per il thread dell'agente
             stop_event = threading.Event()
 
             # 1. Check for slash commands
             if (user_input or "").strip().startswith("/"):
                 from src.runtime.slash import SlashContext, slash_router
-                sr = await slash_router.route(user_input.strip(), SlashContext(raw=user_input.strip(), conversation_id=self.session_id, user_id=self.user_id, profile_name=self.profile_name))
+
+                sr = await slash_router.route(
+                    user_input.strip(),
+                    SlashContext(
+                        raw=user_input.strip(),
+                        conversation_id=self.session_id,
+                        user_id=self.user_id,
+                        profile_name=self.profile_name,
+                    ),
+                )
                 if sr.handled:
-                    for ev in sr.sse_events or []: yield ev
+                    for ev in sr.sse_events or []:
+                        yield ev
                     msg = sr.message or "(nessun output)"
                     yield {"type": "token", "content": msg}
                     yield {"type": "final", "text": msg}
@@ -1211,7 +1337,10 @@ class AgentPipeline:
             # Check LLM connection before database persistence and model invocation
             llm_url = os.getenv("AION_API_URL", "")
             if not llm_url:
-                yield {"type": "error", "content": "Configuration error: AION_API_URL is not set"}
+                yield {
+                    "type": "error",
+                    "content": "Configuration error: AION_API_URL is not set",
+                }
                 return
             api_key = os.getenv("AION_LLM_API_KEY", "placeholder-token")
             from src.runtime.llm_health import check_llm_connection
@@ -1224,11 +1353,22 @@ class AgentPipeline:
                 yield {"type": "error", "content": err_msg}
                 return
 
-            await hook_registry.dispatch("on_user_message", HookContext(event="on_user_message", tenant_id="default", conversation_id=self.session_id, user_id=self.user_id, payload={"message": user_input, "attachments": attachments or []}))
+            await hook_registry.dispatch(
+                "on_user_message",
+                HookContext(
+                    event="on_user_message",
+                    tenant_id="default",
+                    conversation_id=self.session_id,
+                    user_id=self.user_id,
+                    payload={"message": user_input, "attachments": attachments or []},
+                ),
+            )
 
             # 2. Context preparation (delegated to build_turn_context)
             logger.info(">>> [1] Preparing context for session %s", self.session_id)
-            from src.runtime.turn.turn_context import build_turn_context as _build_turn_context
+            from src.runtime.turn.turn_context import (
+                build_turn_context as _build_turn_context,
+            )
 
             _ctx_sse_events: List[Dict[str, Any]] = []
             _turn_ctx = await _build_turn_context(
@@ -1269,9 +1409,13 @@ class AgentPipeline:
             )
 
             # 4. Stream setup
-            from src.runtime.plan_mode import plan_mode_tool_first, plan_text_parser_enabled
+            from src.runtime.plan_mode import (
+                plan_mode_tool_first,
+                plan_text_parser_enabled,
+            )
 
             from .settings import get_settings as _gs
+
             strategy = _gs().artifact_strategy.lower()
             if strategy == "tool":
                 base_parser = NoOpArtifactParser()
@@ -1300,15 +1444,18 @@ class AgentPipeline:
                     "version": version,
                     "saved": True,
                 }
-            
+
             async def listen_tool_events():
                 try:
                     while True:
                         event = await tool_q.get()
                         await queue.put({"type": "tool_event", "event": event})
-                except asyncio.CancelledError: pass
-                except Exception as e: logger.error("Tool listener crashed: %s", e)
-                finally: tool_event_bus.unsubscribe(self.session_id, tool_q)
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    logger.error("Tool listener crashed: %s", e)
+                finally:
+                    tool_event_bus.unsubscribe(self.session_id, tool_q)
 
             tool_listener_task = asyncio.create_task(listen_tool_events())
             gen_kw = generation_kwargs_for_agent(self.agent, reasoning_effort)
@@ -1345,9 +1492,7 @@ class AgentPipeline:
 
             async def _run_agent_async(msgs: List[ChatMessage]) -> Any:
                 _turn_pid = (
-                    plan_controller.plan_id
-                    if plan_controller is not None
-                    else None
+                    plan_controller.plan_id if plan_controller is not None else None
                 )
                 set_context(
                     self.session_id,
@@ -1419,9 +1564,7 @@ class AgentPipeline:
 
             def _run_agent_sync(msgs: List[ChatMessage]) -> Any:
                 _turn_pid = (
-                    plan_controller.plan_id
-                    if plan_controller is not None
-                    else None
+                    plan_controller.plan_id if plan_controller is not None else None
                 )
                 set_context(
                     self.session_id,
@@ -1539,10 +1682,16 @@ class AgentPipeline:
             max_output_events = turn_guards.max_output_events
             max_output_chars = turn_guards.max_output_chars
             no_progress_timeout = turn_guards.no_progress_timeout
-            min_reasoning_chars_without_tool = turn_guards.min_reasoning_chars_without_tool
-            max_reasoning_events_without_tool = turn_guards.max_reasoning_events_without_tool
+            min_reasoning_chars_without_tool = (
+                turn_guards.min_reasoning_chars_without_tool
+            )
+            max_reasoning_events_without_tool = (
+                turn_guards.max_reasoning_events_without_tool
+            )
             reasoning_hard_stop = turn_guards.reasoning_hard_stop
-            single_orch_channel = os.getenv("AION_ORCH_EVENT_SINGLE_CHANNEL", "1").strip().lower() in (
+            single_orch_channel = os.getenv(
+                "AION_ORCH_EVENT_SINGLE_CHANNEL", "1"
+            ).strip().lower() in (
                 "1",
                 "true",
                 "yes",
@@ -1629,7 +1778,9 @@ class AgentPipeline:
                     if inserted:
                         assistant_message_persisted = True
                 except Exception as upsert_exc:
-                    logger.warning("assistant placeholder upsert failed: %s", upsert_exc)
+                    logger.warning(
+                        "assistant placeholder upsert failed: %s", upsert_exc
+                    )
 
             logger.info(">>> [6] Entering stream loop...")
             _use_stream_loop_v2 = _gs().stream_loop_v2
@@ -1654,7 +1805,13 @@ class AgentPipeline:
                         plan_controller=plan_controller,
                         message_source=message_source,
                         plan_text_parser_enabled_fn=(
-                            lambda: plan_text_parser_enabled() or (effective_agent_mode == "plan" and not plan_mode_tool_first())
+                            lambda: (
+                                plan_text_parser_enabled()
+                                or (
+                                    effective_agent_mode == "plan"
+                                    and not plan_mode_tool_first()
+                                )
+                            )
                         ),
                         demux=_sl_demux,
                         track_sse=_track_sse,
@@ -1679,7 +1836,9 @@ class AgentPipeline:
                     plan_intercepts = _stream_loop.plan_intercepts
                     raw_token_fallback_chunks = _stream_loop.raw_token_fallback_chunks
                     pending_write_artifacts = _stream_loop.pending_write_artifacts
-                    assistant_message_persisted = turn_persist.assistant_message_persisted
+                    assistant_message_persisted = (
+                        turn_persist.assistant_message_persisted
+                    )
                 else:
                     async with asyncio.timeout(turn_guards.turn_timeout):
                         while True:
@@ -1691,7 +1850,9 @@ class AgentPipeline:
                             stream_events += 1
                             ctype = str(chunk.get("type") or "")
                             evt_for_counter = chunk.get("event") or {}
-                            c_inc, o_inc = _chunk_counters(ctype, str(evt_for_counter.get("type") or ""))
+                            c_inc, o_inc = _chunk_counters(
+                                ctype, str(evt_for_counter.get("type") or "")
+                            )
                             control_events += c_inc
                             output_events += o_inc
                             if ctype in ("token", "artifact_content"):
@@ -1699,7 +1860,10 @@ class AgentPipeline:
                             if ctype == "reasoning":
                                 output_chars += len(str(chunk.get("reasoning") or ""))
 
-                            if max_stream_events > 0 and stream_events > max_stream_events:
+                            if (
+                                max_stream_events > 0
+                                and stream_events > max_stream_events
+                            ):
                                 stop_event.set()
                                 stop_reason = "stream_events_limit"
                                 msg = (
@@ -1709,7 +1873,10 @@ class AgentPipeline:
                                 logger.warning("Hard-stop loop guard: %s", msg)
                                 yield {"type": "error", "content": msg}
                                 break
-                            if max_control_events > 0 and control_events > max_control_events:
+                            if (
+                                max_control_events > 0
+                                and control_events > max_control_events
+                            ):
                                 stop_event.set()
                                 stop_reason = "control_events_limit"
                                 msg = (
@@ -1719,7 +1886,10 @@ class AgentPipeline:
                                 logger.warning("Hard-stop control guard: %s", msg)
                                 yield {"type": "error", "content": msg}
                                 break
-                            if max_output_events > 0 and output_events > max_output_events:
+                            if (
+                                max_output_events > 0
+                                and output_events > max_output_events
+                            ):
                                 stop_event.set()
                                 stop_reason = "output_events_limit"
                                 msg = (
@@ -1739,7 +1909,11 @@ class AgentPipeline:
                                 logger.warning("Hard-stop output-char guard: %s", msg)
                                 yield {"type": "error", "content": msg}
                                 break
-                            if no_progress_timeout > 0 and (loop.time() - last_progress_at) > no_progress_timeout:
+                            if (
+                                no_progress_timeout > 0
+                                and (loop.time() - last_progress_at)
+                                > no_progress_timeout
+                            ):
                                 stop_event.set()
                                 stop_reason = "no_progress_timeout"
                                 msg = (
@@ -1752,7 +1926,9 @@ class AgentPipeline:
                                     "no_progress_timeout",
                                     {
                                         "session_id": self.session_id[:12],
-                                        "idle_sec": round(loop.time() - last_progress_at, 1),
+                                        "idle_sec": round(
+                                            loop.time() - last_progress_at, 1
+                                        ),
                                         "tool_calls": tool_calls,
                                         "output_chars": output_chars,
                                     },
@@ -1772,7 +1948,9 @@ class AgentPipeline:
                                     "queue_done_received",
                                     {
                                         "session_id": self.session_id[:12],
-                                        "full_response_len": len("".join(full_response)),
+                                        "full_response_len": len(
+                                            "".join(full_response)
+                                        ),
                                         "stop_reason": stop_reason,
                                         "tool_calls": tool_calls,
                                     },
@@ -1785,7 +1963,9 @@ class AgentPipeline:
                                     "queue_error_chunk",
                                     {
                                         "session_id": self.session_id[:12],
-                                        "content": str(chunk.get("content") or "")[:300],
+                                        "content": str(chunk.get("content") or "")[
+                                            :300
+                                        ],
                                     },
                                 )
                                 yield _track_sse(chunk)
@@ -1802,19 +1982,39 @@ class AgentPipeline:
                                             full_response.append(pe.content)
                                             text_emitted = True
                                         last_progress_at = loop.time()
-                                        yield _track_sse({"type": "token", "content": pe.content})
+                                        yield _track_sse(
+                                            {"type": "token", "content": pe.content}
+                                        )
                                         await _flush_assistant_stream_content()
                                     elif pe.event == ArtifactEvent.ARTIFACT_START:
                                         had_only_text = False
                                         artifact_parse_hits += 1
-                                        if (pe.artifact_type or "").strip().lower() == "plan":
+                                        if (
+                                            pe.artifact_type or ""
+                                        ).strip().lower() == "plan":
                                             plan_intercepts += 1
-                                        yield _track_sse({"type": "artifact_start", "artifact": {"identifier": pe.artifact_id, "type": pe.artifact_type, "title": pe.artifact_title, "auto_execute": pe.auto_execute}})
+                                        yield _track_sse(
+                                            {
+                                                "type": "artifact_start",
+                                                "artifact": {
+                                                    "identifier": pe.artifact_id,
+                                                    "type": pe.artifact_type,
+                                                    "title": pe.artifact_title,
+                                                    "auto_execute": pe.auto_execute,
+                                                },
+                                            }
+                                        )
                                     elif pe.event == ArtifactEvent.ARTIFACT_CONTENT:
                                         had_only_text = False
                                         if pe.content:
                                             last_progress_at = loop.time()
-                                        yield _track_sse({"type": "artifact_content", "content": pe.content, "artifact_id": pe.artifact_id})
+                                        yield _track_sse(
+                                            {
+                                                "type": "artifact_content",
+                                                "content": pe.content,
+                                                "artifact_id": pe.artifact_id,
+                                            }
+                                        )
                                     elif pe.event == ArtifactEvent.ARTIFACT_END:
                                         had_only_text = False
                                         if _is_plan_artifact_payload(
@@ -1831,10 +2031,14 @@ class AgentPipeline:
                                                 artifact_id=_pid,
                                                 markdown_content=pe.content or "",
                                             )
-                                            yield _track_sse({
-                                                "type": "artifact_end",
-                                                "artifact": _plan_artifact_sse_end(pe, plan_id=_pid),
-                                            })
+                                            yield _track_sse(
+                                                {
+                                                    "type": "artifact_end",
+                                                    "artifact": _plan_artifact_sse_end(
+                                                        pe, plan_id=_pid
+                                                    ),
+                                                }
+                                            )
                                             if pending:
                                                 yield _track_sse(pending)
                                         else:
@@ -1846,45 +2050,69 @@ class AgentPipeline:
                                             )
                                             res = {
                                                 "type": "artifact_end",
-                                                "artifact": _artifact_end_payload(pe, path, version),
+                                                "artifact": _artifact_end_payload(
+                                                    pe, path, version
+                                                ),
                                             }
                                             if pe.auto_execute and path.suffix == ".py":
                                                 res["artifact"]["execution"] = (
-                                                    artifact_manager.auto_execute_sandboxed(path)
+                                                    artifact_manager.auto_execute_sandboxed(
+                                                        path
+                                                    )
                                                 )
                                             queue_attachment(
-                                                storage_key=str(path.relative_to(artifact_manager._root)),
-                                                original_name=pe.filename or pe.artifact_id,
+                                                storage_key=str(
+                                                    path.relative_to(
+                                                        artifact_manager._root
+                                                    )
+                                                ),
+                                                original_name=pe.filename
+                                                or pe.artifact_id,
                                                 mime=pe.artifact_type or "text/plain",
                                                 size_bytes=len(pe.content or ""),
                                             )
                                             yield _track_sse(res)
                                 if plan_controller:
-                                    _prog = plan_controller.maybe_progress_sse("".join(full_response))
+                                    _prog = plan_controller.maybe_progress_sse(
+                                        "".join(full_response)
+                                    )
                                     if _prog:
                                         yield _track_sse(_prog)
                                 if (
                                     had_only_text
                                     and not text_emitted
                                     and raw_token
-                                    and not getattr(artifact_parser, "is_suppressing_tokens", lambda: False)()
+                                    and not getattr(
+                                        artifact_parser,
+                                        "is_suppressing_tokens",
+                                        lambda: False,
+                                    )()
                                 ):
                                     _suppress_plan_token = False
-                                    if plan_controller is not None and plan_text_parser_enabled():
-                                        from src.runtime.plan_engine import should_suppress_plan_token
+                                    if (
+                                        plan_controller is not None
+                                        and plan_text_parser_enabled()
+                                    ):
+                                        from src.runtime.plan_engine import (
+                                            should_suppress_plan_token,
+                                        )
 
-                                        _suppress_plan_token = should_suppress_plan_token(
-                                            raw_token, "".join(full_response)
+                                        _suppress_plan_token = (
+                                            should_suppress_plan_token(
+                                                raw_token, "".join(full_response)
+                                            )
                                         )
                                     full_response.append(raw_token)
                                     raw_token_fallback_chunks += 1
                                     if not _suppress_plan_token:
                                         last_progress_at = loop.time()
-                                        yield _track_sse({"type": "token", "content": raw_token})
+                                        yield _track_sse(
+                                            {"type": "token", "content": raw_token}
+                                        )
                                         await _flush_assistant_stream_content()
                                 elif had_only_text:
                                     raw_token_fallback_chunks += 1
-                        
+
                             elif chunk.get("type") == "reasoning":
                                 is_streaming = True
                                 reasoning_piece = chunk.get("reasoning") or ""
@@ -1894,10 +2122,18 @@ class AgentPipeline:
                                 reasoning_chars += len(reasoning_piece)
                                 # Chunk di reasoning possono essere molto frammentati:
                                 # interrompiamo solo se supera ENTRAMBI i budget.
-                                over_events = max_reasoning_events > 0 and reasoning_events > max_reasoning_events
-                                over_chars = max_reasoning_chars > 0 and reasoning_chars > max_reasoning_chars
+                                over_events = (
+                                    max_reasoning_events > 0
+                                    and reasoning_events > max_reasoning_events
+                                )
+                                over_chars = (
+                                    max_reasoning_chars > 0
+                                    and reasoning_chars > max_reasoning_chars
+                                )
                                 # #region agent log
-                                if not reasoning_guard_logged and (over_events or over_chars):
+                                if not reasoning_guard_logged and (
+                                    over_events or over_chars
+                                ):
                                     reasoning_guard_logged = True
                                     _agent_debug_log(
                                         "H1",
@@ -1907,8 +2143,10 @@ class AgentPipeline:
                                             "session_id": self.session_id[:12],
                                             "over_events": over_events,
                                             "over_chars": over_chars,
-                                            "stop_with_current_and_logic": over_events and over_chars,
-                                            "would_stop_with_or_logic": over_events or over_chars,
+                                            "stop_with_current_and_logic": over_events
+                                            and over_chars,
+                                            "would_stop_with_or_logic": over_events
+                                            or over_chars,
                                             "reasoning_events": reasoning_events,
                                             "max_reasoning_events": max_reasoning_events,
                                             "reasoning_chars": reasoning_chars,
@@ -1916,10 +2154,7 @@ class AgentPipeline:
                                         },
                                     )
                                 # #endregion
-                                if (
-                                    reasoning_hard_stop
-                                    and (over_events or over_chars)
-                                ):
+                                if reasoning_hard_stop and (over_events or over_chars):
                                     stop_event.set()
                                     stop_reason = "reasoning_budget"
                                     msg = (
@@ -1932,11 +2167,13 @@ class AgentPipeline:
                                     break
                                 _chars_gate = (
                                     min_reasoning_chars_without_tool > 0
-                                    and reasoning_chars >= min_reasoning_chars_without_tool
+                                    and reasoning_chars
+                                    >= min_reasoning_chars_without_tool
                                 )
                                 _events_gate = (
                                     max_reasoning_events_without_tool > 0
-                                    and reasoning_events >= max_reasoning_events_without_tool
+                                    and reasoning_events
+                                    >= max_reasoning_events_without_tool
                                 )
                                 _no_tool_reasoning_warn = (
                                     tool_calls == 0
@@ -1976,13 +2213,18 @@ class AgentPipeline:
                             elif chunk.get("type") == "tool_event":
                                 tool_events += 1
                                 last_progress_at = loop.time()
-                                if max_tool_events > 0 and tool_events > max_tool_events:
+                                if (
+                                    max_tool_events > 0
+                                    and tool_events > max_tool_events
+                                ):
                                     stop_event.set()
                                     msg = (
                                         "Interrotto automaticamente: troppi eventi tool nel turno "
                                         f"({tool_events}/{max_tool_events})."
                                     )
-                                    logger.warning("Hard-stop tool-event guard: %s", msg)
+                                    logger.warning(
+                                        "Hard-stop tool-event guard: %s", msg
+                                    )
                                     yield {"type": "error", "content": msg}
                                     break
 
@@ -1990,24 +2232,36 @@ class AgentPipeline:
                                 if evt.get("type") == "tool_start":
                                     tool_calls += 1
                                     _tn = str(evt.get("name") or "")
-                                    if _msg_src == "internal_trigger" and _tn != "mark_task_completed":
+                                    if (
+                                        _msg_src == "internal_trigger"
+                                        and _tn != "mark_task_completed"
+                                    ):
                                         try:
                                             from src.runtime.context import get_context
 
                                             _mo = get_context().get("mark_once")
-                                            if isinstance(_mo, dict) and _mo.get("used"):
+                                            if isinstance(_mo, dict) and _mo.get(
+                                                "used"
+                                            ):
                                                 stop_event.set()
                                                 stop_reason = "plan_mark_already_used"
                                                 _block_msg = (
                                                     "mark_task_completed was already called this turn. "
                                                     "STOP — do not call more tools."
                                                 )
-                                                yield _track_sse({"type": "error", "content": _block_msg})
+                                                yield _track_sse(
+                                                    {
+                                                        "type": "error",
+                                                        "content": _block_msg,
+                                                    }
+                                                )
                                                 break
                                         except Exception:
                                             pass
                                     if plan_controller is not None:
-                                        _allowed, _budget_msg = plan_controller.on_research_tool_start(_tn)
+                                        _allowed, _budget_msg = (
+                                            plan_controller.on_research_tool_start(_tn)
+                                        )
                                         if not _allowed:
                                             yield _track_sse(
                                                 plan_controller.sse_phase(
@@ -2030,7 +2284,12 @@ class AgentPipeline:
                                                 self.session_id[:8],
                                                 _tn,
                                             )
-                                            yield _track_sse({"type": "error", "content": _budget_msg or ""})
+                                            yield _track_sse(
+                                                {
+                                                    "type": "error",
+                                                    "content": _budget_msg or "",
+                                                }
+                                            )
                                             break
                                     if _tn.startswith("mempalace_"):
                                         yield _track_sse(
@@ -2053,32 +2312,57 @@ class AgentPipeline:
                                             {
                                                 "session_id": self.session_id[:12],
                                                 "tool_calls": tool_calls,
-                                                "tool_name": str(evt.get("name") or "")[:64],
+                                                "tool_name": str(evt.get("name") or "")[
+                                                    :64
+                                                ],
                                                 "reasoning_chars_so_far": reasoning_chars,
                                                 "output_chars_so_far": output_chars,
                                             },
                                         )
                                     # #endregion
-                                    if max_tool_calls > 0 and tool_calls > max_tool_calls:
+                                    if (
+                                        max_tool_calls > 0
+                                        and tool_calls > max_tool_calls
+                                    ):
                                         stop_event.set()
                                         msg = (
                                             "Interrotto automaticamente: troppi tool call nel turno "
                                             f"({tool_calls}/{max_tool_calls})."
                                         )
-                                        logger.warning("Hard-stop tool-call guard: %s", msg)
+                                        logger.warning(
+                                            "Hard-stop tool-call guard: %s", msg
+                                        )
                                         yield {"type": "error", "content": msg}
                                         break
-                                    if evt.get("name") == "sandbox_write_workspace_file":
+                                    if (
+                                        evt.get("name")
+                                        == "sandbox_write_workspace_file"
+                                    ):
                                         args = evt.get("input", {}) or {}
-                                        rp = str(args.get("relative_path") or "workspace/file.txt")
+                                        rp = str(
+                                            args.get("relative_path")
+                                            or "workspace/file.txt"
+                                        )
                                         ct = str(args.get("content") or "")
-                                        pending_write_artifacts[rp] = {"content": ct, "mode": "write"}
-                                    elif evt.get("name") == "sandbox_edit_workspace_file":
-                                        args = evt.get("input", {}) or {}
-                                        rp = str(args.get("relative_path") or "workspace/file.txt")
                                         pending_write_artifacts[rp] = {
-                                            "old_string": str(args.get("old_string") or ""),
-                                            "new_string": str(args.get("new_string") or ""),
+                                            "content": ct,
+                                            "mode": "write",
+                                        }
+                                    elif (
+                                        evt.get("name") == "sandbox_edit_workspace_file"
+                                    ):
+                                        args = evt.get("input", {}) or {}
+                                        rp = str(
+                                            args.get("relative_path")
+                                            or "workspace/file.txt"
+                                        )
+                                        pending_write_artifacts[rp] = {
+                                            "old_string": str(
+                                                args.get("old_string") or ""
+                                            ),
+                                            "new_string": str(
+                                                args.get("new_string") or ""
+                                            ),
                                             "mode": "edit",
                                         }
                                 if evt.get("type") == "request_sync":
@@ -2093,16 +2377,23 @@ class AgentPipeline:
                                                 _pid = _resolve_turn_plan_id(
                                                     plan_controller, pe.artifact_id
                                                 )
-                                                pending = await _setup_plan_artifact_chunk(
-                                                    session_id=self.session_id,
-                                                    user_id=self.user_id,
-                                                    artifact_id=_pid,
-                                                    markdown_content=pe.content or "",
+                                                pending = (
+                                                    await _setup_plan_artifact_chunk(
+                                                        session_id=self.session_id,
+                                                        user_id=self.user_id,
+                                                        artifact_id=_pid,
+                                                        markdown_content=pe.content
+                                                        or "",
+                                                    )
                                                 )
-                                                yield _track_sse({
-                                                    "type": "artifact_end",
-                                                    "artifact": _plan_artifact_sse_end(pe, plan_id=_pid),
-                                                })
+                                                yield _track_sse(
+                                                    {
+                                                        "type": "artifact_end",
+                                                        "artifact": _plan_artifact_sse_end(
+                                                            pe, plan_id=_pid
+                                                        ),
+                                                    }
+                                                )
                                                 if pending:
                                                     yield _track_sse(pending)
                                             else:
@@ -2114,16 +2405,24 @@ class AgentPipeline:
                                                 )
                                                 queue_attachment(
                                                     storage_key=str(
-                                                        path.relative_to(artifact_manager._root)
+                                                        path.relative_to(
+                                                            artifact_manager._root
+                                                        )
                                                     ),
-                                                    original_name=pe.filename or pe.artifact_id,
-                                                    mime=pe.artifact_type or "text/plain",
+                                                    original_name=pe.filename
+                                                    or pe.artifact_id,
+                                                    mime=pe.artifact_type
+                                                    or "text/plain",
                                                     size_bytes=len(pe.content or ""),
                                                 )
-                                                yield _track_sse({
-                                                    "type": "artifact_end",
-                                                    "artifact": _artifact_end_payload(pe, path, version),
-                                                })
+                                                yield _track_sse(
+                                                    {
+                                                        "type": "artifact_end",
+                                                        "artifact": _artifact_end_payload(
+                                                            pe, path, version
+                                                        ),
+                                                    }
+                                                )
                                     StreamSync.mark_caught_up(self.session_id)
                                     continue
                                 tool_calls_log.append(evt)
@@ -2138,7 +2437,9 @@ class AgentPipeline:
                                             maybe_append_same_turn_reminder,
                                         )
 
-                                        _tool_out = evt.get("output") or evt.get("error")
+                                        _tool_out = evt.get("output") or evt.get(
+                                            "error"
+                                        )
                                         record_exploration_tool(
                                             session_id=self.session_id,
                                             tool_name=str(evt.get("name") or ""),
@@ -2156,7 +2457,8 @@ class AgentPipeline:
                                             )
                                             evt["output"] = _tool_out
                                         _tenant_qm = (
-                                            os.getenv("AION_DEFAULT_TENANT_ID") or "default"
+                                            os.getenv("AION_DEFAULT_TENANT_ID")
+                                            or "default"
                                         ).strip() or "default"
                                         await hook_registry.dispatch(
                                             "post_tool",
@@ -2178,49 +2480,81 @@ class AgentPipeline:
                                             ),
                                         )
                                     except Exception as qm_post_exc:
-                                        logger.debug("sql_qm post_tool: %s", qm_post_exc)
+                                        logger.debug(
+                                            "sql_qm post_tool: %s", qm_post_exc
+                                        )
                                 et = evt.get("type")
-                                if isinstance(et, str) and et.startswith("orchestration_"):
+                                if isinstance(et, str) and et.startswith(
+                                    "orchestration_"
+                                ):
                                     yield {k: v for k, v in evt.items()}
                                     if et == "orchestration_plan_pending":
                                         plan_intercepts += 1
                                         if plan_controller is not None:
-                                            yield _track_sse(plan_controller.sse_phase("registered"))
+                                            yield _track_sse(
+                                                plan_controller.sse_phase("registered")
+                                            )
                                     if single_orch_channel:
                                         continue
-                                if evt.get("type") == "tool_end" and evt.get("name") == "sandbox_write_workspace_file":
+                                if (
+                                    evt.get("type") == "tool_end"
+                                    and evt.get("name")
+                                    == "sandbox_write_workspace_file"
+                                ):
                                     output_text = str(evt.get("output") or "")
                                     saved_path = ""
                                     if "workspace/" in output_text:
-                                        saved_path = output_text.split("workspace/", 1)[1].strip()
-                                        saved_path = "workspace/" + saved_path.split()[0].strip("`\"'.,)")
+                                        saved_path = output_text.split("workspace/", 1)[
+                                            1
+                                        ].strip()
+                                        saved_path = "workspace/" + saved_path.split()[
+                                            0
+                                        ].strip("`\"'.,)")
                                     if not saved_path:
                                         saved_path = "workspace/file.txt"
-                                    data = pending_write_artifacts.pop(saved_path, {"content": "", "mode": "write"})
+                                    data = pending_write_artifacts.pop(
+                                        saved_path, {"content": "", "mode": "write"}
+                                    )
                                     ct = data.get("content") or ""
                                     aid = saved_path.replace("/", "_").replace(".", "_")
-                                    a_type = "html" if saved_path.endswith(".html") else "python" if saved_path.endswith(".py") else "text"
-                                    yield _track_sse({
-                                        "type": "artifact_start",
-                                        "artifact": {
-                                            "identifier": aid,
-                                            "type": a_type,
-                                            "title": f"📄 Artifact: {saved_path}",
-                                            "auto_execute": False,
-                                        },
-                                    })
-                                    yield _track_sse({"type": "artifact_content", "content": ct, "artifact_id": aid})
-                                    yield _track_sse({
-                                        "type": "artifact_end",
-                                        "artifact": {
-                                            "identifier": aid,
-                                            "type": a_type,
-                                            "title": f"📄 Artifact: {saved_path}",
-                                            "path": saved_path,
-                                            "saved": True,
-                                            "version": 1,
-                                        },
-                                    })
+                                    a_type = (
+                                        "html"
+                                        if saved_path.endswith(".html")
+                                        else "python"
+                                        if saved_path.endswith(".py")
+                                        else "text"
+                                    )
+                                    yield _track_sse(
+                                        {
+                                            "type": "artifact_start",
+                                            "artifact": {
+                                                "identifier": aid,
+                                                "type": a_type,
+                                                "title": f"📄 Artifact: {saved_path}",
+                                                "auto_execute": False,
+                                            },
+                                        }
+                                    )
+                                    yield _track_sse(
+                                        {
+                                            "type": "artifact_content",
+                                            "content": ct,
+                                            "artifact_id": aid,
+                                        }
+                                    )
+                                    yield _track_sse(
+                                        {
+                                            "type": "artifact_end",
+                                            "artifact": {
+                                                "identifier": aid,
+                                                "type": a_type,
+                                                "title": f"📄 Artifact: {saved_path}",
+                                                "path": saved_path,
+                                                "saved": True,
+                                                "version": 1,
+                                            },
+                                        }
+                                    )
                                     queue_attachment(
                                         storage_key=saved_path,
                                         original_name=Path(saved_path).name,
@@ -2243,7 +2577,10 @@ class AgentPipeline:
                                         ),
                                     }
                                     yield _track_sse(outcome)
-                                elif evt.get("type") == "tool_end" and evt.get("name") == "sandbox_edit_workspace_file":
+                                elif (
+                                    evt.get("type") == "tool_end"
+                                    and evt.get("name") == "sandbox_edit_workspace_file"
+                                ):
                                     output_text = str(evt.get("output") or "")
                                     saved_path = ""
                                     try:
@@ -2257,14 +2594,29 @@ class AgentPipeline:
                                     data = pending_write_artifacts.pop(saved_path, {})
                                     if data.get("mode") == "edit":
                                         try:
-                                            from src.session_workspace import safe_resolve
+                                            from src.session_workspace import (
+                                                safe_resolve,
+                                            )
 
-                                            p = safe_resolve(self.session_id, saved_path, must_exist=True)
-                                            updated_content = p.read_text(encoding="utf-8", errors="replace")
+                                            p = safe_resolve(
+                                                self.session_id,
+                                                saved_path,
+                                                must_exist=True,
+                                            )
+                                            updated_content = p.read_text(
+                                                encoding="utf-8", errors="replace"
+                                            )
                                         except Exception:
-                                            updated_content = f"[file aggiornato: {saved_path}]"
+                                            updated_content = (
+                                                f"[file aggiornato: {saved_path}]"
+                                            )
 
-                                        aid = saved_path.replace("/", "_").replace(".", "_") + "_edit"
+                                        aid = (
+                                            saved_path.replace("/", "_").replace(
+                                                ".", "_"
+                                            )
+                                            + "_edit"
+                                        )
                                         a_type = (
                                             "python"
                                             if saved_path.endswith(".py")
@@ -2272,34 +2624,44 @@ class AgentPipeline:
                                             if saved_path.endswith(".html")
                                             else "text"
                                         )
-                                        yield _track_sse({
-                                            "type": "artifact_start",
-                                            "artifact": {
-                                                "identifier": aid,
-                                                "type": a_type,
-                                                "title": f"✏️ Edit: {saved_path}",
-                                                "auto_execute": False,
-                                            },
-                                        })
-                                        yield _track_sse({"type": "artifact_content", "content": updated_content, "artifact_id": aid})
-                                        yield _track_sse({
-                                            "type": "artifact_end",
-                                            "artifact": {
-                                                "identifier": aid,
-                                                "type": a_type,
-                                                "title": f"✏️ Edit: {saved_path}",
-                                                "path": saved_path,
-                                                "saved": True,
-                                                "version": 1,
-                                            },
-                                        })
+                                        yield _track_sse(
+                                            {
+                                                "type": "artifact_start",
+                                                "artifact": {
+                                                    "identifier": aid,
+                                                    "type": a_type,
+                                                    "title": f"✏️ Edit: {saved_path}",
+                                                    "auto_execute": False,
+                                                },
+                                            }
+                                        )
+                                        yield _track_sse(
+                                            {
+                                                "type": "artifact_content",
+                                                "content": updated_content,
+                                                "artifact_id": aid,
+                                            }
+                                        )
+                                        yield _track_sse(
+                                            {
+                                                "type": "artifact_end",
+                                                "artifact": {
+                                                    "identifier": aid,
+                                                    "type": a_type,
+                                                    "title": f"✏️ Edit: {saved_path}",
+                                                    "path": saved_path,
+                                                    "saved": True,
+                                                    "version": 1,
+                                                },
+                                            }
+                                        )
                                         queue_attachment(
                                             storage_key=saved_path,
                                             original_name=Path(saved_path).name,
                                             mime=a_type,
                                             size_bytes=len(updated_content),
                                         )
-                            
+
                                 if evt.get("type") == "tool_start":
                                     queue_tool_step(evt, is_start=True)
                                     if assistant_message_id:
@@ -2311,16 +2673,22 @@ class AgentPipeline:
                                 elif evt.get("type") == "tool_end":
                                     try:
                                         call_id = str(evt.get("id") or "").strip()
-                                        out_tokens = count_tokens(str(evt.get("output") or ""))
+                                        out_tokens = count_tokens(
+                                            str(evt.get("output") or "")
+                                        )
                                         inp_tokens = 0
                                         for ps in pending_db_steps:
                                             if ps.get("step_id") == call_id:
-                                                inp_tokens = count_tokens(ps.get("input") or "")
+                                                inp_tokens = count_tokens(
+                                                    ps.get("input") or ""
+                                                )
                                                 break
                                         evt["tokens_in"] = inp_tokens
                                         evt["tokens_out"] = out_tokens
                                     except Exception as e:
-                                        logger.warning("Failed to count tool tokens: %s", e)
+                                        logger.warning(
+                                            "Failed to count tool tokens: %s", e
+                                        )
                                     queue_tool_step(evt)
                                     if assistant_message_id:
                                         await persist_pending_turn_records(
@@ -2342,7 +2710,9 @@ class AgentPipeline:
                 drain_sec = float(os.getenv("AION_AGENT_DRAIN_TIMEOUT_SEC", "0"))
                 if stop_event.is_set() and stop_reason != "completed" and drain_sec > 0:
                     try:
-                        turn_result = await asyncio.wait_for(agent_task, timeout=drain_sec)
+                        turn_result = await asyncio.wait_for(
+                            agent_task, timeout=drain_sec
+                        )
                     except asyncio.TimeoutError:
                         logger.error(
                             "agent_task drain timeout after stop_reason=%s session=%s "
@@ -2379,7 +2749,10 @@ class AgentPipeline:
                         "stop_reason": stop_reason,
                     },
                 )
-                logger.info(">>> [DEBUG] Agent turn finished. Result type: %s", type(turn_result))
+                logger.info(
+                    ">>> [DEBUG] Agent turn finished. Result type: %s",
+                    type(turn_result),
+                )
                 # Supporto sia per liste che per dict (Pipeline result)
                 new_messages = []
                 raw_list = []
@@ -2394,7 +2767,11 @@ class AgentPipeline:
                     if not raw_list:
                         # Fallback: cerca una lista di ChatMessage in qualsiasi chiave
                         for val in turn_result.values():
-                            if isinstance(val, list) and len(val) > 0 and hasattr(val[0], "role"):
+                            if (
+                                isinstance(val, list)
+                                and len(val) > 0
+                                and hasattr(val[0], "role")
+                            ):
                                 raw_list = val
                                 break
 
@@ -2402,10 +2779,10 @@ class AgentPipeline:
                 if raw_list and messages:
                     idx = _find_input_end_index(messages, raw_list)
                     if idx >= 0:
-                        new_messages = raw_list[idx + 1:]
+                        new_messages = raw_list[idx + 1 :]
                     else:
                         # Fallback di sicurezza basato sulla lunghezza se non troviamo il messaggio di input
-                        new_messages = raw_list[len(messages):]
+                        new_messages = raw_list[len(messages) :]
                 else:
                     new_messages = raw_list
 
@@ -2414,15 +2791,26 @@ class AgentPipeline:
                 if new_messages:
                     for i, msg in enumerate(new_messages):
                         content = chat_message_text(msg)
-                        raw_role = msg.role.value if hasattr(msg.role, "value") else str(msg.role)
+                        raw_role = (
+                            msg.role.value
+                            if hasattr(msg.role, "value")
+                            else str(msg.role)
+                        )
                         role = normalize_message_role(raw_role)
                         # Recupero ragionamento da metadati o da accumulo streaming
-                        reasoning = msg.meta.get("reasoning") or msg.meta.get("reasoning_content")
-                        if not reasoning and role == "assistant" and not msg.tool_calls and i == (len(new_messages) - 1):
+                        reasoning = msg.meta.get("reasoning") or msg.meta.get(
+                            "reasoning_content"
+                        )
+                        if (
+                            not reasoning
+                            and role == "assistant"
+                            and not msg.tool_calls
+                            and i == (len(new_messages) - 1)
+                        ):
                             reasoning = "".join(full_reasoning)
                         tool_call_id = None
                         tool_name = None
-                        
+
                         if role == "assistant" and msg.tool_calls:
                             tool_name = msg.tool_calls[0].tool_name
                             tool_call_id = msg.tool_calls[0].id
@@ -2432,9 +2820,16 @@ class AgentPipeline:
 
                         # Se è l'ultimo messaggio assistant del turno, usiamo l'assistant_message_id sincronizzato
                         mid = None
-                        if role == "assistant" and not msg.tool_calls and i == (len(new_messages) - 1):
+                        if (
+                            role == "assistant"
+                            and not msg.tool_calls
+                            and i == (len(new_messages) - 1)
+                        ):
                             mid = assistant_message_id
-                            logger.debug("Assigning synchronized ID %s to final assistant message", mid)
+                            logger.debug(
+                                "Assigning synchronized ID %s to final assistant message",
+                                mid,
+                            )
 
                         try:
                             tl_json = (
@@ -2459,7 +2854,10 @@ class AgentPipeline:
                                     tool_call_id=tool_call_id,
                                     reasoning=reasoning,
                                     timeline_json=tl_json,
-                                    metadata_json=_plan_meta_json if mid == user_message_id or mid == assistant_message_id else None,
+                                    metadata_json=_plan_meta_json
+                                    if mid == user_message_id
+                                    or mid == assistant_message_id
+                                    else None,
                                 )
                                 if mid == assistant_message_id and role == "assistant":
                                     assistant_message_persisted = True
@@ -2476,12 +2874,18 @@ class AgentPipeline:
                                     message_id=None,
                                     timeline_json=tl_json,
                                 )
-                            logger.info(">>> [DEBUG] Persisted message: role=%s, id=%s", role, mid)
+                            logger.info(
+                                ">>> [DEBUG] Persisted message: role=%s, id=%s",
+                                role,
+                                mid,
+                            )
                         except Exception as p_err:
                             logger.error("Persistence error: %s", p_err)
                 else:
-                    logger.warning("turn_result has no new messages: %s", type(turn_result))
-            
+                    logger.warning(
+                        "turn_result has no new messages: %s", type(turn_result)
+                    )
+
             except asyncio.TimeoutError:
                 _turn_status = "timeout"
                 _turn_error_type = "TimeoutError"
@@ -2499,7 +2903,9 @@ class AgentPipeline:
                 yield {"type": "error", "content": str(e)}
             finally:
                 try:
-                    from src.runtime.sql_query_memory_context import clear_sql_qm_turn_context
+                    from src.runtime.sql_query_memory_context import (
+                        clear_sql_qm_turn_context,
+                    )
 
                     clear_sql_qm_turn_context(self.session_id)
                 except Exception:
@@ -2552,54 +2958,73 @@ class AgentPipeline:
                             full_response.append(pe.content)
                             yield _track_sse({"type": "token", "content": pe.content})
                         elif pe.event == ArtifactEvent.ARTIFACT_START:
-                            yield _track_sse({
-                                "type": "artifact_start",
-                                "artifact": {
-                                    "identifier": pe.artifact_id,
-                                    "type": pe.artifact_type,
-                                    "title": pe.artifact_title,
-                                    "auto_execute": pe.auto_execute,
-                                },
-                            })
+                            yield _track_sse(
+                                {
+                                    "type": "artifact_start",
+                                    "artifact": {
+                                        "identifier": pe.artifact_id,
+                                        "type": pe.artifact_type,
+                                        "title": pe.artifact_title,
+                                        "auto_execute": pe.auto_execute,
+                                    },
+                                }
+                            )
                         elif pe.event == ArtifactEvent.ARTIFACT_CONTENT:
-                            yield _track_sse({
-                                "type": "artifact_content",
-                                "content": pe.content,
-                                "artifact_id": pe.artifact_id,
-                            })
+                            yield _track_sse(
+                                {
+                                    "type": "artifact_content",
+                                    "content": pe.content,
+                                    "artifact_id": pe.artifact_id,
+                                }
+                            )
                         elif pe.event == ArtifactEvent.ARTIFACT_END:
                             if _is_plan_artifact_payload(
                                 pe.artifact_id or "",
                                 pe.artifact_type or "",
                                 pe.content or "",
                             ):
-                                _pid = _resolve_turn_plan_id(plan_controller, pe.artifact_id)
+                                _pid = _resolve_turn_plan_id(
+                                    plan_controller, pe.artifact_id
+                                )
                                 pending = await _setup_plan_artifact_chunk(
                                     session_id=self.session_id,
                                     user_id=self.user_id,
                                     artifact_id=_pid,
                                     markdown_content=pe.content or "",
                                 )
-                                yield _track_sse({
-                                    "type": "artifact_end",
-                                    "artifact": _plan_artifact_sse_end(pe, plan_id=_pid),
-                                })
+                                yield _track_sse(
+                                    {
+                                        "type": "artifact_end",
+                                        "artifact": _plan_artifact_sse_end(
+                                            pe, plan_id=_pid
+                                        ),
+                                    }
+                                )
                                 if pending:
                                     yield _track_sse(pending)
                             else:
                                 path, version = artifact_manager.save(
-                                    pe.artifact_id, pe.content, pe.artifact_type, pe.filename
+                                    pe.artifact_id,
+                                    pe.content,
+                                    pe.artifact_type,
+                                    pe.filename,
                                 )
                                 queue_attachment(
-                                    storage_key=str(path.relative_to(artifact_manager._root)),
+                                    storage_key=str(
+                                        path.relative_to(artifact_manager._root)
+                                    ),
                                     original_name=pe.filename or pe.artifact_id,
                                     mime=pe.artifact_type or "text/plain",
                                     size_bytes=len(pe.content or ""),
                                 )
-                                yield _track_sse({
-                                    "type": "artifact_end",
-                                    "artifact": _artifact_end_payload(pe, path, version),
-                                })
+                                yield _track_sse(
+                                    {
+                                        "type": "artifact_end",
+                                        "artifact": _artifact_end_payload(
+                                            pe, path, version
+                                        ),
+                                    }
+                                )
                 except Exception as flush_err:
                     logger.warning("Artifact parser flush failed: %s", flush_err)
 
@@ -2651,7 +3076,9 @@ class AgentPipeline:
                                             revision=1,
                                         )
                                     )
-                                    yield _track_sse(plan_controller.sse_phase("registered"))
+                                    yield _track_sse(
+                                        plan_controller.sse_phase("registered")
+                                    )
                                 logger.info(
                                     "Plan Mode finalize: source=%s tasks=%s plan_id=%s session=%s",
                                     _finalize.source,
@@ -2663,7 +3090,9 @@ class AgentPipeline:
                             plan_finalize_source = "failed"
                             if plan_controller is not None:
                                 yield _track_sse(
-                                    plan_controller.sse_plan_error(PLAN_FINALIZE_USER_MESSAGE)
+                                    plan_controller.sse_plan_error(
+                                        PLAN_FINALIZE_USER_MESSAGE
+                                    )
                                 )
                             yield _track_sse(
                                 {"type": "token", "content": PLAN_FINALIZE_USER_MESSAGE}
@@ -2713,9 +3142,13 @@ class AgentPipeline:
 
                 if artifact_parse_hits == 0:
                     try:
-                        from src.runtime.artifact_coercion import salvage_artifact_from_response
+                        from src.runtime.artifact_coercion import (
+                            salvage_artifact_from_response,
+                        )
 
-                        _salvaged = salvage_artifact_from_response("".join(full_response))
+                        _salvaged = salvage_artifact_from_response(
+                            "".join(full_response)
+                        )
                         if _salvaged and not _is_plan_artifact_payload(
                             _salvaged.artifact_id,
                             _salvaged.artifact_type,
@@ -2747,8 +3180,11 @@ class AgentPipeline:
                                 }
                             )
                             queue_attachment(
-                                storage_key=str(path.relative_to(artifact_manager._root)),
-                                original_name=_salvaged.filename or _salvaged.artifact_id,
+                                storage_key=str(
+                                    path.relative_to(artifact_manager._root)
+                                ),
+                                original_name=_salvaged.filename
+                                or _salvaged.artifact_id,
                                 mime=_salvaged.artifact_type or "text/markdown",
                                 size_bytes=len(_salvaged.content or ""),
                             )
@@ -2759,7 +3195,9 @@ class AgentPipeline:
                                         "identifier": _salvaged.artifact_id,
                                         "type": _salvaged.artifact_type,
                                         "title": _salvaged.title,
-                                        "path": str(path.relative_to(artifact_manager._root)),
+                                        "path": str(
+                                            path.relative_to(artifact_manager._root)
+                                        ),
                                         "version": version,
                                         "saved": True,
                                     },
@@ -2776,8 +3214,10 @@ class AgentPipeline:
                 await _flush_assistant_stream_content(force=True)
                 if keepalive_task is not None and not keepalive_task.done():
                     keepalive_task.cancel()
-                if 'agent_task' in locals() and not agent_task.done(): agent_task.cancel()
-                if 'tool_listener_task' in locals(): tool_listener_task.cancel()
+                if "agent_task" in locals() and not agent_task.done():
+                    agent_task.cancel()
+                if "tool_listener_task" in locals():
+                    tool_listener_task.cancel()
                 StreamSync.purge(self.session_id)
 
                 if prompt_debug_enabled():
@@ -2786,12 +3226,18 @@ class AgentPipeline:
                             coerce_chat_plan_to_canonical_markdown,
                             looks_like_chat_plan,
                         )
-                        from src.runtime.prompt_snapshot import patch_prompt_snapshot_output
+                        from src.runtime.prompt_snapshot import (
+                            patch_prompt_snapshot_output,
+                        )
 
                         _raw_assistant = "".join(full_response)
                         _coerced_md = None
-                        if effective_agent_mode == "plan" and looks_like_chat_plan(_raw_assistant):
-                            _coerced_md = coerce_chat_plan_to_canonical_markdown(_raw_assistant)
+                        if effective_agent_mode == "plan" and looks_like_chat_plan(
+                            _raw_assistant
+                        ):
+                            _coerced_md = coerce_chat_plan_to_canonical_markdown(
+                                _raw_assistant
+                            )
                         _patched = patch_prompt_snapshot_output(
                             self.session_id,
                             assistant_message_id,
@@ -2813,7 +3259,9 @@ class AgentPipeline:
                                 }
                             )
                     except Exception as snap_exc:
-                        logger.debug("prompt snapshot post-run patch failed: %s", snap_exc)
+                        logger.debug(
+                            "prompt snapshot post-run patch failed: %s", snap_exc
+                        )
 
                 final_text = "".join(full_response).strip()
                 if not final_text:
@@ -2840,8 +3288,13 @@ class AgentPipeline:
                         plan_intercepts=plan_intercepts,
                     )
                     if _outcome_chunk:
-                        if _outcome_chunk.get("message") and not "".join(full_response).strip():
-                            yield _track_sse({"type": "token", "content": _outcome_chunk["message"]})
+                        if (
+                            _outcome_chunk.get("message")
+                            and not "".join(full_response).strip()
+                        ):
+                            yield _track_sse(
+                                {"type": "token", "content": _outcome_chunk["message"]}
+                            )
                         yield _track_sse(_outcome_chunk)
                     elif final_text and not "".join(full_response).strip():
                         yield _track_sse({"type": "token", "content": final_text})
@@ -2863,9 +3316,13 @@ class AgentPipeline:
                         )
                         assistant_message_persisted = True
                     except Exception as db_err:
-                        logger.warning("Failed to persist final assistant message: %s", db_err)
+                        logger.warning(
+                            "Failed to persist final assistant message: %s", db_err
+                        )
                 if pending_db_steps or pending_db_attachments:
-                    await persist_pending_turn_records(assistant_message_id if assistant_message_persisted else None)
+                    await persist_pending_turn_records(
+                        assistant_message_id if assistant_message_persisted else None
+                    )
                 try:
                     loop.create_task(
                         ltm_orchestrator.extract_and_persist(
@@ -2880,13 +3337,24 @@ class AgentPipeline:
                     )
                     try:
                         from .learning.skill_distiller import skill_distiller
-                        loop.create_task(skill_distiller.maybe_distill(self.session_id, self.profile_name, user_input, final_text, tool_calls_log))
-                    except Exception: pass
-                except Exception as post_err: logger.error("Failed post-turn tasks: %s", post_err)
+
+                        loop.create_task(
+                            skill_distiller.maybe_distill(
+                                self.session_id,
+                                self.profile_name,
+                                user_input,
+                                final_text,
+                                tool_calls_log,
+                            )
+                        )
+                    except Exception:
+                        pass
+                except Exception as post_err:
+                    logger.error("Failed post-turn tasks: %s", post_err)
 
             # Calculate duration
             _turn_duration = time.monotonic() - _turn_start_time
-            
+
             # Estimate prompt tokens
             if _accumulated_prompt_tokens > 0:
                 _prompt_tokens_est = _accumulated_prompt_tokens
@@ -2910,7 +3378,7 @@ class AgentPipeline:
             else:
                 _reasoning_text = "".join(full_reasoning)
                 _reasoning_tokens_est = count_tokens(_reasoning_text)
-            
+
             _post_turn_payload = {
                 "duration": _turn_duration,
                 "status": _turn_status,
@@ -2921,7 +3389,7 @@ class AgentPipeline:
                 "reasoning_tokens": _reasoning_tokens_est,
                 "llm_calls": _llm_steps_done,
             }
-            
+
             await hook_registry.dispatch(
                 "post_turn",
                 HookContext(
@@ -2931,7 +3399,7 @@ class AgentPipeline:
                     user_id=self.user_id,
                     profile=self.profile_name,
                     payload=_post_turn_payload,
-                )
+                ),
             )
             _agent_debug_log(
                 "H4",
@@ -2945,9 +3413,11 @@ class AgentPipeline:
                 },
             )
             yield _track_sse({"type": "final", "text": final_text})
-        
+
         except Exception as e:
-            logger.error(">>> [CRITICAL] Outer run_stream failure: %s", e, exc_info=True)
+            logger.error(
+                ">>> [CRITICAL] Outer run_stream failure: %s", e, exc_info=True
+            )
             yield {"type": "error", "content": str(e)}
         finally:
             await redis_clear_stream_active(self.session_id)
@@ -2955,6 +3425,7 @@ class AgentPipeline:
             if span:
                 try:
                     from opentelemetry import context
+
                     if otel_token:
                         context.detach(otel_token)
                     span.end()
@@ -2963,5 +3434,10 @@ class AgentPipeline:
 
     async def run(self, user_input: str) -> Dict[str, Any]:
         async for chunk in self.run_stream(user_input):
-            if chunk["type"] == "final": return {"text": chunk["text"], "charts": chunk.get("charts", []), "success": True}
+            if chunk["type"] == "final":
+                return {
+                    "text": chunk["text"],
+                    "charts": chunk.get("charts", []),
+                    "success": True,
+                }
         return {"text": "", "charts": [], "success": False}

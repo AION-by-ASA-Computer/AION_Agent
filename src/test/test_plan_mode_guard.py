@@ -2,7 +2,9 @@ from src.runtime.plan_mode_guard import plan_mode_response_valid
 
 
 def test_plan_registered_skips_tag_requirement():
-    ok, reason = plan_mode_response_valid("solo ricerca web, nessun tag", plan_registered=True)
+    ok, reason = plan_mode_response_valid(
+        "solo ricerca web, nessun tag", plan_registered=True
+    )
     assert ok
     assert reason == "ok_plan_registered"
 

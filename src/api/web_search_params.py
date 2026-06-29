@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import List, Optional
 
 
-def normalize_web_search_restrict_hosts(values: Optional[List[str]]) -> Optional[List[str]]:
+def normalize_web_search_restrict_hosts(
+    values: Optional[List[str]],
+) -> Optional[List[str]]:
     if not values:
         return None
     seen: set[str] = set()

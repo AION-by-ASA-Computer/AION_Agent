@@ -3,6 +3,7 @@ Helper condiviso per operazioni filesystem sessione: edit, grep, glob, chunk rea
 Usato da mcp_servers/session_sandbox/server.py e dai test unitari.
 Tutti i path operativi sono Path già risolti con safe_resolve() dal chiamante.
 """
+
 from __future__ import annotations
 
 import os
@@ -147,7 +148,9 @@ class GrepTruncated(Exception):
     def __init__(self, results: List[dict], total_scanned: int):
         self.results = results
         self.total_scanned = total_scanned
-        super().__init__(f"Risultati troncati a {len(results)} (scansionati {total_scanned} file)")
+        super().__init__(
+            f"Risultati troncati a {len(results)} (scansionati {total_scanned} file)"
+        )
 
 
 def _compile_with_timeout(pattern: str, timeout_sec: float):
@@ -158,7 +161,9 @@ def _compile_with_timeout(pattern: str, timeout_sec: float):
         try:
             return fut.result(timeout=timeout_sec)
         except concurrent.futures.TimeoutError:
-            raise re.error(f"Pattern regex troppo complesso (timeout {timeout_sec}s): {pattern!r}")
+            raise re.error(
+                f"Pattern regex troppo complesso (timeout {timeout_sec}s): {pattern!r}"
+            )
 
 
 def _match_with_timeout(compiled_re, line: str, timeout_sec: float) -> bool:
@@ -197,7 +202,9 @@ def grep_content(
     results: List[dict] = []
     total_scanned = 0
 
-    iterator = search_root.rglob(glob_filter) if recursive else search_root.glob(glob_filter)
+    iterator = (
+        search_root.rglob(glob_filter) if recursive else search_root.glob(glob_filter)
+    )
 
     for path in iterator:
         if not path.is_file():
@@ -288,7 +295,9 @@ def read_file_chunk(
         with open(path, "rb") as f:
             sample = f.read(512)
         if b"\x00" in sample:
-            raise ValueError(f"Il file {path.name} sembra binario, non leggibile come testo.")
+            raise ValueError(
+                f"Il file {path.name} sembra binario, non leggibile come testo."
+            )
     except OSError as e:
         raise ValueError(f"Impossibile leggere {path.name}: {e}") from e
 

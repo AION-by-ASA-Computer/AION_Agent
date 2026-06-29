@@ -2,7 +2,9 @@ from __future__ import annotations
 
 UI_VISIBLE_ROLES = frozenset({"user", "assistant"})
 MODEL_CONTEXT_ROLES = frozenset({"user", "assistant"})
-INTERNAL_ROLES = frozenset({"system", "tool", "internal", "developer", "skill", "reasoning"})
+INTERNAL_ROLES = frozenset(
+    {"system", "tool", "internal", "developer", "skill", "reasoning"}
+)
 
 INTERNAL_CONTENT_MARKERS = (
     "Role: Orchestrator",

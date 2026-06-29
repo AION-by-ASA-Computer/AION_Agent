@@ -1,4 +1,5 @@
 """Unit tests for STM context compression budgets."""
+
 from __future__ import annotations
 
 import asyncio
@@ -26,7 +27,9 @@ def test_compress_trigger_is_model_window_times_threshold():
 
 
 def test_should_compress_at_trigger_including_overhead():
-    comp = ContextCompressor(window_size=131_072, threshold=0.5, keep_last=4, reserve_output=16_384)
+    comp = ContextCompressor(
+        window_size=131_072, threshold=0.5, keep_last=4, reserve_output=16_384
+    )
     overhead = 20_000
     trigger = comp.compress_trigger_tokens()
     below = [_msg("x" * 200) for _ in range(3)]
@@ -39,7 +42,9 @@ def test_should_compress_at_trigger_including_overhead():
 
 def test_should_compress_when_over_api_prompt_budget_even_below_trigger():
     # Soglia alta così il budget API (window − reserve) scatta prima del trigger percentuale.
-    comp = ContextCompressor(window_size=131_072, threshold=0.95, keep_last=4, reserve_output=16_384)
+    comp = ContextCompressor(
+        window_size=131_072, threshold=0.95, keep_last=4, reserve_output=16_384
+    )
     overhead = 114_600
     messages = [_msg("x " * 40) for _ in range(8)]
     total = comp.total_with_overhead(messages, overhead)
@@ -49,7 +54,9 @@ def test_should_compress_when_over_api_prompt_budget_even_below_trigger():
 
 
 def test_compress_until_fits_reduces_message_count():
-    comp = ContextCompressor(window_size=20_000, threshold=0.1, keep_last=2, reserve_output=1000)
+    comp = ContextCompressor(
+        window_size=20_000, threshold=0.1, keep_last=2, reserve_output=1000
+    )
 
     async def _noop(_head):
         return None
@@ -74,14 +81,18 @@ def test_compress_until_fits_reduces_message_count():
 
 
 def test_should_compress_few_huge_messages_over_budget():
-    comp = ContextCompressor(window_size=131_072, threshold=0.5, keep_last=6, reserve_output=16_384)
+    comp = ContextCompressor(
+        window_size=131_072, threshold=0.5, keep_last=6, reserve_output=16_384
+    )
     overhead = 20_000
     messages = [_msg("word " * 12000) for _ in range(6)]
     assert comp.should_compress(messages, fixed_overhead=overhead)
 
 
 def test_truncate_messages_fits_prompt_budget():
-    comp = ContextCompressor(window_size=10_000, threshold=0.5, keep_last=2, reserve_output=1000)
+    comp = ContextCompressor(
+        window_size=10_000, threshold=0.5, keep_last=2, reserve_output=1000
+    )
     max_prompt = comp.max_prompt_tokens()
     overhead = 3000
     messages = [_msg("x" * 5000) for _ in range(4)]
@@ -98,7 +109,10 @@ def test_truncate_messages_fits_prompt_budget():
 def test_model_context_window_prefers_max_context_env():
     with patch.dict(
         os.environ,
-        {"AION_MODEL_MAX_CONTEXT": "131072", "AION_CONTEXT_COMPRESS_MODEL_WINDOW": "32768"},
+        {
+            "AION_MODEL_MAX_CONTEXT": "131072",
+            "AION_CONTEXT_COMPRESS_MODEL_WINDOW": "32768",
+        },
         clear=False,
     ):
         from src.memory.context_compressor import model_context_window

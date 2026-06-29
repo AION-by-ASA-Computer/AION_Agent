@@ -11,7 +11,11 @@ if TYPE_CHECKING:
     from src.agent_profile import AgentProfile
 
 from src.runtime.context import get_current_session_id
-from src.runtime.native_tool_events import emit_tool_end, emit_tool_error, emit_tool_start
+from src.runtime.native_tool_events import (
+    emit_tool_end,
+    emit_tool_error,
+    emit_tool_start,
+)
 from src.runtime.turn_compaction import maybe_compact_after_tool
 from src.runtime.web_search_context import get_web_search_request_context
 
@@ -97,8 +101,14 @@ def build_web_search_tool(
             "type": "object",
             "properties": {
                 "query": {"type": "string", "description": "Search query"},
-                "max_results": {"type": "integer", "description": "Max results (1–20, default da env)"},
-                "language": {"type": "string", "description": "Optional language code (es. it, en)"},
+                "max_results": {
+                    "type": "integer",
+                    "description": "Max results (1–20, default da env)",
+                },
+                "language": {
+                    "type": "string",
+                    "description": "Optional language code (es. it, en)",
+                },
             },
             "required": ["query"],
         },
@@ -131,7 +141,10 @@ def build_web_fetch_page_tool(
 
 
 def _build_sql_memory_tool(
-    tool_id: str, session_id: str, user_id: str, profile: Optional["AgentProfile"] = None
+    tool_id: str,
+    session_id: str,
+    user_id: str,
+    profile: Optional["AgentProfile"] = None,
 ) -> Tool:
     from src.runtime.sql_query_memory_tools import build_sql_query_memory_haystack_tools
 
@@ -139,7 +152,9 @@ def _build_sql_memory_tool(
     for t in build_sql_query_memory_haystack_tools(session_id, user_id, slug):
         if getattr(t, "name", None) == tool_id:
             return t
-    raise ValueError(f"SQL QueryMemory tool {tool_id!r} not built (disabled or profile mismatch)")
+    raise ValueError(
+        f"SQL QueryMemory tool {tool_id!r} not built (disabled or profile mismatch)"
+    )
 
 
 def build_sql_memory_search_tool(
@@ -169,7 +184,9 @@ def build_sql_memory_delete_tool(
 def build_sql_memory_list_projects_tool(
     session_id: str, user_id: str, profile: Optional["AgentProfile"] = None
 ) -> Tool:
-    return _build_sql_memory_tool("sql_memory_list_projects", session_id, user_id, profile)
+    return _build_sql_memory_tool(
+        "sql_memory_list_projects", session_id, user_id, profile
+    )
 
 
 def build_sql_memory_list_saved_tool(
@@ -207,7 +224,9 @@ def build_trigger_research_tool(
         try:
             from src.runtime.native_tools.research_tools import run_trigger_research
 
-            out = run_trigger_research(json.dumps(inp), session_id=sid, user_id=owner_id)
+            out = run_trigger_research(
+                json.dumps(inp), session_id=sid, user_id=owner_id
+            )
         except Exception as e:
             emit_tool_error(sid, "trigger_research", call_id, str(e))
             raise
@@ -225,9 +244,18 @@ def build_trigger_research_tool(
         parameters={
             "type": "object",
             "properties": {
-                "topic": {"type": "string", "description": "Research question or topic"},
-                "max_rounds": {"type": "integer", "description": "Optional max search rounds (0=auto)"},
-                "max_time": {"type": "integer", "description": "Optional max seconds (60-1800)"},
+                "topic": {
+                    "type": "string",
+                    "description": "Research question or topic",
+                },
+                "max_rounds": {
+                    "type": "integer",
+                    "description": "Optional max search rounds (0=auto)",
+                },
+                "max_time": {
+                    "type": "integer",
+                    "description": "Optional max seconds (60-1800)",
+                },
                 "category": {
                     "type": "string",
                     "description": "Optional: product, comparison, howto, factcheck",
@@ -249,7 +277,9 @@ def build_manage_research_tool(
 
     owner_id = (user_id or "default").strip() or "default"
 
-    def manage_fn(action: str = "list", id: str | None = None, search: str | None = None) -> str:
+    def manage_fn(
+        action: str = "list", id: str | None = None, search: str | None = None
+    ) -> str:
         sid = get_current_session_id()
         inp = {"action": action}
         if id:
@@ -279,7 +309,10 @@ def build_manage_research_tool(
             "properties": {
                 "action": {"type": "string", "enum": ["list", "read", "delete"]},
                 "id": {"type": "string", "description": "Research session id"},
-                "search": {"type": "string", "description": "Filter library by query text"},
+                "search": {
+                    "type": "string",
+                    "description": "Filter library by query text",
+                },
             },
             "required": ["action"],
         },

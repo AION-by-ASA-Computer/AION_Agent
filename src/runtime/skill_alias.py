@@ -1,4 +1,5 @@
 """Resolve skill slug aliases (artifact_protocol variants)."""
+
 from __future__ import annotations
 
 import os
@@ -6,7 +7,11 @@ from typing import Optional
 
 
 def artifact_strategy(strategy: Optional[str] = None) -> str:
-    raw = strategy if strategy is not None else os.getenv("AION_ARTIFACT_STRATEGY", "markdown")
+    raw = (
+        strategy
+        if strategy is not None
+        else os.getenv("AION_ARTIFACT_STRATEGY", "markdown")
+    )
     return (raw or "markdown").strip().lower()
 
 

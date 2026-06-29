@@ -1,4 +1,5 @@
 """Embedding helpers (reuse PromQL QueryMemory HTTP client)."""
+
 from __future__ import annotations
 
 from typing import Optional

@@ -1,4 +1,5 @@
 """JSON completion helper for LTM extraction (OpenAI-compatible vLLM endpoint)."""
+
 import json
 import logging
 import os
@@ -73,9 +74,15 @@ def complete_json_sync(
     base, model = resolve_llm_endpoint()
 
     adapter_env = (os.getenv("AION_LLM_ADAPTER") or "").strip().lower()
-    if "anthropic" in adapter_env or "anthropic" in model.lower() or "claude" in model.lower():
+    if (
+        "anthropic" in adapter_env
+        or "anthropic" in model.lower()
+        or "claude" in model.lower()
+    ):
         provider = "anthropic"
-    elif "google" in adapter_env or "gemini" in adapter_env or "gemini" in model.lower():
+    elif (
+        "google" in adapter_env or "gemini" in adapter_env or "gemini" in model.lower()
+    ):
         provider = "google"
     else:
         provider = "openai"
@@ -97,12 +104,19 @@ def complete_json_sync(
             "temperature": 0.4,
             "max_tokens": max_tokens,
         }
-        if os.getenv("AION_LTM_JSON_RESPONSE_FORMAT", "0").lower() in ("1", "true", "yes"):
+        if os.getenv("AION_LTM_JSON_RESPONSE_FORMAT", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
             payload["response_format"] = {"type": "json_object"}
         token = os.getenv("AION_LLM_API_KEY", "placeholder-token")
         try:
             r = requests.post(
-                url, json=payload, headers={"Authorization": f"Bearer {token}"}, timeout=timeout
+                url,
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=timeout,
             )
             r.raise_for_status()
             data = r.json()
@@ -121,7 +135,9 @@ def complete_json_sync(
         generator = LiteLLMChatGeneratorWrapper(
             model=model,
             api_base_url=base,
-            api_key=Secret.from_token(os.getenv("AION_LLM_API_KEY", "placeholder-token")),
+            api_key=Secret.from_token(
+                os.getenv("AION_LLM_API_KEY", "placeholder-token")
+            ),
             timeout=timeout,
             generation_kwargs=gen_kwargs,
         )
@@ -141,7 +157,8 @@ def complete_json_sync(
 
     if isinstance(content, list):
         content = "".join(
-            part.get("text", "") if isinstance(part, dict) else str(part) for part in content
+            part.get("text", "") if isinstance(part, dict) else str(part)
+            for part in content
         )
     if content is None or (isinstance(content, str) and not content.strip()):
         logger.debug("LTM extract: empty message content from model.")
@@ -149,16 +166,27 @@ def complete_json_sync(
     parsed = _extract_json_object(str(content))
     if parsed is None:
         # Retry with simpler prompt if empty/bad but we want to try again
-        if (not content or not content.strip()) and "SIMPLIFIED_RETRY" not in system_prompt:
-            logger.debug("LTM extract: Empty response, retrying with simplified prompt...")
-            simple_system = "Rispondi solo con JSON: {\"should_persist\": false, \"reason\": \"no_info\"} se non c'è nulla di rilevante, altrimenti estrai i fatti in JSON LTM."
-            return complete_json_sync(simple_system, user_prompt + "\n\nSIMPLIFIED_RETRY", timeout)
-            
+        if (
+            not content or not content.strip()
+        ) and "SIMPLIFIED_RETRY" not in system_prompt:
+            logger.debug(
+                "LTM extract: Empty response, retrying with simplified prompt..."
+            )
+            simple_system = 'Rispondi solo con JSON: {"should_persist": false, "reason": "no_info"} se non c\'è nulla di rilevante, altrimenti estrai i fatti in JSON LTM.'
+            return complete_json_sync(
+                simple_system, user_prompt + "\n\nSIMPLIFIED_RETRY", timeout
+            )
+
         fb = _fallback_ltm_should_persist(str(content))
         if fb is not None:
-            logger.debug("LTM extract: JSON incompleto, uso fallback should_persist=%s", fb.get("should_persist"))
+            logger.debug(
+                "LTM extract: JSON incompleto, uso fallback should_persist=%s",
+                fb.get("should_persist"),
+            )
             return fb
-        logger.debug("LTM extract: could not parse JSON from: %s...", str(content)[:200])
+        logger.debug(
+            "LTM extract: could not parse JSON from: %s...", str(content)[:200]
+        )
         return {"should_persist": False, "reason": "parse_failed"}
     return parsed
 
@@ -166,7 +194,9 @@ def complete_json_sync(
 async def complete_json_async(
     system_prompt: str, user_prompt: str, timeout: Optional[float] = None
 ) -> Dict[str, Any]:
-    return await asyncio.to_thread(complete_json_sync, system_prompt, user_prompt, timeout)
+    return await asyncio.to_thread(
+        complete_json_sync, system_prompt, user_prompt, timeout
+    )
 
 
 def complete_text_sync(
@@ -185,9 +215,15 @@ def complete_text_sync(
     base, model = resolve_llm_endpoint()
 
     adapter_env = (os.getenv("AION_LLM_ADAPTER") or "").strip().lower()
-    if "anthropic" in adapter_env or "anthropic" in model.lower() or "claude" in model.lower():
+    if (
+        "anthropic" in adapter_env
+        or "anthropic" in model.lower()
+        or "claude" in model.lower()
+    ):
         provider = "anthropic"
-    elif "google" in adapter_env or "gemini" in adapter_env or "gemini" in model.lower():
+    elif (
+        "google" in adapter_env or "gemini" in adapter_env or "gemini" in model.lower()
+    ):
         provider = "google"
     else:
         provider = "openai"
@@ -211,7 +247,10 @@ def complete_text_sync(
         }
         try:
             r = requests.post(
-                url, json=payload, headers={"Authorization": f"Bearer {token}"}, timeout=timeout
+                url,
+                json=payload,
+                headers={"Authorization": f"Bearer {token}"},
+                timeout=timeout,
             )
             r.raise_for_status()
             data = r.json()
@@ -230,7 +269,9 @@ def complete_text_sync(
         generator = LiteLLMChatGeneratorWrapper(
             model=model,
             api_base_url=base,
-            api_key=Secret.from_token(os.getenv("AION_LLM_API_KEY", "placeholder-token")),
+            api_key=Secret.from_token(
+                os.getenv("AION_LLM_API_KEY", "placeholder-token")
+            ),
             timeout=timeout,
             generation_kwargs={
                 "temperature": 0.2,
@@ -248,5 +289,3 @@ def complete_text_sync(
         except Exception as e:
             logger.warning("Text completion LLM failed: %s", e)
         return ""
-
-

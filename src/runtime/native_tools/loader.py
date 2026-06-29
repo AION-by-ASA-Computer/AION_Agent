@@ -21,13 +21,17 @@ logger = logging.getLogger(__name__)
 def native_registry_content_hash() -> str:
     """Frammento stabile per cache agent (invalida quando cambia il registry)."""
     try:
-        blob = json.dumps(load_merged_native_tool_registry(), sort_keys=True, default=str)
+        blob = json.dumps(
+            load_merged_native_tool_registry(), sort_keys=True, default=str
+        )
     except Exception:
         blob = ""
     return hashlib.md5(blob.encode("utf-8")).hexdigest()[:16]
 
 
-def load_native_tools(profile: "AgentProfile", session_id: str, user_id: str) -> List[Tool]:
+def load_native_tools(
+    profile: "AgentProfile", session_id: str, user_id: str
+) -> List[Tool]:
     groups = getattr(profile, "native_tool_groups", None) or []
     if not groups:
         return []
@@ -45,7 +49,9 @@ def load_native_tools(profile: "AgentProfile", session_id: str, user_id: str) ->
             tid_s = str(tid).strip()
             factory = NATIVE_TOOL_FACTORIES.get(tid_s)
             if not factory:
-                logger.warning("native tool id sconosciuto %r nel bundle %r", tid_s, gid)
+                logger.warning(
+                    "native tool id sconosciuto %r nel bundle %r", tid_s, gid
+                )
                 continue
             try:
                 t = factory(session_id, user_id, profile)

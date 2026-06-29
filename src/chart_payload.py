@@ -75,7 +75,9 @@ def normalize_chart_dict(payload: Dict[str, Any]) -> Dict[str, Any]:
         xk = out["x_key"]
         if xk not in row0:
             logger.warning("x_key %r missing on chart rows, using index", xk)
-            out["x_key"] = "index" if "index" in row0 else next(iter(row0.keys()), "index")
+            out["x_key"] = (
+                "index" if "index" in row0 else next(iter(row0.keys()), "index")
+            )
 
         if out.get("series_keys"):
             keys = set(row0.keys())

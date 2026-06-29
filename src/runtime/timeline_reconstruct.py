@@ -1,4 +1,5 @@
 """Best-effort timeline reconstruction from legacy flat message fields."""
+
 from __future__ import annotations
 
 import json
@@ -57,7 +58,11 @@ def reconstruct_timeline_from_legacy(
         meta_raw = s.get("metadata_json")
         if meta_raw:
             try:
-                meta = json.loads(meta_raw) if isinstance(meta_raw, str) else dict(meta_raw)
+                meta = (
+                    json.loads(meta_raw)
+                    if isinstance(meta_raw, str)
+                    else dict(meta_raw)
+                )
             except (json.JSONDecodeError, TypeError):
                 meta = {}
         merged.append(
@@ -72,8 +77,12 @@ def reconstruct_timeline_from_legacy(
                     "output": s.get("output"),
                     "status": "error" if s.get("is_error") else "done",
                     "isError": bool(s.get("is_error")),
-                    "tokens_in": meta.get("tokens_in") if isinstance(meta.get("tokens_in"), int) else None,
-                    "tokens_out": meta.get("tokens_out") if isinstance(meta.get("tokens_out"), int) else None,
+                    "tokens_in": meta.get("tokens_in")
+                    if isinstance(meta.get("tokens_in"), int)
+                    else None,
+                    "tokens_out": meta.get("tokens_out")
+                    if isinstance(meta.get("tokens_out"), int)
+                    else None,
                 },
             )
         )

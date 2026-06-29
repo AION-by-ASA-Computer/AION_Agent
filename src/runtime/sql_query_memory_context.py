@@ -1,4 +1,5 @@
 """Per-turn context for SQL QueryMemory (project slug, tenant, user)."""
+
 from __future__ import annotations
 
 import json
@@ -54,8 +55,12 @@ def set_sql_qm_turn_context(
     sql_cache_schemas: Optional[tuple[str, ...]] = None,
     sql_cache_hit_ids: Optional[tuple[int, ...]] = None,
 ) -> None:
-    tid = (tenant_id or os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
-    proj = (project_slug or os.getenv("AION_SQL_QM_DEFAULT_PROJECT") or "default").strip() or "default"
+    tid = (
+        tenant_id or os.getenv("AION_DEFAULT_TENANT_ID") or "default"
+    ).strip() or "default"
+    proj = (
+        project_slug or os.getenv("AION_SQL_QM_DEFAULT_PROJECT") or "default"
+    ).strip() or "default"
     _store(
         SqlQmTurnContext(
             tenant_id=tid,
@@ -71,7 +76,9 @@ def set_sql_qm_turn_context(
     )
 
 
-def get_sql_qm_turn_context(session_id: Optional[str] = None) -> Optional[SqlQmTurnContext]:
+def get_sql_qm_turn_context(
+    session_id: Optional[str] = None,
+) -> Optional[SqlQmTurnContext]:
     if session_id:
         hit = _TURN_BY_SESSION.get(session_id)
         if hit is not None:
@@ -174,7 +181,7 @@ def format_session_entity_cache_block(session_id: Optional[str]) -> str:
     if tables:
         lines.append(f"Tables: `{', '.join(tables)}`")
     if ls.get("user_request"):
-        lines.append(f"Prior question: \"{ls['user_request']}\"")
+        lines.append(f'Prior question: "{ls["user_request"]}"')
     lines.append(f"```sql\n{sql_preview[:1500]}\n```")
     return "\n".join(lines)
 

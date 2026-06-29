@@ -1,4 +1,5 @@
 """Cached LLM endpoint health check (GET /models)."""
+
 from __future__ import annotations
 
 import logging

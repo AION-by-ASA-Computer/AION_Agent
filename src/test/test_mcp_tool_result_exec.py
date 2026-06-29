@@ -1,4 +1,5 @@
 """Exec allowlist JSON errors must surface stderr to the agent."""
+
 from __future__ import annotations
 
 import json
@@ -14,7 +15,9 @@ def test_exec_failure_surfaces_stderr_not_generic_tool_error() -> None:
         "stdout": "",
         "command": ["wren", "--sql", "SELECT 1"],
     }
-    is_err, normalized = classify_tool_result_text(json.dumps(payload), "sandbox_exec_allowlisted")
+    is_err, normalized = classify_tool_result_text(
+        json.dumps(payload), "sandbox_exec_allowlisted"
+    )
     assert is_err
     data = json.loads(normalized)
     assert data["error"] == "exec_failed"

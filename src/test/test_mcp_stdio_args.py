@@ -1,4 +1,5 @@
 """Regression: console script names must not resolve to clone directories."""
+
 from __future__ import annotations
 
 import os
@@ -7,7 +8,9 @@ from pathlib import Path
 from src.mcp_manager import MCPManager
 
 
-def test_resolve_stdio_args_keeps_script_name_when_clone_dir_exists(tmp_path, monkeypatch):
+def test_resolve_stdio_args_keeps_script_name_when_clone_dir_exists(
+    tmp_path, monkeypatch
+):
     root = tmp_path / "repo"
     clone = root / "mcp_servers" / "mcp-email-server"
     clone.mkdir(parents=True)

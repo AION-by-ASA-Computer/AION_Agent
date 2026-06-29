@@ -3,11 +3,13 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Optional
 
+
 class ArtifactEvent(Enum):
     TEXT = "text"
     ARTIFACT_START = "artifact_start"
     ARTIFACT_CONTENT = "artifact_content"
     ARTIFACT_END = "artifact_end"
+
 
 @dataclass
 class ParsedEvent:
@@ -19,21 +21,25 @@ class ParsedEvent:
     auto_execute: bool = False
     filename: Optional[str] = None
 
+
 class BaseArtifactStreamParser:
     """Base class for all artifact stream parsers."""
+
     def feed(self, token: str) -> list[ParsedEvent]:
         raise NotImplementedError
 
     def flush(self) -> list[ParsedEvent]:
         raise NotImplementedError
 
+
 class XMLArtifactStreamParser(BaseArtifactStreamParser):
     """
     State machine that processes tokens in streaming and separates normal text from <aion_artifact> blocks.
     """
+
     OPEN_TAG_START = "<aion_artifact"
     CLOSE_TAG = "</aion_artifact>"
-    
+
     # Permissive attribute regex: matches key="value", key='value', or key=value (no spaces in value)
     _ATTR_RE = re.compile(r'(\w+)\s*=\s*(?:["\']([^"\']*)["\']|([^\s>]+))')
 
@@ -45,10 +51,7 @@ class XMLArtifactStreamParser(BaseArtifactStreamParser):
         self._current_attrs: dict = {}
         self._active_open_tag = ""
         self._active_close_tag = ""
-        self.TAGS = {
-            "<aion_artifact": "</aion_artifact>",
-            "<plan": "</plan>"
-        }
+        self.TAGS = {"<aion_artifact": "</aion_artifact>", "<plan": "</plan>"}
 
     def feed(self, token: str) -> list[ParsedEvent]:
         """Feed a token, return a list of events."""
@@ -65,20 +68,26 @@ class XMLArtifactStreamParser(BaseArtifactStreamParser):
             # Cut off mid-artifact: emit what we have as a finalized artifact
             if self._buffer:
                 self._content_buffer += self._buffer
-                events.append(ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=self._buffer))
-            
-            events.append(ParsedEvent(
-                ArtifactEvent.ARTIFACT_END,
-                content=self._content_buffer,
-                artifact_id=self._current_attrs.get("identifier"),
-                artifact_type=self._current_attrs.get("type", "text"),
-                artifact_title=self._current_attrs.get("title"),
-                filename=self._current_attrs.get("filename")
-            ))
+                events.append(
+                    ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=self._buffer)
+                )
+
+            events.append(
+                ParsedEvent(
+                    ArtifactEvent.ARTIFACT_END,
+                    content=self._content_buffer,
+                    artifact_id=self._current_attrs.get("identifier"),
+                    artifact_type=self._current_attrs.get("type", "text"),
+                    artifact_title=self._current_attrs.get("title"),
+                    filename=self._current_attrs.get("filename"),
+                )
+            )
             self._reset()
         elif self._state == "TAG_OPEN":
             # Tag never finished: emit as text
-            events.append(ParsedEvent(ArtifactEvent.TEXT, content=self._tag_buffer + self._buffer))
+            events.append(
+                ParsedEvent(ArtifactEvent.TEXT, content=self._tag_buffer + self._buffer)
+            )
             self._reset()
         return events
 
@@ -104,12 +113,16 @@ class XMLArtifactStreamParser(BaseArtifactStreamParser):
 
                 if matched_tag:
                     if matched_idx > 0:
-                        events.append(ParsedEvent(ArtifactEvent.TEXT, content=self._buffer[:matched_idx]))
-                    
+                        events.append(
+                            ParsedEvent(
+                                ArtifactEvent.TEXT, content=self._buffer[:matched_idx]
+                            )
+                        )
+
                     self._tag_buffer = matched_tag
                     self._active_open_tag = matched_tag
                     self._active_close_tag = self.TAGS[matched_tag]
-                    self._buffer = self._buffer[matched_idx + len(matched_tag):]
+                    self._buffer = self._buffer[matched_idx + len(matched_tag) :]
                     self._state = "TAG_OPEN"
                 else:
                     # Potential partial match at the end of buffer
@@ -120,14 +133,21 @@ class XMLArtifactStreamParser(BaseArtifactStreamParser):
                                 partial = True
                                 idx = len(self._buffer) - i
                                 if idx > 0:
-                                    events.append(ParsedEvent(ArtifactEvent.TEXT, content=self._buffer[:idx]))
+                                    events.append(
+                                        ParsedEvent(
+                                            ArtifactEvent.TEXT,
+                                            content=self._buffer[:idx],
+                                        )
+                                    )
                                     self._buffer = self._buffer[idx:]
                                 break
                         if partial:
                             break
-                    
+
                     if not partial:
-                        events.append(ParsedEvent(ArtifactEvent.TEXT, content=self._buffer))
+                        events.append(
+                            ParsedEvent(ArtifactEvent.TEXT, content=self._buffer)
+                        )
                         self._buffer = ""
                     else:
                         break
@@ -135,26 +155,34 @@ class XMLArtifactStreamParser(BaseArtifactStreamParser):
             elif self._state == "TAG_OPEN":
                 if ">" in self._buffer:
                     idx = self._buffer.find(">")
-                    self._tag_buffer += self._buffer[:idx + 1]
-                    self._buffer = self._buffer[idx + 1:]
-                    
+                    self._tag_buffer += self._buffer[: idx + 1]
+                    self._buffer = self._buffer[idx + 1 :]
+
                     attrs = self._parse_tag_attrs(self._tag_buffer)
                     if self._active_open_tag == "<plan":
                         attrs["type"] = "plan"
                         if "identifier" not in attrs:
                             import uuid
-                            attrs["identifier"] = "execution_plan_" + str(uuid.uuid4().hex[:6])
-                    
+
+                            attrs["identifier"] = "execution_plan_" + str(
+                                uuid.uuid4().hex[:6]
+                            )
+
                     self._current_attrs = attrs
-                    
-                    events.append(ParsedEvent(
-                        ArtifactEvent.ARTIFACT_START,
-                        artifact_id=attrs.get("identifier"),
-                        artifact_type=attrs.get("type", "text"),
-                        artifact_title=attrs.get("title") or "Execution Plan" if attrs.get("type") == "plan" else attrs.get("title"),
-                        auto_execute=attrs.get("auto_execute", "false").lower() in ("true", "1", "yes"),
-                        filename=attrs.get("filename")
-                    ))
+
+                    events.append(
+                        ParsedEvent(
+                            ArtifactEvent.ARTIFACT_START,
+                            artifact_id=attrs.get("identifier"),
+                            artifact_type=attrs.get("type", "text"),
+                            artifact_title=attrs.get("title") or "Execution Plan"
+                            if attrs.get("type") == "plan"
+                            else attrs.get("title"),
+                            auto_execute=attrs.get("auto_execute", "false").lower()
+                            in ("true", "1", "yes"),
+                            filename=attrs.get("filename"),
+                        )
+                    )
                     self._state = "CONTENT"
                     self._content_buffer = ""
                 else:
@@ -167,18 +195,27 @@ class XMLArtifactStreamParser(BaseArtifactStreamParser):
                     content_chunk = self._buffer[:idx]
                     if content_chunk:
                         self._content_buffer += content_chunk
-                        events.append(ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=content_chunk))
-                    
-                    self._buffer = self._buffer[idx + len(self._active_close_tag):]
-                    
-                    events.append(ParsedEvent(
-                        ArtifactEvent.ARTIFACT_END,
-                        content=self._content_buffer,
-                        artifact_id=self._current_attrs.get("identifier"),
-                        artifact_type=self._current_attrs.get("type", "text"),
-                        artifact_title=self._current_attrs.get("title") or "Execution Plan" if self._current_attrs.get("type") == "plan" else self._current_attrs.get("title"),
-                        filename=self._current_attrs.get("filename")
-                    ))
+                        events.append(
+                            ParsedEvent(
+                                ArtifactEvent.ARTIFACT_CONTENT, content=content_chunk
+                            )
+                        )
+
+                    self._buffer = self._buffer[idx + len(self._active_close_tag) :]
+
+                    events.append(
+                        ParsedEvent(
+                            ArtifactEvent.ARTIFACT_END,
+                            content=self._content_buffer,
+                            artifact_id=self._current_attrs.get("identifier"),
+                            artifact_type=self._current_attrs.get("type", "text"),
+                            artifact_title=self._current_attrs.get("title")
+                            or "Execution Plan"
+                            if self._current_attrs.get("type") == "plan"
+                            else self._current_attrs.get("title"),
+                            filename=self._current_attrs.get("filename"),
+                        )
+                    )
                     self._reset()
                 else:
                     # Potential partial match for close tag
@@ -190,13 +227,22 @@ class XMLArtifactStreamParser(BaseArtifactStreamParser):
                             content_chunk = self._buffer[:idx]
                             if content_chunk:
                                 self._content_buffer += content_chunk
-                                events.append(ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=content_chunk))
+                                events.append(
+                                    ParsedEvent(
+                                        ArtifactEvent.ARTIFACT_CONTENT,
+                                        content=content_chunk,
+                                    )
+                                )
                             self._buffer = self._buffer[idx:]
                             break
-                    
+
                     if not partial:
                         self._content_buffer += self._buffer
-                        events.append(ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=self._buffer))
+                        events.append(
+                            ParsedEvent(
+                                ArtifactEvent.ARTIFACT_CONTENT, content=self._buffer
+                            )
+                        )
                         self._buffer = ""
                     else:
                         break
@@ -209,6 +255,7 @@ class XMLArtifactStreamParser(BaseArtifactStreamParser):
             val = match.group(2) or match.group(3)
             attrs[key] = val
         return attrs
+
 
 _ARTIFACT_METADATA_LINE_RE = re.compile(
     r"^\s*#?\s*(artifact_id|title|filename|auto_execute)\s*:\s*(.*)",
@@ -243,6 +290,7 @@ class MarkdownArtifactStreamParser(BaseArtifactStreamParser):
      print("hello")
      ```
     """
+
     def __init__(self):
         self._state = "NORMAL"
         self._buffer = ""
@@ -261,32 +309,39 @@ class MarkdownArtifactStreamParser(BaseArtifactStreamParser):
         elif self._state == "CODE_BLOCK":
             # If stream ends inside a block, we close it as an artifact if we had metadata
             if self._block_started:
-                events.append(ParsedEvent(
-                    ArtifactEvent.ARTIFACT_END,
-                    content=self._content_buffer,
-                    artifact_id=self._metadata.get("artifact_id"),
-                    artifact_type=self._metadata.get("type", "text"),
-                    artifact_title=self._metadata.get("title"),
-                    filename=self._metadata.get("filename")
-                ))
+                events.append(
+                    ParsedEvent(
+                        ArtifactEvent.ARTIFACT_END,
+                        content=self._content_buffer,
+                        artifact_id=self._metadata.get("artifact_id"),
+                        artifact_type=self._metadata.get("type", "text"),
+                        artifact_title=self._metadata.get("title"),
+                        filename=self._metadata.get("filename"),
+                    )
+                )
             elif self._metadata.get("artifact_id"):
                 # Metadata was collected but ARTIFACT_START never emitted (all lines were metadata)
-                events.append(ParsedEvent(
-                    ArtifactEvent.ARTIFACT_START,
-                    artifact_id=self._metadata.get("artifact_id"),
-                    artifact_type=self._metadata.get("type", "text"),
-                    artifact_title=self._metadata.get("title"),
-                    auto_execute=self._metadata.get("auto_execute", "false").lower() in ("true", "1", "yes"),
-                    filename=self._metadata.get("filename")
-                ))
-                events.append(ParsedEvent(
-                    ArtifactEvent.ARTIFACT_END,
-                    content=self._content_buffer,
-                    artifact_id=self._metadata.get("artifact_id"),
-                    artifact_type=self._metadata.get("type", "text"),
-                    artifact_title=self._metadata.get("title"),
-                    filename=self._metadata.get("filename")
-                ))
+                events.append(
+                    ParsedEvent(
+                        ArtifactEvent.ARTIFACT_START,
+                        artifact_id=self._metadata.get("artifact_id"),
+                        artifact_type=self._metadata.get("type", "text"),
+                        artifact_title=self._metadata.get("title"),
+                        auto_execute=self._metadata.get("auto_execute", "false").lower()
+                        in ("true", "1", "yes"),
+                        filename=self._metadata.get("filename"),
+                    )
+                )
+                events.append(
+                    ParsedEvent(
+                        ArtifactEvent.ARTIFACT_END,
+                        content=self._content_buffer,
+                        artifact_id=self._metadata.get("artifact_id"),
+                        artifact_type=self._metadata.get("type", "text"),
+                        artifact_title=self._metadata.get("title"),
+                        filename=self._metadata.get("filename"),
+                    )
+                )
         return events
 
     def _process(self) -> list[ParsedEvent]:
@@ -296,9 +351,11 @@ class MarkdownArtifactStreamParser(BaseArtifactStreamParser):
                 if "```" in self._buffer:
                     idx = self._buffer.find("```")
                     if idx > 0:
-                        events.append(ParsedEvent(ArtifactEvent.TEXT, content=self._buffer[:idx]))
-                    
-                    self._buffer = self._buffer[idx + 3:]
+                        events.append(
+                            ParsedEvent(ArtifactEvent.TEXT, content=self._buffer[:idx])
+                        )
+
+                    self._buffer = self._buffer[idx + 3 :]
                     self._state = "CODE_HEADER"
                     self._content_buffer = ""
                     self._metadata = {}
@@ -309,15 +366,15 @@ class MarkdownArtifactStreamParser(BaseArtifactStreamParser):
                         break
                     events.append(ParsedEvent(ArtifactEvent.TEXT, content=self._buffer))
                     self._buffer = ""
-            
+
             elif self._state == "CODE_HEADER":
                 # Look for the end of the line after ``` (the language)
                 if "\n" in self._buffer:
                     idx = self._buffer.find("\n")
                     self._metadata["type"] = self._buffer[:idx].strip() or "text"
-                    self._buffer = self._buffer[idx + 1:]
+                    self._buffer = self._buffer[idx + 1 :]
                     self._state = "CODE_BLOCK"
-                elif len(self._buffer) > 50: # safety break if no newline
+                elif len(self._buffer) > 50:  # safety break if no newline
                     self._metadata["type"] = self._buffer.strip() or "text"
                     self._state = "CODE_BLOCK"
                     self._buffer = ""
@@ -329,23 +386,30 @@ class MarkdownArtifactStreamParser(BaseArtifactStreamParser):
                     idx = self._buffer.find("```")
                     chunk = self._buffer[:idx]
                     self._process_content(chunk, events)
-                    self._buffer = self._buffer[idx + 3:]
-                    
+                    self._buffer = self._buffer[idx + 3 :]
+
                     if self._block_started:
-                        events.append(ParsedEvent(
-                            ArtifactEvent.ARTIFACT_END,
-                            content=self._content_buffer,
-                            artifact_id=self._metadata.get("artifact_id"),
-                            artifact_type=self._metadata.get("type", "text"),
-                            artifact_title=self._metadata.get("title"),
-                            filename=self._metadata.get("filename")
-                        ))
+                        events.append(
+                            ParsedEvent(
+                                ArtifactEvent.ARTIFACT_END,
+                                content=self._content_buffer,
+                                artifact_id=self._metadata.get("artifact_id"),
+                                artifact_type=self._metadata.get("type", "text"),
+                                artifact_title=self._metadata.get("title"),
+                                filename=self._metadata.get("filename"),
+                            )
+                        )
                     else:
                         # It was a normal code block, emit as text
                         # (actually we should have emitted it as we went, but for simplicity
                         # if it's not an artifact we just emit the whole block as text now)
-                        events.append(ParsedEvent(ArtifactEvent.TEXT, content="```" + self._content_buffer + "```"))
-                    
+                        events.append(
+                            ParsedEvent(
+                                ArtifactEvent.TEXT,
+                                content="```" + self._content_buffer + "```",
+                            )
+                        )
+
                     self._state = "NORMAL"
                     self._content_buffer = ""
                     self._metadata = {}
@@ -354,9 +418,9 @@ class MarkdownArtifactStreamParser(BaseArtifactStreamParser):
                     # Wait for newline to check metadata line by line
                     if "\n" in self._buffer:
                         idx = self._buffer.rfind("\n")
-                        chunk = self._buffer[:idx+1]
+                        chunk = self._buffer[: idx + 1]
                         self._process_content(chunk, events)
-                        self._buffer = self._buffer[idx+1:]
+                        self._buffer = self._buffer[idx + 1 :]
                     else:
                         # If buffer is getting large without newline, just process it
                         if len(self._buffer) > 500:
@@ -413,7 +477,7 @@ class MarkdownArtifactStreamParser(BaseArtifactStreamParser):
             lines = chunk.splitlines(keepends=True)
             remaining_text = []
             found_artifact_id = bool(self._metadata.get("artifact_id"))
-            
+
             for line in lines:
                 if not self._block_started:
                     # Only check for metadata at the start of the block
@@ -424,24 +488,35 @@ class MarkdownArtifactStreamParser(BaseArtifactStreamParser):
                         if key == "artifact_id":
                             found_artifact_id = True
                         continue
-                    
+
                     # If we find a non-metadata, non-empty line
                     if line.strip():
-                        if not found_artifact_id and self._infer_html_artifact_metadata_if_needed(line):
+                        if (
+                            not found_artifact_id
+                            and self._infer_html_artifact_metadata_if_needed(line)
+                        ):
                             found_artifact_id = True
-                        if not found_artifact_id and self._infer_markdown_artifact_metadata_if_needed(line):
+                        if (
+                            not found_artifact_id
+                            and self._infer_markdown_artifact_metadata_if_needed(line)
+                        ):
                             found_artifact_id = True
                         if found_artifact_id:
                             # It's an artifact! Start it now.
                             self._block_started = True
-                            events.append(ParsedEvent(
-                                ArtifactEvent.ARTIFACT_START,
-                                artifact_id=self._metadata.get("artifact_id"),
-                                artifact_type=self._metadata.get("type", "text"),
-                                artifact_title=self._metadata.get("title"),
-                                auto_execute=self._metadata.get("auto_execute", "false").lower() in ("true", "1", "yes"),
-                                filename=self._metadata.get("filename")
-                            ))
+                            events.append(
+                                ParsedEvent(
+                                    ArtifactEvent.ARTIFACT_START,
+                                    artifact_id=self._metadata.get("artifact_id"),
+                                    artifact_type=self._metadata.get("type", "text"),
+                                    artifact_title=self._metadata.get("title"),
+                                    auto_execute=self._metadata.get(
+                                        "auto_execute", "false"
+                                    ).lower()
+                                    in ("true", "1", "yes"),
+                                    filename=self._metadata.get("filename"),
+                                )
+                            )
                             remaining_text.append(line)
                         else:
                             # Not an artifact block (no artifact_id found before first content)
@@ -453,20 +528,24 @@ class MarkdownArtifactStreamParser(BaseArtifactStreamParser):
                         remaining_text.append(line)
                 else:
                     remaining_text.append(line)
-            
+
             text_to_add = "".join(remaining_text)
             if self._block_started:
                 if text_to_add:
                     self._content_buffer += text_to_add
-                    events.append(ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=text_to_add))
+                    events.append(
+                        ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=text_to_add)
+                    )
             else:
                 self._content_buffer += text_to_add
         else:
             self._content_buffer += chunk
             events.append(ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=chunk))
 
+
 class NoOpArtifactParser(BaseArtifactStreamParser):
     """Parser that does nothing, treating all input as plain text."""
+
     def feed(self, token: str) -> list[ParsedEvent]:
         return [ParsedEvent(ArtifactEvent.TEXT, content=token)]
 
@@ -581,13 +660,17 @@ class PlanTagInterceptorParser(BaseArtifactStreamParser):
                     self._buffer = keep
                     break
                 if idx > 0:
-                    out.append(ParsedEvent(ArtifactEvent.TEXT, content=self._buffer[:idx]))
+                    out.append(
+                        ParsedEvent(ArtifactEvent.TEXT, content=self._buffer[:idx])
+                    )
                 if self._buffer[idx : idx + len(self._OPEN)].lower() == self._OPEN:
                     self._tag_buffer = self._OPEN
                     self._buffer = self._buffer[idx + len(self._OPEN) :]
                 else:
                     pseudo_m = self._PSEUDO_OPEN_FIND_RE.search(self._buffer, idx)
-                    pseudo_len = len(pseudo_m.group(0)) if pseudo_m else len("plan title=")
+                    pseudo_len = (
+                        len(pseudo_m.group(0)) if pseudo_m else len("plan title=")
+                    )
                     self._tag_buffer = "<plan"
                     self._buffer = self._buffer[idx + pseudo_len :]
                 self._state = "OPEN_TAG"
@@ -597,8 +680,8 @@ class PlanTagInterceptorParser(BaseArtifactStreamParser):
                     self._tag_buffer += self._buffer
                     self._buffer = ""
                     break
-                self._tag_buffer += self._buffer[:gt + 1]
-                self._buffer = self._buffer[gt + 1:]
+                self._tag_buffer += self._buffer[: gt + 1]
+                self._buffer = self._buffer[gt + 1 :]
                 attrs = self._parse_attrs(self._tag_buffer)
                 if "identifier" not in attrs:
                     import uuid
@@ -624,13 +707,17 @@ class PlanTagInterceptorParser(BaseArtifactStreamParser):
                     emit, keep = self._split_partial(self._buffer, self._CLOSE)
                     if emit:
                         self._content_buffer += emit
-                        out.append(ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=emit))
+                        out.append(
+                            ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=emit)
+                        )
                     self._buffer = keep
                     break
                 chunk = self._buffer[:idx]
                 if chunk:
                     self._content_buffer += chunk
-                    out.append(ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=chunk))
+                    out.append(
+                        ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=chunk)
+                    )
                 self._buffer = self._buffer[idx + len(self._CLOSE) :]
                 out.append(
                     ParsedEvent(
@@ -638,7 +725,8 @@ class PlanTagInterceptorParser(BaseArtifactStreamParser):
                         content=self._content_buffer,
                         artifact_id=self._current_attrs.get("identifier"),
                         artifact_type="plan",
-                        artifact_title=self._current_attrs.get("title") or "Execution Plan",
+                        artifact_title=self._current_attrs.get("title")
+                        or "Execution Plan",
                         filename=self._current_attrs.get("filename"),
                     )
                 )
@@ -686,7 +774,9 @@ class PlanTagInterceptorParser(BaseArtifactStreamParser):
 
         if self._buffer:
             self._content_buffer += self._buffer
-            out.append(ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=self._buffer))
+            out.append(
+                ParsedEvent(ArtifactEvent.ARTIFACT_CONTENT, content=self._buffer)
+            )
         out.append(
             ParsedEvent(
                 ArtifactEvent.ARTIFACT_END,

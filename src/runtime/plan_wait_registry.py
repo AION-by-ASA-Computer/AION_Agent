@@ -1,4 +1,5 @@
 """Wait registry piani orchestrazione (Redis / LocalFallback polling)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -51,7 +52,9 @@ async def set_pending(
         return False
 
 
-async def wait_for_resolution(plan_id: str, *, poll_sec: float, timeout_sec: float) -> Dict[str, Any]:
+async def wait_for_resolution(
+    plan_id: str, *, poll_sec: float, timeout_sec: float
+) -> Dict[str, Any]:
     r = get_redis()
     key = _key(plan_id)
     deadline = time.monotonic() + timeout_sec
@@ -82,7 +85,11 @@ async def wait_for_resolution(plan_id: str, *, poll_sec: float, timeout_sec: flo
             await r.set(key, json.dumps(cur, ensure_ascii=False, default=str), ex=3600)
     except Exception:
         pass
-    return {"state": "timeout", "plan": None, "reason": "AION_ORCH_PLAN_WAIT_TIMEOUT_SEC"}
+    return {
+        "state": "timeout",
+        "plan": None,
+        "reason": "AION_ORCH_PLAN_WAIT_TIMEOUT_SEC",
+    }
 
 
 async def resolve_plan(

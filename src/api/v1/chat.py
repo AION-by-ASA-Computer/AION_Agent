@@ -39,6 +39,7 @@ def _credential_user_id(auth: ChatAuthIdentity) -> str:
         return sanitize_user_id(auth.identifier)
     return "default"
 
+
 ReasoningEffort = Literal["min", "medium", "max"]
 
 
@@ -246,8 +247,12 @@ def _resolve_chat_user_id(
 
 @router.post("/chat/stop")
 async def chat_stop(
-    conversation_id: Optional[str] = Query(None, description="Conversation / session id"),
-    session_id: Optional[str] = Query(None, description="Legacy alias for conversation_id"),
+    conversation_id: Optional[str] = Query(
+        None, description="Conversation / session id"
+    ),
+    session_id: Optional[str] = Query(
+        None, description="Legacy alias for conversation_id"
+    ),
     _auth: ChatAuthIdentity = Depends(require_chat_auth),
 ):
     cid = (conversation_id or session_id or "").strip()
@@ -300,7 +305,7 @@ async def chat_stream(
             from datetime import datetime, timezone
             from src.data.engine import get_async_session_maker
             from src.data.models import Conversation
-            
+
             async with get_async_session_maker()() as session:
                 r = await session.get(Conversation, body.conversation_id)
                 if not r:
@@ -316,8 +321,10 @@ async def chat_stream(
                         meta["deep_research_mode"] = body.deep_research_mode
                     if body.sql_query_project is not None:
                         meta["sql_query_project"] = body.sql_query_project
-                    
-                    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
+
+                    tenant = (
+                        os.getenv("AION_DEFAULT_TENANT_ID") or "default"
+                    ).strip() or "default"
                     r = Conversation(
                         id=body.conversation_id,
                         tenant_id=tenant,
@@ -325,7 +332,7 @@ async def chat_stream(
                         profile_slug=body.profile,
                         title=None,
                         message_count=0,
-                        metadata_json=json.dumps(meta)
+                        metadata_json=json.dumps(meta),
                     )
                     session.add(r)
                     await session.commit()
@@ -335,19 +342,31 @@ async def chat_stream(
                     if r.profile_slug != body.profile:
                         r.profile_slug = body.profile
                         updated = True
-                    if body.thinking_enabled is not None and meta.get("thinking_enabled") != body.thinking_enabled:
+                    if (
+                        body.thinking_enabled is not None
+                        and meta.get("thinking_enabled") != body.thinking_enabled
+                    ):
                         meta["thinking_enabled"] = body.thinking_enabled
                         updated = True
-                    if body.reasoning_effort is not None and meta.get("reasoning_effort") != body.reasoning_effort:
+                    if (
+                        body.reasoning_effort is not None
+                        and meta.get("reasoning_effort") != body.reasoning_effort
+                    ):
                         meta["reasoning_effort"] = body.reasoning_effort
                         updated = True
                     if meta.get("agent_mode") != resolved_agent_mode:
                         meta["agent_mode"] = resolved_agent_mode
                         updated = True
-                    if body.plan_mode is not None and meta.get("plan_mode") != body.plan_mode:
+                    if (
+                        body.plan_mode is not None
+                        and meta.get("plan_mode") != body.plan_mode
+                    ):
                         meta["plan_mode"] = body.plan_mode
                         updated = True
-                    if body.sql_query_project is not None and meta.get("sql_query_project") != body.sql_query_project:
+                    if (
+                        body.sql_query_project is not None
+                        and meta.get("sql_query_project") != body.sql_query_project
+                    ):
                         meta["sql_query_project"] = body.sql_query_project
                         updated = True
                     if updated:
@@ -360,9 +379,13 @@ async def chat_stream(
                         r.updated_at = datetime.now(timezone.utc)
                         session.add(r)
                         await session.commit()
-                    conversation_project = (meta.get("sql_query_project") or "").strip() or None
+                    conversation_project = (
+                        meta.get("sql_query_project") or ""
+                    ).strip() or None
         except Exception as e:
-            logger.error("Error ensuring/updating conversation metadata in v1 chat: %s", e)
+            logger.error(
+                "Error ensuring/updating conversation metadata in v1 chat: %s", e
+            )
 
     from src.runtime.sql_query_project_resolve import resolve_sql_query_project
 

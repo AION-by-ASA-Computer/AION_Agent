@@ -1,4 +1,5 @@
 """Compressione contesto (stile Claude compaction): transcript intero, tool/timeline, budget API."""
+
 from __future__ import annotations
 
 import json
@@ -53,7 +54,9 @@ def reserve_output_tokens() -> int:
         except ValueError:
             return 8192
     try:
-        return max(0, int(os.getenv("AION_CONTEXT_COMPRESS_RESERVE_OUTPUT_TOKENS", "0")))
+        return max(
+            0, int(os.getenv("AION_CONTEXT_COMPRESS_RESERVE_OUTPUT_TOKENS", "0"))
+        )
     except ValueError:
         return 0
 
@@ -74,7 +77,9 @@ class CompactionTranscriptRow:
     tool_name: Optional[str] = None
 
 
-def timeline_json_to_transcript(timeline_json: Optional[str], *, max_tool_out: int = 1200) -> str:
+def timeline_json_to_transcript(
+    timeline_json: Optional[str], *, max_tool_out: int = 1200
+) -> str:
     if not timeline_json or not str(timeline_json).strip():
         return ""
     try:
@@ -86,7 +91,9 @@ def timeline_json_to_transcript(timeline_json: Optional[str], *, max_tool_out: i
         segments = [s for s in parsed if isinstance(s, dict)]
     elif isinstance(parsed, dict):
         raw = parsed.get("segments")
-        segments = [s for s in raw if isinstance(s, dict)] if isinstance(raw, list) else []
+        segments = (
+            [s for s in raw if isinstance(s, dict)] if isinstance(raw, list) else []
+        )
     else:
         return ""
     lines: List[str] = []
@@ -198,7 +205,9 @@ class ContextCompressor:
         keep_last: int = 6,
         reserve_output: Optional[int] = None,
     ):
-        self.window_size = window_size if window_size is not None else model_context_window()
+        self.window_size = (
+            window_size if window_size is not None else model_context_window()
+        )
         self.threshold = threshold
         self.keep_last = keep_last
         self.reserve_output_tokens = (
@@ -237,7 +246,9 @@ class ContextCompressor:
         if force:
             return True
         total = self.total_with_overhead(messages, fixed_overhead)
-        return total >= self.compress_trigger_tokens() or total >= self.max_prompt_tokens()
+        return (
+            total >= self.compress_trigger_tokens() or total >= self.max_prompt_tokens()
+        )
 
     def budget_status(
         self, messages: List[ChatMessage], *, fixed_overhead: int = 0
@@ -277,8 +288,12 @@ class ContextCompressor:
             summary_text = complete_text_sync(
                 compaction_summary_prompt(lang),
                 transcript,
-                max_tokens=int(os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "2000")),
-                timeout=float(os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_TIMEOUT", "120")),
+                max_tokens=int(
+                    os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "2000")
+                ),
+                timeout=float(
+                    os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_TIMEOUT", "120")
+                ),
             )
         except Exception as exc:
             logger.warning("compression LLM failed: %s", exc)
@@ -288,14 +303,20 @@ class ContextCompressor:
     async def compress(
         self,
         messages: List[ChatMessage],
-        pre_compression_hook: Optional[Callable[[List[ChatMessage]], Awaitable[None]]] = None,
+        pre_compression_hook: Optional[
+            Callable[[List[ChatMessage]], Awaitable[None]]
+        ] = None,
         *,
         transcript_override: Optional[str] = None,
         lang: str = "it",
     ) -> List[ChatMessage]:
         if not messages:
             return messages
-        keep = min(self.keep_last, max(1, len(messages) - 1)) if len(messages) <= self.keep_last else self.keep_last
+        keep = (
+            min(self.keep_last, max(1, len(messages) - 1))
+            if len(messages) <= self.keep_last
+            else self.keep_last
+        )
         if len(messages) <= 1:
             return truncate_messages_to_prompt_budget(
                 messages,
@@ -328,7 +349,9 @@ class ContextCompressor:
         messages: List[ChatMessage],
         *,
         fixed_overhead: int = 0,
-        pre_compression_hook: Optional[Callable[[List[ChatMessage]], Awaitable[None]]] = None,
+        pre_compression_hook: Optional[
+            Callable[[List[ChatMessage]], Awaitable[None]]
+        ] = None,
         force: bool = False,
         transcript_override: Optional[str] = None,
         lang: str = "it",
@@ -399,7 +422,9 @@ def truncate_messages_to_prompt_budget(
     keep_last = max(1, keep_last)
 
     def _total() -> int:
-        return sum(count_tokens(chat_message_text(m)) for m in out) + max(0, fixed_overhead)
+        return sum(count_tokens(chat_message_text(m)) for m in out) + max(
+            0, fixed_overhead
+        )
 
     while len(out) > 0 and _total() > max_prompt_tokens:
         if len(out) > keep_last:
@@ -443,7 +468,9 @@ def estimate_agent_overhead_tokens(agent: object) -> int:
     return floor
 
 
-def estimate_full_prompt_tokens(agent: object, messages: List[ChatMessage]) -> Dict[str, int]:
+def estimate_full_prompt_tokens(
+    agent: object, messages: List[ChatMessage]
+) -> Dict[str, int]:
     overhead = estimate_agent_overhead_tokens(agent)
     msg_tokens = sum(count_tokens(chat_message_text(m)) for m in messages)
     comp = get_default_compressor()

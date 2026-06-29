@@ -24,7 +24,7 @@ def test_resolve_llm_endpoint_ok(monkeypatch):
 
 def test_lite_llm_wrapper_basic(monkeypatch):
     monkeypatch.delenv("AION_LLM_ADAPTER", raising=False)
-    
+
     wrapper = LiteLLMChatGeneratorWrapper(
         model="openai/gpt-4o",
         api_base_url="http://localhost:8000/v1",
@@ -33,7 +33,7 @@ def test_lite_llm_wrapper_basic(monkeypatch):
         generation_kwargs={"temperature": 0.5},
         tools_strict=True,
     )
-    
+
     assert wrapper.provider == "openai"
     assert wrapper.model_name == "gpt-4o"
     assert wrapper.generator.model == "openai/gpt-4o"
@@ -43,7 +43,7 @@ def test_lite_llm_wrapper_basic(monkeypatch):
 
 def test_lite_llm_wrapper_anthropic(monkeypatch):
     monkeypatch.delenv("AION_LLM_ADAPTER", raising=False)
-    
+
     wrapper = LiteLLMChatGeneratorWrapper(
         model="anthropic/claude-3-5-sonnet",
         api_key=Secret.from_token("test-key"),
@@ -51,7 +51,7 @@ def test_lite_llm_wrapper_anthropic(monkeypatch):
         generation_kwargs={"temperature": 0.7},
         tools_strict=True,
     )
-    
+
     assert wrapper.provider == "anthropic"
     assert wrapper.model_name == "claude-3-5-sonnet"
     assert wrapper.generator.model == "anthropic/claude-3-5-sonnet"
@@ -60,13 +60,13 @@ def test_lite_llm_wrapper_anthropic(monkeypatch):
 
 def test_lite_llm_wrapper_google(monkeypatch):
     monkeypatch.setenv("AION_LLM_ADAPTER", "google")
-    
+
     wrapper = LiteLLMChatGeneratorWrapper(
         model="google/gemini-2.5-flash",
         api_key=Secret.from_token("test-key"),
         generation_kwargs={"temperature": 0.2},
     )
-    
+
     assert wrapper.provider == "google"
     assert wrapper.model_name == "gemini-2.5-flash"
     assert wrapper.generator.model == "google/gemini-2.5-flash"

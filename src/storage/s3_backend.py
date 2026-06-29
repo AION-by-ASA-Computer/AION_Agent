@@ -31,7 +31,9 @@ class S3Backend(StorageBackend):
         self._client = session.client(
             "s3",
             endpoint_url=endpoint_url or None,
-            config=Config(s3={"addressing_style": "path" if use_path_style else "auto"}),
+            config=Config(
+                s3={"addressing_style": "path" if use_path_style else "auto"}
+            ),
         )
 
     def put_object(
@@ -70,7 +72,9 @@ class S3Backend(StorageBackend):
     def list_prefix(self, prefix: str, limit: int = 1000) -> list[StorageObjectMeta]:
         out: list[StorageObjectMeta] = []
         paginator = self._client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix, PaginationConfig={"MaxItems": limit}):
+        for page in paginator.paginate(
+            Bucket=self._bucket, Prefix=prefix, PaginationConfig={"MaxItems": limit}
+        ):
             for obj in page.get("Contents") or []:
                 k = obj.get("Key")
                 if not k:

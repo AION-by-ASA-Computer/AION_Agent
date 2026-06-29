@@ -1,4 +1,5 @@
 """Tool orchestrazione in-process (draft + progress tracking) con HITL via wait registry."""
+
 from __future__ import annotations
 
 import json
@@ -35,6 +36,7 @@ ORCHESTRATION_BUILTIN_TOOL_NAMES: tuple[str, ...] = (
     "mark_task_completed",
 )
 
+
 def format_plan_tasks_excerpt(markdown: str, *, max_lines: int = 40) -> str:
     """Compact ## Tasks excerpt for agent system messages."""
     lines = (markdown or "").splitlines()
@@ -59,7 +61,8 @@ def format_plan_tasks_excerpt(markdown: str, *, max_lines: int = 40) -> str:
     if not rows:
         return "(no tasks in markdown)"
     return "\n".join(
-        f"- [{'x' if done else ' '}] `{tid}` **{title}**" for tid, title, done in rows[:max_lines]
+        f"- [{'x' if done else ' '}] `{tid}` **{title}**"
+        for tid, title, done in rows[:max_lines]
     )
 
 
@@ -92,7 +95,9 @@ def format_plan_progress_summary(rows: List[Tuple[str, str, bool]]) -> str:
     return "\n".join(lines)
 
 
-def format_mark_task_result(plan_id: str, task_id: str, updated_md: str, revision: int) -> str:
+def format_mark_task_result(
+    plan_id: str, task_id: str, updated_md: str, revision: int
+) -> str:
     from src.runtime.plan_engine import next_pending_task_id
 
     rows = iter_plan_task_rows(updated_md)
@@ -107,8 +112,8 @@ def format_mark_task_result(plan_id: str, task_id: str, updated_md: str, revisio
     if next_tid:
         parts.append(f"Next pending task: `{next_tid}`.")
     parts.append(
-        f"Full markdown: get_execution_plan(plan_id=\"{plan_id}\"). "
-        f"To edit the plan: update_execution_plan(plan_id=\"{plan_id}\", plan_markdown=...)."
+        f'Full markdown: get_execution_plan(plan_id="{plan_id}"). '
+        f'To edit the plan: update_execution_plan(plan_id="{plan_id}", plan_markdown=...).'
     )
     return "\n".join(parts)
 
@@ -351,7 +356,9 @@ async def run_mark_task_completed(
     if not rec:
         raise ValueError(f"Plan `{plan_id}` not found")
 
-    current_md = (rec.get("approved_markdown") or rec.get("draft_markdown") or "").strip()
+    current_md = (
+        rec.get("approved_markdown") or rec.get("draft_markdown") or ""
+    ).strip()
     if not current_md:
         raise ValueError(f"Piano `{plan_id}` senza markdown disponibile")
 
@@ -410,7 +417,7 @@ async def run_get_execution_plan(
         f"Plan `{plan_id}` (status={st}, revision={revision}). Source: orchestration DB.\n\n"
         f"{format_plan_progress_summary(rows)}\n\n"
         "To change goal/context/tasks send the full updated markdown via "
-        f"update_execution_plan(plan_id=\"{plan_id}\", plan_markdown=...).\n\n"
+        f'update_execution_plan(plan_id="{plan_id}", plan_markdown=...).\n\n'
         "--- Markdown ---\n\n"
     )
 
@@ -538,7 +545,9 @@ async def run_draft_execution_plan(
     )
 
 
-def merge_builtin_orchestration_tools(tools: List[Any], session_id: str, user_id: str) -> List[Any]:
+def merge_builtin_orchestration_tools(
+    tools: List[Any], session_id: str, user_id: str
+) -> List[Any]:
     """Append orchestration in-process tools unless already present (dedupe by name)."""
     existing = {getattr(t, "name", None) for t in tools}
     for haystack_tool in build_orchestration_haystack_tools(session_id, user_id):
@@ -553,7 +562,11 @@ def _instrument_orchestration_tool(session_id: str, tool_name: str, fn):
     """Emit tool_start / tool_end / tool_error on the SSE bus (same as native MCP tools)."""
 
     def wrapped(**kwargs):
-        from src.runtime.native_tool_events import emit_tool_end, emit_tool_error, emit_tool_start
+        from src.runtime.native_tool_events import (
+            emit_tool_end,
+            emit_tool_error,
+            emit_tool_start,
+        )
 
         inp = {k: v for k, v in kwargs.items() if v is not None}
         call_id = emit_tool_start(session_id, tool_name, inp)
@@ -591,7 +604,9 @@ def build_orchestration_haystack_tools(session_id: str, user_id: str) -> List[An
 
     def draft_execution_plan_fn(goal: str, tasks: str | list | None = None) -> str:
         return _run_async(
-            run_draft_execution_plan(goal, tasks, session_id=session_id, user_id=user_id)
+            run_draft_execution_plan(
+                goal, tasks, session_id=session_id, user_id=user_id
+            )
         )
 
     def list_session_execution_plans_fn(limit: int = 10) -> str:
@@ -725,7 +740,10 @@ def build_orchestration_haystack_tools(session_id: str, user_id: str) -> List[An
             parameters={
                 "type": "object",
                 "properties": {
-                    "plan_id": {"type": "string", "description": "Sidebar id, e.g. execution_plan_7f2c55"},
+                    "plan_id": {
+                        "type": "string",
+                        "description": "Sidebar id, e.g. execution_plan_7f2c55",
+                    },
                     "plan_markdown": {
                         "type": "string",
                         "description": "Full markdown with ## Goal, ## Tasks, checkboxes - [ ] / - [x]",
@@ -745,7 +763,10 @@ def build_orchestration_haystack_tools(session_id: str, user_id: str) -> List[An
             parameters={
                 "type": "object",
                 "properties": {
-                    "goal": {"type": "string", "description": "Verifiable plan objective"},
+                    "goal": {
+                        "type": "string",
+                        "description": "Verifiable plan objective",
+                    },
                     "tasks": {
                         "type": "string",
                         "description": "JSON task array or task markdown lines (optional)",

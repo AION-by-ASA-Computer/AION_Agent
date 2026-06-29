@@ -3,6 +3,7 @@ import asyncio
 from pathlib import Path
 from fastapi.testclient import TestClient
 
+
 async def _reset_unified_db(monkeypatch, tmp_path: Path) -> None:
     import src.data.engine as engine
 
@@ -10,11 +11,13 @@ async def _reset_unified_db(monkeypatch, tmp_path: Path) -> None:
         await engine._engine.dispose()
     engine._engine = None
     engine._session_factory = None
-    
+
     # Configure test environment variables before import/startup of main app
     monkeypatch.setenv("AION_UNIFIED_DB", "1")
     monkeypatch.setenv("AION_DEFAULT_TENANT_ID", "default")
-    monkeypatch.setenv("AION_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 'test_aion.db'}")
+    monkeypatch.setenv(
+        "AION_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 'test_aion.db'}"
+    )
     monkeypatch.setenv("AION_CHAT_PASSWORD_AUTH", "0")
     monkeypatch.setenv("AION_ADMIN_PASSWORD_AUTH", "0")
     monkeypatch.setenv("AION_REDIS_FALLBACK_LOCAL", "1")
@@ -24,12 +27,12 @@ async def _reset_unified_db(monkeypatch, tmp_path: Path) -> None:
 def test_api_endpoints_workflow(monkeypatch, tmp_path):
     async def run():
         await _reset_unified_db(monkeypatch, tmp_path)
-        
+
         # Ensure config and mcp_servers default profiles exist for test loading
         # (This avoids failures if profiles directory hasn't been created yet)
         profiles_dir = tmp_path / "config" / "profiles"
         profiles_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Create a dummy profile
         dummy_profile_content = """
 name: Generic Assistant
@@ -41,16 +44,17 @@ mcp_servers: []
 """
         with open(profiles_dir / "generic_assistant.yaml", "w", encoding="utf-8") as f:
             f.write(dummy_profile_content)
-            
+
         # Point the profile manager to the dummy config folder
         monkeypatch.setattr("src.agent_profile.profile_manager.base_path", profiles_dir)
         # Reload profiles
         from src.agent_profile import profile_manager
+
         profile_manager.load_all()
 
         # Import FastAPI app
         from src.api.main import app
-        
+
         # Use context manager to start/stop FastAPI lifespan (runs migrations/bootstrap)
         with TestClient(app) as client:
             # 1. Test /health endpoint

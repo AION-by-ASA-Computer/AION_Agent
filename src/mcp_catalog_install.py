@@ -1,6 +1,7 @@
 """
 Install MCP server from curated connector catalog (no marketplace re-search).
 """
+
 from __future__ import annotations
 
 import re
@@ -11,6 +12,7 @@ import yaml
 from .mcp_connector_catalog import _connector_by_id, load_mcp_connector_catalog
 from .mcp_integration_sync import sync_mcp_server_config_from_registry
 from .mcp_manager import mcp_manager
+
 
 def _slug_from_connector(connector: Dict[str, Any]) -> str:
     hints = connector.get("mcp_name_hints")
@@ -81,14 +83,20 @@ def _default_registry_config(connector: Dict[str, Any], slug: str) -> Dict[str, 
     return cfg
 
 
-def build_registry_config_for_connector(connector: Dict[str, Any]) -> Tuple[str, Dict[str, Any]]:
+def build_registry_config_for_connector(
+    connector: Dict[str, Any],
+) -> Tuple[str, Dict[str, Any]]:
     slug = _slug_from_connector(connector)
-    parsed = _parse_example_registry_block(connector.get("example_registry_block") or "")
+    parsed = _parse_example_registry_block(
+        connector.get("example_registry_block") or ""
+    )
     if parsed.get("command") or parsed.get("args"):
         cfg = dict(parsed)
     else:
         cfg = _default_registry_config(connector, slug)
-    cfg["aion_connector_id"] = str(connector.get("id") or cfg.get("aion_connector_id") or slug)
+    cfg["aion_connector_id"] = str(
+        connector.get("id") or cfg.get("aion_connector_id") or slug
+    )
     if connector.get("description") and not cfg.get("description"):
         cfg["description"] = str(connector.get("description"))[:2000]
     return slug, cfg
@@ -103,7 +111,9 @@ async def install_mcp_from_catalog(connector_id: str) -> Dict[str, Any]:
 
     slug, cfg = build_registry_config_for_connector(connector)
     mcp_manager.load_registry()
-    if slug in mcp_manager._registry and mcp_manager._registry.get(slug, {}).get("is_base"):
+    if slug in mcp_manager._registry and mcp_manager._registry.get(slug, {}).get(
+        "is_base"
+    ):
         return {"ok": False, "error": f"Cannot overwrite built-in server '{slug}'"}
 
     mcp_manager._registry_local[slug] = cfg

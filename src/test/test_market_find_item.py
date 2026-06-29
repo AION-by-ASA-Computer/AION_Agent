@@ -1,4 +1,5 @@
 """Regression: install by npx:/github: id without marketplace re-search."""
+
 from src.api.admin import (
     _find_marketplace_item,
     _synthetic_github_market_item,
@@ -18,7 +19,9 @@ def test_find_marketplace_item_npx_without_network():
     item = _find_marketplace_item("npx:@hauptsache.net/clickup-mcp")
     assert item is not None
     assert item["install_type"] == "npx"
-    assert "@hauptsache.net/clickup-mcp" in (item.get("npx_package") or item.get("id", ""))
+    assert "@hauptsache.net/clickup-mcp" in (
+        item.get("npx_package") or item.get("id", "")
+    )
 
 
 def test_synthetic_github_clickup_case_insensitive():

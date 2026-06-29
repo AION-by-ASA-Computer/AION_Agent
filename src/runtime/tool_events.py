@@ -4,11 +4,13 @@ from typing import Dict, Set
 
 logger = logging.getLogger("aion.tool_events")
 
+
 class SessionToolEventQueue:
     """
     Manages tool event queues for multiple sessions (Pub/Sub pattern).
     Each session has its own queue(s) of events.
     """
+
     def __init__(self):
         # session_id -> Set of asyncio.Queue
         self._subscribers: Dict[str, Set[asyncio.Queue]] = {}
@@ -41,5 +43,6 @@ class SessionToolEventQueue:
             return
         for q in subs:
             q.put_nowait(event)
+
 
 tool_event_bus = SessionToolEventQueue()

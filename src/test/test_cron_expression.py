@@ -1,4 +1,5 @@
 """Cron expression validation and next-run computation."""
+
 from datetime import datetime, timezone
 
 import pytest

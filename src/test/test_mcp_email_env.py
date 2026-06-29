@@ -1,4 +1,5 @@
 """Email MCP env normalization and tool argument sanitization."""
+
 from __future__ import annotations
 
 from src.mcp_manager import normalize_mcp_email_server_env, sanitize_mcp_tool_arguments
@@ -19,7 +20,6 @@ def test_sanitize_none_strings_to_null() -> None:
     assert "flagged" not in clean
     assert "answered" not in clean
     assert clean["seen"] is False
-
 
 
 def test_normalize_email_env_port_587_starttls() -> None:

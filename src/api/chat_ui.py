@@ -1,4 +1,5 @@
 """Endpoint compat per chat-ui: lista/crea conversazioni su schema unificato (senza API key v1)."""
+
 from __future__ import annotations
 
 import json
@@ -73,6 +74,7 @@ def _resolve_message_timeline(
         artifacts=artifacts,
     )
 
+
 router = APIRouter(prefix="/chat-ui", tags=["chat-ui"])
 
 _warned_no_secret = False
@@ -112,7 +114,9 @@ class ConversationCreateBody(BaseModel):
 @router.get("/conversations")
 async def list_conversations_chat_ui(
     limit: int = Query(40, ge=1, le=200),
-    exclude_scheduled: bool = Query(True, description="Hide cron/scheduled-job conversations from sidebar"),
+    exclude_scheduled: bool = Query(
+        True, description="Hide cron/scheduled-job conversations from sidebar"
+    ),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
     x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
 ):
@@ -184,6 +188,7 @@ async def create_conversation_chat_ui(
         "metadata": body.metadata or {},
     }
 
+
 @router.get("/conversations/{conv_id}/stream-status")
 async def get_conversation_stream_status_chat_ui(
     conv_id: str,
@@ -253,18 +258,30 @@ async def get_conversation_messages_chat_ui(
             raise HTTPException(404, "Conversation not found")
 
         # Fetch Messages
-        q_msg = select(Message).where(Message.conversation_id == conv_id).order_by(Message.seq.asc())
+        q_msg = (
+            select(Message)
+            .where(Message.conversation_id == conv_id)
+            .order_by(Message.seq.asc())
+        )
         msgs = (await session.execute(q_msg)).scalars().all()
         last_msg_id = msgs[-1].id if msgs else None
-        
+
         # Fetch Steps
-        q_steps = select(Step).where(Step.conversation_id == conv_id).order_by(Step.created_at.asc())
+        q_steps = (
+            select(Step)
+            .where(Step.conversation_id == conv_id)
+            .order_by(Step.created_at.asc())
+        )
         steps = (await session.execute(q_steps)).scalars().all()
-        
+
         # Fetch Attachments
-        q_att = select(Attachment).where(Attachment.conversation_id == conv_id).order_by(Attachment.created_at.asc())
+        q_att = (
+            select(Attachment)
+            .where(Attachment.conversation_id == conv_id)
+            .order_by(Attachment.created_at.asc())
+        )
         atts = (await session.execute(q_att)).scalars().all()
-        
+
         # Group steps and attachments by message_id
         steps_by_msg = {}
         for s in steps:
@@ -284,7 +301,9 @@ async def get_conversation_messages_chat_ui(
         for r in msgs:
             nr = normalize_message_role(r.role)
             meta = _message_metadata_dict(r)
-            plan_internal = include_plan_internal and _is_plan_tagged_internal(r, nr, meta)
+            plan_internal = include_plan_internal and _is_plan_tagged_internal(
+                r, nr, meta
+            )
 
             # Collect steps and attachments for this message
             current_steps = steps_by_msg.get(r.id, [])
@@ -300,10 +319,7 @@ async def get_conversation_messages_chat_ui(
             is_terminal_assistant = nr == "assistant" and r.id == last_msg_id
             if (
                 ((not is_ui_visible_role(nr)) and not plan_internal)
-                or (
-                    looks_like_internal_content(r.content)
-                    and not plan_internal
-                )
+                or (looks_like_internal_content(r.content) and not plan_internal)
                 or looks_like_raw_plan_content(r.content)
                 or (
                     is_empty_technical_message(nr, r.content)
@@ -314,7 +330,7 @@ async def get_conversation_messages_chat_ui(
                 # Technical messages are intentionally hidden from chat-ui replay.
                 # Canonical tool/artifact records should point to the visible assistant message.
                 continue
-            
+
             final_steps = current_steps
             final_atts = current_atts
             if nr == "assistant":
@@ -357,8 +373,12 @@ async def get_conversation_messages_chat_ui(
         if orphan_steps or orphan_atts:
             for idx in range(len(data) - 1, -1, -1):
                 if data[idx].get("role") == "assistant":
-                    data[idx]["steps"] = orphan_steps + list(data[idx].get("steps") or [])
-                    data[idx]["artifacts"] = orphan_atts + list(data[idx].get("artifacts") or [])
+                    data[idx]["steps"] = orphan_steps + list(
+                        data[idx].get("steps") or []
+                    )
+                    data[idx]["artifacts"] = orphan_atts + list(
+                        data[idx].get("artifacts") or []
+                    )
                     if not data[idx].get("timeline"):
                         msg_row = await fetch_message_by_id(session, data[idx]["id"])
                         if msg_row:
@@ -391,17 +411,26 @@ async def get_conversation_messages_chat_ui(
 
         # Identify ids to suppress (the "empty" side of each duplicate pair).
         ids_to_suppress: set = set()
-        asst_rows = [(idx, r) for idx, r in enumerate(data) if r.get("role") == "assistant"]
+        asst_rows = [
+            (idx, r) for idx, r in enumerate(data) if r.get("role") == "assistant"
+        ]
         last_asst_id_in_data = asst_rows[-1][1]["id"] if asst_rows else None
         for i in range(len(asst_rows) - 1):
             _, row_a = asst_rows[i]
             _, row_b = asst_rows[i + 1]
             # Only consider non-terminal messages.
-            if row_a["id"] == last_asst_id_in_data or row_b["id"] == last_asst_id_in_data:
+            if (
+                row_a["id"] == last_asst_id_in_data
+                or row_b["id"] == last_asst_id_in_data
+            ):
                 continue
             prefix_a = (row_a.get("content") or "").strip()[:_DEDUP_PREFIX_LEN]
             prefix_b = (row_b.get("content") or "").strip()[:_DEDUP_PREFIX_LEN]
-            if not prefix_a or len(prefix_a) < _DEDUP_PREFIX_LEN or prefix_a != prefix_b:
+            if (
+                not prefix_a
+                or len(prefix_a) < _DEDUP_PREFIX_LEN
+                or prefix_a != prefix_b
+            ):
                 continue
             # Same prefix — suppress the one with less payload.
             score_a, score_b = _payload_score(row_a), _payload_score(row_b)
@@ -412,9 +441,6 @@ async def get_conversation_messages_chat_ui(
 
         dedup_filtered = [r for r in data if r.get("id") not in ids_to_suppress]
         return {"messages": dedup_filtered}
-
-
-
 
 
 @router.get("/conversations/{conv_id}")
@@ -467,14 +493,14 @@ async def update_conversation_metadata_chat_ui(
         if r:
             if r.tenant_id != tenant or r.user_id != user_id:
                 raise HTTPException(404, "Not found")
-            
+
             updated = False
             if body.metadata is not None:
                 current_meta = json.loads(r.metadata_json or "{}")
                 current_meta.update(body.metadata)
                 r.metadata_json = json.dumps(current_meta)
                 updated = True
-                
+
             profile_to_set = body.profile or body.profile_slug
             if profile_to_set is not None:
                 r.profile_slug = profile_to_set
@@ -483,7 +509,7 @@ async def update_conversation_metadata_chat_ui(
             if body.title is not None:
                 r.title = body.title
                 updated = True
-                
+
             if updated:
                 r.updated_at = datetime.now(timezone.utc)
                 session.add(r)
@@ -504,12 +530,12 @@ async def update_conversation_metadata_chat_ui(
             r = await session.get(Conversation, conv_id)
             if not r:
                 raise HTTPException(500, "Failed to create conversation")
-            
+
         return {
             "id": r.id,
             "title": r.title,
             "metadata": json.loads(r.metadata_json or "{}"),
-            "profile_slug": r.profile_slug
+            "profile_slug": r.profile_slug,
         }
 
 
@@ -525,65 +551,72 @@ async def delete_turn_chat_ui(
     _require_unified()
     user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
-    
+
     async with get_async_session_maker()() as session:
         # Verify the conversation exists and belongs to the user
         r = await session.get(Conversation, conv_id)
         if not r or r.tenant_id != tenant or r.user_id != user_id:
             raise HTTPException(404, "Conversation not found")
-        
+
         # Verify the message exists and belongs to the conversation
-        q_msg = select(Message).where(Message.id == message_id, Message.conversation_id == conv_id)
+        q_msg = select(Message).where(
+            Message.id == message_id, Message.conversation_id == conv_id
+        )
         msg_to_delete = (await session.execute(q_msg)).scalar_one_or_none()
         if not msg_to_delete:
             raise HTTPException(404, "Message not found")
-            
+
         if msg_to_delete.role != "user":
             raise HTTPException(400, "Only user messages can trigger turn deletion")
-            
+
         # Verify if this is the last user message in the conversation
         q_later_user = select(Message).where(
             Message.conversation_id == conv_id,
             Message.role == "user",
-            Message.seq > msg_to_delete.seq
+            Message.seq > msg_to_delete.seq,
         )
         later_user = (await session.execute(q_later_user)).scalars().first()
         if later_user:
             raise HTTPException(400, "Only the last user message turn can be deleted")
-            
+
         # Get all message IDs that have seq >= msg_to_delete.seq
         q_subsequent = select(Message.id).where(
-            Message.conversation_id == conv_id,
-            Message.seq >= msg_to_delete.seq
+            Message.conversation_id == conv_id, Message.seq >= msg_to_delete.seq
         )
         subsequent_ids = (await session.execute(q_subsequent)).scalars().all()
-        
+
         if subsequent_ids:
             from sqlalchemy import delete
+
             # Delete steps associated with these messages
-            await session.execute(delete(Step).where(Step.message_id.in_(subsequent_ids)))
+            await session.execute(
+                delete(Step).where(Step.message_id.in_(subsequent_ids))
+            )
             # Delete attachments associated with these messages
-            await session.execute(delete(Attachment).where(Attachment.message_id.in_(subsequent_ids)))
+            await session.execute(
+                delete(Attachment).where(Attachment.message_id.in_(subsequent_ids))
+            )
             # Delete the messages
             await session.execute(delete(Message).where(Message.id.in_(subsequent_ids)))
-            
+
         # Recalculate message count of the conversation
         r.message_count = max(0, msg_to_delete.seq - 1)
         r.updated_at = datetime.now(timezone.utc)
-        
+
         session.add(r)
         await session.commit()
-        
+
         return {
             "success": True,
             "message_id": message_id,
-            "message_count": r.message_count
+            "message_count": r.message_count,
         }
 
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Salvataggio risposta parziale (Stop mid-stream)
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class MessageCreateBody(BaseModel):
     message_id: Optional[str] = None
@@ -734,8 +767,10 @@ async def save_partial_steps_chat_ui(
         saved = 0
         for item in body.steps:
             meta = {}
-            if item.tokens_in is not None: meta["tokens_in"] = item.tokens_in
-            if item.tokens_out is not None: meta["tokens_out"] = item.tokens_out
+            if item.tokens_in is not None:
+                meta["tokens_in"] = item.tokens_in
+            if item.tokens_out is not None:
+                meta["tokens_out"] = item.tokens_out
 
             step = Step(
                 id=new_uuid7_str(),
@@ -768,22 +803,25 @@ async def delete_conversation_chat_ui(
     _require_unified()
     user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
-    
+
     async with get_async_session_maker()() as session:
         r = await session.get(Conversation, conv_id)
         if not r or r.tenant_id != tenant or r.user_id != user_id:
             raise HTTPException(404, "Not found")
-            
+
         r.archived_at = datetime.now(timezone.utc)
         session.add(r)
         await session.commit()
-        
+
     try:
         from src.mcp_manager import mcp_manager
+
         await mcp_manager.release_session(conv_id)
     except Exception as e:
-        logger.warning("Failed to release MCP session for conversation %s: %s", conv_id, e)
-        
+        logger.warning(
+            "Failed to release MCP session for conversation %s: %s", conv_id, e
+        )
+
     return {"success": True}
 
 
@@ -802,9 +840,7 @@ async def get_khub_file_endpoint(
 
     api_endpoint = (os.getenv("KHUB_API_ENDPOINT") or "").strip()
     if not api_endpoint:
-        logger.error(
-            "KHUb integration error: KHUB_API_ENDPOINT not configured."
-        )
+        logger.error("KHUb integration error: KHUB_API_ENDPOINT not configured.")
         raise HTTPException(
             status_code=500,
             detail="Knowledge Hub external API endpoint is not configured in backend environment.",
@@ -822,7 +858,7 @@ async def get_khub_file_endpoint(
         raise HTTPException(
             status_code=502,
             detail="Could not obtain a Keycloak access token for Knowledge Hub. "
-                   "Ensure KHUB_ISSUER, KHUB_CLIENT_ID and KHUB_CLIENT_SECRET are configured.",
+            "Ensure KHUB_ISSUER, KHUB_CLIENT_ID and KHUB_CLIENT_SECRET are configured.",
         )
 
     # 2. Fetch file content from KHUB endpoint.
@@ -841,12 +877,15 @@ async def get_khub_file_endpoint(
             if res.status_code == 401:
                 khub_token_manager.invalidate()
                 logger.warning(
-                    "KHUb returned 401 for %s — token invalidated for next request.", khub_file_url
+                    "KHUb returned 401 for %s — token invalidated for next request.",
+                    khub_file_url,
                 )
 
             if res.status_code != 200:
                 logger.error(
-                    "KHUb API content retrieval error: %d - %s", res.status_code, res.text
+                    "KHUb API content retrieval error: %d - %s",
+                    res.status_code,
+                    res.text,
                 )
                 raise HTTPException(
                     status_code=res.status_code,

@@ -2,6 +2,7 @@
 Normalizzazione e pre-validazione argomenti tool MCP prima della chiamata FastMCP.
 Evita ValidationError opachi quando il modello omette parametri obbligatori.
 """
+
 from __future__ import annotations
 
 import json

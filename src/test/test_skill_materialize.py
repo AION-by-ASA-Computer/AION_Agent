@@ -1,4 +1,5 @@
 """Skill package scripts materialized into session workspace."""
+
 from __future__ import annotations
 
 import json

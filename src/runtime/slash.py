@@ -51,7 +51,9 @@ slash_router = SlashCommandRouter()
 
 async def _slash_help(ctx: SlashContext) -> SlashResult:
     keys = sorted(slash_router.list_commands())
-    return SlashResult(handled=True, message="Comandi: " + ", ".join(f"/{k}" for k in keys))
+    return SlashResult(
+        handled=True, message="Comandi: " + ", ".join(f"/{k}" for k in keys)
+    )
 
 
 slash_router.register("help", _slash_help, "help")
@@ -96,6 +98,7 @@ slash_router.register("plan", _slash_plan_removed, "removed — use Plan agent m
 slash_router.register("clear", _slash_clear, "new conversation")
 slash_router.register("compact", _slash_compact, "compress context")
 
+
 async def _slash_ttc(ctx: SlashContext) -> SlashResult:
     from ..main import get_agent
     from ..agent_pipeline import AgentPipeline
@@ -105,18 +108,26 @@ async def _slash_ttc(ctx: SlashContext) -> SlashResult:
     task = ctx.raw.split(" ", 1)[1].strip() if " " in ctx.raw else ""
     if not task:
         return SlashResult(handled=True, message="Uso: /ttc <task>")
-        
+
     try:
-        agent_instance, p_name = await get_agent(ctx.profile_name, session_id=ctx.conversation_id, user_id=ctx.user_id)
-        pipeline = AgentPipeline(agent_instance, session_id=ctx.conversation_id, profile_name=p_name, user_id=ctx.user_id)
-        
+        agent_instance, p_name = await get_agent(
+            ctx.profile_name, session_id=ctx.conversation_id, user_id=ctx.user_id
+        )
+        pipeline = AgentPipeline(
+            agent_instance,
+            session_id=ctx.conversation_id,
+            profile_name=p_name,
+            user_id=ctx.user_id,
+        )
+
         strategy = ttc_engine.get_strategy(TTCStrategyType.REFINEMENT)
         res = await strategy.run(pipeline, task)
-        
+
         final_msg = f"**TTC Strategy: Refinement (Attempts: {res.get('attempts', 1)})**\n\n{res.get('text', 'No output')}"
         return SlashResult(handled=True, message=final_msg)
     except Exception as e:
         return SlashResult(handled=True, message=f"TTC error: {e}")
+
 
 slash_router.register("ttc", _slash_ttc, "Start task with Test-Time Compute")
 

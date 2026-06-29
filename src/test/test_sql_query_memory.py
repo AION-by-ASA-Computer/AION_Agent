@@ -1,4 +1,5 @@
 """SQL QueryMemory helpers (embedding cosine, feature flag)."""
+
 from __future__ import annotations
 
 import os

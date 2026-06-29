@@ -1,4 +1,5 @@
 """P2 Sprint 4 — skill distill, search draft filter, admin promote."""
+
 import textwrap
 from pathlib import Path
 
@@ -33,10 +34,16 @@ def test_skill_search_excludes_draft(tmp_path: Path):
     verified = skills / "good_skill.md"
     post2 = frontmatter.Post(
         content="# good",
-        **{"name": "good_skill", "description": "good draft test", "status": "verified"},
+        **{
+            "name": "good_skill",
+            "description": "good draft test",
+            "status": "verified",
+        },
     )
     verified.write_text(frontmatter.dumps(post2), encoding="utf-8")
-    reg = SkillRegistry(curated_dir=str(skills), curated_fallback_dir=str(tmp_path / "none"))
+    reg = SkillRegistry(
+        curated_dir=str(skills), curated_fallback_dir=str(tmp_path / "none")
+    )
     hits = reg.search("draft", top_k=5)
     names = [h["name"] for h in hits]
     assert "draft_skill" not in names
@@ -49,10 +56,17 @@ def test_admin_promote_skill(tmp_path: Path):
     path = skills / "draft_one.md"
     post = frontmatter.Post(
         content="# x",
-        **{"name": "draft_one", "description": "d", "status": "draft", "source": "generated"},
+        **{
+            "name": "draft_one",
+            "description": "d",
+            "status": "draft",
+            "source": "generated",
+        },
     )
     path.write_text(frontmatter.dumps(post), encoding="utf-8")
-    reg = SkillRegistry(curated_dir=str(skills), curated_fallback_dir=str(tmp_path / "none"))
+    reg = SkillRegistry(
+        curated_dir=str(skills), curated_fallback_dir=str(tmp_path / "none")
+    )
     assert reg.get_meta("draft_one")["status"] == "draft"
     loaded = frontmatter.loads(path.read_text(encoding="utf-8"))
     loaded.metadata["status"] = "verified"

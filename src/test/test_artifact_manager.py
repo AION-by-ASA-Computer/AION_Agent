@@ -3,6 +3,7 @@ import shutil
 from pathlib import Path
 from src.runtime.artifact_manager import ArtifactManager
 
+
 class TestArtifactManager(unittest.TestCase):
     def setUp(self):
         self.session_id = "test_session_mgr"
@@ -35,7 +36,7 @@ class TestArtifactManager(unittest.TestCase):
     def test_type_extension(self):
         path, _ = self.manager.save("style", "body { color: red; }", "css")
         self.assertEqual(path.suffix, ".css")
-        
+
         path, _ = self.manager.save("data", "a,b,c", "csv")
         self.assertEqual(path.suffix, ".csv")
 
@@ -47,6 +48,7 @@ class TestArtifactManager(unittest.TestCase):
             output.startswith("OK") or output.startswith("Error"),
             msg=output,
         )
+
 
 if __name__ == "__main__":
     unittest.main()

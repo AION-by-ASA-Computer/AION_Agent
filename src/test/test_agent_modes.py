@@ -3,12 +3,13 @@ import pytest
 from pathlib import Path
 from src.main import get_agent
 
+
 @pytest.mark.anyio
 async def test_agent_mode_prompt_injection(monkeypatch, tmp_path):
     # Set up a temporary mock profiles directory
     profiles_dir = tmp_path / "config" / "profiles"
     profiles_dir.mkdir(parents=True, exist_ok=True)
-    
+
     dummy_profile_content = """
 name: Generic Assistant
 description: Standard test profile
@@ -19,18 +20,21 @@ mcp_servers: []
 """
     with open(profiles_dir / "generic_assistant.yaml", "w", encoding="utf-8") as f:
         f.write(dummy_profile_content)
-        
+
     monkeypatch.setattr("src.agent_profile.profile_manager.base_path", profiles_dir)
     from src.agent_profile import profile_manager
+
     profile_manager.load_all()
 
     # Mock external runtime dependencies that get_agent executes
     async def dummy_warm_session(*args, **kwargs):
         return None
+
     monkeypatch.setattr("src.main.mcp_manager.warm_session", dummy_warm_session)
 
     async def dummy_build_all_tools(*args, **kwargs):
         return []
+
     monkeypatch.setattr("src.main.build_all_tools", dummy_build_all_tools)
 
     captured_prompt = None
@@ -39,11 +43,13 @@ mcp_servers: []
     def mock_create_aion_agent(*, chat_generator, tools, system_prompt, **kwargs):
         nonlocal captured_prompt
         captured_prompt = system_prompt
+
         class MockAgent:
             def __init__(self):
                 self.chat_generator = chat_generator
                 self.tools = tools
                 self.system_prompt = system_prompt
+
         return MockAgent()
 
     monkeypatch.setattr("src.main.create_aion_agent", mock_create_aion_agent)
@@ -103,10 +109,12 @@ mcp_servers: []
 
     monkeypatch.setattr("src.agent_profile.profile_manager.base_path", profiles_dir)
     from src.agent_profile import profile_manager
+
     profile_manager.load_all()
 
     async def dummy_warm_session(*args, **kwargs):
         return None
+
     monkeypatch.setattr("src.main.mcp_manager.warm_session", dummy_warm_session)
 
     # Simula una lista di tool che include sia tool mutanti che tool di sola lettura
@@ -115,15 +123,16 @@ mcp_servers: []
             self.name = name
 
     fake_tools = [
-        FakeTool("sandbox_write_workspace_file"),   # mutante — deve essere rimosso
-        FakeTool("sandbox_run_python_file"),         # mutante — deve essere rimosso
-        FakeTool("sandbox_list_files"),              # lettura — deve restare
-        FakeTool("sandbox_read_text_file"),          # lettura — deve restare
-        FakeTool("web_search"),                      # lettura — deve restare
+        FakeTool("sandbox_write_workspace_file"),  # mutante — deve essere rimosso
+        FakeTool("sandbox_run_python_file"),  # mutante — deve essere rimosso
+        FakeTool("sandbox_list_files"),  # lettura — deve restare
+        FakeTool("sandbox_read_text_file"),  # lettura — deve restare
+        FakeTool("web_search"),  # lettura — deve restare
     ]
 
     async def dummy_build_all_tools(*args, **kwargs):
         return list(fake_tools)
+
     monkeypatch.setattr("src.main.build_all_tools", dummy_build_all_tools)
 
     captured_tools: list = []
@@ -131,11 +140,13 @@ mcp_servers: []
     def mock_create_aion_agent(*, chat_generator, tools, system_prompt, **kwargs):
         captured_tools.clear()
         captured_tools.extend(tools)
+
         class MockAgent:
             def __init__(self):
                 self.chat_generator = chat_generator
                 self.tools = tools
                 self.system_prompt = system_prompt
+
         return MockAgent()
 
     monkeypatch.setattr("src.main.create_aion_agent", mock_create_aion_agent)
@@ -144,7 +155,7 @@ mcp_servers: []
     # Imposta AION_PLAN_MODE_BLOCKED_TOOLS con i tool mutanti
     monkeypatch.setenv(
         "AION_PLAN_MODE_BLOCKED_TOOLS",
-        "sandbox_write_workspace_file,sandbox_run_python_file,sandbox_install_python_packages"
+        "sandbox_write_workspace_file,sandbox_run_python_file,sandbox_install_python_packages",
     )
 
     await get_agent(profile_name="generic_assistant", agent_mode="plan")

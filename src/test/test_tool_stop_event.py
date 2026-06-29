@@ -1,4 +1,5 @@
 """MCP tools must honour turn stop_event."""
+
 import threading
 from unittest.mock import MagicMock, patch
 
@@ -12,7 +13,9 @@ def test_mcp_tool_returns_cancelled_when_stop_event_set():
     set_context("sess-1", MagicMock(), MagicMock(), stop)
     try:
         with patch("src.mcp_manager.SerializableMCPTool") as mock_tool:
-            out = _aion_mcp_tool_run("sandbox", "write_file", "sess-1", {"path": "a.txt"})
+            out = _aion_mcp_tool_run(
+                "sandbox", "write_file", "sess-1", {"path": "a.txt"}
+            )
             mock_tool.assert_not_called()
     finally:
         from src.runtime.context import clear_context

@@ -1,4 +1,5 @@
 """SQL QueryMemory update/delete — user_id, project scope, error messages."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -35,9 +36,12 @@ async def test_delete_entry_passes_user_and_project_to_validator():
     mock_session.execute = AsyncMock()
     mock_session.commit = AsyncMock()
 
-    with patch.object(svc, "session_maker") as sm, patch.object(
-        svc, "_validate_entry_for_user", new_callable=AsyncMock
-    ) as validate:
+    with (
+        patch.object(svc, "session_maker") as sm,
+        patch.object(
+            svc, "_validate_entry_for_user", new_callable=AsyncMock
+        ) as validate,
+    ):
         sm.return_value.__aenter__ = AsyncMock(return_value=mock_session)
         sm.return_value.__aexit__ = AsyncMock(return_value=False)
         validate.return_value = (mock_row, MagicMock(slug="am_2_new"), "")

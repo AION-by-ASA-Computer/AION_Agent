@@ -1,4 +1,5 @@
 """Hard project binding for SQL QueryMemory tools."""
+
 from __future__ import annotations
 
 import pytest

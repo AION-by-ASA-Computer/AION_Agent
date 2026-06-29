@@ -1,4 +1,5 @@
 """Project scope hints from DB metadata (no hardcoded slugs)."""
+
 from __future__ import annotations
 
 from src.memory.project_memory_scope import (

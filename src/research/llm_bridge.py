@@ -34,9 +34,15 @@ async def complete_messages(
     base, model = resolve_llm_endpoint()
 
     adapter_env = (os.getenv("AION_LLM_ADAPTER") or "").strip().lower()
-    if "anthropic" in adapter_env or "anthropic" in model.lower() or "claude" in model.lower():
+    if (
+        "anthropic" in adapter_env
+        or "anthropic" in model.lower()
+        or "claude" in model.lower()
+    ):
         provider = "anthropic"
-    elif "google" in adapter_env or "gemini" in adapter_env or "gemini" in model.lower():
+    elif (
+        "google" in adapter_env or "gemini" in adapter_env or "gemini" in model.lower()
+    ):
         provider = "google"
     else:
         provider = "openai"
@@ -49,7 +55,10 @@ async def complete_messages(
                 base = base + "/v1"
         url = base + "/chat/completions"
         token = os.getenv("AION_LLM_API_KEY", "placeholder-token")
-        headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        }
         payload: Dict[str, Any] = {
             "model": model,
             "messages": messages,
@@ -71,13 +80,18 @@ async def complete_messages(
             return strip_thinking(content or "") or ""
         except Exception as e:
             import logging
-            logging.getLogger("aion.research").warning("LLM bridge direct HTTP failed: %s", e)
+
+            logging.getLogger("aion.research").warning(
+                "LLM bridge direct HTTP failed: %s", e
+            )
             return ""
     else:
         generator = LiteLLMChatGeneratorWrapper(
             model=model,
             api_base_url=base,
-            api_key=Secret.from_token(os.getenv("AION_LLM_API_KEY", "placeholder-token")),
+            api_key=Secret.from_token(
+                os.getenv("AION_LLM_API_KEY", "placeholder-token")
+            ),
             timeout=timeout,
             generation_kwargs={
                 "temperature": temperature,
@@ -102,7 +116,10 @@ async def complete_messages(
                 return strip_thinking(content) or ""
         except Exception as e:
             import logging
-            logging.getLogger("aion.research").warning("LLM bridge wrapper failed: %s", e)
+
+            logging.getLogger("aion.research").warning(
+                "LLM bridge wrapper failed: %s", e
+            )
         return ""
 
 
@@ -128,4 +145,3 @@ def complete_messages_sync(
             messages, temperature=temperature, max_tokens=max_tokens, timeout=timeout
         )
     )
-

@@ -1,4 +1,5 @@
 """LTM persist validation (wing/room/importance — no user-text regex)."""
+
 from __future__ import annotations
 
 from src.memory.ltm_orchestrator import _filter_ltm_drawer, _is_project_wing

@@ -1,4 +1,5 @@
 """MemPalace navigation hooks: pre-turn inject + post-tool auto-learn (project-scoped wings)."""
+
 from __future__ import annotations
 
 import json
@@ -60,10 +61,16 @@ def user_requests_navigation_docs_only(user_input: str) -> bool:
             "mappa navigazione",
             "skill db_",
         )
-    ) or ("skill" in t and any(k in t for k in ("leggi", "read", "incolla", "paste", "scrivi")))
+    ) or (
+        "skill" in t
+        and any(k in t for k in ("leggi", "read", "incolla", "paste", "scrivi"))
+    )
     if not nav_doc:
         return False
-    if any(k in t for k in ("select ", " query", "sql", "quanti", "count(", "join ", "postgres")):
+    if any(
+        k in t
+        for k in ("select ", " query", "sql", "quanti", "count(", "join ", "postgres")
+    ):
         return False
     return any(p in t for p in _READ_ONLY_NAV_PATTERNS)
 
@@ -125,7 +132,9 @@ def _parse_search_hits(raw: str) -> List[Tuple[float, str, str, str]]:
     return out
 
 
-def _format_inject_block(project_slug: str, hits: List[Tuple[float, str, str, str]]) -> str:
+def _format_inject_block(
+    project_slug: str, hits: List[Tuple[float, str, str, str]]
+) -> str:
     wing = project_wing(project_slug)
     lines = [
         f"\n\n## MemPalace navigation (progetto `{project_slug}`, wing `{wing}`)",
@@ -180,7 +189,9 @@ async def _pre_turn_mempalace_navigation(ctx: HookContext) -> None:
 
     if user_requests_navigation_docs_only(user_input):
         try:
-            from src.runtime.sql_query_memory_context import set_mempalace_writes_allowed
+            from src.runtime.sql_query_memory_context import (
+                set_mempalace_writes_allowed,
+            )
 
             set_mempalace_writes_allowed(False)
             logger.info("mempalace writes blocked for read-only navigation doc turn")
@@ -370,7 +381,12 @@ async def _maybe_add_nav_drawer(
         await _call_mcp(
             session_id,
             "mempalace_add_drawer",
-            {"wing": wing, "room": room, "content": content, "added_by": "aion_nav_hook"},
+            {
+                "wing": wing,
+                "room": room,
+                "content": content,
+                "added_by": "aion_nav_hook",
+            },
         )
         logger.info("mempalace nav auto-learn wing=%s room=%s", wing, room)
     except Exception as exc:
@@ -449,7 +465,9 @@ def register_db_navigation_mempalace_hooks() -> None:
         from src.runtime.datasource_memory_mode import datasource_orchestrator_enabled
 
         if not datasource_orchestrator_enabled():
-            hook_registry.register("pre_turn", _pre_turn_mempalace_navigation, priority=35)
+            hook_registry.register(
+                "pre_turn", _pre_turn_mempalace_navigation, priority=35
+            )
     except Exception:
         hook_registry.register("pre_turn", _pre_turn_mempalace_navigation, priority=35)
     hook_registry.register("post_tool", _post_tool_mempalace_auto_learn, priority=35)

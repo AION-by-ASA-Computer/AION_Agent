@@ -4,7 +4,11 @@ import os
 
 import pytest
 
-from src.chart_payload import CHART_KINDS, chart_kind_feature_enabled, normalize_chart_dict
+from src.chart_payload import (
+    CHART_KINDS,
+    chart_kind_feature_enabled,
+    normalize_chart_dict,
+)
 
 
 def test_normalize_defaults():
@@ -28,7 +32,9 @@ def test_normalize_bar_and_series():
 
 
 def test_unknown_kind_fallback():
-    d = normalize_chart_dict({"query": "q", "chart_kind": "pie", "data": [{"index": 0, "v": 1}]})
+    d = normalize_chart_dict(
+        {"query": "q", "chart_kind": "pie", "data": [{"index": 0, "v": 1}]}
+    )
     assert d["chart_kind"] == "line"
 
 

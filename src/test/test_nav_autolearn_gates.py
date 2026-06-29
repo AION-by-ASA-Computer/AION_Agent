@@ -1,4 +1,5 @@
 """Tests for MemPalace navigation auto-learn quality gates."""
+
 from __future__ import annotations
 
 from src.runtime.db_navigation_mempalace_hooks import (
@@ -36,7 +37,7 @@ def test_drawer_narrative_no_sql_block() -> None:
         user_request="quanti ordini",
         sql="SELECT count(*) FROM ordini o JOIN clienti c ON o.id=c.id",
         ok=True,
-        output_preview="[{\"count\":1}]",
+        output_preview='[{"count":1}]',
         error_hint="",
     )
     assert room == "join_paths"

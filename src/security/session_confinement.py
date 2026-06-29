@@ -15,6 +15,7 @@ Env keys stamped by ``stamp_confinement_env``:
 - ``AION_SANDBOX_LL_READ`` — ``:``-separated absolute paths (read/execute)
 - ``AION_SANDBOX_LL_WRITE`` — ``:``-separated absolute paths (write)
 """
+
 from __future__ import annotations
 
 import builtins
@@ -316,7 +317,12 @@ def apply_landlock(read_paths: Sequence[Path], write_paths: Sequence[Path]) -> b
         fd = os.open(path, os.O_PATH | os.O_DIRECTORY | os.O_CLOEXEC)
         try:
             attr = PathBeneathAttr(allowed_access=access, parent_fd=fd)
-            if syscall(445, ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(attr), 0) != 0:
+            if (
+                syscall(
+                    445, ruleset_fd, LANDLOCK_RULE_PATH_BENEATH, ctypes.byref(attr), 0
+                )
+                != 0
+            ):
                 err = ctypes.get_errno()
                 raise OSError(err, os.strerror(err))
         finally:
@@ -369,14 +375,18 @@ def _install_python_guards() -> None:
 
     def guarded_open(file, mode="r", *args, **kwargs):  # type: ignore[no-untyped-def]
         write = any(ch in str(mode) for ch in ("w", "a", "+", "x"))
-        if isinstance(file, (str, bytes, os.PathLike)) and not path_allowed(file, write=write):
+        if isinstance(file, (str, bytes, os.PathLike)) and not path_allowed(
+            file, write=write
+        ):
             raise PermissionError(f"sandbox: filesystem access denied: {file!r}")
         return orig_open(file, mode, *args, **kwargs)
 
     def guarded_os_open(path, flags, *args, **kwargs):  # type: ignore[no-untyped-def]
         if isinstance(path, int):
             return orig_os_open(path, flags, *args, **kwargs)
-        write = bool(flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND))
+        write = bool(
+            flags & (os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_TRUNC | os.O_APPEND)
+        )
         if not path_allowed(path, write=write):
             raise PermissionError(f"sandbox: filesystem access denied: {path!r}")
         return orig_os_open(path, flags, *args, **kwargs)
@@ -394,7 +404,16 @@ def _patch_pathlib_io() -> None:
     from pathlib import Path as _Path
 
     if "Path.read_text" not in _GUARD_ORIGINALS:
-        for name in ("read_text", "read_bytes", "write_text", "write_bytes", "open", "iterdir", "glob", "rglob"):
+        for name in (
+            "read_text",
+            "read_bytes",
+            "write_text",
+            "write_bytes",
+            "open",
+            "iterdir",
+            "glob",
+            "rglob",
+        ):
             _GUARD_ORIGINALS[f"Path.{name}"] = getattr(_Path, name)
 
     for name, write in (
@@ -485,7 +504,9 @@ def _patch_sqlite3() -> None:
     orig_connect = sqlite3.connect
 
     def guarded_connect(database, *args, **kwargs):  # type: ignore[no-untyped-def]
-        if isinstance(database, (str, bytes, os.PathLike)) and not path_allowed(database):
+        if isinstance(database, (str, bytes, os.PathLike)) and not path_allowed(
+            database
+        ):
             raise PermissionError(f"sandbox: filesystem access denied: {database!r}")
         return orig_connect(database, *args, **kwargs)
 
@@ -513,7 +534,16 @@ def deactivate_python_guards() -> None:
 
     from pathlib import Path as _Path
 
-    for name in ("read_text", "read_bytes", "write_text", "write_bytes", "open", "iterdir", "glob", "rglob"):
+    for name in (
+        "read_text",
+        "read_bytes",
+        "write_text",
+        "write_bytes",
+        "open",
+        "iterdir",
+        "glob",
+        "rglob",
+    ):
         key = f"Path.{name}"
         if key in _GUARD_ORIGINALS:
             setattr(_Path, name, _GUARD_ORIGINALS[key])
@@ -581,7 +611,11 @@ def extract_python_script_argv(argv: Sequence[str]) -> list[str]:
         name = Path(parts[0]).name.lower()
         if name.startswith("python") or name in ("uv",):
             idx = 1
-            while idx < len(parts) and parts[idx].startswith("-") and not parts[idx].endswith(".py"):
+            while (
+                idx < len(parts)
+                and parts[idx].startswith("-")
+                and not parts[idx].endswith(".py")
+            ):
                 idx += 1
             if idx < len(parts):
                 return parts[idx:]

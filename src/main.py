@@ -13,7 +13,10 @@ from sqlalchemy import select
 from . import aion_env  # noqa: F401 — carica `.env` prima di altri moduli locali
 
 from haystack.tools import Tool
-from src.runtime.aion_agent import create_aion_agent, ensure_haystack_agent_signatures_valid
+from src.runtime.aion_agent import (
+    create_aion_agent,
+    ensure_haystack_agent_signatures_valid,
+)
 from src.runtime.llm_lite_llm_adapter import LiteLLMChatGeneratorWrapper
 from haystack.utils import Secret
 from .config import config
@@ -31,7 +34,9 @@ ensure_haystack_agent_signatures_valid()
 
 # --- HAYSTACK NATIVE REASONING PATCH ---
 import haystack.components.generators.chat.openai as openai_module
+
 _orig_convert = openai_module._convert_chat_completion_chunk_to_streaming_chunk
+
 
 def _patched_convert_chunk(chunk, previous_chunks, component_info=None):
     streaming_chunk = _orig_convert(chunk, previous_chunks, component_info)
@@ -40,17 +45,22 @@ def _patched_convert_chunk(chunk, previous_chunks, component_info=None):
         delta = getattr(choice, "delta", None)
         if delta:
             # Aggressive search: vLLM puts it in 'reasoning'
-            reasoning = getattr(delta, "reasoning", None) or getattr(delta, "reasoning_content", None)
-            
+            reasoning = getattr(delta, "reasoning", None) or getattr(
+                delta, "reasoning_content", None
+            )
+
             # Pydantic V2 model_extra check for unknown fields
             model_extra = getattr(delta, "model_extra", {}) or {}
             if not reasoning:
-                reasoning = model_extra.get("reasoning") or model_extra.get("reasoning_content")
-            
+                reasoning = model_extra.get("reasoning") or model_extra.get(
+                    "reasoning_content"
+                )
+
             if reasoning:
                 if "reasoning" not in streaming_chunk.meta:
                     streaming_chunk.meta["reasoning"] = reasoning
     return streaming_chunk
+
 
 openai_module._convert_chat_completion_chunk_to_streaming_chunk = _patched_convert_chunk
 
@@ -69,14 +79,18 @@ try:
     import haystack.components.generators.utils as _gen_utils
 
     # Build a proxy that mirrors the json module but with a recovery-aware loads.
-    _proxy_json = _types.SimpleNamespace(**{
-        k: getattr(_json_stdlib, k)
-        for k in dir(_json_stdlib)
-        if not k.startswith("__")
-    })
+    _proxy_json = _types.SimpleNamespace(
+        **{
+            k: getattr(_json_stdlib, k)
+            for k in dir(_json_stdlib)
+            if not k.startswith("__")
+        }
+    )
     _proxy_json.JSONDecodeError = _json_stdlib.JSONDecodeError
 
-    _orig_proxy_loads = _json_stdlib.loads  # capture real loads before any other patching
+    _orig_proxy_loads = (
+        _json_stdlib.loads
+    )  # capture real loads before any other patching
 
     def _loads_with_recovery(s, *a, **kw):
         if isinstance(s, str) and len(s) > 1000:
@@ -126,7 +140,12 @@ for _quiet in (
 # --- Tool Visibility Bridge ---
 # TOOL_EVENT_QUEUE is deprecated, use tool_event_bus
 _GLOBAL_LOOP = None
-_TOOL_DEDUPE_ENABLED = os.getenv("AION_TOOL_DEDUPE_ENABLED", "1").lower() in ("1", "true", "yes", "on")
+_TOOL_DEDUPE_ENABLED = os.getenv("AION_TOOL_DEDUPE_ENABLED", "1").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 _TOOL_DEDUPE_TTL_SEC = float(os.getenv("AION_TOOL_DEDUPE_TTL_SEC", "20"))
 _TOOL_DEDUPE_CACHE: Dict[str, tuple[float, bool]] = {}
 _MCP_FNAMES_BY_SESSION: Dict[str, set[str]] = {}
@@ -155,11 +174,15 @@ def _is_mutating_tool(tool_name: str) -> bool:
     )
 
 
-def _tool_call_fingerprint(server_name: str, tool_name: str, session_id: str, kwargs: dict) -> str:
+def _tool_call_fingerprint(
+    server_name: str, tool_name: str, session_id: str, kwargs: dict
+) -> str:
     payload = dict(kwargs or {})
     payload.pop("_trace_context", None)
     blob = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
-    return hashlib.sha256(f"{session_id}\0{server_name}\0{tool_name}\0{blob}".encode("utf-8")).hexdigest()
+    return hashlib.sha256(
+        f"{session_id}\0{server_name}\0{tool_name}\0{blob}".encode("utf-8")
+    ).hexdigest()
 
 
 def set_event_loop(loop):
@@ -210,14 +233,14 @@ def _aion_mcp_tool_run(
     kwargs["_trace_context"] = carrier
 
     loop = _GLOBAL_LOOP or asyncio.get_event_loop()
-    
+
     # Signal the streaming pipeline that we need to sync before running the tool
     loop.call_soon_threadsafe(
         tool_event_bus.put_event,
         session_id,
         {"type": "request_sync", "tool_name": tool_name},
     )
-    
+
     # Ensure all preceding text/artifacts from the stream are processed before tool execution
     StreamSync.wait_for_sync(session_id)
 
@@ -399,10 +422,13 @@ def _aion_mcp_tool_run(
             tenant_id = "default"
 
     from contextlib import nullcontext
+
     span_ctx = nullcontext()
     if tracer:
         try:
-            span_ctx = tracer.start_as_current_span(f"Profile {profile} tool.execute:{tool_name}")
+            span_ctx = tracer.start_as_current_span(
+                f"Profile {profile} tool.execute:{tool_name}"
+            )
         except Exception:
             pass
 
@@ -422,6 +448,7 @@ def _aion_mcp_tool_run(
         if loop.is_running():
             try:
                 from src.runtime.hooks import HookContext, hook_registry
+
                 pre_ctx = HookContext(
                     event="pre_tool_use",
                     tenant_id=tenant_id,
@@ -492,7 +519,9 @@ def _aion_mcp_tool_run(
                             schemas=extract_schemas_from_sql(sql_text),
                             tables=extract_tables_from_sql(sql_text),
                         )
-                    from .runtime.sql_query_memory_context import increment_cache_hits_sync
+                    from .runtime.sql_query_memory_context import (
+                        increment_cache_hits_sync,
+                    )
 
                     increment_cache_hits_sync(session_id)
             logger.info(
@@ -505,7 +534,9 @@ def _aion_mcp_tool_run(
 
             if span and span.is_recording():
                 try:
-                    span.set_attribute("tool.status", "success" if not is_err else "error")
+                    span.set_attribute(
+                        "tool.status", "success" if not is_err else "error"
+                    )
                     span.set_attribute("tool.output", str(normalized))
                 except Exception:
                     pass
@@ -527,9 +558,13 @@ def _aion_mcp_tool_run(
                             "status": "error" if is_err else "success",
                         },
                     )
-                    asyncio.run_coroutine_threadsafe(hook_registry.dispatch("post_tool_use", post_ctx), loop)
+                    asyncio.run_coroutine_threadsafe(
+                        hook_registry.dispatch("post_tool_use", post_ctx), loop
+                    )
                 except Exception as hook_err:
-                    logger.warning("Failed to dispatch post_tool_use hook: %s", hook_err)
+                    logger.warning(
+                        "Failed to dispatch post_tool_use hook: %s", hook_err
+                    )
 
             if dedupe_fp and not is_err:
                 _TOOL_DEDUPE_CACHE[dedupe_fp] = (time.monotonic(), True)
@@ -620,7 +655,9 @@ def _register_mcp_tool_function(server_name: str, tool_name: str, session_id: st
     return g[fname]
 
 
-async def build_mcp_tools(name: str, server_config: Dict[str, Any], session_id: str, user_id: str = "default"):
+async def build_mcp_tools(
+    name: str, server_config: Dict[str, Any], session_id: str, user_id: str = "default"
+):
     """Discovers tools from an MCP server using the manager and optional sandboxing."""
     discovered_tools = []
 
@@ -635,7 +672,9 @@ async def build_mcp_tools(name: str, server_config: Dict[str, Any], session_id: 
             pass
         return discovered_tools
 
-    if (server_config.get("type") or "").lower() == "in_process" and name == "orchestration":
+    if (
+        server_config.get("type") or ""
+    ).lower() == "in_process" and name == "orchestration":
         from .runtime.orchestration_tools import build_orchestration_haystack_tools
 
         return build_orchestration_haystack_tools(session_id, user_id)
@@ -643,9 +682,13 @@ async def build_mcp_tools(name: str, server_config: Dict[str, Any], session_id: 
     try:
         list_timeout = float(os.getenv("AION_MCP_LIST_TOOLS_TIMEOUT_SEC", "30"))
         # Session-scoped pool: stesso stdio per tutta la chat (AION_MCP_POOL=1)
-        async with mcp_manager.session_context(name, chat_session_id=session_id) as session:
-            tools_result = await asyncio.wait_for(session.list_tools(), timeout=list_timeout)
-        
+        async with mcp_manager.session_context(
+            name, chat_session_id=session_id
+        ) as session:
+            tools_result = await asyncio.wait_for(
+                session.list_tools(), timeout=list_timeout
+            )
+
         for mcp_tool in tools_result.tools:
             fn = _register_mcp_tool_function(name, mcp_tool.name, session_id)
             haystack_tool = Tool(
@@ -655,9 +698,14 @@ async def build_mcp_tools(name: str, server_config: Dict[str, Any], session_id: 
                 parameters=mcp_tool.inputSchema,
             )
             discovered_tools.append(haystack_tool)
-                    
+
         logger.info(f"✅ Discovered {len(discovered_tools)} tools from {name}")
-        logger.info("mcp_tools_discovered server=%s count=%d tools=%s", name, len(discovered_tools), [t.name for t in discovered_tools])
+        logger.info(
+            "mcp_tools_discovered server=%s count=%d tools=%s",
+            name,
+            len(discovered_tools),
+            [t.name for t in discovered_tools],
+        )
     except Exception as e:
         err = str(e).strip() or type(e).__name__
         logger.error("❌ Handshake FAILED for %s: %s", name, err)
@@ -670,11 +718,16 @@ async def build_mcp_tools(name: str, server_config: Dict[str, Any], session_id: 
 
     return discovered_tools
 
+
 _AGENT_CACHE: "OrderedDict[str, Tuple[Any, str]]" = OrderedDict()
 _AGENT_CACHE_LOCK = asyncio.Lock()
 _AGENT_BUILD_INFLIGHT: Dict[str, asyncio.Future] = {}
 _AGENT_CACHE_MAX = int(os.getenv("AION_AGENT_CACHE_MAX", "256"))
-_AGENT_CACHE_ENABLED = os.getenv("AION_AGENT_CACHE", "1").lower() in ("1", "true", "yes")
+_AGENT_CACHE_ENABLED = os.getenv("AION_AGENT_CACHE", "1").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 
 def _build_chat_generation_kwargs() -> Tuple[Dict[str, Any], str]:
@@ -701,7 +754,9 @@ def _build_chat_generation_kwargs() -> Tuple[Dict[str, Any], str]:
             if isinstance(parsed, dict):
                 extra.update(parsed)
             else:
-                logger.warning("AION_VLLM_EXTRA_BODY deve essere un oggetto JSON, ignorato")
+                logger.warning(
+                    "AION_VLLM_EXTRA_BODY deve essere un oggetto JSON, ignorato"
+                )
         except json.JSONDecodeError as e:
             logger.warning("AION_VLLM_EXTRA_BODY JSON non valido: %s", e)
 
@@ -737,6 +792,7 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
 
     if "aion_subagents" in profile.mcp_servers:
         from .runtime.subagent_tools import get_delegation_tool
+
         all_tools.append(get_delegation_tool(session_id, user_id))
 
     from .runtime.native_tools import load_native_tools
@@ -758,10 +814,16 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
         pref_map = await get_user_mcp_preference_map(user_id, tenant_id=tenant)
         async with get_async_session_maker()() as session:
             cfg_rows = (
-                await session.execute(
-                    select(McpServerConfig).where(McpServerConfig.server_slug.in_(profile.mcp_servers or []))
+                (
+                    await session.execute(
+                        select(McpServerConfig).where(
+                            McpServerConfig.server_slug.in_(profile.mcp_servers or [])
+                        )
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         policy_by_slug = {r.server_slug: r for r in cfg_rows}
         for server_name in profile.mcp_servers or []:
             pol = policy_by_slug.get(server_name)
@@ -778,14 +840,22 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
         profile_slugs = set(profile.mcp_servers or [])
         async with get_async_session_maker()() as session:
             enabled_rows = (
-                await session.execute(
-                    select(McpServerConfig.server_slug).where(
-                        McpServerConfig.is_enabled_for_users.is_(True)
+                (
+                    await session.execute(
+                        select(McpServerConfig.server_slug).where(
+                            McpServerConfig.is_enabled_for_users.is_(True)
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         for slug in enabled_rows:
-            if slug and slug not in profile_slugs and mcp_manager.get_server_config(slug):
+            if (
+                slug
+                and slug not in profile_slugs
+                and mcp_manager.get_server_config(slug)
+            ):
                 if slug in (ORCHESTRATION_BUILTIN_SERVER, CRON_BUILTIN_SERVER):
                     continue
                 logger.warning(
@@ -807,16 +877,22 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
     async def _discover_mcp_server(server_name: str) -> list:
         server_config = mcp_manager.get_server_config(server_name)
         if not server_config:
-            logger.warning(f"MCP Server '{server_name}' requested but not found in registry.")
+            logger.warning(
+                f"MCP Server '{server_name}' requested but not found in registry."
+            )
             return []
-        return await build_mcp_tools(server_name, server_config, session_id, user_id=user_id)
+        return await build_mcp_tools(
+            server_name, server_config, session_id, user_id=user_id
+        )
 
     if mcp_discover_names:
         discovered_batches = await asyncio.gather(
             *[_discover_mcp_server(name) for name in mcp_discover_names],
             return_exceptions=True,
         )
-        for server_name, batch in zip(mcp_discover_names, discovered_batches, strict=True):
+        for server_name, batch in zip(
+            mcp_discover_names, discovered_batches, strict=True
+        ):
             if isinstance(batch, Exception):
                 err = str(batch).strip() or type(batch).__name__
                 logger.error("MCP discovery failed for %s: %s", server_name, err)
@@ -844,6 +920,7 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
     )
 
     return all_tools
+
 
 def _skills_content_hash(skill_names: list, strategy: str) -> str:
     """Hash contenuto skill per invalidare _AGENT_CACHE quando cambiano i file .md."""
@@ -874,7 +951,12 @@ async def get_agent(
     Con AION_AGENT_CACHE=1 riusa agente + tool discovery per la stessa tripletta
     (session_id, profilo, user_id) così i worker MCP restano caldi e non si ripete il log di init.
     """
-    logger.info("agent_build_start profile=%s session=%s user=%s", profile_name, session_id, user_id)
+    logger.info(
+        "agent_build_start profile=%s session=%s user=%s",
+        profile_name,
+        session_id,
+        user_id,
+    )
     from .agent_profile import ProfileNotFoundError
 
     try:
@@ -915,8 +997,15 @@ async def get_agent(
     )
     # Env default (e.g. AION_DEFAULT_AGENT_MODE=plan) only for real user turns — not post-approval execution.
     if (message_source or "user_input").strip() in ("user_input",):
-        env_default_mode = (os.getenv("AION_DEFAULT_AGENT_MODE") or "normal").strip().lower()
-        if resolved_agent_mode == "normal" and env_default_mode in ("plan", "ask", "debug", "deep_research"):
+        env_default_mode = (
+            (os.getenv("AION_DEFAULT_AGENT_MODE") or "normal").strip().lower()
+        )
+        if resolved_agent_mode == "normal" and env_default_mode in (
+            "plan",
+            "ask",
+            "debug",
+            "deep_research",
+        ):
             resolved_agent_mode = env_default_mode
 
     cache_key = (
@@ -1017,7 +1106,9 @@ async def _finish_get_agent_build(
 
         _blocked_names = effective_plan_mode_blocked_tool_names()
         if plan_mode_tool_first():
-            _overridden = plan_mode_blocked_tool_names() & set(PLAN_MODE_DRAFT_TOOL_NAMES)
+            _overridden = plan_mode_blocked_tool_names() & set(
+                PLAN_MODE_DRAFT_TOOL_NAMES
+            )
             if _overridden:
                 logger.warning(
                     "Plan Mode tool-first: ignoring AION_PLAN_MODE_BLOCKED_TOOLS for %s",
@@ -1076,7 +1167,9 @@ async def _finish_get_agent_build(
             "list_sql_projects",
             "mark_sql_query_successful",
         }
-        has_native_sql = any(getattr(t, "name", None) in native_sql_names for t in tools)
+        has_native_sql = any(
+            getattr(t, "name", None) in native_sql_names for t in tools
+        )
         filtered_tools: list = []
         removed_datasource: list[str] = []
         for t in tools:
@@ -1097,7 +1190,6 @@ async def _finish_get_agent_build(
             )
         tools = filtered_tools
 
-
     # 1. Resolve LLM Configuration from Environment
     from src.runtime.llm_adapter import (
         resolve_llm_adapter,
@@ -1109,8 +1201,10 @@ async def _finish_get_agent_build(
     llm_adapter = resolve_llm_adapter()
     logger.info("LLM adapter: %s", llm_adapter)
     llm_timeout = resolve_llm_timeout()
-    
-    logger.info(f"🚀 Initializing Generator: {llm_model} at {llm_url} Provider: {llm_provider_name} (Timeout: {llm_timeout}s, Mode: {resolved_agent_mode})")
+
+    logger.info(
+        f"🚀 Initializing Generator: {llm_model} at {llm_url} Provider: {llm_provider_name} (Timeout: {llm_timeout}s, Mode: {resolved_agent_mode})"
+    )
     eb = gen_kw.get("extra_body")
     if isinstance(eb, dict) and eb.get("thinking_token_budget") is not None:
         logger.info(
@@ -1130,30 +1224,48 @@ async def _finish_get_agent_build(
         from src.data.engine import get_async_session_maker
         from src.data.models import LlmProvider
         from src.runtime.credential_store import decrypt_value
+
         async with get_async_session_maker()() as session:
-            row = (await session.execute(
-                select(LlmProvider).where(
-                    LlmProvider.tenant_id == "default",
-                    LlmProvider.slug == llm_provider_name,
+            row = (
+                (
+                    await session.execute(
+                        select(LlmProvider).where(
+                            LlmProvider.tenant_id == "default",
+                            LlmProvider.slug == llm_provider_name,
+                        )
+                    )
                 )
-            )).scalars().first()
+                .scalars()
+                .first()
+            )
         if row:
             if not row.enabled:
-                logger.warning("Provider LLM %s è disattivato, uso configurazione env", llm_provider_name)
+                logger.warning(
+                    "Provider LLM %s è disattivato, uso configurazione env",
+                    llm_provider_name,
+                )
             else:
                 provider_api_base = row.api_base_url
-                provider_model = f"{row.provider}/{row.model_name}" if "/" not in row.model_name else row.model_name
+                provider_model = (
+                    f"{row.provider}/{row.model_name}"
+                    if "/" not in row.model_name
+                    else row.model_name
+                )
                 provider_timeout = row.timeout
                 if row.api_key_encrypted:
                     api_key = decrypt_value(row.api_key_encrypted)
                     api_key_secret = Secret.from_token(api_key)
                 else:
-                    api_key_secret = Secret.from_token(os.getenv("AION_LLM_API_KEY", "placeholder-token"))
-                
+                    api_key_secret = Secret.from_token(
+                        os.getenv("AION_LLM_API_KEY", "placeholder-token")
+                    )
+
                 # extra_body è vLLM/OpenAI-specific — va rimosso per provider che non lo supportano
                 provider_gen_kw = None
                 if gen_kw:
-                    provider_gen_kw = {k: v for k, v in gen_kw.items() if k != "extra_body"}
+                    provider_gen_kw = {
+                        k: v for k, v in gen_kw.items() if k != "extra_body"
+                    }
                     if row.thinking_token_budget:
                         if row.provider in ("openai", "azure"):
                             eb = provider_gen_kw.get("extra_body") or {}
@@ -1164,10 +1276,12 @@ async def _finish_get_agent_build(
                 elif row.thinking_token_budget:
                     provider_gen_kw = {}
                     if row.provider in ("openai", "azure"):
-                        provider_gen_kw["extra_body"] = {"thinking_token_budget": row.thinking_token_budget}
+                        provider_gen_kw["extra_body"] = {
+                            "thinking_token_budget": row.thinking_token_budget
+                        }
                     elif row.provider == "anthropic":
                         provider_gen_kw["max_tokens"] = row.thinking_token_budget
-                
+
                 chat_generator = LiteLLMChatGeneratorWrapper(
                     api_base_url=provider_api_base,
                     model=provider_model,
@@ -1176,17 +1290,30 @@ async def _finish_get_agent_build(
                     generation_kwargs=provider_gen_kw,
                     tools_strict=tools_strict,
                 )
-                logger.info("Using LiteLLMChatGeneratorWrapper for model: %s (provider: %s)", provider_model, row.provider)
+                logger.info(
+                    "Using LiteLLMChatGeneratorWrapper for model: %s (provider: %s)",
+                    provider_model,
+                    row.provider,
+                )
                 provider_loaded = True
-                
-                logger.info("Provider LLM caricato: %s (%s/%s)", row.display_name, row.provider, row.model_name)
+
+                logger.info(
+                    "Provider LLM caricato: %s (%s/%s)",
+                    row.display_name,
+                    row.provider,
+                    row.model_name,
+                )
         else:
             # Provider non trovato, uso configurazione env
-            logger.info("Provider LLM %s non trovato, uso configurazione env", llm_provider_name)
+            logger.info(
+                "Provider LLM %s non trovato, uso configurazione env", llm_provider_name
+            )
 
     # Fallback: crea chat_generator dalla configurazione env se non già caricato dal DB
     if not provider_loaded:
-        api_key_secret = Secret.from_token(os.getenv("AION_LLM_API_KEY", "placeholder-token"))
+        api_key_secret = Secret.from_token(
+            os.getenv("AION_LLM_API_KEY", "placeholder-token")
+        )
         chat_generator = LiteLLMChatGeneratorWrapper(
             api_base_url=llm_url,
             model=llm_model,
@@ -1195,9 +1322,10 @@ async def _finish_get_agent_build(
             generation_kwargs=gen_kw if gen_kw else None,
             tools_strict=tools_strict,
         )
-        logger.info("Using env-based LiteLLMChatGeneratorWrapper for model: %s", llm_model)
+        logger.info(
+            "Using env-based LiteLLMChatGeneratorWrapper for model: %s", llm_model
+        )
 
-    
     # 3. Inizializza l'Agente Haystack (skill: index o full via AION_SKILL_SYSTEM_PROMPT_MODE)
     system_prompt = profile.generate_system_prompt(user_id=user_id)
     if user_lang:
@@ -1248,35 +1376,43 @@ async def _finish_get_agent_build(
 
         # This helper executes the actual LLM call and is decorated with @track
         @track(type="llm", name=f"llm-{llm_model}")
-        def _execute_tracked_llm(messages, streaming_callback, generation_kwargs, tools, **kwargs):
+        def _execute_tracked_llm(
+            messages, streaming_callback, generation_kwargs, tools, **kwargs
+        ):
             try:
                 update_current_span(
                     metadata={
                         "model": llm_model,
                         "api_base_url": llm_url,
-                        "generation_kwargs": generation_kwargs or {}
+                        "generation_kwargs": generation_kwargs or {},
                     }
                 )
             except Exception:
                 pass
             return original_run(
-                messages, 
-                streaming_callback=streaming_callback, 
-                generation_kwargs=generation_kwargs, 
-                tools=tools, 
-                **kwargs
+                messages,
+                streaming_callback=streaming_callback,
+                generation_kwargs=generation_kwargs,
+                tools=tools,
+                **kwargs,
             )
 
         # The actual method wrapper doesn't have the decorator directly, preventing signature issues.
         # functools.wraps preserves signature, making `inspect.signature` check in Agent constructor succeed.
         @functools.wraps(original_run)
-        def opik_wrapped_run(messages, streaming_callback=None, generation_kwargs=None, tools=None, **kwargs):
+        def opik_wrapped_run(
+            messages,
+            streaming_callback=None,
+            generation_kwargs=None,
+            tools=None,
+            **kwargs,
+        ):
             res = _execute_tracked_llm(
-                messages, 
-                streaming_callback=streaming_callback, 
-                generation_kwargs=generation_kwargs, 
-                tools=tools, 
-                **kwargs
+                messages,
+                streaming_callback=streaming_callback,
+                generation_kwargs=generation_kwargs,
+                tools=tools,
+                **kwargs,
             )
             try:
                 if isinstance(res, dict) and "replies" in res:
@@ -1287,9 +1423,14 @@ async def _finish_get_agent_build(
                             p_tok = usage.get("prompt_tokens", 0) or 0
                             c_tok = usage.get("completion_tokens", 0) or 0
                             details = usage.get("completion_tokens_details", {}) or {}
-                            r_tok = details.get("reasoning_tokens", 0) or usage.get("reasoning_tokens", 0) or 0
-                            
+                            r_tok = (
+                                details.get("reasoning_tokens", 0)
+                                or usage.get("reasoning_tokens", 0)
+                                or 0
+                            )
+
                             from src.runtime.turn_compaction import _turn_runtime
+
                             if _turn_runtime is not None:
                                 rt = _turn_runtime.get()
                                 if isinstance(rt, dict):
@@ -1303,10 +1444,12 @@ async def _finish_get_agent_build(
                                                 "prompt_tokens": p_tok,
                                                 "completion_tokens": c_tok,
                                                 "reasoning_tokens": r_tok,
-                                            }
+                                            },
                                         )
             except Exception as tok_err:
-                logger.debug("Failed to extract token usage in opik_wrapped_run: %s", tok_err)
+                logger.debug(
+                    "Failed to extract token usage in opik_wrapped_run: %s", tok_err
+                )
             return res
 
         chat_generator.run = opik_wrapped_run
@@ -1315,19 +1458,22 @@ async def _finish_get_agent_build(
         wrapped_tools = []
         for tool in tools:
             original_fn = tool.function
-            
+
             def make_wrapped_tool(orig_fn, name):
                 @track(type="tool", name=name)
                 @functools.wraps(orig_fn)
                 def opik_wrapped_tool_fn(*args, **kwargs):
                     return orig_fn(*args, **kwargs)
+
                 return opik_wrapped_tool_fn
-                
+
             tool.function = make_wrapped_tool(original_fn, tool.name)
             wrapped_tools.append(tool)
-            
+
         tools = wrapped_tools
-        logger.info("Opik telemetry wrappers successfully applied to chat_generator and tools with signature preservation.")
+        logger.info(
+            "Opik telemetry wrappers successfully applied to chat_generator and tools with signature preservation."
+        )
     except Exception as opik_err:
         logger.warning("Failed to apply Opik telemetry wrappers: %s", opik_err)
 
@@ -1337,12 +1483,18 @@ async def _finish_get_agent_build(
         system_prompt=system_prompt,
         max_agent_steps=min(
             int(os.getenv("AION_MAX_AGENT_STEPS", "15")),
-            getattr(profile, "max_agent_steps", 999) or 999
+            getattr(profile, "max_agent_steps", 999) or 999,
         ),
     )
 
     pair = (agent, profile.slug)
-    logger.info("agent_build_complete profile=%s session=%s tools_count=%d model=%s", profile.slug, session_id, len(tools), getattr(chat_generator, 'model', llm_model))
+    logger.info(
+        "agent_build_complete profile=%s session=%s tools_count=%d model=%s",
+        profile.slug,
+        session_id,
+        len(tools),
+        getattr(chat_generator, "model", llm_model),
+    )
     if _AGENT_CACHE_ENABLED:
         async with _AGENT_CACHE_LOCK:
             _AGENT_CACHE[cache_key] = pair

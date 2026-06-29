@@ -1,6 +1,7 @@
 """
 Admin REST API for MemPalace (LTM) — thin wrappers over MCP tools.
 """
+
 import logging
 import re
 from typing import Any, Dict, List, Optional
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from ..mcp_manager import mcp_manager
 from ..memory.ltm_audit import append_ltm_audit
+
 logger = logging.getLogger("aion.api.ltm_admin")
 
 router = APIRouter(prefix="/ltm", tags=["ltm"])
@@ -89,7 +91,9 @@ async def ltm_search(
         args["wing"] = wing
     if room:
         if not wing:
-            raise HTTPException(status_code=400, detail="wing required when room is set")
+            raise HTTPException(
+                status_code=400, detail="wing required when room is set"
+            )
         _validate_wing_room(wing, room)
         args["room"] = room
     return {"text": await _call("mempalace_search", args)}
@@ -214,7 +218,9 @@ async def ltm_kg_add(body: TripleCreate):
     }
     if body.valid_from:
         args["valid_from"] = body.valid_from
-    append_ltm_audit("mempalace_kg_add", {k: args[k] for k in ("subject", "predicate", "object")})
+    append_ltm_audit(
+        "mempalace_kg_add", {k: args[k] for k in ("subject", "predicate", "object")}
+    )
     return {"text": await _call("mempalace_kg_add", args)}
 
 
@@ -240,4 +246,3 @@ async def ltm_kg_invalidate(body: InvalidateBody):
             },
         )
     }
-

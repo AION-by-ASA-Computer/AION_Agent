@@ -14,11 +14,14 @@ def _repo_root() -> Path:
 
 
 def _artifact_variant_loaded(reg: SkillRegistry) -> bool:
-    return any(reg.get_skill_full(n) for n in (
-        "artifact_protocol_xml",
-        "artifact_protocol_markdown",
-        "artifact_protocol_tool",
-    ))
+    return any(
+        reg.get_skill_full(n)
+        for n in (
+            "artifact_protocol_xml",
+            "artifact_protocol_markdown",
+            "artifact_protocol_tool",
+        )
+    )
 
 
 _OFFICE_SKILL_SLUGS = frozenset({"docx", "pdf", "xlsx", "pptx"})
@@ -38,13 +41,19 @@ def test_config_std_profile_skills_resolve():
                 )
                 continue
             if skill in _OFFICE_SKILL_SLUGS:
-                assert reg.get_skill_full(skill), f"{path.name} references missing skill {skill!r}"
+                assert reg.get_skill_full(skill), (
+                    f"{path.name} references missing skill {skill!r}"
+                )
                 scripts = _repo_root() / "config_std" / "skills" / skill / "scripts"
-                assert scripts.is_dir(), f"{skill}: missing config_std/skills/{skill}/scripts/"
+                assert scripts.is_dir(), (
+                    f"{skill}: missing config_std/skills/{skill}/scripts/"
+                )
                 if skill in ("docx", "pptx"):
                     assert (scripts / "office" / "unpack.py").is_file()
                 continue
-            assert reg.get_skill_full(skill), f"{path.name} references missing skill {skill!r}"
+            assert reg.get_skill_full(skill), (
+                f"{path.name} references missing skill {skill!r}"
+            )
 
 
 def test_config_std_office_skill_scripts_on_disk():

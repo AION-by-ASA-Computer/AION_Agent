@@ -13,6 +13,8 @@ def test_deep_research_mode_off():
 
 def test_internal_trigger_forces_normal():
     assert (
-        resolve_agent_mode("deep_research", deep_research_mode=True, message_source="internal_trigger")
+        resolve_agent_mode(
+            "deep_research", deep_research_mode=True, message_source="internal_trigger"
+        )
         == "normal"
     )

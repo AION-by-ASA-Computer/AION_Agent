@@ -1,6 +1,7 @@
 """
 Podman/Docker container runtime for session sandbox MCP workers.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -26,7 +27,12 @@ def sandbox_container_mode_enabled() -> bool:
     backend = (os.environ.get("AION_SANDBOX_BACKEND") or "subprocess").strip().lower()
     if backend != "container":
         return False
-    if os.environ.get("AION_SANDBOX_MCP_JAIL", "1").lower() in ("0", "false", "no", "off"):
+    if os.environ.get("AION_SANDBOX_MCP_JAIL", "1").lower() in (
+        "0",
+        "false",
+        "no",
+        "off",
+    ):
         return False
     return True
 
@@ -83,8 +89,12 @@ def prepare_session_host_mount(session_path: Path) -> None:
 
 class ContainerRuntime:
     def __init__(self) -> None:
-        self.runtime = (os.environ.get("AION_CONTAINER_RUNTIME") or "podman").strip().lower()
-        self.image = (os.environ.get("AION_SANDBOX_CONTAINER_IMAGE") or "aion/sandbox:latest").strip()
+        self.runtime = (
+            (os.environ.get("AION_CONTAINER_RUNTIME") or "podman").strip().lower()
+        )
+        self.image = (
+            os.environ.get("AION_SANDBOX_CONTAINER_IMAGE") or "aion/sandbox:latest"
+        ).strip()
         self.socket = (os.environ.get("AION_PODMAN_SOCKET") or "").strip()
 
     def _base_env(self) -> Dict[str, str]:
@@ -172,7 +182,9 @@ class ContainerRuntime:
                     env=env,
                 )
             except (OSError, subprocess.TimeoutExpired) as exc:
-                logger.warning("sandbox_container_stop failed session=%s: %s", session_id[:8], exc)
+                logger.warning(
+                    "sandbox_container_stop failed session=%s: %s", session_id[:8], exc
+                )
 
         await asyncio.to_thread(_stop)
         logger.info("sandbox_container_stop session=%s name=%s", session_id[:8], name)

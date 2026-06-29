@@ -1,4 +1,5 @@
 """Regression tests for Plan Mode prompt, tool blocking, parsing, and coercion."""
+
 import os
 
 import pytest
@@ -141,7 +142,10 @@ Task 3 — Scrittura modulo fondamenti
     assert coerced.strip().lower().startswith("<plan")
     plan = markdown_to_plan(coerced)
     assert len(plan.tasks) >= 3
-    assert "syllabus" in plan.tasks[0].title.lower() or "Definizione" in plan.tasks[0].title
+    assert (
+        "syllabus" in plan.tasks[0].title.lower()
+        or "Definizione" in plan.tasks[0].title
+    )
 
 
 def test_coerce_structured_markdown_without_plan_wrapper():
@@ -219,6 +223,7 @@ mcp_servers: []
     from src.agent_profile import profile_manager
 
     profile_manager.load_all()
+
     async def _warm(*args, **kwargs):
         return None
 

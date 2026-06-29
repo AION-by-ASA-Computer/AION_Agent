@@ -1,4 +1,5 @@
 """In-process gate blocks skill_view before MCP when skill not on profile."""
+
 from __future__ import annotations
 
 from src.mcp_manager import mcp_manager
@@ -19,11 +20,14 @@ def test_block_skill_view_for_postgres_profile(monkeypatch):
         assert msg is not None
         assert "is not enabled in the active profile" in msg
         for allowed in ("wren", "openmetadata_guide", "datasource_memory_protocol"):
-            assert block_skills_hub_tool_if_needed(
-                "skills_hub",
-                "skill_view",
-                sid,
-                {"name": allowed, "materialize": False},
-            ) is None
+            assert (
+                block_skills_hub_tool_if_needed(
+                    "skills_hub",
+                    "skill_view",
+                    sid,
+                    {"name": allowed, "materialize": False},
+                )
+                is None
+            )
     finally:
         mcp_manager._session_ctx.pop(sid, None)

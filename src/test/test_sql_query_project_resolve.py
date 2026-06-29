@@ -1,4 +1,5 @@
 """SQL QueryMemory project resolution priority."""
+
 from __future__ import annotations
 
 from src.runtime.sql_query_project_resolve import resolve_sql_query_project

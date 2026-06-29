@@ -2,15 +2,16 @@ import unittest
 import json
 from src.runtime.json_recovery import try_recover_json
 
+
 class TestJSONRecovery(unittest.TestCase):
     def test_unescaped_newlines(self):
         # Malformed JSON with literal newline inside a string
-        malformed = '{"code": "print(\'hello\')\nprint(\'world\')"}'
-        
+        malformed = "{\"code\": \"print('hello')\nprint('world')\"}"
+
         # Standard json.loads would fail here
         with self.assertRaises(json.JSONDecodeError):
             json.loads(malformed)
-            
+
         recovered = try_recover_json(malformed)
         self.assertIsNotNone(recovered)
         self.assertEqual(recovered["code"], "print('hello')\nprint('world')")
@@ -24,7 +25,7 @@ class TestJSONRecovery(unittest.TestCase):
     def test_isolated_open_brace(self):
         recovered = try_recover_json("{")
         self.assertEqual(recovered, {})
-        
+
         recovered = try_recover_json("  {  ")
         self.assertEqual(recovered, {})
 
@@ -34,8 +35,8 @@ class TestJSONRecovery(unittest.TestCase):
 
     def test_broken_json_repair_fallback(self):
         # Very broken JSON that might need json_repair (if installed)
-        malformed = "{'code': 'print(1)',}" # trailing comma, single quotes
-        
+        malformed = "{'code': 'print(1)',}"  # trailing comma, single quotes
+
         # This test might pass if json_repair is installed, or fail (return None) if not.
         # But we want to see if the function behaves gracefully.
         recovered = try_recover_json(malformed)

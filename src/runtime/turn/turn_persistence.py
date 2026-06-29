@@ -1,4 +1,5 @@
 """Persist tool steps, attachments, and streaming assistant content during a turn."""
+
 from __future__ import annotations
 
 import json
@@ -29,7 +30,9 @@ class TurnPersistence:
         self.pending_db_attachments: List[Dict[str, Any]] = []
         self.pending_step_ids: Dict[str, str] = {}
         self._persisted_step_sigs: set[str] = set()
-        self._stream_flush_interval = float(os.getenv("AION_STREAM_DB_FLUSH_SEC", "0.75"))
+        self._stream_flush_interval = float(
+            os.getenv("AION_STREAM_DB_FLUSH_SEC", "0.75")
+        )
         self._last_stream_flush_at = 0.0
         self.assistant_message_persisted = False
 
@@ -156,7 +159,10 @@ class TurnPersistence:
     ) -> None:
         if not self.assistant_message_id:
             return
-        if not force and (loop_time - self._last_stream_flush_at) < self._stream_flush_interval:
+        if (
+            not force
+            and (loop_time - self._last_stream_flush_at) < self._stream_flush_interval
+        ):
             return
         self._last_stream_flush_at = loop_time
         body = "".join(full_response)

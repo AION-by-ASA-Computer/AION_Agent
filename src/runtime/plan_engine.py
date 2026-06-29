@@ -1,4 +1,5 @@
 """Plan Mode engine: phase controller, mandatory finalizer, SSE helpers."""
+
 from __future__ import annotations
 
 import json
@@ -15,7 +16,10 @@ from src.runtime.plan_coercion import (
     looks_like_chat_plan,
     new_execution_plan_id,
 )
-from src.runtime.plan_mode import plan_mode_max_research_tools, plan_mode_research_tool_names
+from src.runtime.plan_mode import (
+    plan_mode_max_research_tools,
+    plan_mode_research_tool_names,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -154,7 +158,9 @@ class PlanModeController:
             "</system-reminder>"
         )
 
-    def sse_phase(self, phase: PlanPhase, *, message: Optional[str] = None) -> Dict[str, Any]:
+    def sse_phase(
+        self, phase: PlanPhase, *, message: Optional[str] = None
+    ) -> Dict[str, Any]:
         self.phase = phase
         out: Dict[str, Any] = {
             "type": "plan_phase",
@@ -258,7 +264,9 @@ class PlanFinalizer:
             if llm_result:
                 return llm_result
 
-        coerced = coerce_chat_plan_to_canonical_markdown(body, title=title) if body else None
+        coerced = (
+            coerce_chat_plan_to_canonical_markdown(body, title=title) if body else None
+        )
         if coerced:
             try:
                 plan = markdown_to_plan(coerced)
@@ -277,9 +285,13 @@ class PlanFinalizer:
                 if plan.tasks:
                     from src.runtime.plan_coercion import _escape_attr, _infer_title
 
-                    plan_title = (title or _infer_title(body)).strip() or "Execution plan"
+                    plan_title = (
+                        title or _infer_title(body)
+                    ).strip() or "Execution plan"
                     inner = plan_to_markdown(plan)
-                    wrapped = f'<plan title="{_escape_attr(plan_title)}">\n{inner}\n</plan>'
+                    wrapped = (
+                        f'<plan title="{_escape_attr(plan_title)}">\n{inner}\n</plan>'
+                    )
                     return FinalizeResult(
                         markdown=wrapped,
                         source="coercion",
@@ -331,7 +343,11 @@ class PlanFinalizer:
                     continue
                 tid = str(row.get("id") or f"task_{i + 1:02d}").strip()
                 ttitle = str(row.get("title") or f"Task {i + 1}").strip()
-                deps = [str(x).strip() for x in (row.get("depends_on") or []) if str(x).strip()]
+                deps = [
+                    str(x).strip()
+                    for x in (row.get("depends_on") or [])
+                    if str(x).strip()
+                ]
                 tasks.append(
                     ExecutionTask(
                         id=tid,

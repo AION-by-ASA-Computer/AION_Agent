@@ -1,4 +1,5 @@
 """Tests for legacy timeline reconstruction."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -40,5 +41,7 @@ def test_reconstruct_interleaves_steps_and_artifacts_by_created_at():
 
 
 def test_reconstruct_reasoning_and_text_only():
-    segs = reconstruct_timeline_from_legacy(reasoning="r", content="c", steps=[], artifacts=[])
+    segs = reconstruct_timeline_from_legacy(
+        reasoning="r", content="c", steps=[], artifacts=[]
+    )
     assert [s["kind"] for s in segs] == ["reasoning", "text"]

@@ -3,18 +3,19 @@ import httpx
 import json
 import sys
 
+
 async def test_sse_artifacts(prompt: str, profile: str = "Generic Assistant"):
     url = "http://localhost:8001/chat"
     payload = {
         "message": prompt,
         "session_id": "test_session_sse",
         "profile": profile,
-        "attachments": []
+        "attachments": [],
     }
-    
+
     print(f"🚀 Sending request to {url}...")
     print(f"📝 Prompt: {prompt}")
-    
+
     try:
         async with httpx.AsyncClient(timeout=600) as client:
             async with client.stream("POST", url, json=payload) as response:
@@ -26,29 +27,35 @@ async def test_sse_artifacts(prompt: str, profile: str = "Generic Assistant"):
                 print("📡 Connection established. Listening to SSE stream...")
                 artifact_detected = False
                 text_buffer = ""
-                
+
                 async for line in response.aiter_lines():
                     if not line.strip():
                         continue
-                    print(f"RAW: {line}") # Debugging raw SSE lines
+                    print(f"RAW: {line}")  # Debugging raw SSE lines
                     if line.startswith("data: "):
                         try:
                             data = json.loads(line[6:])
                             event_type = data.get("type")
-                            
+
                             if event_type == "text" or event_type == "token":
                                 content = data.get("content", "")
                                 text_buffer += content
                             elif event_type == "artifact_start":
                                 artifact_detected = True
-                                print(f"\n✨ ARTIFACT START: {data.get('artifact', {}).get('identifier')} ({data.get('artifact', {}).get('type')})")
+                                print(
+                                    f"\n✨ ARTIFACT START: {data.get('artifact', {}).get('identifier')} ({data.get('artifact', {}).get('type')})"
+                                )
                             elif event_type == "artifact_content":
                                 pass
                             elif event_type == "artifact_end":
-                                print(f"\n✅ ARTIFACT END: {data.get('artifact', {}).get('identifier')}")
+                                print(
+                                    f"\n✅ ARTIFACT END: {data.get('artifact', {}).get('identifier')}"
+                                )
                             elif event_type == "tool_event":
                                 evt = data.get("event", {})
-                                print(f"\n🛠 TOOL EVENT: {evt.get('type')} - {evt.get('name')}")
+                                print(
+                                    f"\n🛠 TOOL EVENT: {evt.get('type')} - {evt.get('name')}"
+                                )
                             elif event_type == "error":
                                 print(f"\n❌ AGENT ERROR: {data.get('content')}")
                         except Exception as e:
@@ -66,6 +73,7 @@ async def test_sse_artifacts(prompt: str, profile: str = "Generic Assistant"):
 
     except Exception as e:
         print(f"❌ Connection failed: {e}")
+
 
 if __name__ == "__main__":
     test_prompt = "Genera un file HTML completo per una landing page moderna di una startup robotica chiamata DroidX. Usa almeno 50 righe di codice ma massimo 200 righe."

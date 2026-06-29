@@ -1,4 +1,5 @@
 """Admin cron-jobs HTTP API."""
+
 from pathlib import Path
 
 import pytest

@@ -1,4 +1,5 @@
 """Resolve tenant scope and user_scope_key for SQL QueryMemory."""
+
 from __future__ import annotations
 
 import os

@@ -1,4 +1,5 @@
 """OpenCode-style <system-reminder> injects for datasource SQL turns."""
+
 from __future__ import annotations
 
 from typing import Optional
@@ -21,7 +22,9 @@ def _is_short_follow_up(user_input: str) -> bool:
         "go on",
         "proceed",
     )
-    return any(low == s or low.startswith(s + " ") or low.startswith(s + ",") for s in starters)
+    return any(
+        low == s or low.startswith(s + " ") or low.startswith(s + ",") for s in starters
+    )
 
 
 def should_skip_nav_inject(*, cache_hit: bool, user_input: str) -> bool:

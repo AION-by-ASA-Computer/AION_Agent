@@ -1,4 +1,5 @@
 """Read-only navigation doc turns block MemPalace writes."""
+
 from __future__ import annotations
 
 from src.runtime.db_navigation_mempalace_hooks import user_requests_navigation_docs_only

@@ -6,6 +6,7 @@ from src.settings import AionSettings, get_settings
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fresh(monkeypatch, **env_overrides) -> AionSettings:
     """Clear the LRU cache, apply env overrides, and return a fresh settings instance."""
     get_settings.cache_clear()
@@ -19,6 +20,7 @@ def _fresh(monkeypatch, **env_overrides) -> AionSettings:
 # ---------------------------------------------------------------------------
 # Existing tests (kept for regression)
 # ---------------------------------------------------------------------------
+
 
 def test_settings_load_from_env(monkeypatch):
     get_settings.cache_clear()
@@ -35,6 +37,7 @@ def test_settings_load_from_env(monkeypatch):
 # ---------------------------------------------------------------------------
 # New fields introduced in S6
 # ---------------------------------------------------------------------------
+
 
 def test_stm_max_turns_default(monkeypatch):
     monkeypatch.delenv("AION_STM_MAX_TURNS", raising=False)
@@ -146,9 +149,11 @@ def test_plan_text_parser_present(monkeypatch):
 # validate_settings_at_startup integration test (no API server needed)
 # ---------------------------------------------------------------------------
 
+
 def test_validate_settings_at_startup_no_api_url(monkeypatch, caplog):
     """validate_settings_at_startup should log an error but NOT raise when api_url is empty."""
     import logging
+
     # Use setenv("", ...) rather than delenv so os.environ overrides the live .env file.
     monkeypatch.setenv("AION_API_URL", "")
     get_settings.cache_clear()
@@ -167,6 +172,7 @@ def test_validate_settings_at_startup_no_api_url(monkeypatch, caplog):
 def test_validate_settings_at_startup_valid(monkeypatch, caplog):
     """When api_url is set, validate_settings_at_startup should not emit error logs."""
     import logging
+
     get_settings.cache_clear()
     monkeypatch.setenv("AION_API_URL", "http://localhost:8000/v1")
     monkeypatch.setenv("AION_MODEL", "test-model")

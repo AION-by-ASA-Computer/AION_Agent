@@ -92,7 +92,9 @@ def enforce_global_allowlist() -> bool:
     return _truthy(os.getenv("AION_WEB_SEARCH_ENFORCE_GLOBAL_ALLOWLIST", "0"))
 
 
-def validate_user_hosts_subset(user_hosts: List[str], admin_patterns: List[str]) -> Optional[str]:
+def validate_user_hosts_subset(
+    user_hosts: List[str], admin_patterns: List[str]
+) -> Optional[str]:
     """Ogni voce utente deve essere coperta dall'allowlist admin (hostname di prova)."""
     if not admin_patterns or not user_hosts:
         return None

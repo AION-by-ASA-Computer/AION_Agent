@@ -1,4 +1,5 @@
 """Resolve active SQL QueryMemory project from chat conversation metadata."""
+
 from __future__ import annotations
 
 import json
@@ -7,7 +8,12 @@ from typing import Optional
 
 
 def _unified_db_enabled() -> bool:
-    return os.getenv("AION_UNIFIED_DB", "1").strip().lower() in ("1", "true", "yes", "on")
+    return os.getenv("AION_UNIFIED_DB", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 async def get_conversation_sql_project(conversation_id: str) -> Optional[str]:

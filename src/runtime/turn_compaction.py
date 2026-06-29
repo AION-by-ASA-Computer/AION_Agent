@@ -1,4 +1,5 @@
 """Compattazione contesto durante un turno agent (dopo tool / ragionamento)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -147,7 +148,9 @@ def _message_role_str(message: ChatMessage) -> str:
     return str(role.value if hasattr(role, "value") else role or "user").lower()
 
 
-def _split_system_and_conversation(messages: List[ChatMessage]) -> tuple[List[ChatMessage], List[ChatMessage]]:
+def _split_system_and_conversation(
+    messages: List[ChatMessage],
+) -> tuple[List[ChatMessage], List[ChatMessage]]:
     system: List[ChatMessage] = []
     convo: List[ChatMessage] = []
     for m in messages:
@@ -158,7 +161,9 @@ def _split_system_and_conversation(messages: List[ChatMessage]) -> tuple[List[Ch
     return system, convo
 
 
-def _estimate_prompt_total(agent: Any, messages: List[ChatMessage], extra: int = 0) -> Dict[str, int]:
+def _estimate_prompt_total(
+    agent: Any, messages: List[ChatMessage], extra: int = 0
+) -> Dict[str, int]:
     overhead = estimate_agent_overhead_tokens(agent)
     msg_tokens = sum(count_tokens(chat_message_text(m)) for m in messages) + extra
     comp = get_default_compressor()
@@ -237,7 +242,10 @@ def compact_agent_messages_in_place() -> bool:
     compressor = get_default_compressor()
     threshold_ratio = float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_RATIO", "0.85"))
     mid_trigger = int(stats["max_prompt"] * threshold_ratio)
-    if stats["total"] < mid_trigger and stats["total"] < compressor.compress_trigger_tokens():
+    if (
+        stats["total"] < mid_trigger
+        and stats["total"] < compressor.compress_trigger_tokens()
+    ):
         return False
 
     system_msgs, convo = _split_system_and_conversation(list(messages))
@@ -248,9 +256,7 @@ def compact_agent_messages_in_place() -> bool:
     head = convo[:-keep] if len(convo) > keep else convo[:-1]
     tail = convo[-keep:] if len(convo) > keep else convo[-1:]
 
-    transcript = "\n".join(
-        f"{m.role}: {chat_message_text(m)[:3000]}" for m in head
-    )
+    transcript = "\n".join(f"{m.role}: {chat_message_text(m)[:3000]}" for m in head)
     if not transcript.strip():
         return False
 
@@ -263,7 +269,9 @@ def compact_agent_messages_in_place() -> bool:
         summary = complete_text_sync(
             compaction_summary_prompt(),
             transcript,
-            max_tokens=int(os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "2000")),
+            max_tokens=int(
+                os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "2000")
+            ),
             timeout=float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_TIMEOUT", "90")),
         )
     except Exception as exc:
@@ -309,7 +317,9 @@ def compact_agent_messages_in_place() -> bool:
     return True
 
 
-def _schedule_db_persist(rt: Dict[str, Any], summary_msg: ChatMessage, keep_last: int) -> None:
+def _schedule_db_persist(
+    rt: Dict[str, Any], summary_msg: ChatMessage, keep_last: int
+) -> None:
     loop = rt.get("loop")
     session_id = rt.get("session_id")
     profile = rt.get("profile_name") or "default"
@@ -346,7 +356,9 @@ def maybe_compact_after_tool(*, tool_name: str, result: str) -> str:
     """Tronca output tool e, se serve, compatta lo state agent prima del prossimo LLM step."""
     out = truncate_tool_result(result, tool_name=tool_name)
     add_turn_token_estimate(count_tokens(out) + 128)
-    if mid_turn_compaction_enabled() and not _skip_mid_turn_compact_for_tool(tool_name, out):
+    if mid_turn_compaction_enabled() and not _skip_mid_turn_compact_for_tool(
+        tool_name, out
+    ):
         try:
             compact_agent_messages_in_place()
         except Exception as exc:

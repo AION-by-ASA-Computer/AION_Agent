@@ -1,4 +1,5 @@
 """Lightweight skill_view counters (P2.9)."""
+
 from __future__ import annotations
 
 import json

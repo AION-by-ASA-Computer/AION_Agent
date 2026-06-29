@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Optional
 
 logger = logging.getLogger("aion.marketplaces")
 
+
 def parse_github_owner_repo(item: Dict[str, Any]) -> Optional[tuple[str, str]]:
     """Ritorna (owner, repo) minuscolo da URL GitHub o id ``github:`` / ``glama:``."""
     url = (item.get("url") or "").strip()
@@ -76,20 +77,24 @@ def npx_invoke_args(item: Dict[str, Any]) -> List[str]:
         return ["-y", (item.get("id") or "package").strip()]
     return ["-y", pkg]
 
+
 class MarketplaceAdapter:
     """
     Base class for MCP marketplace adapters.
     """
+
     def search(self, query: str) -> List[Dict[str, Any]]:
         raise NotImplementedError()
 
     def get_install_info(self, mcp_id: str) -> Dict[str, Any]:
         raise NotImplementedError()
 
+
 class GlamaAdapter(MarketplaceAdapter):
     """
     Adapter for Glama.ai MCP Registry.
     """
+
     API_URL = "https://glama.ai/api/mcp/v1/servers"
 
     def search(self, query: str) -> List[Dict[str, Any]]:
@@ -98,59 +103,75 @@ class GlamaAdapter(MarketplaceAdapter):
             response = requests.get(self.API_URL, timeout=10)
             if response.status_code != 200:
                 return []
-            
+
             data = response.json()
             # If it's a list directly or in a 'servers' key
             servers = data.get("servers") if isinstance(data, dict) else data
-            
+
             results = []
             for s in servers:
                 name = s.get("name") or s.get("repo", "")
-                if not query or query.lower() in name.lower() or query.lower() in (s.get("description") or "").lower():
-                    results.append({
-                        "id": f"glama:{s.get('owner')}/{s.get('repo')}",
-                        "name": name,
-                        "source": "Glama.ai",
-                        "description": s.get("description"),
-                        "url": f"https://github.com/{s.get('owner')}/{s.get('repo')}",
-                        "install_type": "git"
-                    })
+                if (
+                    not query
+                    or query.lower() in name.lower()
+                    or query.lower() in (s.get("description") or "").lower()
+                ):
+                    results.append(
+                        {
+                            "id": f"glama:{s.get('owner')}/{s.get('repo')}",
+                            "name": name,
+                            "source": "Glama.ai",
+                            "description": s.get("description"),
+                            "url": f"https://github.com/{s.get('owner')}/{s.get('repo')}",
+                            "install_type": "git",
+                        }
+                    )
             return results
         except Exception as e:
             logger.error(f"Glama search failed: {e}")
             return []
 
+
 class OfficialRegistryAdapter(MarketplaceAdapter):
     """
     Adapter for the Official MCP Registry (registry.modelcontextprotocol.io).
     """
+
     API_URL = "https://registry.modelcontextprotocol.io/v0.1/servers"
 
     def search(self, query: str) -> List[Dict[str, Any]]:
         try:
-
             print(f"[DEBUG MCP QUERY] {query}")
             # The official registry currently returns a list at /v0.1/servers
-            response = requests.get(self.API_URL, params={"search": query} if query else {}, timeout=10)
+            response = requests.get(
+                self.API_URL, params={"search": query} if query else {}, timeout=10
+            )
             if response.status_code != 200:
-                logger.error(f"Official Registry error {response.status_code}: {response.text}")
+                logger.error(
+                    f"Official Registry error {response.status_code}: {response.text}"
+                )
                 return []
-            
+
             data = response.json()
             if isinstance(data, dict) and "servers" in data:
                 server_items = data["servers"]
             elif isinstance(data, list):
                 server_items = data
             else:
-                logger.error(f"Official Registry returned unexpected format: {type(data)}")
+                logger.error(
+                    f"Official Registry returned unexpected format: {type(data)}"
+                )
                 return []
 
-            print(f"[DEBUG OFFICIAL REGISTRY] {len(server_items)} risultati:", flush=True)
+            print(
+                f"[DEBUG OFFICIAL REGISTRY] {len(server_items)} risultati:", flush=True
+            )
 
             results = []
             for s in server_items:
                 print(f"[DEBUG OFFICIAL REGISTRY] {s}", flush=True)
-                if not isinstance(s, dict): continue
+                if not isinstance(s, dict):
+                    continue
                 srv = s.get("server") if isinstance(s.get("server"), dict) else s
                 if srv.get("remotes"):
                     install_type = "remote"
@@ -159,31 +180,34 @@ class OfficialRegistryAdapter(MarketplaceAdapter):
                 else:
                     install_type = "stdio"
 
-                results.append({
-                    "id": f"mcp:{srv.get('name')}",
-                    "name": srv.get("name"),
-                    "source": "Official Registry",
-                    "description": srv.get("description"),
-                    "url": srv.get("websiteUrl"),
-                    "install_type": install_type,
-                    "remotes": srv.get("remotes"),
-                    "_meta": s.get("_meta") if isinstance(s, dict) else {},
-                })
-
+                results.append(
+                    {
+                        "id": f"mcp:{srv.get('name')}",
+                        "name": srv.get("name"),
+                        "source": "Official Registry",
+                        "description": srv.get("description"),
+                        "url": srv.get("websiteUrl"),
+                        "install_type": install_type,
+                        "remotes": srv.get("remotes"),
+                        "_meta": s.get("_meta") if isinstance(s, dict) else {},
+                    }
+                )
 
             print(f"[DEBUG OFFICIAL REGISTRY] {len(results)} risultati:", flush=True)
             for r in results:
                 print(f"  -> {r}", flush=True)
-            
+
             return results
         except Exception as e:
             logger.error(f"Official Registry search failed: {e}")
             return []
 
+
 class GoogleCloudAdapter(MarketplaceAdapter):
     """
     Adapter for official Google Cloud MCP servers.
     """
+
     def search(self, query: str) -> List[Dict[str, Any]]:
         # Focused on verified Google tools
         tools = [
@@ -197,8 +221,8 @@ class GoogleCloudAdapter(MarketplaceAdapter):
                     "darwin/arm64": "https://storage.googleapis.com/mcp-toolbox-for-databases/v1.1.0/darwin/arm64/toolbox",
                     "darwin/amd64": "https://storage.googleapis.com/mcp-toolbox-for-databases/v1.1.0/darwin/amd64/toolbox",
                     "linux/amd64": "https://storage.googleapis.com/mcp-toolbox-for-databases/v1.1.0/linux/amd64/toolbox",
-                    "windows/amd64": "https://storage.googleapis.com/mcp-toolbox-for-databases/v1.1.0/windows/amd64/toolbox.exe"
-                }
+                    "windows/amd64": "https://storage.googleapis.com/mcp-toolbox-for-databases/v1.1.0/windows/amd64/toolbox.exe",
+                },
             },
             {
                 "id": "npx:@toolbox-sdk/server",
@@ -207,14 +231,17 @@ class GoogleCloudAdapter(MarketplaceAdapter):
                 "description": "Run the Database Toolbox directly via NPX.",
                 "install_type": "npx",
                 "npx_args": ["-y", "@toolbox-sdk/server", "--stdio"],
-            }
+            },
         ]
-        return [t for t in tools if not query or query.lower() in t['name'].lower()]
+        return [t for t in tools if not query or query.lower() in t["name"].lower()]
+
+
 class ClaudeCommunityAdapter(MarketplaceAdapter):
     """
     Adapter for searching community-maintained MCP servers on GitHub.
     Ref: https://github.com/modelcontextprotocol/servers
     """
+
     REPO_API = "https://api.github.com/repos/modelcontextprotocol/servers/contents"
 
     def search(self, query: str) -> List[Dict[str, Any]]:
@@ -222,33 +249,41 @@ class ClaudeCommunityAdapter(MarketplaceAdapter):
             response = requests.get(self.REPO_API, timeout=10)
             if response.status_code != 200:
                 return []
-            
+
             items = response.json()
             results = []
             for item in items:
-                if item["type"] == "dir" and (not query or query.lower() in item["name"].lower()):
-                    results.append({
-                        "id": f"github:mcp/{item['name']}",
-                        "name": item["name"],
-                        "source": "Claude Community",
-                        "description": f"Official community server: {item['name']}",
-                        "url": item["html_url"],
-                        "install_type": "git"
-                    })
+                if item["type"] == "dir" and (
+                    not query or query.lower() in item["name"].lower()
+                ):
+                    results.append(
+                        {
+                            "id": f"github:mcp/{item['name']}",
+                            "name": item["name"],
+                            "source": "Claude Community",
+                            "description": f"Official community server: {item['name']}",
+                            "url": item["html_url"],
+                            "install_type": "git",
+                        }
+                    )
             return results
         except Exception as e:
             logger.error(f"GitHub search failed: {e}")
             return []
 
+
 class GitHubTopicAdapter(MarketplaceAdapter):
     """
     GitHub: repo con topic ``mcp-server`` + fallback per nome (molti MCP non hanno il topic).
     """
+
     SEARCH_API = "https://api.github.com/search/repositories"
 
     def _github_search(self, q: str, *, per_page: int = 20) -> List[Dict[str, Any]]:
         headers: Dict[str, str] = {"Accept": "application/vnd.github+json"}
-        token = (os.getenv("GITHUB_TOKEN") or os.getenv("AION_GITHUB_TOKEN") or "").strip()
+        token = (
+            os.getenv("GITHUB_TOKEN") or os.getenv("AION_GITHUB_TOKEN") or ""
+        ).strip()
         if token:
             headers["Authorization"] = f"Bearer {token}"
         response = requests.get(
@@ -297,49 +332,63 @@ class GitHubTopicAdapter(MarketplaceAdapter):
                 if "/" in query.replace(" ", ""):
                     slug = query.strip().replace(" ", "").strip("/")
                     direct = build_github_market_item(f"https://github.com/{slug}")
-                    if direct and not any(r.get("id") == direct.get("id") for r in results):
+                    if direct and not any(
+                        r.get("id") == direct.get("id") for r in results
+                    ):
                         results.insert(0, direct)
             return results
         except Exception as e:
             logger.error("GitHub search failed: %s", e)
             return []
 
+
 class AwesomeListAdapter(MarketplaceAdapter):
     """
     Parses community-maintained 'Awesome MCP Servers' lists.
     """
+
     SOURCES = [
         "https://raw.githubusercontent.com/wong2/awesome-mcp-servers/main/README.md",
-        "https://raw.githubusercontent.com/punkpeye/awesome-mcp-servers/main/README.md"
+        "https://raw.githubusercontent.com/punkpeye/awesome-mcp-servers/main/README.md",
     ]
 
     def search(self, query: str) -> List[Dict[str, Any]]:
         import re
+
         results = []
         for url in self.SOURCES:
             try:
                 response = requests.get(url, timeout=10)
                 if response.status_code != 200:
                     continue
-                
+
                 content = response.text
                 pattern = r"- \*\*\[([^\]]+)\]\((https?://[^\)]+)\)\*\*(?: - (.+))?"
                 matches = re.finditer(pattern, content)
-                
+
                 for match in matches:
                     name, tool_url, desc = match.groups()
-                    if not query or query.lower() in name.lower() or query.lower() in (desc or "").lower():
-                        results.append({
-                            "id": f"awesome:{name.lower().replace(' ', '_')}",
-                            "name": name,
-                            "source": "Awesome List",
-                            "description": desc or "No description",
-                            "url": tool_url,
-                            "install_type": "git" if "github.com" in tool_url else "stdio"
-                        })
+                    if (
+                        not query
+                        or query.lower() in name.lower()
+                        or query.lower() in (desc or "").lower()
+                    ):
+                        results.append(
+                            {
+                                "id": f"awesome:{name.lower().replace(' ', '_')}",
+                                "name": name,
+                                "source": "Awesome List",
+                                "description": desc or "No description",
+                                "url": tool_url,
+                                "install_type": "git"
+                                if "github.com" in tool_url
+                                else "stdio",
+                            }
+                        )
             except Exception as e:
                 logger.error(f"Awesome list parsing failed for {url}: {e}")
         return results
+
 
 class HubAggregator:
     def __init__(self):
@@ -349,30 +398,33 @@ class HubAggregator:
             GlamaAdapter(),
             GoogleCloudAdapter(),
             ClaudeCommunityAdapter(),
-            GitHubTopicAdapter()
+            GitHubTopicAdapter(),
         ]
 
     def search_all(self, query: str) -> List[Dict[str, Any]]:
         all_results = []
         for adapter in self.adapters:
             all_results.extend(adapter.search(query))
-        
+
         # Deduplicazione intelligente (per URL o Nome)
         unique_results = []
         seen_urls = set()
         seen_names = set()
-        
+
         for res in all_results:
             url = res.get("url")
             name = res.get("name")
-            
+
             if (url and url in seen_urls) or (name and name.lower() in seen_names):
                 continue
-            
-            if url: seen_urls.add(url)
-            if name: seen_names.add(name.lower())
+
+            if url:
+                seen_urls.add(url)
+            if name:
+                seen_names.add(name.lower())
             unique_results.append(res)
 
         return unique_results
+
 
 hub_aggregator = HubAggregator()

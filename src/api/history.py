@@ -7,7 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 from haystack.dataclasses import ChatMessage
 from src.data.message_roles import is_model_context_role, normalize_message_role
-''
+
+""
 logger = logging.getLogger("aion.history")
 
 
@@ -295,7 +296,9 @@ class ChatHistoryManager:
             fut = ex.submit(_run)
             return fut.result(timeout=120)
 
-    def get_turn_context_blocking(self, message_id: Union[str, int], window: int = 2) -> List[Dict[str, Any]]:
+    def get_turn_context_blocking(
+        self, message_id: Union[str, int], window: int = 2
+    ) -> List[Dict[str, Any]]:
         try:
             asyncio.get_running_loop()
         except RuntimeError:
@@ -304,9 +307,9 @@ class ChatHistoryManager:
         import concurrent.futures
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
-            return ex.submit(lambda: asyncio.run(self.get_turn_context(message_id, window))).result(
-                timeout=60
-            )
+            return ex.submit(
+                lambda: asyncio.run(self.get_turn_context(message_id, window))
+            ).result(timeout=60)
 
     async def _migrate_legacy_table(self, db: aiosqlite.Connection) -> None:
         """If only legacy columns exist, copy into new table."""
@@ -388,14 +391,26 @@ class ChatHistoryManager:
                     session_id, profile_name, user_id, role, content, tool_name, tool_call_id, promoted_to_ltm
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, 0)
                 """,
-                (session_id, profile_name, user_id, role, content, tool_name, tool_call_id),
+                (
+                    session_id,
+                    profile_name,
+                    user_id,
+                    role,
+                    content,
+                    tool_name,
+                    tool_call_id,
+                ),
             )
             await db.commit()
 
-    async def update_message_timeline(self, message_id: str, timeline_json: str) -> None:
+    async def update_message_timeline(
+        self, message_id: str, timeline_json: str
+    ) -> None:
         if self._unified:
             await self._init_unified_once()
-            return await self._unified.update_message_timeline(message_id, timeline_json)
+            return await self._unified.update_message_timeline(
+                message_id, timeline_json
+            )
 
     async def upsert_message_content(
         self,
@@ -428,12 +443,13 @@ class ChatHistoryManager:
                 metadata_json=metadata_json,
             )
         return False
+
     async def get_last_assistant_steps(self, session_id: str) -> List[Dict[str, Any]]:
         """Bridge wrapper for get_last_assistant_steps."""
         if self._unified:
             await self._init_unified_once()
             return await self._unified.get_last_assistant_steps(session_id)
-        
+
         await self._init_db()
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -445,7 +461,7 @@ class ChatHistoryManager:
                 if not row:
                     return []
                 last_msg_id = row[0]
-            
+
             try:
                 async with db.execute(
                     "SELECT name, type, input, output, is_error, metadata FROM steps WHERE conversation_id = ? AND message_id = ? ORDER BY id ASC",
@@ -471,7 +487,16 @@ class ChatHistoryManager:
         if self._unified:
             await self._init_unified_once()
             return await self._unified.add_step(
-                session_id, name, type, input, output, is_error, message_id, parent_id, step_id, metadata_json=metadata_json
+                session_id,
+                name,
+                type,
+                input,
+                output,
+                is_error,
+                message_id,
+                parent_id,
+                step_id,
+                metadata_json=metadata_json,
             )
         # Non-unified implementation skipped for brevity as we focus on aion.db
         pass
@@ -488,7 +513,11 @@ class ChatHistoryManager:
         if self._unified:
             await self._init_unified_once()
             return await self._unified.update_step(
-                step_id, output=output, is_error=is_error, input=input, metadata_json=metadata_json
+                step_id,
+                output=output,
+                is_error=is_error,
+                input=input,
+                metadata_json=metadata_json,
             )
 
     async def add_attachment(
@@ -505,7 +534,14 @@ class ChatHistoryManager:
         if self._unified:
             await self._init_unified_once()
             return await self._unified.add_attachment(
-                session_id, storage_key, original_name, mime, size_bytes, kind, message_id, attachment_id
+                session_id,
+                storage_key,
+                original_name,
+                mime,
+                size_bytes,
+                kind,
+                message_id,
+                attachment_id,
             )
         # Non-unified implementation skipped
         pass
@@ -547,7 +583,9 @@ class ChatHistoryManager:
         messages.reverse()
         return messages
 
-    def _row_to_chat_message(self, role: str, content: str, tool_name: Optional[str]) -> Optional[ChatMessage]:
+    def _row_to_chat_message(
+        self, role: str, content: str, tool_name: Optional[str]
+    ) -> Optional[ChatMessage]:
         nr = normalize_message_role(role)
         if nr == "user":
             return ChatMessage.from_user(content)
@@ -595,7 +633,9 @@ class ChatHistoryManager:
         while parts:
             total_c = sum(len(p[1]) for p in parts)
             total_t = sum(_approx_tokens(p[1]) for p in parts)
-            if total_c <= char_limit and (token_budget is None or total_t <= token_budget):
+            if total_c <= char_limit and (
+                token_budget is None or total_t <= token_budget
+            ):
                 break
             parts.pop(0)
         out: List[ChatMessage] = []
@@ -605,7 +645,9 @@ class ChatHistoryManager:
                 out.append(mapped)
         return out
 
-    async def count_user_messages(self, session_id: str, profile_name: str = "default") -> int:
+    async def count_user_messages(
+        self, session_id: str, profile_name: str = "default"
+    ) -> int:
         if self._unified:
             await self._init_unified_once()
             return await self._unified.count_user_messages(session_id, profile_name)
@@ -626,7 +668,9 @@ class ChatHistoryManager:
     ) -> List[Dict[str, Any]]:
         if self._unified:
             await self._init_unified_once()
-            return await self._unified.fetch_unpromoted_rows(session_id, profile_name, limit)
+            return await self._unified.fetch_unpromoted_rows(
+                session_id, profile_name, limit
+            )
         await self._init_db()
         async with aiosqlite.connect(self.db_path) as db:
             db.row_factory = aiosqlite.Row
@@ -670,7 +714,9 @@ class ChatHistoryManager:
             )
         return []
 
-    async def count_messages(self, session_id: str, profile_name: str = "default") -> int:
+    async def count_messages(
+        self, session_id: str, profile_name: str = "default"
+    ) -> int:
         if self._unified:
             await self._init_unified_once()
             return await self._unified.count_messages(session_id)
@@ -728,7 +774,9 @@ class ChatHistoryManager:
         await self._init_db()
         async with aiosqlite.connect(self.db_path) as db:
             if profile_name is None:
-                await db.execute("DELETE FROM messages WHERE session_id = ?", (session_id,))
+                await db.execute(
+                    "DELETE FROM messages WHERE session_id = ?", (session_id,)
+                )
             else:
                 await db.execute(
                     "DELETE FROM messages WHERE session_id = ? AND profile_name = ?",

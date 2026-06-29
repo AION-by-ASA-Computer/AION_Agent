@@ -1,4 +1,5 @@
 """Normalize SQL for structural dedup (fingerprint)."""
+
 from __future__ import annotations
 
 import hashlib
@@ -62,7 +63,11 @@ def normalize_request_intent(text: str) -> str:
         if re.search(rf"\b{re.escape(device)}\b", s):
             s = re.sub(rf"\b{re.escape(device)}\b", "<DEVICE_TYPE>", s, count=1)
             break
-    s = re.sub(r"\b(?:ha|has|uses|use|di|of|per|for)\s+[\w'\-]+(?:\s+[\w'\-]+){0,3}", "<PERSON>", s)
+    s = re.sub(
+        r"\b(?:ha|has|uses|use|di|of|per|for)\s+[\w'\-]+(?:\s+[\w'\-]+){0,3}",
+        "<PERSON>",
+        s,
+    )
     s = re.sub(r"['\"][^'\"]+['\"]", "<LITERAL>", s)
     s = _WS.sub(" ", s).strip()
     return s

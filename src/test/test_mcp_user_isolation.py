@@ -66,7 +66,9 @@ def test_resolve_hyphenated_server_slug_from_env_placeholder(iso_db: str) -> Non
     asyncio.run(run())
 
 
-def test_mcp_home_isolation_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_mcp_home_isolation_dirs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setenv("AION_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("AION_MCP_USER_HOME_ISOLATION", "1")
     from src.mcp_manager import _apply_mcp_home_isolation

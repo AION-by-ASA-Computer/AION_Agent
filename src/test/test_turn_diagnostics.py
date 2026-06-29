@@ -1,4 +1,5 @@
 """Tests for turn outcome classification."""
+
 from __future__ import annotations
 
 from src.runtime.turn_diagnostics import classify_turn_outcome
@@ -14,7 +15,15 @@ def test_empty_final_with_tools():
         tool_calls_count=2,
         tool_events_count=4,
         new_messages=[
-            type("M", (), {"role": type("R", (), {"value": "assistant"})(), "tool_calls": [1], "content": ""})()
+            type(
+                "M",
+                (),
+                {
+                    "role": type("R", (), {"value": "assistant"})(),
+                    "tool_calls": [1],
+                    "content": "",
+                },
+            )()
         ],
         context_stats={"total": 25000, "message_count": 674},
         max_agent_steps=10,

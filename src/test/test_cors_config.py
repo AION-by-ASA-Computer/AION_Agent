@@ -1,4 +1,5 @@
 """CORS settings: production must not use open wildcard by default."""
+
 import os
 
 import pytest
@@ -34,7 +35,9 @@ def test_dev_wildcard_allowed(monkeypatch):
 
 
 def test_explicit_origin_list(monkeypatch):
-    monkeypatch.setenv("AION_CORS_ORIGINS", "https://app.example.com,https://admin.example.com")
+    monkeypatch.setenv(
+        "AION_CORS_ORIGINS", "https://app.example.com,https://admin.example.com"
+    )
     settings = resolve_cors_settings()
     assert settings.allow_origin_regex is None
     assert settings.allow_origins == [

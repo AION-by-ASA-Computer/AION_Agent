@@ -61,6 +61,7 @@ async def test_run_draft_execution_plan_reuses_turn_plan_id(monkeypatch):
         captured["plan_id"] = plan_id
 
     monkeypatch.setattr(ot, "setup_execution_plan_from_markdown", fake_setup)
+
     async def _noop_redis(*_a, **_k):
         return None
 

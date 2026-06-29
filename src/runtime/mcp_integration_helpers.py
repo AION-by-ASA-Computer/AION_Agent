@@ -1,4 +1,5 @@
 """Shared logic for user MCP integrations, pending credentials, preferences."""
+
 from __future__ import annotations
 
 import json
@@ -12,7 +13,10 @@ from src.agent_profile import profile_manager
 from src.data.engine import get_async_session_maker
 from src.data.ids import new_uuid7_str
 from src.data.models import McpServerConfig, UserMcpCredential, UserMcpPreference
-from src.runtime.credential_store import list_credentials_hints, user_credentials_enabled
+from src.runtime.credential_store import (
+    list_credentials_hints,
+    user_credentials_enabled,
+)
 
 
 def credentials_feature_enabled() -> bool:
@@ -26,13 +30,17 @@ async def get_user_mcp_preference_map(
 ) -> Dict[str, bool]:
     async with get_async_session_maker()() as session:
         rows = (
-            await session.execute(
-                select(UserMcpPreference).where(
-                    UserMcpPreference.user_id == user_id,
-                    UserMcpPreference.tenant_id == tenant_id,
+            (
+                await session.execute(
+                    select(UserMcpPreference).where(
+                        UserMcpPreference.user_id == user_id,
+                        UserMcpPreference.tenant_id == tenant_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     return {r.server_slug: r.is_active for r in rows}
 
 
@@ -48,14 +56,18 @@ async def batch_list_credentials_hints(
     now = datetime.now(timezone.utc)
     async with get_async_session_maker()() as session:
         rows = (
-            await session.execute(
-                select(UserMcpCredential).where(
-                    UserMcpCredential.user_id == user_id,
-                    UserMcpCredential.tenant_id == tenant_id,
-                    UserMcpCredential.server_slug.in_(server_slugs),
+            (
+                await session.execute(
+                    select(UserMcpCredential).where(
+                        UserMcpCredential.user_id == user_id,
+                        UserMcpCredential.tenant_id == tenant_id,
+                        UserMcpCredential.server_slug.in_(server_slugs),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     result: Dict[str, List[Dict[str, Any]]] = {}
     for r in rows:
         slug = r.server_slug
@@ -67,13 +79,15 @@ async def batch_list_credentials_hints(
             if exp.tzinfo is None:
                 exp = exp.replace(tzinfo=timezone.utc)
             is_expired = exp < now
-        result[slug].append({
-            "key": r.credential_key,
-            "display_hint": r.display_hint,
-            "expires_at": r.expires_at.isoformat() if r.expires_at else None,
-            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
-            "is_expired": is_expired,
-        })
+        result[slug].append(
+            {
+                "key": r.credential_key,
+                "display_hint": r.display_hint,
+                "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                "is_expired": is_expired,
+            }
+        )
     return result
 
 
@@ -86,14 +100,18 @@ async def set_user_mcp_preference(
 ) -> None:
     async with get_async_session_maker()() as session:
         row = (
-            await session.execute(
-                select(UserMcpPreference).where(
-                    UserMcpPreference.user_id == user_id,
-                    UserMcpPreference.tenant_id == tenant_id,
-                    UserMcpPreference.server_slug == server_slug,
+            (
+                await session.execute(
+                    select(UserMcpPreference).where(
+                        UserMcpPreference.user_id == user_id,
+                        UserMcpPreference.tenant_id == tenant_id,
+                        UserMcpPreference.server_slug == server_slug,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if row:
             row.is_active = is_active
         else:
@@ -132,11 +150,18 @@ async def integration_row_to_public_dict(
     hints_map: Optional[Dict[str, List[Dict[str, Any]]]] = None,
 ) -> Dict[str, Any]:
     if pref_map is None:
-        pref_map = await get_user_mcp_preference_map(user_id, tenant_id=tenant_id) if not anonymous else {}
+        pref_map = (
+            await get_user_mcp_preference_map(user_id, tenant_id=tenant_id)
+            if not anonymous
+            else {}
+        )
 
     schema = json.loads(r.credential_schema_json or "[]")
     try:
-        from src.mcp_credential_discovery import discover_mcp_credentials, merge_schema_sources
+        from src.mcp_credential_discovery import (
+            discover_mcp_credentials,
+            merge_schema_sources,
+        )
         from src.mcp_manager import mcp_manager
 
         mcp_manager.load_registry()
@@ -154,15 +179,14 @@ async def integration_row_to_public_dict(
     except Exception:
         pass
     schema = [
-        s
-        for s in schema
-        if s.get("key") and not str(s["key"]).startswith("AION_USER_")
+        s for s in schema if s.get("key") and not str(s["key"]).startswith("AION_USER_")
     ]
     oauth_cfg = json.loads(r.oauth_config_json or "{}")
     if not oauth_cfg.get("authorization_server") and not oauth_cfg.get("auth_url"):
         try:
             from src.mcp_credential_discovery import discover_mcp_credentials
             from src.mcp_manager import mcp_manager
+
             reg_cfg = mcp_manager.get_server_config(r.server_slug) or {}
             discovered = discover_mcp_credentials(r.server_slug, reg_cfg)
             if discovered and discovered.remote_auth_type == "oauth2":
@@ -181,14 +205,18 @@ async def integration_row_to_public_dict(
     show_form = mode == "per_user" and r.requires_user_credentials
     org_managed = mode == "org_shared"
     user_may_disable = bool(getattr(r, "user_may_disable", True))
-    user_enabled = user_mcp_effective_active(r.server_slug, pref_map=pref_map, user_may_disable=user_may_disable)
+    user_enabled = user_mcp_effective_active(
+        r.server_slug, pref_map=pref_map, user_may_disable=user_may_disable
+    )
 
     hints: List[Dict[str, Any]] = []
     if show_form and credentials_feature_enabled() and not anonymous and user_enabled:
         if hints_map is not None:
             hints = hints_map.get(r.server_slug, [])
         else:
-            hints = await list_credentials_hints(user_id, r.server_slug, tenant_id=tenant_id)
+            hints = await list_credentials_hints(
+                user_id, r.server_slug, tenant_id=tenant_id
+            )
 
     # Include saved credential keys not in admin schema so users can still edit them.
     if show_form and hints:
@@ -230,6 +258,7 @@ async def integration_row_to_public_dict(
 
     try:
         from src.mcp_manager import mcp_manager as _mm
+
         _mm.load_registry()
         _reg = _mm.get_server_config(r.server_slug) or {}
         _is_remote_bridge = _reg.get("type") == "remote-bridge"
@@ -240,6 +269,7 @@ async def integration_row_to_public_dict(
     if _is_remote_bridge:
         try:
             from src.mcp_credential_discovery import discover_mcp_credentials
+
             discovered = discover_mcp_credentials(r.server_slug, _reg)
             remote_auth_type = discovered.remote_auth_type
         except Exception:
@@ -264,7 +294,8 @@ async def integration_row_to_public_dict(
         "is_remote_bridge": _is_remote_bridge,
         "remote_url": oauth_cfg.get("remote_url") or "",
         "oauth_provider": oauth_cfg.get("provider"),
-        "oauth_authorization_server": oauth_cfg.get("authorization_server") or oauth_cfg.get("auth_url"),
+        "oauth_authorization_server": oauth_cfg.get("authorization_server")
+        or oauth_cfg.get("auth_url"),
         "oauth_client_id": oauth_cfg.get("client_id"),
         "oauth_scopes": oauth_cfg.get("scopes") or [],
         "is_configured": configured if show_form else (org_managed or mode == "none"),
@@ -296,10 +327,24 @@ async def list_pending_for_profile(
 
     async with get_async_session_maker()() as session:
         rows = (
-            await session.execute(select(McpServerConfig).where(McpServerConfig.server_slug.in_(mcp_slugs)))
-        ).scalars().all() if mcp_slugs else []
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug.in_(mcp_slugs)
+                    )
+                )
+            )
+            .scalars()
+            .all()
+            if mcp_slugs
+            else []
+        )
 
-    pref_map = await get_user_mcp_preference_map(user_id, tenant_id=tenant_id) if not anonymous else {}
+    pref_map = (
+        await get_user_mcp_preference_map(user_id, tenant_id=tenant_id)
+        if not anonymous
+        else {}
+    )
     pending: List[Dict[str, Any]] = []
     seen: Set[str] = set()
 
@@ -322,13 +367,25 @@ async def list_pending_for_profile(
             # implicitamente per gli utenti, ignorando il flag del DB delle policy.
             continue
         pub = await integration_row_to_public_dict(
-            row, user_id=user_id, tenant_id=tenant_id, anonymous=anonymous, pref_map=pref_map
+            row,
+            user_id=user_id,
+            tenant_id=tenant_id,
+            anonymous=anonymous,
+            pref_map=pref_map,
         )
         if not pub["user_enabled"]:
             continue
         mode = pub["credential_mode"]
-        if mode == "per_user" and pub["requires_user_credentials"] and not pub["is_configured"]:
-            missing = [s["key"] for s in json.loads(row.credential_schema_json or "[]") if s.get("required")]
+        if (
+            mode == "per_user"
+            and pub["requires_user_credentials"]
+            and not pub["is_configured"]
+        ):
+            missing = [
+                s["key"]
+                for s in json.loads(row.credential_schema_json or "[]")
+                if s.get("required")
+            ]
             pending.append(
                 {
                     "server_slug": slug,

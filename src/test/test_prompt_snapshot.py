@@ -1,4 +1,5 @@
 """Tests for full prompt snapshot serialization."""
+
 from haystack.dataclasses import ChatMessage
 
 from src.runtime.prompt_snapshot import (

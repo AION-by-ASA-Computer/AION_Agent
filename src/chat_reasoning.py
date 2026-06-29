@@ -1,4 +1,5 @@
 """Streaming helpers for reasoning chunks."""
+
 from __future__ import annotations
 
 import json

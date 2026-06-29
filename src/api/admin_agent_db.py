@@ -23,9 +23,21 @@ router = APIRouter(
     dependencies=[Depends(require_admin_role)],
 )
 manager = AgentDBManager(root_dir=os.getenv("AION_AGENT_DB_ROOT", "data/agent_dbs"))
-_STRICT_ADMIN_IDENTITY = os.getenv("AION_AGENT_DB_ADMIN_STRICT_IDENTITY", "1").lower() in ("1", "true", "yes", "on")
-_ALLOW_ADMIN_SQL_WRITE = os.getenv("AION_AGENT_DB_ADMIN_SQL_WRITE", "0").lower() in ("1", "true", "yes", "on")
-_EMBED_SECRET = os.getenv("AION_AGENT_DB_EMBED_SECRET") or os.getenv("AION_AGENT_DB_INTERNAL_SECRET") or "aion-db-embed"
+_STRICT_ADMIN_IDENTITY = os.getenv(
+    "AION_AGENT_DB_ADMIN_STRICT_IDENTITY", "1"
+).lower() in ("1", "true", "yes", "on")
+_ALLOW_ADMIN_SQL_WRITE = os.getenv("AION_AGENT_DB_ADMIN_SQL_WRITE", "0").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
+_EMBED_SECRET = (
+    os.getenv("AION_AGENT_DB_EMBED_SECRET")
+    or os.getenv("AION_AGENT_DB_INTERNAL_SECRET")
+    or "aion-db-embed"
+)
+
 
 class UserDBStats(BaseModel):
     user_id: str
@@ -77,7 +89,9 @@ class SchemaPayload(BaseModel):
     schema_name: str
 
 
-def _resolve_table(conn: sqlite3.Connection, schema_name: str, table_name: str) -> tuple[SchemaRegistry, Dict[str, Any]]:
+def _resolve_table(
+    conn: sqlite3.Connection, schema_name: str, table_name: str
+) -> tuple[SchemaRegistry, Dict[str, Any]]:
     registry = SchemaRegistry(conn)
     schema_name = validate_name(schema_name, "Schema name")
     table_name = validate_name(table_name, "Table name")
@@ -99,26 +113,36 @@ def _valid_embed_token(user_id: str, token: Optional[str]) -> bool:
         if exp < int(time.time()):
             return False
         payload = f"{uid}:{exp}"
-        expected = hmac.new(_EMBED_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        expected = hmac.new(
+            _EMBED_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
         return hmac.compare_digest(expected, sig)
     except Exception:
         return False
 
 
-def _enforce_admin_identity(user_id: str, x_aion_user_id: Optional[str], x_aion_embed_token: Optional[str] = None) -> None:
+def _enforce_admin_identity(
+    user_id: str,
+    x_aion_user_id: Optional[str],
+    x_aion_embed_token: Optional[str] = None,
+) -> None:
     if not _STRICT_ADMIN_IDENTITY:
         return
     if isinstance(x_aion_user_id, str) and x_aion_user_id and x_aion_user_id != user_id:
-        raise HTTPException(status_code=403, detail="identity_mismatch: user path and header differ")
+        raise HTTPException(
+            status_code=403, detail="identity_mismatch: user path and header differ"
+        )
     if isinstance(x_aion_user_id, str) and x_aion_user_id == user_id:
         return
     if _valid_embed_token(user_id, x_aion_embed_token):
         return
-    raise HTTPException(status_code=403, detail="forbidden: missing valid identity proof")
+    raise HTTPException(
+        status_code=403, detail="forbidden: missing valid identity proof"
+    )
 
 
 def _quote_identifier(name: str, context: str) -> str:
-    return f"\"{validate_name(name, context)}\""
+    return f'"{validate_name(name, context)}"'
 
 
 @router.post("/{user_id}/schemas")
@@ -166,7 +190,7 @@ async def drop_schema(
             (schema_name,),
         )
         for row in cur.fetchall():
-            conn.execute(f"DROP TABLE IF EXISTS \"{row['physical_name']}\"")
+            conn.execute(f'DROP TABLE IF EXISTS "{row["physical_name"]}"')
             conn.execute(
                 "UPDATE _aion_schema_registry SET archived_at = datetime('now') WHERE schema_name = ? AND table_name = ?",
                 (schema_name, row["table_name"]),
@@ -187,49 +211,56 @@ async def drop_schema(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/overview", response_model=List[UserDBStats])
 async def get_agent_db_overview(tenant_id: str = "default"):
     tenant_dir = os.path.join(manager.root_dir, tenant_id)
     if not os.path.exists(tenant_dir):
         return []
-    
+
     stats = []
     for filename in os.listdir(tenant_dir):
         if filename.endswith(".db"):
             user_id = filename[:-3]
             db_path = os.path.join(tenant_dir, filename)
-            
+
             try:
                 conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
                 conn.row_factory = sqlite3.Row
-                
+
                 # Check if system tables exist
                 cursor = conn.cursor()
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='_aion_schema_registry'")
+                cursor.execute(
+                    "SELECT name FROM sqlite_master WHERE type='table' AND name='_aion_schema_registry'"
+                )
                 if not cursor.fetchone():
                     conn.close()
                     continue
-                
-                cursor.execute("SELECT COUNT(DISTINCT schema_name) as sc, COUNT(*) as tc, SUM(row_count) as rc FROM _aion_schema_registry WHERE archived_at IS NULL")
+
+                cursor.execute(
+                    "SELECT COUNT(DISTINCT schema_name) as sc, COUNT(*) as tc, SUM(row_count) as rc FROM _aion_schema_registry WHERE archived_at IS NULL"
+                )
                 row = cursor.fetchone()
-                
+
                 cursor.execute("SELECT MAX(updated_at) FROM _aion_schema_registry")
                 last_upd = cursor.fetchone()[0]
-                
-                stats.append(UserDBStats(
-                    user_id=user_id,
-                    schema_count=row['sc'] or 0,
-                    table_count=row['tc'] or 0,
-                    row_count=row['rc'] or 0,
-                    size_bytes=os.path.getsize(db_path),
-                    last_modified=last_upd
-                ))
+
+                stats.append(
+                    UserDBStats(
+                        user_id=user_id,
+                        schema_count=row["sc"] or 0,
+                        table_count=row["tc"] or 0,
+                        row_count=row["rc"] or 0,
+                        size_bytes=os.path.getsize(db_path),
+                        last_modified=last_upd,
+                    )
+                )
                 conn.close()
             except Exception as e:
                 # Log error and skip this DB
                 print(f"Error reading DB {db_path}: {e}")
                 continue
-                
+
     return stats
 
 
@@ -251,6 +282,7 @@ async def get_agent_db_identity_debug(
         "db_size_bytes": os.path.getsize(db_path) if os.path.exists(db_path) else 0,
     }
 
+
 @router.get("/{user_id}/detail")
 async def get_agent_db_detail(
     user_id: str,
@@ -263,28 +295,29 @@ async def get_agent_db_detail(
         conn = manager.get_connection(tenant_id, user_id, readonly=True)
         registry = SchemaRegistry(conn)
         schemas = registry.list_schemas()
-        
+
         # Add column info for each table
         for schema in schemas:
-            for table in schema['tables']:
-                table_detail = registry.describe_table(schema['schema_name'], table['table_name'])
+            for table in schema["tables"]:
+                table_detail = registry.describe_table(
+                    schema["schema_name"], table["table_name"]
+                )
                 if table_detail:
-                    table['columns'] = table_detail['columns']
-                    table['physical_name'] = table_detail['physical_name']
-        
+                    table["columns"] = table_detail["columns"]
+                    table["physical_name"] = table_detail["physical_name"]
+
         # Get history
         cursor = conn.cursor()
-        cursor.execute("SELECT * FROM _aion_schema_history ORDER BY performed_at DESC LIMIT 50")
+        cursor.execute(
+            "SELECT * FROM _aion_schema_history ORDER BY performed_at DESC LIMIT 50"
+        )
         history = [dict(r) for r in cursor.fetchall()]
-        
+
         conn.close()
-        return {
-            "user_id": user_id,
-            "schemas": schemas,
-            "history": history
-        }
+        return {"user_id": user_id, "schemas": schemas, "history": history}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/{user_id}/{schema_name}/{table_name}/preview")
 async def get_table_preview(
@@ -300,23 +333,22 @@ async def get_table_preview(
         _enforce_admin_identity(user_id, x_aion_user_id, x_aion_embed_token)
         conn = manager.get_connection(tenant_id, user_id, readonly=True)
         _, detail = _resolve_table(conn, schema_name, table_name)
-            
-        physical_name = detail['physical_name']
+
+        physical_name = detail["physical_name"]
         cursor = conn.cursor()
         # Only select user columns
-        user_cols = [c['column_name'] for c in detail['columns']]
+        user_cols = [c["column_name"] for c in detail["columns"]]
         if include_system:
             user_cols = ["_id"] + user_cols
-        col_list = ", ".join([f"\"{c}\"" for c in user_cols])
-        
-        cursor.execute(f"SELECT {col_list} FROM \"{physical_name}\" WHERE _archived_at IS NULL LIMIT 10")
+        col_list = ", ".join([f'"{c}"' for c in user_cols])
+
+        cursor.execute(
+            f'SELECT {col_list} FROM "{physical_name}" WHERE _archived_at IS NULL LIMIT 10'
+        )
         rows = [dict(r) for r in cursor.fetchall()]
-        
+
         conn.close()
-        return {
-            "columns": user_cols,
-            "rows": rows
-        }
+        return {"columns": user_cols, "rows": rows}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -348,12 +380,12 @@ async def list_table_rows(
         where = "_archived_at IS NULL"
         params: List[Any] = []
         if q:
-            search_parts = [f"CAST(\"{c}\" AS TEXT) LIKE ?" for c in columns]
+            search_parts = [f'CAST("{c}" AS TEXT) LIKE ?' for c in columns]
             where += f" AND ({' OR '.join(search_parts)})"
             params.extend([f"%{q}%"] * len(columns))
 
         cursor = conn.cursor()
-        cursor.execute(f"SELECT COUNT(*) FROM \"{physical_name}\" WHERE {where}", params)
+        cursor.execute(f'SELECT COUNT(*) FROM "{physical_name}" WHERE {where}', params)
         total = int(cursor.fetchone()[0])
 
         order_col = "_id"
@@ -361,9 +393,9 @@ async def list_table_rows(
             order_col = sort_by
         direction = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
         sql = (
-            f"SELECT _id, {', '.join([f'\"{c}\"' for c in columns])} "
-            f"FROM \"{physical_name}\" WHERE {where} "
-            f"ORDER BY \"{order_col}\" {direction} LIMIT ? OFFSET ?"
+            f"SELECT _id, {', '.join([f'"{c}"' for c in columns])} "
+            f'FROM "{physical_name}" WHERE {where} '
+            f'ORDER BY "{order_col}" {direction} LIMIT ? OFFSET ?'
         )
         cursor.execute(sql, params + [safe_size, offset])
         rows = [dict(r) for r in cursor.fetchall()]
@@ -409,8 +441,15 @@ async def create_table(
             cname = validate_name(c.get("name"), "Column name")
             ctype = str(c.get("type") or "TEXT").upper()
             nullable = bool(c.get("nullable", True))
-            col_defs.append(f"\"{cname}\" {ctype} {'NULL' if nullable else 'NOT NULL'}")
-            reg_cols.append({"name": cname, "type": ctype, "nullable": nullable, "description": c.get("description")})
+            col_defs.append(f'"{cname}" {ctype} {"NULL" if nullable else "NOT NULL"}')
+            reg_cols.append(
+                {
+                    "name": cname,
+                    "type": ctype,
+                    "nullable": nullable,
+                    "description": c.get("description"),
+                }
+            )
         col_defs.extend(
             [
                 "_id INTEGER PRIMARY KEY AUTOINCREMENT",
@@ -421,14 +460,21 @@ async def create_table(
                 "_archived_at TEXT",
             ]
         )
-        conn.execute(f"CREATE TABLE \"{physical_name}\" ({', '.join(col_defs)})")
+        conn.execute(f'CREATE TABLE "{physical_name}" ({", ".join(col_defs)})')
         conn.execute(
-            f"CREATE TRIGGER \"{physical_name}_updated_at\" AFTER UPDATE ON \"{physical_name}\" "
+            f'CREATE TRIGGER "{physical_name}_updated_at" AFTER UPDATE ON "{physical_name}" '
             f"BEGIN UPDATE \"{physical_name}\" SET _updated_at = datetime('now') WHERE _id = NEW._id; END;"
         )
-        registry.register_table(schema_name, table_name, physical_name, payload.description or "")
+        registry.register_table(
+            schema_name, table_name, physical_name, payload.description or ""
+        )
         registry.register_columns(schema_name, table_name, reg_cols)
-        registry.log_history("ADMIN_CREATE_TABLE", schema_name, table_name, json.dumps({"columns": reg_cols}))
+        registry.log_history(
+            "ADMIN_CREATE_TABLE",
+            schema_name,
+            table_name,
+            json.dumps({"columns": reg_cols}),
+        )
         conn.commit()
         conn.close()
         return {"ok": True, "schema_name": schema_name, "table_name": table_name}
@@ -452,10 +498,17 @@ async def rename_table(
         conn = manager.get_connection(payload.tenant_id, user_id)
         registry, detail = _resolve_table(conn, schema_name, table_name)
         new_table_name = validate_name(payload.new_table_name, "New table name")
-        new_physical = manager.get_physical_table_name(validate_name(schema_name, "Schema name"), new_table_name)
+        new_physical = manager.get_physical_table_name(
+            validate_name(schema_name, "Schema name"), new_table_name
+        )
         old_physical = detail["physical_name"]
-        conn.execute(f"ALTER TABLE \"{old_physical}\" RENAME TO \"{new_physical}\"")
-        registry.register_table(schema_name, new_table_name, new_physical, payload.description or detail.get("description") or "")
+        conn.execute(f'ALTER TABLE "{old_physical}" RENAME TO "{new_physical}"')
+        registry.register_table(
+            schema_name,
+            new_table_name,
+            new_physical,
+            payload.description or detail.get("description") or "",
+        )
         conn.execute(
             "UPDATE _aion_schema_columns SET table_name = ? WHERE schema_name = ? AND table_name = ?",
             (new_table_name, schema_name, table_name),
@@ -464,7 +517,12 @@ async def rename_table(
             "UPDATE _aion_schema_registry SET archived_at = datetime('now') WHERE schema_name = ? AND table_name = ? AND physical_name = ?",
             (schema_name, table_name, old_physical),
         )
-        registry.log_history("ADMIN_RENAME_TABLE", schema_name, table_name, json.dumps({"to": new_table_name}))
+        registry.log_history(
+            "ADMIN_RENAME_TABLE",
+            schema_name,
+            table_name,
+            json.dumps({"to": new_table_name}),
+        )
         conn.commit()
         conn.close()
         return {"ok": True, "new_table_name": new_table_name}
@@ -490,11 +548,33 @@ async def add_column(
         col = payload.column or {}
         cname = validate_name(col.get("name"), "Column name")
         ctype = str(col.get("type") or "TEXT").upper()
-        conn.execute(f"ALTER TABLE \"{detail['physical_name']}\" ADD COLUMN \"{cname}\" {ctype}")
-        cols = detail["columns"] + [{"column_name": cname, "column_type": ctype, "nullable": True, "description": col.get("description")}]
-        reg_cols = [{"name": c["column_name"], "type": c["column_type"], "nullable": bool(c.get("nullable", True)), "description": c.get("description")} for c in cols]
+        conn.execute(
+            f'ALTER TABLE "{detail["physical_name"]}" ADD COLUMN "{cname}" {ctype}'
+        )
+        cols = detail["columns"] + [
+            {
+                "column_name": cname,
+                "column_type": ctype,
+                "nullable": True,
+                "description": col.get("description"),
+            }
+        ]
+        reg_cols = [
+            {
+                "name": c["column_name"],
+                "type": c["column_type"],
+                "nullable": bool(c.get("nullable", True)),
+                "description": c.get("description"),
+            }
+            for c in cols
+        ]
         registry.register_columns(schema_name, table_name, reg_cols)
-        registry.log_history("ADMIN_ADD_COLUMN", schema_name, table_name, json.dumps({"column": cname, "type": ctype}))
+        registry.log_history(
+            "ADMIN_ADD_COLUMN",
+            schema_name,
+            table_name,
+            json.dumps({"column": cname, "type": ctype}),
+        )
         conn.commit()
         conn.close()
         return {"ok": True, "column": cname}
@@ -518,7 +598,7 @@ async def drop_table(
         conn = manager.get_connection(tenant_id, user_id)
         registry, detail = _resolve_table(conn, schema_name, table_name)
         physical = detail["physical_name"]
-        conn.execute(f"DROP TABLE IF EXISTS \"{physical}\"")
+        conn.execute(f'DROP TABLE IF EXISTS "{physical}"')
         conn.execute(
             "UPDATE _aion_schema_registry SET archived_at = datetime('now') WHERE schema_name = ? AND table_name = ?",
             (schema_name, table_name),
@@ -527,7 +607,12 @@ async def drop_table(
             "DELETE FROM _aion_schema_columns WHERE schema_name = ? AND table_name = ?",
             (schema_name, table_name),
         )
-        registry.log_history("ADMIN_DROP_TABLE", schema_name, table_name, json.dumps({"physical": physical}))
+        registry.log_history(
+            "ADMIN_DROP_TABLE",
+            schema_name,
+            table_name,
+            json.dumps({"physical": physical}),
+        )
         conn.commit()
         conn.close()
         return {"ok": True}
@@ -551,10 +636,16 @@ async def execute_sql(
             raise HTTPException(status_code=400, detail="query is required")
         write_mode = bool(payload.allow_write and _ALLOW_ADMIN_SQL_WRITE)
         if not write_mode and not is_readonly_query(query):
-            raise HTTPException(status_code=400, detail="Only SELECT/WITH allowed in read-only mode")
+            raise HTTPException(
+                status_code=400, detail="Only SELECT/WITH allowed in read-only mode"
+            )
         if write_mode and ";" in query.strip().rstrip(";"):
-            raise HTTPException(status_code=400, detail="Only single-statement SQL is allowed")
-        conn = manager.get_connection(payload.tenant_id, user_id, readonly=not write_mode)
+            raise HTTPException(
+                status_code=400, detail="Only single-statement SQL is allowed"
+            )
+        conn = manager.get_connection(
+            payload.tenant_id, user_id, readonly=not write_mode
+        )
         cur = conn.cursor()
         cur.execute(query)
         if query.upper().startswith(("SELECT", "WITH")):
@@ -565,7 +656,13 @@ async def execute_sql(
         changed = cur.rowcount
         conn.execute(
             "INSERT INTO _aion_schema_history (schema_name, table_name, operation, payload, rows_affected) VALUES (?, ?, ?, ?, ?)",
-            ("_sql", "_sql", "ADMIN_SQL_WRITE", json.dumps({"query": query[:500]}), int(changed or 0)),
+            (
+                "_sql",
+                "_sql",
+                "ADMIN_SQL_WRITE",
+                json.dumps({"query": query[:500]}),
+                int(changed or 0),
+            ),
         )
         conn.commit()
         conn.close()
@@ -593,7 +690,7 @@ async def export_table(
         cols = [c["column_name"] for c in detail["columns"]]
         cur = conn.cursor()
         cur.execute(
-            f"SELECT {', '.join([f'\"{c}\"' for c in cols])} FROM \"{detail['physical_name']}\" WHERE _archived_at IS NULL"
+            f'SELECT {", ".join([f'"{c}"' for c in cols])} FROM "{detail["physical_name"]}" WHERE _archived_at IS NULL'
         )
         rows = [dict(r) for r in cur.fetchall()]
         conn.close()
@@ -629,9 +726,13 @@ async def import_table(
         else:
             parsed = json.loads(payload.content)
             if not isinstance(parsed, list):
-                raise HTTPException(status_code=400, detail="json content must be array of rows")
+                raise HTTPException(
+                    status_code=400, detail="json content must be array of rows"
+                )
         if payload.mode == "replace":
-            conn.execute(f"UPDATE \"{detail['physical_name']}\" SET _archived_at = datetime('now'), _source = 'admin:replace'")
+            conn.execute(
+                f"UPDATE \"{detail['physical_name']}\" SET _archived_at = datetime('now'), _source = 'admin:replace'"
+            )
         inserted = 0
         for row in parsed:
             clean = {k: row.get(k) for k in cols if k in row}
@@ -640,11 +741,16 @@ async def import_table(
             names = list(clean.keys())
             vals = [clean[k] for k in names]
             conn.execute(
-                f"INSERT INTO \"{detail['physical_name']}\" ({', '.join([f'\"{c}\"' for c in names])}, _source) VALUES ({', '.join(['?']*len(names))}, ?)",
+                f'INSERT INTO "{detail["physical_name"]}" ({", ".join([f'"{c}"' for c in names])}, _source) VALUES ({", ".join(["?"] * len(names))}, ?)',
                 vals + ["admin:import"],
             )
             inserted += 1
-        registry.log_history("ADMIN_IMPORT", schema_name, table_name, json.dumps({"rows": inserted, "mode": payload.mode}))
+        registry.log_history(
+            "ADMIN_IMPORT",
+            schema_name,
+            table_name,
+            json.dumps({"rows": inserted, "mode": payload.mode}),
+        )
         conn.commit()
         conn.close()
         return {"ok": True, "inserted": inserted}
@@ -655,7 +761,9 @@ async def import_table(
 
 
 @router.post("/{user_id}/{schema_name}/{table_name}/rows")
-async def insert_table_row(user_id: str, schema_name: str, table_name: str, payload: RowPayload):
+async def insert_table_row(
+    user_id: str, schema_name: str, table_name: str, payload: RowPayload
+):
     try:
         conn = manager.get_connection(payload.tenant_id, user_id)
         registry, detail = _resolve_table(conn, schema_name, table_name)
@@ -666,15 +774,17 @@ async def insert_table_row(user_id: str, schema_name: str, table_name: str, payl
             raise HTTPException(status_code=400, detail="Row payload is empty")
         unknown = [k for k in row.keys() if k not in allowed_cols]
         if unknown:
-            raise HTTPException(status_code=400, detail=f"Unknown columns: {', '.join(unknown)}")
+            raise HTTPException(
+                status_code=400, detail=f"Unknown columns: {', '.join(unknown)}"
+            )
 
         cols = list(row.keys())
         placeholders = ", ".join(["?"] * len(cols))
-        col_sql = ", ".join([f"\"{c}\"" for c in cols])
+        col_sql = ", ".join([f'"{c}"' for c in cols])
         values = [row[c] for c in cols]
         cursor = conn.cursor()
         cursor.execute(
-            f"INSERT INTO \"{physical_name}\" ({col_sql}, _source) VALUES ({placeholders}, ?)",
+            f'INSERT INTO "{physical_name}" ({col_sql}, _source) VALUES ({placeholders}, ?)',
             values + ["admin:manual"],
         )
         conn.commit()
@@ -705,13 +815,15 @@ async def update_table_row(
             raise HTTPException(status_code=400, detail="Row payload is empty")
         unknown = [k for k in row.keys() if k not in allowed_cols]
         if unknown:
-            raise HTTPException(status_code=400, detail=f"Unknown columns: {', '.join(unknown)}")
+            raise HTTPException(
+                status_code=400, detail=f"Unknown columns: {', '.join(unknown)}"
+            )
 
-        assignments = ", ".join([f"\"{k}\" = ?" for k in row.keys()])
+        assignments = ", ".join([f'"{k}" = ?' for k in row.keys()])
         values = list(row.values()) + [row_id]
         cursor = conn.cursor()
         cursor.execute(
-            f"UPDATE \"{physical_name}\" SET {assignments}, _source = ? WHERE _id = ? AND _archived_at IS NULL",
+            f'UPDATE "{physical_name}" SET {assignments}, _source = ? WHERE _id = ? AND _archived_at IS NULL',
             list(row.values()) + ["admin:update", row_id],
         )
         conn.commit()
@@ -725,7 +837,13 @@ async def update_table_row(
 
 
 @router.delete("/{user_id}/{schema_name}/{table_name}/rows/{row_id}")
-async def delete_table_row(user_id: str, schema_name: str, table_name: str, row_id: int, tenant_id: str = "default"):
+async def delete_table_row(
+    user_id: str,
+    schema_name: str,
+    table_name: str,
+    row_id: int,
+    tenant_id: str = "default",
+):
     try:
         conn = manager.get_connection(tenant_id, user_id)
         _, detail = _resolve_table(conn, schema_name, table_name)
@@ -744,40 +862,45 @@ async def delete_table_row(user_id: str, schema_name: str, table_name: str, row_
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 @router.get("/{user_id}/integrity")
 async def get_db_integrity(user_id: str, tenant_id: str = "default"):
     try:
         conn = manager.get_connection(tenant_id, user_id, readonly=True)
         cursor = conn.cursor()
-        
+
         cursor.execute("PRAGMA integrity_check")
         integrity = cursor.fetchone()[0]
-        
+
         cursor.execute("PRAGMA foreign_key_check")
         fk_errors = [dict(r) for r in cursor.fetchall()]
-        
+
         # Schema vs Registry check
         registry = SchemaRegistry(conn)
         schemas = registry.list_schemas()
         registry_tables = []
         for s in schemas:
-            for t in s['tables']:
-                registry_tables.append(t['physical_name'])
-        
-        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '_aion_%' AND name NOT LIKE 'sqlite_%'")
+            for t in s["tables"]:
+                registry_tables.append(t["physical_name"])
+
+        cursor.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE '_aion_%' AND name NOT LIKE 'sqlite_%'"
+        )
         actual_tables = [r[0] for r in cursor.fetchall()]
-        
+
         orphans = [t for t in actual_tables if t not in registry_tables]
         missing = [t for t in registry_tables if t not in actual_tables]
-        
+
         conn.close()
         return {
             "integrity_check": integrity,
             "foreign_key_errors": fk_errors,
             "orphan_tables": orphans,
             "missing_tables": missing,
-            "is_healthy": integrity == "ok" and not fk_errors and not orphans and not missing
+            "is_healthy": integrity == "ok"
+            and not fk_errors
+            and not orphans
+            and not missing,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-

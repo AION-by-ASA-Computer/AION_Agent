@@ -1,4 +1,5 @@
 """Resolve LLM endpoint and model from environment (no hardcoded private IPs)."""
+
 from __future__ import annotations
 
 import logging

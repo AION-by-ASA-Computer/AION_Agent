@@ -1,4 +1,5 @@
 """Profile loader skips junk duplicate files."""
+
 import textwrap
 from pathlib import Path
 

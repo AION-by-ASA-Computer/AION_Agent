@@ -1,4 +1,5 @@
 """SQL QueryMemory auto-learn env gate."""
+
 from __future__ import annotations
 
 import os

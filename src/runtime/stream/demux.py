@@ -11,6 +11,7 @@ Usage
     # Inside the stream loop:
     demux.feed(chunk)  # classifies and dispatches; returns chunk unchanged
 """
+
 from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -37,7 +38,9 @@ _ARTIFACT_TYPES = frozenset(
 )
 _TOOL_TYPES = frozenset({"tool_event"})
 _TOKEN_TYPES = frozenset({"token", "reasoning"})
-_CONTROL_TYPES = frozenset({"keepalive", "done", "error", "stream_end", "context_length_error"})
+_CONTROL_TYPES = frozenset(
+    {"keepalive", "done", "error", "stream_end", "context_length_error"}
+)
 
 
 class StreamDemux:

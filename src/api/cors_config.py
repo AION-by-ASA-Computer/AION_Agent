@@ -1,4 +1,5 @@
 """CORS middleware settings from environment."""
+
 from __future__ import annotations
 
 import logging
@@ -39,7 +40,11 @@ def _default_restricted_origins() -> List[str]:
             origin = raw.replace("/api", "").rstrip("/")
             if origin not in origins:
                 origins.append(origin)
-    admin = (os.getenv("AION_ADMIN_UI_URL") or os.getenv("NEXT_PUBLIC_AION_ADMIN_UI_URL") or "").strip()
+    admin = (
+        os.getenv("AION_ADMIN_UI_URL")
+        or os.getenv("NEXT_PUBLIC_AION_ADMIN_UI_URL")
+        or ""
+    ).strip()
     if admin.startswith("http") and admin.rstrip("/") not in origins:
         origins.append(admin.rstrip("/"))
     return origins
@@ -64,7 +69,9 @@ def resolve_cors_settings() -> CorsSettings:
                 "AION_CORS_ORIGINS=* in production without AION_CORS_ALLOW_WILDCARD=1; "
                 "using restricted default origins"
             )
-            return CorsSettings(allow_origins=_default_restricted_origins(), allow_origin_regex=None)
+            return CorsSettings(
+                allow_origins=_default_restricted_origins(), allow_origin_regex=None
+            )
         if allow_wildcard_flag or env == "dev":
             logger.warning(
                 "CORS wildcard active (allow_origin_regex=.*). "
@@ -72,4 +79,6 @@ def resolve_cors_settings() -> CorsSettings:
             )
             return CorsSettings(allow_origins=[], allow_origin_regex=".*")
 
-    return CorsSettings(allow_origins=_default_restricted_origins(), allow_origin_regex=None)
+    return CorsSettings(
+        allow_origins=_default_restricted_origins(), allow_origin_regex=None
+    )

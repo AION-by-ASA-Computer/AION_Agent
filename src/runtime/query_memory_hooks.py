@@ -1,4 +1,5 @@
 """Pipeline hooks: SQL QueryMemory pre-turn inject and post-tool auto-learn."""
+
 from __future__ import annotations
 
 import json
@@ -110,7 +111,11 @@ async def _run_pre_turn_sql_query_memory(ctx: HookContext) -> None:
     user_input = (ctx.payload.get("user_input") or "").strip()
     if not user_input:
         return
-    project = (ctx.payload.get("sql_query_project") or os.getenv("AION_SQL_QM_DEFAULT_PROJECT") or "default").strip()
+    project = (
+        ctx.payload.get("sql_query_project")
+        or os.getenv("AION_SQL_QM_DEFAULT_PROJECT")
+        or "default"
+    ).strip()
     try:
         good = await _search_inject_candidates(
             user_input=user_input,
@@ -148,7 +153,7 @@ async def _run_pre_turn_sql_query_memory(ctx: HookContext) -> None:
         if len(sql_body) > max_sql_chars:
             sql_body = sql_body[: max_sql_chars - 3] + "..."
         lines.append(f"### Cached query id={h.id} score={h.score:.2f}")
-        lines.append(f"Original request: \"{h.user_request}\"")
+        lines.append(f'Original request: "{h.user_request}"')
         lines.append(f"```sql\n{sql_body}\n```")
     block = "\n".join(lines)
     merged = dict(ctx.modified_payload or ctx.payload)
@@ -248,15 +253,26 @@ async def _post_tool_sql_auto_learn(ctx: HookContext) -> None:
     sql = _extract_sql_from_tool_input(ctx.payload.get("tool_input"))
     if not sql or not re.search(r"\bSELECT\b", sql, re.I):
         return
-    user_request = (ctx.payload.get("user_input") or ctx.payload.get("last_user_message") or "").strip()
+    user_request = (
+        ctx.payload.get("user_input") or ctx.payload.get("last_user_message") or ""
+    ).strip()
     if not user_request:
         user_request = "Query SQL automatica"
-    project = (ctx.payload.get("sql_query_project") or os.getenv("AION_SQL_QM_DEFAULT_PROJECT") or "default").strip()
-    sql_to_store = normalize_sql(sql) if os.getenv("AION_SQL_QM_PARAMETERIZE", "1").lower() not in (
-        "0",
-        "false",
-        "no",
-    ) else sql
+    project = (
+        ctx.payload.get("sql_query_project")
+        or os.getenv("AION_SQL_QM_DEFAULT_PROJECT")
+        or "default"
+    ).strip()
+    sql_to_store = (
+        normalize_sql(sql)
+        if os.getenv("AION_SQL_QM_PARAMETERIZE", "1").lower()
+        not in (
+            "0",
+            "false",
+            "no",
+        )
+        else sql
+    )
     try:
         await sql_query_memory.save(
             request_text=user_request,

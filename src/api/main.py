@@ -159,21 +159,35 @@ async def _bootstrap_default_admin_user() -> None:
 def _cleanup_orphaned_mcp_remotes() -> None:
     """Termina i processi mcp-remote orfani rimasti attivi in background da precedenti esecuzioni."""
     import subprocess
+
     try:
         logger.info("🧹 Rimozione processi mcp-remote orfani...")
-        subprocess.run(["pkill", "-f", "mcp-remote"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            ["pkill", "-f", "mcp-remote"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     except Exception as e:
-        logger.warning("Errore durante la pulizia dei processi mcp-remote orfani: %s", e)
+        logger.warning(
+            "Errore durante la pulizia dei processi mcp-remote orfani: %s", e
+        )
 
 
 def _cleanup_orphaned_mcp_remotes() -> None:
     """Termina i processi mcp-remote orfani rimasti attivi in background da precedenti esecuzioni."""
     import subprocess
+
     try:
         logger.info("🧹 Rimozione processi mcp-remote orfani...")
-        subprocess.run(["pkill", "-f", "mcp-remote"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(
+            ["pkill", "-f", "mcp-remote"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
     except Exception as e:
-        logger.warning("Errore durante la pulizia dei processi mcp-remote orfani: %s", e)
+        logger.warning(
+            "Errore durante la pulizia dei processi mcp-remote orfani: %s", e
+        )
 
 
 @asynccontextmanager
@@ -182,7 +196,7 @@ async def _lifespan(app: FastAPI):
     try:
         from src.observability.logging import setup_logging
         from src.observability.hooks_emitter import register_observability_hooks
-        
+
         setup_logging()
         register_observability_hooks()
         logger.info("Logging and hooks recovered successfully at lifespan startup!")
@@ -197,8 +211,8 @@ async def _lifespan(app: FastAPI):
         logger.error("Settings validation error: %s", _cfg_err)
 
     try:
-        
         from src.runtime.redis_client import redis_ping_startup
+
         await redis_ping_startup()
         logger.info("Redis check done.")
     except Exception as e:
@@ -209,29 +223,35 @@ async def _lifespan(app: FastAPI):
             from src.data.engine import init_engine
             from src.data.bootstrap import ensure_bootstrap_schema
             from src.data.migrations import run_migrations
-            
+
             eng = init_engine()
             logger.info("DB Engine initialized.")
-            
+
             # Bootstrap iniziale (tabelle core + FTS5 + trigger + tenant default)
             await ensure_bootstrap_schema(eng)
             logger.info("DB Bootstrap (schema/FTS5/triggers) done.")
-            
+
             run_migrations()
             logger.info("DB Migrations done.")
             try:
                 from src.observability.logging import setup_logging
 
                 setup_logging()
-                logger.info("Logging configuration re-established after Alembic migrations.")
+                logger.info(
+                    "Logging configuration re-established after Alembic migrations."
+                )
             except Exception as log_err:
-                logger.warning("DB migrations done, but failed to restore logging: %s", log_err)
+                logger.warning(
+                    "DB migrations done, but failed to restore logging: %s", log_err
+                )
             try:
                 from src.runtime.timeline_backfill import backfill_message_timelines
 
                 n_tl = await backfill_message_timelines()
                 if n_tl:
-                    logger.info("Timeline backfill: updated %d assistant message(s)", n_tl)
+                    logger.info(
+                        "Timeline backfill: updated %d assistant message(s)", n_tl
+                    )
             except Exception as tl_exc:  # noqa: BLE001
                 logger.warning("Timeline backfill skipped: %s", tl_exc)
             await asyncio.sleep(0.1)
@@ -270,6 +290,7 @@ async def _lifespan(app: FastAPI):
 
     try:
         from src.runtime.plugin_loader import load_plugins
+
         loaded = load_plugins()
         logger.info("Loaded plugins: %s", loaded)
     except Exception as e:
@@ -278,6 +299,7 @@ async def _lifespan(app: FastAPI):
     try:
         from src.runtime.hooks import hook_registry
         from src.security.pii_redactor import pii_pre_llm_hook
+
         hook_registry.register("pre_llm_call", pii_pre_llm_hook, priority=10)
         logger.info("PII hook registered.")
     except Exception as e:
@@ -314,7 +336,11 @@ async def _lifespan(app: FastAPI):
         logger.warning("observability hooks: %s", e)
 
     try:
-        from src.runtime.cron_scheduler import cron_enabled, reload_all_jobs, start_scheduler
+        from src.runtime.cron_scheduler import (
+            cron_enabled,
+            reload_all_jobs,
+            start_scheduler,
+        )
 
         if cron_enabled():
             start_scheduler()
@@ -325,6 +351,7 @@ async def _lifespan(app: FastAPI):
 
     try:
         from src.mcp_integration_sync import sync_all_mcp_server_configs_from_registry
+
         result = await sync_all_mcp_server_configs_from_registry()
         logger.info(
             "MCP integration config sync on startup: created=%s updated=%s skipped=%s",
@@ -337,6 +364,7 @@ async def _lifespan(app: FastAPI):
 
     try:
         from src.mcp_integration_sync import sync_all_mcp_server_configs_from_registry
+
         result = await sync_all_mcp_server_configs_from_registry()
         logger.info(
             "MCP integration config sync on startup: created=%s updated=%s skipped=%s",
@@ -360,14 +388,19 @@ async def _lifespan(app: FastAPI):
         logger.warning("cron scheduler shutdown: %s", e)
 
 
-
 # ── Root path per reverse proxy (es. /api quando Caddy strippa il prefisso) ──
 _ROOT_PATH = os.getenv("AION_ROOT_PATH", "").rstrip("/")
 # ── Docs interattivi API: disabilitati in produzione per sicurezza ──
-_API_DOCS = (os.getenv("AION_API_DOCS_ENABLED") or "1").strip().lower() in ("1", "true", "yes")
+_API_DOCS = (os.getenv("AION_API_DOCS_ENABLED") or "1").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 if _ROOT_PATH:
-    logger.info("FastAPI root_path set to %r — docs will be at %s/docs", _ROOT_PATH, _ROOT_PATH)
+    logger.info(
+        "FastAPI root_path set to %r — docs will be at %s/docs", _ROOT_PATH, _ROOT_PATH
+    )
 if not _API_DOCS:
     logger.info("API interactive docs disabled (AION_API_DOCS_ENABLED=0)")
 
@@ -383,6 +416,7 @@ app = FastAPI(
 
 try:
     from src.observability.otel_setup import init_observability
+
     init_observability(app)
     logger.info("OTel middlewares initialized successfully at module import time!")
 except Exception as e:
@@ -405,7 +439,11 @@ app.add_middleware(
 
 # Admin Dashboard Static Files
 os.makedirs("static/admin", exist_ok=True)
-app.mount("/admin/dashboard", StaticFiles(directory="static/admin", html=True), name="admin_dashboard")
+app.mount(
+    "/admin/dashboard",
+    StaticFiles(directory="static/admin", html=True),
+    name="admin_dashboard",
+)
 
 # Include Routers
 app.include_router(admin_router)
@@ -429,8 +467,6 @@ from .agent_db_internal import router as agent_db_internal_router
 app.include_router(agent_db_router, prefix="/admin/agent-db")
 app.include_router(agent_db_internal_router)
 logger.info("Agent DB router included directly in main at /admin/agent-db")
-
-
 
 
 @app.middleware("http")
@@ -469,6 +505,7 @@ async def debug_prompt(
     _auth: ChatAuthIdentity = Depends(require_chat_auth),
 ):
     from src.agent_profile import profile_manager
+
     profile = profile_manager.get_profile(profile_name)
     if not profile:
         return {"error": "Profile not found"}
@@ -537,6 +574,7 @@ class ChatRequest(BaseModel):
 # --- Globals ---
 _GLOBAL_LOOP = None
 
+
 @app.post("/chat")
 async def chat(
     request: ChatRequest,
@@ -584,7 +622,7 @@ async def chat(
             from datetime import datetime, timezone
             from src.data.engine import get_async_session_maker
             from src.data.models import Conversation
-            
+
             async with get_async_session_maker()() as session:
                 r = await session.get(Conversation, request.session_id)
                 if not r:
@@ -600,8 +638,10 @@ async def chat(
                         meta["deep_research_mode"] = request.deep_research_mode
                     if request.sql_query_project is not None:
                         meta["sql_query_project"] = request.sql_query_project
-                    
-                    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
+
+                    tenant = (
+                        os.getenv("AION_DEFAULT_TENANT_ID") or "default"
+                    ).strip() or "default"
                     r = Conversation(
                         id=request.session_id,
                         tenant_id=tenant,
@@ -609,7 +649,7 @@ async def chat(
                         profile_slug=request.profile,
                         title=None,
                         message_count=0,
-                        metadata_json=json.dumps(meta)
+                        metadata_json=json.dumps(meta),
                     )
                     session.add(r)
                     await session.commit()
@@ -619,19 +659,31 @@ async def chat(
                     if r.profile_slug != request.profile:
                         r.profile_slug = request.profile
                         updated = True
-                    if request.thinking_enabled is not None and meta.get("thinking_enabled") != request.thinking_enabled:
+                    if (
+                        request.thinking_enabled is not None
+                        and meta.get("thinking_enabled") != request.thinking_enabled
+                    ):
                         meta["thinking_enabled"] = request.thinking_enabled
                         updated = True
-                    if request.reasoning_effort is not None and meta.get("reasoning_effort") != request.reasoning_effort:
+                    if (
+                        request.reasoning_effort is not None
+                        and meta.get("reasoning_effort") != request.reasoning_effort
+                    ):
                         meta["reasoning_effort"] = request.reasoning_effort
                         updated = True
                     if meta.get("agent_mode") != resolved_agent_mode:
                         meta["agent_mode"] = resolved_agent_mode
                         updated = True
-                    if request.plan_mode is not None and meta.get("plan_mode") != request.plan_mode:
+                    if (
+                        request.plan_mode is not None
+                        and meta.get("plan_mode") != request.plan_mode
+                    ):
                         meta["plan_mode"] = request.plan_mode
                         updated = True
-                    if request.sql_query_project is not None and meta.get("sql_query_project") != request.sql_query_project:
+                    if (
+                        request.sql_query_project is not None
+                        and meta.get("sql_query_project") != request.sql_query_project
+                    ):
                         meta["sql_query_project"] = request.sql_query_project
                         updated = True
                     if updated:
@@ -639,7 +691,9 @@ async def chat(
                         r.updated_at = datetime.now(timezone.utc)
                         session.add(r)
                         await session.commit()
-                    conversation_project = (meta.get("sql_query_project") or "").strip() or None
+                    conversation_project = (
+                        meta.get("sql_query_project") or ""
+                    ).strip() or None
         except Exception as e:
             logger.error("Error ensuring/updating conversation metadata in chat: %s", e)
 
@@ -664,7 +718,9 @@ async def chat(
         from src.runtime.query_memory_hooks import profile_has_memory_capability_by_slug
         from src.runtime.sql_query_project_scope import verify_user_project_access
 
-        if sql_project_resolved and profile_has_memory_capability_by_slug(request.profile):
+        if sql_project_resolved and profile_has_memory_capability_by_slug(
+            request.profile
+        ):
             _project_access_err = await verify_user_project_access(
                 project_slug=sql_project_resolved,
                 tenant_id=_tenant_qm,
@@ -689,7 +745,11 @@ async def chat(
             yield {"event": "error", "data": json.dumps({"error": _project_access_err})}
             return
         try:
-            logger.info(">>> API: Getting agent instance for profile %s with mode %s...", request.profile, resolved_agent_mode)
+            logger.info(
+                ">>> API: Getting agent instance for profile %s with mode %s...",
+                request.profile,
+                resolved_agent_mode,
+            )
             agent_instance, profile_name = await get_agent(
                 request.profile,
                 session_id=request.session_id,
@@ -723,10 +783,7 @@ async def chat(
                 ),
                 sql_query_project=sql_project_resolved,
             ):
-                yield {
-                    "event": "message",
-                    "data": json.dumps(chunk)
-                }
+                yield {"event": "message", "data": json.dumps(chunk)}
         except Exception as e:
             from src.agent_profile import ProfileNotFoundError
 

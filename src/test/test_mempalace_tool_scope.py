@@ -1,4 +1,5 @@
 """Tests for MemPalace wing scoping from SQL QueryMemory turn context."""
+
 from __future__ import annotations
 
 from src.memory.project_memory_scope import project_wing

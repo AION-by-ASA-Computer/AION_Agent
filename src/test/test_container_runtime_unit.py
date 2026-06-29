@@ -1,4 +1,5 @@
 """Unit tests for container sandbox policy and runtime helpers."""
+
 from __future__ import annotations
 
 import os
@@ -64,7 +65,9 @@ class TestContainerPolicy(unittest.TestCase):
             )
         self.assertTrue(
             any("network=" in arg and "none" not in arg for arg in argv)
-            or any(arg.startswith("--network=") and arg != "--network=none" for arg in argv)
+            or any(
+                arg.startswith("--network=") and arg != "--network=none" for arg in argv
+            )
         )
 
     def test_run_user_when_host_data_dir_set(self):

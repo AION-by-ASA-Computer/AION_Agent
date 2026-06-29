@@ -184,11 +184,13 @@ def _schema_from_keys(keys: List[str]) -> List[Dict[str, Any]]:
     return schema
 
 
-def classify_from_headers(headers: List[Dict[str, Any]], remote: Dict[str, Any], meta: Dict[str, Any]) -> Dict[str, Any]:
+def classify_from_headers(
+    headers: List[Dict[str, Any]], remote: Dict[str, Any], meta: Dict[str, Any]
+) -> Dict[str, Any]:
     has_bearer = False
     has_basic = False
     has_oauth = False
-    
+
     for h in headers:
         if not isinstance(h, dict):
             continue
@@ -200,10 +202,10 @@ def classify_from_headers(headers: List[Dict[str, Any]], remote: Dict[str, Any],
             has_basic = True
         elif "oauth" in value or "oauth" in name or "authorization_uri" in value:
             has_oauth = True
-            
+
     connect_url = meta.get("connect") or None
     url = remote.get("url")
-    
+
     if has_oauth:
         return {
             "type": "oauth2",
@@ -211,8 +213,13 @@ def classify_from_headers(headers: List[Dict[str, Any]], remote: Dict[str, Any],
             "connectUrl": connect_url,
             "credential_mode": "per_user",
             "credential_schema": [
-                {"key": "OAUTH_TOKEN", "label": "OAuth Token", "type": "oauth", "required": True}
-            ]
+                {
+                    "key": "OAUTH_TOKEN",
+                    "label": "OAuth Token",
+                    "type": "oauth",
+                    "required": True,
+                }
+            ],
         }
     if has_bearer:
         return {
@@ -221,8 +228,13 @@ def classify_from_headers(headers: List[Dict[str, Any]], remote: Dict[str, Any],
             "connectUrl": connect_url,
             "credential_mode": "per_user",
             "credential_schema": [
-                {"key": "API_KEY", "label": "API Key", "type": "password", "required": True}
-            ]
+                {
+                    "key": "API_KEY",
+                    "label": "API Key",
+                    "type": "password",
+                    "required": True,
+                }
+            ],
         }
     if has_basic:
         return {
@@ -231,8 +243,13 @@ def classify_from_headers(headers: List[Dict[str, Any]], remote: Dict[str, Any],
             "connectUrl": connect_url,
             "credential_mode": "per_user",
             "credential_schema": [
-                {"key": "BASIC_AUTH", "label": "Basic Auth Credentials", "type": "password", "required": True}
-            ]
+                {
+                    "key": "BASIC_AUTH",
+                    "label": "Basic Auth Credentials",
+                    "type": "password",
+                    "required": True,
+                }
+            ],
         }
     return {
         "type": "api-key",
@@ -241,12 +258,13 @@ def classify_from_headers(headers: List[Dict[str, Any]], remote: Dict[str, Any],
         "credential_mode": "per_user",
         "credential_schema": [
             {"key": "API_KEY", "label": "API Key", "type": "password", "required": True}
-        ]
+        ],
     }
 
 
 def extract_url_from_www_authenticate(www_auth: str, param_name: str) -> Optional[str]:
     import re
+
     pattern = rf'{param_name}\s*=\s*(?:"([^"]+)"|([^,\s]+))'
     match = re.search(pattern, www_auth, re.IGNORECASE)
     if match:
@@ -269,6 +287,7 @@ def detect_oauth_provider(url: str = "") -> str:
 
 def get_url_origin(url: str) -> str:
     from urllib.parse import urlparse
+
     parsed = urlparse(url)
     return f"{parsed.scheme}://{parsed.netloc}"
 
@@ -285,22 +304,25 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
             del _PROBE_CACHE[url]
     # -------------------------------------------------------------------------
     import requests
+
     try:
         response = requests.get(url, timeout=_PROBE_TIMEOUT)
-        
+
         if response.status_code == 200:
             return {
                 "type": "none",
                 "url": url,
                 "credential_mode": "none",
-                "credential_schema": []
+                "credential_schema": [],
             }
         elif response.status_code == 401:
             www_auth = response.headers.get("WWW-Authenticate") or ""
             connect_url = meta.get("connect") or None
-            
+
             # 3a. Ha resource_metadata -> segui il link (RFC 9728)
-            resource_meta = extract_url_from_www_authenticate(www_auth, "resource_metadata")
+            resource_meta = extract_url_from_www_authenticate(
+                www_auth, "resource_metadata"
+            )
             if resource_meta:
                 try:
                     meta_res = requests.get(resource_meta, timeout=_PROBE_TIMEOUT)
@@ -320,7 +342,7 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
                                     token_url = wk_res.json().get("token_endpoint")
                             except Exception:
                                 pass
-                            
+
                             provider = detect_oauth_provider(issuer)
                             return {
                                 "type": "oauth2",
@@ -330,19 +352,27 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
                                 "credential_mode": "per_user",
                                 "oauth_provider": provider,
                                 "oauth_server": issuer,
-                                "oauth_token_url": token_url or f"{issuer.rstrip('/')}/token",
+                                "oauth_token_url": token_url
+                                or f"{issuer.rstrip('/')}/token",
                                 "credential_schema": [
-                                    {"key": "OAUTH_TOKEN", "label": "OAuth Token", "type": "oauth", "required": True}
-                                ]
+                                    {
+                                        "key": "OAUTH_TOKEN",
+                                        "label": "OAuth Token",
+                                        "type": "oauth",
+                                        "required": True,
+                                    }
+                                ],
                             }
                 except Exception:
                     pass
-            
+
             # 3b. Ha authorization_uri diretto
             auth_uri = extract_url_from_www_authenticate(www_auth, "authorization_uri")
             if auth_uri:
                 provider = detect_oauth_provider(auth_uri)
-                token_url = auth_uri.replace("/auth", "/token").replace("/authorize", "/token")
+                token_url = auth_uri.replace("/auth", "/token").replace(
+                    "/authorize", "/token"
+                )
                 return {
                     "type": "oauth2",
                     "url": url,
@@ -353,10 +383,15 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
                     "oauth_server": auth_uri,
                     "oauth_token_url": token_url,
                     "credential_schema": [
-                        {"key": "OAUTH_TOKEN", "label": "OAuth Token", "type": "oauth", "required": True}
-                    ]
+                        {
+                            "key": "OAUTH_TOKEN",
+                            "label": "OAuth Token",
+                            "type": "oauth",
+                            "required": True,
+                        }
+                    ],
                 }
-                
+
             # 3c. Prova /.well-known/oauth-authorization-server
             try:
                 origin_url = get_url_origin(url)
@@ -376,14 +411,20 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
                             "credential_mode": "per_user",
                             "oauth_provider": provider,
                             "oauth_server": issuer,
-                            "oauth_token_url": token_url or f"{issuer.rstrip('/')}/token",
+                            "oauth_token_url": token_url
+                            or f"{issuer.rstrip('/')}/token",
                             "credential_schema": [
-                                {"key": "OAUTH_TOKEN", "label": "OAuth Token", "type": "oauth", "required": True}
-                            ]
+                                {
+                                    "key": "OAUTH_TOKEN",
+                                    "label": "OAuth Token",
+                                    "type": "oauth",
+                                    "required": True,
+                                }
+                            ],
                         }
             except Exception:
                 pass
-            
+
             # Fallback 401
             if "bearer" in www_auth.lower():
                 return {
@@ -393,8 +434,13 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
                     "connectUrl": connect_url,
                     "credential_mode": "per_user",
                     "credential_schema": [
-                        {"key": "API_KEY", "label": "API Key", "type": "password", "required": True}
-                    ]
+                        {
+                            "key": "API_KEY",
+                            "label": "API Key",
+                            "type": "password",
+                            "required": True,
+                        }
+                    ],
                 }
             elif "basic" in www_auth.lower():
                 return {
@@ -404,8 +450,13 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
                     "connectUrl": connect_url,
                     "credential_mode": "per_user",
                     "credential_schema": [
-                        {"key": "BASIC_AUTH", "label": "Basic Auth Credentials", "type": "password", "required": True}
-                    ]
+                        {
+                            "key": "BASIC_AUTH",
+                            "label": "Basic Auth Credentials",
+                            "type": "password",
+                            "required": True,
+                        }
+                    ],
                 }
             else:
                 return {
@@ -415,8 +466,13 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
                     "connectUrl": connect_url,
                     "credential_mode": "per_user",
                     "credential_schema": [
-                        {"key": "API_KEY", "label": "API Key / Token", "type": "password", "required": True}
-                    ]
+                        {
+                            "key": "API_KEY",
+                            "label": "API Key / Token",
+                            "type": "password",
+                            "required": True,
+                        }
+                    ],
                 }
         elif response.status_code == 403:
             return {
@@ -424,27 +480,29 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
                 "url": url,
                 "credential_mode": "per_user",
                 "credential_schema": [
-                    {"key": "API_KEY", "label": "Token / API Key", "type": "password", "required": True}
-                ]
+                    {
+                        "key": "API_KEY",
+                        "label": "Token / API Key",
+                        "type": "password",
+                        "required": True,
+                    }
+                ],
             }
         else:
             return {
                 "type": "unreachable",
                 "url": url,
-                "error": f"HTTP {response.status_code}"
+                "error": f"HTTP {response.status_code}",
             }
     except Exception as e:
-        return {
-            "type": "unreachable",
-            "url": url,
-            "error": str(e)
-        }
+        return {"type": "unreachable", "url": url, "error": str(e)}
 
 
 def _extract_remote_bridge_token_key(cfg: dict) -> Optional[str]:
     """Estrae il nome della env var dal --header Bearer ${VAR} negli args di mcp-remote."""
     args = cfg.get("args") or []
     import re
+
     for i, arg in enumerate(args):
         if arg == "--header" and i + 1 < len(args):
             header_val = args[i + 1]
@@ -467,41 +525,50 @@ def discover_mcp_credentials(
         return cached
 
     cfg = server_config or {}
-    
+
     # Rilevamento server remoti (SSE o remote-bridge)
-    is_remote = cfg.get("aion_market_install") == "remote" or cfg.get("type") in ("sse", "remote-bridge")
+    is_remote = cfg.get("aion_market_install") == "remote" or cfg.get("type") in (
+        "sse",
+        "remote-bridge",
+    )
     if is_remote:
         remotes = cfg.get("remotes") or []
         url = cfg.get("remote_url") or cfg.get("url")
         remote = None
         if remotes:
             for r in remotes:
-                if isinstance(r, dict) and r.get("type") in ("sse", "streamable-http", "streamable_http"):
+                if isinstance(r, dict) and r.get("type") in (
+                    "sse",
+                    "streamable-http",
+                    "streamable_http",
+                ):
                     remote = r
                     break
             if not remote and remotes:
                 remote = remotes[0]
         if not remote and url:
             remote = {"url": url, "type": "sse", "headers": []}
-            
+
         if not remote:
             _res = CredentialDiscoveryResult(
                 env_keys=[],
                 schema=[],
                 credential_mode_hint="none",
                 sources=["remote_discovery"],
-                remote_auth_type="no-remote"
+                remote_auth_type="no-remote",
             )
             _DISCOVERY_CACHE[server_slug] = _res
             return _res
-            
+
         headers = remote.get("headers") or []
-        meta = cfg.get("_meta", {}).get("io.modelcontextprotocol.registry/publisher-provided", {})
-        
+        meta = cfg.get("_meta", {}).get(
+            "io.modelcontextprotocol.registry/publisher-provided", {}
+        )
+
         classified = None
         if headers:
             classified = classify_from_headers(headers, remote, meta)
-            
+
         probe_url = cfg.get("remote_url") or remote.get("url") or url
         if probe_url:
             probe_res = probe_remote_url_sync(probe_url, meta)
@@ -510,7 +577,7 @@ def discover_mcp_credentials(
             _PROBE_CACHE[probe_url] = (time.monotonic(), probe_res)
         else:
             probe_res = {"type": "unreachable", "error": "Missing remote URL"}
-            
+
         if classified:
             if probe_res.get("type") == "unreachable":
                 final_res = probe_res
@@ -520,11 +587,11 @@ def discover_mcp_credentials(
                     final_res["hint"] = probe_res["hint"]
         else:
             final_res = probe_res
-            
+
         auth_type = final_res.get("type", "unknown")
         mode_hint = final_res.get("credential_mode", "per_user")
         schema = final_res.get("credential_schema") or []
-        
+
         if cfg.get("type") == "remote-bridge":
             token_key = _extract_remote_bridge_token_key(cfg)
             if token_key:
@@ -532,15 +599,20 @@ def discover_mcp_credentials(
                 if "__" in token_key:
                     db_key = token_key.split("__", 1)[1]
                 elif token_key.startswith("AION_USER_"):
-                    db_key = token_key[len("AION_USER_"):]
-                
+                    db_key = token_key[len("AION_USER_") :]
+
                 if schema:
                     schema = [dict(s) for s in schema]
                     for s in schema:
                         s["key"] = db_key
                 else:
                     schema = [
-                        {"key": db_key, "label": "Token / API Key", "type": "password", "required": True}
+                        {
+                            "key": db_key,
+                            "label": "Token / API Key",
+                            "type": "password",
+                            "required": True,
+                        }
                     ]
                     mode_hint = "per_user"
                     if auth_type == "unknown" or auth_type == "unreachable":
@@ -561,7 +633,7 @@ def discover_mcp_credentials(
             remote_oauth_provider=final_res.get("oauth_provider"),
             remote_oauth_server=final_res.get("oauth_server"),
             remote_oauth_token_url=final_res.get("oauth_token_url"),
-            has_env_auth=(mode_hint != "none" and auth_type != "unreachable")
+            has_env_auth=(mode_hint != "none" and auth_type != "unreachable"),
         )
         _DISCOVERY_CACHE[server_slug] = _res
         return _res
@@ -580,20 +652,26 @@ def discover_mcp_credentials(
         for env_name in (".env.example", ".env.sample", ".env.template"):
             ef = mcp_dir / env_name
             if ef.is_file():
-                keys |= _keys_from_text(ef.read_text(encoding="utf-8", errors="replace"))
+                keys |= _keys_from_text(
+                    ef.read_text(encoding="utf-8", errors="replace")
+                )
                 sources.append(env_name)
                 break
 
         for src in ("index.ts", "index.js", "server.ts", "server.py", "main.ts"):
             sf = mcp_dir / src
             if sf.is_file():
-                keys |= _keys_from_text(sf.read_text(encoding="utf-8", errors="replace"))
+                keys |= _keys_from_text(
+                    sf.read_text(encoding="utf-8", errors="replace")
+                )
                 sources.append(src)
                 break
 
     readme_text = ""
     if mcp_dir and (mcp_dir / "README.md").is_file():
-        readme_text = (mcp_dir / "README.md").read_text(encoding="utf-8", errors="replace")
+        readme_text = (mcp_dir / "README.md").read_text(
+            encoding="utf-8", errors="replace"
+        )
         keys |= _keys_from_text(readme_text)
         sources.append("README.md")
 
@@ -602,7 +680,10 @@ def discover_mcp_credentials(
         k
         for k in keys
         if not k.startswith("AION_USER_")
-        and (_is_credential_key(k) or k.endswith(("_HOST", "_PORT", "_URL", "_URI", "_SSL")))
+        and (
+            _is_credential_key(k)
+            or k.endswith(("_HOST", "_PORT", "_URL", "_URI", "_SSL"))
+        )
     )
 
     config_file_auth = bool(readme_text and _CONFIG_FILE_HINTS.search(readme_text))

@@ -2,7 +2,10 @@
 
 import json
 
-from src.runtime.native_tools.research_tools import run_manage_research, run_trigger_research
+from src.runtime.native_tools.research_tools import (
+    run_manage_research,
+    run_trigger_research,
+)
 
 
 def test_trigger_research_returns_session_id(monkeypatch):
@@ -22,7 +25,9 @@ def test_trigger_research_returns_session_id(monkeypatch):
         "src.research.handler.deep_research_enabled",
         lambda: True,
     )
-    raw = run_trigger_research(json.dumps({"topic": "quantum computing 2026"}), user_id="alice")
+    raw = run_trigger_research(
+        json.dumps({"topic": "quantum computing 2026"}), user_id="alice"
+    )
     data = json.loads(raw)
     assert data["exit_code"] == 0
     assert data["ui_event"] == "research_started"

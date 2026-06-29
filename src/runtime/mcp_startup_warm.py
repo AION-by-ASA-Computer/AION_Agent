@@ -1,4 +1,5 @@
 """Pre-avvio MCP stdio al boot API (pool caldo prima della prima chat)."""
+
 from __future__ import annotations
 
 import logging
@@ -46,7 +47,9 @@ def _collect_startup_server_slugs() -> List[str]:
         profile_manager.load_all_if_stale()
         if raw_profiles.strip() == "*":
             for row in profile_manager.list_profiles() or []:
-                p = profile_manager.get_profile(row.get("name") or row.get("slug") or "")
+                p = profile_manager.get_profile(
+                    row.get("name") or row.get("slug") or ""
+                )
                 if p:
                     servers.update(p.mcp_servers or [])
         for token in raw_profiles.split(","):
@@ -80,10 +83,9 @@ async def warm_mcp_at_startup() -> None:
         return
 
     tenant_id = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
-    profile_slug = (
-        (os.getenv("AION_MCP_STARTUP_WARM_PROFILES") or "aion_std").split(",")[0].strip()
-        or "generic_assistant"
-    )
+    profile_slug = (os.getenv("AION_MCP_STARTUP_WARM_PROFILES") or "aion_std").split(
+        ","
+    )[0].strip() or "generic_assistant"
     user_ids = _startup_warm_user_ids()
 
     logger.info(
@@ -102,7 +104,9 @@ async def warm_mcp_at_startup() -> None:
             user_id=user_id,
             tenant_id=tenant_id,
         )
-    logger.info("MCP startup warm completato (%d server, %d user)", len(servers), len(user_ids))
+    logger.info(
+        "MCP startup warm completato (%d server, %d user)", len(servers), len(user_ids)
+    )
 
 
 def _startup_warm_user_ids() -> List[str]:

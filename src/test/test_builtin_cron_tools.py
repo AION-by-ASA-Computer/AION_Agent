@@ -15,7 +15,9 @@ async def test_build_all_tools_includes_cron_when_enabled(monkeypatch):
     async def _no_mcp(*_a, **_k):
         return []
 
-    monkeypatch.setattr("src.runtime.native_tools.load_native_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        "src.runtime.native_tools.load_native_tools", lambda *_a, **_k: []
+    )
     monkeypatch.setattr("src.main.build_mcp_tools", _no_mcp)
 
     profile = SimpleNamespace(

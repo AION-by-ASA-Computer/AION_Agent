@@ -1,6 +1,7 @@
 """
 Venv Python per sessione sotto ``data/sessions/<id>/.venv`` e installazione pacchetti controllata (pip/uv).
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,7 +51,12 @@ def _pip_install_allowed() -> bool:
 
 
 def _auto_venv_enabled() -> bool:
-    return os.environ.get("AION_SANDBOX_AUTO_VENV", "1").lower() in ("1", "true", "yes", "on")
+    return os.environ.get("AION_SANDBOX_AUTO_VENV", "1").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _pip_timeout() -> float:
@@ -74,7 +80,12 @@ def _pip_max_packages() -> int:
 
 
 def _default_use_uv() -> bool:
-    return os.environ.get("AION_SANDBOX_PIP_USE_UV", "0").lower() in ("1", "true", "yes", "on")
+    return os.environ.get("AION_SANDBOX_PIP_USE_UV", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _validate_package_names(packages: List[str]) -> List[str]:
@@ -112,7 +123,9 @@ def ensure_session_venv(session_id: str) -> Path:
     )
     if proc.returncode != 0:
         err = (proc.stderr or "") + (proc.stdout or "")
-        raise RuntimeError(f"python -m venv failed (exit {proc.returncode}): {err[:4000]}")
+        raise RuntimeError(
+            f"python -m venv failed (exit {proc.returncode}): {err[:4000]}"
+        )
     if not py.is_file():
         raise RuntimeError("venv creato ma interprete not found")
     logger.info("Session venv creato: %s", vdir)

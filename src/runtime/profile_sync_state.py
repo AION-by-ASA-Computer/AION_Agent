@@ -1,4 +1,5 @@
 """Track profile YAML hashes so ``sync_config --force`` can skip local customizations."""
+
 from __future__ import annotations
 
 import hashlib
@@ -30,22 +31,33 @@ def load_profile_sync_state(config_root: Path | None = None) -> Dict[str, str]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         profiles = data.get("profiles") or {}
-        return {k: v for k, v in profiles.items() if isinstance(k, str) and isinstance(v, str)}
+        return {
+            k: v
+            for k, v in profiles.items()
+            if isinstance(k, str) and isinstance(v, str)
+        }
     except (OSError, json.JSONDecodeError, TypeError):
         return {}
 
 
-def save_profile_sync_state(state: Dict[str, str], config_root: Path | None = None) -> None:
+def save_profile_sync_state(
+    state: Dict[str, str], config_root: Path | None = None
+) -> None:
     path = _state_path(config_root)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        json.dumps({"profiles": dict(sorted(state.items()))}, indent=2, sort_keys=True) + "\n",
+        json.dumps({"profiles": dict(sorted(state.items()))}, indent=2, sort_keys=True)
+        + "\n",
         encoding="utf-8",
     )
 
 
 def profile_rel_key(rel_path: Path) -> str | None:
-    if len(rel_path.parts) >= 2 and rel_path.parts[0] == "profiles" and rel_path.suffix == ".yaml":
+    if (
+        len(rel_path.parts) >= 2
+        and rel_path.parts[0] == "profiles"
+        and rel_path.suffix == ".yaml"
+    ):
         return rel_path.as_posix()
     return None
 
@@ -74,12 +86,16 @@ def should_preserve_profile_on_force(
     return True, "customized"
 
 
-def record_profile_after_sync(target: Path, state: Dict[str, str], rel_key: str) -> None:
+def record_profile_after_sync(
+    target: Path, state: Dict[str, str], rel_key: str
+) -> None:
     if target.is_file():
         state[rel_key] = file_sha256(target)
 
 
-def record_profile_after_admin_save(yaml_path: Path, config_root: Path | None = None) -> None:
+def record_profile_after_admin_save(
+    yaml_path: Path, config_root: Path | None = None
+) -> None:
     rel_key = profile_rel_key(Path("profiles") / yaml_path.name)
     if not rel_key or not yaml_path.is_file():
         return

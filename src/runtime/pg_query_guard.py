@@ -1,4 +1,5 @@
 """PostgreSQL MCP query timeouts (toolbox-postgres)."""
+
 from __future__ import annotations
 
 import os

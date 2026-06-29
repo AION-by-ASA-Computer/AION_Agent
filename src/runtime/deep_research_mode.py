@@ -1,4 +1,5 @@
 """Deep Research Mode: blocked tools and system prompt."""
+
 from __future__ import annotations
 
 import os

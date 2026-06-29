@@ -1,4 +1,5 @@
 """Strip <plan> blocks from visible chat timeline (mirrors chat-ui planDisplay.ts)."""
+
 from __future__ import annotations
 
 import re
@@ -45,7 +46,9 @@ def _find_plan_open_index(text: str) -> int:
     return min(idx_direct, idx_pseudo)
 
 
-def _trailing_partial(text: str, markers: tuple[str, ...] = _PLAN_PARTIAL_MARKERS) -> int:
+def _trailing_partial(
+    text: str, markers: tuple[str, ...] = _PLAN_PARTIAL_MARKERS
+) -> int:
     best = 0
     for marker in markers:
         max_keep = len(marker) - 1
@@ -117,7 +120,9 @@ def feed_plan_aware_display(
 
         close_m = _PLAN_CLOSE_RE.search(rest)
         if close_m is None:
-            partial = _trailing_partial(rest, ("</plan>", "</plan", "</pla", "</pl", "</p", "</", "<"))
+            partial = _trailing_partial(
+                rest, ("</plan>", "</plan", "</pla", "</pl", "</p", "</", "<")
+            )
             if partial:
                 pending_out = rest[-partial:]
                 rest = rest[: len(rest) - partial]

@@ -1,4 +1,5 @@
 """Load optional plugins from data/plugins/*.py"""
+
 from __future__ import annotations
 
 import importlib.util
@@ -29,8 +30,16 @@ def load_plugins(app: Any = None) -> List[str]:
     if not root.is_dir():
         root.mkdir(parents=True, exist_ok=True)
         return []
-    allow = {x.strip() for x in (os.getenv("AION_PLUGINS_ALLOWLIST") or "").split(",") if x.strip()}
-    deny = {x.strip() for x in (os.getenv("AION_PLUGINS_DENYLIST") or "").split(",") if x.strip()}
+    allow = {
+        x.strip()
+        for x in (os.getenv("AION_PLUGINS_ALLOWLIST") or "").split(",")
+        if x.strip()
+    }
+    deny = {
+        x.strip()
+        for x in (os.getenv("AION_PLUGINS_DENYLIST") or "").split(",")
+        if x.strip()
+    }
     loaded: List[str] = []
     stub = app or AionAppStub()
     for path in sorted(root.glob("*.py")):

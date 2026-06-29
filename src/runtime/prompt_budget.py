@@ -1,4 +1,5 @@
 """Token budget per prompt injection layer (P1.3)."""
+
 from __future__ import annotations
 
 import logging
@@ -72,7 +73,9 @@ class PromptBudget:
             parts.append(layer.text)
             used += est
         if self.dropped:
-            logger.info("prompt_budget dropped_layers=%s used_tokens~%s", self.dropped, used)
+            logger.info(
+                "prompt_budget dropped_layers=%s used_tokens~%s", self.dropped, used
+            )
         return "\n\n".join(parts)
 
 

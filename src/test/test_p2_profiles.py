@@ -1,4 +1,5 @@
 """P2 Sprint 1 — profiles, aliases, mtime reload."""
+
 import textwrap
 import time
 from pathlib import Path
@@ -11,7 +12,10 @@ from src.runtime.skill_alias import resolve_skill_alias
 
 def test_resolve_skill_alias_matrix():
     assert resolve_skill_alias("core_protocol") == "core_protocol"
-    assert resolve_skill_alias("artifact_protocol", "markdown") == "artifact_protocol_markdown"
+    assert (
+        resolve_skill_alias("artifact_protocol", "markdown")
+        == "artifact_protocol_markdown"
+    )
     assert resolve_skill_alias("artifact_protocol", "tool") == "artifact_protocol_tool"
     assert resolve_skill_alias("artifact_protocol", "xml") == "artifact_protocol_xml"
 

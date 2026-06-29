@@ -1,4 +1,5 @@
 """Carica `.env` dalla root del progetto (una volta). Importare prima di altri moduli che leggono os.environ."""
+
 from __future__ import annotations
 
 import os
@@ -55,9 +56,14 @@ except ImportError:
     pass
 
 # Inizializzazione precoce di OpenLit (dopo load_dotenv così AION_OTEL_* è disponibile).
-if os.getenv("AION_OTEL_ENABLED", "0") == "1" and os.environ.get("AION_OPENLIT_ACTIVE") != "1":
+if (
+    os.getenv("AION_OTEL_ENABLED", "0") == "1"
+    and os.environ.get("AION_OPENLIT_ACTIVE") != "1"
+):
     try:
-        otlp_endpoint = os.getenv("AION_OTEL_ENDPOINT", "http://host.docker.internal:4317")
+        otlp_endpoint = os.getenv(
+            "AION_OTEL_ENDPOINT", "http://host.docker.internal:4317"
+        )
         service_name = os.getenv("AION_OTEL_SERVICE_NAME", "aion-agent")
         protocol = os.getenv("AION_OTEL_PROTOCOL", "grpc")
 

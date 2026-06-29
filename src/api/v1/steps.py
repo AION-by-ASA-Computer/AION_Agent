@@ -56,14 +56,19 @@ async def create_step(
 
 @router.get("/conversations/{conversation_id}/steps")
 async def list_steps(
-    conversation_id: str, ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_READ))
+    conversation_id: str,
+    ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_READ)),
 ):
     _require_unified()
     async with get_async_session_maker()() as session:
         c = await session.get(Conversation, conversation_id)
         if not c or c.tenant_id != ctx.tenant_id:
             raise HTTPException(404, "conversation not found")
-        q = select(Step).where(Step.conversation_id == conversation_id).order_by(Step.created_at)
+        q = (
+            select(Step)
+            .where(Step.conversation_id == conversation_id)
+            .order_by(Step.created_at)
+        )
         rows = (await session.execute(q)).scalars().all()
     return {
         "data": [

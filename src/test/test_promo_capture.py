@@ -1,4 +1,5 @@
 """Tests for promotional graphics capture helpers."""
+
 from __future__ import annotations
 
 import unittest
@@ -46,7 +47,9 @@ class TestPromoCapture(unittest.TestCase):
             _pick_template("linkedin_post", "bento_red"),
             "bento_linkedin_red.html",
         )
-        self.assertEqual(_pick_template("instagram_portrait", "minimal"), "react_post.html")
+        self.assertEqual(
+            _pick_template("instagram_portrait", "minimal"), "react_post.html"
+        )
 
     def test_component_catalog(self):
         cat = read_component_catalog()

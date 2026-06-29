@@ -1,4 +1,5 @@
 """Time-ordered UUIDs for primary keys (UUIDv7)."""
+
 from __future__ import annotations
 
 try:

@@ -1,4 +1,5 @@
 """Load/save MCP registry documents (flat YAML or standard JSON ``mcpServers``)."""
+
 from __future__ import annotations
 
 import json

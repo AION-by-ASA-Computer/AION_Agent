@@ -4,6 +4,7 @@ Internal HTTP hooks for the Agent DB MCP subprocess (LTM sync via MemPalace MCP)
 Set AION_AGENT_DB_LTM_SYNC_URL (e.g. http://127.0.0.1:8000/internal/agent-db/sync-drawer)
 and AION_AGENT_DB_INTERNAL_SECRET (same value in MCP env and API env).
 """
+
 from __future__ import annotations
 
 import logging

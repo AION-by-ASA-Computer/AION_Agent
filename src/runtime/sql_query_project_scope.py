@@ -1,4 +1,5 @@
 """Hard-bind SQL QueryMemory tools to the chat-ui selected project (per turn)."""
+
 from __future__ import annotations
 
 import logging
@@ -58,7 +59,9 @@ def bound_sql_project(session_id: Optional[str] = None) -> Optional[str]:
     return None
 
 
-def block_project_list_tool(tool_name: str, session_id: Optional[str] = None) -> Optional[str]:
+def block_project_list_tool(
+    tool_name: str, session_id: Optional[str] = None
+) -> Optional[str]:
     """Disallow listing/switching projects while a turn project is bound."""
     if not project_scope_enforced():
         return None
@@ -123,7 +126,10 @@ async def verify_user_project_access(
         should_block = True
         if profile_slug:
             try:
-                from src.runtime.query_memory_hooks import profile_has_memory_capability_by_slug
+                from src.runtime.query_memory_hooks import (
+                    profile_has_memory_capability_by_slug,
+                )
+
                 should_block = profile_has_memory_capability_by_slug(profile_slug)
             except Exception:
                 pass
@@ -146,7 +152,9 @@ async def verify_user_project_access(
         return f"Could not verify access to project '{slug}'."
 
 
-async def verify_bound_project_access(session_id: Optional[str], user_id: str) -> Optional[str]:
+async def verify_bound_project_access(
+    session_id: Optional[str], user_id: str
+) -> Optional[str]:
     bound = bound_sql_project(session_id)
     if not bound:
         return None

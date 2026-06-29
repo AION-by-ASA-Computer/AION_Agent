@@ -3,6 +3,7 @@ Redis singleton for chart queue, locks, rate limiting, cache.
 Falls back to in-process implementations when Redis is unavailable and
 AION_REDIS_FALLBACK_LOCAL=1.
 """
+
 from __future__ import annotations
 
 import logging
@@ -241,7 +242,9 @@ def redis_namespace_key(*parts: str) -> str:
     return ":".join([_NS, *parts])
 
 
-async def redis_enqueue_session_event(session_id: str, event: dict, ttl_sec: int = 3600) -> None:
+async def redis_enqueue_session_event(
+    session_id: str, event: dict, ttl_sec: int = 3600
+) -> None:
     """Cross-process session event queue (Redis/list with LocalFallback support)."""
     import json as _json
 
@@ -256,7 +259,9 @@ async def redis_enqueue_session_event(session_id: str, event: dict, ttl_sec: int
         _handle_redis_error("redis_enqueue_session_event", e)
 
 
-async def redis_drain_session_events(session_id: str, max_items: int = 50) -> list[dict]:
+async def redis_drain_session_events(
+    session_id: str, max_items: int = 50
+) -> list[dict]:
     """Drain queued session events (FIFO)."""
     import json as _json
 
@@ -297,8 +302,10 @@ async def redis_ping_startup() -> bool:
             return True
     except Exception as e:
         err = str(e)
-        if url and _fallback_enabled() and (
-            "MISCONF" in err or "stop-writes-on-bgsave-error" in err
+        if (
+            url
+            and _fallback_enabled()
+            and ("MISCONF" in err or "stop-writes-on-bgsave-error" in err)
         ):
             global _client, _fallback_used
             logger.warning(
@@ -313,7 +320,9 @@ async def redis_ping_startup() -> bool:
         if url and _fallback_enabled() and _is_connection_error(e):
             _degrade_to_local_fallback("ping all'avvio", e)
             return True
-        logger.warning("Redis ping at startup failed url=%s: %s", redis_url_for_logs(url), e)
+        logger.warning(
+            "Redis ping at startup failed url=%s: %s", redis_url_for_logs(url), e
+        )
         if url and not isinstance(r, _LocalFallback) and not _fallback_enabled():
             logger.error(
                 "Redis non utilizzabile e AION_REDIS_FALLBACK_LOCAL disabilitato: "

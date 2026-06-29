@@ -10,6 +10,7 @@ Landlock rules persist across ``execvp`` on Linux. Node also loads
 ``sandbox_node_hook.cjs`` (``--require``) so FS access is blocked even when
 Landlock is unavailable in the container runtime.
 """
+
 from __future__ import annotations
 
 import os
@@ -35,7 +36,11 @@ def _venv_dir() -> Path | None:
 def _landlock_abort_if_required() -> None:
     from .session_confinement import confinement_enabled, landlock_required
 
-    if platform.system() != "Linux" or not confinement_enabled() or not landlock_required():
+    if (
+        platform.system() != "Linux"
+        or not confinement_enabled()
+        or not landlock_required()
+    ):
         return
     print(
         "sandbox entry: Landlock required (AION_SANDBOX_LANDLOCK_REQUIRED=1) "

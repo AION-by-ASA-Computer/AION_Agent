@@ -1,4 +1,5 @@
 """Tests for session sandbox environment scrubbing."""
+
 from __future__ import annotations
 
 import os
@@ -29,7 +30,9 @@ class TestSessionEnv(unittest.TestCase):
         self.assertNotIn("AION_API_URL", env)
         self.assertNotIn("AION_DB_URL", env)
         self.assertNotIn("AION_CHAT_AUTH_SECRET", env)
-        self.assertEqual(env["HOME"], str(Path("/tmp/sessions/test-sess-1234").resolve()))
+        self.assertEqual(
+            env["HOME"], str(Path("/tmp/sessions/test-sess-1234").resolve())
+        )
         self.assertEqual(env["AION_CHAT_SESSION_ID"], "test-sess-1234")
         self.assertEqual(
             env["AION_DATA_DIR"],

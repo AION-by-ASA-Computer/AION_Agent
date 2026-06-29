@@ -2,6 +2,7 @@
 Unified DB implementation of chat history (session_id == conversation.id).
 Enabled when AION_UNIFIED_DB is on (default 1; migrate with `python scripts/migrate_to_aion_db.py` or fresh bootstrap).
 """
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +24,9 @@ from .models import Conversation, Message, Step, Attachment
 logger = logging.getLogger("aion.data.bridge")
 
 
-async def fetch_message_by_id(session: AsyncSession, message_id: str) -> Optional[Message]:
+async def fetch_message_by_id(
+    session: AsyncSession, message_id: str
+) -> Optional[Message]:
     """Lookup by public message UUID (Message.id), not fts_rowid PK."""
     mid = (message_id or "").strip()
     if not mid:
@@ -61,7 +64,11 @@ class UnifiedHistoryBridge:
         await self._ensure()
 
     async def _get_or_create_conv(
-        self, session: AsyncSession, conversation_id: str, profile_name: str, user_id: Optional[str]
+        self,
+        session: AsyncSession,
+        conversation_id: str,
+        profile_name: str,
+        user_id: Optional[str],
     ) -> Conversation:
         await self._ensure()
         r = await session.get(Conversation, conversation_id)
@@ -152,7 +159,9 @@ class UnifiedHistoryBridge:
 
         async with get_async_session_maker()() as session:
             await self._ensure()
-            conversation = await self._get_or_create_conv(session, session_id, profile_name, user_id)
+            conversation = await self._get_or_create_conv(
+                session, session_id, profile_name, user_id
+            )
 
             sql = text("""
                 INSERT INTO messages (
@@ -183,7 +192,9 @@ class UnifiedHistoryBridge:
             }
 
             await session.execute(sql, params)
-            auto_title = _conversation_title_from_user_message(content) if role == "user" else ""
+            auto_title = (
+                _conversation_title_from_user_message(content) if role == "user" else ""
+            )
             if auto_title and not (conversation.title or "").strip():
                 conversation.title = auto_title
             await session.execute(
@@ -195,7 +206,9 @@ class UnifiedHistoryBridge:
             )
             await session.commit()
 
-    async def update_message_timeline(self, message_id: str, timeline_json: str) -> None:
+    async def update_message_timeline(
+        self, message_id: str, timeline_json: str
+    ) -> None:
         async with get_async_session_maker()() as session:
             await self._ensure()
             await session.execute(
@@ -227,7 +240,9 @@ class UnifiedHistoryBridge:
 
         async with get_async_session_maker()() as session:
             await self._ensure()
-            conversation = await self._get_or_create_conv(session, session_id, profile_name, user_id)
+            conversation = await self._get_or_create_conv(
+                session, session_id, profile_name, user_id
+            )
             now = datetime.now(timezone.utc)
 
             async def _update_existing(row: Message) -> bool:
@@ -287,7 +302,9 @@ class UnifiedHistoryBridge:
                     raise
                 return await _update_existing(existing)
 
-            auto_title = _conversation_title_from_user_message(content) if role == "user" else ""
+            auto_title = (
+                _conversation_title_from_user_message(content) if role == "user" else ""
+            )
             if auto_title and not (conversation.title or "").strip():
                 conversation.title = auto_title
             await session.execute(
@@ -301,7 +318,11 @@ class UnifiedHistoryBridge:
             return True
 
     def _row_to_chat_message(
-        self, role: str, content: str, tool_name: Optional[str], reasoning: Optional[str] = None
+        self,
+        role: str,
+        content: str,
+        tool_name: Optional[str],
+        reasoning: Optional[str] = None,
     ) -> Optional[ChatMessage]:
         meta = {}
         if tool_name:
@@ -331,7 +352,9 @@ class UnifiedHistoryBridge:
         async with get_async_session_maker()() as session:
             await self._ensure()
             q = (
-                select(Message.role, Message.content, Message.tool_name, Message.reasoning)
+                select(
+                    Message.role, Message.content, Message.tool_name, Message.reasoning
+                )
                 .where(Message.conversation_id == session_id)
                 .order_by(Message.seq.desc())
                 .limit(approx_rows)
@@ -344,7 +367,9 @@ class UnifiedHistoryBridge:
         while parts:
             total_c = sum(len(p[1]) for p in parts)
             total_t = sum(_approx_tokens(p[1]) for p in parts)
-            if total_c <= char_limit and (token_budget is None or total_t <= token_budget):
+            if total_c <= char_limit and (
+                token_budget is None or total_t <= token_budget
+            ):
                 break
             parts.pop(0)
         out: List[ChatMessage] = []
@@ -385,7 +410,9 @@ class UnifiedHistoryBridge:
                 sql += " AND m.profile_name = :pn"
                 params["pn"] = profile_name
             if since_days is not None:
-                sql += f" AND m.created_at >= datetime('now', '-{int(since_days)} days')"
+                sql += (
+                    f" AND m.created_at >= datetime('now', '-{int(since_days)} days')"
+                )
             sql += " ORDER BY score LIMIT :lim"
             try:
                 res = await session.execute(text(sql), params)
@@ -408,7 +435,9 @@ class UnifiedHistoryBridge:
                 rows = res.mappings().all()
         return [dict(r) for r in rows]
 
-    async def get_turn_context(self, message_id: str, window: int = 2) -> List[Dict[str, Any]]:
+    async def get_turn_context(
+        self, message_id: str, window: int = 2
+    ) -> List[Dict[str, Any]]:
         async with get_async_session_maker()() as session:
             await self._ensure()
             m0 = (
@@ -448,7 +477,13 @@ class UnifiedHistoryBridge:
         async with get_async_session_maker()() as session:
             await self._ensure()
             q = (
-                select(Message.id, Message.role, Message.content, Message.tool_name, Message.created_at)
+                select(
+                    Message.id,
+                    Message.role,
+                    Message.content,
+                    Message.tool_name,
+                    Message.created_at,
+                )
                 .where(
                     Message.conversation_id == session_id,
                     Message.promoted_to_ltm == 0,
@@ -474,20 +509,30 @@ class UnifiedHistoryBridge:
         async with get_async_session_maker()() as session:
             await self._ensure()
             await session.execute(
-                update(Message).where(Message.id.in_(message_ids)).values(promoted_to_ltm=1)
+                update(Message)
+                .where(Message.id.in_(message_ids))
+                .values(promoted_to_ltm=1)
             )
             await session.commit()
 
-    async def count_user_messages(self, session_id: str, profile_name: str = "default") -> int:
+    async def count_user_messages(
+        self, session_id: str, profile_name: str = "default"
+    ) -> int:
         async with get_async_session_maker()() as session:
             await self._ensure()
-            q = select(func.count()).select_from(Message).where(
-                Message.conversation_id == session_id,
-                Message.role == "user",
+            q = (
+                select(func.count())
+                .select_from(Message)
+                .where(
+                    Message.conversation_id == session_id,
+                    Message.role == "user",
+                )
             )
             return int((await session.execute(q)).scalar_one() or 0)
 
-    async def prune_old(self, session_id: str, profile_name: str = "default", keep_last_n: int = 50) -> None:
+    async def prune_old(
+        self, session_id: str, profile_name: str = "default", keep_last_n: int = 50
+    ) -> None:
         async with get_async_session_maker()() as session:
             await self._ensure()
             await session.execute(
@@ -567,8 +612,10 @@ class UnifiedHistoryBridge:
     async def count_messages(self, session_id: str) -> int:
         async with get_async_session_maker()() as session:
             await self._ensure()
-            q = select(func.count()).select_from(Message).where(
-                Message.conversation_id == session_id
+            q = (
+                select(func.count())
+                .select_from(Message)
+                .where(Message.conversation_id == session_id)
             )
             return int((await session.execute(q)).scalar_one() or 0)
 
@@ -589,10 +636,15 @@ class UnifiedHistoryBridge:
         summary_content = (summary_content or "").strip()
         if not summary_content or keep_last_n < 1:
             return
-        if COMPACTION_MARKER not in summary_content and CONTEXT_SUMMARY_MARKER not in summary_content:
+        if (
+            COMPACTION_MARKER not in summary_content
+            and CONTEXT_SUMMARY_MARKER not in summary_content
+        ):
             from src.memory.context_compressor import format_compaction_block
 
-            summary_content = format_compaction_block(summary_content, source_messages=0)
+            summary_content = format_compaction_block(
+                summary_content, source_messages=0
+            )
         async with get_async_session_maker()() as session:
             await self._ensure()
             kept_rows = list(
@@ -614,7 +666,8 @@ class UnifiedHistoryBridge:
                 return
             kept_ids = [r[0] for r in kept_rows]
             if any(
-                COMPACTION_MARKER in (r[2] or "") or CONTEXT_SUMMARY_MARKER in (r[2] or "")
+                COMPACTION_MARKER in (r[2] or "")
+                or CONTEXT_SUMMARY_MARKER in (r[2] or "")
                 for r in kept_rows
             ):
                 await session.execute(
@@ -679,7 +732,10 @@ class UnifiedHistoryBridge:
         async with get_async_session_maker()() as session:
             await self._ensure()
             if profile_name is None:
-                await session.execute(text("DELETE FROM messages WHERE conversation_id = :cid"), {"cid": session_id})
+                await session.execute(
+                    text("DELETE FROM messages WHERE conversation_id = :cid"),
+                    {"cid": session_id},
+                )
             else:
                 await session.execute(
                     text(
@@ -697,18 +753,30 @@ class UnifiedHistoryBridge:
             last_msg_id = (
                 await session.execute(
                     select(Message.id)
-                    .where(Message.conversation_id == session_id, Message.role == "assistant")
+                    .where(
+                        Message.conversation_id == session_id,
+                        Message.role == "assistant",
+                    )
                     .order_by(Message.seq.desc())
                     .limit(1)
                 )
             ).scalar_one_or_none()
             if not last_msg_id:
                 return []
-            
+
             # Fetch steps associated with that message
             q = (
-                select(Step.name, Step.type, Step.input, Step.output, Step.is_error, Step.metadata_json)
-                .where(Step.conversation_id == session_id, Step.message_id == last_msg_id)
+                select(
+                    Step.name,
+                    Step.type,
+                    Step.input,
+                    Step.output,
+                    Step.is_error,
+                    Step.metadata_json,
+                )
+                .where(
+                    Step.conversation_id == session_id, Step.message_id == last_msg_id
+                )
                 .order_by(Step.created_at.asc())
             )
             rows = (await session.execute(q)).all()
@@ -836,4 +904,6 @@ class UnifiedHistoryBridge:
         limit: int = 20,
         char_limit: int = 60000,
     ) -> List[ChatMessage]:
-        return await self.get_window(session_id, profile_name, max_turns=limit, char_limit=char_limit)
+        return await self.get_window(
+            session_id, profile_name, max_turns=limit, char_limit=char_limit
+        )

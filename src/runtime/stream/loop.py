@@ -11,6 +11,7 @@ Design principles
 * ``StreamLoop.consume()`` is an async generator that yields SSE event dicts.
   Callers wrap each yield with ``_track_sse(event)`` as needed.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -686,9 +687,7 @@ class StreamLoop:
             if et == "orchestration_plan_pending":
                 self.plan_intercepts += 1
                 if self.plan_controller is not None:
-                    yield self._track_sse(
-                        self.plan_controller.sse_phase("registered")
-                    )
+                    yield self._track_sse(self.plan_controller.sse_phase("registered"))
             if self.single_orch_channel:
                 return  # continue
 
@@ -882,9 +881,7 @@ class StreamLoop:
     # Private: artifact finalizer (shared by token and tool_event)
     # ------------------------------------------------------------------
 
-    async def _finalize_artifact(
-        self, pe: Any
-    ) -> AsyncGenerator[Dict[str, Any], None]:
+    async def _finalize_artifact(self, pe: Any) -> AsyncGenerator[Dict[str, Any], None]:
         from src.agent_pipeline import (
             _is_plan_artifact_payload,
             _plan_artifact_sse_end,

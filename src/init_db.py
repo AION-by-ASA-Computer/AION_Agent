@@ -1,6 +1,7 @@
 import sqlite3
 import os
 
+
 def init_db(db_path="data/chat_memory.db"):
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     conn = sqlite3.connect(db_path)
@@ -73,6 +74,7 @@ def init_db(db_path="data/chat_memory.db"):
     conn.commit()
     conn.close()
     print(f"✅ Database AION inizializzato con successo: {db_path}")
+
 
 if __name__ == "__main__":
     init_db()

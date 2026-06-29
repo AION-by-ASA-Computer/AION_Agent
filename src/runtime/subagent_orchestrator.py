@@ -1,4 +1,5 @@
 """Run isolated mini-sessions for subagent delegation (Claude-style)."""
+
 from __future__ import annotations
 
 import logging
@@ -32,10 +33,17 @@ async def run_subagent_task(
     ensure_session_dirs(child_session)
     sync_meta = sync_parent_uploads_to_child(parent_conversation_id, child_session)
     if sync_meta.get("errors"):
-        logger.warning("subagent upload sync parent=%s child=%s: %s", parent_conversation_id, child_session, sync_meta)
+        logger.warning(
+            "subagent upload sync parent=%s child=%s: %s",
+            parent_conversation_id,
+            child_session,
+            sync_meta,
+        )
     from src.main import get_agent
 
-    agent, resolved = await get_agent(profile.slug, session_id=child_session, user_id=user_id)
+    agent, resolved = await get_agent(
+        profile.slug, session_id=child_session, user_id=user_id
+    )
     from src.agent_pipeline import AgentPipeline
 
     pipe = AgentPipeline(agent, child_session, resolved, user_id=user_id)

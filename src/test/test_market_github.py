@@ -9,7 +9,9 @@ def test_parse_github_url_https() -> None:
 
 
 def test_build_github_market_item() -> None:
-    item = build_github_market_item("https://github.com/ai-zerolab/mcp-email-server.git")
+    item = build_github_market_item(
+        "https://github.com/ai-zerolab/mcp-email-server.git"
+    )
     assert item is not None
     assert item["id"] == "github:ai-zerolab/mcp-email-server"
     assert item["install_type"] == "git"

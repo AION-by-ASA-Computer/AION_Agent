@@ -1,4 +1,5 @@
 """Execute scheduled jobs headless (no SSE)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -21,7 +22,9 @@ _PREVIEW_MAX = 4000
 
 def _preview_max() -> int:
     try:
-        return max(500, int(os.getenv("AION_CRON_PREVIEW_MAX_CHARS", str(_PREVIEW_MAX))))
+        return max(
+            500, int(os.getenv("AION_CRON_PREVIEW_MAX_CHARS", str(_PREVIEW_MAX)))
+        )
     except ValueError:
         return _PREVIEW_MAX
 
@@ -64,7 +67,9 @@ async def _ensure_conversation(
                 existing.metadata_json = json.dumps(current)
             except Exception:
                 pass
-            if not (existing.title or "").strip() or (existing.title or "").startswith("Cron:"):
+            if not (existing.title or "").strip() or (existing.title or "").startswith(
+                "Cron:"
+            ):
                 existing.title = job_name
             existing.updated_at = datetime.now(timezone.utc)
             session.add(existing)

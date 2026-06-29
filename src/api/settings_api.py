@@ -16,7 +16,7 @@ def _get_repo_root() -> Path:
 
 
 def _get_env_path() -> Path:
-    if os.path.exists('/.dockerenv'):
+    if os.path.exists("/.dockerenv"):
         data_dir = os.environ.get("AION_DATA_DIR", "/app/data")
         return Path(data_dir) / "runtime.env"
     return _get_repo_root() / ".env"
@@ -47,7 +47,7 @@ def _parse_env() -> Dict[str, str]:
             out[key] = val
     except Exception as e:
         logger.error(f"Failed to parse env file {path}: {e}")
-        
+
     return out
 
 
@@ -100,10 +100,10 @@ def _filter_settings_post(updates: Dict[str, str]) -> Dict[str, str]:
 
 def _write_env(updates: Dict[str, str]):
     path = _get_env_path()
-    
+
     # Ensure the parent directory (e.g. /app/data) exists
     path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     lines = []
 
     if not path.is_file():
@@ -137,7 +137,7 @@ def _write_env(updates: Dict[str, str]):
 def _resolve_provider_type(env_dict: Dict[str, str]) -> str:
     adapter = (env_dict.get("AION_LLM_ADAPTER") or "").strip().lower()
     model = (env_dict.get("AION_MODEL") or "").strip().lower()
-    
+
     if "anthropic" in adapter or "anthropic" in model or "claude" in model:
         return "anthropic"
     elif "google" in adapter or "gemini" in adapter or "gemini" in model:
@@ -157,7 +157,7 @@ async def get_settings():
     provider_type = _resolve_provider_type(env_dict)
     return {
         "settings": _mask_settings_for_get(env_dict),
-        "provider_type": provider_type
+        "provider_type": provider_type,
     }
 
 
@@ -172,12 +172,16 @@ async def update_settings(update: SettingsUpdate):
     """Update .env settings."""
     try:
         merged = _filter_settings_post(dict(update.settings))
-        
+
         # Validation: If provider is anthropic, AION_CHAT_MAX_TOKENS must be > AION_THINKING_TOKEN_BUDGET
         adapter = merged.get("AION_LLM_ADAPTER") or ""
         model = merged.get("AION_MODEL") or ""
-        is_anthropic = "anthropic" in adapter.lower() or "anthropic" in model.lower() or "claude" in model.lower()
-        
+        is_anthropic = (
+            "anthropic" in adapter.lower()
+            or "anthropic" in model.lower()
+            or "claude" in model.lower()
+        )
+
         if is_anthropic:
             max_tokens_str = merged.get("AION_CHAT_MAX_TOKENS")
             thinking_str = merged.get("AION_THINKING_TOKEN_BUDGET")
@@ -188,12 +192,12 @@ async def update_settings(update: SettingsUpdate):
                     if max_tokens <= thinking:
                         raise HTTPException(
                             status_code=400,
-                            detail="For Anthropic provider, Max Chat Tokens (AION_CHAT_MAX_TOKENS) must be greater than Thinking Token Budget (AION_THINKING_TOKEN_BUDGET)."
+                            detail="For Anthropic provider, Max Chat Tokens (AION_CHAT_MAX_TOKENS) must be greater than Thinking Token Budget (AION_THINKING_TOKEN_BUDGET).",
                         )
                 except ValueError:
                     raise HTTPException(
                         status_code=400,
-                        detail="Max Chat Tokens and Thinking Token Budget must be valid integers."
+                        detail="Max Chat Tokens and Thinking Token Budget must be valid integers.",
                     )
 
         # Validation: AION_LLM_TIMEOUT must be a valid integer
@@ -204,21 +208,23 @@ async def update_settings(update: SettingsUpdate):
             except ValueError:
                 raise HTTPException(
                     status_code=400,
-                    detail="LLM Timeout (AION_LLM_TIMEOUT) must be a valid integer."
+                    detail="LLM Timeout (AION_LLM_TIMEOUT) must be a valid integer.",
                 )
 
         _write_env(merged)
-        
+
         restarting = False
-        if os.path.exists('/.dockerenv'):
+        if os.path.exists("/.dockerenv"):
             restarting = True
             logger.info("Docker environment detected. Scheduling container restart...")
             asyncio.create_task(_deferred_exit())
-            
+
         return {
-            "status": "success", 
-            "message": "Settings updated. Restarting API container..." if restarting else "Settings updated. Some changes may require a restart.",
-            "restarting": restarting
+            "status": "success",
+            "message": "Settings updated. Restarting API container..."
+            if restarting
+            else "Settings updated. Some changes may require a restart.",
+            "restarting": restarting,
         }
     except HTTPException:
         raise

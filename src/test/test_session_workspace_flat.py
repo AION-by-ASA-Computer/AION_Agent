@@ -1,4 +1,5 @@
 """Tests for flat /session mount layout inside sandbox containers."""
+
 from __future__ import annotations
 
 import os

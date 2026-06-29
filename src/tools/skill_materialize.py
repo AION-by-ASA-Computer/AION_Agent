@@ -4,6 +4,7 @@ Copy skill package ``scripts/`` trees into a chat session workspace.
 Used after ``skill_view`` so ``sandbox_exec_allowlisted`` can run paths like
 ``scripts/office/unpack.py`` relative to the session root.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -76,7 +77,9 @@ def _save_marker(session_id: str, slug: str, payload: Dict[str, Any]) -> None:
     mp.write_text(json.dumps(payload, indent=0), encoding="utf-8")
 
 
-def materialize_skill_scripts(session_id: str, slug: str, *, force: bool = False) -> MaterializeResult:
+def materialize_skill_scripts(
+    session_id: str, slug: str, *, force: bool = False
+) -> MaterializeResult:
     """
     Copy ``<skill>/scripts/`` into ``{session}/scripts/`` (merge, idempotent).
     """
@@ -85,7 +88,9 @@ def materialize_skill_scripts(session_id: str, slug: str, *, force: bool = False
         return MaterializeResult("not_found", "Skill slug vuoto.", [])
 
     if not skill_registry.get_skill_full(slug):
-        return MaterializeResult("not_found", f"Skill '{slug}' not found nel registry.", [])
+        return MaterializeResult(
+            "not_found", f"Skill '{slug}' not found nel registry.", []
+        )
 
     src = skill_registry.get_skill_scripts_dir(slug)
     if not src:

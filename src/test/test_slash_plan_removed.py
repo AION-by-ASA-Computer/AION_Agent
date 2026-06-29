@@ -1,4 +1,5 @@
 """Legacy /plan slash must not auto-register orchestration plans."""
+
 from __future__ import annotations
 
 import pytest

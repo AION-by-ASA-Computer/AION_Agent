@@ -1,10 +1,15 @@
 """Wren CLI env injection for sandbox_exec_allowlisted."""
+
 from __future__ import annotations
 
 import os
 from unittest.mock import patch
 
-from src.tools.session_exec import _build_exec_env, _resolve_wren_home, _wren_exec_timeout_sec
+from src.tools.session_exec import (
+    _build_exec_env,
+    _resolve_wren_home,
+    _wren_exec_timeout_sec,
+)
 
 
 def test_wren_exec_default_timeout():

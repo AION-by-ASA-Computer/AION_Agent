@@ -1,4 +1,5 @@
 """Profile std + writable overlay merge and migration."""
+
 import os
 import textwrap
 from pathlib import Path
@@ -22,7 +23,9 @@ def profile_dirs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return std, template, overlay
 
 
-def _write_profile(path: Path, slug: str, *, name: str, instructions: str = "base") -> None:
+def _write_profile(
+    path: Path, slug: str, *, name: str, instructions: str = "base"
+) -> None:
     path.write_text(
         textwrap.dedent(
             f"""
@@ -41,7 +44,9 @@ def test_overlay_wins_over_std(profile_dirs):
     std, template, overlay = profile_dirs
     _write_profile(std / "aion_std.yaml", "aion_std", name="Std")
     _write_profile(template / "aion_std.yaml", "aion_std", name="Template")
-    _write_profile(overlay / "aion_std.yaml", "aion_std", name="Custom", instructions="edited")
+    _write_profile(
+        overlay / "aion_std.yaml", "aion_std", name="Custom", instructions="edited"
+    )
 
     mgr = ProfileManager()
     p = mgr.get_profile("aion_std")
@@ -52,8 +57,12 @@ def test_overlay_wins_over_std(profile_dirs):
 
 def test_migrate_copies_customized_std_profile(profile_dirs):
     std, template, overlay = profile_dirs
-    _write_profile(template / "aion_std.yaml", "aion_std", name="Template", instructions="from git")
-    _write_profile(std / "aion_std.yaml", "aion_std", name="Local", instructions="admin edit")
+    _write_profile(
+        template / "aion_std.yaml", "aion_std", name="Template", instructions="from git"
+    )
+    _write_profile(
+        std / "aion_std.yaml", "aion_std", name="Local", instructions="admin edit"
+    )
     assert not (overlay / "aion_std.yaml").exists()
 
     copied = migrate_profiles_to_write_dir()

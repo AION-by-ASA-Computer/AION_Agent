@@ -1,4 +1,5 @@
 """Fallback visible answer when the model ran tools but emitted no assistant text."""
+
 from __future__ import annotations
 
 import json

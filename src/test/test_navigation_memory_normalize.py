@@ -1,4 +1,5 @@
 """Normalize MemPalace drawer rows for navigation-memory API."""
+
 from src.memory.navigation_memory_service import _normalize_drawer_row
 
 

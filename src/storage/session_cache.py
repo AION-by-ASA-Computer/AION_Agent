@@ -1,4 +1,5 @@
 """Local cache for object-storage files so MCP sandbox can read from disk."""
+
 from __future__ import annotations
 
 import fcntl
@@ -37,7 +38,9 @@ class SessionFileCache:
                 fcntl.flock(lf.fileno(), fcntl.LOCK_UN)
         return dest
 
-    def promote_to_storage(self, conversation_id: str, local_path: Path, kind: str = "output") -> str:
+    def promote_to_storage(
+        self, conversation_id: str, local_path: Path, kind: str = "output"
+    ) -> str:
         tenant = os.getenv("AION_DEFAULT_TENANT_ID", "default")
         key = f"{tenant}/conversations/{conversation_id}/{kind}s/{local_path.name}"
         data = local_path.read_bytes()

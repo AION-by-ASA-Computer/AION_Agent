@@ -17,6 +17,7 @@ Utilizzo:
     token = await khub_token_manager.get_token()
     # → str | None  (None se le env var non sono configurate)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -108,7 +109,8 @@ class KhubTokenManager:
             expires_in = data.get("expires_in", 300)
             self._expires_at = time.time() + expires_in
             logger.info(
-                "KhubTokenManager: token acquisito con successo, scade in %ds.", expires_in
+                "KhubTokenManager: token acquisito con successo, scade in %ds.",
+                expires_in,
             )
             return self._access_token
 
@@ -120,7 +122,8 @@ class KhubTokenManager:
             )
         except httpx.HTTPError as exc:
             logger.error(
-                "KhubTokenManager: errore di rete durante l'acquisizione del token: %s", exc
+                "KhubTokenManager: errore di rete durante l'acquisizione del token: %s",
+                exc,
             )
         except Exception as exc:
             logger.error("KhubTokenManager: errore imprevisto: %s", exc)

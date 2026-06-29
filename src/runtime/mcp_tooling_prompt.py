@@ -12,7 +12,10 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Optional
 
-from ..mcp_connector_catalog import infer_connector_id_for_registry_name, load_mcp_connector_catalog
+from ..mcp_connector_catalog import (
+    infer_connector_id_for_registry_name,
+    load_mcp_connector_catalog,
+)
 
 
 def _connector_by_id_map(catalog: Dict[str, Any]) -> Dict[str, Dict[str, Any]]:
@@ -63,7 +66,9 @@ def build_mcp_tooling_prompt_section(
         if not guidance:
             continue
         title = con.get("title") or cid
-        doc_url = (con.get("mcp_upstream_docs_url") or con.get("official_doc_url") or "").strip()
+        doc_url = (
+            con.get("mcp_upstream_docs_url") or con.get("official_doc_url") or ""
+        ).strip()
         header = f"### MCP: {title} (server registry: `{srv}`)\n"
         body = guidance
         if doc_url:

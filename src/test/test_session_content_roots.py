@@ -1,4 +1,5 @@
 """Session sandbox content roots (uploads, workspace, derived, unpacked)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -18,7 +19,9 @@ def test_safe_resolve_unpacked_and_workspace_paths(isolated_data):
     sid = "test-content-roots"
     root = session_root(sid)
     (root / "unpacked" / "word").mkdir(parents=True)
-    (root / "unpacked" / "word" / "document.xml").write_text("<w:document/>", encoding="utf-8")
+    (root / "unpacked" / "word" / "document.xml").write_text(
+        "<w:document/>", encoding="utf-8"
+    )
     (root / "workspace" / "unpacked" / "word").mkdir(parents=True)
     (root / "workspace" / "unpacked" / "word" / "document.xml").write_text(
         "<w:document/>", encoding="utf-8"

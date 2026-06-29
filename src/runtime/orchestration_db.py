@@ -1,4 +1,5 @@
 """Persistenza piani orchestrazione (SQLAlchemy async)."""
+
 from __future__ import annotations
 
 import json
@@ -14,7 +15,9 @@ from src.data.models import ExecutionPlanRecord, OrchestrationAudit
 logger = logging.getLogger("aion.orchestration_db")
 
 
-async def _supersede_other_session_drafts(session, session_id: str, plan_id: str) -> None:
+async def _supersede_other_session_drafts(
+    session, session_id: str, plan_id: str
+) -> None:
     """Supersede draft_pending plans for this session except the target plan_id."""
     await session.execute(
         update(ExecutionPlanRecord)
@@ -75,7 +78,9 @@ async def upsert_execution_plan_draft(
             status=status,
             draft_json=json.dumps(draft, ensure_ascii=False),
             draft_markdown=draft_markdown,
-            todos_json=json.dumps(todos, ensure_ascii=False) if todos is not None else None,
+            todos_json=json.dumps(todos, ensure_ascii=False)
+            if todos is not None
+            else None,
         )
         session.add(row)
         await session.commit()
@@ -133,17 +138,27 @@ async def update_plan_after_wait(
         if todos is not None:
             vals["todos_json"] = json.dumps(todos, ensure_ascii=False)
         if audit_meta is not None:
-            vals["audit_meta_json"] = json.dumps(audit_meta, ensure_ascii=False)  # ORM → colonna audit_meta
+            vals["audit_meta_json"] = json.dumps(
+                audit_meta, ensure_ascii=False
+            )  # ORM → colonna audit_meta
         if revision is not None:
             vals["revision"] = int(revision)
-        await session.execute(update(ExecutionPlanRecord).where(ExecutionPlanRecord.plan_id == plan_id).values(**vals))
+        await session.execute(
+            update(ExecutionPlanRecord)
+            .where(ExecutionPlanRecord.plan_id == plan_id)
+            .values(**vals)
+        )
         await session.commit()
 
 
 async def fetch_plan_session(plan_id: str) -> Optional[str]:
     maker = get_async_session_maker()
     async with maker() as session:
-        r = await session.execute(select(ExecutionPlanRecord.session_id).where(ExecutionPlanRecord.plan_id == plan_id))
+        r = await session.execute(
+            select(ExecutionPlanRecord.session_id).where(
+                ExecutionPlanRecord.plan_id == plan_id
+            )
+        )
         row = r.first()
         return str(row[0]) if row else None
 
@@ -192,7 +207,17 @@ async def fetch_plan_sse_bundle(plan_id: str) -> Optional[Dict[str, Any]]:
         row = r.first()
         if not row:
             return None
-        sid, status, draft_json_s, appr_json_s, draft_md, appr_md, todos_s, ann_s, rev = row
+        (
+            sid,
+            status,
+            draft_json_s,
+            appr_json_s,
+            draft_md,
+            appr_md,
+            todos_s,
+            ann_s,
+            rev,
+        ) = row
         md = (appr_md or draft_md or "").strip()
         if not md:
             return None
@@ -226,7 +251,9 @@ async def fetch_plan_sse_bundle(plan_id: str) -> Optional[Dict[str, Any]]:
         }
 
 
-async def list_plans_for_session(session_id: str, *, limit: int = 20) -> list[Dict[str, Any]]:
+async def list_plans_for_session(
+    session_id: str, *, limit: int = 20
+) -> list[Dict[str, Any]]:
     """Piani orchestrazione per sessione (più recenti prima), esclusi i superseded."""
     sid = (session_id or "").strip()
     if not sid:
@@ -244,7 +271,10 @@ async def list_plans_for_session(session_id: str, *, limit: int = 20) -> list[Di
                 ExecutionPlanRecord.session_id == sid,
                 ExecutionPlanRecord.status != "superseded",
             )
-            .order_by(ExecutionPlanRecord.created_at.desc(), ExecutionPlanRecord.plan_id.desc())
+            .order_by(
+                ExecutionPlanRecord.created_at.desc(),
+                ExecutionPlanRecord.plan_id.desc(),
+            )
             .limit(max(1, min(limit, 50)))
         )
         rows = r.all()
@@ -297,7 +327,9 @@ async def insert_audit(
                 session_id=session_id,
                 actor=actor,
                 action=action,
-                payload_json=json.dumps(payload, ensure_ascii=False) if payload else None,
+                payload_json=json.dumps(payload, ensure_ascii=False)
+                if payload
+                else None,
             )
         )
         await session.commit()

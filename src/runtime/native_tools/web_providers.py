@@ -30,7 +30,9 @@ def _truthy(val: Optional[str]) -> bool:
 
 def _enabled_providers() -> List[str]:
     order: List[str] = []
-    default = (os.getenv("AION_WEB_SEARCH_DEFAULT_PROVIDER") or "tavily").strip().lower()
+    default = (
+        (os.getenv("AION_WEB_SEARCH_DEFAULT_PROVIDER") or "tavily").strip().lower()
+    )
     fb_raw = (os.getenv("AION_WEB_SEARCH_FALLBACK_ORDER") or "").strip()
     fallback = [p.strip().lower() for p in fb_raw.split(",") if p.strip()]
     seen = set()
@@ -57,7 +59,9 @@ def web_search_availability() -> Dict[str, Any]:
     return {
         "any_enabled": bool(enabled),
         "enabled": enabled,
-        "default_provider": (os.getenv("AION_WEB_SEARCH_DEFAULT_PROVIDER") or "tavily").strip().lower(),
+        "default_provider": (os.getenv("AION_WEB_SEARCH_DEFAULT_PROVIDER") or "tavily")
+        .strip()
+        .lower(),
     }
 
 
@@ -76,7 +80,9 @@ def _search_tavily(
         "api_key": key,
         "query": query,
         "max_results": max(1, min(max_results, 20)),
-        "search_depth": depth if depth in ("basic", "advanced", "fast", "ultra-fast") else "basic",
+        "search_depth": depth
+        if depth in ("basic", "advanced", "fast", "ultra-fast")
+        else "basic",
     }
     if include_domains:
         body["include_domains"] = include_domains
@@ -214,7 +220,12 @@ def run_web_search(
                 logger.warning("web_search provider %s failed: %s", prov, e)
                 errors.append(f"{prov}: {e}")
     return json.dumps(
-        {"query": query, "error": "all providers failed or are disabled", "details": errors, "results": []},
+        {
+            "query": query,
+            "error": "all providers failed or are disabled",
+            "details": errors,
+            "results": [],
+        },
         ensure_ascii=False,
     )
 
@@ -252,7 +263,9 @@ def _strip_html_simple(html: str, max_chars: int) -> str:
 def run_web_fetch_page(url: str, *, prefer_stealth: bool = False) -> str:
     """Scarica una singola pagina e restituisce testo (JSON)."""
     if not url or not str(url).strip().lower().startswith(("http://", "https://")):
-        return json.dumps({"error": "URL http(s) richiesto", "text": ""}, ensure_ascii=False)
+        return json.dumps(
+            {"error": "URL http(s) richiesto", "text": ""}, ensure_ascii=False
+        )
     u = str(url).strip()
     ctx = get_web_search_request_context()
     patterns, perr = effective_host_patterns(list(ctx.restrict_hosts))
@@ -279,16 +292,24 @@ def run_web_fetch_page(url: str, *, prefer_stealth: bool = False) -> str:
         try:
             if not re.search(allow, u):
                 return json.dumps(
-                    {"error": f"URL non ammesso da AION_WEB_FETCH_ALLOWLIST_REGEX", "url": u},
+                    {
+                        "error": f"URL non ammesso da AION_WEB_FETCH_ALLOWLIST_REGEX",
+                        "url": u,
+                    },
                     ensure_ascii=False,
                 )
         except re.error as e:
-            return json.dumps({"error": f"regex allowlist invalida: {e}", "url": u}, ensure_ascii=False)
+            return json.dumps(
+                {"error": f"regex allowlist invalida: {e}", "url": u},
+                ensure_ascii=False,
+            )
 
     if _url_path_looks_pdf(u):
         return _pdf_not_text_extractable_payload(u)
 
-    stealth = prefer_stealth and _truthy(os.getenv("AION_SCRAPLING_STEALTH_ENABLED", "0"))
+    stealth = prefer_stealth and _truthy(
+        os.getenv("AION_SCRAPLING_STEALTH_ENABLED", "0")
+    )
 
     # 1) Scrapling Fetcher (richiede scrapling[fetchers])
     try:
@@ -309,7 +330,10 @@ def run_web_fetch_page(url: str, *, prefer_stealth: bool = False) -> str:
             elif isinstance(html, str) and html.lstrip().startswith("%PDF-"):
                 return _pdf_not_text_extractable_payload(u)
             text = _strip_html_simple(html, max_chars)
-            return json.dumps({"url": u, "mode": "scrapling_fetcher", "text": text}, ensure_ascii=False)
+            return json.dumps(
+                {"url": u, "mode": "scrapling_fetcher", "text": text},
+                ensure_ascii=False,
+            )
         except Exception as e:
             logger.warning("scrapling Fetcher failed for %s: %s", u, e)
 
@@ -326,14 +350,21 @@ def run_web_fetch_page(url: str, *, prefer_stealth: bool = False) -> str:
             elif isinstance(html, str) and html.lstrip().startswith("%PDF-"):
                 return _pdf_not_text_extractable_payload(u)
             text = _strip_html_simple(html, max_chars)
-            return json.dumps({"url": u, "mode": "scrapling_stealthy", "text": text}, ensure_ascii=False)
+            return json.dumps(
+                {"url": u, "mode": "scrapling_stealthy", "text": text},
+                ensure_ascii=False,
+            )
         except Exception as e:
             logger.warning("scrapling StealthyFetcher failed for %s: %s", u, e)
 
     # 2) httpx fallback
     try:
         with httpx.Client(follow_redirects=True) as client:
-            r = client.get(u, timeout=timeout, headers={"User-Agent": "AION-Agent/1.0 (+web_fetch_page)"})
+            r = client.get(
+                u,
+                timeout=timeout,
+                headers={"User-Agent": "AION-Agent/1.0 (+web_fetch_page)"},
+            )
             r.raise_for_status()
             body = r.content[:max_bytes]
             ctype = (r.headers.get("content-type") or "").lower()
@@ -343,9 +374,13 @@ def run_web_fetch_page(url: str, *, prefer_stealth: bool = False) -> str:
                 return _pdf_not_text_extractable_payload(u)
             path_lower = u.lower().split("?", 1)[0]
             if "html" in ctype or path_lower.endswith((".htm", ".html")):
-                text = _strip_html_simple(body.decode("utf-8", errors="replace"), max_chars)
+                text = _strip_html_simple(
+                    body.decode("utf-8", errors="replace"), max_chars
+                )
             else:
                 text = body.decode("utf-8", errors="replace")[:max_chars]
-            return json.dumps({"url": u, "mode": "httpx", "text": text}, ensure_ascii=False)
+            return json.dumps(
+                {"url": u, "mode": "httpx", "text": text}, ensure_ascii=False
+            )
     except Exception as e:
         return json.dumps({"error": str(e), "url": u, "text": ""}, ensure_ascii=False)

@@ -1,4 +1,5 @@
 """Nudge periodico (Hermes FASE E) — analisi retrospettiva leggera."""
+
 from __future__ import annotations
 
 import logging
@@ -40,7 +41,8 @@ class PeriodicNudge:
         if not rows:
             return
         transcript = "\n".join(
-            f"{r.get('role', '?')}: {(r.get('content') or '')[:600]}" for r in rows[-40:]
+            f"{r.get('role', '?')}: {(r.get('content') or '')[:600]}"
+            for r in rows[-40:]
         )
         system = (
             'Rispondi JSON: {"diary_entry": "breve o null", "note": "..."} '

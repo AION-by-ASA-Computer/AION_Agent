@@ -1,4 +1,5 @@
 """MemPalace pre-turn inject is opt-in."""
+
 from __future__ import annotations
 
 import os

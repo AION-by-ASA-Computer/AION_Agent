@@ -1,4 +1,5 @@
 """Tests for Podman sandbox setup helper."""
+
 from __future__ import annotations
 
 import os

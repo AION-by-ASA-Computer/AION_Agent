@@ -18,7 +18,9 @@ def test_setup_execution_plan_casts_ttl_to_int(monkeypatch):
 
     from src.runtime import orchestration_db as odb
 
-    monkeypatch.setattr(odb, "upsert_execution_plan_draft", fake_upsert_execution_plan_draft)
+    monkeypatch.setattr(
+        odb, "upsert_execution_plan_draft", fake_upsert_execution_plan_draft
+    )
 
     ok = asyncio.run(
         ot.setup_execution_plan_from_markdown(

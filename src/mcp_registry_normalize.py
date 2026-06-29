@@ -1,6 +1,7 @@
 """
 Rilevamento entrypoint e patch registry post-install marketplace (git/npx).
 """
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,10 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from .mcp_connector_catalog import infer_connector_id_for_registry_name, load_mcp_connector_catalog
+from .mcp_connector_catalog import (
+    infer_connector_id_for_registry_name,
+    load_mcp_connector_catalog,
+)
 from .mcp_manager import mcp_manager
 
 logger = logging.getLogger("aion.mcp_registry_normalize")
@@ -51,12 +55,18 @@ def detect_stdio_entrypoint(server_slug: str) -> Tuple[str, List[str]]:
     Node/TS: bun/tsx/node come prima.
     """
     cfg = mcp_manager.get_server_config(server_slug) or {}
-    clone = (cfg.get("aion_market_clone_path") or f"mcp_servers/{server_slug}").replace("\\", "/")
+    clone = (cfg.get("aion_market_clone_path") or f"mcp_servers/{server_slug}").replace(
+        "\\", "/"
+    )
     dest = _repo_root() / clone
     if not dest.is_dir():
         dest = _repo_root() / "mcp_servers" / server_slug
 
-    rel_dir = str(dest.relative_to(_repo_root())).replace("\\", "/") if dest.is_dir() else clone
+    rel_dir = (
+        str(dest.relative_to(_repo_root())).replace("\\", "/")
+        if dest.is_dir()
+        else clone
+    )
 
     if (dest / "pyproject.toml").is_file():
         scripts = _pyproject_console_scripts(dest)
@@ -111,7 +121,9 @@ def detect_stdio_entrypoint(server_slug: str) -> Tuple[str, List[str]]:
             for _bin_name, bin_path in bin_field.items():
                 candidate_bin = dest / bin_path
                 if candidate_bin.is_file():
-                    rel = str(candidate_bin.relative_to(_repo_root())).replace("\\", "/")
+                    rel = str(candidate_bin.relative_to(_repo_root())).replace(
+                        "\\", "/"
+                    )
                     if str(bin_path).endswith(".ts"):
                         if shutil.which("bun"):
                             return "bun", ["run", rel]
@@ -140,7 +152,13 @@ def detect_stdio_entrypoint(server_slug: str) -> Tuple[str, List[str]]:
             return "node", [rel]
 
         # Fallback: cerca src/main.ts, src/index.ts (sorgenti TypeScript)
-        for src_entry in ("src/main.ts", "src/index.ts", "src/server.ts", "main.ts", "index.ts"):
+        for src_entry in (
+            "src/main.ts",
+            "src/index.ts",
+            "src/server.ts",
+            "main.ts",
+            "index.ts",
+        ):
             candidate_src = dest / src_entry
             if candidate_src.is_file():
                 rel = str(candidate_src.relative_to(_repo_root())).replace("\\", "/")
@@ -199,7 +217,9 @@ def normalize_installed_server_registry(server_slug: str) -> Dict[str, Any]:
             if not candidate.is_file():
                 needs_detect = True
     if needs_detect:
-        clone = (cfg.get("aion_market_clone_path") or f"mcp_servers/{server_slug}").replace("\\", "/")
+        clone = (
+            cfg.get("aion_market_clone_path") or f"mcp_servers/{server_slug}"
+        ).replace("\\", "/")
         dest = _repo_root() / clone
         if dest.is_dir():
             _uv_sync_clone(dest)
@@ -219,7 +239,10 @@ def normalize_installed_server_registry(server_slug: str) -> Dict[str, Any]:
 
 async def normalize_and_apply_env_after_install(server_slug: str) -> Dict[str, Any]:
     """Normalize entrypoint then apply suggested env using inferred credential_mode (no AI)."""
-    from .mcp_integration_sync import apply_integration_config, build_integration_preview
+    from .mcp_integration_sync import (
+        apply_integration_config,
+        build_integration_preview,
+    )
 
     norm = normalize_installed_server_registry(server_slug)
     if not norm.get("ok"):

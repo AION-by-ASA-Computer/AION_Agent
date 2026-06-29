@@ -24,6 +24,7 @@ def _trace(msg: str) -> None:
     print(f">>> [DEEP_RESEARCH] {msg}", flush=True)
     logger.info(msg)
 
+
 _handler: Optional["ResearchHandler"] = None
 
 
@@ -168,7 +169,9 @@ class ResearchHandler:
         chat_session_id: str = "",
     ) -> dict:
         if not deep_research_enabled():
-            raise RuntimeError("Deep research is disabled (AION_DEEP_RESEARCH_ENABLED=0)")
+            raise RuntimeError(
+                "Deep research is disabled (AION_DEEP_RESEARCH_ENABLED=0)"
+            )
 
         owner = owner or ""
         if owner and self._count_running_for_owner(owner) >= max_concurrent_per_owner():
@@ -183,7 +186,11 @@ class ResearchHandler:
 
         if hard_timeout is None:
             raw = _env_int("AION_DEEP_RESEARCH_RUN_TIMEOUT", 1800)
-            hard_timeout = None if raw <= 0 else _bounded_int(raw, default=1800, minimum=60, maximum=86400)
+            hard_timeout = (
+                None
+                if raw <= 0
+                else _bounded_int(raw, default=1800, minimum=60, maximum=86400)
+            )
 
         max_rounds = _normalize_max_rounds(max_rounds)
         max_time = _normalize_max_time(max_time)
@@ -268,7 +275,9 @@ class ResearchHandler:
                 else:
                     entry["status"] = "error"
                     entry["result"] = f"Research timed out after {hard_timeout}s."
-                on_progress({"phase": "error", "message": f"Timed out after {hard_timeout}s"})
+                on_progress(
+                    {"phase": "error", "message": f"Timed out after {hard_timeout}s"}
+                )
             except asyncio.CancelledError:
                 entry["status"] = "cancelled"
                 raise
@@ -339,7 +348,9 @@ class ResearchHandler:
 
         max_report_tokens = _env_int("AION_DEEP_RESEARCH_MAX_TOKENS", 16384)
         ext_timeout = _bounded_int(
-            extraction_timeout if extraction_timeout is not None else _env_int("AION_DEEP_RESEARCH_EXTRACTION_TIMEOUT", 90),
+            extraction_timeout
+            if extraction_timeout is not None
+            else _env_int("AION_DEEP_RESEARCH_EXTRACTION_TIMEOUT", 90),
             default=90,
             minimum=15,
             maximum=3600,
@@ -500,7 +511,10 @@ class ResearchHandler:
             if data.get("status") != "running":
                 continue
             sid = path.stem
-            if sid in self._active_tasks and self._active_tasks[sid].get("status") == "running":
+            if (
+                sid in self._active_tasks
+                and self._active_tasks[sid].get("status") == "running"
+            ):
                 continue
             self._recover_orphaned_session(sid, data)
 
@@ -641,7 +655,8 @@ class ResearchHandler:
                     "category": data.get("category") or "",
                     "source_count": len(data.get("sources") or []),
                     "status": data.get("status", "done"),
-                    "duration": (data.get("completed_at") or 0) - (data.get("started_at") or 0),
+                    "duration": (data.get("completed_at") or 0)
+                    - (data.get("started_at") or 0),
                     "rounds": (data.get("stats") or {}).get("Rounds"),
                     "started_at": data.get("started_at", 0),
                     "completed_at": data.get("completed_at", 0),
@@ -653,7 +668,10 @@ class ResearchHandler:
         elif sort == "alpha":
             items.sort(key=lambda x: (x.get("query") or "").lower())
         else:
-            items.sort(key=lambda x: x.get("completed_at") or x.get("started_at") or 0, reverse=True)
+            items.sort(
+                key=lambda x: x.get("completed_at") or x.get("started_at") or 0,
+                reverse=True,
+            )
         return items[: max(1, min(limit, 200))]
 
     def delete_research(self, session_id: str) -> bool:
@@ -809,7 +827,9 @@ class ResearchHandler:
         return items
 
     @staticmethod
-    def _format_research_report(query: str, full_report: str, stats: dict, elapsed: float) -> str:
+    def _format_research_report(
+        query: str, full_report: str, stats: dict, elapsed: float
+    ) -> str:
         full_report = strip_thinking(full_report) or ""
         summary = " | ".join(
             [

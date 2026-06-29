@@ -1,4 +1,5 @@
 """Create tables + FTS5 for unified DB."""
+
 from __future__ import annotations
 
 import logging
@@ -149,14 +150,20 @@ CREATE TABLE messages (
 _MSG_LEGACY_SQL_PREFIX = "aionm-"
 
 
-async def _migrate_sqlite_messages_legacy_to_fts_rowid(engine: AsyncEngine, conn) -> bool:
+async def _migrate_sqlite_messages_legacy_to_fts_rowid(
+    engine: AsyncEngine, conn
+) -> bool:
     """DB unificato vecchio: ``messages.id`` INTEGER PK + FTS ``content_rowid=id`` → schema ORM attuale.
 
     Returns True se è stata eseguita una migrazione (serve rebuild FTS5).
     """
     if engine.dialect.name != "sqlite":
         return False
-    r = await conn.execute(text("SELECT 1 FROM sqlite_master WHERE type='table' AND name='messages' LIMIT 1"))
+    r = await conn.execute(
+        text(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='messages' LIMIT 1"
+        )
+    )
     if r.first() is None:
         return False
     info = await conn.execute(text("PRAGMA table_info(messages)"))
@@ -169,7 +176,9 @@ async def _migrate_sqlite_messages_legacy_to_fts_rowid(engine: AsyncEngine, conn
         return False
     id_type = (id_row[2] or "").upper()
     if "INT" not in id_type:
-        logger.warning("SQLite messages migration: tipo colonna id inatteso (%s), skip", id_type)
+        logger.warning(
+            "SQLite messages migration: tipo colonna id inatteso (%s), skip", id_type
+        )
         return False
 
     logger.info(
@@ -244,7 +253,9 @@ CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts USING fts5(
 async def ensure_bootstrap_schema(engine: AsyncEngine) -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        migrated_messages = await _migrate_sqlite_messages_legacy_to_fts_rowid(engine, conn)
+        migrated_messages = await _migrate_sqlite_messages_legacy_to_fts_rowid(
+            engine, conn
+        )
         await _patch_sqlite_columns(engine, conn)
         try:
             await conn.execute(text(_FTS_DDL))
@@ -264,7 +275,9 @@ END""",
             ):
                 await conn.execute(text(stmt))
             if migrated_messages:
-                await conn.execute(text("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')"))
+                await conn.execute(
+                    text("INSERT INTO messages_fts(messages_fts) VALUES('rebuild')")
+                )
                 logger.info("FTS5: rebuild dopo migrazione messages")
         except Exception as e:
             logger.warning("FTS5 bootstrap skipped: %s", e)
@@ -277,4 +290,3 @@ END""",
             )
         except Exception as e:
             logger.debug("tenant seed: %s", e)
-

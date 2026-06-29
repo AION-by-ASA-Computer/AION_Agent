@@ -1,4 +1,5 @@
 """Weak mempalace_search result annotation."""
+
 from __future__ import annotations
 
 import json
@@ -23,7 +24,11 @@ def test_strong_search_unchanged() -> None:
     raw = json.dumps(
         {
             "results": [
-                {"text": "Users to DeviceMovement", "similarity": 0.85, "room": "join_paths"}
+                {
+                    "text": "Users to DeviceMovement",
+                    "similarity": 0.85,
+                    "room": "join_paths",
+                }
             ]
         }
     )
@@ -32,4 +37,7 @@ def test_strong_search_unchanged() -> None:
 
 
 def test_other_tools_unchanged() -> None:
-    assert enrich_mempalace_tool_result("mempalace_add_drawer", '{"ok":true}') == '{"ok":true}'
+    assert (
+        enrich_mempalace_tool_result("mempalace_add_drawer", '{"ok":true}')
+        == '{"ok":true}'
+    )

@@ -1,5 +1,8 @@
 from src.agent_pipeline import _chunk_counters
-from src.runtime.reasoning_effort import effective_reasoning_effort, normalize_reasoning_effort
+from src.runtime.reasoning_effort import (
+    effective_reasoning_effort,
+    normalize_reasoning_effort,
+)
 
 
 def test_chunk_counter_classification():
@@ -16,4 +19,3 @@ def test_reasoning_default_is_medium(monkeypatch):
     monkeypatch.delenv("AION_THINKING_ENABLED", raising=False)
     assert normalize_reasoning_effort(None) == "medium"
     assert effective_reasoning_effort(None) == "medium"
-

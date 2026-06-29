@@ -1,4 +1,5 @@
 """Resolve active SQL QueryMemory project slug for a chat turn."""
+
 from __future__ import annotations
 
 import os
@@ -20,5 +21,7 @@ def resolve_sql_query_project(
     stored = (conversation_project or "").strip()
     if stored:
         return stored
-    fallback = (env_default or os.getenv("AION_SQL_QM_DEFAULT_PROJECT") or "default").strip()
+    fallback = (
+        env_default or os.getenv("AION_SQL_QM_DEFAULT_PROJECT") or "default"
+    ).strip()
     return fallback or "default"

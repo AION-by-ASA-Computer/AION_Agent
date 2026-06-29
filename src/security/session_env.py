@@ -3,6 +3,7 @@ Minimal environment for session sandbox subprocesses.
 
 Strips host secrets and most AION_* configuration before user code runs.
 """
+
 from __future__ import annotations
 
 import os
@@ -192,7 +193,7 @@ def build_exec_env(
             continue
         if val and repo_root and not Path(val).is_absolute():
             try:
-                cleaned = val.strip('"\'')
+                cleaned = val.strip("\"'")
                 resolved = (repo_root / cleaned).resolve()
                 if resolved.exists():
                     val = str(resolved)

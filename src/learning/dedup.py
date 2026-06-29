@@ -1,4 +1,5 @@
 """Dedup skill candidate via embedding (opzionale)."""
+
 from __future__ import annotations
 
 import os
@@ -24,7 +25,9 @@ def compute_similarity(text_a: str, text_b: str) -> float:
         return 0.0
 
 
-def find_similar_skill(description: str, threshold: float = 0.88) -> Optional[Tuple[str, float]]:
+def find_similar_skill(
+    description: str, threshold: float = 0.88
+) -> Optional[Tuple[str, float]]:
     from src.skill_registry import skill_registry
 
     try:

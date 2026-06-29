@@ -1,4 +1,5 @@
 """datasource_memory_protocol content checks."""
+
 from __future__ import annotations
 
 from pathlib import Path

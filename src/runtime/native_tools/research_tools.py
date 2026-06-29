@@ -27,17 +27,27 @@ def run_trigger_research(
     user_id: str = "",
 ) -> str:
     """Start a deep research job (in-process). Returns JSON string."""
-    from src.research.handler import deep_research_enabled, get_research_handler, new_research_session_id
+    from src.research.handler import (
+        deep_research_enabled,
+        get_research_handler,
+        new_research_session_id,
+    )
 
     if not deep_research_enabled():
         return json.dumps(
-            {"error": "Deep research disabled (AION_DEEP_RESEARCH_ENABLED=0)", "exit_code": 1},
+            {
+                "error": "Deep research disabled (AION_DEEP_RESEARCH_ENABLED=0)",
+                "exit_code": 1,
+            },
             ensure_ascii=False,
         )
     args = _parse_args(content)
     topic = (args.get("topic") or args.get("query") or "").strip()
     if not topic:
-        return json.dumps({"error": "topic (or query) is required", "exit_code": 1}, ensure_ascii=False)
+        return json.dumps(
+            {"error": "topic (or query) is required", "exit_code": 1},
+            ensure_ascii=False,
+        )
 
     max_rounds = args.get("max_rounds")
     max_time = args.get("max_time")
@@ -97,18 +107,28 @@ def run_manage_research(content: str, *, user_id: str = "") -> str:
     if action in ("delete", "remove"):
         rid = (args.get("id") or args.get("session_id") or "").strip()
         if not rid:
-            return json.dumps({"error": "id required for delete", "exit_code": 1}, ensure_ascii=False)
+            return json.dumps(
+                {"error": "id required for delete", "exit_code": 1}, ensure_ascii=False
+            )
         if not handler.owns(rid, owner):
-            return json.dumps({"error": "not found", "exit_code": 1}, ensure_ascii=False)
+            return json.dumps(
+                {"error": "not found", "exit_code": 1}, ensure_ascii=False
+            )
         handler.delete_research(rid)
-        return json.dumps({"output": f"Deleted research {rid}.", "exit_code": 0}, ensure_ascii=False)
+        return json.dumps(
+            {"output": f"Deleted research {rid}.", "exit_code": 0}, ensure_ascii=False
+        )
 
     if action in ("read", "open", "view", "get"):
         rid = (args.get("id") or args.get("session_id") or "").strip()
         if not rid:
-            return json.dumps({"error": "id required for read", "exit_code": 1}, ensure_ascii=False)
+            return json.dumps(
+                {"error": "id required for read", "exit_code": 1}, ensure_ascii=False
+            )
         if not handler.owns(rid, owner):
-            return json.dumps({"error": "not found", "exit_code": 1}, ensure_ascii=False)
+            return json.dumps(
+                {"error": "not found", "exit_code": 1}, ensure_ascii=False
+            )
         result = handler.get_result(rid) or ""
         sources = handler.get_sources(rid) or []
         lines = [result, "", "**Sources:**"]

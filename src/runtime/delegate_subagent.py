@@ -1,4 +1,5 @@
 """Entry point unico per delega sub-agent (tool Haystack ``delegate_task`` e MCP ``delegate_to_subagent``)."""
+
 from __future__ import annotations
 
 

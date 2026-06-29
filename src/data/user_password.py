@@ -1,4 +1,5 @@
 """Creazione utenti con password (bcrypt) nel DB unificato — condiviso da Admin API, setup e CLI."""
+
 from __future__ import annotations
 
 import json
@@ -22,11 +23,15 @@ class UserAlreadyExistsError(Exception):
     def __init__(self, tenant_id: str, identifier: str) -> None:
         self.tenant_id = tenant_id
         self.identifier = identifier
-        super().__init__(f"User already exists: tenant={tenant_id!r} identifier={identifier!r}")
+        super().__init__(
+            f"User already exists: tenant={tenant_id!r} identifier={identifier!r}"
+        )
 
 
 def hash_password(plain: str) -> str:
-    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode("ascii")
+    return bcrypt.hashpw(plain.encode("utf-8"), bcrypt.gensalt(rounds=12)).decode(
+        "ascii"
+    )
 
 
 def verify_password(plain: str, hashed: Optional[str]) -> bool:
@@ -39,6 +44,7 @@ def verify_password(plain: str, hashed: Optional[str]) -> bool:
 
 
 # --- Roles -----------------------------------------------------------------
+
 
 def get_roles(u: User) -> List[str]:
     """Decodifica ``users.roles`` (JSON list). Robusto a valori legacy."""
@@ -72,6 +78,7 @@ def set_roles(u: User, roles: Iterable[str]) -> None:
 
 # --- Creazione utente ------------------------------------------------------
 
+
 async def create_password_user(
     *,
     tenant_id: str,
@@ -99,8 +106,16 @@ async def create_password_user(
 
     async with sm() as session:
         existing = (
-            await session.execute(select(User).where(User.tenant_id == tenant_id, User.identifier == key))
-        ).scalars().first()
+            (
+                await session.execute(
+                    select(User).where(
+                        User.tenant_id == tenant_id, User.identifier == key
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
         if existing:
             raise UserAlreadyExistsError(tenant_id, key)
 
@@ -132,8 +147,10 @@ async def admin_exists(
     sm = session_maker or get_async_session_maker()
     async with sm() as session:
         rows = (
-            await session.execute(select(User).where(User.tenant_id == tenant_id))
-        ).scalars().all()
+            (await session.execute(select(User).where(User.tenant_id == tenant_id)))
+            .scalars()
+            .all()
+        )
         for u in rows:
             if has_role(u, "admin"):
                 return True

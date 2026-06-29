@@ -3,6 +3,7 @@
 Legacy env aliases ``AION_CHAINLIT_PASSWORD_AUTH`` / ``CHAINLIT_AUTH_SECRET`` are
 still read as fallback; ``scripts/upgrade_core.py`` migrates them to ``AION_CHAT_*``.
 """
+
 from __future__ import annotations
 
 import json
@@ -31,13 +32,13 @@ def password_auth_enabled() -> bool:
 
 def chat_auth_secret() -> str:
     return (
-        os.getenv("AION_CHAT_AUTH_SECRET")
-        or os.getenv("CHAINLIT_AUTH_SECRET")
-        or ""
+        os.getenv("AION_CHAT_AUTH_SECRET") or os.getenv("CHAINLIT_AUTH_SECRET") or ""
     ).strip()
 
 
-async def authenticate_user_password(username: str, password: str) -> Optional[Dict[str, Any]]:
+async def authenticate_user_password(
+    username: str, password: str
+) -> Optional[Dict[str, Any]]:
     """Verify credentials on ``users``; return a serializable dict or None."""
     if not username or not password:
         return None
@@ -46,16 +47,30 @@ async def authenticate_user_password(username: str, password: str) -> Optional[D
 
     async with get_async_session_maker()() as session:
         u_res = (
-            await session.execute(select(User).where(User.tenant_id == tenant_id, User.identifier == key))
-        ).scalars().all()
+            (
+                await session.execute(
+                    select(User).where(
+                        User.tenant_id == tenant_id, User.identifier == key
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
         u = u_res[0] if u_res else None
 
         if not u:
             u_res = (
-                await session.execute(
-                    select(User).where(User.tenant_id == tenant_id, User.identifier.ilike(key))
+                (
+                    await session.execute(
+                        select(User).where(
+                            User.tenant_id == tenant_id, User.identifier.ilike(key)
+                        )
+                    )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
             u = u_res[0] if u_res else None
 
         if not u:

@@ -5,7 +5,12 @@ import os
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
 
 logger = logging.getLogger("aion.data.engine")
 
@@ -26,7 +31,9 @@ def init_engine(url: str | None = None) -> AsyncEngine:
         Path(u.split("///")[-1]).parent.mkdir(parents=True, exist_ok=True)
     _engine = create_async_engine(u, echo=os.getenv("AION_SQL_ECHO", "0") == "1")
     _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
-    logger.info("SQLAlchemy async engine ready: %s", u.split("@")[-1] if "@" in u else u)
+    logger.info(
+        "SQLAlchemy async engine ready: %s", u.split("@")[-1] if "@" in u else u
+    )
     return _engine
 
 

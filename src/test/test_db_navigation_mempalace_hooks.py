@@ -1,4 +1,5 @@
 """Unit tests for MemPalace navigation hooks."""
+
 from __future__ import annotations
 
 import json

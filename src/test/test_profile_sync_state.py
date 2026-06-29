@@ -1,4 +1,5 @@
 """sync_config preserves customized profile YAML on --force."""
+
 import textwrap
 from pathlib import Path
 

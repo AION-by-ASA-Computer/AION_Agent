@@ -1,4 +1,5 @@
 """MCP registry JSON/YAML normalization."""
+
 from __future__ import annotations
 
 import json

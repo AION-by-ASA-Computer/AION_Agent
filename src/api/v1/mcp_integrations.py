@@ -1,4 +1,5 @@
 """User-facing MCP integrations (chat JWT, not X-API-Key)."""
+
 from __future__ import annotations
 
 import os
@@ -110,22 +111,35 @@ async def list_available_integrations(
 
     # Carica il registry per sapere quali server esistono realmente
     from src.mcp_manager import mcp_manager
+
     mcp_manager.load_registry()
     registry_slugs = set(mcp_manager._registry.keys())
 
     async with get_async_session_maker()() as session:
         rows = (
-            await session.execute(
-                select(McpServerConfig).where(McpServerConfig.is_enabled_for_users.is_(True))
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.is_enabled_for_users.is_(True)
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
     # Batch-fetch preferences and credential hints for all enabled slugs
     enabled_slugs = {r.server_slug for r in rows if r.server_slug in registry_slugs}
-    pref_map = await get_user_mcp_preference_map(user_id, tenant_id=tenant) if not anonymous else {}
-    hints_map = await batch_list_credentials_hints(
-        user_id, enabled_slugs, tenant_id=tenant
-    ) if not anonymous and credentials_feature_enabled() else {}
+    pref_map = (
+        await get_user_mcp_preference_map(user_id, tenant_id=tenant)
+        if not anonymous
+        else {}
+    )
+    hints_map = (
+        await batch_list_credentials_hints(user_id, enabled_slugs, tenant_id=tenant)
+        if not anonymous and credentials_feature_enabled()
+        else {}
+    )
 
     result: List[Dict[str, Any]] = []
     for r in rows:
@@ -164,7 +178,10 @@ async def list_runtime_mcp_errors(
 ) -> Dict[str, Any]:
     """Errori avvio/handshake MCP per i server nel profilo (tool non caricati in chat)."""
     from src.agent_profile import profile_manager
-    from src.runtime.mcp_health import get_last_mcp_load_errors, probe_profile_mcp_servers
+    from src.runtime.mcp_health import (
+        get_last_mcp_load_errors,
+        probe_profile_mcp_servers,
+    )
 
     user_id = _credential_user_id(auth)
     sid = (session_id or "").strip() or f"health-{user_id}"
@@ -185,8 +202,9 @@ async def list_runtime_mcp_errors(
         cached = get_last_mcp_load_errors(sid)
         from src.runtime.mcp_health import _clean_error_message, _hint_for_error
         from src.mcp_manager import mcp_manager
+
         mcp_manager.load_registry()
-        
+
         rows = []
         for slug, err in cached.items():
             if slug not in profile_slugs:
@@ -231,7 +249,10 @@ async def list_pending_integrations(
         tenant_id=tenant,
         anonymous=anonymous,
     )
-    return {"pending": pending, "credentials_feature_enabled": credentials_feature_enabled()}
+    return {
+        "pending": pending,
+        "credentials_feature_enabled": credentials_feature_enabled(),
+    }
 
 
 class PreferenceBody(BaseModel):
@@ -250,23 +271,33 @@ async def patch_integration_preference(
 
     async with get_async_session_maker()() as session:
         cfg = (
-            await session.execute(
-                select(McpServerConfig).where(
-                    McpServerConfig.server_slug == server_slug,
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == server_slug,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
     if cfg:
         if not cfg.is_enabled_for_users and body.is_active:
             raise HTTPException(status_code=404, detail="Integration not enabled")
         if not getattr(cfg, "user_may_disable", True) and not body.is_active:
-            raise HTTPException(status_code=403, detail="This integration cannot be disabled by users")
+            raise HTTPException(
+                status_code=403, detail="This integration cannot be disabled by users"
+            )
     else:
         # If it doesn't exist in the database configuration, we only allow disabling it
         if body.is_active:
-            raise HTTPException(status_code=404, detail="Integration not found or not configured")
+            raise HTTPException(
+                status_code=404, detail="Integration not found or not configured"
+            )
 
-    await set_user_mcp_preference(user_id, server_slug, body.is_active, tenant_id=tenant)
+    await set_user_mcp_preference(
+        user_id, server_slug, body.is_active, tenant_id=tenant
+    )
     clear_integrations_cache()
     return {"ok": True, "server_slug": server_slug, "is_active": body.is_active}
 
@@ -289,15 +320,21 @@ async def save_credentials(
 
     async with get_async_session_maker()() as session:
         cfg = (
-            await session.execute(
-                select(McpServerConfig).where(
-                    McpServerConfig.server_slug == body.server_slug,
-                    McpServerConfig.is_enabled_for_users.is_(True),
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == body.server_slug,
+                        McpServerConfig.is_enabled_for_users.is_(True),
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
     if not cfg:
-        raise HTTPException(status_code=404, detail="Integration not found or not enabled")
+        raise HTTPException(
+            status_code=404, detail="Integration not found or not enabled"
+        )
 
     for key, value in body.credentials.items():
         hint = (body.display_hints or {}).get(key)
@@ -311,7 +348,11 @@ async def save_credentials(
         )
 
     clear_integrations_cache()
-    return {"ok": True, "server_slug": body.server_slug, "saved_keys": list(body.credentials.keys())}
+    return {
+        "ok": True,
+        "server_slug": body.server_slug,
+        "saved_keys": list(body.credentials.keys()),
+    }
 
 
 @router.delete("/credentials/{server_slug}/{credential_key}")
@@ -324,7 +365,9 @@ async def delete_user_credential(
     _require_identity_for_mutation(auth)
     user_id = _credential_user_id(auth)
     tenant = _tenant_id()
-    deleted = await delete_credential(user_id, server_slug, credential_key, tenant_id=tenant)
+    deleted = await delete_credential(
+        user_id, server_slug, credential_key, tenant_id=tenant
+    )
     if not deleted:
         raise HTTPException(status_code=404, detail="Credential not found")
     clear_integrations_cache()
@@ -357,15 +400,20 @@ async def oauth_callback(
 
     async with get_async_session_maker()() as session:
         cfg = (
-            await session.execute(
-                select(McpServerConfig).where(McpServerConfig.server_slug == body.server_slug)
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == body.server_slug
+                    )
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
     if not cfg:
         raise HTTPException(
-            status_code=400,
-            detail=f"Server '{body.server_slug}' not found."
+            status_code=400, detail=f"Server '{body.server_slug}' not found."
         )
 
     try:
@@ -377,12 +425,22 @@ async def oauth_callback(
         try:
             from src.mcp_credential_discovery import discover_mcp_credentials
             from src.mcp_manager import mcp_manager
+
             reg_cfg = mcp_manager.get_server_config(body.server_slug) or {}
             discovered = discover_mcp_credentials(body.server_slug, reg_cfg)
             if discovered and discovered.remote_auth_type == "oauth2":
-                oauth_cfg["provider"] = oauth_cfg.get("provider") or discovered.remote_oauth_provider or "generic"
-                oauth_cfg["authorization_server"] = oauth_cfg.get("authorization_server") or discovered.remote_oauth_server
-                oauth_cfg["token_url"] = oauth_cfg.get("token_url") or discovered.remote_oauth_token_url
+                oauth_cfg["provider"] = (
+                    oauth_cfg.get("provider")
+                    or discovered.remote_oauth_provider
+                    or "generic"
+                )
+                oauth_cfg["authorization_server"] = (
+                    oauth_cfg.get("authorization_server")
+                    or discovered.remote_oauth_server
+                )
+                oauth_cfg["token_url"] = (
+                    oauth_cfg.get("token_url") or discovered.remote_oauth_token_url
+                )
         except Exception:
             pass
 
@@ -390,7 +448,7 @@ async def oauth_callback(
     if not token_url:
         raise HTTPException(
             status_code=400,
-            detail=f"OAuth token_url is not configured or discovered for server '{body.server_slug}'."
+            detail=f"OAuth token_url is not configured or discovered for server '{body.server_slug}'.",
         )
 
     client_id = oauth_cfg.get("client_id")
@@ -410,8 +468,14 @@ async def oauth_callback(
     if body.redirect_uri:
         payload["redirect_uri"] = body.redirect_uri
     else:
-        aion_api_base = os.getenv("AION_OAUTH_REDIRECT_BASE_URL") or os.getenv("AION_FASTAPI_URL") or "http://localhost:8001"
-        payload["redirect_uri"] = f"{aion_api_base.rstrip('/')}/v1/integrations/oauth/callback"
+        aion_api_base = (
+            os.getenv("AION_OAUTH_REDIRECT_BASE_URL")
+            or os.getenv("AION_FASTAPI_URL")
+            or "http://localhost:8001"
+        )
+        payload["redirect_uri"] = (
+            f"{aion_api_base.rstrip('/')}/v1/integrations/oauth/callback"
+        )
 
     headers = {
         "Accept": "application/json",
@@ -424,23 +488,25 @@ async def oauth_callback(
             resp.raise_for_status()
             token_data = resp.json()
     except httpx.HTTPStatusError as e:
-        logger.error("OAuth token exchange failed with status %d: %s", e.response.status_code, e.response.text)
+        logger.error(
+            "OAuth token exchange failed with status %d: %s",
+            e.response.status_code,
+            e.response.text,
+        )
         raise HTTPException(
-            status_code=400,
-            detail=f"OAuth provider error: {e.response.text}"
+            status_code=400, detail=f"OAuth provider error: {e.response.text}"
         )
     except Exception as e:
         logger.exception("OAuth token exchange error")
         raise HTTPException(
-            status_code=502,
-            detail=f"Failed to connect to OAuth provider: {str(e)}"
+            status_code=502, detail=f"Failed to connect to OAuth provider: {str(e)}"
         )
 
     access_token = token_data.get("access_token")
     if not access_token:
         raise HTTPException(
             status_code=400,
-            detail=f"No access_token returned by OAuth provider: {token_data}"
+            detail=f"No access_token returned by OAuth provider: {token_data}",
         )
 
     user_id = _credential_user_id(auth)
@@ -451,6 +517,7 @@ async def oauth_callback(
     if expires_in is not None:
         try:
             from datetime import timedelta
+
             expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
         except Exception:
             pass
@@ -484,12 +551,18 @@ import secrets
 import hashlib
 import base64
 
-_oauth_pending: dict[str, dict] = {}  # state -> {server_slug, code_verifier, user_id, expires_at}
+_oauth_pending: dict[
+    str, dict
+] = {}  # state -> {server_slug, code_verifier, user_id, expires_at}
 
 
 def _cleanup_expired_states() -> None:
     now = datetime.now(timezone.utc)
-    expired = [state for state, data in list(_oauth_pending.items()) if data["expires_at"] < now]
+    expired = [
+        state
+        for state, data in list(_oauth_pending.items())
+        if data["expires_at"] < now
+    ]
     for state in expired:
         _oauth_pending.pop(state, None)
 
@@ -505,11 +578,11 @@ def _generate_pkce_pair() -> tuple[str, str]:
 async def oauth_start(
     server_slug: str,
     redirect_uri: Optional[str] = None,
-    auth: ChatAuthIdentity = Depends(require_chat_auth)
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
 ) -> Dict[str, Any]:
     """
     Avvia il flow OAuth 2.0 PKCE per un server MCP remoto.
-    
+
     Implementa la spec MCP OAuth completa:
     1. Discovery del resource server via /.well-known/oauth-protected-resource
     2. Discovery dell'authorization server via /.well-known/oauth-authorization-server
@@ -524,15 +597,20 @@ async def oauth_start(
 
     async with get_async_session_maker()() as session:
         cfg = (
-            await session.execute(
-                select(McpServerConfig).where(McpServerConfig.server_slug == server_slug)
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == server_slug
+                    )
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
     if not cfg:
         raise HTTPException(
-            status_code=400,
-            detail=f"Server '{server_slug}' not found."
+            status_code=400, detail=f"Server '{server_slug}' not found."
         )
 
     try:
@@ -542,34 +620,59 @@ async def oauth_start(
 
     # Determina il redirect_uri prima della discovery (serve per la dynamic registration)
     if not redirect_uri:
-        aion_api_base = os.getenv("AION_OAUTH_REDIRECT_BASE_URL") or os.getenv("AION_FASTAPI_URL") or "http://localhost:8001"
+        aion_api_base = (
+            os.getenv("AION_OAUTH_REDIRECT_BASE_URL")
+            or os.getenv("AION_FASTAPI_URL")
+            or "http://localhost:8001"
+        )
         redirect_uri = f"{aion_api_base.rstrip('/')}/v1/integrations/oauth/callback"
 
     modified = False
 
     # ─── STEP 1: Discovery dal resource server ───────────────────────────────
     # Se non abbiamo ancora l'authorization server, prova la discovery completa
-    if not oauth_cfg.get("authorization_server") or not oauth_cfg.get("token_url") or not oauth_cfg.get("authorization_endpoint"):
+    if (
+        not oauth_cfg.get("authorization_server")
+        or not oauth_cfg.get("token_url")
+        or not oauth_cfg.get("authorization_endpoint")
+    ):
         from src.mcp_manager import mcp_manager as _mgr
+
         _mgr.load_registry()
         reg_cfg = _mgr.get_server_config(server_slug) or {}
         remote_url = reg_cfg.get("remote_url") or oauth_cfg.get("remote_url") or ""
 
         if remote_url:
             try:
-                async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as hclient:
+                async with httpx.AsyncClient(
+                    timeout=8.0, follow_redirects=True
+                ) as hclient:
                     # RFC 9728: /.well-known/oauth-protected-resource
                     resource_meta = {}
-                    
+
                     from urllib.parse import urlparse, urlunparse
+
                     parsed_url = urlparse(remote_url)
-                    
+
                     # Prova prima a livello di host root (consigliato RFC) e poi sotto il subpath
                     urls_to_try = []
                     if parsed_url.netloc:
-                        urls_to_try.append(urlunparse((parsed_url.scheme, parsed_url.netloc, "/.well-known/oauth-protected-resource", "", "", "")))
-                    urls_to_try.append(f"{remote_url.rstrip('/')}/.well-known/oauth-protected-resource")
-                    
+                        urls_to_try.append(
+                            urlunparse(
+                                (
+                                    parsed_url.scheme,
+                                    parsed_url.netloc,
+                                    "/.well-known/oauth-protected-resource",
+                                    "",
+                                    "",
+                                    "",
+                                )
+                            )
+                        )
+                    urls_to_try.append(
+                        f"{remote_url.rstrip('/')}/.well-known/oauth-protected-resource"
+                    )
+
                     for well_known_url in urls_to_try:
                         try:
                             r = await hclient.get(well_known_url)
@@ -585,10 +688,11 @@ async def oauth_start(
                         try:
                             r401 = await hclient.get(remote_url)
                             rm_url = None
-                            
+
                             # 1. Prova a estrarre dal WWW-Authenticate header
                             www_auth = r401.headers.get("www-authenticate", "")
                             import re
+
                             m = re.search(r'resource_metadata="([^"]+)"', www_auth)
                             if m:
                                 rm_url = m.group(1)
@@ -596,16 +700,21 @@ async def oauth_start(
                                 # 2. Prova a estrarre dal body JSON
                                 try:
                                     body_json = r401.json()
-                                    if isinstance(body_json, dict) and "resource_metadata" in body_json:
+                                    if (
+                                        isinstance(body_json, dict)
+                                        and "resource_metadata" in body_json
+                                    ):
                                         rm_url = body_json["resource_metadata"]
                                 except Exception:
                                     pass
-                            
+
                             if rm_url:
                                 rmr = await hclient.get(rm_url)
                                 if rmr.status_code == 200:
                                     resource_meta = rmr.json()
-                                    auth_servers = resource_meta.get("authorization_servers", [])
+                                    auth_servers = resource_meta.get(
+                                        "authorization_servers", []
+                                    )
                         except Exception:
                             pass
 
@@ -620,10 +729,38 @@ async def oauth_start(
                         as_meta = {}
                         metadata_urls = [
                             # RFC 8414: /.well-known/oauth-authorization-server[/{issuer_path}]
-                            urlunparse((parsed.scheme, parsed.netloc, "/.well-known/oauth-authorization-server" + parsed.path.rstrip("/"), "", "", "")),
-                            urlunparse((parsed.scheme, parsed.netloc, "/.well-known/oauth-authorization-server", "", "", "")),
+                            urlunparse(
+                                (
+                                    parsed.scheme,
+                                    parsed.netloc,
+                                    "/.well-known/oauth-authorization-server"
+                                    + parsed.path.rstrip("/"),
+                                    "",
+                                    "",
+                                    "",
+                                )
+                            ),
+                            urlunparse(
+                                (
+                                    parsed.scheme,
+                                    parsed.netloc,
+                                    "/.well-known/oauth-authorization-server",
+                                    "",
+                                    "",
+                                    "",
+                                )
+                            ),
                             # OpenID Connect discovery
-                            urlunparse((parsed.scheme, parsed.netloc, "/.well-known/openid-configuration", "", "", "")),
+                            urlunparse(
+                                (
+                                    parsed.scheme,
+                                    parsed.netloc,
+                                    "/.well-known/openid-configuration",
+                                    "",
+                                    "",
+                                    "",
+                                )
+                            ),
                         ]
                         for meta_url in metadata_urls:
                             try:
@@ -635,18 +772,30 @@ async def oauth_start(
                                 continue
 
                         if as_meta:
-                            if not oauth_cfg.get("token_url") and as_meta.get("token_endpoint"):
+                            if not oauth_cfg.get("token_url") and as_meta.get(
+                                "token_endpoint"
+                            ):
                                 oauth_cfg["token_url"] = as_meta["token_endpoint"]
                                 modified = True
-                            if not oauth_cfg.get("authorization_endpoint") and as_meta.get("authorization_endpoint"):
-                                oauth_cfg["authorization_endpoint"] = as_meta["authorization_endpoint"]
+                            if not oauth_cfg.get(
+                                "authorization_endpoint"
+                            ) and as_meta.get("authorization_endpoint"):
+                                oauth_cfg["authorization_endpoint"] = as_meta[
+                                    "authorization_endpoint"
+                                ]
                                 modified = True
-                            if not oauth_cfg.get("registration_endpoint") and as_meta.get("registration_endpoint"):
-                                oauth_cfg["registration_endpoint"] = as_meta["registration_endpoint"]
+                            if not oauth_cfg.get(
+                                "registration_endpoint"
+                            ) and as_meta.get("registration_endpoint"):
+                                oauth_cfg["registration_endpoint"] = as_meta[
+                                    "registration_endpoint"
+                                ]
                                 modified = True
 
                         # ─── STEP 3: Dynamic Client Registration (RFC 7591) ──
-                        reg_endpoint = oauth_cfg.get("registration_endpoint") or as_meta.get("registration_endpoint")
+                        reg_endpoint = oauth_cfg.get(
+                            "registration_endpoint"
+                        ) or as_meta.get("registration_endpoint")
                         if reg_endpoint and not oauth_cfg.get("client_id"):
                             try:
                                 reg_payload = {
@@ -659,7 +808,7 @@ async def oauth_start(
                                 reg_resp = await hclient.post(
                                     reg_endpoint,
                                     json=reg_payload,
-                                    headers={"Content-Type": "application/json"}
+                                    headers={"Content-Type": "application/json"},
                                 )
                                 if reg_resp.status_code in (200, 201):
                                     reg_data = reg_resp.json()
@@ -667,26 +816,42 @@ async def oauth_start(
                                     if new_client_id:
                                         oauth_cfg["client_id"] = new_client_id
                                         if reg_data.get("client_secret"):
-                                            oauth_cfg["client_secret"] = reg_data["client_secret"]
+                                            oauth_cfg["client_secret"] = reg_data[
+                                                "client_secret"
+                                            ]
                                         modified = True
                                         logger.info(
                                             "oauth_start: dynamic client registration OK slug=%s client_id=%s",
-                                            server_slug, new_client_id
+                                            server_slug,
+                                            new_client_id,
                                         )
                             except Exception as reg_exc:
-                                logger.warning("oauth_start: dynamic client registration failed: %s", reg_exc)
+                                logger.warning(
+                                    "oauth_start: dynamic client registration failed: %s",
+                                    reg_exc,
+                                )
 
             except Exception as disc_exc:
-                logger.warning("oauth_start: discovery failed for slug=%s: %s", server_slug, disc_exc)
+                logger.warning(
+                    "oauth_start: discovery failed for slug=%s: %s",
+                    server_slug,
+                    disc_exc,
+                )
 
     # ─── Salva le info aggiornate nel DB ─────────────────────────────────────
     if modified:
         async with get_async_session_maker()() as session:
             db_cfg = (
-                await session.execute(
-                    select(McpServerConfig).where(McpServerConfig.server_slug == server_slug)
+                (
+                    await session.execute(
+                        select(McpServerConfig).where(
+                            McpServerConfig.server_slug == server_slug
+                        )
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if db_cfg:
                 db_cfg.oauth_config_json = json.dumps(oauth_cfg)
                 await session.commit()
@@ -711,17 +876,19 @@ async def oauth_start(
     code_verifier, code_challenge = _generate_pkce_pair()
     state = secrets.token_urlsafe(32)
     from datetime import timedelta
+
     _oauth_pending[state] = {
         "server_slug": server_slug,
         "code_verifier": code_verifier,
         "user_id": user_id,
         "redirect_uri": redirect_uri,
-        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10)
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=10),
     }
 
     client_id = oauth_cfg.get("client_id") or ""
 
     import urllib.parse
+
     params: Dict[str, str] = {
         "response_type": "code",
         "redirect_uri": redirect_uri,
@@ -739,7 +906,10 @@ async def oauth_start(
     authorization_url = f"{authorization_endpoint}?{urllib.parse.urlencode(params)}"
     logger.info(
         "oauth_start: slug=%s auth_endpoint=%s client_id=%s redirect=%s",
-        server_slug, authorization_endpoint, client_id or "(none)", redirect_uri
+        server_slug,
+        authorization_endpoint,
+        client_id or "(none)",
+        redirect_uri,
     )
     return {"authorization_url": authorization_url, "state": state}
 
@@ -751,7 +921,7 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
 
     pending = _oauth_pending.pop(state, None)
     chat_base = _chat_base_url()
-    
+
     if not pending:
         return RedirectResponse(
             url=f"{chat_base}/integrations?oauth_status=error&error=Sessione+OAuth+scaduta+o+non+valida"
@@ -764,13 +934,21 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
 
     async with get_async_session_maker()() as session:
         cfg = (
-            await session.execute(
-                select(McpServerConfig).where(McpServerConfig.server_slug == server_slug)
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == server_slug
+                    )
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
     if not cfg:
-        return RedirectResponse(url=f"{chat_base}/integrations?oauth_status=error&error=Server+non+trovato")
+        return RedirectResponse(
+            url=f"{chat_base}/integrations?oauth_status=error&error=Server+non+trovato"
+        )
 
     try:
         oauth_cfg = json.loads(cfg.oauth_config_json) if cfg.oauth_config_json else {}
@@ -781,12 +959,22 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
         try:
             from src.mcp_credential_discovery import discover_mcp_credentials
             from src.mcp_manager import mcp_manager
+
             reg_cfg = mcp_manager.get_server_config(server_slug) or {}
             discovered = discover_mcp_credentials(server_slug, reg_cfg)
             if discovered and discovered.remote_auth_type == "oauth2":
-                oauth_cfg["provider"] = oauth_cfg.get("provider") or discovered.remote_oauth_provider or "generic"
-                oauth_cfg["authorization_server"] = oauth_cfg.get("authorization_server") or discovered.remote_oauth_server
-                oauth_cfg["token_url"] = oauth_cfg.get("token_url") or discovered.remote_oauth_token_url
+                oauth_cfg["provider"] = (
+                    oauth_cfg.get("provider")
+                    or discovered.remote_oauth_provider
+                    or "generic"
+                )
+                oauth_cfg["authorization_server"] = (
+                    oauth_cfg.get("authorization_server")
+                    or discovered.remote_oauth_server
+                )
+                oauth_cfg["token_url"] = (
+                    oauth_cfg.get("token_url") or discovered.remote_oauth_token_url
+                )
         except Exception:
             pass
 
@@ -831,6 +1019,7 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
         if isinstance(e, httpx.HTTPStatusError):
             err_msg = e.response.text
         import urllib.parse
+
         return RedirectResponse(
             url=f"{chat_base}/integrations?oauth_status=error&error={urllib.parse.quote_plus(err_msg)}"
         )
@@ -846,6 +1035,7 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
     if expires_in is not None:
         try:
             from datetime import timedelta
+
             expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
         except Exception:
             pass
@@ -877,16 +1067,13 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
 
 @router.get("/{server_slug}/oauth-status")
 async def oauth_status(
-    server_slug: str,
-    auth: ChatAuthIdentity = Depends(require_chat_auth)
+    server_slug: str, auth: ChatAuthIdentity = Depends(require_chat_auth)
 ) -> Dict[str, Any]:
     _require_credentials_enabled()
     user_id = _credential_user_id(auth)
     tenant = _tenant_id()
-    
+
     from src.runtime.credential_store import get_credential
+
     token = await get_credential(user_id, server_slug, "OAUTH_TOKEN", tenant_id=tenant)
-    return {
-        "connected": token is not None,
-        "server_slug": server_slug
-    }
+    return {"connected": token is not None, "server_slug": server_slug}

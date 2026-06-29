@@ -1,4 +1,5 @@
 """Turn outcome classification and JSONL diagnostics for silent / empty agent turns."""
+
 from __future__ import annotations
 
 import json
@@ -147,7 +148,9 @@ def classify_turn_outcome(
         code = f"stopped_{stop_reason}"
 
     ctx_total = (context_stats or {}).get("total")
-    ctx_msg = (context_stats or {}).get("message_count") or (context_stats or {}).get("msg")
+    ctx_msg = (context_stats or {}).get("message_count") or (context_stats or {}).get(
+        "msg"
+    )
 
     warning: Optional[str] = None
     if code != "ok" and code != "plan_created":
@@ -159,9 +162,7 @@ def classify_turn_outcome(
                 f"The agent ran {tool_calls_count} tool calls but did not write a final summary."
             )
         elif code == "reasoning_only_no_answer":
-            parts.append(
-                "Internal reasoning was generated but no visible reply text."
-            )
+            parts.append("Internal reasoning was generated but no visible reply text.")
         elif code == "persisted_no_visible_text":
             parts.append(
                 f"Persisted {new_msg_count} messages (e.g. tool-only) with no final assistant text."
@@ -178,9 +179,7 @@ def classify_turn_outcome(
                 f"Estimated context ~{ctx_total} tokens): the model may truncate or skip the final round."
             )
         if max_agent_steps and llm_steps >= int(max_agent_steps):
-            parts.append(
-                f"Agent step limit reached ({llm_steps}/{max_agent_steps})."
-            )
+            parts.append(f"Agent step limit reached ({llm_steps}/{max_agent_steps}).")
         parts.append(
             "See `data/diagnostics/turns.jsonl` for details. "
             "For structured MemPalace import, retry in a new chat or run "
