@@ -177,6 +177,14 @@ OpenTelemetry and Opik hooks exist but are **off by default** (`AION_OTEL_ENABLE
 
 Report vulnerabilities privately — [SECURITY.md](SECURITY.md).
 
+## Disclaimer
+
+**AION Agent is under active development.** APIs, configuration, and behavior may change between releases without prior notice.
+
+The software is provided **“as is”**, without warranty of any kind. AION / ASA Computer **assumes no liability** for damages, data loss, security incidents, or operational issues arising from the use of this project in any environment (including production).
+
+You are responsible for evaluating fitness for your use case, securing your deployment, and complying with applicable laws and third-party license terms.
+
 ## License
 
 [Apache License 2.0](LICENSE). Third-party notices: [NOTICE](NOTICE).
