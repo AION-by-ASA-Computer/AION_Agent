@@ -4,6 +4,7 @@ Self-hosted AI agent platform with MCP tool integration, multi-level memory (STM
 YAML profiles, skills, and Plan Mode for structured multi-step work.
 
 [![CI](https://github.com/AION-by-ASA-Computer/AION_Agent/actions/workflows/ci.yml/badge.svg)](https://github.com/AION-by-ASA-Computer/AION_Agent/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/AION-by-ASA-Computer/AION_Agent/badge)](https://scorecard.dev/viewer/?uri=github.com/AION-by-ASA-Computer/AION_Agent)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.13-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)

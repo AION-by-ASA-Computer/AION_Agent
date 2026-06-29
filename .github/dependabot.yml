@@ -11,6 +11,12 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - dependabot
+    commit-message:
+      prefix: chore
+      include: scope
     groups:
       github-actions:
         patterns: ["*"]
@@ -21,6 +27,13 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    labels:
+      - dependencies
+      - dependabot
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
     groups:
       pip-minor-patch:
         update-types: ["minor", "patch"]
@@ -31,6 +44,12 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - dependabot
+    commit-message:
+      prefix: chore
+      include: scope
 
   - package-ecosystem: docker
     directory: "/docker"
@@ -38,3 +57,9 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - dependabot
+    commit-message:
+      prefix: chore
+      include: scope

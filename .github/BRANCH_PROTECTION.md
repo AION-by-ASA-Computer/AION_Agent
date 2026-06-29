@@ -120,6 +120,15 @@ If a check does not appear, trigger a successful workflow run on `main` first, t
 
 > **Dependabot** ([`.github/dependabot.yml`](dependabot.yml)) does not add merge-blocking checks. In **Settings → Security → Advanced Security**, enable **Dependabot alerts** if shown. **Dependabot security updates** on public repositories are often **always enabled** (no toggle, or button greyed out).
 
+Optional governance checks (add after first green run; not required for day-one merges):
+
+| Check | Workflow |
+|-------|----------|
+| `Workflow Lint` | [governance.yml](workflows/governance.yml) |
+| `Typos Check` | [governance.yml](workflows/governance.yml) |
+| `Semantic PR Title` | [pull-request.yml](workflows/pull-request.yml) |
+| `OSV-Scanner PR` | [osv-scanner-pr.yml](workflows/osv-scanner-pr.yml) |
+
 **Source:** leave **Any source** unless you later pin checks to a specific GitHub App integration.
 
 ### 6. Create

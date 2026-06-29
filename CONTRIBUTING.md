@@ -124,6 +124,22 @@ Examples:
 
 Releases and GHCR images: [docs/opensource/releases.md](docs/opensource/releases.md).
 
+## Automated checks (CI / security)
+
+Pull requests to `main` run:
+
+| Workflow | Purpose |
+|----------|---------|
+| [ci.yml](.github/workflows/ci.yml) | Ruff, pytest, frontend builds, gitleaks, Trivy FS, Docker builds |
+| [codeql.yml](.github/workflows/codeql.yml) | CodeQL SAST (Python + TypeScript) |
+| [governance.yml](.github/workflows/governance.yml) | actionlint + typos |
+| [pull-request.yml](.github/workflows/pull-request.yml) | Conventional Commits PR title (release-please) |
+| [osv-scanner-pr.yml](.github/workflows/osv-scanner-pr.yml) | New dependency vulnerabilities only |
+
+Scheduled: OSV-Scanner, OpenSSF Scorecard, CodeQL, stale bot. Dependabot opens weekly update PRs ([dependabot.yml](.github/dependabot.yml)).
+
+Machine-readable security metadata: [security-insights.yml](security-insights.yml).
+
 ## Security
 
 Do not open public issues for vulnerabilities. See [SECURITY.md](SECURITY.md).
