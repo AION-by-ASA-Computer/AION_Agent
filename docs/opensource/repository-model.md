@@ -28,4 +28,4 @@ git checkout main
 2. Open PR → review → merge to `main`
 3. Tag releases on `main` when ready
 
-Branch protection on `main` is documented in [`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md).
+Branch ruleset on `main` is documented in [`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md).
