@@ -1,0 +1,18 @@
+# Esempio di override locale — NON committare.
+#
+# Opzione A (consigliata): variabili in `.env` (già lette da compose):
+#   CADDY_HTTP_PORT=8066
+#   CADDY_HTTPS_PORT=44366
+#   AION_PUBLIC_API_URL=http://localhost:8066/api
+#
+# Opzione B: copia questo file come `docker-compose.override.yml` (è in .gitignore).
+# Docker Compose lo applica automaticamente con `docker compose up`.
+#
+# name: aion-agent
+#
+# services:
+#   caddy:
+#     ports:
+#       - "8066:80"
+#       - "44366:443"
+#       - "44366:443/udp"

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{TITLE}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./aion-promo-theme.css" />
+  <style>
+    html, body { width: {{WIDTH}}px; height: {{HEIGHT}}px; margin: 0; overflow: hidden; }
+    #promo-root { width: {{WIDTH}}px; height: {{HEIGHT}}px; }
+    .promo-product-img { max-height: 100%; max-width: 100%; object-fit: contain; filter: drop-shadow(0 8px 24px rgba(0,0,0,0.5)); }
+  </style>
+</head>
+<body>
+  <div id="promo-root" class="promo-canvas-crimson"></div>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+    function CrystalHero() {
+      return (
+        <div className="promo-crystal-wrap">
+          <svg className="promo-crystal-svg" viewBox="0 0 300 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M150 10 L260 110 L210 290 L90 290 L40 110 Z" fill="rgba(225,22,20,0.15)" stroke="rgba(255,34,34,0.25)" strokeWidth="1" />
+          </svg>
+        </div>
+      );
+    }
+
+    function PromoPost() {
+      return (
+        <>
+          <div className="promo-ambient" />
+          <div className="promo-noise" />
+          <div className="promo-bento promo-bento--linkedin">
+            <div className="promo-tile promo-tile--brand">{{LOGO_BLOCK}}</div>
+            <div className="promo-tile promo-tile--badge">
+              <span className="promo-badge"><span className="promo-badge-dot" />{{BADGE}}</span>
+            </div>
+            <div className="promo-tile promo-tile--accent" />
+            <div className="promo-tile promo-tile--hero promo-tile--gradient-red">
+              <div className="promo-stat-label" style={{ marginBottom: 6 }}>AI operativa on-premise</div>
+              <h1 className="promo-headline-xl">
+                <span className="line">{{HEADLINE_LINE1}}</span><br />
+                <span className="line line-accent">{{HEADLINE_LINE2}}</span>
+              </h1>
+              <p className="promo-subline">{{SUBHEADLINE}}</p>
+            </div>
+            <div className="promo-tile promo-tile--product">{{PRODUCT_BLOCK}}</div>
+            <div className="promo-tile promo-tile--crystal"><CrystalHero /></div>
+            <div className="promo-tile promo-tile--stat promo-tile--stat1">
+              <div className="promo-stat-value">{{STAT1_VALUE}}</div>
+              <div className="promo-stat-label">{{STAT1_LABEL}}</div>
+            </div>
+            <div className="promo-tile promo-tile--stat promo-tile--stat2">
+              <div className="promo-stat-value">{{STAT2_VALUE}}</div>
+              <div className="promo-stat-label">{{STAT2_LABEL}}</div>
+            </div>
+            <div className="promo-tile promo-tile--stat promo-tile--stat3">
+              <div className="promo-stat-value">{{STAT3_VALUE}}</div>
+              <div className="promo-stat-label">{{STAT3_LABEL}}</div>
+            </div>
+            <div className="promo-tile promo-tile--chips">{{FEATURE_CHIPS_BLOCK}}</div>
+            <div className="promo-tile promo-tile--footer">
+              <span className="promo-url">{{FOOTER_URL}}</span>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('promo-root'));
+    root.render(<PromoPost />);
+  </script>
+</body>
+</html>

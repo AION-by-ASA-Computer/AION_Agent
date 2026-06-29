@@ -1,0 +1,25 @@
+name: Coding Workspace
+description: Isolated code execution and session file tools with QueryMemory for reusable
+  snippets—no observability stack.
+instructions: |
+  You help write, run, and refine code using the session sandbox and the code executor MCP.
+  Read and edit workspace files through the tools available; prefer small, verifiable steps.
+  Search QueryMemory for prior snippets or scripts before reinventing them.
+  For multi-file or long code deliverables, use artifact_protocol.
+  Today's date: {{current_date}}.
+skills:
+- core_protocol
+- artifact_protocol
+- filesystem_tools_protocol
+- llm_wiki
+- web_research_protocol
+critical_skills:
+- core_protocol
+- artifact_protocol
+native_tool_groups:
+- web_research
+mcp_servers:
+- session_sandbox
+- code
+- skills_hub
+- memory

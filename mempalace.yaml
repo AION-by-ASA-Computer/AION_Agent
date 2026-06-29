@@ -1,0 +1,66 @@
+wing: aion_agent
+rooms:
+- name: configuration
+  description: Files from config/
+  keywords:
+  - configuration
+  - config
+- name: scratch
+  description: Files from scratch/
+  keywords:
+  - scratch
+  - scratch
+- name: public
+  description: Files from public/
+  keywords:
+  - public
+  - public
+- name: static
+  description: Files from static/
+  keywords:
+  - static
+  - static
+- name: mcp_servers
+  description: Files from mcp_servers/
+  keywords:
+  - mcp_servers
+  - mcp_servers
+- name: admin_ui
+  description: Files from admin-ui/
+  keywords:
+  - admin_ui
+  - admin-ui
+- name: data
+  description: Files from data/
+  keywords:
+  - data
+  - data
+- name: src
+  description: Files from src/
+  keywords:
+  - src
+  - src
+- name: scripts
+  description: Files from tools/
+  keywords:
+  - scripts
+  - tools
+- name: testing
+  description: Files from test/
+  keywords:
+  - testing
+  - test
+- name: backend
+  description: Files from api/
+  keywords:
+  - backend
+  - api
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []
+- name: wiki
+  description: Official agent-maintained corporate knowledge (LLM Wiki)
+  keywords:
+  - wiki
+  - documentation
+  - facts

@@ -1,0 +1,197 @@
+name: AION CI Pipeline
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+# Cancel redundant runs on the same PR branch.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-checks:
+    name: Backend Linting and Testing
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Setup UV
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Configure Environment and Sync MCP/Config
+        run: |
+          uv venv
+          uv pip install -r requirements.txt
+          uv run python scripts/setup_core.py --non-interactive --skip-promo-playwright
+
+      - name: Lint (Ruff)
+        run: |
+          uv pip install ruff
+          uv run ruff check --config ruff.toml src/
+          uv run ruff format --check --config ruff.toml src/
+
+      - name: Check no runtime data/ tracked in git
+        run: uv run python scripts/check_data_git_tracking.py
+
+      - name: Run CI pytest suite
+        env:
+          AION_CHAT_PASSWORD_AUTH: "0"
+          AION_ADMIN_PASSWORD_AUTH: "0"
+          AION_REDIS_FALLBACK_LOCAL: "1"
+        run: |
+          uv pip install pytest pytest-asyncio
+          chmod +x scripts/run_ci_tests.sh
+          ./scripts/run_ci_tests.sh
+
+  frontend-checks:
+    name: Frontend Packages Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('chat-ui/package.json', 'admin-ui/package.json', 'website/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install and build Chat UI
+        run: |
+          cd chat-ui
+          pnpm install --no-frozen-lockfile
+          pnpm build
+
+      - name: Build Admin UI
+        run: |
+          cd admin-ui
+          pnpm install --no-frozen-lockfile
+          pnpm build
+
+      - name: Build Website (Docusaurus)
+        run: |
+          cd website
+          pnpm install --no-frozen-lockfile
+          pnpm build
+
+  security-scan:
+    name: Security Vulnerability Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+      security-events: write
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          severity: CRITICAL,HIGH
+
+  docker-build-checks:
+    name: Test Docker Builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+
+      - name: Setup Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Sync config before image build
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq python3-venv
+          python3 -m venv .venv-ci
+          . .venv-ci/bin/activate
+          pip install -q -r requirements.txt
+          python scripts/setup_core.py --non-interactive --skip-promo-playwright
+
+      - name: Build Backend Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.backend
+          push: false
+          tags: aion-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Chat UI Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.chat-ui
+          push: false
+          tags: aion-chat-ui:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build Admin UI Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.admin-ui
+          push: false
+          tags: aion-admin-ui:ci
+          cache-from: type=gha,mode=max
+
+      - name: Build Website Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/Dockerfile.website
+          push: false
+          tags: aion-website:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

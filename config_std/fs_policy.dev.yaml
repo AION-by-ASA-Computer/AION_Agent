@@ -1,0 +1,118 @@
+# Dev-only: exec enabled with an expanded allowlist (office/docx, text tools, safe file ops).
+# NOT for production without security review.
+# .env: AION_FS_POLICY_PATH=config/fs_policy.yaml  (or this file directly)
+# Restart backend after changes.
+
+version: "1.0-dev"
+
+filesystem:
+  allow:
+    - "workspace/**"
+    - "uploads/**"
+    - "derived/**"
+  deny: []
+
+exec:
+  enabled: true
+  allowlist:
+    # --- Python (session scripts: docx/office workflow; no -c / -m — enforced in session_exec) ---
+    - executable: "python"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3, 4, 5, 6, 7]
+    - executable: "python3"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3, 4, 5, 6, 7]
+
+    # --- Text search & inspection ---
+    - executable: "grep"
+      argv_prefix: ["-r"]
+      validate_path_positions: [2, 3, 4]
+    - executable: "grep"
+      argv_prefix: ["-E"]
+      validate_path_positions: [2, 3, 4]
+    - executable: "grep"
+      argv_prefix: ["-F"]
+      validate_path_positions: [2, 3, 4]
+    - executable: "grep"
+      argv_prefix: []
+      validate_path_positions: [2, 3, 4]
+    - executable: "wc"
+      argv_prefix: []
+      validate_path_positions: [1, 2]
+    - executable: "sort"
+      argv_prefix: []
+      validate_path_positions: [1, 2]
+    - executable: "head"
+      argv_prefix: []
+      validate_path_positions: [1, 2]
+    - executable: "tail"
+      argv_prefix: []
+      validate_path_positions: [1, 2]
+    - executable: "cat"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "cut"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "tr"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "uniq"
+      argv_prefix: []
+      validate_path_positions: [1, 2]
+    - executable: "file"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+
+    # --- Find / list (paths must stay under session) ---
+    - executable: "find"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3, 4, 5, 6]
+    - executable: "ls"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "du"
+      argv_prefix: []
+      validate_path_positions: [1, 2]
+
+    # --- Copy / move / mkdir (within session only) ---
+    - executable: "cp"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "mv"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "mkdir"
+      argv_prefix: ["-p"]
+      validate_path_positions: [2, 3, 4]
+    - executable: "mkdir"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "touch"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+
+    # --- Archives (uploads/workspace) ---
+    - executable: "unzip"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "zip"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3, 4, 5]
+
+    # --- Document conversion (docx skill) ---
+    - executable: "pandoc"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3, 4, 5]
+    - executable: "pdftoppm"
+      argv_prefix: []
+      validate_path_positions: [2, 3, 4, 5]
+
+    # --- Wren CLI (semantic SQL / MDL; skill: config/skills/wren/SKILL.md) ---
+    - executable: "wren"
+      argv_prefix: []
+
+limits:
+  max_file_read_bytes: 2097152
+  max_file_write_bytes: 10485760
+  max_edit_file_bytes: 2097152

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{TITLE}}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./aion-promo-theme.css" />
+  <style>
+    html, body { width: {{WIDTH}}px; height: {{HEIGHT}}px; margin: 0; overflow: hidden; }
+    #promo-root { width: {{WIDTH}}px; height: {{HEIGHT}}px; padding: {{PADDING}}px; }
+  </style>
+</head>
+<body>
+  <div id="promo-root"></div>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script type="text/babel" data-presets="react">
+    const { useState } = React;
+
+    /* PLACEHOLDER — replace with bento layout per PREMIUM_STYLE.md */
+    function PromoPost() {
+      return (
+        <>
+          <div className="promo-ambient" />
+          <div className="promo-grid" style={{ flex: 1, padding: '0.5rem', gridTemplateRows: 'auto 1fr auto' }}>
+            <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span className="promo-badge">{{BADGE}}</span>
+              <span className="promo-muted" style={{ fontSize: '0.65rem', fontFamily: 'var(--font-mono)' }}>aion-asa.com</span>
+            </header>
+            <main>
+              <h1 className="promo-headline" style={{ margin: '1rem 0 0.5rem' }}>{{HEADLINE}}</h1>
+              <p className="promo-muted" style={{ fontSize: '1rem', maxWidth: '92%', margin: 0 }}>{{SUBHEADLINE}}</p>
+            </main>
+            <footer style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              <button type="button" className="promo-cta">{{CTA}}</button>
+              <div className="promo-card" style={{ padding: '0.75rem 1rem', flex: 1 }}>
+                <div className="promo-stat-label">{{FOOTER_LABEL}}</div>
+                <div style={{ fontWeight: 600 }}>{{FOOTER_VALUE}}</div>
+              </div>
+            </footer>
+          </div>
+        </>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('promo-root'));
+    root.render(<PromoPost />);
+  </script>
+</body>
+</html>

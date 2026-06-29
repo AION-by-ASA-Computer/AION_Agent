@@ -1,0 +1,91 @@
+# =============================================================================
+# Docker build context exclusion list
+# Si applica a tutti i Dockerfile della repo (docker/Dockerfile.*).
+# Mantenere stretto per build veloci e per evitare leak di .env nei layer.
+# =============================================================================
+
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Editor / IDE
+.vscode
+.idea
+.cursor
+.claude
+.agents
+.DS_Store
+*.swp
+
+# Python virtualenvs
+.venv
+.venv-*
+venv
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+*$py.class
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Node
+**/node_modules
+**/.next
+**/.turbo
+**/dist
+**/build
+**/.pnpm-store
+.pnpm-store
+
+# NB: i lockfile (package-lock.json, pnpm-lock.yaml, yarn.lock) NON sono
+# committati nel repo (sono in .gitignore), ma SE presenti localmente li
+# includiamo nel build context cosi' i Dockerfile possono usarli per accelerare
+# `npm install` / `pnpm install`. Su fresh clone in CI il lockfile manca e
+# verra' rigenerato durante il build (i Dockerfile usano glob tolleranti).
+
+# Logs / runtime
+**/*.log
+startup.log
+reports/
+
+# Persistent runtime data (NON entrano nelle immagini, vengono montati)
+data/
+*.db
+*.sqlite
+*.sqlite3
+aion.db
+.chainlit/
+.files/
+
+# Backup / archivi
+*.bak
+.env.bak*
+*.tgz
+*.zip
+
+# Secrets — non finiscono mai nell'immagine
+.env
+.env.local
+.env.*.local
+
+# Documentazione che non serve dentro l'immagine app
+AION_v5_implementation_guide.md
+BOZZA.md
+PROJECT*.md
+README.md
+*.xlsx
+
+# Test / report transitori
+test_*.xlsx
+scratch/
+
+# Docusaurus build cache (rebuilt dentro il Dockerfile.website)
+website/build
+website/.docusaurus
+
+# Docker artifacts di altri stage (evitiamo ricorsioni)
+docker-compose*.override.yml

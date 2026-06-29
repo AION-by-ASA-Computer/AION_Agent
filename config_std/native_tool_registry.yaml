@@ -1,0 +1,21 @@
+# Template: copiato in config/ da sync_config se mancante.
+bundles:
+  web_research:
+    description: "Ricerca web multi-provider e fetch pagina."
+    tools:
+      - web_search
+      - web_fetch_page
+  deep_research:
+    description: "IterResearch deep research jobs + library."
+    tools:
+      - trigger_research
+      - manage_research
+  sql_query_memory:
+    description: "QueryMemory SQL — search/save validated PostgreSQL queries (in-process)."
+    tools:
+      - sql_memory_search
+      - sql_memory_save
+      - sql_memory_update
+      - sql_memory_delete
+      - sql_memory_list_projects
+      - sql_memory_list_saved

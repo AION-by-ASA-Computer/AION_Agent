@@ -1,0 +1,87 @@
+/**
+ * Allineamento a theme.json (Chainlit) e admin-ui: primario rosso/corallo, sfondo scuro, Inter.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+  --aion-bg: #fafafa;
+  --aion-text: #171717;
+  --aion-card: #f5f5f5;
+  --aion-border: #e0e0e0;
+  /* theme.json light --primary ~ hsl(0, 72%, 46%) */
+  --ifm-color-primary: #c93434;
+  --ifm-color-primary-dark: #b32d2d;
+  --ifm-color-primary-darker: #a82a2a;
+  --ifm-color-primary-darkest: #8b2222;
+  --ifm-color-primary-light: #d14545;
+  --ifm-color-primary-lighter: #d64f4f;
+  --ifm-color-primary-lightest: #db6a6a;
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    sans-serif;
+  --ifm-heading-font-family: var(--ifm-font-family-base);
+  --ifm-background-color: var(--aion-bg);
+  --ifm-navbar-background-color: #ffffff;
+  --ifm-footer-background-color: #0f0f0f;
+  --ifm-code-font-size: 92%;
+  --docusaurus-highlighted-code-line-bg: rgba(201, 52, 52, 0.12);
+  --ifm-hr-border-color: var(--aion-border);
+}
+
+[data-theme='dark'] {
+  --aion-bg: #0a0a0a;
+  --aion-text: #ededed;
+  --aion-card: #141414;
+  --aion-border: #262626;
+  /* theme.json dark --primary ~ hsl(0, 72%, 51%) */
+  --ifm-color-primary: #e04545;
+  --ifm-color-primary-dark: #dc3a3a;
+  --ifm-color-primary-darker: #d93636;
+  --ifm-color-primary-darkest: #c42a2a;
+  --ifm-color-primary-light: #e85a5a;
+  --ifm-color-primary-lighter: #eb6a6a;
+  --ifm-color-primary-lightest: #f08a8a;
+  --ifm-background-color: var(--aion-bg);
+  --ifm-navbar-background-color: #0f0f0f;
+  --ifm-footer-background-color: #050505;
+  --ifm-heading-color: var(--aion-text);
+  --ifm-color-content: #d4d4d4;
+  --ifm-color-secondary-contrast-foreground: #a3a3a3;
+  --docusaurus-highlighted-code-line-bg: rgba(224, 69, 69, 0.15);
+  --ifm-hr-border-color: var(--aion-border);
+}
+
+html {
+  font-family: var(--ifm-font-family-base);
+}
+
+/* Navbar: bordo sottile come le card admin */
+.navbar {
+  border-bottom: 1px solid var(--aion-border);
+  box-shadow: none;
+}
+
+.footer--dark {
+  --ifm-footer-link-color: #a3a3a3;
+}
+
+.footer__title {
+  color: var(--aion-text);
+}
+
+/* Diagrammi Mermaid: leggibilità e scroll orizzontale su flowchart LR */
+.mermaid {
+  margin: 1.25rem 0;
+  display: flex;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+[data-theme='dark'] .mermaid {
+  filter: brightness(1.05) contrast(1.02);
+}

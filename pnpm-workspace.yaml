@@ -1,0 +1,4 @@
+packages:
+  - 'admin-ui'
+  - 'chat-ui'
+  - 'website'

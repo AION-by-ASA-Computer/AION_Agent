@@ -1,0 +1,112 @@
+# AION Agent — dev stack (essenziali)
+#
+# Avvia backend + chat-ui + redis con hot reload.
+# admin-ui e website restano avviabili da terminale (pnpm dev nelle rispettive cartelle).
+#
+# Avvio:    docker compose -f docker-compose.dev.yml up
+# Build:    docker compose -f docker-compose.dev.yml build
+# Stop:     docker compose -f docker-compose.dev.yml down
+#
+# Hot reload:
+#   - backend: uvicorn --reload via bind-mount di src/
+#   - chat-ui: next dev via bind-mount di chat-ui/
+#   - config/MCP: git pull su config_std/ + mcp_servers_std/, poi restart backend
+
+name: aion-dev
+
+x-aion-dev-env: &aion-dev-env
+  env_file:
+    - .env
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    command: redis-server --appendonly yes
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks: [aion_dev_net]
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.13-slim}
+        UV_VERSION: ${UV_VERSION:-latest}
+    <<: *aion-dev-env
+    ports:
+      - "8001:8001"
+    environment:
+      AION_API_HOST: 0.0.0.0
+      AION_API_PORT: "8001"
+      AION_DATA_DIR: /app/data
+      AION_REDIS_URL: redis://redis:6379/0
+      AION_SYNC_ON_BOOT: ${AION_SYNC_ON_BOOT:-1}
+      AION_MCP_REGISTRY_LOCAL_PATH: ${AION_MCP_REGISTRY_LOCAL_PATH:-/app/data/mcp_registry.local.yaml}
+      AION_PUBLIC_API_URL: ${AION_PUBLIC_API_URL:-http://localhost:8001}
+      AION_CORS_ORIGINS: ${AION_CORS_ORIGINS:-*}
+      AION_SANDBOX_BACKEND: ${AION_SANDBOX_BACKEND:-subprocess}
+      AION_CONTAINER_RUNTIME: ${AION_CONTAINER_RUNTIME:-podman}
+      AION_SANDBOX_CONTAINER_IMAGE: ${AION_SANDBOX_CONTAINER_IMAGE:-aion/sandbox:latest}
+      AION_PODMAN_SOCKET: /run/podman/podman.sock
+      AION_SANDBOX_FAIL_CLOSED: ${AION_SANDBOX_FAIL_CLOSED:-1}
+      AION_SANDBOX_MCP_JAIL: ${AION_SANDBOX_MCP_JAIL:-1}
+    volumes:
+      - ./src:/app/src
+      - ./scripts:/app/scripts
+      - ./config_std:/app/config_std:ro
+      - ./mcp_servers_std:/app/mcp_servers_std:ro
+      - ./config:/app/config
+      - ./mcp_servers:/app/mcp_servers
+      - ./data:/app/data
+      - ${AION_PODMAN_SOCKET_HOST:-/run/user/1000/podman/podman.sock}:/run/podman/podman.sock
+    command:
+      - uvicorn
+      - src.api.main:app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8001"
+      - --workers
+      - "1"
+      - --reload
+      - --reload-exclude
+      - data/sessions
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks: [aion_dev_net]
+
+  chat-ui:
+    image: node:22-alpine
+    working_dir: /app/chat-ui
+    ports:
+      - "8003:8003"
+    environment:
+      NEXT_PUBLIC_AION_API_URL: ${NEXT_PUBLIC_AION_API_URL:-http://localhost:8001}
+      NEXT_PUBLIC_AION_ADMIN_UI_URL: ${NEXT_PUBLIC_AION_ADMIN_UI_URL:-http://localhost:3870}
+      NEXT_TELEMETRY_DISABLED: "1"
+    volumes:
+      - ./chat-ui:/app/chat-ui
+      - chat_ui_node_modules:/app/chat-ui/node_modules
+    command: >
+      sh -c "npm install --no-audit --no-fund &&
+             npm run dev -- --hostname 0.0.0.0"
+    depends_on:
+      - backend
+    networks: [aion_dev_net]
+
+networks:
+  aion_dev_net:
+    driver: bridge
+
+volumes:
+  chat_ui_node_modules:
+  redis_dev_data:

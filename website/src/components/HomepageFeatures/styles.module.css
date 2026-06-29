@@ -1,0 +1,41 @@
+.features {
+  display: flex;
+  align-items: stretch;
+  padding: 3rem 0 4rem;
+  width: 100%;
+}
+
+.featureCard {
+  background: rgba(20, 20, 20, 0.45);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--aion-border);
+  border-radius: 12px;
+  padding: 1.5rem 1.25rem;
+  height: 100%;
+}
+
+[data-theme='light'] .featureCard {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: var(--aion-border);
+}
+
+.featureTitle {
+  font-size: 1.15rem;
+  font-weight: 600;
+  margin-bottom: 0.75rem;
+  background: linear-gradient(to right, #60a5fa, #a855f7);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.featureDesc {
+  margin: 0;
+  color: var(--ifm-color-content);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+[data-theme='light'] .featureDesc {
+  color: #404040;
+}

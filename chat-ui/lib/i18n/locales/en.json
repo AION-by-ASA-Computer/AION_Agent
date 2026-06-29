@@ -1,0 +1,654 @@
+{
+  "btn": {
+    "save": "Save",
+    "cancel": "Cancel",
+    "yes": "Yes",
+    "no": "No",
+    "delete": "Delete",
+    "rename": "Rename",
+    "update": "Update",
+    "add": "Add"
+  },
+  "settings": {
+    "title": "User Settings",
+    "back": "Go back",
+    "tab": {
+      "account": "Profile & Account",
+      "usermd": "Profiles"
+    },
+    "section": {
+      "profile": {
+        "title": "Profile Information",
+        "desc": "Edit your local user identifier for the chat session. This ID determines where your preferences and instructions will be saved."
+      },
+      "session": {
+        "title": "Session",
+        "no_token": "No session token detected."
+      },
+      "language": {
+        "label": "Reference Language",
+        "desc": "Set your preferred language. The assistant will respond and organize its reasoning in this language."
+      }
+    },
+    "field": {
+      "username": "Username",
+      "displayname": "Display Name",
+      "email": "Email Address"
+    },
+    "placeholder": {
+      "username": "e.g. jdoe",
+      "displayname": "e.g. John Doe",
+      "email": "e.g. j.doe@company.com"
+    },
+    "btn": {
+      "update": "Update",
+      "logout": "Sign out"
+    },
+    "usermd": {
+      "title": "Customize USER.md",
+      "desc": "This Markdown file is loaded into the assistant's system prompt to store your global formatting preferences, tone, or language constraints. It is unique to the current combination of profile and user ID.",
+      "profile_label": "Selected Profile",
+      "profile_loading": "Loading profiles...",
+      "profile_none": "No profiles found",
+      "profile_nodesc": "No description available for this profile.",
+      "placeholder": "# My preferences...",
+      "loading_placeholder": "Loading instructions...",
+      "loading_overlay": "Loading...",
+      "markdown_hint": "Supports standard Markdown syntax.",
+      "chars": "{{count}} / 1400 characters",
+      "overlimit": "Limit exceeded",
+      "btn": {
+        "restore": "Restore Default",
+        "save": "Save Instructions",
+        "saving": "Saving..."
+      }
+    }
+  },
+  "sidebar": {
+    "new_conversation": "New conversation",
+    "refresh": "Refresh",
+    "no_conversations": "No conversations.",
+    "delete_confirm": "Delete chat?",
+    "settings": "Settings",
+    "login": "Sign in",
+    "integrations": "My integrations",
+    "schedules": "Scheduled jobs"
+  },
+  "schedulesPage": {
+    "title": "Scheduled jobs",
+    "subtitle": "Recurring prompts run automatically by the agent.",
+    "back_chat": "← Chat",
+    "loading": "Loading…",
+    "empty": "No scheduled jobs yet.",
+    "empty_hint": "Create a job to run a prompt on a schedule — daily, weekly, or at a custom interval.",
+    "new": "New job",
+    "create": "Create",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "cancel": "Cancel",
+    "edit": "Edit",
+    "create_title": "New scheduled job",
+    "edit_title": "Edit scheduled job",
+    "dialog_subtitle": "Choose when to run and what the agent should do.",
+    "schedule_label": "When should it run?",
+    "session_legend": "Conversation",
+    "field_name": "Name",
+    "field_prompt": "Prompt sent on each run",
+    "field_timezone": "Timezone",
+    "field_profile": "Agent profile",
+    "form_required": "Name and prompt are required.",
+    "session_fixed": "Same conversation each run (context is kept)",
+    "session_new": "New conversation each run",
+    "section_active": "Active",
+    "section_paused": "Paused",
+    "badge_active": "active",
+    "badge_paused": "paused",
+    "next": "Next run",
+    "last_run": "Last run",
+    "run_now": "Run now",
+    "pause": "Pause",
+    "resume": "Resume",
+    "delete": "Delete",
+    "delete_confirm": "Delete this scheduled job?",
+    "open_session": "Open fixed session",
+    "recent_runs": "Recent runs",
+    "runs_loading": "Loading runs…",
+    "runs_empty": "No runs yet.",
+    "open_run_chat": "Open chat",
+    "load_error": "Could not load scheduled jobs",
+    "save_error": "Could not save job",
+    "feature_disabled": "Scheduled jobs are disabled on the server (set AION_CRON_ENABLED=1 in backend .env and restart the API).",
+    "cron": {
+      "mode_simple": "Simple",
+      "mode_advanced": "Advanced",
+      "freq_label": "How often?",
+      "freq": {
+        "daily": "Every day",
+        "weekdays": "Monday to Friday",
+        "weekly": "Once a week",
+        "monthly": "Once a month",
+        "hourly": "Every hour",
+        "every_n_minutes": "Every few minutes"
+      },
+      "hour_label": "Hour",
+      "minute_label": "Minute",
+      "weekday_label": "Day of week",
+      "dom_label": "Day of month",
+      "interval_label": "Interval",
+      "every_n_label": "Every {{n}} minutes",
+      "advanced_label": "Cron expression (5 fields)",
+      "advanced_hint": "Format: minute hour day month weekday — for experts only.",
+      "invalid": "Invalid schedule. Check the expression or switch to Simple mode.",
+      "timezone_note": "Times use timezone {{tz}}",
+      "weekday": {
+        "0": "Sunday",
+        "1": "Monday",
+        "2": "Tuesday",
+        "3": "Wednesday",
+        "4": "Thursday",
+        "5": "Friday",
+        "6": "Saturday"
+      },
+      "summary": {
+        "daily": "Every day at {{time}}",
+        "weekdays": "Monday–Friday at {{time}}",
+        "weekly": "Every {{day}} at {{time}}",
+        "monthly": "Day {{dom}} of each month at {{time}}",
+        "hourly": "Every hour at minute {{minute}}",
+        "every_n_minutes": "Every {{n}} minutes"
+      }
+    }
+  },
+  "integrationsPage": {
+    "title": "My integrations",
+    "back_chat": "← Chat",
+    "subtitle": "Connect your personal accounts to organization-enabled MCP servers. Values are encrypted on the server.",
+    "loading": "Loading…",
+    "empty": "No integrations available. Ask an admin to enable MCP servers.",
+    "section_configured": "Connected",
+    "section_pending": "Needs setup",
+    "badge_configured": "connected",
+    "badge_pending": "to set up",
+    "connect": "Connect",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "save": "Save and connect",
+    "saving": "Saving…",
+    "security": "Your credentials are encrypted and tied to your account.",
+    "oauth_soon": "Authorize with OAuth (coming soon)",
+    "pat_hint": "OAuth not available for this integration. Paste your Personal Access Token (PAT) below.",
+    "pat_placeholder": "Paste your token here…",
+    "field_error": "Missing required fields",
+    "save_error": "Could not save",
+    "org_managed": "Managed by your organization — no personal setup required.",
+    "per_user_hint": "Enter your personal credentials for this integration.",
+    "feature_disabled": "User credentials are disabled on the server (AION_MCP_USER_CREDENTIALS=0).",
+    "checklist_hub": "Admin: enable the server in MCP Hub → Enable in chat.",
+    "checklist_per_user": "Admin: set credential mode to Per user and save.",
+    "checklist_env": "Admin: apply suggested env with ${AION_USER_*} placeholders.",
+    "checklist_login": "You must be logged in to save credentials.",
+    "composer_pending": "Integration setup required",
+    "composer_runtime_errors": "Integration runtime errors",
+    "composer_alerts_mixed": "Integrations need attention",
+    "add_credential": "Add credential field",
+    "custom_field": "extra",
+    "new_field_label": "New field",
+    "field_label": "Label"
+  },
+  "header": {
+    "toggle_sidebar": {
+      "hide": "Hide left panel",
+      "show": "Show left panel"
+    },
+    "toggle_dock": {
+      "hide": "Hide right panel",
+      "show": "Show right panel"
+    },
+    "resize_dock": "Resize right panel",
+    "copy_session": "Copy session_id to clipboard",
+    "copied": "Copied",
+    "edit_title": "Double-click to edit title",
+    "new_conversation": "New conversation"
+  },
+  "chat": {
+    "thinking": {
+      "label": "Thinking",
+      "off": "Thinking: Off",
+      "min": "Thinking: Minimal",
+      "med": "Thinking: Medium",
+      "max": "Thinking: Maximum",
+      "disable": "Disable"
+    },
+    "stream_recovery": "The agent is still working on this chat on the server. Refreshing automatically…",
+    "agent_status": {
+      "thinking": "The agent is thinking…",
+      "working": "The agent is working…",
+      "compacting": "Compacting context…",
+      "compacting_desc": "Compacting short-term memory…"
+    },
+    "generating": {
+      "plan": "Generating plan…",
+      "document": "Generating document…",
+      "document_named": "Generating {{title}}…"
+    },
+    "tools": {
+      "attach_file": "Attach File",
+      "view_label": "Tools View",
+      "select_view": "Select Tools View",
+      "hide": "Hide",
+      "partial": "Partial",
+      "full": "Full",
+      "plus_tooltip": "Add file or change tools view"
+    },
+    "profile": {
+      "label": "Profile",
+      "select": "Select Profile",
+      "none": "No profile"
+    },
+    "sql_project": {
+      "hint": "Active SQL / navigation project (click to open panel). New messages use this project."
+    },
+    "edit": {
+      "placeholder": "Edit message...",
+      "save_send": "Save & Send",
+      "no_reasoning": "No reasoning received from the model for this response. This is normal if the backend doesn't expose chain-of-thought or the profile uses reasoning {{level}}.",
+      "tooltip": "Edit message",
+      "btn": "Edit"
+    },
+    "error": "Error: {{msg}}",
+    "history_load_error": "Could not load conversation history: {{msg}}",
+    "session_preparing": "Preparing integrations and tools…",
+    "mcp_errors_hint": "Some integrations failed to start. You can still chat with the tools that loaded.",
+    "mcp_errors_details": "Details",
+    "empty_assistant_reply": "No content was saved for this reply. Try regenerating or sending your message again.",
+    "interrupted": "Response interrupted.",
+    "footer_hint": "AION can make mistakes. Consider verifying important information.",
+    "composer_placeholder": "Send a message to AION...",
+    "resize_composer": "Resize message area",
+    "project_required": {
+      "title": "Memory Project Required",
+      "desc": "This profile uses QueryMemory. For security reasons, using the shared 'default' project is not allowed. Please create a new project to start.",
+      "button": "New Project",
+      "textarea_placeholder": "Create or select a project to unlock chat..."
+    },
+    "go_to_source": "Go to source",
+    "actions": {
+      "copy": "Copy response",
+      "copied": "Copied",
+      "good": "Good response",
+      "bad": "Bad response",
+      "regenerate": "Regenerate response"
+    },
+    "reasoning": {
+      "label": "Reasoning",
+      "streaming": "Reasoning in progress…"
+    },
+    "tool": {
+      "running": "Running {{name}}…",
+      "web_search_running": "Searching the web",
+      "web_search_done": "Web search complete",
+      "web_fetch_running": "Reading page",
+      "web_fetch_done": "Page read",
+      "params": "Parameters",
+      "result": "Result",
+      "result_error": "Error",
+      "waiting": "Waiting for server…"
+    },
+    "plan": {
+      "task": {
+        "starting": "Starting"
+      },
+      "execution": "Plan execution"
+    },
+    "session_files_new": "New session files",
+    "remove_file": "Remove {{name}}",
+    "web_search": {
+      "disabled": "Web search disabled",
+      "restricted": "Restricted · {{count}} hosts",
+      "global": "Global web search",
+      "global_desc": "Active Internet connection to obtain updated answers from web sources.",
+      "toggle_aria": "Enable or disable web search",
+      "advanced": "Advanced Search (Specific Sources)",
+      "modal_title": "Advanced Web Search",
+      "modal_desc": "Limit search results to specific domains.",
+      "add_domain": "Add a domain",
+      "error_invalid_domain": "Enter a valid domain (e.g. wikipedia.org)",
+      "error_duplicate_domain": "Domain already present in the list.",
+      "error_max_domains": "You can add up to 20 domains.",
+      "domain_placeholder": "e.g. github.com, *.gov.it, wikipedia.org",
+      "domain_hint": "Specify the exact domain or use the asterisk to include subdomains.",
+      "active_domains": "Active domains ({{count}}/20)",
+      "remove_domain": "Remove {{name}}",
+      "no_domains": "No specific domains",
+      "no_domains_desc": "Add sources above to limit the search.",
+      "clear_list": "Clear list",
+      "save_preferences": "Save Preferences"
+    }
+  },
+  "login": {
+    "btn": "Sign in",
+    "no_auth": "← Chat without login (default user)"
+  },
+  "authgate": {
+    "checking": "Checking access…",
+    "redirecting": "Redirecting to login…"
+  },
+  "toast": {
+    "username_empty": "Username cannot be empty.",
+    "field_updated": "{{field}} updated successfully!",
+    "language_saved": "Reference language saved to profile!",
+    "language_local": "Reference language saved locally!",
+    "language_server_error": "Could not save to server. Saved locally only.",
+    "usermd_saved": "USER.md instructions saved successfully to server!",
+    "usermd_overlimit": "Cannot save: instructions exceed the 1400 character limit.",
+    "usermd_no_profile": "Cannot save: no profile selected.",
+    "logout": "Signed out successfully. ID reset to default.",
+    "no_token": "No session token detected.",
+    "conn_error": "Connection error with the server.",
+    "server_error": "Error saving data to the server."
+  },
+  "field": {
+    "username": "Username",
+    "displayname": "Display Name",
+    "email": "Email"
+  },
+  "artifacts": {
+    "title": "Files",
+    "no_artifacts": "No files or artifacts generated in this session.",
+    "source": {
+      "live": "streaming",
+      "history": "history"
+    },
+    "download": "Download",
+    "in_memory": "In memory",
+    "live_preview": "Live preview",
+    "live_preview_empty": "Waiting for content…",
+    "session_files": "Session Files",
+    "generated_artifacts": "Generated Artifacts",
+    "root": "Session Root",
+    "uploads": "Uploads",
+    "derived": "Derived",
+    "workspace": "Workspace",
+    "refresh": "Refresh"
+  },
+  "research": {
+    "title": "Research",
+    "deep_research": "Deep Research",
+    "description": "Iterative multi-step research with HTML report. The status remains visible after a page refresh while the research is in progress.",
+    "placeholder": "Topic to investigate…",
+    "start": "Start research",
+    "activity": "Activity",
+    "library": "Library",
+    "open_report": "Open report",
+    "adopt_default_query": "Research started by the agent",
+    "empty_panel_p1": "No research in panel. Start from the form above or ask the agent in Deep Research mode. Open DevTools → filter",
+    "empty_panel_p2": "for progress logs.",
+    "round": "Round {{round}}",
+    "sources": "{{count}} sources",
+    "findings": "{{count}} findings",
+    "status": {
+      "running": "Running",
+      "done": "Completed",
+      "error": "Error",
+      "cancelled": "Cancelled",
+      "interrupted": "Interrupted"
+    },
+    "phase": {
+      "probing": "Checking LLM connection…",
+      "planning": "Planning…",
+      "searching": "Web searching…",
+      "reading": "Reading sources…",
+      "writing": "Writing report…",
+      "done_summary": "Completed — open the report",
+      "error_summary": "Error during research",
+      "running_summary": "Waiting for updates…",
+      "starting": "Starting research…"
+    },
+    "category": {
+      "auto": "Auto",
+      "product": "Product",
+      "comparison": "Comparison",
+      "howto": "How-to",
+      "factcheck": "Fact-check"
+    }
+  },
+  "plan": {
+    "title": "Plan",
+    "tasks": "tasks",
+    "blocks": "blocks",
+    "chars": "characters",
+    "status": {
+      "locked": "Locked",
+      "dirty": "Changes",
+      "ok": "Ok",
+      "revision": "rev"
+    },
+    "notice": {
+      "revision_available": "Revision {{rev}} available (local changes not overwritten).",
+      "updated": "Updated to revision {{rev}}."
+    },
+    "decision": {
+      "sending": "Sending decision...",
+      "approved": "Decision: plan approved with current markdown.",
+      "approved_draft": "Decision: approved original draft (approve_only).",
+      "rejected": "Decision: plan rejected from interface.",
+      "ok_approved": "Plan approved and saved.",
+      "ok_approved_draft": "Original draft approved.",
+      "ok_rejected": "Plan rejected."
+    },
+    "error": {
+      "network": "Network error: {{msg}}",
+      "server": "Error {{code}}: {{msg}}"
+    },
+    "fallback": {
+      "title": "Execution Plan",
+      "goal": "Goal",
+      "context": "Context",
+      "context_opt": "_Optional context._",
+      "tasks": "Tasks",
+      "notes": "Notes",
+      "edit_hint": "Edit before approving."
+    },
+    "preview": {
+      "title": "Preview (read-only): Goal / context / current task",
+      "edit_hint": "Edits are made in the blocks above.",
+      "completed": "Completed",
+      "active": "Active now",
+      "next": "Next",
+      "no_tasks": "No tasks in markdown."
+    },
+    "actions": {
+      "approve": "Approve plan",
+      "original": "Original",
+      "reject": "Reject",
+      "sending": "Sending...",
+      "complete_all": "Mark all complete"
+    },
+    "task": {
+      "progress": "tasks done",
+      "complete_ok": "Task {{id}} marked complete.",
+      "completing_all": "Marking all tasks…",
+      "complete_all_ok": "{{count}} tasks marked complete."
+    },
+    "menu": {
+      "placeholder": "Type '/' for commands...",
+      "text": "Text",
+      "h1": "Heading 1",
+      "h2": "Heading 2",
+      "task": "Task",
+      "code": "Code"
+    },
+    "meta": {
+      "profile": "Profile",
+      "dep": "dep"
+    },
+    "missing_props": "TaskPlanManagerV4: missing props.",
+    "execution": {
+      "running": "Running plan tasks…",
+      "retry": "Retrying task `{{id}}`…",
+      "task_error": "Task `{{id}}` failed after retry — skipped.",
+      "deliverable": "Deliverable",
+      "open_deliverable": "Open deliverable"
+    },
+    "editor": {
+      "goal_label": "Goal",
+      "goal_placeholder": "Describe the overall objective…",
+      "context_label": "Context",
+      "context_placeholder": "Optional context or constraints…",
+      "tasks_label": "Tasks",
+      "task_id_label": "ID",
+      "task_title_label": "Title",
+      "task_desc_label": "Description",
+      "task_deps_label": "Depends on",
+      "task_deps_placeholder": "task_01, task_02",
+      "add_task": "Add task",
+      "remove_task": "Remove",
+      "export_md": "Export markdown",
+      "preview_md": "Preview markdown"
+    }
+  },
+  "theme": {
+    "toggle": {
+      "to_light": "Switch to light theme",
+      "to_dark": "Switch to dark theme",
+      "title": "Light/dark theme"
+    }
+  },
+  "agentdb": {
+    "title": "Agent DB"
+  },
+  "memory": {
+    "title": "Memory"
+  },
+  "memory_dock": {
+    "title": "Project memory",
+    "subtitle": "Saved SQL queries and MemPalace navigation for the active project.",
+    "tab_query": "SQL queries",
+    "tab_navigation": "Navigation",
+    "hint_query": "Filter, verify, or edit SELECT statements the agent saved for this project.",
+    "hint_navigation": "Structured drawers for database exploration: entry points, JOINs, pitfalls, and discoveries.",
+    "open_panel": "Open memory panel (project settings)",
+    "no_capabilities": "This profile does not expose SQL or MemPalace memory."
+  },
+  "memory_project": {
+    "label": "Project",
+    "new_project": "New project",
+    "new_short": "New",
+    "settings": "Project settings",
+    "settings_short": "Settings",
+    "create_btn": "Create project",
+    "create_modal_hint": "The slug identifies the MemPalace wing and QueryMemory bucket.",
+    "slug_label": "Slug",
+    "name_label": "Display name",
+    "desc_label": "Description",
+    "tab_general": "General",
+    "tab_members": "Members",
+    "members_readonly": "Only the owner can invite or remove members.",
+    "no_members": "No members listed.",
+    "open_full_page": "Full project management →",
+    "page_title": "Memory projects",
+    "page_subtitle": "Create projects, scope descriptions, and manage members.",
+    "back_chat": "← Back to chat",
+    "profile_filter": "Agent profile",
+    "loading": "Loading…",
+    "no_projects": "No projects yet. Create one to get started.",
+    "no_description": "No description — add one to guide the agent on scope.",
+    "page_footer": "SQL queries and MemPalace drawers share the project slug selected in chat.",
+    "select_project": "Select a project from the list.",
+    "slug_placeholder": "slug (e.g. billing_db)",
+    "name_placeholder": "Display name",
+    "desc_placeholder": "Description (optional)",
+    "rename": "Display name & description",
+    "invite": "Invite member",
+    "invite_placeholder": "Username or user id",
+    "invite_btn": "Invite",
+    "your_role": "Your role",
+    "remove_member_confirm": "Remove this member from the project?",
+    "not_in_list": "not in list — check access"
+  },
+  "query_memory": {
+    "title": "SQL queries",
+    "filter_placeholder": "Filter…",
+    "verified_only": "Verified only",
+    "refresh": "Refresh",
+    "empty": "No saved queries in this project yet. Successful SELECTs are stored here after the agent saves them.",
+    "empty_hint": "Queries appear here after the agent saves them with memory tools.",
+    "delete_confirm": "Delete this query from QueryMemory?",
+    "edit": "Edit query",
+    "copy_sql": "Copy SQL",
+    "verified": "Verified",
+    "draft": "Draft",
+    "request_label": "User request / description"
+  },
+  "navigation_memory": {
+    "title": "Navigation",
+    "wing": "Wing",
+    "drawers": "drawer(s)",
+    "hint": "The agent uses the same wing as the project selected above. Edit drawers here or ask the agent to add structured navigation memory.",
+    "advanced": "Advanced maintenance",
+    "active_wing": "Active wing",
+    "other_wings_hint": "No drawers in this wing, but MemPalace has data in other wings — switch project in chat or migrate memory.",
+    "all_rooms": "All rooms",
+    "search_placeholder": "Search navigation…",
+    "refresh": "Refresh",
+    "preview_legacy": "Preview legacy wings",
+    "prune_legacy": "Prune legacy wings",
+    "prune_confirm": "Delete all drawers in non-project wings? This cannot be undone.",
+    "legacy_wings": "Legacy wings",
+    "empty": "No navigation memory for this project yet. Ask the agent to add drawers per fact in MemPalace rooms.",
+    "delete_confirm": "Delete this navigation drawer?",
+    "edit": "Edit drawer",
+    "no_content": "(no content available — refresh or edit the drawer)"
+  },
+  "khub_file": {
+    "title": "Document",
+    "download": "Download document",
+    "loading": "Loading document...",
+    "error": "Unable to load file",
+    "empty": "No document selected."
+  },
+  "dock": {
+    "none_hint": "Select a tab (Plan / Artifacts / Agent DB / Memory / Prompt)."
+  },
+  "prompt_debug": {
+    "title": "Prompt",
+    "disabled_title": "Prompt debug disabled",
+    "disabled_hint": "Set AION_PROMPT_DEBUG=1 and NEXT_PUBLIC_AION_PROMPT_DEBUG=1 in the repo root .env, then restart backend and chat-ui.",
+    "empty": "No snapshots yet. Send a message to capture the full prompt sent to the agent.",
+    "turn_select": "Turn",
+    "copy_all": "Copy all",
+    "copy_section": "Copy",
+    "search_placeholder": "Search prompt (e.g. English, italiano, MODALITÀ…)",
+    "no_injects": "No manual injects recorded for this turn.",
+    "tab": {
+      "raw": "Full raw",
+      "output": "Model output",
+      "system": "System",
+      "messages": "Messages",
+      "injects": "Injects",
+      "tools": "Tools"
+    },
+    "output": {
+      "model": "Assistant response (raw)",
+      "coerced": "Coerced plan (post-processing)",
+      "pending": "Waiting for turn completion — output appears here after streaming ends."
+    },
+    "stats": {
+      "total": "total tokens",
+      "messages": "message tokens",
+      "overhead": "overhead",
+      "count": "messages"
+    }
+  },
+  "turn": {
+    "outcome": {
+      "turn_timeout": "Turn stopped automatically: timeout ({seconds}s).",
+      "no_progress": "Turn stopped automatically: no progress for {seconds}s.",
+      "stream_events": "Turn stopped automatically: too many stream events.",
+      "control_events": "Turn stopped automatically: too many control events.",
+      "tool_calls": "Turn stopped automatically: too many tool calls.",
+      "tool_events": "Turn stopped automatically: too many tool events.",
+      "plan_invalid_response": "Plan mode: invalid assistant response."
+    }
+  }
+}

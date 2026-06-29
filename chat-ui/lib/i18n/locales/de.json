@@ -1,0 +1,547 @@
+{
+  "btn": {
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "yes": "Ja",
+    "no": "Nein",
+    "delete": "Löschen",
+    "rename": "Umbenennen",
+    "update": "Aktualisieren",
+    "add": "Hinzufügen"
+  },
+  "settings": {
+    "title": "Benutzereinstellungen",
+    "back": "Zurück",
+    "tab": {
+      "account": "Profil & Konto",
+      "usermd": "Profile"
+    },
+    "section": {
+      "profile": {
+        "title": "Profilinformationen",
+        "desc": "Bearbeite deine lokale Benutzer-ID für die Chat-Sitzung. Diese ID bestimmt, wo deine Einstellungen und Anweisungen gespeichert werden."
+      },
+      "session": {
+        "title": "Sitzung",
+        "no_token": "Kein Sitzungstoken erkannt."
+      },
+      "language": {
+        "label": "Referenzsprache",
+        "desc": "Lege deine bevorzugte Sprache fest. Der Assistent wird in dieser Sprache antworten und sein Denken organisieren."
+      }
+    },
+    "field": {
+      "username": "Benutzername",
+      "displayname": "Anzeigename",
+      "email": "E-Mail-Adresse"
+    },
+    "placeholder": {
+      "username": "z.B. jmustermann",
+      "displayname": "z.B. Max Mustermann",
+      "email": "z.B. m.mustermann@firma.de"
+    },
+    "btn": {
+      "update": "Aktualisieren",
+      "logout": "Abmelden"
+    },
+    "usermd": {
+      "title": "USER.md anpassen",
+      "desc": "Diese Markdown-Datei wird in den System-Prompt des Assistenten geladen, um deine globalen Formatierungs-, Ton- oder Spracheinschränkungen zu speichern. Sie ist einzigartig für die aktuelle Kombination aus Profil und Benutzer-ID.",
+      "profile_label": "Ausgewähltes Profil",
+      "profile_loading": "Profile werden geladen...",
+      "profile_none": "Keine Profile gefunden",
+      "profile_nodesc": "Keine Beschreibung für dieses Profil verfügbar.",
+      "placeholder": "# Meine Einstellungen...",
+      "loading_placeholder": "Anweisungen werden geladen...",
+      "loading_overlay": "Laden...",
+      "markdown_hint": "Unterstützt Standard-Markdown-Syntax.",
+      "chars": "{{count}} / 1400 Zeichen",
+      "overlimit": "Limit überschritten",
+      "btn": {
+        "restore": "Standard wiederherstellen",
+        "save": "Anweisungen speichern",
+        "saving": "Wird gespeichert..."
+      }
+    }
+  },
+  "sidebar": {
+    "new_conversation": "Neues Gespräch",
+    "refresh": "Aktualisieren",
+    "no_conversations": "Keine Gespräche.",
+    "delete_confirm": "Chat löschen?",
+    "settings": "Einstellungen",
+    "login": "Anmelden",
+    "integrations": "Meine Integrationen",
+    "schedules": "Geplante Jobs"
+  },
+  "schedulesPage": {
+    "title": "Geplante Jobs",
+    "subtitle": "Wiederkehrende Prompts, die der Agent automatisch ausführt.",
+    "back_chat": "← Chat",
+    "loading": "Laden…",
+    "empty": "Keine geplanten Jobs.",
+    "empty_hint": "Erstellen Sie einen Job für tägliche, wöchentliche oder benutzerdefinierte Intervalle.",
+    "new": "Neuer Job",
+    "create": "Erstellen",
+    "save": "Speichern",
+    "saving": "Speichern…",
+    "cancel": "Abbrechen",
+    "edit": "Bearbeiten",
+    "create_title": "Neuer geplanter Job",
+    "edit_title": "Job bearbeiten",
+    "dialog_subtitle": "Wählen Sie Zeitpunkt und Aufgabe für den Agenten.",
+    "schedule_label": "Wann ausführen?",
+    "session_legend": "Unterhaltung",
+    "field_name": "Name",
+    "field_prompt": "Prompt bei jedem Lauf",
+    "field_timezone": "Zeitzone",
+    "field_profile": "Agentenprofil",
+    "form_required": "Name und Prompt sind erforderlich.",
+    "session_fixed": "Gleiche Unterhaltung (Kontext bleibt)",
+    "session_new": "Neue Unterhaltung pro Lauf",
+    "section_active": "Aktiv",
+    "section_paused": "Pausiert",
+    "badge_active": "aktiv",
+    "badge_paused": "pausiert",
+    "next": "Nächster Lauf",
+    "last_run": "Letzter Lauf",
+    "run_now": "Jetzt ausführen",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "delete": "Löschen",
+    "delete_confirm": "Diesen Job löschen?",
+    "open_session": "Feste Session öffnen",
+    "recent_runs": "Letzte Ausführungen",
+    "runs_loading": "Ausführungen werden geladen…",
+    "runs_empty": "Noch keine Ausführungen.",
+    "open_run_chat": "Chat öffnen",
+    "load_error": "Jobs konnten nicht geladen werden",
+    "save_error": "Job konnte nicht gespeichert werden",
+    "feature_disabled": "Geplante Jobs sind auf dem Server deaktiviert (AION_CRON_ENABLED=1 in .env setzen und API neu starten).",
+    "cron": {
+      "mode_simple": "Einfach",
+      "mode_advanced": "Erweitert",
+      "freq_label": "Wie oft?",
+      "freq": {
+        "daily": "Täglich",
+        "weekdays": "Mo–Fr",
+        "weekly": "Wöchentlich",
+        "monthly": "Monatlich",
+        "hourly": "Stündlich",
+        "every_n_minutes": "Alle X Minuten"
+      },
+      "hour_label": "Stunde",
+      "minute_label": "Minute",
+      "weekday_label": "Wochentag",
+      "dom_label": "Tag im Monat",
+      "interval_label": "Intervall",
+      "every_n_label": "Alle {{n}} Minuten",
+      "advanced_label": "Cron-Ausdruck (5 Felder)",
+      "advanced_hint": "Format: Minute Stunde Tag Monat Wochentag.",
+      "invalid": "Ungültiger Zeitplan.",
+      "timezone_note": "Zeiten in {{tz}}",
+      "weekday": {
+        "0": "Sonntag",
+        "1": "Montag",
+        "2": "Dienstag",
+        "3": "Mittwoch",
+        "4": "Donnerstag",
+        "5": "Freitag",
+        "6": "Samstag"
+      },
+      "summary": {
+        "daily": "Täglich um {{time}}",
+        "weekdays": "Mo–Fr um {{time}}",
+        "weekly": "Jeden {{day}} um {{time}}",
+        "monthly": "Am {{dom}}. jedes Monats um {{time}}",
+        "hourly": "Jede Stunde bei Minute {{minute}}",
+        "every_n_minutes": "Alle {{n}} Minuten"
+      }
+    }
+  },
+  "integrationsPage": {
+    "title": "Meine Integrationen",
+    "back_chat": "← Chat",
+    "subtitle": "Verbinden Sie Ihre Konten mit den vom Administrator freigeschalteten MCP-Servern. Werte werden auf dem Server verschlüsselt.",
+    "loading": "Laden…",
+    "empty": "Keine Integrationen. Bitte den Administrator, MCP-Server zu aktivieren.",
+    "section_configured": "Verbunden",
+    "section_pending": "Offen",
+    "badge_configured": "verbunden",
+    "badge_pending": "offen",
+    "connect": "Verbinden",
+    "edit": "Bearbeiten",
+    "cancel": "Abbrechen",
+    "save": "Speichern und verbinden",
+    "saving": "Speichern…",
+    "security": "Ihre Zugangsdaten werden verschlüsselt und Ihrem Konto zugeordnet.",
+    "oauth_soon": "Mit OAuth autorisieren (demnächst)",
+    "pat_hint": "OAuth nicht verfügbar. Fügen Sie Ihren Personal Access Token (PAT) ein.",
+    "pat_placeholder": "Token hier einfügen…",
+    "field_error": "Pflichtfelder fehlen",
+    "save_error": "Speichern fehlgeschlagen",
+    "org_managed": "Von Ihrer Organisation verwaltet — keine persönliche Einrichtung nötig.",
+    "per_user_hint": "Geben Sie Ihre persönlichen Zugangsdaten für diese Integration ein.",
+    "add_credential": "Zugangsdatenfeld hinzufügen",
+    "custom_field": "extra",
+    "new_field_label": "Neues Feld",
+    "field_label": "Bezeichnung"
+  },
+  "header": {
+    "toggle_sidebar": {
+      "hide": "Linkes Panel ausblenden",
+      "show": "Linkes Panel einblenden"
+    },
+    "toggle_dock": {
+      "hide": "Rechtes Panel ausblenden",
+      "show": "Rechtes Panel einblenden"
+    },
+    "resize_dock": "Rechtes Panel anpassen",
+    "copy_session": "Session-ID in die Zwischenablage kopieren",
+    "copied": "Kopiert",
+    "edit_title": "Doppelklick zum Bearbeiten des Titels",
+    "new_conversation": "Neues Gespräch"
+  },
+  "chat": {
+    "thinking": {
+      "label": "Nachdenken",
+      "off": "Thinking: Aus",
+      "min": "Thinking: Minimal",
+      "med": "Thinking: Mittel",
+      "max": "Thinking: Maximum",
+      "disable": "Deaktivieren"
+    },
+    "stream_recovery": "Der Agent arbeitet auf dem Server noch an diesem Chat. Automatische Aktualisierung…",
+    "agent_status": {
+      "thinking": "Der Agent denkt nach…",
+      "working": "Der Agent arbeitet…",
+      "compacting": "Kontext wird komprimiert…",
+      "compacting_desc": "Komprimierung des Kurzzeitgedächtnisses…"
+    },
+    "tools": {
+      "attach_file": "Datei anhängen",
+      "view_label": "Werkzeugansicht",
+      "select_view": "Werkzeugansicht auswählen",
+      "hide": "Ausblenden",
+      "partial": "Teilweise",
+      "full": "Vollständig",
+      "plus_tooltip": "Datei hinzufügen oder Tools-Ansicht ändern"
+    },
+    "profile": {
+      "label": "Profil",
+      "select": "Profil auswählen",
+      "none": "Keine Profile"
+    },
+    "edit": {
+      "placeholder": "Nachricht bearbeiten...",
+      "save_send": "Speichern & Senden",
+      "no_reasoning": "Kein Reasoning vom Modell für diese Antwort empfangen. Das ist normal, wenn das Backend keinen Chain-of-Thought preisgibt oder das Profil das Reasoning {{level}} verwendet.",
+      "tooltip": "Nachricht bearbeiten",
+      "btn": "Bearbeiten"
+    },
+    "error": "Fehler: {{msg}}",
+    "history_load_error": "Verlauf konnte nicht geladen werden: {{msg}}",
+    "empty_assistant_reply": "Für diese Antwort wurde kein Inhalt gespeichert. Versuche es erneut oder sende die Nachricht noch einmal.",
+    "interrupted": "Antwort unterbrochen.",
+    "footer_hint": "AION kann Fehler machen. Bitte überprüfe wichtige Informationen.",
+    "composer_placeholder": "Senden Sie eine Nachricht an AION...",
+    "resize_composer": "Größe des Nachrichtenbereichs ändern",
+    "project_required": {
+      "title": "Speicherprojekt erforderlich",
+      "desc": "Dieses Profil verwendet QueryMemory. Aus Sicherheitsgründen ist die Verwendung des gemeinsamen Projekts 'default' nicht zulässig. Bitte erstellen Sie ein neues Projekt, um zu starten.",
+      "button": "Neues Projekt",
+      "textarea_placeholder": "Erstellen oder wählen Sie ein Projekt, um den Chat freizugeben..."
+    },
+    "go_to_source": "Zur Quelle gehen",
+    "plan": {
+      "task": {
+        "starting": "Starten"
+      },
+      "execution": "Planausführung"
+    },
+    "session_files_new": "Neue Sitzungsdateien",
+    "remove_file": "Entfernen {{name}}",
+    "web_search": {
+      "disabled": "Websuche deaktiviert",
+      "restricted": "Eingeschränkt · {{count}} Hosts",
+      "global": "Globale Websuche",
+      "global_desc": "Aktive Internetverbindung, um aktuelle Antworten aus Webquellen zu erhalten.",
+      "toggle_aria": "Websuche aktivieren oder deaktivieren",
+      "advanced": "Erweiterte Suche (Spezifische Quellen)",
+      "modal_title": "Erweiterte Websuche",
+      "modal_desc": "Suchergebnisse auf bestimmte Domänen einschränken.",
+      "add_domain": "Eine Domain hinzufügen",
+      "error_invalid_domain": "Geben Sie eine gültige Domain ein (z. B. wikipedia.org)",
+      "error_duplicate_domain": "Domain bereits in der Liste vorhanden.",
+      "error_max_domains": "Sie können maximal 20 Domains hinzufügen.",
+      "domain_placeholder": "z. B. github.com, *.gov.it, wikipedia.org",
+      "domain_hint": "Geben Sie die genaue Domain an oder verwenden Sie das Sternchen, um Subdomains einzuschließen.",
+      "active_domains": "Aktive Domains ({{count}}/20)",
+      "remove_domain": "Entfernen {{name}}",
+      "no_domains": "Keine spezifischen Domains",
+      "no_domains_desc": "Fügen Sie oben Quellen hinzu, um die Suche einzuschränken.",
+      "clear_list": "Liste leeren",
+      "save_preferences": "Einstellungen speichern"
+    }
+  },
+  "login": {
+    "btn": "Einloggen",
+    "no_auth": "← Chat ohne Login (Standard-Benutzer)"
+  },
+  "authgate": {
+    "checking": "Zugang wird überprüft…",
+    "redirecting": "Weiterleitung zum Login…"
+  },
+  "toast": {
+    "username_empty": "Der Benutzername darf nicht leer sein.",
+    "field_updated": "{{field}} erfolgreich aktualisiert!",
+    "language_saved": "Referenzsprache im Profil gespeichert!",
+    "language_local": "Referenzsprache lokal gespeichert!",
+    "language_server_error": "Konnte nicht auf dem Server gespeichert werden. Nur lokal gespeichert.",
+    "usermd_saved": "USER.md-Anweisungen erfolgreich auf dem Server gespeichert!",
+    "usermd_overlimit": "Speichern nicht möglich: Anweisungen überschreiten das Limit von 1400 Zeichen.",
+    "usermd_no_profile": "Speichern nicht möglich: Kein Profil ausgewählt.",
+    "logout": "Erfolgreich abgemeldet. ID auf Standard zurückgesetzt.",
+    "no_token": "Kein Sitzungstoken erkannt.",
+    "conn_error": "Verbindungsfehler mit dem Server.",
+    "server_error": "Fehler beim Speichern der Daten auf dem Server."
+  },
+  "field": {
+    "username": "Benutzername",
+    "displayname": "Anzeigename",
+    "email": "E-Mail"
+  },
+  "artifacts": {
+    "title": "Dateien",
+    "no_artifacts": "Keine Dateien oder Artefakte in dieser Sitzung generiert.",
+    "source": {
+      "live": "Streaming",
+      "history": "Verlauf"
+    },
+    "download": "Herunterladen",
+    "in_memory": "Im Speicher",
+    "session_files": "Sitzungsdateien",
+    "generated_artifacts": "Generierte Artefakte",
+    "root": "Sitzungs-Root",
+    "uploads": "Uploads",
+    "derived": "Derived",
+    "workspace": "Workspace",
+    "refresh": "Aktualisieren"
+  },
+  "plan": {
+    "title": "Plan",
+    "tasks": "Aufgaben",
+    "blocks": "Blöcke",
+    "chars": "Zeichen",
+    "status": {
+      "locked": "Gesperrt",
+      "dirty": "Änderungen",
+      "ok": "Ok",
+      "revision": "Rev"
+    },
+    "notice": {
+      "revision_available": "Revision {{rev}} verfügbar (lokale Änderungen nicht überschrieben).",
+      "updated": "Aktualisiert auf Revision {{rev}}."
+    },
+    "decision": {
+      "sending": "Entscheidung wird gesendet...",
+      "approved": "Entscheidung: Plan mit aktuellem Markdown genehmigt.",
+      "approved_draft": "Entscheidung: Originalentwurf genehmigt (nur Genehmigung).",
+      "rejected": "Entscheidung: Plan über die Schnittstelle abgelehnt.",
+      "ok_approved": "Plan genehmigt und gespeichert.",
+      "ok_approved_draft": "Originalentwurf genehmigt.",
+      "ok_rejected": "Plan abgelehnt."
+    },
+    "error": {
+      "network": "Netzwerkfehler: {{msg}}",
+      "server": "Fehler {{code}}: {{msg}}"
+    },
+    "fallback": {
+      "title": "Ausführungsplan",
+      "goal": "Ziel",
+      "context": "Kontext",
+      "context_opt": "_Optionaler Kontext._",
+      "tasks": "Aufgaben",
+      "notes": "Notizen",
+      "edit_hint": "Vor der Genehmigung bearbeiten."
+    },
+    "preview": {
+      "title": "Vorschau (schreibgeschützt): Ziel / Kontext / Aktuelle Aufgabe",
+      "edit_hint": "Änderungen werden in den Blöcken oben vorgenommen.",
+      "completed": "Abgeschlossen",
+      "active": "Jetzt aktiv",
+      "next": "Nächste",
+      "no_tasks": "Keine Aufgaben im Markdown."
+    },
+    "actions": {
+      "approve": "Plan genehmigen",
+      "original": "Original",
+      "reject": "Ablehnen",
+      "sending": "Wird gesendet...",
+      "complete_all": "Alle als erledigt markieren"
+    },
+    "task": {
+      "progress": "Aufgaben erledigt",
+      "complete_ok": "Aufgabe {{id}} als erledigt markiert.",
+      "completing_all": "Markiere alle Aufgaben…",
+      "complete_all_ok": "{{count}} Aufgaben als erledigt markiert."
+    },
+    "menu": {
+      "placeholder": "Geben Sie '/' für Befehle ein...",
+      "text": "Text",
+      "h1": "Überschrift 1",
+      "h2": "Überschrift 2",
+      "task": "Aufgabe",
+      "code": "Code"
+    },
+    "meta": {
+      "profile": "Profil",
+      "dep": "Dep"
+    },
+    "missing_props": "TaskPlanManagerV4: Fehlende Props."
+  },
+  "theme": {
+    "toggle": {
+      "to_light": "Zum hellen Design wechseln",
+      "to_dark": "Zum dunklen Design wechseln",
+      "title": "Helles/dunkles Design"
+    }
+  },
+  "agentdb": {
+    "title": "Agent DB"
+  },
+  "memory": {
+    "title": "Speicher"
+  },
+  "memory_dock": {
+    "title": "Projektspeicher",
+    "subtitle": "Gespeicherte SQL-Abfragen und MemPalace-Navigation für das aktive Projekt.",
+    "tab_query": "SQL-Abfragen",
+    "tab_navigation": "Navigation",
+    "hint_query": "Filtern, verifizieren oder bearbeiten Sie vom Agenten gespeicherte SELECTs.",
+    "hint_navigation": "Strukturierte Drawer für Datenbank-Exploration: Einstieg, JOINs, Fallstricke, Entdeckungen.",
+    "open_panel": "Speicher-Panel öffnen (Projekteinstellungen)",
+    "no_capabilities": "Dieses Profil bietet keinen SQL- oder MemPalace-Speicher."
+  },
+  "memory_project": {
+    "label": "Projekt",
+    "new_project": "Neues Projekt",
+    "new_short": "Neu",
+    "settings": "Projekteinstellungen",
+    "settings_short": "Einstellungen",
+    "create_btn": "Projekt erstellen",
+    "create_modal_hint": "Der Slug identifiziert den MemPalace-Wing und den QueryMemory-Bucket.",
+    "slug_label": "Slug",
+    "name_label": "Anzeigename",
+    "desc_label": "Beschreibung",
+    "tab_general": "Allgemein",
+    "tab_members": "Mitglieder",
+    "members_readonly": "Nur der Eigentümer kann Mitglieder einladen oder entfernen.",
+    "no_members": "Keine Mitglieder aufgelistet.",
+    "open_full_page": "Vollständige Projektverwaltung →",
+    "page_title": "Speicherprojekte",
+    "page_subtitle": "Projekte erstellen, Bereichsbeschreibungen festlegen und Mitglieder verwalten.",
+    "back_chat": "← Zurück zum Chat",
+    "profile_filter": "Agentenprofil",
+    "loading": "Wird geladen…",
+    "no_projects": "Noch keine Projekte. Erstellen Sie eines, um zu beginnen.",
+    "no_description": "Keine Beschreibung — fügen Sie eine hinzu, um den Agenten bezüglich des Bereichs anzuleiten.",
+    "page_footer": "SQL-Abfragen und MemPalace-Drawer teilen sich den im Chat ausgewählten Projekt-Slug.",
+    "select_project": "Wählen Sie ein Projekt aus der Liste aus.",
+    "slug_placeholder": "Slug (z. B. billing_db)",
+    "name_placeholder": "Anzeigename",
+    "desc_placeholder": "Beschreibung (optional)",
+    "rename": "Anzeigename & Beschreibung",
+    "invite": "Mitglied einladen",
+    "invite_placeholder": "Benutzername oder Benutzer-ID",
+    "invite_btn": "Einladen",
+    "your_role": "Ihre Rolle",
+    "remove_member_confirm": "Dieses Mitglied aus dem Projekt entfernen?",
+    "not_in_list": "nicht in der Liste — Zugriff prüfen"
+  },
+  "query_memory": {
+    "title": "SQL-Abfragen",
+    "filter_placeholder": "Filtern…",
+    "verified_only": "Nur verifiziert",
+    "refresh": "Aktualisieren",
+    "empty": "Noch keine gespeicherten Abfragen in diesem Projekt.",
+    "empty_hint": "Abfragen erscheinen hier, nachdem der Agent sie mit Speicher-Tools speichert.",
+    "delete_confirm": "Diese Abfrage aus QueryMemory löschen?",
+    "edit": "Abfrage bearbeiten",
+    "copy_sql": "SQL kopieren",
+    "verified": "Verifiziert",
+    "draft": "Entwurf",
+    "request_label": "Anfrage / Beschreibung"
+  },
+  "navigation_memory": {
+    "title": "Navigation",
+    "wing": "Wing",
+    "drawers": "Drawer",
+    "hint": "Der Agent nutzt denselben Wing wie das oben gewählte Projekt.",
+    "advanced": "Erweiterte Wartung",
+    "active_wing": "Aktiver Wing",
+    "other_wings_hint": "Keine Drawer in diesem Wing, aber MemPalace hat Daten in anderen Wings — Projekt in der Chat wechseln oder migrieren.",
+    "all_rooms": "Alle Räume",
+    "search_placeholder": "Navigation durchsuchen…",
+    "refresh": "Aktualisieren",
+    "preview_legacy": "Legacy-Wings anzeigen",
+    "prune_legacy": "Legacy-Wings bereinigen",
+    "prune_confirm": "Alle Drawer in Nicht-Projekt-Wings löschen? Unwiderruflich.",
+    "legacy_wings": "Legacy-Wings",
+    "empty": "Noch keine Navigationsdaten für dieses Projekt.",
+    "delete_confirm": "Diesen Navigations-Drawer löschen?",
+    "edit": "Drawer bearbeiten",
+    "no_content": "(kein Inhalt — aktualisieren oder Drawer bearbeiten)"
+  },
+  "khub_file": {
+    "title": "Dokument",
+    "download": "Dokument herunterladen",
+    "loading": "Dokument wird geladen...",
+    "error": "Datei kann nicht geladen werden",
+    "empty": "Kein Dokument ausgewählt."
+  },
+  "dock": {
+    "none_hint": "Wähle einen Tab (Plan / Artefakte / Agent DB / Speicher)."
+  },
+  "research": {
+    "title": "Recherche",
+    "deep_research": "Deep Research",
+    "description": "Iterative, mehrstufige Recherche mit HTML-Bericht. Der Status bleibt nach einem Aktualisieren der Seite sichtbar, solange die Recherche läuft.",
+    "placeholder": "Thema zu untersuchen…",
+    "start": "Recherche starten",
+    "activity": "Aktivität",
+    "library": "Bibliothek",
+    "open_report": "Bericht öffnen",
+    "adopt_default_query": "Vom Agenten gestartete Recherche",
+    "empty_panel_p1": "Keine Recherche im Panel. Starten Sie über das obige Formular oder fragen Sie den Agenten im Deep Research-Modus. Öffnen Sie die DevTools → filtern Sie",
+    "empty_panel_p2": "nach Fortschrittsprotokollen.",
+    "round": "Runde {{round}}",
+    "sources": "{{count}} Quellen",
+    "findings": "{{count}} Erkenntnisse",
+    "status": {
+      "running": "Laufend",
+      "done": "Abgeschlossen",
+      "error": "Fehler",
+      "cancelled": "Abgebrochen",
+      "interrupted": "Unterbrochen"
+    },
+    "phase": {
+      "probing": "LLM-Verbindung prüfen…",
+      "planning": "Planung…",
+      "searching": "Web-Suche…",
+      "reading": "Quellen lesen…",
+      "writing": "Bericht schreiben…",
+      "done_summary": "Abgeschlossen — Bericht öffnen",
+      "error_summary": "Fehler bei der Recherche",
+      "running_summary": "Warten auf Updates…",
+      "starting": "Recherche wird gestartet…"
+    },
+    "category": {
+      "auto": "Auto",
+      "product": "Produkt",
+      "comparison": "Vergleich",
+      "howto": "Anleitung",
+      "factcheck": "Fact-Check"
+    }
+  }
+}

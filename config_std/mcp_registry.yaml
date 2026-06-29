@@ -1,0 +1,100 @@
+# config/mcp_registry.yaml
+# Registry base (template in config_std; copiato in config/ al primo sync).
+# Override locale (NON sovrascritti da sync --force):
+#   - config/mcp_registry.local.yaml  (flat, stile AION)
+#   - config/mcp_registry.local.json  (standard mercato: { "mcpServers": { ... } })
+#   - oppure entrambi (JSON merge sopra YAML). Vedi config_std/mcp_registry.local.json.example
+# Import Claude/Cursor: `python -m src.mcp_import -i claude_desktop_config.json -o config/mcp_registry.local.json`
+# Mappa di tutti i server MCP disponibili nel sistema.
+# Ogni chiave rappresenta il nome che verrà usato nei profili.
+
+prometheus:
+  command: "python"
+  args: ["-u", "prometheus/server.py"]
+  description: "Metriche Prometheus e Grafica"
+
+charts:
+  command: "python"
+  args: ["-u", "charts/server.py"]
+  description: "Generatore di Grafici Interattivi (Line, Area, Bar)"
+
+grafana:
+  command: "python"
+  args: ["-u", "grafana/server.py"]
+  description: "Integrazione Grafana Annotations & Dashboards"
+
+memory:
+  command: "python"
+  args: ["-u", "query_memory/server.py"]
+  description: "Database di conoscenza e cache query verificate"
+
+mempalace:
+  command: "python"
+  args: ["-m", "mempalace.mcp_server"]
+  description: "Memoria a lungo termine gerarchica (facts & context)"
+
+code:
+  command: "python"
+  args: ["-u", "code_executor/server.py"]
+  description: "Esecuzione di script Python sicuri"
+
+# khub_rag:
+#   type: "sse"
+#   url: "${KHUB_MCP_ENDPOINT}"
+#   description: "Ricerca semantica avanzata nella documentazione aziendale (RAG) - Remoto"
+
+ocr:
+  command: "python"
+  args: ["-u", "ocr_mcp/server.py"]
+  description: "OCR immagini/PDF tramite servizio dedicato (GLM-OCR)"
+
+session_sandbox:
+  command: "python"
+  args: ["-u", "session_sandbox/server.py"]
+  description: "Workspace sessione: elenco file, lettura, script Python isolati"
+  container:
+    image: "${AION_SANDBOX_CONTAINER_IMAGE:-aion/sandbox:latest}"
+    network: none
+
+promo_render:
+  command: "python"
+  args: ["-u", "promo_render/server.py"]
+  description: "Grafiche promozionali React/HTML → PNG (stile chat-ui, Playwright)"
+
+skills_hub:
+  command: "python"
+  args: ["-u", "skills_hub/server.py"]
+  description: "Ricerca e lettura on-demand delle skill AION (progressive disclosure)"
+  env:
+    AION_SKILL_WRITE_ENABLED: "1"
+    # 1 = skill_view/skill_list solo per skill in profile.skills (allineato a src/runtime/skill_profile_gate.py)
+    AION_SKILL_VIEW_ENFORCE_PROFILE: "1"
+
+aion_subagents:
+  command: "python"
+  args: ["-u", "aion_subagents/server.py"]
+  description: "Delega a subagent con sessione isolata (delegate_to_subagent)"
+
+orchestration:
+  type: in_process
+  description: "Built-in Plan/HITL (draft_execution_plan + mark_task_completed; sempre merge in build_all_tools, non mettere in profili YAML)"
+
+cron:
+  type: in_process
+  description: "Built-in scheduled jobs (create_scheduled_job, …); richiede AION_CRON_ENABLED=1; merge in build_all_tools"
+
+agent_db:
+  command: "python"
+  args: ["-m", "mcp_servers.agent_db.server"]
+  description: "Agent-managed SQL databases for structured long-term memory"
+
+# --- Per-user MCP credentials (Approccio A + HOME isolation Approccio B) ---
+# Con AION_MCP_USER_CREDENTIALS=1, i valori sotto possono usare placeholder risolti dal DB
+# (salvati dalla chat UI) invece che da os.environ. Convenzione slug nel nome variabile:
+#   ${AION_USER_<SERVER_SLUG_UPPERCASE>__<CREDENTIAL_KEY>}
+# Esempio per uno slug registry `email_mcp`:
+#   EMAIL_TOKEN: "${AION_USER_EMAIL_MCP__ACCESS_TOKEN}"
+# Forma semplice (slug = contesto server corrente):
+#   EMAIL_TOKEN: "${AION_USER_ACCESS_TOKEN}"
+# Documentazione: docs/mcp/user-isolation-and-credentials.md
+

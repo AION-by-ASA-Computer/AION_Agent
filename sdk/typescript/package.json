@@ -1,0 +1,13 @@
+{
+  "name": "@aion/client",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/client.js",
+  "types": "dist/client.d.ts",
+  "scripts": {
+    "build": "tsc"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
