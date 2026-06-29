@@ -1,0 +1,15 @@
+# Ruff configuration for AION Agent monorepo
+# Prevents style-only and non-critical warnings from blocking the CI/CD pipeline or developers' workflows.
+
+target-version = "py313"
+
+[lint]
+# Select rules (defaults are ["E", "F"] which are fine, but we ignore non-blocking ones)
+ignore = [
+    "F401",  # Unused imports (non-critical, cleanups are optional)
+    "F841",  # Unused local variables (non-critical)
+    "E701",  # Multiple statements on one line (colon, e.g. `if not self.enabled: return`)
+    "E711",  # Comparison to None (SQLAlchemy needs `!= None` for proper query building)
+    "E402",  # Module level import not at top of file (Required because AION env loading must be first import)
+    "F541",  # f-string without placeholders (harmless)
+]

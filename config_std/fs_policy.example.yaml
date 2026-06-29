@@ -1,0 +1,84 @@
+# AION Agent — filesystem & exec policy (example)
+# Copy:  cp config_std/fs_policy.example.yaml config/fs_policy.yaml
+# .env:  AION_FS_POLICY_PATH=config/fs_policy.yaml
+# Restart backend after changes (policy is cached at startup).
+
+version: "1.0"
+
+filesystem:
+  allow:
+    - "workspace/**"
+    - "uploads/**"
+    - "derived/**"
+  deny:
+    - "/etc/**"
+    - "/root/**"
+    - "~/.ssh/**"
+    - "/proc/**"
+    - "/sys/**"
+
+# Exec: OFF by default. Enable only after reviewing allowlist (no bash/sh/curl/wget).
+# Dev reference with python + docx tools: config_std/fs_policy.dev.yaml
+exec:
+  enabled: false
+  allowlist:
+    - executable: "python"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3, 4, 5, 6, 7]
+    - executable: "python3"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3, 4, 5, 6, 7]
+    - executable: "grep"
+      argv_prefix: ["-r"]
+      validate_path_positions: [2, 3, 4]
+    - executable: "grep"
+      argv_prefix: ["-E"]
+      validate_path_positions: [2, 3, 4]
+    - executable: "wc"
+      argv_prefix: []
+      validate_path_positions: [1, 2]
+    - executable: "sort"
+      argv_prefix: []
+      validate_path_positions: [1, 2]
+    - executable: "head"
+      argv_prefix: []
+      validate_path_positions: [1, 2]
+    - executable: "tail"
+      argv_prefix: []
+      validate_path_positions: [1, 2]
+    - executable: "cat"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "find"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3, 4, 5, 6]
+    - executable: "cp"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "mv"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    - executable: "mkdir"
+      argv_prefix: ["-p"]
+      validate_path_positions: [2, 3, 4]
+    - executable: "pandoc"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3, 4, 5]
+    - executable: "pdftoppm"
+      argv_prefix: []
+      validate_path_positions: [2, 3, 4, 5]
+    - executable: "unzip"
+      argv_prefix: []
+      validate_path_positions: [1, 2, 3]
+    # Wren CLI (skills get/list, ask, query, context, profile, memory — see skills/wren/SKILL.md)
+    - executable: "wren"
+      argv_prefix: []
+
+limits:
+  max_file_read_bytes: 2097152
+  max_file_write_bytes: 10485760
+  max_edit_file_bytes: 2097152
+  grep_max_file_bytes: 524288
+  grep_max_matches: 200
+  glob_max_paths: 500
+  chunk_max_lines: 500

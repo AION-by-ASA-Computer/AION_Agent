@@ -1,0 +1,24 @@
+{
+  "name": "Optimization Base Dataset",
+  "description": "Dataset per il tuning dei parametri (Optuna). Copre logica, RAG e precisione.",
+  "cases": [
+    {
+      "id": "coding_standard",
+      "input_text": "Spiega il concetto di decoratore in Python con un esempio pratico.",
+      "expected_output": "Deve spiegare che un decoratore è una funzione che ne avvolge un'altra. L'esempio deve includere la sintassi @decorator.",
+      "eval_type": "llm_judge"
+    },
+    {
+      "id": "rag_precision",
+      "input_text": "In base ai tuoi strumenti, come si configura la memoria a lungo termine?",
+      "expected_output": "L'utente deve menzionare MemPalace o il consolidamento STM->LTM.",
+      "eval_type": "llm_judge"
+    },
+    {
+      "id": "concise_reasoning",
+      "input_text": "Riassumi in 3 punti i vantaggi di Docker.",
+      "expected_output": "Isolamento, portabilità, efficienza.",
+      "eval_type": "contains"
+    }
+  ]
+}

@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1.6
+# website (Docusaurus 3.10) — static build served via nginx
+# Build context: repository root
+#   docker build -f docker/Dockerfile.website \
+#     --build-arg DOCUSAURUS_BASE_URL=/docs/ -t aion/website .
+#
+# Versione Node allineata alla shell di dev (node v22.22.0). Node 22 e' LTS.
+# `website/package-lock.json` e' gitignored -> su fresh clone non c'e' lockfile,
+# quindi usiamo `npm install` invece di `npm ci`.
+ARG NODE_VERSION=22-alpine
+
+# ---------- builder ----------
+FROM node:${NODE_VERSION} AS builder
+
+ARG DOCUSAURUS_BASE_URL=/docs/
+ENV DOCUSAURUS_BASE_URL=$DOCUSAURUS_BASE_URL
+
+WORKDIR /repo
+
+# Docusaurus config reads ../docs at build time (see website/docusaurus.config.ts)
+COPY website/package.json ./website/
+# Lockfile opzionale: glob tollerante (no errore se manca)
+COPY website/package-lock.jso[n] ./website/
+RUN cd website && npm install --no-audit --no-fund
+
+COPY website/ ./website/
+COPY docs/    ./docs/
+
+# baseUrl deve essere /docs/ (path pubblico dietro Caddy). La ARG vuota da compose
+# viene espansa bash-style qui così da non finire mai su "/".
+RUN cd website && DOCUSAURUS_BASE_URL="${DOCUSAURUS_BASE_URL:-/docs/}" && [ "$DOCUSAURUS_BASE_URL" = "/" ] && DOCUSAURUS_BASE_URL="/docs/" || true && DOCUSAURUS_BASE_URL="$DOCUSAURUS_BASE_URL" npm run build
+
+# ---------- runner ----------
+FROM nginx:alpine AS runner
+
+COPY docker/nginx-website.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /repo/website/build /usr/share/nginx/html
+
+EXPOSE 3000

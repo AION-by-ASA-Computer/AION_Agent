@@ -1,0 +1,543 @@
+{
+  "btn": {
+    "save": "Sauvegarder",
+    "cancel": "Annuler",
+    "yes": "Oui",
+    "no": "Non",
+    "delete": "Supprimer",
+    "rename": "Renommer",
+    "update": "Mettre à jour",
+    "add": "Ajouter"
+  },
+  "settings": {
+    "title": "Paramètres Utilisateur",
+    "back": "Retour",
+    "tab": {
+      "account": "Profil & Compte",
+      "usermd": "Profils"
+    },
+    "section": {
+      "profile": {
+        "title": "Informations du Profil",
+        "desc": "Modifiez votre identifiant utilisateur local pour la session de chat. Cet ID détermine où seront sauvegardées vos préférences et instructions."
+      },
+      "session": {
+        "title": "Session",
+        "no_token": "Aucun jeton de session détecté."
+      },
+      "language": {
+        "label": "Langue de Référence",
+        "desc": "Définissez votre langue préférée. L'assistant répondra et organisera son raisonnement dans cette langue."
+      }
+    },
+    "field": {
+      "username": "Nom d'utilisateur",
+      "displayname": "Nom Affiché",
+      "email": "Adresse E-mail"
+    },
+    "placeholder": {
+      "username": "ex. jdupont",
+      "displayname": "ex. Jean Dupont",
+      "email": "ex. j.dupont@entreprise.fr"
+    },
+    "btn": {
+      "update": "Mettre à jour",
+      "logout": "Se déconnecter"
+    },
+    "usermd": {
+      "title": "Personnaliser USER.md",
+      "desc": "Ce fichier Markdown est chargé dans le system prompt de l'assistant pour stocker vos préférences globales de mise en forme, de ton ou de contraintes linguistiques. Il est unique pour la combinaison actuelle de profil et d'ID utilisateur.",
+      "profile_label": "Profil Sélectionné",
+      "profile_loading": "Chargement des profils...",
+      "profile_none": "Aucun profil trouvé",
+      "profile_nodesc": "Aucune description disponible pour ce profil.",
+      "placeholder": "# Mes préférences...",
+      "loading_placeholder": "Chargement des instructions...",
+      "loading_overlay": "Chargement...",
+      "markdown_hint": "Supporte la syntaxe Markdown standard.",
+      "chars": "{{count}} / 1400 caractères",
+      "overlimit": "Limite dépassée",
+      "btn": {
+        "restore": "Restaurer par Défaut",
+        "save": "Sauvegarder les Instructions",
+        "saving": "Sauvegarde..."
+      }
+    }
+  },
+  "sidebar": {
+    "new_conversation": "Nouvelle conversation",
+    "refresh": "Actualiser",
+    "no_conversations": "Aucune conversation.",
+    "delete_confirm": "Supprimer le chat ?",
+    "settings": "Paramètres",
+    "login": "Se connecter",
+    "integrations": "Mes intégrations",
+    "schedules": "Tâches planifiées"
+  },
+  "schedulesPage": {
+    "title": "Tâches planifiées",
+    "subtitle": "Invites récurrentes exécutées automatiquement par l'agent.",
+    "back_chat": "← Chat",
+    "loading": "Chargement…",
+    "empty": "Aucune tâche planifiée.",
+    "empty_hint": "Créez une tâche pour exécuter une invite chaque jour, semaine ou intervalle personnalisé.",
+    "new": "Nouvelle tâche",
+    "create": "Créer",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "cancel": "Annuler",
+    "edit": "Modifier",
+    "create_title": "Nouvelle tâche planifiée",
+    "edit_title": "Modifier la tâche",
+    "dialog_subtitle": "Choisissez quand exécuter et ce que l'agent doit faire.",
+    "schedule_label": "Quand l'exécuter ?",
+    "session_legend": "Conversation",
+    "field_name": "Nom",
+    "field_prompt": "Invite envoyée à chaque exécution",
+    "field_timezone": "Fuseau horaire",
+    "field_profile": "Profil agent",
+    "form_required": "Le nom et l'invite sont obligatoires.",
+    "session_fixed": "Même conversation (contexte conservé)",
+    "session_new": "Nouvelle conversation à chaque fois",
+    "section_active": "Actives",
+    "section_paused": "En pause",
+    "badge_active": "actives",
+    "badge_paused": "en pause",
+    "next": "Prochaine exécution",
+    "last_run": "Dernière exécution",
+    "run_now": "Exécuter maintenant",
+    "pause": "Pause",
+    "resume": "Reprendre",
+    "delete": "Supprimer",
+    "delete_confirm": "Supprimer cette tâche ?",
+    "open_session": "Ouvrir la session fixe",
+    "recent_runs": "Exécutions récentes",
+    "runs_loading": "Chargement des exécutions…",
+    "runs_empty": "Aucune exécution pour l'instant.",
+    "open_run_chat": "Ouvrir le chat",
+    "load_error": "Impossible de charger les tâches",
+    "save_error": "Impossible d'enregistrer",
+    "feature_disabled": "Tâches planifiées désactivées sur le serveur (AION_CRON_ENABLED=1 dans le .env, puis redémarrer l'API).",
+    "cron": {
+      "mode_simple": "Simple",
+      "mode_advanced": "Avancé",
+      "freq_label": "Fréquence ?",
+      "freq": {
+        "daily": "Chaque jour",
+        "weekdays": "Lun–ven",
+        "weekly": "Chaque semaine",
+        "monthly": "Chaque mois",
+        "hourly": "Chaque heure",
+        "every_n_minutes": "Toutes les X minutes"
+      },
+      "hour_label": "Heure",
+      "minute_label": "Minute",
+      "weekday_label": "Jour de la semaine",
+      "dom_label": "Jour du mois",
+      "interval_label": "Intervalle",
+      "every_n_label": "Toutes les {{n}} minutes",
+      "advanced_label": "Expression cron (5 champs)",
+      "advanced_hint": "Format : minute heure jour mois jour_semaine.",
+      "invalid": "Planification invalide.",
+      "timezone_note": "Heures en {{tz}}",
+      "weekday": {
+        "0": "Dimanche",
+        "1": "Lundi",
+        "2": "Mardi",
+        "3": "Mercredi",
+        "4": "Jeudi",
+        "5": "Vendredi",
+        "6": "Samedi"
+      },
+      "summary": {
+        "daily": "Chaque jour à {{time}}",
+        "weekdays": "Lun–ven à {{time}}",
+        "weekly": "Chaque {{day}} à {{time}}",
+        "monthly": "Le {{dom}} de chaque mois à {{time}}",
+        "hourly": "Chaque heure à la minute {{minute}}",
+        "every_n_minutes": "Toutes les {{n}} minutes"
+      }
+    }
+  },
+  "integrationsPage": {
+    "title": "Mes intégrations",
+    "back_chat": "← Chat",
+    "subtitle": "Connectez vos comptes aux serveurs MCP activés par l'administrateur. Les valeurs sont chiffrées côté serveur.",
+    "loading": "Chargement…",
+    "empty": "Aucune intégration. Demandez à l'administrateur d'activer des serveurs MCP.",
+    "section_configured": "Connectées",
+    "section_pending": "À configurer",
+    "badge_configured": "connectées",
+    "badge_pending": "à configurer",
+    "connect": "Connecter",
+    "edit": "Modifier",
+    "cancel": "Annuler",
+    "save": "Enregistrer et connecter",
+    "saving": "Enregistrement…",
+    "security": "Vos identifiants sont chiffrés et liés à votre compte.",
+    "oauth_soon": "Autoriser via OAuth (bientôt)",
+    "pat_hint": "OAuth non disponible. Collez votre Personal Access Token (PAT) ci-dessous.",
+    "pat_placeholder": "Collez votre jeton ici…",
+    "field_error": "Champs obligatoires manquants",
+    "save_error": "Échec de l'enregistrement",
+    "org_managed": "Géré par votre organisation — aucune configuration personnelle requise.",
+    "per_user_hint": "Saisissez vos identifiants personnels pour cette intégration.",
+    "add_credential": "Ajouter un champ d'identifiants",
+    "custom_field": "extra",
+    "new_field_label": "Nouveau champ",
+    "field_label": "Libellé"
+  },
+  "header": {
+    "toggle_sidebar": {
+      "hide": "Masquer le panneau gauche",
+      "show": "Afficher le panneau gauche"
+    },
+    "toggle_dock": {
+      "hide": "Masquer le panneau droit",
+      "show": "Afficher le panneau droit"
+    },
+    "resize_dock": "Redimensionner le panneau droit",
+    "copy_session": "Copier le session_id dans le presse-papiers",
+    "copied": "Copié",
+    "edit_title": "Double-clic pour modifier le titre",
+    "new_conversation": "Nouvelle conversation"
+  },
+  "chat": {
+    "thinking": {
+      "label": "Réflexion",
+      "off": "Thinking : Désactivé",
+      "min": "Thinking : Minimal",
+      "med": "Thinking : Moyen",
+      "max": "Thinking : Maximum",
+      "disable": "Désactiver"
+    },
+    "stream_recovery": "L'agent travaille encore sur ce chat côté serveur. Actualisation automatique…",
+    "agent_status": {
+      "thinking": "L'agent réfléchit…",
+      "working": "L'agent travaille…",
+      "compacting": "Compactage du contexte…",
+      "compacting_desc": "Compactage de la mémoire à court terme…"
+    },
+    "tools": {
+      "attach_file": "Joindre un Fichier",
+      "view_label": "Vue des Outils",
+      "select_view": "Sélectionner la Vue des Outils",
+      "hide": "Masquer",
+      "partial": "Partielle",
+      "full": "Complète",
+      "plus_tooltip": "Ajouter un fichier ou modifier la vue des outils"
+    },
+    "profile": {
+      "label": "Profil",
+      "select": "Sélectionner un Profil",
+      "none": "Aucun profil"
+    },
+    "edit": {
+      "placeholder": "Modifier le message...",
+      "save_send": "Sauvegarder et Envoyer",
+      "no_reasoning": "Aucun raisonnement reçu du modèle pour cette réponse. C'est normal si le backend n'expose pas le chain-of-thought ou le profil utilise le raisonnement {{level}}.",
+      "tooltip": "Modifier le message",
+      "btn": "Modifier"
+    },
+    "error": "Erreur : {{msg}}",
+    "history_load_error": "Impossible de charger l'historique : {{msg}}",
+    "empty_assistant_reply": "Aucun contenu enregistré pour cette réponse. Réessayez ou renvoyez votre message.",
+    "interrupted": "Réponse interrompue.",
+    "footer_hint": "AION peut faire des erreurs. Pensez à vérifier les informations importantes.",
+    "composer_placeholder": "Envoyez un message à AION...",
+    "resize_composer": "Redimensionner la zone de message",
+    "project_required": {
+      "title": "Projet de mémoire requis",
+      "desc": "Ce profil utilise QueryMemory. Pour des raisons de sécurité, l'utilisation du projet partagé 'default' n'est pas autorisée. Veuillez créer un nouveau projet pour commencer.",
+      "button": "Nouveau projet",
+      "textarea_placeholder": "Créez ou sélectionnez un projet pour débloquer le chat..."
+    },
+    "go_to_source": "Aller à la source",
+    "plan": {
+      "task": {
+        "starting": "Démarrage"
+      },
+      "execution": "Exécution du plan"
+    },
+    "session_files_new": "Nouveaux fichiers de session",
+    "remove_file": "Supprimer {{name}}",
+    "web_search": {
+      "disabled": "Recherche web désactivée",
+      "restricted": "Restreint · {{count}} hôtes",
+      "global": "Recherche web globale",
+      "global_desc": "Connexion Internet active pour obtenir des réponses mises à jour à partir de sources Web.",
+      "toggle_aria": "Activer ou désactiver la recherche web",
+      "advanced": "Recherche avancée (Sources spécifiques)",
+      "modal_title": "Recherche Web avancée",
+      "modal_desc": "Limiter les résultats de recherche à des domaines spécifiques.",
+      "add_domain": "Ajouter un domaine",
+      "error_invalid_domain": "Entrez un domaine valide (ex. wikipedia.org)",
+      "error_duplicate_domain": "Domaine déjà présent dans la liste.",
+      "error_max_domains": "Vous pouvez ajouter jusqu'à 20 domaines.",
+      "domain_placeholder": "ex. github.com, *.gov.it, wikipedia.org",
+      "domain_hint": "Spécifiez le domaine exact ou utilisez l'astérisque pour inclure les sous-domaines.",
+      "active_domains": "Domaines actifs ({{count}}/20)",
+      "remove_domain": "Supprimer {{name}}",
+      "no_domains": "Aucun domaine spécifique",
+      "no_domains_desc": "Ajoutez des sources ci-dessus pour limiter la recherche.",
+      "clear_list": "Effacer la liste",
+      "save_preferences": "Enregistrer les préférences"
+    }
+  },
+  "login": {
+    "btn": "Entrer",
+    "no_auth": "← Chat sans connexion (utilisateur par défaut)"
+  },
+  "authgate": {
+    "checking": "Vérification de l'accès…",
+    "redirecting": "Redirection vers la connexion…"
+  },
+  "toast": {
+    "username_empty": "Le nom d'utilisateur ne peut pas être vide.",
+    "field_updated": "{{field}} mis à jour avec succès !",
+    "language_saved": "Langue de référence sauvegardée dans le profil !",
+    "language_local": "Langue de référence sauvegardée localement !",
+    "language_server_error": "Impossible de sauvegarder sur le serveur. Sauvegardé localement seulement.",
+    "usermd_saved": "Instructions USER.md sauvegardées avec succès sur le serveur !",
+    "usermd_overlimit": "Impossible de sauvegarder : les instructions dépassent la limite de 1400 caractères.",
+    "usermd_no_profile": "Impossible de sauvegarder : aucun profil sélectionné.",
+    "logout": "Déconnecté avec succès. ID réinitialisé à default.",
+    "no_token": "Aucun jeton de session détecté.",
+    "conn_error": "Erreur de connexion avec le serveur.",
+    "server_error": "Erreur lors de la sauvegarde des données sur le serveur."
+  },
+  "field": {
+    "username": "Nom d'utilisateur",
+    "displayname": "Nom Affiché",
+    "email": "E-mail"
+  },
+  "artifacts": {
+    "title": "Fichiers",
+    "no_artifacts": "Aucun fichier ou artefact généré dans cette session.",
+    "source": {
+      "live": "streaming",
+      "history": "historique"
+    },
+    "download": "Télécharger",
+    "in_memory": "En mémoire",
+    "session_files": "Fichiers de session",
+    "generated_artifacts": "Artefacts générés",
+    "root": "Racine de session",
+    "uploads": "Uploads",
+    "derived": "Derived",
+    "workspace": "Workspace",
+    "refresh": "Actualiser"
+  },
+  "plan": {
+    "title": "Plan",
+    "tasks": "tâches",
+    "blocks": "blocs",
+    "chars": "caractères",
+    "status": {
+      "locked": "Verrouillé",
+      "dirty": "Modifications",
+      "ok": "Ok",
+      "revision": "rév"
+    },
+    "notice": {
+      "revision_available": "Révision {{rev}} disponible (modifications locales non écrasées).",
+      "updated": "Mis à jour à la révision {{rev}}."
+    },
+    "decision": {
+      "sending": "Envoi de la décision...",
+      "approved": "Décision : plan approuvé con le markdown actuel.",
+      "approved_draft": "Décision : brouillon original approuvé (approve_only).",
+      "rejected": "Décision : plan rejeté par l'interface.",
+      "ok_approved": "Plan approuvé et sauvegardé.",
+      "ok_approved_draft": "Brouillon original approuvé.",
+      "ok_rejected": "Plan rejeté."
+    },
+    "error": {
+      "network": "Erreur de réseau : {{msg}}",
+      "server": "Erreur {{code}} : {{msg}}"
+    },
+    "fallback": {
+      "title": "Plan d'Exécution",
+      "goal": "Objectif",
+      "context": "Contexte",
+      "context_opt": "_Contexte optionnel._",
+      "tasks": "Tâches",
+      "notes": "Notes",
+      "edit_hint": "Modifier avant d'approuver."
+    },
+    "preview": {
+      "title": "Aperçu (lecture seule) : Objectif / contexte / tâche actuelle",
+      "edit_hint": "Les modifications se font dans les blocs ci-dessus.",
+      "completed": "Terminées",
+      "active": "Active maintenant",
+      "next": "Suivantes",
+      "no_tasks": "Aucune tâche dans le markdown."
+    },
+    "actions": {
+      "approve": "Approuver le plan",
+      "original": "Original",
+      "reject": "Rejeter",
+      "sending": "Envoi...",
+      "complete_all": "Tout marquer terminé"
+    },
+    "task": {
+      "progress": "tâches terminées",
+      "complete_ok": "Tâche {{id}} marquée terminée.",
+      "completing_all": "Marquage de toutes les tâches…",
+      "complete_all_ok": "{{count}} tâches marquées terminées."
+    },
+    "menu": {
+      "placeholder": "Tapez '/' pour les commandes...",
+      "text": "Texte",
+      "h1": "Titre 1",
+      "h2": "Titre 2",
+      "task": "Tâche",
+      "code": "Code"
+    },
+    "meta": {
+      "profile": "Profil",
+      "dep": "dép"
+    },
+    "missing_props": "TaskPlanManagerV4 : props manquantes."
+  },
+  "theme": {
+    "toggle": {
+      "to_light": "Passer au thème clair",
+      "to_dark": "Passer au thème sombre",
+      "title": "Thème clair/sombre"
+    }
+  },
+  "agentdb": {
+    "title": "Agent DB"
+  },
+  "memory": {
+    "title": "Mémoire"
+  },
+  "memory_dock": {
+    "title": "Mémoire projet",
+    "subtitle": "Requêtes SQL enregistrées et navigation MemPalace pour le projet actif.",
+    "tab_query": "Requêtes SQL",
+    "tab_navigation": "Navigation",
+    "hint_query": "Filtrez, vérifiez ou modifiez les SELECT enregistrés par l'agent pour ce projet.",
+    "hint_navigation": "Tiroirs structurés : points d'entrée, JOIN, pièges et découvertes.",
+    "open_panel": "Ouvrir le panneau mémoire (paramètres projet)"
+  },
+  "memory_project": {
+    "label": "Projet",
+    "new_project": "Nouveau projet",
+    "new_short": "Nouveau",
+    "settings": "Paramètres du projet",
+    "settings_short": "Paramètres",
+    "create_btn": "Créer un projet",
+    "create_modal_hint": "Le slug identifie l'aile de MemPalace et le compartiment de QueryMemory.",
+    "slug_label": "Slug",
+    "name_label": "Nom affiché",
+    "desc_label": "Description",
+    "tab_general": "Général",
+    "tab_members": "Membres",
+    "members_readonly": "Seul le propriétaire peut inviter ou retirer des membres.",
+    "no_members": "Aucun membre répertorié.",
+    "open_full_page": "Gestion complète du projet →",
+    "page_title": "Projets de mémoire",
+    "page_subtitle": "Créez des projets, des descriptions de portée et gérez les membres.",
+    "back_chat": "← Retour au chat",
+    "profile_filter": "Profil de l'agent",
+    "loading": "Chargement…",
+    "no_projects": "Aucun projet pour le moment. Créez-en un pour commencer.",
+    "no_description": "Pas de description — ajoutez-en une pour guider l'agent sur la portée.",
+    "page_footer": "Les requêtes SQL et les tiroirs de MemPalace partagent le slug du projet sélectionné dans le chat.",
+    "select_project": "Sélectionnez un projet dans la liste.",
+    "slug_placeholder": "slug (ex. billing_db)",
+    "name_placeholder": "Nom affiché",
+    "desc_placeholder": "Description (facultatif)",
+    "rename": "Nom et description",
+    "invite": "Inviter un membre",
+    "invite_placeholder": "Identifiant utilisateur",
+    "invite_btn": "Inviter",
+    "your_role": "Votre rôle",
+    "remove_member_confirm": "Retirer ce membre du projet ?",
+    "not_in_list": "absent de la liste — vérifier l'accès"
+  },
+  "query_memory": {
+    "title": "Requêtes SQL",
+    "filter_placeholder": "Filtrer…",
+    "verified_only": "Vérifiées uniquement",
+    "refresh": "Actualiser",
+    "empty": "Aucune requête enregistrée pour ce projet.",
+    "empty_hint": "Les requêtes apparaissent ici après enregistrement par l'agent via les outils mémoire.",
+    "delete_confirm": "Supprimer cette requête de QueryMemory ?",
+    "edit": "Modifier la requête",
+    "copy_sql": "Copier le SQL",
+    "verified": "Vérifiée",
+    "draft": "Brouillon",
+    "request_label": "Demande / description"
+  },
+  "navigation_memory": {
+    "title": "Navigation",
+    "wing": "Wing",
+    "drawers": "tiroir(s)",
+    "hint": "Le projet est défini dans l'interface ; l'agent utilise le même wing.",
+    "all_rooms": "Toutes les salles",
+    "search_placeholder": "Rechercher…",
+    "refresh": "Actualiser",
+    "preview_legacy": "Aperçu wings legacy",
+    "prune_legacy": "Purger les wings legacy",
+    "prune_confirm": "Supprimer tous les tiroirs hors projet ? Irréversible.",
+    "legacy_wings": "Wings legacy",
+    "empty": "Pas encore de mémoire de navigation pour ce projet.",
+    "delete_confirm": "Supprimer ce tiroir de navigation ?",
+    "edit": "Modifier le tiroir",
+    "no_content": "(aucun contenu — actualisez ou modifiez le tiroir)"
+  },
+  "khub_file": {
+    "title": "Document",
+    "download": "Télécharger le document",
+    "loading": "Chargement du document...",
+    "error": "Impossible de charger le fichier",
+    "empty": "Aucun document sélectionné."
+  },
+  "dock": {
+    "none_hint": "Sélectionnez un onglet (Plan / Artéfacts / Agent DB / Mémoire)."
+  },
+  "research": {
+    "title": "Recherche",
+    "deep_research": "Deep Research",
+    "description": "Recherche itérative multi-étapes avec rapport HTML. Le statut reste visible après un rafraîchissement de page tant que la recherche est en cours.",
+    "placeholder": "Sujet à approfondir…",
+    "start": "Lancer la recherche",
+    "activity": "Activité",
+    "library": "Bibliothèque",
+    "open_report": "Ouvrir le rapport",
+    "adopt_default_query": "Recherche démarrée par l'agent",
+    "empty_panel_p1": "Aucune recherche dans le panneau. Lancez-la depuis le formulaire ci-dessus ou demandez à l'agent en mode Deep Research. Ouvrez DevTools → filtrez",
+    "empty_panel_p2": "pour voir les logs de progression.",
+    "round": "Round {{round}}",
+    "sources": "{{count}} sources",
+    "findings": "{{count}} résultats",
+    "status": {
+      "running": "En cours",
+      "done": "Terminée",
+      "error": "Erreur",
+      "cancelled": "Annulée",
+      "interrupted": "Interrompue"
+    },
+    "phase": {
+      "probing": "Vérification de la connexion LLM…",
+      "planning": "Planification…",
+      "searching": "Recherche web…",
+      "reading": "Lecture des sources…",
+      "writing": "Écriture du rapport…",
+      "done_summary": "Terminée — ouvrir le rapport",
+      "error_summary": "Erreur pendant la recherche",
+      "running_summary": "En attente de mises à jour…",
+      "starting": "Lancement de la recherche…"
+    },
+    "category": {
+      "auto": "Auto",
+      "product": "Produit",
+      "comparison": "Comparaison",
+      "howto": "Guide",
+      "factcheck": "Fact-check"
+    }
+  }
+}

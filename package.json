@@ -1,0 +1,16 @@
+{
+  "name": "aion-agent-root",
+  "private": true,
+  "devDependencies": {
+    "tailwindcss": "4.2.4",
+    "@tailwindcss/postcss": "4.2.4",
+    "postcss": "8.5.3",
+    "mcp-remote": "^0.1.38"
+  },
+  "pnpm": {
+    "overrides": {
+      "serialize-javascript": "^7.0.3",
+      "shell-quote": "^1.8.4"
+    }
+  }
+}

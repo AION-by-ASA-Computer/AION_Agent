@@ -1,0 +1,67 @@
+# AION Agent — reverse proxy Caddy
+#
+# Routing path-based su singolo dominio (DOMAIN env, fornito da docker-compose):
+#   /api/*    -> backend FastAPI (prefisso stripped, espone /chat, /profiles, ecc.)
+#   /admin*   -> admin-ui Next.js (basePath="/admin" baked nell'immagine)
+#   /docs/*   -> website Docusaurus (baseUrl="/docs/" baked nell'immagine)
+#   /         -> chat-ui Next.js
+#
+# Variabili attese:
+#   {$DOMAIN}              -> hostname pubblico (es. cliente.example.com)
+#   {$LETS_ENCRYPT_EMAIL}  -> contatto ACME per Let's Encrypt
+#
+# Per dev locale (HTTP-only, no TLS) impostare DOMAIN=:80
+
+{
+	email {$LETS_ENCRYPT_EMAIL}
+	# Decommentare in fase di test per usare staging Let's Encrypt:
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+{$DOMAIN} {
+	encode gzip zstd
+
+	log {
+		output stdout
+		format console
+	}
+
+	# Security headers minimi (X-Frame-Options gestito da Next.js dove serve)
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# --- API backend (SSE-friendly) ---------------------------------------
+	# handle_path strippa il prefisso /api -> il backend riceve /chat, /profiles, ecc.
+	handle_path /api/* {
+		reverse_proxy backend:8001 {
+			# Streaming SSE: flush immediato, niente buffering, timeout disabilitato
+			flush_interval -1
+			transport http {
+				read_timeout 0
+				write_timeout 0
+				response_header_timeout 0
+			}
+			header_up X-Forwarded-Prefix /api
+		}
+	}
+
+	# --- Documentazione (Docusaurus static) -------------------------------
+	# baseUrl è già "/docs/" nella build -> nessuno strip
+	handle /docs* {
+		reverse_proxy website:3000
+	}
+
+	# --- Admin UI (Next.js basePath="/admin") -----------------------------
+	handle /admin* {
+		reverse_proxy admin-ui:3870
+	}
+
+	# --- Chat UI (root) ---------------------------------------------------
+	handle {
+		reverse_proxy chat-ui:8003
+	}
+}

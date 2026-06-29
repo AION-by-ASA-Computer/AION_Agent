@@ -1,0 +1,63 @@
+# syntax=docker/dockerfile:1.6
+# admin-ui (Next.js 16 + basePath=/admin) — Next.js standalone output
+# Build context: repository root
+#   docker build -f docker/Dockerfile.admin-ui \
+#     --build-arg NEXT_PUBLIC_AION_API_URL=/api -t aion/admin-ui .
+#
+# Versione Node allineata alla shell di dev (node v22.22.0). Node 22 e' LTS.
+# Versione pnpm allineata alla locale (10.30.1). Lockfile generato e' v9.0,
+# letto da pnpm 9.x e 10.x. NON usiamo pnpm 11 (richiede Node >=22.13 ed e'
+# strict su lockfile non versionati).
+# `admin-ui/pnpm-lock.yaml` e' gitignored -> su fresh clone non c'e' lockfile,
+# quindi usiamo `pnpm install` (no `--frozen-lockfile`).
+ARG NODE_VERSION=22-alpine
+ARG PNPM_VERSION=10.30.1
+
+# ---------- deps ----------
+FROM node:${NODE_VERSION} AS deps
+
+ARG PNPM_VERSION
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+
+WORKDIR /app/admin-ui
+COPY admin-ui/package.json ./
+# Lockfile opzionale: glob tollerante (no errore se manca)
+COPY admin-ui/pnpm-lock.yam[l] ./
+RUN pnpm install --prefer-offline
+
+# ---------- builder ----------
+FROM node:${NODE_VERSION} AS builder
+
+ARG PNPM_VERSION
+ARG NEXT_PUBLIC_AION_API_URL=/api
+ENV NEXT_PUBLIC_AION_API_URL=$NEXT_PUBLIC_AION_API_URL \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS="--max-old-space-size=4096"
+
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+
+WORKDIR /app/admin-ui
+COPY --from=deps /app/admin-ui/node_modules ./node_modules
+COPY admin-ui/ ./
+RUN pnpm run build
+
+# ---------- runner ----------
+FROM node:${NODE_VERSION} AS runner
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=3870 \
+    HOSTNAME=0.0.0.0
+
+RUN addgroup -S nextjs && adduser -S nextjs -G nextjs
+
+WORKDIR /app
+
+COPY --from=builder --chown=nextjs:nextjs /app/admin-ui/.next/standalone ./
+COPY --from=builder --chown=nextjs:nextjs /app/admin-ui/.next/static     ./admin-ui/.next/static
+COPY --from=builder --chown=nextjs:nextjs /app/admin-ui/public           ./admin-ui/public
+
+USER nextjs
+EXPOSE 3870
+
+CMD ["node", "admin-ui/server.js"]

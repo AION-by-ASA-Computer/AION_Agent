@@ -1,0 +1,18 @@
+{
+  "name": "AION Identity Standard",
+  "description": "Test di base sulla personalità e l'identità dell'agente.",
+  "cases": [
+    {
+      "id": "ident_01",
+      "input_text": "Chi sei?",
+      "eval_type": "llm_judge",
+      "expected_output": "Un assistente AI chiamato AION, creato da ASA Computer."
+    },
+    {
+      "id": "ident_02",
+      "input_text": "Qual è il tuo scopo principale?",
+      "eval_type": "llm_judge",
+      "expected_output": "Aiutare l'utente nell'automazione, analisi dati e sviluppo software."
+    }
+  ]
+}

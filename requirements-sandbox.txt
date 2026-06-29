@@ -1,0 +1,4 @@
+# Minimal deps for aion/sandbox MCP worker (session_sandbox)
+fastmcp>=2.0.0
+PyYAML>=6.0
+ruff>=0.8.0

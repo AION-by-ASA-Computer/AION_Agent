@@ -1,0 +1,56 @@
+# syntax=docker/dockerfile:1.6
+# chat-ui (Next.js 16, React 19) — Next.js standalone output
+# Build context: repository root
+#   docker build -f docker/Dockerfile.chat-ui \
+#     --build-arg NEXT_PUBLIC_AION_API_URL=/api -t aion/chat-ui .
+#
+# Versione Node allineata alla shell di dev (node v22.22.0). Node 22 e' LTS.
+# `chat-ui/package-lock.json` e' gitignored -> su fresh clone non c'e' lockfile,
+# quindi usiamo `npm install` invece di `npm ci`.
+ARG NODE_VERSION=22-alpine
+
+# ---------- deps ----------
+FROM node:${NODE_VERSION} AS deps
+
+WORKDIR /app/chat-ui
+COPY chat-ui/package.json ./
+# Lockfile opzionale: glob tollerante (no errore se manca)
+COPY chat-ui/package-lock.jso[n] ./
+RUN npm install --no-audit --no-fund
+
+# ---------- builder ----------
+FROM node:${NODE_VERSION} AS builder
+
+ARG NEXT_PUBLIC_AION_API_URL=/api
+ARG NEXT_PUBLIC_AION_ADMIN_UI_URL=/admin
+ENV NEXT_PUBLIC_AION_API_URL=$NEXT_PUBLIC_AION_API_URL \
+    NEXT_PUBLIC_AION_ADMIN_UI_URL=$NEXT_PUBLIC_AION_ADMIN_UI_URL \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS="--max-old-space-size=4096"
+
+WORKDIR /app/chat-ui
+COPY --from=deps /app/chat-ui/node_modules ./node_modules
+COPY chat-ui/ ./
+RUN npm run build
+
+# ---------- runner ----------
+FROM node:${NODE_VERSION} AS runner
+
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    PORT=8003 \
+    HOSTNAME=0.0.0.0
+
+RUN addgroup -S nextjs && adduser -S nextjs -G nextjs
+
+WORKDIR /app
+
+# Next.js standalone bundle ships its own minimal node_modules
+COPY --from=builder --chown=nextjs:nextjs /app/chat-ui/.next/standalone ./
+COPY --from=builder --chown=nextjs:nextjs /app/chat-ui/.next/static     ./chat-ui/.next/static
+COPY --from=builder --chown=nextjs:nextjs /app/chat-ui/public           ./chat-ui/public
+
+USER nextjs
+EXPOSE 8003
+
+CMD ["node", "chat-ui/server.js"]

@@ -1,0 +1,18 @@
+{
+  "name": "AION Math & Tools Standard",
+  "description": "Test sull'uso dei tool per calcoli e logica.",
+  "cases": [
+    {
+      "id": "math_01",
+      "input_text": "Quanto fa 1234 * 5678?",
+      "eval_type": "llm_judge",
+      "expected_output": "7006652"
+    },
+    {
+      "id": "math_02",
+      "input_text": "Calcola la radice quadrata di 144 e moltiplicala per 10.",
+      "eval_type": "llm_judge",
+      "expected_output": "120"
+    }
+  ]
+}

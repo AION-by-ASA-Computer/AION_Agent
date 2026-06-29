@@ -1,0 +1,24 @@
+{
+  "name": "Smoke Test Dataset",
+  "description": "Verifica di base della connettività e delle capacità minime dell'agente.",
+  "cases": [
+    {
+      "id": "identita_base",
+      "input_text": "Chi sei?",
+      "expected_output": "AION",
+      "eval_type": "contains"
+    },
+    {
+      "id": "matematica_base",
+      "input_text": "Quanto fa 15 + 27?",
+      "expected_output": "42",
+      "eval_type": "contains"
+    },
+    {
+      "id": "python_check",
+      "input_text": "Scrivi una funzione python che somma due numeri.",
+      "expected_output": "def ",
+      "eval_type": "contains"
+    }
+  ]
+}

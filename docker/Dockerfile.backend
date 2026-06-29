@@ -1,0 +1,131 @@
+# syntax=docker/dockerfile:1.6
+# AION Agent backend (FastAPI + MCP subprocess pool)
+# Build context: repository root
+#   docker build -f docker/Dockerfile.backend -t aion/backend .
+
+# Versione Python allineata alla .venv del progetto (Python 3.13.x).
+# Per cambiare versione: aggiorna entrambi gli stage builder/runtime.
+ARG PYTHON_VERSION=3.13-slim
+# uv: default `latest` così ogni rebuild prende fix/security dall'immagine Astral.
+# Per build riproducibili in prod: UV_VERSION=0.6.17 (o tag specifico) nel .env.
+# https://github.com/astral-sh/uv/pkgs/container/uv
+ARG UV_VERSION=latest
+
+# ---------- builder ----------
+# uv accelera l'install Python di ~10-50x rispetto a pip. Copiamo il binario
+# statico dall'immagine ufficiale (no Rust toolchain richiesta).
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv-bin
+
+FROM python:${PYTHON_VERSION} AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    UV_PYTHON_DOWNLOADS=never \
+    UV_CACHE_DIR=/tmp/uv-cache \
+    UV_CONCURRENT_DOWNLOADS=16
+
+# Copia il binario uv dall'immagine ufficiale (~25 MB compresso)
+COPY --from=uv-bin /uv /uvx /usr/local/bin/
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends build-essential gcc \
+ && rm -rf /var/lib/apt/lists/*
+
+# Creiamo un venv portabile in /opt/venv. Cosi' lo stage runtime puo' copiarlo
+# in blocco senza dipendere dal path di python (3.13.x) hardcoded.
+RUN uv venv /opt/venv
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH"
+
+WORKDIR /build
+COPY requirements.txt ./
+
+# uv pip install nel venv (VIRTUAL_ENV gia' settato). --no-cache evita che il
+# layer porti GB di wheel cache; usiamo cache mount BuildKit per riusare wheel
+# tra build successive.
+RUN --mount=type=cache,target=/tmp/uv-cache \
+    uv pip install --python /opt/venv/bin/python -r requirements.txt
+
+# ---------- runtime ----------
+FROM python:${PYTHON_VERSION} AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH" \
+    AION_API_HOST=0.0.0.0 \
+    AION_API_PORT=8001 \
+    AION_DATA_DIR=/app/data
+
+# System dependencies required by Python packages:
+# - tesseract-ocr (+ italian) for pytesseract
+# - poppler-utils for pdf2image
+# - libmagic1 for python-magic style detection
+# - tini for clean PID 1 (handles SIGTERM for MCP subprocesses)
+# - nodejs and npm for Node-based MCP servers (e.g. toolbox-postgres)
+# - git for MCP Hub install-github (marketplace git clone)
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+        tesseract-ocr \
+        tesseract-ocr-ita \
+        poppler-utils \
+        libmagic1 \
+        tini \
+        curl \
+        git \
+        nodejs \
+        npm \
+        podman \
+ && rm -rf /var/lib/apt/lists/*
+
+# Copia il venv (contiene tutti i pacchetti Python + console scripts)
+COPY --from=builder /opt/venv /opt/venv
+
+# Copia il binario uv/uvx per consentire all'agente di eseguire server MCP tramite uvx
+COPY --from=uv-bin /uv /uvx /usr/local/bin/
+
+
+WORKDIR /app
+
+# Application code (runtime dirs config/ and mcp_servers/ come from sync at boot)
+COPY src/              ./src/
+COPY mcp_servers_std/  ./mcp_servers_std/
+COPY config_std/       ./config_std/
+COPY migrations/       ./migrations/
+COPY scripts/          ./scripts/
+COPY wre[n]/            ./wren/
+COPY alembic.ini       ./
+COPY mempalace.yaml    ./
+COPY docker/backend-entrypoint.sh /usr/local/bin/aion-backend-entrypoint.sh
+
+RUN sed -i 's/\r$//' /usr/local/bin/aion-backend-entrypoint.sh \
+ && chmod +x /usr/local/bin/aion-backend-entrypoint.sh \
+ && python scripts/sync_config.py --force \
+ && python scripts/sync_mcp_servers.py --force
+
+# Writable runtime directories (mounted as volume in compose, created here as fallback)
+RUN mkdir -p /app/data /app/data/sessions /app/data/profiles \
+             /app/data/skills/generated /app/data/agent_dbs \
+             /app/data/chroma_embedding_cache
+
+# Pre-download Chroma ONNX embeddings (~80MB) so first MemPalace call does not block SSE.
+RUN XDG_CACHE_HOME=/app/data/chroma_embedding_cache \
+    TQDM_DISABLE=1 HF_HUB_DISABLE_PROGRESS_BARS=1 \
+    /opt/venv/bin/python scripts/warmup_chroma_embeddings.py \
+    || echo "WARN: chroma embedding warmup skipped at build time"
+
+EXPOSE 8001
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD curl -fsS http://127.0.0.1:8001/health || exit 1
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/aion-backend-entrypoint.sh"]
+CMD ["uvicorn", "src.api.main:app", \
+     "--host", "0.0.0.0", "--port", "8001", \
+     "--workers", "1", \
+     "--loop", "asyncio", \
+     "--proxy-headers", \
+     "--forwarded-allow-ips", "*"]

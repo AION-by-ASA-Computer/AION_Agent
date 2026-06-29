@@ -1,0 +1,186 @@
+# AION Agent — production stack
+#
+# Deploy multi-tenant: 1 record DNS A + .env con DOMAIN + `docker compose up -d --build`.
+# Caddy gestisce TLS automaticamente via Let's Encrypt (richiede porte 80/443 pubbliche).
+#
+# Variabili principali (vedi .env.docker.example):
+#   DOMAIN, LETS_ENCRYPT_EMAIL, AION_API_URL, AION_MODEL, secrets vari.
+#
+# Avvio:           docker compose up -d --build
+# Stop:            docker compose down
+# Solo dev:        docker compose -f docker-compose.dev.yml up
+name: aion-agent
+
+x-aion-env: &aion-env
+  env_file:
+    - .env
+
+    
+
+services:
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      # Porte host configurabili in .env (es. 8066/44366 se 80/443 sono occupate)
+      - "${CADDY_HTTP_PORT:-80}:80"
+      - "${CADDY_HTTPS_PORT:-443}:443"
+      - "${CADDY_HTTPS_PORT:-443}:443/udp" # HTTP/3
+    environment:
+      # DOMAIN non impostato -> ":80" (modalita' local HTTP, accesso via http://localhost)
+      # Per prod con TLS auto: DOMAIN=cliente.example.com nel .env
+      DOMAIN: http://${DOMAIN:-:80}
+      LETS_ENCRYPT_EMAIL: ${LETS_ENCRYPT_EMAIL:-admin@example.com}
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks: [ aion_net ]
+    depends_on:
+      backend:
+        condition: service_healthy
+      chat-ui: { condition: service_started }
+      admin-ui: { condition: service_started }
+      website: { condition: service_started }
+
+  sandbox:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.sandbox
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.13-slim}
+    image: aion/sandbox:${AION_SANDBOX_IMAGE_TAG:-latest}
+    profiles: ["sandbox-build"]
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.13-slim}
+        UV_VERSION: ${UV_VERSION:-latest}
+    image: aion/backend:latest
+    restart: unless-stopped
+    <<: *aion-env
+    environment:
+      AION_API_HOST: 0.0.0.0
+      AION_API_PORT: "8001"
+      AION_DATA_DIR: /app/data
+      # Sync config_std/ + mcp_servers_std/ -> runtime dirs at container start
+      AION_SYNC_ON_BOOT: ${AION_SYNC_ON_BOOT:-1}
+      # Writable MCP registry overlay (mcp_registry.yaml in config/ stays from sync)
+      AION_MCP_REGISTRY_LOCAL_PATH: ${AION_MCP_REGISTRY_LOCAL_PATH:-/app/data/mcp_registry.local.yaml}
+      AION_REDIS_URL: ${AION_REDIS_URL:-redis://redis:6379/0}
+      AION_DB_URL: ${AION_DB_URL:-sqlite+aiosqlite:///data/aion.db}
+      # Local default (DOMAIN non valorizzato): http://localhost via Caddy su :80.
+      # In prod sovrascrivere nel .env: AION_PUBLIC_API_URL=https://${DOMAIN}/api
+      AION_PUBLIC_API_URL: ${AION_PUBLIC_API_URL:-http://localhost/api}
+      AION_CORS_ORIGINS: ${AION_CORS_ORIGINS:-*}
+      # Root path per il reverse proxy: Caddy strippa /api, root_path glielo
+      # restituisce per generare URL corretti nello schema OpenAPI / Swagger UI.
+      AION_ROOT_PATH: /api
+      # Docs API disabilitati in produzione (security hardening by default).
+      AION_API_DOCS_ENABLED: "0"
+      AION_WREN_HOME: /app/data/wren/.wren
+      AION_NORTHWIND_DB_URL: /app/data/db_test
+      # Session sandbox container isolation (Podman rootless on host)
+      AION_SANDBOX_BACKEND: ${AION_SANDBOX_BACKEND:-container}
+      AION_CONTAINER_RUNTIME: ${AION_CONTAINER_RUNTIME:-podman}
+      AION_SANDBOX_CONTAINER_IMAGE: ${AION_SANDBOX_CONTAINER_IMAGE:-aion/sandbox:latest}
+      AION_PODMAN_SOCKET: /run/podman/podman.sock
+      CONTAINER_HOST: unix:///run/podman/podman.sock
+      AION_SANDBOX_FAIL_CLOSED: ${AION_SANDBOX_FAIL_CLOSED:-1}
+      AION_SANDBOX_MCP_JAIL: ${AION_SANDBOX_MCP_JAIL:-1}
+    volumes:
+      - aion_data:/app/data
+      # Host-visible sessions so rootless Podman can bind-mount per chat (see AION_SANDBOX_HOST_DATA_DIR)
+      - ./data/sessions:/app/data/sessions
+      - ./data/db_test:/app/data/db_test
+      - ~/.wren:/app/data/wren/.wren:ro
+      - ${AION_PODMAN_SOCKET_HOST:-/run/user/1000/podman/podman.sock}:/run/podman/podman.sock
+      # Versioned templates from git (git pull + restart propagates without image rebuild)
+      - ./config_std:/app/config_std:ro
+      - ./mcp_servers_std:/app/mcp_servers_std:ro
+      # Writable runtime overlay (synced from *_std at boot; local customizations persist)
+      - ./config:/app/config
+      - ./mcp_servers:/app/mcp_servers
+    expose:
+      - "8001"
+    networks: [ aion_net ]
+    extra_hosts:
+      - "contractai-db:host-gateway"
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  chat-ui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.chat-ui
+      args:
+        # Same-origin via Caddy: /api and /admin work for any DOMAIN under the reverse proxy
+        NEXT_PUBLIC_AION_API_URL: "/api"
+        NEXT_PUBLIC_AION_ADMIN_UI_URL: "/admin"
+    image: aion/chat-ui:latest
+    restart: unless-stopped
+    expose:
+      - "8003"
+    networks: [ aion_net ]
+
+  admin-ui:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.admin-ui
+      args:
+        NEXT_PUBLIC_AION_API_URL: "/api"
+    image: aion/admin-ui:latest
+    restart: unless-stopped
+    expose:
+      - "3870"
+    networks: [ aion_net ]
+
+  website:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.website
+      args:
+        DOCUSAURUS_BASE_URL: /docs/
+    image: aion/website:latest
+    restart: unless-stopped
+    expose:
+      - "3000"
+    networks: [ aion_net ]
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    command: >
+      redis-server --appendonly yes ${REDIS_PASSWORD:+--requirepass $REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    expose:
+      - "6379"
+    networks: [ aion_net ]
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  aion_net:
+    driver: bridge
+
+volumes:
+  aion_data:
+  caddy_data:
+  caddy_config:
+  redis_data:
