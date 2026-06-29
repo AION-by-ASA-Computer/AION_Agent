@@ -119,6 +119,8 @@ If a check does not appear, trigger a successful workflow run on `main` first, t
 > **CodeQL** runs from [`.github/workflows/codeql.yml`](workflows/codeql.yml). Matrix jobs appear as `CodeQL Analysis (python)` and `CodeQL Analysis (javascript-typescript)`. Add both after the first green CodeQL run, or require only one language while onboarding.
 
 > **Dependabot** ([`.github/dependabot.yml`](dependabot.yml)) does not add merge-blocking checks. In **Settings → Security → Advanced Security**, enable **Dependabot alerts** if shown. **Dependabot security updates** on public repositories are often **always enabled** (no toggle, or button greyed out).
+>
+> Dependabot workflows **cannot read repository secrets** (including `GITLEAKS_LICENSE`). The gitleaks step in [ci.yml](workflows/ci.yml) is skipped for `dependabot[bot]`; Trivy still runs so **Security Vulnerability Scanning** can pass on dependency PRs.
 
 Optional governance checks (add after first green run; not required for day-one merges):
 
@@ -229,7 +231,7 @@ Direct pushes and force pushes to `main` are blocked.
 | Symptom | What to check |
 |---------|----------------|
 | Status check missing in ruleset UI | Run CI successfully on `main` first; use exact job `name` from workflow |
-| Security job fails immediately | Add `GITLEAKS_LICENSE` repository secret |
+| Security job fails immediately | Add `GITLEAKS_LICENSE` repository secret (not available to Dependabot — gitleaks is skipped for `dependabot[bot]`) |
 | Merge blocked despite green CI | Branch out of date — click **Update branch** on the PR |
 | Rules seem duplicated | Remove legacy rule under **Settings → Branches** |
 | Admin can still push | Admin may be on bypass list — remove bypass or use **For pull requests only** |
