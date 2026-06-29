@@ -1,0 +1,37 @@
+[default]
+extend-ignore-re = [
+  # Italian/technical tokens and project names
+  "ACI",
+  "AIN",
+  "Caddy",
+  "Haystack",
+  "MemPalace",
+  "PromQL",
+  "SQLite",
+  "stdio",
+  "subagent",
+  "subagents",
+  "unm",
+]
+
+[files]
+extend-exclude = [
+  "mcp_servers_std/",
+  "data/",
+  "node_modules/",
+  "chat-ui/",
+  "admin-ui/",
+  "website/",
+  "src/",
+  "config_std/",
+  "docs/",
+  "CLAUDE.md",
+  ".github/skills/",
+  "*.png",
+  "*.jpg",
+  "*.woff",
+  "*.woff2",
+  "*.ttf",
+  "*.mjs",
+  "*.umd.js",
+]

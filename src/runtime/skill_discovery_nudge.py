@@ -38,7 +38,7 @@ def build_skill_discovery_nudge(user_message: str) -> str:
         "Before writing code or files in the workspace for this task, you must use skills_hub: "
         "`skill_search` with a relevant query, then `skill_view` for the matching profile skill.\n"
         "If `skill_search` finds nothing but the profile lists a relevant skill, call "
-        '`skill_view` with that slug.\n'
+        "`skill_view` with that slug.\n"
         "After `skill_view`, any skill scripts are materialized in the session; "
         "use `sandbox_exec_allowlisted` with paths relative to the session root when needed.\n"
         "Only after loading the skill proceed with mutating tools or artifacts.\n\n"

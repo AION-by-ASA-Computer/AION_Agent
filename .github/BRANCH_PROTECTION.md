@@ -109,10 +109,25 @@ Add each required check by name (must match the **job name** in Actions, not the
 | `Frontend Packages Build` |
 | `Security Vulnerability Scanning` |
 | `Test Docker Builds` |
+| `CodeQL Analysis (python)` |
+| `CodeQL Analysis (javascript-typescript)` |
 
 For each name: type it in the search box → select the suggestion → confirm with **+**.
 
 If a check does not appear, trigger a successful workflow run on `main` first, then refresh this page.
+
+> **CodeQL** runs from [`.github/workflows/codeql.yml`](workflows/codeql.yml). Matrix jobs appear as `CodeQL Analysis (python)` and `CodeQL Analysis (javascript-typescript)`. Add both after the first green CodeQL run, or require only one language while onboarding.
+
+> **Dependabot** ([`.github/dependabot.yml`](dependabot.yml)) does not add merge-blocking checks. In **Settings → Security → Advanced Security**, enable **Dependabot alerts** if shown. **Dependabot security updates** on public repositories are often **always enabled** (no toggle, or button greyed out).
+
+Optional governance checks (add after first green run; not required for day-one merges):
+
+| Check | Workflow |
+|-------|----------|
+| `Workflow Lint` | [governance.yml](workflows/governance.yml) |
+| `Typos Check` | [governance.yml](workflows/governance.yml) |
+| `Semantic PR Title` | [pull-request.yml](workflows/pull-request.yml) |
+| `OSV-Scanner PR` | [osv-scanner-pr.yml](workflows/osv-scanner-pr.yml) |
 
 **Source:** leave **Any source** unless you later pin checks to a specific GitHub App integration.
 
@@ -144,7 +159,15 @@ jobs:
     name: Test Docker Builds
 ```
 
-The ruleset must use these **`name:`** values, not the job IDs (`backend-checks`, etc.).
+CodeQL (optional fifth/sixth required checks) — [`.github/workflows/codeql.yml`](workflows/codeql.yml):
+
+```yaml
+jobs:
+  analyze:
+    name: CodeQL Analysis   # matrix: (python), (javascript-typescript)
+```
+
+The ruleset must use these **`name:`** values (plus matrix suffixes for CodeQL), not the job IDs (`backend-checks`, etc.).
 
 ---
 
@@ -192,7 +215,7 @@ gh api repos/AION-by-ASA-Computer/AION_Agent/rulesets
 1. `git checkout main && git pull`
 2. `git checkout -b feature/my-change`
 3. Push and open a PR to `main`
-4. Wait for all four CI jobs to pass
+4. Wait for all CI jobs to pass (four core jobs; plus CodeQL if required in the ruleset)
 5. Obtain **one approving review**
 6. Resolve all review conversations
 7. Merge (squash, merge, or rebase — per allowed methods in the ruleset)

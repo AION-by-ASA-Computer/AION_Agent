@@ -1,0 +1,43 @@
+header:
+  schema-version: 2.2.0
+  last-updated: "2026-06-29"
+  last-reviewed: "2026-06-29"
+  url: https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/security-insights.yml
+  comment: |
+    Machine-readable security metadata for AION Agent (OpenSSF Security Insights).
+    Human-readable policy: SECURITY.md
+
+project:
+  name: AION Agent
+  administrators:
+    - name: AION Maintainers
+      affiliation: ASA Computer
+      primary: true
+      comment: |
+        Contact via private GitHub security advisory or https://aion-asa.com
+  repositories:
+    - name: AION_Agent
+      url: https://github.com/AION-by-ASA-Computer/AION_Agent
+      comment: |
+        Primary open-source repository: backend, chat-ui, admin-ui, docs, Docker stack.
+  vulnerability-reporting:
+    reports-accepted: true
+    bug-bounty-available: false
+    comment: |
+      Do not file public issues for vulnerabilities. Use GitHub private security
+      advisories or the contact channel on https://aion-asa.com (see SECURITY.md).
+
+repository:
+  url: https://github.com/AION-by-ASA-Computer/AION_Agent
+  status: active
+  accepts-change-request: true
+  accepts-automated-change-request: true
+  license:
+    url: https://github.com/AION-by-ASA-Computer/AION_Agent/blob/main/LICENSE
+    expression: Apache-2.0
+  security:
+    assessments:
+      self:
+        comment: |
+          CI: ruff, pytest subset, frontend builds, Docker builds, gitleaks, Trivy,
+          CodeQL, OSV-Scanner, OpenSSF Scorecard. Releases via release-please on main.
