@@ -20,7 +20,7 @@ def get_version() -> str:
                     return v
         except Exception as e:
             logger.warning("Failed to parse version.json at %s: %s", version_file, e)
-    return "v1.0.0"
+    return "0.0.0"
 
 
 __version__ = get_version()

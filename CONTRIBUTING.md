@@ -108,11 +108,21 @@ Add or update tests when you change behavior. Prefer extending `scripts/run_ci_t
 
 ## Commit messages
 
-Use clear, imperative subjects. Examples:
+Use [Conventional Commits](https://www.conventionalcommits.org/) — release-please uses them to bump versions and update `CHANGELOG.md`:
+
+| Prefix | Typical bump |
+|--------|----------------|
+| `feat:` | Minor |
+| `fix:` | Patch |
+| `docs:`, `chore:`, `ci:` | Usually no release unless user-facing |
+
+Examples:
 
 - `fix: reject sandbox paths outside session workspace`
 - `feat: expose reasoning effort in chat settings API`
 - `docs: update Docker quick start in README`
+
+Releases and GHCR images: [docs/opensource/releases.md](docs/opensource/releases.md).
 
 ## Security
 
