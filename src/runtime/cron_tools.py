@@ -1,4 +1,5 @@
 """Built-in Haystack tools for per-user scheduled jobs."""
+
 from __future__ import annotations
 
 import asyncio
@@ -33,7 +34,12 @@ def _max_jobs_per_user() -> int:
 
 
 def cron_tools_enabled() -> bool:
-    return os.environ.get("AION_CRON_ENABLED", "0").lower() in ("1", "true", "yes", "on")
+    return os.environ.get("AION_CRON_ENABLED", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _disabled_msg() -> str:
@@ -189,7 +195,9 @@ async def _run_scheduled_job_now(job_id: str, user_id: str) -> str:
     return json.dumps(result, ensure_ascii=False, indent=2)
 
 
-def merge_builtin_cron_tools(tools: List[Any], session_id: str, user_id: str) -> List[Any]:
+def merge_builtin_cron_tools(
+    tools: List[Any], session_id: str, user_id: str
+) -> List[Any]:
     if not cron_tools_enabled():
         return tools
     existing = {getattr(t, "name", None) for t in tools}
@@ -297,8 +305,14 @@ def build_cron_haystack_tools(session_id: str, user_id: str) -> List[Any]:
                 "type": "object",
                 "properties": {
                     "name": {"type": "string"},
-                    "cron_expression": {"type": "string", "description": "e.g. 0 9 * * 1"},
-                    "prompt": {"type": "string", "description": "Message sent to the agent each run"},
+                    "cron_expression": {
+                        "type": "string",
+                        "description": "e.g. 0 9 * * 1",
+                    },
+                    "prompt": {
+                        "type": "string",
+                        "description": "Message sent to the agent each run",
+                    },
                     "profile_slug": {"type": "string"},
                     "session_mode": {"type": "string", "enum": ["fixed", "new"]},
                     "timezone": {"type": "string"},

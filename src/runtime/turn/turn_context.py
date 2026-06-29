@@ -20,6 +20,7 @@ Usage
         yield _track_sse(evt)
     # ctx.messages, ctx.augmented_user, … are ready
 """
+
 from __future__ import annotations
 
 import logging
@@ -138,9 +139,7 @@ async def build_turn_context(
     import os as _os_qm
 
     _qm_project = (
-        sql_query_project
-        or _os_qm.getenv("AION_SQL_QM_DEFAULT_PROJECT")
-        or "default"
+        sql_query_project or _os_qm.getenv("AION_SQL_QM_DEFAULT_PROJECT") or "default"
     ).strip()
 
     if not sql_query_project:
@@ -331,13 +330,17 @@ async def build_turn_context(
                     _rec = await odb.fetch_plan_record(_active_pid)
                     _amd = (
                         (
-                            (_rec.get("approved_markdown") or _rec.get("draft_markdown") or "")
-                            if _rec
-                            else ""
+                            _rec.get("approved_markdown")
+                            or _rec.get("draft_markdown")
+                            or ""
                         )
+                        if _rec
+                        else ""
                     ).strip()
                     _explicit_tid = (plan_execution_task_id or "").strip()
-                    _ntid = _explicit_tid or (next_pending_task_id(_amd) if _amd else None)
+                    _ntid = _explicit_tid or (
+                        next_pending_task_id(_amd) if _amd else None
+                    )
                     _artifact_exec_reminder = build_plan_execution_reminder(
                         plan_id=_active_pid,
                         plan_markdown=_amd,
@@ -353,12 +356,17 @@ async def build_turn_context(
                     "</system-reminder>"
                 )
             _prompt_inject_layers.append(
-                {"key": "plan_artifact_reminder", "text": _artifact_exec_reminder + "\n\n"}
+                {
+                    "key": "plan_artifact_reminder",
+                    "text": _artifact_exec_reminder + "\n\n",
+                }
             )
             augmented_user = _artifact_exec_reminder + "\n\n" + augmented_user
 
         try:
-            from src.runtime.datasource_memory_mode import datasource_orchestrator_enabled
+            from src.runtime.datasource_memory_mode import (
+                datasource_orchestrator_enabled,
+            )
 
             if not datasource_orchestrator_enabled():
                 from src.memory.project_memory_scope import (
@@ -403,7 +411,9 @@ async def build_turn_context(
                 "plan_artifact_reminder",
             }
             _hook_layers = [
-                e for e in _prompt_inject_layers if str(e.get("key") or "") in _hook_keys
+                e
+                for e in _prompt_inject_layers
+                if str(e.get("key") or "") in _hook_keys
             ]
             if _hook_layers and "_pre_hooks" in locals():
                 augmented_user = apply_injection_budget(_pre_hooks, _hook_layers)
@@ -412,7 +422,9 @@ async def build_turn_context(
 
     # LTM context retrieval
     _pre_ltm = augmented_user
-    augmented_user = ltm_orchestrator.build_augmented_user_text(augmented_user, "", wake)
+    augmented_user = ltm_orchestrator.build_augmented_user_text(
+        augmented_user, "", wake
+    )
     track_prepend_layer(
         _prompt_inject_layers,
         "ltm_wake",
@@ -424,7 +436,9 @@ async def build_turn_context(
         _prompt_inject_layers.append({"key": "attachments_block", "text": attach_block})
     _prompt_inject_layers.append({"key": "user_input_raw", "text": _user_input_raw})
     if user_input != _user_input_raw:
-        _prompt_inject_layers.append({"key": "user_input_after_nudge", "text": user_input})
+        _prompt_inject_layers.append(
+            {"key": "user_input_after_nudge", "text": user_input}
+        )
 
     # ------------------------------------------------------------------
     # 6. Message list assembly
@@ -459,7 +473,9 @@ async def build_turn_context(
             {
                 "type": "context_compacting",
                 "active": True,
-                "tokens": compressor_probe.total_with_overhead(messages, overhead_probe),
+                "tokens": compressor_probe.total_with_overhead(
+                    messages, overhead_probe
+                ),
                 "trigger": compressor_probe.compress_trigger_tokens(),
                 "phase": "summarizing",
             }
@@ -478,14 +494,18 @@ async def build_turn_context(
         )
         from src.haystack_chat import chat_message_text
 
-        if not messages or chat_message_text(messages[-1]) != chat_message_text(user_turn):
+        if not messages or chat_message_text(messages[-1]) != chat_message_text(
+            user_turn
+        ):
             messages.append(user_turn)
     if did_compact:
         _emit(
             {
                 "type": "context_compacting",
                 "active": False,
-                "tokens": compressor_probe.total_with_overhead(messages, overhead_probe),
+                "tokens": compressor_probe.total_with_overhead(
+                    messages, overhead_probe
+                ),
                 "phase": "done",
             }
         )

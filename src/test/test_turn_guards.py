@@ -1,4 +1,5 @@
 """Tests for TurnGuards budget module."""
+
 import time
 
 from src.runtime.turn.turn_guards import TurnGuards
@@ -78,5 +79,3 @@ def test_dynamic_thinking_token_budget(monkeypatch):
     monkeypatch.setenv("AION_THINKING_TOKEN_BUDGET", "99")
     res_over = merge_generation_kwargs({}, "medium")
     assert res_over["extra_body"]["thinking_token_budget"] == 99
-
-

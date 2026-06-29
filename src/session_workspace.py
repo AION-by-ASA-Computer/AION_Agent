@@ -2,6 +2,7 @@
 Workspace isolato per sessione chat: uploads, derived, workspace (script/dati generati).
 Tutti i path sono validati per evitare directory traversal.
 """
+
 from __future__ import annotations
 
 import os
@@ -122,7 +123,9 @@ def _is_under(parent: Path, candidate: Path) -> bool:
         return False
 
 
-def safe_resolve(session_id: str, relative_path: str, *, must_exist: bool = False) -> Path:
+def safe_resolve(
+    session_id: str, relative_path: str, *, must_exist: bool = False
+) -> Path:
     """
     Risolve un path relativo sotto la root sessione (qualsiasi sottopath valido, es. uploads/, workspace/, unpacked/).
     `relative_path` non deve iniziare con / o contenere ..
@@ -145,7 +148,9 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
     root = ensure_session_dirs(session_id)
     sub = subdir.strip().replace("\\", "/").strip("/")
     if sub not in SESSION_CONTENT_ROOTS:
-        raise ValueError(f"subdir deve essere uno tra: {', '.join(sorted(SESSION_CONTENT_ROOTS))}")
+        raise ValueError(
+            f"subdir deve essere uno tra: {', '.join(sorted(SESSION_CONTENT_ROOTS))}"
+        )
     d = root / sub
     if not d.is_dir():
         return []
@@ -158,7 +163,11 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
             if sub == "uploads":
                 is_alias = False
                 for name in all_names:
-                    if name != p.name and name.endswith("_" + p.name) and len(name) == len(p.name) + 11:
+                    if (
+                        name != p.name
+                        and name.endswith("_" + p.name)
+                        and len(name) == len(p.name) + 11
+                    ):
                         is_alias = True
                         break
                 if is_alias:
@@ -185,7 +194,11 @@ def save_upload(
     max_bytes: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Salva un file in uploads/ con nome univoco."""
-    limit = max_bytes if max_bytes is not None else int(os.getenv("AION_UPLOAD_MAX_BYTES", str(50 * 1024 * 1024)))
+    limit = (
+        max_bytes
+        if max_bytes is not None
+        else int(os.getenv("AION_UPLOAD_MAX_BYTES", str(50 * 1024 * 1024)))
+    )
     if len(data) > limit:
         raise ValueError(f"file troppo grande (max {limit} bytes)")
     ensure_session_dirs(session_id)
@@ -204,7 +217,7 @@ def save_upload(
     alias_path = safe_resolve(session_id, alias_rel, must_exist=False)
     if alias_path != path:
         alias_path.write_bytes(data)
-    
+
     logger.info(
         "File caricato con successo: %s (path: %s, session_id: %s, size: %d bytes)",
         base_name,
@@ -246,16 +259,32 @@ def sync_parent_uploads_to_child(
             "bytes": 0,
         }
     if parent_sid == child_sid:
-        return {"ok": True, "copied": [], "skipped": ["same_session"], "bytes": 0, "errors": []}
+        return {
+            "ok": True,
+            "copied": [],
+            "skipped": ["same_session"],
+            "bytes": 0,
+            "errors": [],
+        }
 
-    max_total = int(os.getenv("AION_SUBAGENT_UPLOAD_SYNC_MAX_TOTAL_MB", "50")) * 1024 * 1024
-    max_file = int(os.getenv("AION_SUBAGENT_UPLOAD_SYNC_MAX_FILE_MB", "25")) * 1024 * 1024
+    max_total = (
+        int(os.getenv("AION_SUBAGENT_UPLOAD_SYNC_MAX_TOTAL_MB", "50")) * 1024 * 1024
+    )
+    max_file = (
+        int(os.getenv("AION_SUBAGENT_UPLOAD_SYNC_MAX_FILE_MB", "25")) * 1024 * 1024
+    )
 
     try:
         parent_root = ensure_session_dirs(parent_sid)
         child_root = ensure_session_dirs(child_sid)
     except ValueError as e:
-        return {"ok": False, "copied": [], "skipped": [], "errors": [str(e)], "bytes": 0}
+        return {
+            "ok": False,
+            "copied": [],
+            "skipped": [],
+            "errors": [str(e)],
+            "bytes": 0,
+        }
 
     src_dir = parent_root / "uploads"
     dst_dir = child_root / "uploads"

@@ -1,4 +1,5 @@
 """Adapter LiteLLM per LLM providers multipli."""
+
 from __future__ import annotations
 
 import inspect
@@ -48,7 +49,9 @@ class LiteLLMChatGeneratorWrapper:
         self.generator = self._instantiate_generator()
 
     def _instantiate_generator(self) -> Any:
-        from haystack_integrations.components.generators.litellm import LiteLLMChatGenerator
+        from haystack_integrations.components.generators.litellm import (
+            LiteLLMChatGenerator,
+        )
 
         gen_cls = LiteLLMChatGenerator
 
@@ -75,7 +78,9 @@ class LiteLLMChatGeneratorWrapper:
         if has_kwargs:
             filtered_params = init_params
         else:
-            filtered_params = {k: v for k, v in init_params.items() if k in sig.parameters}
+            filtered_params = {
+                k: v for k, v in init_params.items() if k in sig.parameters
+            }
 
         return gen_cls(**filtered_params)
 
@@ -142,7 +147,8 @@ class LiteLLMChatGeneratorWrapper:
         if hasattr(self.generator, "run_async"):
             run_sig = inspect.signature(self.generator.run_async)
             has_run_kwargs = any(
-                p.kind == inspect.Parameter.VAR_KEYWORD for p in run_sig.parameters.values()
+                p.kind == inspect.Parameter.VAR_KEYWORD
+                for p in run_sig.parameters.values()
             )
             if has_run_kwargs:
                 filtered_run_params = run_params
@@ -156,7 +162,8 @@ class LiteLLMChatGeneratorWrapper:
 
             run_sig = inspect.signature(self.generator.run)
             has_run_kwargs = any(
-                p.kind == inspect.Parameter.VAR_KEYWORD for p in run_sig.parameters.values()
+                p.kind == inspect.Parameter.VAR_KEYWORD
+                for p in run_sig.parameters.values()
             )
             if has_run_kwargs:
                 filtered_run_params = run_params

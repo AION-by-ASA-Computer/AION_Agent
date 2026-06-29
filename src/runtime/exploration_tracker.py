@@ -1,4 +1,5 @@
 """Track DB exploration per turn; remind agent to persist when prior turn skipped saves."""
+
 from __future__ import annotations
 
 import logging
@@ -10,7 +11,16 @@ from src.runtime.hooks import HookContext, hook_registry
 logger = logging.getLogger("aion.exploration_tracker")
 
 _EXPLORATION_TOOL_SUFFIXES = frozenset(
-    {"list_tables", "list_schemas", "execute_sql", "query", "run_sql", "sql_query", "mysql_query", "postgres_query"}
+    {
+        "list_tables",
+        "list_schemas",
+        "execute_sql",
+        "query",
+        "run_sql",
+        "sql_query",
+        "mysql_query",
+        "postgres_query",
+    }
 )
 _SAVE_TOOL_SUFFIXES = frozenset(
     {
@@ -54,7 +64,9 @@ def _profile_tracks_exploration(profile_slug: Optional[str]) -> bool:
     if not profile_slug:
         return True
     try:
-        from src.runtime.datasource_memory_mode import profile_slug_wants_datasource_workflow
+        from src.runtime.datasource_memory_mode import (
+            profile_slug_wants_datasource_workflow,
+        )
 
         return profile_slug_wants_datasource_workflow(profile_slug)
     except Exception:
@@ -140,7 +152,9 @@ async def _pre_turn_exploration_reminder(ctx: HookContext) -> None:
         return
     merged = dict(ctx.modified_payload or ctx.payload)
     existing = (merged.get("exploration_reminder") or "").strip()
-    merged["exploration_reminder"] = (existing + reminder).strip() if existing else reminder.strip()
+    merged["exploration_reminder"] = (
+        (existing + reminder).strip() if existing else reminder.strip()
+    )
     ctx.modified_payload = merged
 
 

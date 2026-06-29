@@ -1,4 +1,5 @@
 """Markdown source-of-truth helpers for orchestration plans."""
+
 from __future__ import annotations
 
 import re
@@ -61,9 +62,7 @@ _TASK_BOLD_ID = re.compile(
     re.IGNORECASE,
 )
 # Any checkbox line under ## Tasks (sidebar block editor often omits backtick ids)
-_ORPHAN_CHECKBOX = re.compile(
-    r"^\s*-\s*\[(?P<checked>[ xX])\]\s*(?P<body>.+?)\s*$"
-)
+_ORPHAN_CHECKBOX = re.compile(r"^\s*-\s*\[(?P<checked>[ xX])\]\s*(?P<body>.+?)\s*$")
 _TASK_META_SUFFIX = re.compile(
     r"\s*\((?:deps|profile):\s*[^)]+\)\s*$",
     re.IGNORECASE,
@@ -388,10 +387,14 @@ def plan_to_markdown(plan: ExecutionPlan) -> str:
     lines.append(plan.goal.strip())
     lines.append("")
     lines.append("## Context")
-    lines.append("_Contesto, vincoli e note di sfondo (markdown consentito). Modifica qui le spiegazioni lunghe._")
+    lines.append(
+        "_Contesto, vincoli e note di sfondo (markdown consentito). Modifica qui le spiegazioni lunghe._"
+    )
     lines.append("")
     lines.append("## Deliverable")
-    lines.append("_Percorso file unico del documento finale, es. `workspace/progetto.md` — tutte le task di scrittura usano `sandbox_edit_workspace_file` dopo la prima._")
+    lines.append(
+        "_Percorso file unico del documento finale, es. `workspace/progetto.md` — tutte le task di scrittura usano `sandbox_edit_workspace_file` dopo la prima._"
+    )
     lines.append("")
     lines.append("## Tasks")
     for t in plan.tasks:
@@ -522,7 +525,11 @@ def markdown_to_plan(markdown: str) -> ExecutionPlan:
             title = (lm.group("title") or "").strip()
             tid = (lm.group("tid") or "").strip()
             if not tid:
-                tid = f"task_{num.zfill(2)}" if num.isdigit() else f"task_{len(tasks) + 1:02d}"
+                tid = (
+                    f"task_{num.zfill(2)}"
+                    if num.isdigit()
+                    else f"task_{len(tasks) + 1:02d}"
+                )
             if title:
                 tasks.append(
                     ExecutionTask(
@@ -581,7 +588,9 @@ def plan_to_todos(plan: ExecutionPlan) -> List[Dict[str, Any]]:
                 "id": t.id,
                 "title": t.title,
                 "description": t.description or "",
-                "status": str(t.status.value if hasattr(t.status, "value") else t.status),
+                "status": str(
+                    t.status.value if hasattr(t.status, "value") else t.status
+                ),
                 "depends_on": list(t.depends_on or []),
                 "target_profile": t.target_profile or "",
                 "comment": "",
@@ -613,10 +622,14 @@ def todos_to_plan(goal: str, todos: List[Dict[str, Any]]) -> ExecutionPlan:
             raise ValueError(f"todo[{i}] non valido")
         tasks.append(
             ExecutionTask(
-                id=str(t.get("id") or f"task_{i+1}").strip(),
-                title=str(t.get("title") or f"Task {i+1}").strip(),
+                id=str(t.get("id") or f"task_{i + 1}").strip(),
+                title=str(t.get("title") or f"Task {i + 1}").strip(),
                 description=str(t.get("description") or "").strip(),
-                depends_on=[str(x).strip() for x in (t.get("depends_on") or []) if str(x).strip()],
+                depends_on=[
+                    str(x).strip()
+                    for x in (t.get("depends_on") or [])
+                    if str(x).strip()
+                ],
                 target_profile=(str(t.get("target_profile") or "").strip() or None),
                 status=str(t.get("status") or "pending"),
             )
@@ -666,7 +679,11 @@ def resolve_plan_markdown_for_approval(
         except Exception:
             continue
 
-    if isinstance(plan_json, dict) and plan_json.get("tasks") and not is_degenerate_plan_json(plan_json):
+    if (
+        isinstance(plan_json, dict)
+        and plan_json.get("tasks")
+        and not is_degenerate_plan_json(plan_json)
+    ):
         plan = ExecutionPlan.model_validate(plan_json)
         return plan_to_markdown(plan), plan
 

@@ -1,4 +1,5 @@
 """Contratto dati orchestrazione / task graph (Pydantic v2)."""
+
 from __future__ import annotations
 
 import json
@@ -79,17 +80,22 @@ class ExecutionPlan(BaseModel):
         if isinstance(tasks, str):
             s = tasks.strip()
             if not s:
-                return cls(goal=goal, tasks=[ExecutionTask(title="main", description=goal)])
+                return cls(
+                    goal=goal, tasks=[ExecutionTask(title="main", description=goal)]
+                )
             try:
                 data = json.loads(s)
             except json.JSONDecodeError as e:
                 # Se fallisce il JSON, proviamo a parsarlo come Markdown
                 from src.a2a.plan_markdown import markdown_to_plan
+
                 dummy_md = f"# Plan\n\n## Goal\n{goal}\n\n## Tasks\n{s}"
                 try:
                     return markdown_to_plan(dummy_md)
                 except Exception as md_err:
-                    raise ValueError(f"tasks non è un JSON valido né Markdown valido: {md_err} (Original JSON error: {e})")
+                    raise ValueError(
+                        f"tasks non è un JSON valido né Markdown valido: {md_err} (Original JSON error: {e})"
+                    )
         else:
             data = tasks
         if isinstance(data, dict):

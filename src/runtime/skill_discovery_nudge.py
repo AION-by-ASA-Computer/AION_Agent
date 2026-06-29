@@ -1,4 +1,5 @@
 """Soft nudge: remind the agent to load skills before specialized work."""
+
 from __future__ import annotations
 
 import re
@@ -43,7 +44,7 @@ def build_skill_discovery_nudge(user_message: str) -> str:
         "Before writing code or files in the workspace for this task, you must use skills_hub: "
         f"`skill_search` with a relevant query, then `skill_view` for the skill (e.g. `{hint}` or related).\n"
         "If `skill_search` finds nothing but the profile lists the skill, call "
-        f"`skill_view(\"{hint}\")`.\n"
+        f'`skill_view("{hint}")`.\n'
         "After `skill_view`, skill scripts (e.g. `scripts/office/unpack.py`) are in the session; "
         "use `sandbox_exec_allowlisted` with paths relative to the session root.\n"
         "Only after loading the skill proceed with mutating tools or artifacts.\n\n"

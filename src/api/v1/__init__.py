@@ -1,6 +1,14 @@
 from fastapi import APIRouter
 
-from . import chat, conversations, files, mcp_integrations, navigation_memory, query_memory, steps
+from . import (
+    chat,
+    conversations,
+    files,
+    mcp_integrations,
+    navigation_memory,
+    query_memory,
+    steps,
+)
 from src.api.cron_user import router as cron_user_router
 
 api_v1_router = APIRouter(prefix="/v1")

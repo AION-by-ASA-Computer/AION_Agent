@@ -1,4 +1,5 @@
 """SQL QueryMemory: persistent validated SELECT cache with hybrid retrieval."""
+
 from __future__ import annotations
 
 import json
@@ -20,7 +21,12 @@ from src.data.models import (
 )
 from src.identity import sanitize_user_id
 
-from .embedding import bytes_to_embedding, cosine_similarity, embedding_to_bytes, get_embedding
+from .embedding import (
+    bytes_to_embedding,
+    cosine_similarity,
+    embedding_to_bytes,
+    get_embedding,
+)
 from .fingerprint import (
     build_save_metadata,
     normalize_request_intent,
@@ -28,7 +34,14 @@ from .fingerprint import (
     normalize_sql,
     sql_fingerprint,
 )
-from .models import SqlProjectMemberOut, SqlProjectOut, SqlQueryHit, TenantSqlQmSettingsOut, AdminProjectMemberOut, AdminProjectOut
+from .models import (
+    SqlProjectMemberOut,
+    SqlProjectOut,
+    SqlQueryHit,
+    TenantSqlQmSettingsOut,
+    AdminProjectMemberOut,
+    AdminProjectOut,
+)
 from .scope import (
     ScopeContext,
     datasource_key_from_env,
@@ -56,14 +69,21 @@ def _env_int(name: str, default: int) -> int:
 
 
 def sql_query_memory_enabled() -> bool:
-    return os.getenv("AION_SQL_QM_ENABLED", "1").strip().lower() in ("1", "true", "yes", "on")
+    return os.getenv("AION_SQL_QM_ENABLED", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 class SqlQueryMemoryService:
     def __init__(self) -> None:
         self.session_maker = get_async_session_maker()
 
-    async def get_tenant_settings(self, tenant_id: Optional[str] = None) -> TenantSqlQmSettingsOut:
+    async def get_tenant_settings(
+        self, tenant_id: Optional[str] = None
+    ) -> TenantSqlQmSettingsOut:
         tid = tenant_id or default_tenant_id()
         async with self.session_maker() as session:
             row = await session.get(TenantQueryMemorySettings, tid)
@@ -94,7 +114,10 @@ class SqlQueryMemoryService:
                 row.sql_default_scope = patch["sql_default_scope"]
             if "sql_auto_learn" in patch and patch["sql_auto_learn"] is not None:
                 row.sql_auto_learn = bool(patch["sql_auto_learn"])
-            if "sql_search_before_run" in patch and patch["sql_search_before_run"] is not None:
+            if (
+                "sql_search_before_run" in patch
+                and patch["sql_search_before_run"] is not None
+            ):
                 row.sql_search_before_run = bool(patch["sql_search_before_run"])
             row.updated_at = datetime.now(timezone.utc)
             await session.commit()
@@ -146,8 +169,10 @@ class SqlQueryMemoryService:
             return (await session.execute(q)).scalars().first()
 
     async def _member_count(self, session, project_id: int) -> int:
-        q = select(func.count()).select_from(SqlQueryProjectMember).where(
-            SqlQueryProjectMember.project_id == project_id
+        q = (
+            select(func.count())
+            .select_from(SqlQueryProjectMember)
+            .where(SqlQueryProjectMember.project_id == project_id)
         )
         return int((await session.execute(q)).scalar() or 0)
 
@@ -205,7 +230,10 @@ class SqlQueryMemoryService:
             if project.created_by in (None, "", uid):
                 await self._bootstrap_owner_if_needed(session, project, uid)
                 return True, "owner"
-            return project.created_by == uid, "owner" if project.created_by == uid else None
+            return (
+                project.created_by == uid,
+                "owner" if project.created_by == uid else None,
+            )
         return False, None
 
     async def check_user_project_access(
@@ -309,7 +337,11 @@ class SqlQueryMemoryService:
         uid = sanitize_user_id(user_id)
         async with self.session_maker() as session:
             q = select(SqlQueryProject).where(SqlQueryProject.tenant_id == tid)
-            rows = (await session.execute(q.order_by(SqlQueryProject.slug))).scalars().all()
+            rows = (
+                (await session.execute(q.order_by(SqlQueryProject.slug)))
+                .scalars()
+                .all()
+            )
             out: List[SqlProjectOut] = []
             for r in rows:
                 ok, role = await self._can_access_project(session, r, uid)
@@ -348,10 +380,16 @@ class SqlQueryMemoryService:
     ) -> List[AdminProjectOut]:
         tid = tenant_id or default_tenant_id()
         async with self.session_maker() as session:
-            q = select(SqlQueryProject).where(SqlQueryProject.tenant_id == tid).options(
-                selectinload(SqlQueryProject.members)
+            q = (
+                select(SqlQueryProject)
+                .where(SqlQueryProject.tenant_id == tid)
+                .options(selectinload(SqlQueryProject.members))
             )
-            rows = (await session.execute(q.order_by(SqlQueryProject.slug))).scalars().all()
+            rows = (
+                (await session.execute(q.order_by(SqlQueryProject.slug)))
+                .scalars()
+                .all()
+            )
             out: List[AdminProjectOut] = []
             for r in rows:
                 members_list = [
@@ -408,15 +446,21 @@ class SqlQueryMemoryService:
                 if ds is not None:
                     row.datasource_key = ds
             if scope_mode is not None:
-                row.scope_mode = scope_mode if scope_mode in ("inherit", "shared", "per_user") else "inherit"
+                row.scope_mode = (
+                    scope_mode
+                    if scope_mode in ("inherit", "shared", "per_user")
+                    else "inherit"
+                )
             await session.commit()
-            
+
             # Fetch with eager loaded members
-            q = select(SqlQueryProject).where(SqlQueryProject.id == row.id).options(
-                selectinload(SqlQueryProject.members)
+            q = (
+                select(SqlQueryProject)
+                .where(SqlQueryProject.id == row.id)
+                .options(selectinload(SqlQueryProject.members))
             )
             updated_row = (await session.execute(q)).scalars().first()
-            
+
             members_list = [
                 AdminProjectMemberOut(
                     user_identifier=m.user_identifier,
@@ -535,7 +579,9 @@ class SqlQueryMemoryService:
                 description=description,
                 datasource_key=ds,
                 profile_slug=profile_slug,
-                scope_mode=scope_mode if scope_mode in ("inherit", "shared", "per_user") else "inherit",
+                scope_mode=scope_mode
+                if scope_mode in ("inherit", "shared", "per_user")
+                else "inherit",
                 created_by=creator,
             )
             session.add(row)
@@ -612,7 +658,11 @@ class SqlQueryMemoryService:
             q = select(SqlQueryProjectMember).where(
                 SqlQueryProjectMember.project_id == project.id
             )
-            rows = (await session.execute(q.order_by(SqlQueryProjectMember.role))).scalars().all()
+            rows = (
+                (await session.execute(q.order_by(SqlQueryProjectMember.role)))
+                .scalars()
+                .all()
+            )
             return [
                 SqlProjectMemberOut(
                     user_identifier=m.user_identifier,
@@ -745,9 +795,7 @@ class SqlQueryMemoryService:
         if code == "not_found":
             return f"SQL query id={entry_id} not found."
         if code == "forbidden":
-            return (
-                f"SQL query id={entry_id} exists but you do not have permission to modify it."
-            )
+            return f"SQL query id={entry_id} exists but you do not have permission to modify it."
         if code == "wrong_project":
             active = (project_slug or "").strip() or "?"
             other = (entry_project or "").strip() or "?"
@@ -834,10 +882,9 @@ class SqlQueryMemoryService:
                     cand_meta = json.loads(cand.metadata_json)
                 except json.JSONDecodeError:
                     cand_meta = None
-            cand_intent = (
-                (cand_meta or {}).get("intent_template")
-                or normalize_request_intent(cand.user_request)
-            )
+            cand_intent = (cand_meta or {}).get(
+                "intent_template"
+            ) or normalize_request_intent(cand.user_request)
             if norm_intent and cand_intent and norm_intent == cand_intent:
                 score = max(score, 0.98)
             elif norm_req and normalize_request_text(cand.user_request) == norm_req:
@@ -1067,7 +1114,9 @@ class SqlQueryMemoryService:
             )
             if err:
                 return False, err
-            await session.execute(delete(CachedSqlQuery).where(CachedSqlQuery.id == entry_id))
+            await session.execute(
+                delete(CachedSqlQuery).where(CachedSqlQuery.id == entry_id)
+            )
             await session.commit()
             return True, ""
 
@@ -1157,7 +1206,9 @@ class SqlQueryMemoryService:
                     "is_verified": bool(r.is_verified),
                     "success_count": r.success_count,
                     "failure_count": r.failure_count,
-                    "last_used_at": r.last_used_at.isoformat() if r.last_used_at else None,
+                    "last_used_at": r.last_used_at.isoformat()
+                    if r.last_used_at
+                    else None,
                     "project_slug": project.slug,
                 }
             )
@@ -1178,7 +1229,7 @@ class SqlQueryMemoryService:
             status = "verified" if r.get("is_verified") else "draft"
             lines.append(
                 f"- ID {r['id']} [{status}, successes={r.get('success_count', 0)}] "
-                f"\"{r.get('user_request', '')}\"\n"
+                f'"{r.get("user_request", "")}"\n'
                 f"  SQL: {r.get('sql_text', '')}"
             )
         return "\n".join(lines)

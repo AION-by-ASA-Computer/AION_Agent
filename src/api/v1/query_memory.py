@@ -1,4 +1,5 @@
 """REST API for SQL QueryMemory (chat users — JWT / chat-ui secret, not API-key only)."""
+
 from __future__ import annotations
 
 import os
@@ -75,7 +76,9 @@ def _map_project_error(exc: ValueError) -> HTTPException:
     if code == "already_member":
         return HTTPException(status_code=409, detail="User is already a member")
     if code == "cannot_remove_self":
-        return HTTPException(status_code=400, detail="Cannot remove yourself from the project")
+        return HTTPException(
+            status_code=400, detail="Cannot remove yourself from the project"
+        )
     return HTTPException(status_code=400, detail=code)
 
 

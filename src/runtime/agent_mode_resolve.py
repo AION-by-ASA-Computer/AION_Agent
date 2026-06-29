@@ -1,4 +1,5 @@
 """Resolve effective agent mode for chat requests (Plan Mode, Deep Research, internal triggers)."""
+
 from __future__ import annotations
 
 import os
@@ -36,6 +37,11 @@ def resolve_agent_mode(
         return "deep_research"
 
     env_default = (os.getenv("AION_DEFAULT_AGENT_MODE") or "normal").strip().lower()
-    if resolved == "normal" and env_default in ("plan", "ask", "debug", "deep_research"):
+    if resolved == "normal" and env_default in (
+        "plan",
+        "ask",
+        "debug",
+        "deep_research",
+    ):
         return env_default
     return resolved

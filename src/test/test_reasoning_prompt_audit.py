@@ -1,4 +1,5 @@
 """Regression tests for reasoning prompt audit (core_protocol, STM, generation kwargs)."""
+
 from __future__ import annotations
 
 import pytest
@@ -48,7 +49,9 @@ def test_merge_generation_kwargs_medium_sets_thinking_budget():
 
 
 def test_merge_generation_kwargs_min_disables_thinking():
-    merged = merge_generation_kwargs({"extra_body": {"thinking_token_budget": 999}}, "min")
+    merged = merge_generation_kwargs(
+        {"extra_body": {"thinking_token_budget": 999}}, "min"
+    )
     eb = merged.get("extra_body") or {}
     assert eb.get("chat_template_kwargs", {}).get("enable_thinking") is False
     assert "thinking_token_budget" not in eb

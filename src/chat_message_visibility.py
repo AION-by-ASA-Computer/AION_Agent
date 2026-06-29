@@ -1,4 +1,5 @@
 """Helpers for chat replay / UI visibility (shared by API and tests)."""
+
 from __future__ import annotations
 
 from typing import Any, Dict

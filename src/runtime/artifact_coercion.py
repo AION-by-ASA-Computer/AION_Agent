@@ -1,11 +1,16 @@
 """Recover file artifacts from malformed markdown fences when the stream parser missed them."""
+
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 from typing import Optional
 
-from src.runtime.artifact_parser import _ARTIFACT_METADATA_LINE_RE, _sanitize_artifact_filename, _slug_artifact_id
+from src.runtime.artifact_parser import (
+    _ARTIFACT_METADATA_LINE_RE,
+    _sanitize_artifact_filename,
+    _slug_artifact_id,
+)
 
 _FENCE_RE = re.compile(r"```(?:markdown|md)?\s*\n([\s\S]*?)```+", re.IGNORECASE)
 _MIN_SALVAGE_CHARS = 200

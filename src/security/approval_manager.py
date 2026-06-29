@@ -1,4 +1,5 @@
 """Approval tool sensibili (Hermes FASE M) — estensione futura; default sempre allow."""
+
 from __future__ import annotations
 
 import logging

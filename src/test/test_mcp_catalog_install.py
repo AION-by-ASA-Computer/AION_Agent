@@ -1,4 +1,5 @@
 """Catalog-based MCP install (no marketplace)."""
+
 import pytest
 
 from src.mcp_catalog_install import build_registry_config_for_connector

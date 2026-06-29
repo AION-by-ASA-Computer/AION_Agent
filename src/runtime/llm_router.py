@@ -1,4 +1,5 @@
 """LLM primary + fallback routing (config-driven; stub for Haystack integration)."""
+
 from __future__ import annotations
 
 import logging
@@ -26,4 +27,8 @@ def load_fallbacks_from_config() -> List[Dict[str, Any]]:
 def log_fallback_event(from_provider: str, to_provider: str) -> None:
     if os.getenv("AION_LLM_FALLBACK_LOG", "1").lower() not in ("1", "true", "yes"):
         return
-    logger.warning("LLM fallback %s -> %s (wire Haystack generator to enable)", from_provider, to_provider)
+    logger.warning(
+        "LLM fallback %s -> %s (wire Haystack generator to enable)",
+        from_provider,
+        to_provider,
+    )

@@ -1,4 +1,5 @@
 """skills_hub skill_view must respect profile.skills allowlist."""
+
 from __future__ import annotations
 
 import os

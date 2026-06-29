@@ -1,4 +1,5 @@
 """Admin CRUD for all users' scheduled jobs."""
+
 from __future__ import annotations
 
 import os
@@ -31,7 +32,9 @@ class AdminScheduledJobCreate(ScheduledJobCreate):
 
 def _require_cron() -> None:
     if not cron_tools_enabled():
-        raise HTTPException(status_code=503, detail="Cron disabled (AION_CRON_ENABLED=0)")
+        raise HTTPException(
+            status_code=503, detail="Cron disabled (AION_CRON_ENABLED=0)"
+        )
 
 
 def _out(d: dict) -> ScheduledJobOut:
@@ -69,7 +72,9 @@ async def get_cron_job(job_id: str, _admin=Depends(require_admin_role)):
 
 
 @router.post("", response_model=ScheduledJobOut)
-async def create_cron_job(body: AdminScheduledJobCreate, _admin=Depends(require_admin_role)):
+async def create_cron_job(
+    body: AdminScheduledJobCreate, _admin=Depends(require_admin_role)
+):
     _require_cron()
     uid = sanitize_user_id(body.user_id.strip() if body.user_id else None)
     if not uid:

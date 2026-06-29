@@ -60,10 +60,7 @@ def _git_npm_build_preflight(dest_dir: Path) -> str | None:
     if _repo_has_tsconfig(dest_dir):
         return None
     pkg_name = (data.get("name") or "questo pacchetto").strip()
-    return (
-        f"Repo senza tsconfig — npm build fallirebbe. "
-        f"Pacchetto npm: {pkg_name}"
-    )
+    return f"Repo senza tsconfig — npm build fallirebbe. Pacchetto npm: {pkg_name}"
 
 
 def _git_npm_package_name(dest_dir: Path) -> str | None:
@@ -140,7 +137,8 @@ def _npm_log_meaningful_excerpt(log_path: Path, max_chars: int = 16000) -> str:
     if not hits:
         tail = "\n".join(lines[-min(80, n) :])
         return (
-            f"(Nessun pattern errore npm/tsc trovato; ultime {min(80, n)} righe di {log_path})\n" + tail
+            f"(Nessun pattern errore npm/tsc trovato; ultime {min(80, n)} righe di {log_path})\n"
+            + tail
         )[:max_chars]
 
     intervals = [(max(0, i - window), min(n, i + window + 1)) for i in hits[-25:]]
@@ -154,7 +152,9 @@ def _npm_log_meaningful_excerpt(log_path: Path, max_chars: int = 16000) -> str:
         filt = [
             ln
             for ln in seg
-            if not (_RE_NPM_HTTP_CACHE_LINE.match(ln) or _RE_NPM_SILLY_FETCH_CACHE.match(ln))
+            if not (
+                _RE_NPM_HTTP_CACHE_LINE.match(ln) or _RE_NPM_SILLY_FETCH_CACHE.match(ln)
+            )
         ]
         chunks.append("\n".join(filt if filt else seg))
         prev_end = b
@@ -186,6 +186,7 @@ def _npm_diagnostic_tail(stderr_stdout: str) -> str:
     except Exception as ex:
         return f"\n\n(Impossibile analizzare log npm {log_path}: {ex})"
 
+
 class MCPInstaller:
     def __init__(self, bin_dir: str = "bin"):
         self.bin_dir = Path(bin_dir)
@@ -193,6 +194,7 @@ class MCPInstaller:
 
     def get_platform_key(self) -> str:
         import platform
+
         system = platform.system().lower()
         arch = platform.machine().lower()
         if arch == "x86_64":
@@ -269,7 +271,9 @@ class MCPInstaller:
                 logger.error(msg)
                 return False, msg
             if proc.returncode != 0:
-                err = (proc.stderr or proc.stdout or "").strip() or f"exit {proc.returncode}"
+                err = (
+                    proc.stderr or proc.stdout or ""
+                ).strip() or f"exit {proc.returncode}"
                 msg = f"git clone fallito: {err[:1500]}"
                 logger.error(msg)
                 return False, msg
@@ -323,7 +327,9 @@ class MCPInstaller:
                         )
                     return False, msg
             elif (dest_dir / "requirements.txt").exists():
-                logger.info("Python project detected. Preparing setup (clone only; nessun pip automatico).")
+                logger.info(
+                    "Python project detected. Preparing setup (clone only; nessun pip automatico)."
+                )
 
             return True, ""
         except Exception as e:
@@ -337,7 +343,7 @@ class MCPInstaller:
         urls = item.get("binary_urls", {})
         platform = self.get_platform_key()
         url = urls.get(platform)
-        
+
         if not url:
             msg = f"Nessun binario per la piattaforma {platform!r} (chiavi disponibili: {list(urls.keys())})"
             logger.error(msg)
@@ -345,14 +351,14 @@ class MCPInstaller:
 
         name = market_safe_dir_name(item)
         dest_path = self.bin_dir / name
-        
+
         logger.info("Downloading binary from %s to %s", url, dest_path)
         try:
             response = requests.get(url, stream=True, timeout=60)
             response.raise_for_status()
             with open(dest_path, "wb") as f:
                 shutil.copyfileobj(response.raw, f)
-            
+
             # Make executable
             dest_path.chmod(0o755)
             logger.info("Successfully installed binary: %s", name)
@@ -365,12 +371,15 @@ class MCPInstaller:
     async def _install_npx(self, item: Dict[str, Any]) -> tuple[bool, str]:
         # For NPX, we just verify node is present
         try:
-            proc = subprocess.run(["node", "--version"], capture_output=True, text=True, check=True)
+            proc = subprocess.run(
+                ["node", "--version"], capture_output=True, text=True, check=True
+            )
             logger.info("Node.js detected (%s), npx ready.", proc.stdout.strip())
             return True, ""
         except Exception as e:
             msg = "Node.js non trovato nel PATH: impossibile usare installazioni npx."
             logger.error("%s (%s)", msg, e)
             return False, msg
+
 
 mcp_installer = MCPInstaller()

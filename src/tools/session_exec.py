@@ -2,6 +2,7 @@
 Executor subprocess con allowlist argv (FASE B2).
 NON usa shell=True. NON accetta stringhe di comando free-form.
 """
+
 from __future__ import annotations
 
 import logging
@@ -130,7 +131,7 @@ def _build_exec_env(sid: str, argv: List[str]) -> Dict[str, str]:
         if k.startswith("AION_"):
             if v and not Path(v).is_absolute():
                 try:
-                    cleaned_v = v.strip('"\'')
+                    cleaned_v = v.strip("\"'")
                     resolved_path = (_REPO_ROOT / cleaned_v).resolve()
                     if resolved_path.exists():
                         v = str(resolved_path)
@@ -140,9 +141,19 @@ def _build_exec_env(sid: str, argv: List[str]) -> Dict[str, str]:
     if os.name == "nt":
         # Forward essential Windows environment variables to avoid python/DLL hangs and pathlib failures
         win_keys = {
-            "SYSTEMROOT", "SYSTEMDRIVE", "TEMP", "TMP", "USERPROFILE",
-            "APPDATA", "LOCALAPPDATA", "COMSPEC", "PATHEXT",
-            "HOMEDRIVE", "HOMEPATH", "USERNAME", "WINDIR"
+            "SYSTEMROOT",
+            "SYSTEMDRIVE",
+            "TEMP",
+            "TMP",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "COMSPEC",
+            "PATHEXT",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "USERNAME",
+            "WINDIR",
         }
         for k, v in os.environ.items():
             if k.upper() in win_keys:
@@ -233,15 +244,21 @@ def _validate_argv_against_allowlist(
     )
 
 
-_PYTHON_BINARIES = frozenset({"python", "python3", "python3.11", "python3.12", "python3.13"})
+_PYTHON_BINARIES = frozenset(
+    {"python", "python3", "python3.11", "python3.12", "python3.13"}
+)
 
 
 def _validate_python_argv(argv: List[str]) -> None:
     """Block inline execution; require a script path as argv[1] (docx/office helpers)."""
     if len(argv) < 2:
-        raise ExecAllowlistError("python requires at least the script as the first argument")
+        raise ExecAllowlistError(
+            "python requires at least the script as the first argument"
+        )
     script = argv[1]
-    if script in ("-c", "-m") or (script.startswith("-") and not script.startswith("--")):
+    if script in ("-c", "-m") or (
+        script.startswith("-") and not script.startswith("--")
+    ):
         raise ExecAllowlistError(
             "python -c / -m not allowed in exec allowlist; "
             "use sandbox_run_python_file per codice arbitrario."
@@ -330,9 +347,12 @@ def run_allowlisted(
                 "message": f"Script not found in sessione: {argv[1]}.{hint}",
                 "command": argv,
             }
-    env_minimal = build_exec_env(sid, session_root=session_root(sid), argv=argv, repo_root=_REPO_ROOT)
+    env_minimal = build_exec_env(
+        sid, session_root=session_root(sid), argv=argv, repo_root=_REPO_ROOT
+    )
 
     import shutil
+
     resolved_exe = shutil.which(argv[0], path=env_minimal.get("PATH"))
     if resolved_exe:
         argv[0] = resolved_exe

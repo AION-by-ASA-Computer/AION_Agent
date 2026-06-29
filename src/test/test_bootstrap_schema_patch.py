@@ -1,4 +1,5 @@
 """SQLite schema drift patches for legacy unified DBs."""
+
 from __future__ import annotations
 
 import os

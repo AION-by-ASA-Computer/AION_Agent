@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Wrapper so check_data_git_tracking is discoverable by pytest in CI."""
+
 from __future__ import annotations
 
 import subprocess

@@ -1,4 +1,5 @@
 """P2 Sprint 2–3 — MCP settings, registry cache, session-scoped pool."""
+
 from pathlib import Path
 
 import src.mcp_manager as mm
@@ -28,7 +29,9 @@ def test_session_scoped_pool_two_conversations(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("AION_MCP_SESSION_SCOPED_SERVERS", "session_sandbox")
     reg = tmp_path / "mcp_registry.yaml"
     reg.write_text("session_sandbox:\n  command: echo\n", encoding="utf-8")
-    mgr = MCPManager(registry_path=str(reg), local_registry_path=str(tmp_path / "local.yaml"))
+    mgr = MCPManager(
+        registry_path=str(reg), local_registry_path=str(tmp_path / "local.yaml")
+    )
     server = "session_sandbox"
     assert server in _session_scoped_servers()
     k1 = mgr._resolve_pool_key("conv-a", server)
@@ -38,7 +41,9 @@ def test_session_scoped_pool_two_conversations(tmp_path: Path, monkeypatch):
     assert k1 != k2
     mgr.set_session_context(
         "conv-a",
-        SessionContext(profile_slug="aion_std", user_id="alice", conversation_id="conv-a"),
+        SessionContext(
+            profile_slug="aion_std", user_id="alice", conversation_id="conv-a"
+        ),
     )
     k_user = mgr._resolve_pool_key("conv-a", "other_server")
     assert k_user[0].startswith("__user__alice")

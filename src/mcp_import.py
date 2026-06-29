@@ -5,6 +5,7 @@ Esempi:
   python -m src.mcp_import --input ~/Library/Application\\ Support/Claude/claude_desktop_config.json
   python -m src.mcp_import --input mcp.json --dry-run
 """
+
 from __future__ import annotations
 
 import argparse
@@ -43,11 +44,15 @@ def _normalize_server(entry: Dict[str, Any]) -> Dict[str, Any]:
 
 def parse_claude_json(data: Any) -> Dict[str, Any]:
     servers = _extract_mcp_servers(data)
-    return {name: _normalize_server(s) for name, s in servers.items() if isinstance(s, dict)}
+    return {
+        name: _normalize_server(s) for name, s in servers.items() if isinstance(s, dict)
+    }
 
 
 def main(argv: list[str] | None = None) -> int:
-    p = argparse.ArgumentParser(description="Import MCP servers into local registry YAML")
+    p = argparse.ArgumentParser(
+        description="Import MCP servers into local registry YAML"
+    )
     p.add_argument(
         "--input",
         "-i",
@@ -71,7 +76,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Non unire con il file locale esistente: scrive solo i server importati (+ eventuale _removed vuoto)",
     )
-    p.add_argument("--dry-run", action="store_true", help="Stampa YAML su stdout, non scrive file")
+    p.add_argument(
+        "--dry-run", action="store_true", help="Stampa YAML su stdout, non scrive file"
+    )
     args = p.parse_args(argv)
 
     path = Path(args.input).expanduser()
@@ -92,15 +99,23 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     root = Path(__file__).resolve().parents[1]
-    out_path = Path(args.output).expanduser() if args.output else root / "config" / "mcp_registry.local.yaml"
+    out_path = (
+        Path(args.output).expanduser()
+        if args.output
+        else root / "config" / "mcp_registry.local.yaml"
+    )
     out_fmt = args.format or ("json" if out_path.suffix.lower() == ".json" else "yaml")
 
     existing_flat: Dict[str, Any] = {}
     if not args.replace and out_path.is_file():
         if out_path.suffix.lower() == ".json":
-            existing_flat = flatten_registry_document(json.loads(out_path.read_text(encoding="utf-8")))
+            existing_flat = flatten_registry_document(
+                json.loads(out_path.read_text(encoding="utf-8"))
+            )
         else:
-            existing_flat = flatten_registry_document(yaml.safe_load(out_path.read_text(encoding="utf-8")) or {})
+            existing_flat = flatten_registry_document(
+                yaml.safe_load(out_path.read_text(encoding="utf-8")) or {}
+            )
 
     if args.replace:
         merged = dict(imported)
@@ -114,7 +129,13 @@ def main(argv: list[str] | None = None) -> int:
         if out_fmt == "json":
             sys.stdout.write(dump_registry_json(merged))
         else:
-            yaml.safe_dump(merged, sys.stdout, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            yaml.safe_dump(
+                merged,
+                sys.stdout,
+                default_flow_style=False,
+                allow_unicode=True,
+                sort_keys=False,
+            )
         return 0
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -122,7 +143,9 @@ def main(argv: list[str] | None = None) -> int:
         out_path.write_text(dump_registry_json(merged), encoding="utf-8")
     else:
         with open(out_path, "w", encoding="utf-8") as f:
-            yaml.safe_dump(merged, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+            yaml.safe_dump(
+                merged, f, default_flow_style=False, allow_unicode=True, sort_keys=False
+            )
 
     print(f"Scritto {out_path} ({len(imported)} server importati, format={out_fmt}).")
     return 0

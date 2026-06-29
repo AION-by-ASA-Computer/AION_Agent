@@ -1,4 +1,5 @@
 """Scope resolution for SQL QueryMemory (shared vs per-user)."""
+
 from __future__ import annotations
 
 import os

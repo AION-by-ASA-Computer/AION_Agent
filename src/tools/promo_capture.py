@@ -1,6 +1,7 @@
 """
 HTML/React promotional canvas → PNG via Playwright (session workspace).
 """
+
 from __future__ import annotations
 
 import json
@@ -12,8 +13,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from ..session_workspace import safe_resolve, session_root
 
-_ASSETS_DIR = Path(__file__).resolve().parents[2] / "mcp_servers_std" / "promo_render" / "assets"
-_TEMPLATES_DIR = Path(__file__).resolve().parents[2] / "mcp_servers_std" / "promo_render" / "templates"
+_ASSETS_DIR = (
+    Path(__file__).resolve().parents[2] / "mcp_servers_std" / "promo_render" / "assets"
+)
+_TEMPLATES_DIR = (
+    Path(__file__).resolve().parents[2]
+    / "mcp_servers_std"
+    / "promo_render"
+    / "templates"
+)
 
 CANVAS_PRESETS: Dict[str, Dict[str, int]] = {
     "instagram_square": {"width": 1080, "height": 1080, "padding": 48},
@@ -61,9 +69,7 @@ def read_style_guide(theme: str = "dark") -> str:
     css_path = _ASSETS_DIR / "aion-promo-theme.css"
     premium_path = _ASSETS_DIR / "PREMIUM_STYLE.md"
     css = css_path.read_text(encoding="utf-8") if css_path.is_file() else ""
-    premium = (
-        premium_path.read_text(encoding="utf-8") if premium_path.is_file() else ""
-    )
+    premium = premium_path.read_text(encoding="utf-8") if premium_path.is_file() else ""
     theme_note = (
         "Default: AION Agent premium dark + red (#e11614). "
         "Read PREMIUM_STYLE.md and build a bento grid — do not ship the generic scaffold layout."

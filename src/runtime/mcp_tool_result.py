@@ -1,4 +1,5 @@
 """Normalize MCP tool outcomes for Haystack, SSE, and QueryMemory hooks."""
+
 from __future__ import annotations
 
 import json
@@ -47,7 +48,11 @@ def _parse_json_error(text: str) -> Tuple[bool, str]:
     if data.get("ok") is False or data.get("error"):
         err = data.get("error")
         if isinstance(err, dict):
-            msg = err.get("message") or err.get("detail") or json.dumps(err, ensure_ascii=False)
+            msg = (
+                err.get("message")
+                or err.get("detail")
+                or json.dumps(err, ensure_ascii=False)
+            )
             err_code = err.get("code") or "tool_error"
         else:
             msg = str(data.get("message") or "").strip()
@@ -63,7 +68,11 @@ def _parse_json_error(text: str) -> Tuple[bool, str]:
                 err_code = "tool_error"
             if not msg:
                 msg = err_code
-        payload: dict[str, Any] = {"ok": False, "error": err_code, "message": msg[:8000]}
+        payload: dict[str, Any] = {
+            "ok": False,
+            "error": err_code,
+            "message": msg[:8000],
+        }
         if data.get("exit_code") is not None:
             payload["exit_code"] = data.get("exit_code")
         stderr = str(data.get("stderr") or "").strip()
@@ -106,7 +115,12 @@ def classify_tool_result_text(text: str, tool_name: str = "") -> Tuple[bool, str
     low = stripped.lower()
     if "mcperror" in low or "mcp error" in low:
         return True, json.dumps(
-            {"ok": False, "error": "mcperror", "message": stripped[:8000], "tool": tool_name},
+            {
+                "ok": False,
+                "error": "mcperror",
+                "message": stripped[:8000],
+                "tool": tool_name,
+            },
             ensure_ascii=False,
         )
 
@@ -115,7 +129,12 @@ def classify_tool_result_text(text: str, tool_name: str = "") -> Tuple[bool, str
 
     if _SQL_ERROR_MARKERS.search(stripped):
         return True, json.dumps(
-            {"ok": False, "error": "sql_execution_error", "message": stripped[:8000], "tool": tool_name},
+            {
+                "ok": False,
+                "error": "sql_execution_error",
+                "message": stripped[:8000],
+                "tool": tool_name,
+            },
             ensure_ascii=False,
         )
 
@@ -124,7 +143,12 @@ def classify_tool_result_text(text: str, tool_name: str = "") -> Tuple[bool, str
 
     if "error" in low and ("exception" in low or "traceback" in low or "failed" in low):
         return True, json.dumps(
-            {"ok": False, "error": "tool_runtime_error", "message": stripped[:8000], "tool": tool_name},
+            {
+                "ok": False,
+                "error": "tool_runtime_error",
+                "message": stripped[:8000],
+                "tool": tool_name,
+            },
             ensure_ascii=False,
         )
 

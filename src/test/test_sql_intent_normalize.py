@@ -1,4 +1,5 @@
 """Intent normalization for SQL QueryMemory cross-question reuse."""
+
 from __future__ import annotations
 
 from src.memory.sql_query_memory.fingerprint import (

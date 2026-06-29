@@ -1,4 +1,5 @@
 """Pydantic models for cron job HTTP APIs."""
+
 from __future__ import annotations
 
 from typing import Any, Dict, List, Literal, Optional

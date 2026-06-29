@@ -1,9 +1,14 @@
 """Exec allowlist policy guards (python script path, exec disabled)."""
+
 from __future__ import annotations
 
 import pytest
 
-from src.tools.session_exec import ExecAllowlistError, _validate_argv_against_allowlist, _validate_python_argv
+from src.tools.session_exec import (
+    ExecAllowlistError,
+    _validate_argv_against_allowlist,
+    _validate_python_argv,
+)
 
 
 def test_python_rejects_inline_c():
@@ -39,7 +44,11 @@ def test_wren_argv_matches_allowlist():
 
 def test_unpack_argv_matches_dev_allowlist():
     allowlist = [
-        {"executable": "python", "argv_prefix": [], "validate_path_positions": [1, 2, 3]},
+        {
+            "executable": "python",
+            "argv_prefix": [],
+            "validate_path_positions": [1, 2, 3],
+        },
     ]
     argv = [
         "python",

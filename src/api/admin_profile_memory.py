@@ -1,5 +1,6 @@
 # src/api/admin_profile_memory.py
 """CRUD SOUL / MEMORY / USER per profilo (pannello admin)."""
+
 from __future__ import annotations
 
 import os
@@ -29,7 +30,9 @@ def _optional_memory_auth(
     if not token:
         return
     if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Bearer token richiesto per questa risorsa")
+        raise HTTPException(
+            status_code=401, detail="Bearer token richiesto per questa risorsa"
+        )
     got = authorization[7:].strip()
     if got != token:
         raise HTTPException(status_code=403, detail="Token non valido")
@@ -77,7 +80,12 @@ async def memory_meta(
     _require_profile(profile_slug)
     read_p = soul_read_path(profile_slug)
     write_p = soul_write_path(profile_slug)
-    mem_p = _project_root() / Path(os.getenv("AION_PROFILE_STATE_DIR", "data/profiles")) / profile_slug / "MEMORY.md"
+    mem_p = (
+        _project_root()
+        / Path(os.getenv("AION_PROFILE_STATE_DIR", "data/profiles"))
+        / profile_slug
+        / "MEMORY.md"
+    )
     users = _list_user_ids_for_profile(profile_slug)
     return {
         "profile_slug": profile_slug,
@@ -165,19 +173,20 @@ def _enforce_user_or_admin_auth(
     # 2. Altrimenti verifica il token utente della sessione chat
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Token di autorizzazione richiesto")
-    
+
     token = authorization[7:].strip()
     from .auth_login import verify_chat_token
+
     parsed = verify_chat_token(token)
     if not parsed:
         raise HTTPException(status_code=401, detail="Sessione non valida o scaduta")
-    
+
     authorized_user_id = sanitize_user_id(parsed["identifier"])
     target_user_id = sanitize_user_id(user_id)
     if authorized_user_id != target_user_id:
         raise HTTPException(
             status_code=403,
-            detail="Non sei autorizzato ad accedere o modificare le preferenze di un altro utente"
+            detail="Non sei autorizzato ad accedere o modificare le preferenze di un altro utente",
         )
 
 

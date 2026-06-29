@@ -1,6 +1,9 @@
 """Streaming plan filter tests (mirrors chat-ui planDisplay.ts)."""
 
-from src.runtime.plan_display import feed_plan_aware_display, strip_plan_blocks_for_chat_display
+from src.runtime.plan_display import (
+    feed_plan_aware_display,
+    strip_plan_blocks_for_chat_display,
+)
 
 
 def test_chunked_plan_title_attribute_does_not_leak():

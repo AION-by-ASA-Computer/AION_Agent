@@ -1,4 +1,5 @@
 """API interne approve/reject piani orchestrazione (HITL)."""
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from src.api.auth_login import ChatAuthIdentity, password_auth_enabled, require_chat_auth
+from src.api.auth_login import (
+    ChatAuthIdentity,
+    password_auth_enabled,
+    require_chat_auth,
+)
 from src.api.research import resolve_research_owner
 from src.data.engine import get_async_session_maker
 from src.data.models import Conversation
@@ -90,7 +95,9 @@ def _http_from_resolve_result(res: Dict[str, Any]) -> HTTPException:
 
 
 def _expected_secret() -> str:
-    return (os.getenv("AION_ORCHESTRATION_INTERNAL_SECRET") or "aion-orchestration-dev").strip()
+    return (
+        os.getenv("AION_ORCHESTRATION_INTERNAL_SECRET") or "aion-orchestration-dev"
+    ).strip()
 
 
 def _orchestration_secret_auth_enabled() -> bool:
@@ -107,10 +114,14 @@ async def orchestration_auth(
     auth: ChatAuthIdentity = Depends(require_chat_auth),
 ) -> ChatAuthIdentity:
     """JWT for chat-ui; ``X-AION-Orch-Secret`` for legacy server-to-server when enabled."""
-    if (x_aion_orch_secret or "").strip() == _expected_secret() and _orchestration_secret_auth_enabled():
+    if (
+        x_aion_orch_secret or ""
+    ).strip() == _expected_secret() and _orchestration_secret_auth_enabled():
         return ChatAuthIdentity(via="orch_secret", identifier="internal")
     if password_auth_enabled() and auth.via == "anonymous":
-        raise HTTPException(status_code=401, detail="Authentication required for orchestration")
+        raise HTTPException(
+            status_code=401, detail="Authentication required for orchestration"
+        )
     return auth
 
 
@@ -126,14 +137,18 @@ async def _assert_session_owner(
         raise HTTPException(status_code=400, detail="session_id required")
     expected = resolve_research_owner(auth, x_aion_user_id)
     async with get_async_session_maker()() as db:
-        row = (await db.execute(select(Conversation.user_id).where(Conversation.id == sid))).first()
+        row = (
+            await db.execute(select(Conversation.user_id).where(Conversation.id == sid))
+        ).first()
     if not row:
         if not password_auth_enabled():
             return
         raise HTTPException(status_code=404, detail="Conversation not found")
     owner = sanitize_user_id(str(row[0] or ""))
     if owner != expected:
-        raise HTTPException(status_code=403, detail="Session does not belong to this user")
+        raise HTTPException(
+            status_code=403, detail="Session does not belong to this user"
+        )
 
 
 class PlanSessionBody(BaseModel):
@@ -176,7 +191,10 @@ async def get_plan_state(
 ):
     await _assert_session_owner(session_id, auth, x_aion_user_id)
     bundle = await odb.fetch_plan_sse_bundle(plan_id)
-    if not bundle or str(bundle.get("session_id") or "").strip() != (session_id or "").strip():
+    if (
+        not bundle
+        or str(bundle.get("session_id") or "").strip() != (session_id or "").strip()
+    ):
         raise HTTPException(status_code=404, detail="Plan not found for session")
     status = str(bundle.get("status") or "")
     revision = int(bundle.get("revision") or 1)
@@ -246,7 +264,12 @@ async def complete_all_plan_tasks(
         if m:
             task_ids.append(m.group(1).strip())
     if not task_ids:
-        return {"status": "ok", "completed": [], "errors": [], "message": "No unchecked tasks"}
+        return {
+            "status": "ok",
+            "completed": [],
+            "errors": [],
+            "message": "No unchecked tasks",
+        }
     completed: list[str] = []
     errors: list[str] = []
     for tid in task_ids:
@@ -273,7 +296,12 @@ async def approve_plan(
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     await _assert_session_owner(body.session_id, auth, x_aion_user_id)
-    logger.info("approve_plan START plan_id=%s session=%s approve_only=%s", plan_id, body.session_id, body.approve_only)
+    logger.info(
+        "approve_plan START plan_id=%s session=%s approve_only=%s",
+        plan_id,
+        body.session_id,
+        body.approve_only,
+    )
     sid = body.session_id.strip()
     stored = await odb.fetch_plan_session(plan_id)
     if not stored or stored != sid:
@@ -316,8 +344,12 @@ async def approve_plan(
             if not raw_pj:
                 continue
             try:
-                plan_json_fallback = json.loads(raw_pj) if isinstance(raw_pj, str) else raw_pj
-                if isinstance(plan_json_fallback, dict) and plan_json_fallback.get("tasks"):
+                plan_json_fallback = (
+                    json.loads(raw_pj) if isinstance(raw_pj, str) else raw_pj
+                )
+                if isinstance(plan_json_fallback, dict) and plan_json_fallback.get(
+                    "tasks"
+                ):
                     if is_degenerate_plan_json(plan_json_fallback):
                         plan_json_fallback = None
                         continue
@@ -328,7 +360,9 @@ async def approve_plan(
         try:
             approved_md, meta = normalize_approved_payload(approved_payload)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid approved markdown/plan: {e}") from e
+            raise HTTPException(
+                status_code=400, detail=f"Invalid approved markdown/plan: {e}"
+            ) from e
         todos_for_resolve = _todos_for_resolve(
             meta_todos=meta.get("todos"),
             body_todos=body.todos,
@@ -339,11 +373,15 @@ async def approve_plan(
             todos=todos_for_resolve,
             plan_json=plan_json_fallback,
         )
-        logger.info("approve_plan parsed=%d tasks plan_id=%s", len(parsed.tasks), plan_id)
+        logger.info(
+            "approve_plan parsed=%d tasks plan_id=%s", len(parsed.tasks), plan_id
+        )
     else:
         logger.info("approve_plan approve_only or empty payload plan_id=%s", plan_id)
         if prev:
-            fallback = (prev.get("approved_markdown") or prev.get("draft_markdown") or "").strip()
+            fallback = (
+                prev.get("approved_markdown") or prev.get("draft_markdown") or ""
+            ).strip()
             if fallback:
                 todos_for_resolve = _todos_for_resolve(
                     meta_todos=None,
@@ -363,6 +401,7 @@ async def approve_plan(
             old_todos = json.loads(prev["todos_json"]) or []
         if not new_todos and parsed:
             from src.a2a.plan_markdown import plan_to_todos
+
             new_todos = plan_to_todos(parsed)
 
         old_ids = {str(t.get("id")) for t in old_todos if isinstance(t, dict)}
@@ -387,7 +426,9 @@ async def approve_plan(
 
     final_markdown = (approved_md or "").strip()
     if not final_markdown and prev:
-        final_markdown = (prev.get("draft_markdown") or prev.get("approved_markdown") or "").strip()
+        final_markdown = (
+            prev.get("draft_markdown") or prev.get("approved_markdown") or ""
+        ).strip()
     if final_markdown and parsed is None:
         todos_for_resolve = _todos_for_resolve(
             meta_todos=None,
@@ -426,14 +467,21 @@ async def approve_plan(
             body.session_id.strip(),
             actor="api",
             action="plan_approved",
-            payload={"approve_only": body.approve_only, "has_markdown": bool(approved_md), "todos_diff": diff_meta},
+            payload={
+                "approve_only": body.approve_only,
+                "has_markdown": bool(approved_md),
+                "todos_diff": diff_meta,
+            },
         )
         logger.info("approve_plan audit logged plan_id=%s", plan_id)
     except Exception as e:
-        logger.error("approve_plan insert_audit FAILED plan_id=%s: %s", plan_id, e, exc_info=True)
-    
+        logger.error(
+            "approve_plan insert_audit FAILED plan_id=%s: %s", plan_id, e, exc_info=True
+        )
+
     # Invia messaggio di sistema per svegliare l'agente (visto che l'attesa asincrona del tool è stata rimossa)
     from src.runtime.tool_events import tool_event_bus
+
     tasks_excerpt = format_plan_tasks_excerpt(final_markdown) if final_markdown else ""
     agent_msg = (
         f"Plan `{plan_id}` was APPROVED (revision={approve_revision}).\n\n"
@@ -460,7 +508,10 @@ async def approve_plan(
     run_id = None
     ui_event = None
     if not body.approve_only and next_tid:
-        from src.plan_execution.handler import get_plan_execution_handler, plan_execution_enabled
+        from src.plan_execution.handler import (
+            get_plan_execution_handler,
+            plan_execution_enabled,
+        )
 
         if plan_execution_enabled():
             try:
@@ -475,7 +526,11 @@ async def approve_plan(
                 run_id = started.get("run_id")
                 ui_event = started.get("ui_event")
             except Exception as e:
-                logger.warning("approve_plan start_plan_execution failed plan_id=%s: %s", plan_id, e)
+                logger.warning(
+                    "approve_plan start_plan_execution failed plan_id=%s: %s",
+                    plan_id,
+                    e,
+                )
 
     evt = {
         "type": "orchestration_plan_approved",
@@ -492,9 +547,13 @@ async def approve_plan(
     try:
         await redis_enqueue_session_event(body.session_id.strip(), evt)
     except Exception as e:
-        logger.warning("approve_plan redis_enqueue_session_event failed plan_id=%s: %s", plan_id, e)
+        logger.warning(
+            "approve_plan redis_enqueue_session_event failed plan_id=%s: %s", plan_id, e
+        )
 
-    logger.info("approve_plan DONE plan_id=%s status=approved run_id=%s", plan_id, run_id)
+    logger.info(
+        "approve_plan DONE plan_id=%s status=approved run_id=%s", plan_id, run_id
+    )
     return {
         "status": "ok",
         "state": res.get("state"),
@@ -505,6 +564,7 @@ async def approve_plan(
         "run_id": run_id,
         "ui_event": ui_event or "plan_execution_started",
     }
+
 
 @router.post("/plans/{plan_id}/reject")
 async def reject_plan(
@@ -525,12 +585,12 @@ async def reject_plan(
     )
     if not res.get("ok"):
         raise _http_from_resolve_result(res)
-        
+
     try:
         await odb.update_plan_after_wait(
-            plan_id, 
-            status="rejected", 
-            audit_meta={"reason": body.reason or "rejected_by_user"}
+            plan_id,
+            status="rejected",
+            audit_meta={"reason": body.reason or "rejected_by_user"},
         )
     except Exception as e:
         logger.warning(f"Failed to update plan db in reject_plan: {e}")
@@ -544,10 +604,13 @@ async def reject_plan(
             payload={"reason": body.reason},
         )
     except Exception as e:
-        logger.error("reject_plan insert_audit FAILED plan_id=%s: %s", plan_id, e, exc_info=True)
-    
+        logger.error(
+            "reject_plan insert_audit FAILED plan_id=%s: %s", plan_id, e, exc_info=True
+        )
+
     # Invia messaggio di sistema per svegliare l'agente
     from src.runtime.tool_events import tool_event_bus
+
     evt = {
         "type": "orchestration_plan_rejected",
         "plan_id": plan_id,
@@ -558,6 +621,8 @@ async def reject_plan(
     try:
         await redis_enqueue_session_event(body.session_id.strip(), evt)
     except Exception as e:
-        logger.warning("reject_plan redis_enqueue_session_event failed plan_id=%s: %s", plan_id, e)
-    
+        logger.warning(
+            "reject_plan redis_enqueue_session_event failed plan_id=%s: %s", plan_id, e
+        )
+
     return {"status": "ok", "state": res.get("state")}

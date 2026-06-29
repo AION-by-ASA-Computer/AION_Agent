@@ -41,4 +41,3 @@ def test_step_visual_normalization():
     normalize_step_visual(sd, "assistant", "giuseppe")
     assert sd["type"] == "assistant_message"
     assert sd["name"] == "AION Agent"
-

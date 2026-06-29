@@ -1,4 +1,5 @@
 """In-process session context for MCP pool keys and profile gate (P2.6)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass

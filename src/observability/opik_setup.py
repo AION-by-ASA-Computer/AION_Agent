@@ -6,7 +6,9 @@ import src.aion_env  # noqa: F401 — MUST be first import to load environment v
 logger = logging.getLogger("aion.observability.opik")
 if not logger.handlers:
     handler = logging.StreamHandler()
-    formatter = logging.Formatter("[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s")
+    formatter = logging.Formatter(
+        "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
+    )
     handler.setFormatter(formatter)
     logger.addHandler(handler)
     logger.setLevel(logging.INFO)
@@ -24,7 +26,9 @@ os.environ["OPIK_PROJECT_NAME"] = OPIK_PROJECT
 if not os.getenv("OPIK_API_KEY"):
     os.environ["OPIK_API_KEY"] = "local-self-hosted-placeholder"
 
-logger.info(f"Inizializzazione SDK Opik. Target URL: {OPIK_URL} | Progetto: {OPIK_PROJECT}")
+logger.info(
+    f"Inizializzazione SDK Opik. Target URL: {OPIK_URL} | Progetto: {OPIK_PROJECT}"
+)
 
 # Ritarda l'importazione di Opik finché l'ambiente non è configurato correttamente
 try:
@@ -47,17 +51,20 @@ except Exception as e:
     OPIK_AVAILABLE = False
     logger.error("Errore durante l'inizializzazione del client Opik: %s", e)
 
-def get_or_create_prompt(prompt_name: str, template_content: str, metadata: dict = None):
+
+def get_or_create_prompt(
+    prompt_name: str, template_content: str, metadata: dict = None
+):
     """
     Verifica se un prompt (es. 'agente-core-prompt') esiste già nella Prompt Library di Opik.
     Se non esiste (o se get_prompt ritorna None), lo crea con dei placeholder (es. {{profilo}}, {{user_input}}).
     Recupera e ritorna l'ultima versione del prompt da utilizzare.
-    
+
     Args:
         prompt_name (str): Il nome del prompt da cercare/creare.
         template_content (str): Il testo del prompt con placeholder jinja-style (es. {{profilo}}).
         metadata (dict, optional): Metadati aggiuntivi associati al prompt.
-        
+
     Returns:
         opik.objects.prompt.Prompt: L'oggetto Prompt di Opik pronto per essere formattato e tracciato.
     """
@@ -66,32 +73,38 @@ def get_or_create_prompt(prompt_name: str, template_content: str, metadata: dict
 
     prompt = None
     try:
-        logger.info(f"Tentativo di recupero prompt '{prompt_name}' dalla Prompt Library...")
+        logger.info(
+            f"Tentativo di recupero prompt '{prompt_name}' dalla Prompt Library..."
+        )
         # Cerca il prompt per nome
         prompt = opik_client.get_prompt(name=prompt_name)
         if prompt is not None:
             # Se il prompt esiste, verifichiamo se il template è lo stesso.
             # Se è diverso, creiamo una nuova versione (commit) chiamando create_prompt.
             if prompt.prompt != template_content:
-                logger.info(f"Template per '{prompt_name}' è cambiato. Creazione di una nuova versione in corso...")
+                logger.info(
+                    f"Template per '{prompt_name}' è cambiato. Creazione di una nuova versione in corso..."
+                )
                 prompt = opik_client.create_prompt(
-                    name=prompt_name,
-                    prompt=template_content,
-                    metadata=metadata or {}
+                    name=prompt_name, prompt=template_content, metadata=metadata or {}
                 )
             else:
-                logger.info(f"Prompt '{prompt_name}' recuperato con successo (nessuna modifica).")
+                logger.info(
+                    f"Prompt '{prompt_name}' recuperato con successo (nessuna modifica)."
+                )
             return prompt
-        logger.info(f"Prompt '{prompt_name}' non trovato (ritornato None). Creazione in corso...")
+        logger.info(
+            f"Prompt '{prompt_name}' non trovato (ritornato None). Creazione in corso..."
+        )
     except Exception as e:
-        logger.info(f"Prompt '{prompt_name}' non recuperato ({e}). Creazione in corso...")
-        
+        logger.info(
+            f"Prompt '{prompt_name}' non recuperato ({e}). Creazione in corso..."
+        )
+
     try:
         # Se non esiste o il recupero fallisce, crea il prompt nella libreria
         prompt = opik_client.create_prompt(
-            name=prompt_name,
-            prompt=template_content,
-            metadata=metadata or {}
+            name=prompt_name, prompt=template_content, metadata=metadata or {}
         )
         logger.info(f"Prompt '{prompt_name}' creato con successo.")
         return prompt
@@ -99,25 +112,25 @@ def get_or_create_prompt(prompt_name: str, template_content: str, metadata: dict
         logger.error(f"Impossibile creare il prompt '{prompt_name}': {create_err}")
         raise create_err
 
+
 async def chiudi_sessione_e_valuta(session_id: str):
     """
     Invia metriche a livello di thread (sessione globale) a Opik al termine dell'interazione.
-    
+
     Args:
         session_id (str): L'ID univoco del thread/sessione.
     """
     try:
-        logger.info(f"Invio feedback score a livello di thread '{session_id}' ad Opik...")
-        opik_client.log_threads_feedback_scores(
-            scores=[
-                {
-                    "id": session_id,
-                    "name": "risoluzione_problema",
-                    "value": 1.0
-                }
-            ]
+        logger.info(
+            f"Invio feedback score a livello di thread '{session_id}' ad Opik..."
         )
-        logger.info(f"Feedback score per il thread '{session_id}' inviato con successo.")
+        opik_client.log_threads_feedback_scores(
+            scores=[{"id": session_id, "name": "risoluzione_problema", "value": 1.0}]
+        )
+        logger.info(
+            f"Feedback score per il thread '{session_id}' inviato con successo."
+        )
     except Exception as e:
-        logger.error(f"Errore durante l'invio del feedback score del thread {session_id}: {e}")
-
+        logger.error(
+            f"Errore durante l'invio del feedback score del thread {session_id}: {e}"
+        )

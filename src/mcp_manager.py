@@ -45,6 +45,7 @@ def _resolved_mcp_registry_path() -> str:
 
 REGISTRY_PATH = _resolved_mcp_registry_path()
 
+
 # Pool MCP stdio persistente: default on via settings (P2.7).
 def _pool_enabled() -> bool:
     try:
@@ -125,7 +126,9 @@ def _session_env_inject_enabled() -> bool:
         )
 
 
-def _apply_call_session_env(chat_session_id: str, ctx: Optional[Tuple[str, ...]]) -> Dict[str, Optional[str]]:
+def _apply_call_session_env(
+    chat_session_id: str, ctx: Optional[Tuple[str, ...]]
+) -> Dict[str, Optional[str]]:
     """Sovrascrive env nel sottoprocesso MCP per una singola call_tool (user-pool)."""
     backup: Dict[str, Optional[str]] = {}
     if chat_session_id:
@@ -145,6 +148,7 @@ def _apply_call_session_env(chat_session_id: str, ctx: Optional[Tuple[str, ...]]
             backup[key] = os.environ.get(key)
             os.environ[key] = str(val)
         from .agent_profile import profile_manager
+
         profile = profile_manager.get_profile(slug)
         if profile and getattr(profile, "wren_project_path", None):
             backup["AION_WREN_PROJECT_PATH"] = os.environ.get("AION_WREN_PROJECT_PATH")
@@ -203,9 +207,14 @@ def _merge_mcp_registries(
         out[k] = copy.deepcopy(v)
     return out
 
+
 def _apply_mcp_home_isolation(env: Dict[str, Any], uid: str) -> None:
     """Isola HOME/XDG per processo MCP (per user_id)."""
-    if os.getenv("AION_MCP_USER_HOME_ISOLATION", "1").lower() not in ("1", "true", "yes"):
+    if os.getenv("AION_MCP_USER_HOME_ISOLATION", "1").lower() not in (
+        "1",
+        "true",
+        "yes",
+    ):
         return
     safe_uid = sanitize_user_id(uid)
     user_mcp_home = data_root() / "users" / safe_uid / "mcp_home"
@@ -233,16 +242,20 @@ def normalize_mcp_email_server_env(env: Dict[str, Any]) -> Dict[str, Any]:
     if not env:
         return env
     e = dict(env)
-    if not str(e.get("MCP_EMAIL_SERVER_IMAP_SSL") or "").strip() and str(
-        e.get("MCP_EMAIL_SERVER_IMAP_VERIFY_SSL") or ""
-    ).strip():
+    if (
+        not str(e.get("MCP_EMAIL_SERVER_IMAP_SSL") or "").strip()
+        and str(e.get("MCP_EMAIL_SERVER_IMAP_VERIFY_SSL") or "").strip()
+    ):
         e["MCP_EMAIL_SERVER_IMAP_SSL"] = e["MCP_EMAIL_SERVER_IMAP_VERIFY_SSL"]
-    if not str(e.get("MCP_EMAIL_SERVER_SMTP_SSL") or "").strip() and str(
-        e.get("MCP_EMAIL_SERVER_SMTP_VERIFY_SSL") or ""
-    ).strip():
+    if (
+        not str(e.get("MCP_EMAIL_SERVER_SMTP_SSL") or "").strip()
+        and str(e.get("MCP_EMAIL_SERVER_SMTP_VERIFY_SSL") or "").strip()
+    ):
         e["MCP_EMAIL_SERVER_SMTP_SSL"] = e["MCP_EMAIL_SERVER_SMTP_VERIFY_SSL"]
     try:
-        smtp_port = int(str(e.get("MCP_EMAIL_SERVER_SMTP_PORT", "465")).strip() or "465")
+        smtp_port = int(
+            str(e.get("MCP_EMAIL_SERVER_SMTP_PORT", "465")).strip() or "465"
+        )
     except ValueError:
         smtp_port = 465
     if smtp_port == 587:
@@ -267,8 +280,9 @@ def sanitize_mcp_tool_arguments(arguments: Optional[Dict[str, Any]]) -> Dict[str
     return out
 
 
-
-def _merge_mcp_subprocess_env(process_env: Dict[str, Any], server_env: Optional[Dict[str, Any]]) -> None:
+def _merge_mcp_subprocess_env(
+    process_env: Dict[str, Any], server_env: Optional[Dict[str, Any]]
+) -> None:
     """
     Unisce ``server_env`` (dal registry, già risolto con resolve_env_placeholders) nell'env del sottoprocesso.
 
@@ -332,7 +346,9 @@ class MCPStdioWorker:
             self._task = None
             self._ready.clear()
             self._init_error = None
-            self._task = asyncio.create_task(self._run(), name=f"mcp-stdio-{self.server_name}")
+            self._task = asyncio.create_task(
+                self._run(), name=f"mcp-stdio-{self.server_name}"
+            )
             await self._wait_ready()
 
     async def _wait_ready(self) -> None:
@@ -344,11 +360,15 @@ class MCPStdioWorker:
         try:
             config = self._manager.get_server_config(self.server_name)
             if not config:
-                raise ValueError(f"MCP server '{self.server_name}' not found in registry")
+                raise ValueError(
+                    f"MCP server '{self.server_name}' not found in registry"
+                )
             command = config.get("command", "python")
             if command == "python":
                 command = self._manager.get_python_exe(self.server_name)
-            elif isinstance(command, str) and ("/" in command or os.path.sep in command):
+            elif isinstance(command, str) and (
+                "/" in command or os.path.sep in command
+            ):
                 cmd_path = Path(command)
                 if not cmd_path.is_absolute():
                     cand = _repo_root() / command
@@ -390,6 +410,7 @@ class MCPStdioWorker:
             env["AION_CURRENT_USER_ID"] = uid
             env["AION_CURRENT_TENANT_ID"] = tid
             from .agent_profile import profile_manager
+
             profile = profile_manager.get_profile(slug)
             if profile and getattr(profile, "wren_project_path", None):
                 env["AION_WREN_PROJECT_PATH"] = profile.wren_project_path
@@ -412,13 +433,21 @@ class MCPStdioWorker:
                     tenant_id=tid,
                     server_slug=self.server_name,
                 )
-                if self.server_name == "mcp-email-server" or "email" in self.server_name:
-                    resolved_server_env = normalize_mcp_email_server_env(resolved_server_env)
+                if (
+                    self.server_name == "mcp-email-server"
+                    or "email" in self.server_name
+                ):
+                    resolved_server_env = normalize_mcp_email_server_env(
+                        resolved_server_env
+                    )
                 _merge_mcp_subprocess_env(env, resolved_server_env)
             apply_runtime_env_aliases(env, self.server_name, config)
             _adjust_stdio_spawn_env(env, command)
 
-            if self.server_name == "session_sandbox" and not sandbox_container_mode_enabled():
+            if (
+                self.server_name == "session_sandbox"
+                and not sandbox_container_mode_enabled()
+            ):
                 from .security.session_env import scrub_secrets_from_env
 
                 scrub_secrets_from_env(env)
@@ -428,7 +457,10 @@ class MCPStdioWorker:
                 and sandbox_container_mode_enabled()
             ):
                 from .security.container_runtime import get_container_runtime
-                from .security.session_runner import SandboxBackendUnavailable, fail_closed
+                from .security.session_runner import (
+                    SandboxBackendUnavailable,
+                    fail_closed,
+                )
 
                 runtime = get_container_runtime()
                 if not runtime.is_available():
@@ -459,16 +491,22 @@ class MCPStdioWorker:
 
             server_params = StdioServerParameters(command=command, args=args, env=env)
 
-            logger.info("🔌 MCP pool: avvio persistente stdio per '%s'", self.server_name)
+            logger.info(
+                "🔌 MCP pool: avvio persistente stdio per '%s'", self.server_name
+            )
             async with stdio_client(server_params) as (read, write):
                 async with ClientSession(read, write) as session:
                     try:
                         # Handshake con timeout per evitare blocchi infiniti se il server è appeso
                         init_timeout = float(os.getenv("AION_MCP_INIT_TIMEOUT", "60"))
-                        await asyncio.wait_for(session.initialize(), timeout=init_timeout)
+                        await asyncio.wait_for(
+                            session.initialize(), timeout=init_timeout
+                        )
                         self._init_error = None
                         self._ready.set()
-                        logger.info("✅ MCP '%s' inizializzato con successo", self.server_name)
+                        logger.info(
+                            "✅ MCP '%s' inizializzato con successo", self.server_name
+                        )
                         await self._manager._increment_active_server(self.server_name)
                         self._is_active = True
                     except asyncio.TimeoutError:
@@ -477,15 +515,21 @@ class MCPStdioWorker:
                             self.server_name,
                             int(init_timeout),
                         )
-                        self._init_error = asyncio.TimeoutError(f"Server {self.server_name} initialization timed out")
+                        self._init_error = asyncio.TimeoutError(
+                            f"Server {self.server_name} initialization timed out"
+                        )
                         self._ready.set()
                         return
                     except Exception as e:
-                        logger.error("❌ Errore durante inizializzazione MCP '%s': %s", self.server_name, e)
+                        logger.error(
+                            "❌ Errore durante inizializzazione MCP '%s': %s",
+                            self.server_name,
+                            e,
+                        )
                         self._init_error = e
                         self._ready.set()
                         return
- 
+
                     while True:
                         op = await self._queue.get()
                         if op is None:
@@ -497,15 +541,23 @@ class MCPStdioWorker:
                                 if not fut.cancelled():
                                     fut.set_result(res)
                             elif kind == "call_tool":
-                                from .runtime.pg_query_guard import postgres_query_timeout_sec
+                                from .runtime.pg_query_guard import (
+                                    postgres_query_timeout_sec,
+                                )
 
                                 raw_args = payload.get("arguments") or {}
                                 tool_name = payload.get("name") or ""
-                                inject_sid = (payload.get("chat_session_id") or self._chat_session_id or "").strip()
+                                inject_sid = (
+                                    payload.get("chat_session_id")
+                                    or self._chat_session_id
+                                    or ""
+                                ).strip()
                                 env_backup: Dict[str, Optional[str]] = {}
                                 if _session_env_inject_enabled() and inject_sid:
                                     ctx = self._manager._session_ctx.get(inject_sid)
-                                    env_backup = _apply_call_session_env(inject_sid, ctx)
+                                    env_backup = _apply_call_session_env(
+                                        inject_sid, ctx
+                                    )
                                 try:
                                     if self.server_name == "mempalace":
                                         from .runtime.mempalace_tool_scope import (
@@ -513,7 +565,9 @@ class MCPStdioWorker:
                                             mempalace_write_blocked_message,
                                         )
 
-                                        blocked = mempalace_write_blocked_message(tool_name)
+                                        blocked = mempalace_write_blocked_message(
+                                            tool_name
+                                        )
                                         if blocked:
                                             if not fut.cancelled():
                                                 fut.set_exception(RuntimeError(blocked))
@@ -529,7 +583,9 @@ class MCPStdioWorker:
                                         self.server_name, tool_name
                                     )
                                     if q_timeout:
-                                        res = await asyncio.wait_for(call_coro, timeout=q_timeout)
+                                        res = await asyncio.wait_for(
+                                            call_coro, timeout=q_timeout
+                                        )
                                     else:
                                         res = await call_coro
                                     if not fut.cancelled():
@@ -539,7 +595,9 @@ class MCPStdioWorker:
                                         _restore_call_session_env(env_backup)
                             self.last_access = asyncio.get_event_loop().time()
                         except asyncio.TimeoutError:
-                            from .runtime.pg_query_guard import postgres_query_timeout_sec
+                            from .runtime.pg_query_guard import (
+                                postgres_query_timeout_sec,
+                            )
 
                             cap = postgres_query_timeout_sec(
                                 self.server_name, payload.get("name") or ""
@@ -562,14 +620,18 @@ class MCPStdioWorker:
                                 fut.set_exception(e)
         except Exception as e:
             self._init_error = e
-            logger.error("MCP worker '%s' terminato con errore: %s", self.server_name, e)
+            logger.error(
+                "MCP worker '%s' terminato con errore: %s", self.server_name, e
+            )
             self._ready.set()
         finally:
             if self._is_active:
                 await self._manager._decrement_active_server(self.server_name)
                 self._is_active = False
             else:
-                metrics.aion_mcp_server_healthy.labels(mcp_server=self.server_name).set(0)
+                metrics.aion_mcp_server_healthy.labels(mcp_server=self.server_name).set(
+                    0
+                )
             if not self._ready.is_set():
                 self._ready.set()
 
@@ -781,7 +843,7 @@ class MCPManager:
                                 sid,
                             )
                             to_release.append((sid, sname))
-                
+
                 for sid, sname in to_release:
                     # Rimuoviamo dal pool e spegniamo
                     async with self._pool_lock:
@@ -800,7 +862,9 @@ class MCPManager:
             return
 
     def _rebuild_merged(self) -> None:
-        self._registry = _merge_mcp_registries(self._registry_base, self._registry_local)
+        self._registry = _merge_mcp_registries(
+            self._registry_base, self._registry_local
+        )
 
     def _load_registry_layers(self, primary_path: str) -> Dict[str, Any]:
         """YAML/JSON flat map + optional companion ``.json`` (``mcpServers`` standard)."""
@@ -810,13 +874,21 @@ class MCPManager:
         json_path = companion_json_path(primary_path)
         if os.path.exists(json_path):
             merged = _merge_mcp_registries(merged, load_registry_file(json_path))
-        if not merged and not os.path.exists(primary_path) and not os.path.exists(json_path):
-            logger.warning("MCP registry not found at %s or %s", primary_path, json_path)
+        if (
+            not merged
+            and not os.path.exists(primary_path)
+            and not os.path.exists(json_path)
+        ):
+            logger.warning(
+                "MCP registry not found at %s or %s", primary_path, json_path
+            )
         return merged
 
     def load_registry(self, *, force: bool = False) -> None:
         base_mtime = (
-            os.path.getmtime(self.registry_path) if os.path.exists(self.registry_path) else 0.0
+            os.path.getmtime(self.registry_path)
+            if os.path.exists(self.registry_path)
+            else 0.0
         )
         local_mtime = (
             os.path.getmtime(self.local_registry_path)
@@ -894,7 +966,9 @@ class MCPManager:
         self.save_registry()
         return True
 
-    def update_server_config(self, name: str, updates: Dict[str, Any]) -> Dict[str, Any]:
+    def update_server_config(
+        self, name: str, updates: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Aggiorna un server nel registry locale (merge su vista già merged)."""
         if name not in self._registry:
             raise KeyError(name)
@@ -980,7 +1054,9 @@ class MCPManager:
             metrics.aion_mcp_server_healthy.labels(mcp_server=server_name).set(0)
             self._health_labels_initialized.add(label_tuple)
         except Exception as e:
-            logger.warning("Failed to initialize health metric for %s: %s", server_name, e)
+            logger.warning(
+                "Failed to initialize health metric for %s: %s", server_name, e
+            )
 
     @staticmethod
     def resolve_stdio_script_path(arg: str) -> Optional[str]:
@@ -1021,7 +1097,11 @@ class MCPManager:
                     resolved.append(dir_arg)
                 i += 2
                 continue
-            if isinstance(arg, str) and not arg.startswith("/") and not arg.startswith("-"):
+            if (
+                isinstance(arg, str)
+                and not arg.startswith("/")
+                and not arg.startswith("-")
+            ):
                 script = cls.resolve_stdio_script_path(arg)
                 resolved.append(script if script else arg)
             else:
@@ -1030,13 +1110,17 @@ class MCPManager:
         return resolved
 
     @classmethod
-    def stdio_entrypoint_missing(cls, server_name: str, config: Dict[str, Any]) -> Optional[str]:
+    def stdio_entrypoint_missing(
+        cls, server_name: str, config: Dict[str, Any]
+    ) -> Optional[str]:
         """Return human-readable reason if the stdio server script is missing."""
         t = (config.get("type") or "stdio").lower()
         if t in ("sse", "in_process"):
             return None
         if t == "remote-bridge":
-            local_path = os.path.join(os.getcwd(), "node_modules", "mcp-remote", "dist", "proxy.js")
+            local_path = os.path.join(
+                os.getcwd(), "node_modules", "mcp-remote", "dist", "proxy.js"
+            )
             if os.path.exists(local_path):
                 if not shutil.which("node"):
                     return "node command not found. Node.js is required to run remote-bridge."
@@ -1087,7 +1171,9 @@ class MCPManager:
         tid = (tid or "default").strip() or "default"
         return (f"__user__{safe_uid}__{tid}", server_name)
 
-    async def _get_worker(self, chat_session_id: str, server_name: str) -> MCPStdioWorker:
+    async def _get_worker(
+        self, chat_session_id: str, server_name: str
+    ) -> MCPStdioWorker:
         if os.getenv("AION_MCP_POOL", "0").lower() in ("0", "false", "no"):
             self._ensure_cleanup_task()
         key = self._resolve_pool_key(chat_session_id, server_name)
@@ -1140,15 +1226,22 @@ class MCPManager:
                 continue
             needs_user_cred = "${AION_USER_" in template
             val = resolved.get(key)
-            if needs_user_cred and (val is None or (isinstance(val, str) and not val.strip())):
+            if needs_user_cred and (
+                val is None or (isinstance(val, str) and not val.strip())
+            ):
                 return f"credenziali mancanti per {server_name} ({key})"
         return None
 
-    def _pre_materialize_office_skills(self, chat_session_id: str, profile_slug: str) -> None:
+    def _pre_materialize_office_skills(
+        self, chat_session_id: str, profile_slug: str
+    ) -> None:
         """Copy office skill scripts into the session before the first docx exec."""
         try:
             from .agent_profile import profile_manager
-            from .tools.skill_materialize import OFFICE_SKILL_SLUGS, materialize_skill_scripts
+            from .tools.skill_materialize import (
+                OFFICE_SKILL_SLUGS,
+                materialize_skill_scripts,
+            )
 
             profile_manager.load_all()
             profile = profile_manager.get_profile(profile_slug)
@@ -1227,15 +1320,22 @@ class MCPManager:
                                 p_slug, uid, _tid = ctx
                             if uid == user_id and p_slug != profile_slug:
                                 to_stop.append((sid, sname))
-            
+
             for sid, sname in to_stop:
-                logger.info("Profilo cambiato: rilascio worker '%s' della sessione '%s' non più presente/attivo", sname, sid)
+                logger.info(
+                    "Profilo cambiato: rilascio worker '%s' della sessione '%s' non più presente/attivo",
+                    sname,
+                    sid,
+                )
                 async with self._pool_lock:
                     worker = self._pool.pop((sid, sname), None)
                 if worker:
                     await worker.shutdown()
         except Exception as e:
-            logger.warning("Errore durante il rilascio dei vecchi worker nel cambio profilo/sessione: %s", e)
+            logger.warning(
+                "Errore durante il rilascio dei vecchi worker nel cambio profilo/sessione: %s",
+                e,
+            )
 
         if not _USE_POOL:
             return
@@ -1326,7 +1426,9 @@ class MCPManager:
 
         stdio_names = [n for n in server_names if self._is_stdio_server(n)]
         if stdio_names:
-            await asyncio.gather(*[_warm_one(n) for n in stdio_names], return_exceptions=True)
+            await asyncio.gather(
+                *[_warm_one(n) for n in stdio_names], return_exceptions=True
+            )
             logger.info(
                 "MCP pool warm per session=%s servers=%s",
                 chat_session_id[:8] + "...",
@@ -1356,7 +1458,11 @@ class MCPManager:
             )
 
     async def call_tool_pooled(
-        self, chat_session_id: str, server_name: str, tool_name: str, arguments: Dict[str, Any]
+        self,
+        chat_session_id: str,
+        server_name: str,
+        tool_name: str,
+        arguments: Dict[str, Any],
     ):
         sid = (chat_session_id or "").strip()
         if (not sid or sid == "default") and server_name in _session_scoped_servers():
@@ -1370,15 +1476,16 @@ class MCPManager:
             if blocked:
                 raise RuntimeError(blocked)
         if not _USE_POOL or not self._is_stdio_server(server_name):
-            async with self.session_context(server_name, chat_session_id=sid or None) as session:
+            async with self.session_context(
+                server_name, chat_session_id=sid or None
+            ) as session:
                 return await session.call_tool(name=tool_name, arguments=arguments)
         w = await self._get_worker(sid, server_name)
         try:
-            result = await w.call_tool(
-                tool_name, arguments, chat_session_id=sid
-            )
+            result = await w.call_tool(tool_name, arguments, chat_session_id=sid)
             # Tool call succeeded → clear any warm-up timeout error for this server.
             from .runtime.mcp_health import clear_mcp_load_errors
+
             clear_mcp_load_errors(sid, server_name)
             return result
         except (TimeoutError, asyncio.TimeoutError):
@@ -1387,7 +1494,9 @@ class MCPManager:
 
     async def list_tools_pooled(self, chat_session_id: str, server_name: str):
         if not _USE_POOL or not self._is_stdio_server(server_name):
-            async with self.session_context(server_name, chat_session_id=None) as session:
+            async with self.session_context(
+                server_name, chat_session_id=None
+            ) as session:
                 return await session.list_tools()
         w = await self._get_worker(chat_session_id, server_name)
         return await w.list_tools()
@@ -1417,16 +1526,14 @@ class MCPManager:
             if not config or config.get("type") != "in_process":
                 self._ensure_health_metric(name)
         except Exception as e:
-            logger.warning("Failed to initialize health metric in session_context: %s", e)
+            logger.warning(
+                "Failed to initialize health metric in session_context: %s", e
+            )
 
         if not config:
             raise ValueError(f"MCP server '{name}' not found in registry")
 
-        if (
-            chat_session_id
-            and _USE_POOL
-            and self._is_stdio_server(name)
-        ):
+        if chat_session_id and _USE_POOL and self._is_stdio_server(name):
             w = await self._get_worker(chat_session_id, name)
             await w.start()
 
@@ -1434,7 +1541,9 @@ class MCPManager:
                 async def list_tools(self_inner):
                     return await w.list_tools()
 
-                async def call_tool(self_inner, name: str, arguments: Optional[Dict[str, Any]] = None):
+                async def call_tool(
+                    self_inner, name: str, arguments: Optional[Dict[str, Any]] = None
+                ):
                     return await w.call_tool(
                         name, arguments or {}, chat_session_id=chat_session_id
                     )
@@ -1454,7 +1563,7 @@ class MCPManager:
                 raise ValueError(f"URL missing for SSE server '{name}'")
             token = await khub_token_manager.get_token()
             headers = {"Authorization": f"Bearer {token}"} if token else {}
-            
+
             # Resolve user-specific environment variables for headers/credentials
             if chat_session_id:
                 ctx = self._session_ctx.get(
@@ -1467,10 +1576,11 @@ class MCPManager:
                     slug, uid, tid = ctx
             else:
                 slug, uid, tid = "generic_assistant", "default", "default"
-                
+
             resolved_env = {}
             if "env" in config:
                 from .runtime.credential_store import resolve_mcp_env_for_user
+
                 resolved_env = await resolve_mcp_env_for_user(
                     config.get("env"),
                     user_id=sanitize_user_id(uid),
@@ -1479,10 +1589,13 @@ class MCPManager:
                 )
             if "OAUTH_TOKEN" not in resolved_env:
                 from .runtime.credential_store import get_credential
-                oauth_tok = await get_credential(sanitize_user_id(uid), name, "OAUTH_TOKEN", tenant_id=tid)
+
+                oauth_tok = await get_credential(
+                    sanitize_user_id(uid), name, "OAUTH_TOKEN", tenant_id=tid
+                )
                 if oauth_tok:
                     resolved_env["OAUTH_TOKEN"] = oauth_tok
-                
+
             config_headers = config.get("headers") or {}
             remotes = config.get("remotes") or []
             if not config_headers and remotes:
@@ -1492,9 +1605,13 @@ class MCPManager:
                         if isinstance(raw_h, dict):
                             config_headers = raw_h
                         elif isinstance(raw_h, list):
-                            config_headers = {str(item.get("name")): str(item.get("value")) for item in raw_h if isinstance(item, dict)}
+                            config_headers = {
+                                str(item.get("name")): str(item.get("value"))
+                                for item in raw_h
+                                if isinstance(item, dict)
+                            }
                         break
-                        
+
             for h_name, h_val in config_headers.items():
                 val_str = str(h_val)
                 for k, v in resolved_env.items():
@@ -1502,7 +1619,7 @@ class MCPManager:
                 for k, v in os.environ.items():
                     val_str = val_str.replace(f"${{{k}}}", str(v))
                 headers[h_name] = val_str
-                
+
             if "Authorization" not in headers:
                 if resolved_env.get("OAUTH_TOKEN"):
                     headers["Authorization"] = f"Bearer {resolved_env['OAUTH_TOKEN']}"
@@ -1510,8 +1627,13 @@ class MCPManager:
                     headers["Authorization"] = f"Bearer {resolved_env['API_KEY']}"
                 elif resolved_env.get("BASIC_AUTH"):
                     headers["Authorization"] = f"Basic {resolved_env['BASIC_AUTH']}"
-                    
-            logger.debug("Connecting to SSE MCP: %s at %s (auth_headers=%s)", name, url, list(headers.keys()))
+
+            logger.debug(
+                "Connecting to SSE MCP: %s at %s (auth_headers=%s)",
+                name,
+                url,
+                list(headers.keys()),
+            )
             is_active = False
             try:
                 async with sse_client(url, headers=headers) as (r, w):
@@ -1529,23 +1651,19 @@ class MCPManager:
                 else:
                     metrics.aion_mcp_server_healthy.labels(mcp_server=name).set(0)
 
-
             async with sse_client(url, headers=headers) as (r, w):
                 session = ClientSession(r, w)
                 async with session:
                     await session.initialize()
                     yield session
 
-
-
-
         else:
-
-            
             command = config.get("command", "python")
             if command == "python":
                 command = self.get_python_exe(name)
-            elif isinstance(command, str) and ("/" in command or os.path.sep in command):
+            elif isinstance(command, str) and (
+                "/" in command or os.path.sep in command
+            ):
                 cmd_path = Path(command)
                 if not cmd_path.is_absolute():
                     cand = _repo_root() / command
@@ -1592,7 +1710,9 @@ class MCPManager:
                     server_slug=name,
                 )
                 if name == "mcp-email-server" or "email" in name:
-                    resolved_server_env = normalize_mcp_email_server_env(resolved_server_env)
+                    resolved_server_env = normalize_mcp_email_server_env(
+                        resolved_server_env
+                    )
                 _merge_mcp_subprocess_env(env, resolved_server_env)
             apply_runtime_env_aliases(env, name, config)
             _adjust_stdio_spawn_env(env, command)
@@ -1603,7 +1723,9 @@ class MCPManager:
                 async with stdio_client(server_params) as (r, w):
                     session = ClientSession(r, w)
                     async with session:
-                        await asyncio.wait_for(session.initialize(), timeout=init_timeout)
+                        await asyncio.wait_for(
+                            session.initialize(), timeout=init_timeout
+                        )
                         await self._increment_active_server(name)
                         is_active = True
                         yield session
@@ -1617,7 +1739,9 @@ class MCPManager:
 
     async def get_session_by_name(self, name: str) -> ClientSession:
         logger.warning("get_session_by_name called for '%s'. Deprecated.", name)
-        raise RuntimeError("get_session_by_name is incompatible with ephemeral mode. Use session_context().")
+        raise RuntimeError(
+            "get_session_by_name is incompatible with ephemeral mode. Use session_context()."
+        )
 
     def get_all_servers(self) -> List[str]:
         return list(self._registry.keys())
@@ -1630,7 +1754,9 @@ def _format_mcp_tool_result(res: Any) -> str:
 
 
 class SerializableMCPTool:
-    def __init__(self, server_name: str, tool_name: str, chat_session_id: str = "default"):
+    def __init__(
+        self, server_name: str, tool_name: str, chat_session_id: str = "default"
+    ):
         self.server_name = server_name
         self.tool_name = tool_name
         self.chat_session_id = chat_session_id

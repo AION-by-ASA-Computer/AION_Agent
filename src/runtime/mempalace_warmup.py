@@ -3,6 +3,7 @@
 First mempalace tool call otherwise downloads ~80MB from S3 inside the MCP
 stdio worker, which can exceed ``AION_NO_PROGRESS_TIMEOUT_SEC`` and abort SSE.
 """
+
 from __future__ import annotations
 
 import logging

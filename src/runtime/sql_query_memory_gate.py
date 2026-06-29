@@ -1,4 +1,5 @@
 """Block schema exploration when server injected a high-confidence SQL cache for this turn."""
+
 from __future__ import annotations
 
 import os
@@ -89,7 +90,11 @@ def block_exploration_tool_if_sql_cache(
         return None
     if not _is_exploration_tool(tool_name):
         return None
-    schemas = ", ".join(ctx.sql_cache_schemas) if ctx.sql_cache_schemas else "(see injected SQL)"
+    schemas = (
+        ", ".join(ctx.sql_cache_schemas)
+        if ctx.sql_cache_schemas
+        else "(see injected SQL)"
+    )
     return (
         f"Blocked `{server_name}/{tool_name}`: this turn already has a server-side "
         f"QueryMemory SQL cache. Run `execute_sql` with the injected query first "

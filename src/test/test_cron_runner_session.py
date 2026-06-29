@@ -1,4 +1,5 @@
 """Session resolution for scheduled job runs."""
+
 from pathlib import Path
 
 import pytest
@@ -48,7 +49,9 @@ async def test_resolve_session_fixed_uses_existing(monkeypatch, tmp_path: Path):
 
 
 @pytest.mark.anyio
-async def test_resolve_session_fixed_creates_and_persists_when_missing(monkeypatch, tmp_path: Path):
+async def test_resolve_session_fixed_creates_and_persists_when_missing(
+    monkeypatch, tmp_path: Path
+):
     await _reset_unified_db(monkeypatch, tmp_path)
     from src.data.bootstrap import ensure_bootstrap_schema
     from src.data.engine import get_engine

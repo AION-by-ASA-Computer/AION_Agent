@@ -1,4 +1,5 @@
 """Plan execution reminders and deliverable path inference."""
+
 from src.a2a.plan_markdown import markdown_to_plan, plan_to_markdown
 from src.a2a.protocol import ExecutionPlan, ExecutionTask
 from src.runtime.plan_execution import (
@@ -12,7 +13,9 @@ def test_plan_to_markdown_no_profile_on_tasks():
     plan = ExecutionPlan(
         goal="Doc WWDC",
         tasks=[
-            ExecutionTask(id="task_01", title="Research", description="", depends_on=[]),
+            ExecutionTask(
+                id="task_01", title="Research", description="", depends_on=[]
+            ),
         ],
     )
     md = plan_to_markdown(plan)
@@ -38,12 +41,21 @@ def test_build_plan_execution_reminder_mentions_edit():
         ExecutionPlan(
             goal="Guide",
             tasks=[
-                ExecutionTask(id="task_01", title="Outline", description="", depends_on=[]),
-                ExecutionTask(id="task_02", title="Write Siri section", description="", depends_on=["task_01"]),
+                ExecutionTask(
+                    id="task_01", title="Outline", description="", depends_on=[]
+                ),
+                ExecutionTask(
+                    id="task_02",
+                    title="Write Siri section",
+                    description="",
+                    depends_on=["task_01"],
+                ),
             ],
         )
     )
-    rem = build_plan_execution_reminder(plan_id="execution_plan_abcd", plan_markdown=md, next_task_id="task_02")
+    rem = build_plan_execution_reminder(
+        plan_id="execution_plan_abcd", plan_markdown=md, next_task_id="task_02"
+    )
     assert "task_02" in rem
     assert "sandbox_edit_workspace_file" in rem
     assert "mark_task_completed" in rem

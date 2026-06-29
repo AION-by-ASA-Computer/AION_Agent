@@ -1,12 +1,19 @@
 """Project context inject gating."""
+
 from __future__ import annotations
 
 from src.memory.project_memory_scope import should_inject_project_context
 
 
 def test_skip_short_chitchat_on_default_project() -> None:
-    assert should_inject_project_context("Ciao come stai?", project_slug="default") is False
-    assert should_inject_project_context("Hello, how are you?", project_slug="default") is False
+    assert (
+        should_inject_project_context("Ciao come stai?", project_slug="default")
+        is False
+    )
+    assert (
+        should_inject_project_context("Hello, how are you?", project_slug="default")
+        is False
+    )
 
 
 def test_inject_short_question_when_non_default_project() -> None:

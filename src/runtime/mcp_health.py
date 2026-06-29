@@ -1,4 +1,5 @@
 """Probe MCP servers for a profile (runtime errors surfaced to chat-ui)."""
+
 from __future__ import annotations
 
 import logging
@@ -20,7 +21,9 @@ def get_last_mcp_load_errors(session_id: str) -> Dict[str, str]:
 def record_mcp_load_error(session_id: str, server_slug: str, error: str) -> None:
     if not session_id or not server_slug:
         return
-    _last_probe_errors.setdefault(session_id, {})[server_slug] = (error or "unknown error")[:2000]
+    _last_probe_errors.setdefault(session_id, {})[server_slug] = (
+        error or "unknown error"
+    )[:2000]
 
 
 def clear_mcp_load_errors(session_id: str, server_slug: Optional[str] = None) -> None:
@@ -59,7 +62,9 @@ async def probe_mcp_server(
 
     mcp_manager._session_ctx[session_id] = ("", user_id, "default")
     try:
-        async with mcp_manager.session_context(server_slug, chat_session_id=session_id) as session:
+        async with mcp_manager.session_context(
+            server_slug, chat_session_id=session_id
+        ) as session:
             result = await session.list_tools()
         tools = getattr(result, "tools", None) or []
         clear_mcp_load_errors(session_id, server_slug)
@@ -109,7 +114,11 @@ def _hint_for_error(server_slug: str, cfg: Dict[str, Any], msg: str) -> str:
             "or temporarily disable the integration from the profile."
         )
     args = cfg.get("args") or []
-    if "cannot find module" in low or "module_not_found" in low or "no such file" in low:
+    if (
+        "cannot find module" in low
+        or "module_not_found" in low
+        or "no such file" in low
+    ):
         if cfg.get("command") == "node" and args:
             return (
                 "Registry points to Node.js but the project is likely Python. "
@@ -121,11 +130,15 @@ def _hint_for_error(server_slug: str, cfg: Dict[str, Any], msg: str) -> str:
     return "Check command/args in MCP Hub and that credentials in My Integrations are complete."
 
 
-def format_session_mcp_errors(session_id: str, profile_name: str) -> List[Dict[str, Any]]:
+def format_session_mcp_errors(
+    session_id: str, profile_name: str
+) -> List[Dict[str, Any]]:
     """Errori MCP registrati per sessione, filtrati sul profilo (payload chat-ui)."""
     profile = profile_manager.get_profile(profile_name)
     profile_slugs = {
-        s for s in (profile.mcp_servers if profile else []) or [] if s and s != "aion_subagents"
+        s
+        for s in (profile.mcp_servers if profile else []) or []
+        if s and s != "aion_subagents"
     }
     rows: List[Dict[str, Any]] = []
     for slug, err in get_last_mcp_load_errors(session_id).items():
@@ -155,12 +168,16 @@ async def probe_profile_mcp_servers(
 ) -> List[Dict[str, Any]]:
     profile = profile_manager.get_profile(profile_name)
     if not profile:
-        return [{"server_slug": "", "ok": False, "error": f"Profile '{profile_name}' not found."}]
+        return [
+            {
+                "server_slug": "",
+                "ok": False,
+                "error": f"Profile '{profile_name}' not found.",
+            }
+        ]
     out: List[Dict[str, Any]] = []
     for slug in profile.mcp_servers or []:
         if not slug or slug == "aion_subagents":
             continue
-        out.append(
-            await probe_mcp_server(slug, user_id=user_id, session_id=session_id)
-        )
+        out.append(await probe_mcp_server(slug, user_id=user_id, session_id=session_id))
     return out

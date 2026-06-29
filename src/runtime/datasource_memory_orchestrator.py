@@ -1,4 +1,5 @@
 """Unified pre_turn READ orchestrator for datasource memory (SQL cache + nav + project + session)."""
+
 from __future__ import annotations
 
 import logging
@@ -31,10 +32,7 @@ async def _pre_turn_datasource_memory_orchestrator(ctx: HookContext) -> None:
     cache_hit = bool(mod_early.get("sql_query_memory_cache_hit"))
     user_input = (ctx.payload.get("user_input") or "").strip()
 
-    run_nav = (
-        datasource_nav_pre_turn_enabled()
-        and datasource_memory_workflow_enabled()
-    )
+    run_nav = datasource_nav_pre_turn_enabled() and datasource_memory_workflow_enabled()
     if run_nav:
         from src.runtime.datasource_turn_reminders import should_skip_nav_inject
 
@@ -69,8 +67,12 @@ async def _pre_turn_datasource_memory_orchestrator(ctx: HookContext) -> None:
         logger.debug("project_context inject skipped: %s", exc)
 
     try:
-        from src.runtime.datasource_turn_reminders import should_skip_session_entity_cache
-        from src.runtime.sql_query_memory_context import format_session_entity_cache_block
+        from src.runtime.datasource_turn_reminders import (
+            should_skip_session_entity_cache,
+        )
+        from src.runtime.sql_query_memory_context import (
+            format_session_entity_cache_block,
+        )
 
         if not should_skip_session_entity_cache(
             user_input=user_input, cache_hit=cache_hit
@@ -105,7 +107,9 @@ async def _pre_turn_datasource_memory_orchestrator(ctx: HookContext) -> None:
 
 
 def register_datasource_memory_orchestrator_hooks() -> None:
-    hook_registry.register("pre_turn", _pre_turn_datasource_memory_orchestrator, priority=25)
+    hook_registry.register(
+        "pre_turn", _pre_turn_datasource_memory_orchestrator, priority=25
+    )
 
 
 register_datasource_memory_orchestrator_hooks()

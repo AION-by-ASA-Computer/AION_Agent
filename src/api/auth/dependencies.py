@@ -72,7 +72,9 @@ async def require_auth(
         row = (
             (
                 await session.execute(
-                    select(ApiKey).where(ApiKey.prefix == prefix, ApiKey.revoked_at.is_(None))
+                    select(ApiKey).where(
+                        ApiKey.prefix == prefix, ApiKey.revoked_at.is_(None)
+                    )
                 )
             )
             .scalars()

@@ -13,7 +13,11 @@ def test_plan_is_intercepted_with_markdown_strategy_parser():
     parser = PlanTagInterceptorParser(MarkdownArtifactStreamParser())
     events = []
     events.extend(parser.feed("Intro\n<plan>\n# Plan\n## Goal\nTest\n"))
-    events.extend(parser.feed("## Tasks\n- [ ] `t1` **Task** (profile: p) (deps: -)\n</plan>\nTail"))
+    events.extend(
+        parser.feed(
+            "## Tasks\n- [ ] `t1` **Task** (profile: p) (deps: -)\n</plan>\nTail"
+        )
+    )
 
     types = _events_to_types(events)
     assert ArtifactEvent.ARTIFACT_START in types
@@ -34,7 +38,7 @@ def test_pseudo_plan_title_opener_is_intercepted():
     events.extend(
         parser.feed(
             'plan title="WWDC 2026"\n# Execution Plan\n## Goal\nG\n## Tasks\n'
-            '- [ ] `task_01` **Research** (profile: -) (deps: none)\n</plan>\n'
+            "- [ ] `task_01` **Research** (profile: -) (deps: none)\n</plan>\n"
         )
     )
     events.extend(parser.flush())
@@ -71,8 +75,13 @@ def test_chunked_plan_title_tokens_are_not_forwarded_as_text():
 def test_unclosed_plan_is_closed_on_flush():
     parser = PlanTagInterceptorParser(MarkdownArtifactStreamParser())
     events = []
-    events.extend(parser.feed("<plan identifier=\"p1\">\n# Plan\n## Goal\nG\n"))
+    events.extend(parser.feed('<plan identifier="p1">\n# Plan\n## Goal\nG\n'))
     events.extend(parser.flush())
 
-    assert any(e.event == ArtifactEvent.ARTIFACT_START and e.artifact_id == "p1" for e in events)
-    assert any(e.event == ArtifactEvent.ARTIFACT_END and e.artifact_id == "p1" for e in events)
+    assert any(
+        e.event == ArtifactEvent.ARTIFACT_START and e.artifact_id == "p1"
+        for e in events
+    )
+    assert any(
+        e.event == ArtifactEvent.ARTIFACT_END and e.artifact_id == "p1" for e in events
+    )

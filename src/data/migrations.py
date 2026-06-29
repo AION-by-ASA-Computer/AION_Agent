@@ -12,6 +12,7 @@ Note:
   revision come applicate senza eseguirle, e gli upgrade futuri
   partiranno dalle migration successive (gia' idempotenti).
 """
+
 from __future__ import annotations
 
 import logging

@@ -1,4 +1,5 @@
 """Pipeline unificato MCP: env per_user/org_shared e contratto email."""
+
 from src.mcp_connector_catalog import _connector_by_id, load_mcp_connector_catalog
 from src.mcp_integration_sync import (
     build_integration_preview,

@@ -1,4 +1,5 @@
 """SQL QueryMemory exploration gate."""
+
 from __future__ import annotations
 
 import os
@@ -69,16 +70,12 @@ def test_gate_unlocks_after_failed_execute_sql() -> None:
     )
     with patch.dict(os.environ, {"AION_SQL_QM_GATE_EXPLORATION": "1"}, clear=False):
         assert (
-            block_exploration_tool_if_sql_cache(
-                "memory", "search_known_sql", "sess2"
-            )
+            block_exploration_tool_if_sql_cache("memory", "search_known_sql", "sess2")
             is not None
         )
         mark_execute_sql_failed("sess2")
         assert (
-            block_exploration_tool_if_sql_cache(
-                "memory", "search_known_sql", "sess2"
-            )
+            block_exploration_tool_if_sql_cache("memory", "search_known_sql", "sess2")
             is None
         )
     clear_sql_qm_turn_context("sess2")

@@ -1,4 +1,5 @@
 """Enforce profile.skills allowlist for skills_hub (in-process + MCP)."""
+
 from __future__ import annotations
 
 import os
@@ -65,9 +66,9 @@ def block_skills_hub_tool_if_needed(
     arguments: dict,
 ) -> Optional[str]:
     """
-  Return error text if the tool call must be blocked; None if allowed.
-  Covers skill_view / skill_list when MCP subprocess is stale.
-  """
+    Return error text if the tool call must be blocked; None if allowed.
+    Covers skill_view / skill_list when MCP subprocess is stale.
+    """
     if (server_name or "").strip() != "skills_hub":
         return None
     base = (tool_name or "").strip()

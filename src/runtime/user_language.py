@@ -1,4 +1,5 @@
 """Resolve chat UI language from DB and build system-prompt instructions."""
+
 from __future__ import annotations
 
 import json
@@ -43,8 +44,10 @@ async def load_user_ui_language(user_id: str) -> Optional[str]:
 
         async with get_async_session_maker()() as session:
             rows = (
-                await session.execute(select(User).where(User.identifier == user_id))
-            ).scalars().all()
+                (await session.execute(select(User).where(User.identifier == user_id)))
+                .scalars()
+                .all()
+            )
             user = rows[0] if rows else None
             if not user or not user.metadata_json:
                 return None

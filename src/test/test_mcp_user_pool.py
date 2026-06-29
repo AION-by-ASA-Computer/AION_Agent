@@ -45,9 +45,7 @@ def test_agent_db_identity_prefers_injected_args_over_stale_env(monkeypatch):
     monkeypatch.setenv("AION_CURRENT_TENANT_ID", "default")
     monkeypatch.setenv("AION_AGENT_DB_STRICT_IDENTITY", "1")
 
-    uid, tid = _resolve_effective_identity(
-        {"user_id": "admin", "tenant_id": "default"}
-    )
+    uid, tid = _resolve_effective_identity({"user_id": "admin", "tenant_id": "default"})
     assert uid == "admin"
     assert tid == "default"
 

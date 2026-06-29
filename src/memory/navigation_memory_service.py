@@ -1,4 +1,5 @@
 """MemPalace navigation memory per SQL QueryMemory project (wing_proj_{slug})."""
+
 from __future__ import annotations
 
 import json
@@ -47,7 +48,11 @@ def _normalize_drawer_row(raw: Dict[str, Any]) -> Dict[str, Any]:
         or ""
     )
     if isinstance(text, dict):
-        text = text.get("text") or text.get("content") or json.dumps(text, ensure_ascii=False)
+        text = (
+            text.get("text")
+            or text.get("content")
+            or json.dumps(text, ensure_ascii=False)
+        )
     text = str(text).strip()
     preview = text if len(text) <= 500 else f"{text[:500]}…"
     out: Dict[str, Any] = {

@@ -1,4 +1,5 @@
 """Test pre-validazione argomenti tool MCP."""
+
 from __future__ import annotations
 
 import json
@@ -10,7 +11,10 @@ from src.runtime.mcp_tool_args import (
 
 
 def test_normalize_workspace_relative_path_adds_prefix():
-    assert normalize_workspace_relative_path("frisian_horse.html") == "workspace/frisian_horse.html"
+    assert (
+        normalize_workspace_relative_path("frisian_horse.html")
+        == "workspace/frisian_horse.html"
+    )
     assert normalize_workspace_relative_path("workspace/a.py") == "workspace/a.py"
     assert (
         normalize_workspace_relative_path("workspace/workspace/promo/x.html")

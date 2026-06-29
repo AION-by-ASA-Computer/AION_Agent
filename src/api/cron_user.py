@@ -1,4 +1,5 @@
 """User-facing scheduled jobs API (chat JWT)."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -37,14 +38,18 @@ async def cron_jobs_status() -> dict:
 
 def _require_cron() -> None:
     if not cron_tools_enabled():
-        raise HTTPException(status_code=503, detail="Cron disabled (AION_CRON_ENABLED=0)")
+        raise HTTPException(
+            status_code=503, detail="Cron disabled (AION_CRON_ENABLED=0)"
+        )
 
 
 def _user_id(auth: ChatAuthIdentity) -> str:
     raw = (auth.identifier or auth.user_row_id or "").strip()
     uid = sanitize_user_id(raw if raw else None)
     if not uid or auth.via == "anonymous":
-        raise HTTPException(status_code=403, detail="Authentication required for scheduled jobs.")
+        raise HTTPException(
+            status_code=403, detail="Authentication required for scheduled jobs."
+        )
     return uid
 
 
@@ -74,7 +79,9 @@ async def list_my_cron_jobs(
 
 
 @router.get("/{job_id}", response_model=ScheduledJobOut)
-async def get_my_cron_job(job_id: str, auth: ChatAuthIdentity = Depends(require_chat_auth)):
+async def get_my_cron_job(
+    job_id: str, auth: ChatAuthIdentity = Depends(require_chat_auth)
+):
     _require_cron()
     job = await _get_owned(job_id, _user_id(auth))
     return _out(job)
@@ -138,7 +145,9 @@ async def patch_my_cron_job(
 
 
 @router.delete("/{job_id}")
-async def delete_my_cron_job(job_id: str, auth: ChatAuthIdentity = Depends(require_chat_auth)):
+async def delete_my_cron_job(
+    job_id: str, auth: ChatAuthIdentity = Depends(require_chat_auth)
+):
     _require_cron()
     await _get_owned(job_id, _user_id(auth))
     await unregister_job(job_id)
@@ -149,7 +158,9 @@ async def delete_my_cron_job(job_id: str, auth: ChatAuthIdentity = Depends(requi
 
 
 @router.post("/{job_id}/run-now")
-async def run_my_cron_job_now(job_id: str, auth: ChatAuthIdentity = Depends(require_chat_auth)):
+async def run_my_cron_job_now(
+    job_id: str, auth: ChatAuthIdentity = Depends(require_chat_auth)
+):
     _require_cron()
     await _get_owned(job_id, _user_id(auth))
     return await execute_job(job_id, trigger="user")

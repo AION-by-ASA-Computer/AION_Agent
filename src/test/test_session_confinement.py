@@ -1,4 +1,5 @@
 """Tests for subprocess sandbox filesystem confinement."""
+
 from __future__ import annotations
 
 import os
@@ -28,7 +29,10 @@ class TestSessionConfinement(unittest.TestCase):
         deactivate_python_guards()
 
     def _with_guards(self, root: Path):
-        from src.security.session_confinement import activate_python_guards, deactivate_python_guards
+        from src.security.session_confinement import (
+            activate_python_guards,
+            deactivate_python_guards,
+        )
 
         activate_python_guards(root)
         return deactivate_python_guards
@@ -114,7 +118,14 @@ check("passwd", lambda: Path("/etc/passwd").read_text())
             )
             env = build_session_env("confine-test-1234", session_root=root)
             proc = subprocess.run(
-                [sys.executable, "-u", "-m", "src.security.sandbox_subprocess_entry", "--python", str(script)],
+                [
+                    sys.executable,
+                    "-u",
+                    "-m",
+                    "src.security.sandbox_subprocess_entry",
+                    "--python",
+                    str(script),
+                ],
                 cwd=str(root),
                 env=env,
                 capture_output=True,
@@ -158,7 +169,11 @@ try {
                 confinement_executables=[Path(node)],
             )
             combined = (proc.stdout or "") + (proc.stderr or "")
-            if proc.returncode != 0 and "BLOCKED" not in combined and "LEAK" not in combined:
+            if (
+                proc.returncode != 0
+                and "BLOCKED" not in combined
+                and "LEAK" not in combined
+            ):
                 self.skipTest(f"node probe inconclusive: {combined[:500]}")
             self.assertIn("BLOCKED", combined)
             self.assertNotIn("LEAK", combined)
@@ -243,10 +258,14 @@ class TestConfinementPaths(unittest.TestCase):
             self.assertIn(Path("/proc/self"), proc_entries)
             for p in proc_entries:
                 tail = str(p)[len("/proc/") :].split("/")[0]
-                self.assertFalse(tail.isdigit(), f"resolved pid leaked into allowlist: {p}")
+                self.assertFalse(
+                    tail.isdigit(), f"resolved pid leaked into allowlist: {p}"
+                )
 
     def test_inject_node_hook(self):
-        hook = Path(__file__).resolve().parents[1] / "security" / "sandbox_node_hook.cjs"
+        hook = (
+            Path(__file__).resolve().parents[1] / "security" / "sandbox_node_hook.cjs"
+        )
         if not hook.is_file():
             self.skipTest("sandbox_node_hook.cjs missing")
         argv = inject_node_hook(["/usr/bin/node", "/tmp/script.js"])

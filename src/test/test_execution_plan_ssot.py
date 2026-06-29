@@ -36,7 +36,9 @@ async def test_mark_task_completed_lists_remaining(monkeypatch):
         captured["plan_id"] = plan_id
 
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_record", fake_fetch)
-    monkeypatch.setattr("src.runtime.orchestration_db.update_plan_after_wait", fake_update)
+    monkeypatch.setattr(
+        "src.runtime.orchestration_db.update_plan_after_wait", fake_update
+    )
     monkeypatch.setattr(ot.tool_event_bus, "put_event", lambda *_a, **_k: None)
 
     redis_events: list = []
@@ -44,7 +46,9 @@ async def test_mark_task_completed_lists_remaining(monkeypatch):
     async def capture_redis(_sid, ev, **_k):
         redis_events.append(ev)
 
-    monkeypatch.setattr("src.runtime.redis_client.redis_enqueue_session_event", capture_redis)
+    monkeypatch.setattr(
+        "src.runtime.redis_client.redis_enqueue_session_event", capture_redis
+    )
 
     out = await ot.run_mark_task_completed(
         "execution_plan_ssot1",
@@ -59,7 +63,10 @@ async def test_mark_task_completed_lists_remaining(monkeypatch):
     assert "Second action" in out
     assert "revision=2" in out
     assert captured.get("approved_markdown")
-    assert "[x]" in captured["approved_markdown"] or "x" in captured["approved_markdown"].lower()
+    assert (
+        "[x]" in captured["approved_markdown"]
+        or "x" in captured["approved_markdown"].lower()
+    )
     assert captured.get("approved_json") is not None
     assert captured.get("revision") == 2
     assert redis_events, "mark_task_completed should notify sidebar via redis"
@@ -107,7 +114,9 @@ def test_approve_only_preserves_draft_markdown():
     approved_md = None
     final = (approved_md or "").strip()
     if not final and prev:
-        final = (prev.get("draft_markdown") or prev.get("approved_markdown") or "").strip()
+        final = (
+            prev.get("draft_markdown") or prev.get("approved_markdown") or ""
+        ).strip()
     assert "## Goal" in final
     assert "task_01" in final
 
@@ -150,11 +159,18 @@ async def test_update_execution_plan_persists_markdown(monkeypatch):
 
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_session", fake_session)
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_record", fake_fetch)
-    monkeypatch.setattr("src.runtime.orchestration_db.update_plan_after_wait", fake_update)
+    monkeypatch.setattr(
+        "src.runtime.orchestration_db.update_plan_after_wait", fake_update
+    )
     monkeypatch.setattr(ot.tool_event_bus, "put_event", lambda *_a, **_k: None)
-    monkeypatch.setattr("src.runtime.redis_client.redis_enqueue_session_event", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        "src.runtime.redis_client.redis_enqueue_session_event", lambda *_a, **_k: None
+    )
 
-    new_md = _PLAN_MD + "\n- [ ] `task_03` **Remediation step** (profile: orchestrator) (deps: task_02)\n"
+    new_md = (
+        _PLAN_MD
+        + "\n- [ ] `task_03` **Remediation step** (profile: orchestrator) (deps: task_02)\n"
+    )
     out = await ot.run_update_execution_plan(
         "execution_plan_ssot1",
         new_md,
@@ -188,9 +204,9 @@ def test_sanitize_plan_finalizer_input_strips_think_and_malformed_plan():
     dirty = (
         "<think>internal reasoning here</think>\n"
         "Ecco il piano:\n"
-        "<plan title=\"Test\">\n## Goal\nWrite a doc\n## Tasks\n- [ ] `task_01` **Do it**\n</plan>\n"
+        '<plan title="Test">\n## Goal\nWrite a doc\n## Tasks\n- [ ] `task_01` **Do it**\n</plan>\n'
         "\nNow formulate the final response</think>\n"
-        "<<plan title=\"Duplicato\">\n## Goal\nDuplicated garbage\n</plan>"
+        '<<plan title="Duplicato">\n## Goal\nDuplicated garbage\n</plan>'
     )
     clean = _sanitize_plan_finalizer_input(dirty)
     assert "<think>" not in clean
@@ -223,9 +239,13 @@ Test goal
         captured.update(kwargs)
 
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_record", fake_fetch)
-    monkeypatch.setattr("src.runtime.orchestration_db.update_plan_after_wait", fake_update)
+    monkeypatch.setattr(
+        "src.runtime.orchestration_db.update_plan_after_wait", fake_update
+    )
     monkeypatch.setattr(ot.tool_event_bus, "put_event", lambda *_a, **_k: None)
-    monkeypatch.setattr("src.runtime.redis_client.redis_enqueue_session_event", lambda *_a, **_k: None)
+    monkeypatch.setattr(
+        "src.runtime.redis_client.redis_enqueue_session_event", lambda *_a, **_k: None
+    )
 
     out = await ot.run_mark_task_completed(
         "execution_plan_colon",
@@ -338,9 +358,7 @@ def test_resolve_plain_bullet_tasks_under_tasks_section():
     from src.a2a.plan_markdown import resolve_plan_markdown_for_approval
 
     md, plan = resolve_plan_markdown_for_approval(
-        "## Goal\nShip feature\n\n## Tasks\n"
-        "- Setup repository\n"
-        "- Write tests\n"
+        "## Goal\nShip feature\n\n## Tasks\n- Setup repository\n- Write tests\n"
     )
     assert len(plan.tasks) == 2
     assert plan.tasks[0].title == "Setup repository"
@@ -361,8 +379,18 @@ def test_resolve_prefers_body_todos_over_unparseable_markdown():
     from src.a2a.plan_markdown import resolve_plan_markdown_for_approval
 
     todos = [
-        {"id": "task_01", "title": "From sidebar", "status": "pending", "depends_on": []},
-        {"id": "task_02", "title": "Second step", "status": "pending", "depends_on": []},
+        {
+            "id": "task_01",
+            "title": "From sidebar",
+            "status": "pending",
+            "depends_on": [],
+        },
+        {
+            "id": "task_02",
+            "title": "Second step",
+            "status": "pending",
+            "depends_on": [],
+        },
     ]
     md, plan = resolve_plan_markdown_for_approval(
         "## Goal\nG\n\n## Context\nNo tasks here\n",
@@ -380,9 +408,7 @@ def test_resolve_prefers_markdown_over_corrupt_db_json():
         "tasks": [{"id": "2a197dcef01f", "title": "main", "depends_on": []}],
     }
     md, plan = resolve_plan_markdown_for_approval(
-        "## Goal\nG\n\n## Tasks\n"
-        "- [ ] Prima azione\n"
-        "- [ ] Seconda azione\n",
+        "## Goal\nG\n\n## Tasks\n- [ ] Prima azione\n- [ ] Seconda azione\n",
         plan_json=corrupt,
     )
     assert len(plan.tasks) == 2
@@ -397,7 +423,9 @@ async def test_setup_execution_plan_rejects_degenerate_fallback(monkeypatch):
         captured["plan_id"] = plan_id
         return True
 
-    monkeypatch.setattr("src.runtime.orchestration_db.upsert_execution_plan_draft", fake_upsert)
+    monkeypatch.setattr(
+        "src.runtime.orchestration_db.upsert_execution_plan_draft", fake_upsert
+    )
     monkeypatch.setattr(ot, "set_pending", lambda *_a, **_k: True)
     monkeypatch.setattr(ot.tool_event_bus, "put_event", lambda *_a, **_k: None)
 

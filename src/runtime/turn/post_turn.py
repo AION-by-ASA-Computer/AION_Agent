@@ -1,4 +1,5 @@
 """Post-turn: outcome classification, fallback answer, final persistence."""
+
 from __future__ import annotations
 
 import logging
@@ -39,7 +40,10 @@ async def finalize_turn_outcome(
 
     try:
         from src.runtime.turn_compaction import get_llm_step_count
-        from src.runtime.turn_diagnostics import classify_turn_outcome, record_turn_outcome
+        from src.runtime.turn_diagnostics import (
+            classify_turn_outcome,
+            record_turn_outcome,
+        )
 
         llm_steps_done = get_llm_step_count()
     except Exception:

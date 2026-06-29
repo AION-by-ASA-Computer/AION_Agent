@@ -1,4 +1,5 @@
 """Tests for mcp_integration_sync (catalog → schema, mode inference)."""
+
 from __future__ import annotations
 
 from src.mcp_credential_discovery import discover_mcp_credentials, merge_schema_sources
@@ -12,7 +13,12 @@ from src.mcp_integration_sync import (
 def test_credential_schema_from_connector_fields() -> None:
     row = {
         "credential_fields": [
-            {"key": "CLICKUP_API_KEY", "label": "API Key", "secret": True, "required": True},
+            {
+                "key": "CLICKUP_API_KEY",
+                "label": "API Key",
+                "secret": True,
+                "required": True,
+            },
         ],
     }
     schema = credential_schema_from_connector(row)
@@ -51,10 +57,27 @@ def test_registry_env_does_not_duplicate_placeholder_slug() -> None:
 
 
 def test_merge_schema_adds_new_keys_without_dropping_existing() -> None:
-    current = [{"key": "MCP_EMAIL_SERVER_IMAP_HOST", "label": "Custom IMAP", "type": "text", "required": True}]
+    current = [
+        {
+            "key": "MCP_EMAIL_SERVER_IMAP_HOST",
+            "label": "Custom IMAP",
+            "type": "text",
+            "required": True,
+        }
+    ]
     fresh = [
-        {"key": "MCP_EMAIL_SERVER_IMAP_HOST", "label": "IMAP Host", "type": "text", "required": True},
-        {"key": "MCP_EMAIL_SERVER_SMTP_START_SSL", "label": "Smtp Start Ssl", "type": "text", "required": True},
+        {
+            "key": "MCP_EMAIL_SERVER_IMAP_HOST",
+            "label": "IMAP Host",
+            "type": "text",
+            "required": True,
+        },
+        {
+            "key": "MCP_EMAIL_SERVER_SMTP_START_SSL",
+            "label": "Smtp Start Ssl",
+            "type": "text",
+            "required": True,
+        },
     ]
     merged = merge_schema_sources(catalog_schema=current, discovered_schema=fresh)
     by_key = {r["key"]: r for r in merged}
@@ -78,7 +101,11 @@ def test_clickup_catalog_per_user_env_e2e() -> None:
 
     catalog = load_mcp_connector_catalog()
     clickup = next(
-        (c for c in (catalog.get("connectors") or []) if isinstance(c, dict) and c.get("id") == "clickup"),
+        (
+            c
+            for c in (catalog.get("connectors") or [])
+            if isinstance(c, dict) and c.get("id") == "clickup"
+        ),
         None,
     )
     assert clickup is not None

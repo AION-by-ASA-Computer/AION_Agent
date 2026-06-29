@@ -1,4 +1,5 @@
 """Agent execution mode: legacy thread pool vs async-native Haystack run_async (P1.2)."""
+
 from __future__ import annotations
 
 import asyncio

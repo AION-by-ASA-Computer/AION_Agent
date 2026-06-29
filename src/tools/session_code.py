@@ -3,6 +3,7 @@ Esecuzione Python limitata alla cartella della sessione (read uploads/derived, w
 Il codice viene salvato come file .py sotto workspace/ prima dell'esecuzione (traceback e debug),
 con verifica sintattica obbligatoria e controllo opzionale ruff se installato.
 """
+
 from __future__ import annotations
 
 import builtins
@@ -74,7 +75,9 @@ def _ruff_check_optional(path: Path) -> Tuple[bool, str]:
         )
     except (OSError, subprocess.TimeoutExpired) as e:
         return True, f"\n[ruff non eseguito: {e}]\n"
-    combined = ((proc.stdout or "").strip() + "\n" + (proc.stderr or "").strip()).strip()
+    combined = (
+        (proc.stdout or "").strip() + "\n" + (proc.stderr or "").strip()
+    ).strip()
     if proc.returncode == 0:
         return True, ""
     low = combined.lower()
@@ -93,12 +96,17 @@ def _ruff_check_optional(path: Path) -> Tuple[bool, str]:
         )
     return True, f"\n[Avviso ruff (non bloccante)]\n{combined}\n"
 
+
 # SANDBOX NETWORK EGRESS:
 # execute() blocca filesystem traversal ma NON il network (per design del modo exec interno).
 # Per script che richiedono HTTP, usare sandbox_run_python_file / subprocess o impostare
 # AION_SANDBOX_ALLOW_HTTP_IMPORTS=1 per consentire import requests/httpx (non raccomandato).
 
-_HTTP_IN_SANDBOX = os.getenv("AION_SANDBOX_ALLOW_HTTP_IMPORTS", "0").lower() in ("1", "true", "yes")
+_HTTP_IN_SANDBOX = os.getenv("AION_SANDBOX_ALLOW_HTTP_IMPORTS", "0").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 # Moduli consentiti per `import ...` / `from ... import` (solo primo segmento del nome modulo).
 # Esclusi: subprocess, socket, multiprocessing, ctypes, pickle (unsafe), pathlib (path arbitrari).
@@ -243,9 +251,7 @@ class SessionSandboxExecutor:
         full: Path = safe_resolve(self.session_id, rel, must_exist=False)
         if can_write:
             full.parent.mkdir(parents=True, exist_ok=True)
-        return builtins.open(
-            full, mode, buffering, encoding, errors, newline, closefd
-        )
+        return builtins.open(full, mode, buffering, encoding, errors, newline, closefd)
 
     def execute(self, code: str, *, require_result: bool = True) -> str:
         safe_builtins = {
@@ -314,7 +320,9 @@ class SessionSandboxExecutor:
 
         # 1) Salva sempre come file .py (newline preservati; traceback con nome file reale)
         try:
-            entry_path = safe_resolve(self.session_id, _SANDBOX_ENTRY_PY, must_exist=False)
+            entry_path = safe_resolve(
+                self.session_id, _SANDBOX_ENTRY_PY, must_exist=False
+            )
         except (OSError, ValueError) as e:
             return f"Error: unable to resolve script path: {e}"
         entry_path.parent.mkdir(parents=True, exist_ok=True)
@@ -352,7 +360,11 @@ class SessionSandboxExecutor:
         if "result" not in local_vars:
             if not require_result:
                 out = redirected.getvalue()
-                return f"Execution successful.\nStdout:\n{out}" if out else "Execution successful. (no output)"
+                return (
+                    f"Execution successful.\nStdout:\n{out}"
+                    if out
+                    else "Execution successful. (no output)"
+                )
             return (
                 "Error: assegna l'output finale alla variabile 'result'.\n"
                 "Stdout:\n"
@@ -387,9 +399,11 @@ class SessionSandboxExecutor:
             if rel.lower().endswith((".js", ".mjs", ".cjs")):
                 return (
                     "Error: per script JavaScript usa sandbox_run_node_file "
-                    f"(es. sandbox_run_node_file(relative_path=\"{rel}\"))."
+                    f'(es. sandbox_run_node_file(relative_path="{rel}")).'
                 )
-            return "Error: path must end with .py (or use sandbox_run_node_file for .js)"
+            return (
+                "Error: path must end with .py (or use sandbox_run_node_file for .js)"
+            )
         try:
             entry_path = safe_resolve(self.session_id, rel, must_exist=True)
         except Exception as e:
@@ -408,10 +422,16 @@ class SessionSandboxExecutor:
             return f"Error: {ruff_note}"
 
         timeout = float(os.environ.get("AION_SANDBOX_RUN_TIMEOUT_SEC", "600"))
-        max_out = int(os.environ.get("AION_SANDBOX_MAX_OUTPUT_BYTES", "500000") or "500000")
+        max_out = int(
+            os.environ.get("AION_SANDBOX_MAX_OUTPUT_BYTES", "500000") or "500000"
+        )
         py_exe = resolve_run_python_executable(self.session_id)
         cmd = [str(py_exe), "-u", str(entry_path)] + extra_args
-        venv = session_venv_dir(self.session_id) if session_venv_dir(self.session_id).is_dir() else None
+        venv = (
+            session_venv_dir(self.session_id)
+            if session_venv_dir(self.session_id).is_dir()
+            else None
+        )
         env = build_session_env(
             self.session_id,
             session_root=self._root,
@@ -431,7 +451,10 @@ class SessionSandboxExecutor:
             )
         except subprocess.TimeoutExpired:
             return f"Error: timeout dopo {timeout:g}s (AION_SANDBOX_RUN_TIMEOUT_SEC)."
-        parts: list[str] = [f"Exit code: {proc.returncode}", f"Command: {' '.join(cmd)}"]
+        parts: list[str] = [
+            f"Exit code: {proc.returncode}",
+            f"Command: {' '.join(cmd)}",
+        ]
         if proc.stdout:
             parts.append("--- stdout ---\n" + proc.stdout)
         if proc.stderr:
@@ -439,14 +462,19 @@ class SessionSandboxExecutor:
         combined = "\n".join(parts)
         raw = combined.encode("utf-8", errors="replace")
         if len(raw) > max_out:
-            combined = raw[:max_out].decode("utf-8", errors="replace") + "\n...[output truncated]\n"
+            combined = (
+                raw[:max_out].decode("utf-8", errors="replace")
+                + "\n...[output truncated]\n"
+            )
         if ruff_note:
             combined += ruff_note
         if proc.returncode != 0:
             return f"Error:\n{combined}"
         return f"OK\n{combined}"
 
-    def run_node_file(self, relative_path: str, extra_args: Optional[list] = None) -> str:
+    def run_node_file(
+        self, relative_path: str, extra_args: Optional[list] = None
+    ) -> str:
         """Esegue ``node <script>`` con cwd nella root sessione (docx-js, ecc.)."""
         import shutil
 
@@ -460,7 +488,7 @@ class SessionSandboxExecutor:
             if rel.lower().endswith(".py"):
                 return (
                     "Error: per script Python usa sandbox_run_python_file "
-                    f"(es. sandbox_run_python_file(relative_path=\"{rel}\"))."
+                    f'(es. sandbox_run_python_file(relative_path="{rel}")).'
                 )
             return "Error: il path deve terminare con .js, .mjs o .cjs"
 
@@ -471,7 +499,9 @@ class SessionSandboxExecutor:
         if not entry_path.is_file():
             return "Error: file not found."
 
-        node_exe = (os.environ.get("AION_NODE_PATH") or "").strip() or shutil.which("node")
+        node_exe = (os.environ.get("AION_NODE_PATH") or "").strip() or shutil.which(
+            "node"
+        )
         if not node_exe:
             return (
                 "Error: Node.js not found sul server. Installa Node o imposta AION_NODE_PATH. "
@@ -479,7 +509,9 @@ class SessionSandboxExecutor:
             )
 
         timeout = float(os.environ.get("AION_SANDBOX_RUN_TIMEOUT_SEC", "600"))
-        max_out = int(os.environ.get("AION_SANDBOX_MAX_OUTPUT_BYTES", "500000") or "500000")
+        max_out = int(
+            os.environ.get("AION_SANDBOX_MAX_OUTPUT_BYTES", "500000") or "500000"
+        )
         node_path = Path(node_exe)
         cmd = [str(node_path), str(entry_path)] + extra_args
         env = build_session_env(self.session_id, session_root=self._root)
@@ -496,7 +528,10 @@ class SessionSandboxExecutor:
             )
         except subprocess.TimeoutExpired:
             return f"Error: timeout dopo {timeout:g}s (AION_SANDBOX_RUN_TIMEOUT_SEC)."
-        parts: list[str] = [f"Exit code: {proc.returncode}", f"Command: {' '.join(cmd)}"]
+        parts: list[str] = [
+            f"Exit code: {proc.returncode}",
+            f"Command: {' '.join(cmd)}",
+        ]
         if proc.stdout:
             parts.append("--- stdout ---\n" + proc.stdout)
         if proc.stderr:
@@ -504,12 +539,18 @@ class SessionSandboxExecutor:
         combined = "\n".join(parts)
         raw = combined.encode("utf-8", errors="replace")
         if len(raw) > max_out:
-            combined = raw[:max_out].decode("utf-8", errors="replace") + "\n...[output truncated]\n"
+            combined = (
+                raw[:max_out].decode("utf-8", errors="replace")
+                + "\n...[output truncated]\n"
+            )
         if proc.returncode != 0:
             hint = ""
-            if "cannot find module" in combined.lower() or "module not found" in combined.lower():
+            if (
+                "cannot find module" in combined.lower()
+                or "module not found" in combined.lower()
+            ):
                 hint = (
-                    "\nHINT: install deps with sandbox_install_npm_packages(packages=[\"docx\"]), "
+                    '\nHINT: install deps with sandbox_install_npm_packages(packages=["docx"]), '
                     "then sandbox_run_node_file again. Do not use sandbox_exec_allowlisted for Node. "
                     "Alternative: python-docx via sandbox_install_python_packages + sandbox_run_python_file."
                 )

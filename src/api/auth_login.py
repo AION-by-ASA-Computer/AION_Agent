@@ -10,6 +10,7 @@ Espone anche:
 - ``GET /auth/status``: endpoint pubblico che il frontend usa per sapere se
   deve forzare il login.
 """
+
 from __future__ import annotations
 
 import base64
@@ -35,6 +36,7 @@ from src.identity import sanitize_user_id
 # Il token emesso da /auth/login e' base64-urlsafe puro: non collide.
 def _looks_like_api_key(token: str) -> bool:
     return token.startswith("aion_")
+
 
 logger = logging.getLogger("aion.api.auth_login")
 
@@ -79,7 +81,9 @@ def issue_chat_token(
     exp = int(time.time()) + max(300, _TOKEN_TTL_SEC)
     roles_csv = _encode_roles(roles)
     payload = f"{user_row_id}:{user_identifier}:{roles_csv}:{exp}"
-    sig = hmac.new(_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    sig = hmac.new(
+        _secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
     raw = f"{payload}:{sig}".encode("utf-8")
     return base64.urlsafe_b64encode(raw).decode("ascii")
 
@@ -99,7 +103,9 @@ def verify_chat_token(token: str) -> Optional[Dict[str, Any]]:
         if len(parts) != 2:
             return None
         body, sig = parts
-        expect = hmac.new(_secret().encode("utf-8"), body.encode("utf-8"), hashlib.sha256).hexdigest()
+        expect = hmac.new(
+            _secret().encode("utf-8"), body.encode("utf-8"), hashlib.sha256
+        ).hexdigest()
         if not hmac.compare_digest(expect, sig):
             return None
         bits = body.split(":")
@@ -217,8 +223,7 @@ class UpdateUserMetadata(BaseModel):
 
 @router.patch("/me")
 async def update_me(
-    body: UpdateUserMetadata,
-    authorization: Optional[str] = Header(None)
+    body: UpdateUserMetadata, authorization: Optional[str] = Header(None)
 ):
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(401, detail="Missing bearer token")
@@ -226,50 +231,57 @@ async def update_me(
     parsed = verify_chat_token(token)
     if not parsed:
         raise HTTPException(401, detail="Invalid or expired token")
-        
+
     user_row_id = parsed["user_row_id"]
-    
+
     import json
     from src.data.engine import get_async_session_maker
     from src.data.models import User
-    
+
     async with get_async_session_maker()() as session:
         u = await session.get(User, user_row_id)
         if not u:
             raise HTTPException(404, detail="User not found")
-            
+
         if body.identifier is not None:
             new_identifier = body.identifier.strip()
             if not new_identifier:
-                raise HTTPException(400, detail="Username (Nome utente) cannot be empty")
+                raise HTTPException(
+                    400, detail="Username (Nome utente) cannot be empty"
+                )
             if new_identifier != u.identifier:
                 from sqlalchemy import select
-                stmt = select(User).where(User.tenant_id == u.tenant_id, User.identifier == new_identifier)
+
+                stmt = select(User).where(
+                    User.tenant_id == u.tenant_id, User.identifier == new_identifier
+                )
                 existing = await session.execute(stmt)
                 if existing.scalar_one_or_none():
-                    raise HTTPException(400, detail="Username (Nome utente) already taken")
+                    raise HTTPException(
+                        400, detail="Username (Nome utente) already taken"
+                    )
                 u.identifier = new_identifier
-                
+
         if body.display_name is not None:
             u.display_name = body.display_name.strip() or None
-            
+
         if body.email is not None:
             u.email = body.email.strip() or None
-            
+
         meta = {}
         if u.metadata_json:
             try:
                 meta = json.loads(u.metadata_json)
             except Exception:
                 pass
-                
+
         if body.metadata is not None:
             meta.update(body.metadata)
             u.metadata_json = json.dumps(meta)
-            
+
         session.add(u)
         await session.commit()
-        
+
         return {
             "user_id": sanitize_user_id(u.identifier),
             "identifier": u.identifier,
@@ -280,6 +292,7 @@ async def update_me(
 
 
 # --- Public auth-status endpoint (no token) ---------------------------------
+
 
 def admin_password_auth_enabled() -> bool:
     """Auth admin: di default sempre attiva (stile Grafana).
@@ -304,8 +317,10 @@ async def auth_status():
 
 # --- FastAPI dependency: require_chat_auth -----------------------------------
 
+
 class ChatAuthIdentity(BaseModel):
     """Identita' propagata agli endpoint protetti."""
+
     user_row_id: Optional[str] = None
     identifier: Optional[str] = None
     via: str = "anonymous"  # "anonymous" | "chat_token" | "api_key"
@@ -376,7 +391,10 @@ async def require_chat_auth(
         try:
             from src.api.auth.dependencies import require_auth as _api_require_auth
             from src.api.auth.scopes import Scope as _Scope
-            ctx = await _api_require_auth(authorization=f"Bearer {token_raw}", x_api_key=token_raw)
+
+            ctx = await _api_require_auth(
+                authorization=f"Bearer {token_raw}", x_api_key=token_raw
+            )
         except HTTPException:
             raise
         except Exception as e:  # noqa: BLE001
@@ -394,7 +412,9 @@ async def require_chat_auth(
     # Token chat (HMAC opaco).
     parsed = verify_chat_token(token_raw)
     if not parsed:
-        raise HTTPException(401, detail="Invalid or expired token. Re-login at /auth/login.")
+        raise HTTPException(
+            401, detail="Invalid or expired token. Re-login at /auth/login."
+        )
     return ChatAuthIdentity(
         via="chat_token",
         user_row_id=parsed.get("user_row_id"),
@@ -404,6 +424,7 @@ async def require_chat_auth(
 
 
 # --- Admin role guard -------------------------------------------------------
+
 
 async def require_admin_role(
     ctx: ChatAuthIdentity = Depends(require_chat_auth),
@@ -438,6 +459,7 @@ async def require_admin_role(
 
 
 # --- Change password (richiede token valido) --------------------------------
+
 
 class ChangePasswordBody(BaseModel):
     old_password: str = Field(..., min_length=1)

@@ -1,4 +1,5 @@
 """Idempotent backfill of messages.timeline_json from legacy flat fields."""
+
 from __future__ import annotations
 
 import logging
@@ -32,7 +33,9 @@ def _messages_has_timeline_column() -> bool:
         engine.dispose()
 
 
-async def backfill_message_timelines(*, batch_size: int = 200, dry_run: bool = False) -> int:
+async def backfill_message_timelines(
+    *, batch_size: int = 200, dry_run: bool = False
+) -> int:
     """Populate timeline_json for assistant messages where it is still null."""
     if not _messages_has_timeline_column():
         logger.info("messages.timeline_json not present; skip timeline backfill")
@@ -42,7 +45,9 @@ async def backfill_message_timelines(*, batch_size: int = 200, dry_run: bool = F
     async with get_async_session_maker()() as session:
         q_msg = select(Message).where(Message.timeline_json.is_(None))
         msgs = (await session.execute(q_msg)).scalars().all()
-        assistant_msgs = [m for m in msgs if normalize_message_role(m.role) == "assistant"]
+        assistant_msgs = [
+            m for m in msgs if normalize_message_role(m.role) == "assistant"
+        ]
         if not assistant_msgs:
             return 0
 
@@ -51,7 +56,11 @@ async def backfill_message_timelines(*, batch_size: int = 200, dry_run: bool = F
         atts_by_msg: dict[str, list] = {}
 
         for cid in conv_ids:
-            q_steps = select(Step).where(Step.conversation_id == cid).order_by(Step.created_at.asc())
+            q_steps = (
+                select(Step)
+                .where(Step.conversation_id == cid)
+                .order_by(Step.created_at.asc())
+            )
             for s in (await session.execute(q_steps)).scalars().all():
                 mid = s.message_id or "orphan"
                 steps_by_msg.setdefault(mid, []).append(
@@ -66,8 +75,10 @@ async def backfill_message_timelines(*, batch_size: int = 200, dry_run: bool = F
                         "created_at": s.created_at,
                     }
                 )
-            q_att = select(Attachment).where(Attachment.conversation_id == cid).order_by(
-                Attachment.created_at.asc()
+            q_att = (
+                select(Attachment)
+                .where(Attachment.conversation_id == cid)
+                .order_by(Attachment.created_at.asc())
             )
             for a in (await session.execute(q_att)).scalars().all():
                 mid = a.message_id or "orphan"

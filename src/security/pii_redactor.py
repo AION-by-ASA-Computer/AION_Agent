@@ -1,4 +1,5 @@
 """Optional PII redaction (regex placeholders) — hook logs matches; safe mutation best-effort."""
+
 from __future__ import annotations
 
 import logging
@@ -50,4 +51,7 @@ async def pii_pre_llm_hook(ctx: HookContext) -> None:
         try:
             m.text = nt  # type: ignore[attr-defined]
         except Exception:
-            logger.info("PII redaction matched %d pattern(s); Haystack message not mutated in-place", n)
+            logger.info(
+                "PII redaction matched %d pattern(s); Haystack message not mutated in-place",
+                n,
+            )

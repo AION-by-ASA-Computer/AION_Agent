@@ -1,4 +1,5 @@
 """Unit tests for SQL normalization and fingerprint stability."""
+
 from __future__ import annotations
 
 from src.memory.sql_query_memory.fingerprint import (
@@ -27,7 +28,9 @@ def test_sql_fingerprint_differs_on_structure():
 
 
 def test_normalize_request_collapses_case_and_spaces():
-    assert normalize_request_text("  Quanti   Trasferimenti?  ") == "quanti trasferimenti?"
+    assert (
+        normalize_request_text("  Quanti   Trasferimenti?  ") == "quanti trasferimenti?"
+    )
 
 
 def test_normalize_sql_strips_comments():

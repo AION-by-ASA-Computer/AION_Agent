@@ -9,7 +9,12 @@ import threading
 
 import pytest
 
-from src.runtime.context import clear_context, get_context, get_current_session_id, set_context
+from src.runtime.context import (
+    clear_context,
+    get_context,
+    get_current_session_id,
+    set_context,
+)
 from src.runtime.native_tools.factory_table import WebSearchExecutor
 from src.runtime.native_tools.web_providers import run_web_fetch_page
 from src.runtime.tool_events import tool_event_bus

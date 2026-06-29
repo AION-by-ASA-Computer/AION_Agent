@@ -1,4 +1,5 @@
 """Tests for unified session subprocess runner."""
+
 from __future__ import annotations
 
 import os
@@ -14,7 +15,9 @@ from src.security.session_runner import (
 
 class TestSessionRunner(unittest.TestCase):
     def test_subprocess_backend_runs_plain(self):
-        with patch.dict(os.environ, {"AION_SANDBOX_BACKEND": "subprocess"}, clear=False):
+        with patch.dict(
+            os.environ, {"AION_SANDBOX_BACKEND": "subprocess"}, clear=False
+        ):
             with patch("src.security.session_runner.subprocess.run") as mock_run:
                 mock_run.return_value = subprocess.CompletedProcess([], 0, "", "")
                 run_session_subprocess(

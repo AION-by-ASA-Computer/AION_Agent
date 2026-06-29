@@ -1,4 +1,5 @@
 """Queue tool steps for DB persistence during SSE streaming."""
+
 from __future__ import annotations
 
 import json

@@ -3,6 +3,7 @@ Unified subprocess runner for session sandbox operations.
 
 Backends: subprocess (default dev), container (Podman/Docker).
 """
+
 from __future__ import annotations
 
 import logging
@@ -43,11 +44,9 @@ def fail_closed() -> bool:
 
 
 def _in_sandbox_container() -> bool:
-    return (
-        os.environ.get("AION_DATA_DIR", "").strip() == "/session"
-        or os.environ.get("AION_SANDBOX_IN_CONTAINER", "").lower()
-        in ("1", "true", "yes")
-    )
+    return os.environ.get("AION_DATA_DIR", "").strip() == "/session" or os.environ.get(
+        "AION_SANDBOX_IN_CONTAINER", ""
+    ).lower() in ("1", "true", "yes")
 
 
 def _maybe_wrap_confined(
@@ -64,7 +63,11 @@ def _maybe_wrap_confined(
     if _in_sandbox_container():
         return argv
 
-    from .session_confinement import confinement_enabled, stamp_confinement_env, wrap_confined_argv
+    from .session_confinement import (
+        confinement_enabled,
+        stamp_confinement_env,
+        wrap_confined_argv,
+    )
 
     if not confinement_enabled():
         return argv

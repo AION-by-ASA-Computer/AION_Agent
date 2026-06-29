@@ -1,11 +1,16 @@
 """Recover plan sidebar registration when the model omits `<plan>` tags."""
+
 from __future__ import annotations
 
 import re
 import uuid
 from typing import List, Optional, Tuple
 
-from src.a2a.plan_markdown import markdown_to_plan, parse_task_checkbox_line, plan_to_markdown
+from src.a2a.plan_markdown import (
+    markdown_to_plan,
+    parse_task_checkbox_line,
+    plan_to_markdown,
+)
 from src.a2a.protocol import ExecutionPlan, ExecutionTask
 
 _TASK_LOOSE_CHECKBOX = re.compile(
@@ -50,7 +55,9 @@ def looks_like_chat_plan(text: str) -> bool:
     bold_id_hits = len(_TASK_BOLD_ID.findall(body))
     if "## tasks" in low and re.search(r"^\s*-\s*\[[ xX]\]\s+", body, re.MULTILINE):
         return True
-    if "## task" in low and (bold_id_hits >= 1 or re.search(r"^\s*-\s*\[[ xX]\]\s+", body, re.MULTILINE)):
+    if "## task" in low and (
+        bold_id_hits >= 1 or re.search(r"^\s*-\s*\[[ xX]\]\s+", body, re.MULTILINE)
+    ):
         return True
     if ("## obiettivo" in low or "## goal" in low) and (
         bold_id_hits >= 1
@@ -64,11 +71,15 @@ def looks_like_chat_plan(text: str) -> bool:
     checkbox_hits = len(_TASK_LOOSE_CHECKBOX.findall(body))
     if checkbox_hits >= 2:
         return True
-    if bold_id_hits >= 1 and ("piano" in low or "## task" in low or "## obiettivo" in low):
+    if bold_id_hits >= 1 and (
+        "piano" in low or "## task" in low or "## obiettivo" in low
+    ):
         return True
     if ("piano di esecuzione" in low or "piano di lavoro" in low) and task_hits >= 1:
         return True
-    if re.match(r"^#+\s*piano\b", body, re.IGNORECASE) and (bold_id_hits >= 1 or task_hits >= 1):
+    if re.match(r"^#+\s*piano\b", body, re.IGNORECASE) and (
+        bold_id_hits >= 1 or task_hits >= 1
+    ):
         return True
     return False
 

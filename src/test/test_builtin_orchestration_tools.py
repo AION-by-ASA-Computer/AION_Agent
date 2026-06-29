@@ -9,13 +9,17 @@ from src.runtime.orchestration_tools import ORCHESTRATION_BUILTIN_TOOL_NAMES
 
 
 @pytest.mark.anyio
-async def test_build_all_tools_includes_orchestration_without_profile_entry(monkeypatch):
+async def test_build_all_tools_includes_orchestration_without_profile_entry(
+    monkeypatch,
+):
     """Profiles without orchestration in mcp_servers still get mark_task_completed."""
 
     async def _no_mcp(*_a, **_k):
         return []
 
-    monkeypatch.setattr("src.runtime.native_tools.load_native_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        "src.runtime.native_tools.load_native_tools", lambda *_a, **_k: []
+    )
     monkeypatch.setattr("src.main.build_mcp_tools", _no_mcp)
 
     profile = SimpleNamespace(

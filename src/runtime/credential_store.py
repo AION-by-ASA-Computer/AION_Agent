@@ -5,6 +5,7 @@ Env:
   AION_CREDENTIAL_ENCRYPTION_KEY — hex-encoded 32-byte key (recommended in production)
   AION_MCP_USER_CREDENTIALS — "1" to enable DB-backed credential resolution
 """
+
 from __future__ import annotations
 
 import base64
@@ -54,7 +55,9 @@ def _get_encryption_key() -> bytes:
         try:
             key = bytes.fromhex(raw)
         except ValueError:
-            logger.warning("AION_CREDENTIAL_ENCRYPTION_KEY non è hex valido — uso chiave dev")
+            logger.warning(
+                "AION_CREDENTIAL_ENCRYPTION_KEY non è hex valido — uso chiave dev"
+            )
             key = b""
         if len(key) in (16, 24, 32):
             return key
@@ -72,7 +75,9 @@ def encrypt_value(plaintext: str) -> str:
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     except ImportError:
-        logger.warning("cryptography non installata — credenziali salvate in base64 (DEV ONLY)")
+        logger.warning(
+            "cryptography non installata — credenziali salvate in base64 (DEV ONLY)"
+        )
         return base64.b64encode(plaintext.encode("utf-8")).decode("ascii")
 
     key = _get_encryption_key()
@@ -115,15 +120,19 @@ async def set_credential(
     encrypted = encrypt_value(value)
     async with get_async_session_maker()() as session:
         existing = (
-            await session.execute(
-                select(UserMcpCredential).where(
-                    UserMcpCredential.user_id == user_id,
-                    UserMcpCredential.tenant_id == tenant_id,
-                    UserMcpCredential.server_slug == server_slug,
-                    UserMcpCredential.credential_key == key,
+            (
+                await session.execute(
+                    select(UserMcpCredential).where(
+                        UserMcpCredential.user_id == user_id,
+                        UserMcpCredential.tenant_id == tenant_id,
+                        UserMcpCredential.server_slug == server_slug,
+                        UserMcpCredential.credential_key == key,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         now = datetime.now(timezone.utc)
         if existing:
             existing.value_encrypted = encrypted
@@ -155,15 +164,19 @@ async def _get_credential_row(
 ):
     async with get_async_session_maker()() as session:
         return (
-            await session.execute(
-                select(UserMcpCredential).where(
-                    UserMcpCredential.user_id == user_id,
-                    UserMcpCredential.tenant_id == tenant_id,
-                    UserMcpCredential.server_slug == server_slug,
-                    UserMcpCredential.credential_key == key,
+            (
+                await session.execute(
+                    select(UserMcpCredential).where(
+                        UserMcpCredential.user_id == user_id,
+                        UserMcpCredential.tenant_id == tenant_id,
+                        UserMcpCredential.server_slug == server_slug,
+                        UserMcpCredential.credential_key == key,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
 
 def credential_key_aliases(key: str) -> tuple[str, ...]:
@@ -188,7 +201,9 @@ async def get_credential(
 ) -> Optional[str]:
     now = datetime.now(timezone.utc)
     for lookup_key in _credential_lookup_keys(key):
-        row = await _get_credential_row(user_id, server_slug, lookup_key, tenant_id=tenant_id)
+        row = await _get_credential_row(
+            user_id, server_slug, lookup_key, tenant_id=tenant_id
+        )
         if not row:
             continue
         if row.expires_at:
@@ -222,14 +237,18 @@ async def list_credentials_hints(
 ) -> List[Dict[str, Any]]:
     async with get_async_session_maker()() as session:
         rows = (
-            await session.execute(
-                select(UserMcpCredential).where(
-                    UserMcpCredential.user_id == user_id,
-                    UserMcpCredential.tenant_id == tenant_id,
-                    UserMcpCredential.server_slug == server_slug,
+            (
+                await session.execute(
+                    select(UserMcpCredential).where(
+                        UserMcpCredential.user_id == user_id,
+                        UserMcpCredential.tenant_id == tenant_id,
+                        UserMcpCredential.server_slug == server_slug,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     now = datetime.now(timezone.utc)
     res = []
     for r in rows:
@@ -239,13 +258,15 @@ async def list_credentials_hints(
             if exp.tzinfo is None:
                 exp = exp.replace(tzinfo=timezone.utc)
             is_expired = exp < now
-        res.append({
-            "key": r.credential_key,
-            "display_hint": r.display_hint,
-            "expires_at": r.expires_at.isoformat() if r.expires_at else None,
-            "updated_at": r.updated_at.isoformat() if r.updated_at else None,
-            "is_expired": is_expired,
-        })
+        res.append(
+            {
+                "key": r.credential_key,
+                "display_hint": r.display_hint,
+                "expires_at": r.expires_at.isoformat() if r.expires_at else None,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                "is_expired": is_expired,
+            }
+        )
     return res
 
 
@@ -277,14 +298,18 @@ async def get_all_credentials_for_server(
 ) -> Dict[str, str]:
     async with get_async_session_maker()() as session:
         rows = (
-            await session.execute(
-                select(UserMcpCredential).where(
-                    UserMcpCredential.user_id == user_id,
-                    UserMcpCredential.tenant_id == tenant_id,
-                    UserMcpCredential.server_slug == server_slug,
+            (
+                await session.execute(
+                    select(UserMcpCredential).where(
+                        UserMcpCredential.user_id == user_id,
+                        UserMcpCredential.tenant_id == tenant_id,
+                        UserMcpCredential.server_slug == server_slug,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     result: Dict[str, str] = {}
     now = datetime.now(timezone.utc)
     for r in rows:

@@ -1,4 +1,5 @@
 """Patch skill generate (Hermes FASE C) — stub sicuro."""
+
 from __future__ import annotations
 
 import logging
@@ -15,7 +16,11 @@ class SkillPatcher:
         new_data: Dict[str, Any],
         reason: str = "",
     ) -> Optional[str]:
-        if os.getenv("AION_SKILL_PATCH_ENABLED", "0").lower() not in ("1", "true", "yes"):
+        if os.getenv("AION_SKILL_PATCH_ENABLED", "0").lower() not in (
+            "1",
+            "true",
+            "yes",
+        ):
             return None
         logger.info("skill_patch stub: %s (%s)", name, reason)
         return None

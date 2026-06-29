@@ -25,7 +25,9 @@ def resolve_env_placeholders(
         }
     if isinstance(obj, list):
         return [
-            resolve_env_placeholders(i, user_id=user_id, tenant_id=tenant_id, server_slug=server_slug)
+            resolve_env_placeholders(
+                i, user_id=user_id, tenant_id=tenant_id, server_slug=server_slug
+            )
             for i in obj
         ]
     if isinstance(obj, str) and obj.startswith("${") and obj.endswith("}"):
@@ -64,7 +66,7 @@ class Config:
             # Minimal fallback if file doesn't exist yet
             self._data = {}
             return
-            
+
         with open(self.config_path, "r", encoding="utf-8") as f:
             raw = yaml.safe_load(f)
             self._data = resolve_env_placeholders(raw)
@@ -78,6 +80,7 @@ class Config:
             return val
         except (KeyError, TypeError):
             return default
+
 
 # Singleton instance
 config = Config()

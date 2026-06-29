@@ -1,4 +1,5 @@
 """Datasource Memory Workflow: standard agent process for SQL metadata profiles."""
+
 from __future__ import annotations
 
 import os
@@ -60,7 +61,9 @@ def datasource_blocked_promql_tool_names() -> set[str]:
 
 
 def datasource_orchestrator_enabled() -> bool:
-    return os.getenv("AION_DATASOURCE_MEMORY_ORCHESTRATOR", "1").strip().lower() not in (
+    return os.getenv(
+        "AION_DATASOURCE_MEMORY_ORCHESTRATOR", "1"
+    ).strip().lower() not in (
         "0",
         "false",
         "no",
@@ -103,11 +106,11 @@ def build_datasource_memory_system_prompt(profile=None) -> str:
             "### Required flow\n"
             "1. **SEARCH** — `sql_memory_search` + `mempalace_search` (skip only when the turn "
             "header includes **QueryMemory — server cache**).\n"
-            "2. **EXPLORE** — `sandbox_exec_allowlisted([\"wren\", \"context\", \"show\"])` "
+            '2. **EXPLORE** — `sandbox_exec_allowlisted(["wren", "context", "show"])` '
             "or `wren memory fetch` when memory extra is installed; max **2** Wren context "
             "calls per turn before asking the user.\n"
-            "3. **EXECUTE** — `sandbox_exec_allowlisted([\"wren\", \"--sql\", \"<SELECT>\", "
-            "\"-o\", \"table\"], timeout_sec=180)` — SQL targets MDL model names.\n"
+            '3. **EXECUTE** — `sandbox_exec_allowlisted(["wren", "--sql", "<SELECT>", '
+            '"-o", "table"], timeout_sec=180)` — SQL targets MDL model names.\n'
             "4. **PERSIST** — before the final answer when this turn verified a **new reusable** path:\n"
             "   - `sql_memory_save` / `save_successful_sql`: parameterized SQL + intent template "
             "(`is_verified=true`)\n"
@@ -162,7 +165,9 @@ def build_datasource_memory_system_prompt(profile=None) -> str:
 def profile_slug_wants_datasource_workflow(profile_slug: str) -> bool:
     try:
         from src.agent_profile import profile_manager
-        from src.runtime.query_memory_hooks import profile_wants_sql_query_memory_by_slug
+        from src.runtime.query_memory_hooks import (
+            profile_wants_sql_query_memory_by_slug,
+        )
 
         if not profile_wants_sql_query_memory_by_slug(profile_slug):
             return False

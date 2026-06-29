@@ -6,6 +6,7 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
+
 def extract_text_from_bytes(content: bytes, filename: str, mime_type: str) -> str:
     """Extract text from various file formats."""
     otel_enabled = os.getenv("AION_OTEL_ENABLED", "0") == "1"
@@ -13,11 +14,13 @@ def extract_text_from_bytes(content: bytes, filename: str, mime_type: str) -> st
     if otel_enabled:
         try:
             from opentelemetry import trace
+
             tracer = trace.get_tracer("aion.document")
         except ImportError:
             pass
 
     from contextlib import nullcontext
+
     span_ctx = nullcontext()
     if tracer:
         try:
@@ -43,7 +46,7 @@ def extract_text_from_bytes(content: bytes, filename: str, mime_type: str) -> st
                 "file.name": filename,
                 "file.mime": mime_type,
                 "file.size_bytes": len(content),
-            }
+            },
         )
 
         try:
@@ -53,14 +56,16 @@ def extract_text_from_bytes(content: bytes, filename: str, mime_type: str) -> st
                 for page in reader.pages:
                     text += page.extract_text() + "\n"
                 out = text
-            
+
             elif "csv" in mime_type or filename.lower().endswith(".csv"):
                 df = pd.read_csv(io.BytesIO(content))
                 out = df.to_string()
-            
-            elif "text" in mime_type or filename.lower().endswith((".txt", ".md", ".json")):
+
+            elif "text" in mime_type or filename.lower().endswith(
+                (".txt", ".md", ".json")
+            ):
                 out = content.decode("utf-8", errors="ignore")
-            
+
             else:
                 out = f"(Formato non supportato per {filename})"
 
@@ -79,7 +84,7 @@ def extract_text_from_bytes(content: bytes, filename: str, mime_type: str) -> st
                     "file.name": filename,
                     "extract.status": "success",
                     "extract.char_count": len(out),
-                }
+                },
             )
             return out
 
@@ -87,6 +92,7 @@ def extract_text_from_bytes(content: bytes, filename: str, mime_type: str) -> st
             if span and span.is_recording():
                 try:
                     from opentelemetry.trace import Status, StatusCode
+
                     span.record_exception(e)
                     span.set_status(Status(StatusCode.ERROR, str(e)))
                     span.set_attribute("extract.status", "error")
@@ -101,18 +107,19 @@ def extract_text_from_bytes(content: bytes, filename: str, mime_type: str) -> st
                     "file.name": filename,
                     "extract.status": "error",
                     "error": str(e),
-                }
+                },
             )
             return f"(Error while extracting from {filename}: {e})"
+
 
 def query_docs(query: str, documents: list) -> str:
     """Very simple search over the provided documents."""
     if not documents:
         return "No documents uploaded."
-    
+
     results = []
     for doc in documents:
-        text = extract_text_from_bytes(doc['content'], doc['name'], doc['type'])
+        text = extract_text_from_bytes(doc["content"], doc["name"], doc["type"])
         if query.lower() in text.lower():
             # Find snippet
             idx = text.lower().find(query.lower())
@@ -120,12 +127,12 @@ def query_docs(query: str, documents: list) -> str:
             end = min(len(text), idx + 1000)
             snippet = text[start:end]
             results.append(f"--- Da {doc['name']} ---\n...{snippet}...")
-            
+
     if not results:
         # If no direct match, return a summary of available docs
         summary = "Nessuna corrispondenza esatta trovata. Documenti disponibili:\n"
         for doc in documents:
             summary += f"- {doc['name']} ({doc['type']})\n"
         return summary
-        
+
     return "\n\n".join(results)

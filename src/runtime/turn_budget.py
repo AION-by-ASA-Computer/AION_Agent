@@ -1,4 +1,5 @@
 """Unified turn budget policy (P1.4). Wraps TurnGuards for a single import point."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ class TurnBudget:
         else:
             try:
                 from src.settings import get_settings
+
                 max_tool_calls = int(get_settings().tool_calls_max_per_turn)
             except Exception:
                 max_tool_calls = 24
@@ -46,16 +48,21 @@ class TurnBudget:
         else:
             try:
                 from src.settings import get_settings
+
                 max_stream_events = int(get_settings().stream_events_max_per_turn)
             except Exception:
                 max_stream_events = 0
 
         no_progress_timeout_raw = os.getenv("AION_NO_PROGRESS_TIMEOUT_SEC")
-        if no_progress_timeout_raw is not None and no_progress_timeout_raw.strip() != "":
+        if (
+            no_progress_timeout_raw is not None
+            and no_progress_timeout_raw.strip() != ""
+        ):
             no_progress_timeout = float(no_progress_timeout_raw)
         else:
             try:
                 from src.settings import get_settings
+
                 no_progress_timeout = float(get_settings().no_progress_timeout_sec)
             except Exception:
                 no_progress_timeout = 90.0
@@ -81,8 +88,12 @@ class TurnBudget:
             max_reasoning_chars = int(os.getenv("AION_REASONING_MIN_CHARS", "2000"))
             max_reasoning_events = int(os.getenv("AION_REASONING_MIN_EVENTS", "30"))
         elif effort == "max":
-            max_reasoning_chars = int(os.getenv("AION_REASONING_MAX_LEVEL_CHARS", str(base_chars * 2)))
-            max_reasoning_events = int(os.getenv("AION_REASONING_MAX_LEVEL_EVENTS", str(base_events * 2)))
+            max_reasoning_chars = int(
+                os.getenv("AION_REASONING_MAX_LEVEL_CHARS", str(base_chars * 2))
+            )
+            max_reasoning_events = int(
+                os.getenv("AION_REASONING_MAX_LEVEL_EVENTS", str(base_events * 2))
+            )
         else:  # medium / fallback
             max_reasoning_chars = base_chars
             max_reasoning_events = base_events

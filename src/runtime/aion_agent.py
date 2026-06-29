@@ -1,4 +1,5 @@
 """Haystack Agent con hook compattazione intra-turno (senza monkey-patch di run/run_async)."""
+
 from __future__ import annotations
 
 import inspect
@@ -129,7 +130,9 @@ def get_aion_agent_class() -> type:
     _AionAgentCls = _build_aion_agent_class(base)
     sub_sig = _signature_report(_AionAgentCls)
     # region agent log
-    _dbg("H2", "aion_agent.py:get_aion_agent_class", "aion_subclass_signatures", sub_sig)
+    _dbg(
+        "H2", "aion_agent.py:get_aion_agent_class", "aion_subclass_signatures", sub_sig
+    )
     # endregion
     if not sub_sig.get("match"):
         raise RuntimeError(f"AionAgent subclass signatures invalid: {sub_sig}")

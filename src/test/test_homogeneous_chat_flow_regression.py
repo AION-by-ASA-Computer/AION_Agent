@@ -22,6 +22,8 @@ def test_resume_filters_empty_technical_messages():
 
 def test_render_audit_reason_codes():
     assert "hidden.internal_role" in _message_render_reason_codes("internal", "x")
-    assert "hidden.raw_plan" in _message_render_reason_codes("assistant", "<plan>abc</plan>")
+    assert "hidden.raw_plan" in _message_render_reason_codes(
+        "assistant", "<plan>abc</plan>"
+    )
     assert "hidden.empty_technical" in _message_render_reason_codes("assistant", "")
     assert _message_render_reason_codes("assistant", "risposta") == ["shown.ui_visible"]

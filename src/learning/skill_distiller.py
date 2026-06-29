@@ -1,4 +1,5 @@
 """Generazione skill in data/skills/generated (Hermes FASE B) — versione essenziale."""
+
 from __future__ import annotations
 
 import json
@@ -24,7 +25,9 @@ class SkillDistiller:
     def __init__(self) -> None:
         self.min_tools = int(os.getenv("AION_SKILL_DISTILL_MIN_TOOLS", "5"))
         self.max_per_day = int(os.getenv("AION_SKILL_DISTILL_MAX_PER_DAY", "20"))
-        self.dedup_threshold = float(os.getenv("AION_SKILL_DISTILL_DEDUP_THRESHOLD", "0.88"))
+        self.dedup_threshold = float(
+            os.getenv("AION_SKILL_DISTILL_DEDUP_THRESHOLD", "0.88")
+        )
         self.out_dir = Path(
             os.getenv("AION_SKILL_GENERATED_DIR", "data/skills/generated")
         )
@@ -91,7 +94,11 @@ class SkillDistiller:
         assistant_output: str,
         tool_calls: List[Dict[str, Any]],
     ) -> Optional[str]:
-        if os.getenv("AION_SKILL_DISTILL_ENABLED", "0").lower() not in ("1", "true", "yes"):
+        if os.getenv("AION_SKILL_DISTILL_ENABLED", "0").lower() not in (
+            "1",
+            "true",
+            "yes",
+        ):
             return None
         if len(tool_calls) < self.min_tools:
             return None
@@ -126,14 +133,18 @@ class SkillDistiller:
             self._audit("dedup_skip", {"existing": similar[0], "score": similar[1]})
             return None
 
-        slug = _SLUG_RE.sub("", (data.get("slug") or "skill").lower().strip())[:60] or "skill"
+        slug = (
+            _SLUG_RE.sub("", (data.get("slug") or "skill").lower().strip())[:60]
+            or "skill"
+        )
         path = self.out_dir / f"{slug}.md"
         if path.exists():
             slug = f"{slug}-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
             path = self.out_dir / f"{slug}.md"
 
         body = "\n".join(
-            f"{i}. {s}" for i, s in enumerate(data.get("procedure") or ["Vedi descrizione"], 1)
+            f"{i}. {s}"
+            for i, s in enumerate(data.get("procedure") or ["Vedi descrizione"], 1)
         )
         post = frontmatter.Post(
             content=f"# {data.get('slug', slug)}\n\n{body}",
@@ -148,7 +159,9 @@ class SkillDistiller:
         )
         path.write_text(frontmatter.dumps(post), encoding="utf-8")
         skill_registry.reload()
-        self._audit("create", {"slug": slug, "session_id": session_id, "profile": profile_name})
+        self._audit(
+            "create", {"slug": slug, "session_id": session_id, "profile": profile_name}
+        )
         logger.info("distilled skill %s", slug)
         return slug
 

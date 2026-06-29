@@ -1,4 +1,5 @@
 """File bounded SOUL/MEMORY/USER per profilo (Hermes FASE G)."""
+
 from __future__ import annotations
 
 import os

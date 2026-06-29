@@ -6,17 +6,27 @@ from datetime import datetime
 
 logger = logging.getLogger("aion.visibility")
 
+
 class VisibilityManager:
     """
     Manages tool execution visibility, logging starts, ends, and errors.
     This is a stub implementation to restore functionality and prevent ImportErrors.
     """
+
     def __init__(self, log_dir: str = "data/logs/visibility"):
         self.log_dir = log_dir
         import os
+
         os.makedirs(log_dir, exist_ok=True)
 
-    def log_tool_call(self, session_id: str, tool_name: str, event_type: str, call_id: str, data: Dict[str, Any]):
+    def log_tool_call(
+        self,
+        session_id: str,
+        tool_name: str,
+        event_type: str,
+        call_id: str,
+        data: Dict[str, Any],
+    ):
         """Logs a tool call event to the console and potentially a file."""
         msg = {
             "timestamp": datetime.now().isoformat(),
@@ -24,9 +34,9 @@ class VisibilityManager:
             "tool_name": tool_name,
             "event": event_type,
             "call_id": call_id,
-            "data": data
+            "data": data,
         }
-        
+
         # Determine log level based on event type
         if event_type == "error":
             logger.error(f"🛠️ TOOL ERROR [{tool_name}]: {json.dumps(data)}")
@@ -42,6 +52,7 @@ class VisibilityManager:
                 f.write(json.dumps(msg) + "\n")
         except Exception as e:
             logger.warning(f"Failed to write visibility log: {e}")
+
 
 # Singleton instance
 visibility_manager = VisibilityManager()

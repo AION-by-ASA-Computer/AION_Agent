@@ -15,11 +15,6 @@ import type * as Preset from '@docusaurus/preset-classic';
 const _buRaw = (process.env.DOCUSAURUS_BASE_URL ?? '').trim();
 const baseUrl = _buRaw === '' ? '/' : (_buRaw.endsWith('/') ? _buRaw : `${_buRaw}/`);
 
-// Quando baseUrl != '/', i footer link con path assoluti (es. /docs/...) non
-// si auto-adeguano al doppio prefisso -> evitiamo di fallire il build su questi.
-// Per dev (baseUrl=/) lasciamo 'throw' per intercettare regressioni.
-const isCustomBaseUrl = baseUrl !== '/';
-
 const config: Config = {
   title: 'AION Agent',
   tagline: 'Technical documentation: architecture, MCP, memory, and client integration.',
@@ -39,7 +34,9 @@ const config: Config = {
   organizationName: 'aion-asa', // Usually your GitHub org/user name.
   projectName: 'aion-agent-documentation', // Usually your repo name.
 
-  onBrokenLinks: isCustomBaseUrl ? 'warn' : 'throw',
+  // Docs link to repo paths (src/, config_std/) that are not Docusaurus routes.
+  onBrokenLinks: 'warn',
+  onBrokenMarkdownLinks: 'warn',
 
   markdown: {
     mermaid: true,

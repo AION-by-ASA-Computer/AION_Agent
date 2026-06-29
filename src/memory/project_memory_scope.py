@@ -1,4 +1,5 @@
 """Shared project ↔ MemPalace wing/room conventions (aligned with SQL QueryMemory slugs)."""
+
 from __future__ import annotations
 
 import os
@@ -84,7 +85,7 @@ _WING_ROOM_RE = re.compile(r"^[a-z0-9_\-]+$")
 def sanitize_id(part: str) -> str:
     s = re.sub(r"[^a-z0-9_\-]", "_", (part or "default").lower())
     s = re.sub(r"_+", "_", s).strip("_")
-    return (s[:80] or "default")
+    return s[:80] or "default"
 
 
 def sanitize_project_slug(project_slug: str) -> str:
@@ -129,7 +130,10 @@ def room_hints_from_query(query: str) -> List[str]:
         hints.append("join_paths")
     if any(w in q for w in ("sscc", "cliente", "ordini", "entry", "partire", "inizi")):
         hints.append("entry_points")
-    if any(w in q for w in ("errore", "fallit", "0 righe", "timeout", "pitfall", "non funz")):
+    if any(
+        w in q
+        for w in ("errore", "fallit", "0 righe", "timeout", "pitfall", "non funz")
+    ):
         hints.append("pitfalls")
     if any(w in q for w in ("trim", "cast", "euristic", "heuristic", "filtro")):
         hints.append("heuristics")

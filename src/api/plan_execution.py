@@ -65,7 +65,9 @@ async def plan_execution_active(
     if not plan_execution_enabled():
         return {"active": []}
     handler = get_plan_execution_handler()
-    return {"active": handler.list_active_for_owner(owner, chat_session_id=chat_session_id)}
+    return {
+        "active": handler.list_active_for_owner(owner, chat_session_id=chat_session_id)
+    }
 
 
 @router.get("/plan-execution/runs")
@@ -183,7 +185,9 @@ async def plan_execution_stream(
                     final["deliverable_path"] = data.get("deliverable_path")
                 yield f"data: {json.dumps(final)}\n\n"
                 return
-            stream_seq = await handler.wait_stream_update(run_id, stream_seq, timeout=0.5)
+            stream_seq = await handler.wait_stream_update(
+                run_id, stream_seq, timeout=0.5
+            )
 
     return StreamingResponse(
         _generate(),
@@ -212,6 +216,8 @@ async def plan_execution_result(
         }
     return {
         "summary": result,
-        "plan_id": handler.load_json(run_id).get("plan_id", "") if handler.load_json(run_id) else "",
+        "plan_id": handler.load_json(run_id).get("plan_id", "")
+        if handler.load_json(run_id)
+        else "",
         "deliverable_path": handler.get_deliverable_path(run_id),
     }

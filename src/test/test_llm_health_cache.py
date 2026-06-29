@@ -1,4 +1,5 @@
 """LLM health ping is cached within TTL."""
+
 from unittest.mock import patch
 
 from src.runtime.llm_health import check_llm_connection, reset_llm_health_cache

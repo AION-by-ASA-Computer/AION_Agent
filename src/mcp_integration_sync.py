@@ -1,6 +1,7 @@
 """
 Sincronizza McpServerConfig dal registry MCP + catalogo connettori (fonte di verità schema).
 """
+
 from __future__ import annotations
 
 import json
@@ -34,7 +35,9 @@ def _slug_env_prefix(server_slug: str) -> str:
     return server_slug.upper().replace("-", "_")
 
 
-def credential_schema_from_connector(connector_row: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def credential_schema_from_connector(
+    connector_row: Optional[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     if not connector_row:
         return []
     raw = connector_row.get("credential_fields")
@@ -48,7 +51,9 @@ def credential_schema_from_connector(connector_row: Optional[Dict[str, Any]]) ->
                 continue
             secret = bool(row.get("secret"))
             if "secret" not in row:
-                secret = bool(re.search(r"TOKEN|SECRET|PASSWORD|API_KEY|REFRESH", key, re.I))
+                secret = bool(
+                    re.search(r"TOKEN|SECRET|PASSWORD|API_KEY|REFRESH", key, re.I)
+                )
             ftype = "password" if secret else "text"
             if str(row.get("type") or "").lower() == "oauth":
                 ftype = "oauth"
@@ -72,7 +77,9 @@ def credential_schema_from_connector(connector_row: Optional[Dict[str, Any]]) ->
                 {
                     "key": k,
                     "label": k.replace("_", " ").title(),
-                    "type": "password" if re.search(r"TOKEN|SECRET|PASSWORD|KEY", k, re.I) else "text",
+                    "type": "password"
+                    if re.search(r"TOKEN|SECRET|PASSWORD|KEY", k, re.I)
+                    else "text",
                     "required": True,
                 }
             )
@@ -83,7 +90,9 @@ def credential_schema_from_connector(connector_row: Optional[Dict[str, Any]]) ->
                 {
                     "key": k,
                     "label": k.replace("_", " ").title(),
-                    "type": "password" if re.search(r"TOKEN|SECRET|PASSWORD|KEY", k, re.I) else "text",
+                    "type": "password"
+                    if re.search(r"TOKEN|SECRET|PASSWORD|KEY", k, re.I)
+                    else "text",
                     "required": False,
                 }
             )
@@ -173,7 +182,11 @@ def infer_credential_mode(
     if discovery and discovery.has_env_auth:
         return "per_user"
     if schema and any(
-        re.search(r"TOKEN|SECRET|PASSWORD|API_KEY|EMAIL|IMAP|SMTP|AUTH", str(f.get("key") or ""), re.I)
+        re.search(
+            r"TOKEN|SECRET|PASSWORD|API_KEY|EMAIL|IMAP|SMTP|AUTH",
+            str(f.get("key") or ""),
+            re.I,
+        )
         for f in schema
     ):
         return "per_user"
@@ -207,10 +220,14 @@ def validate_policy_vs_registry(
     return warnings
 
 
-def _display_meta_from_connector(connector_row: Optional[Dict[str, Any]], slug: str) -> Dict[str, Any]:
+def _display_meta_from_connector(
+    connector_row: Optional[Dict[str, Any]], slug: str
+) -> Dict[str, Any]:
     if connector_row:
         return {
-            "display_name": str(connector_row.get("title") or slug.replace("_", " ").title()),
+            "display_name": str(
+                connector_row.get("title") or slug.replace("_", " ").title()
+            ),
             "description": connector_row.get("description"),
             "category": connector_row.get("category"),
             "aion_connector_id": str(connector_row.get("id") or ""),
@@ -231,7 +248,9 @@ def build_integration_preview(
     try:
         mcp_manager.load_registry()
         catalog = load_mcp_connector_catalog()
-        cfg = mcp_manager.get_server_config(server_slug) or mcp_manager._registry.get(server_slug)
+        cfg = mcp_manager.get_server_config(server_slug) or mcp_manager._registry.get(
+            server_slug
+        )
     except Exception as e:
         return {"ok": False, "error": f"Errore caricamento registry: {e}"}
 
@@ -255,9 +274,13 @@ def build_integration_preview(
         else:
             warnings_list = validate_policy_vs_registry(server_slug, cfg, mode)
         if discovery.has_env_auth and not schema:
-            warnings_list.append("Discovery ha trovato env ma schema vuoto — verificare installazione.")
+            warnings_list.append(
+                "Discovery ha trovato env ma schema vuoto — verificare installazione."
+            )
         if discovery.remote_auth_type == "unreachable":
-            warnings_list.append(f"Il server remoto non è raggiungibile: {discovery.remote_error or 'timeout o errore di connessione'}")
+            warnings_list.append(
+                f"Il server remoto non è raggiungibile: {discovery.remote_error or 'timeout o errore di connessione'}"
+            )
         suggested_per_user = suggest_registry_env_for_per_user(server_slug, schema)
         suggested_org = suggest_registry_env_for_org_shared(schema)
         return {
@@ -270,7 +293,9 @@ def build_integration_preview(
             "suggested_env_org_shared": suggested_org,
             "current_env": cfg.get("env") or {},
             "warnings": warnings_list,
-            "aion_connector_id": (cfg.get("aion_connector_id") or (connector_row or {}).get("id")),
+            "aion_connector_id": (
+                cfg.get("aion_connector_id") or (connector_row or {}).get("id")
+            ),
             "discovery": {
                 "env_keys": discovery.env_keys,
                 "sources": discovery.sources,
@@ -289,13 +314,16 @@ def build_integration_preview(
         }
     except Exception as e:
         import logging
+
         logging.getLogger("aion.mcp_integration_sync").exception(
             "build_integration_preview fallita per %s", server_slug
         )
         return {"ok": False, "error": str(e)}
 
 
-def apply_credential_mode_flags(mode: str, requires_user_credentials: Optional[bool] = None) -> Tuple[str, bool]:
+def apply_credential_mode_flags(
+    mode: str, requires_user_credentials: Optional[bool] = None
+) -> Tuple[str, bool]:
     m = mode if mode in ("none", "org_shared", "per_user") else "none"
     if requires_user_credentials is not None:
         return m, requires_user_credentials
@@ -322,14 +350,22 @@ async def sync_mcp_server_config_from_registry(
     )
     mode = credential_mode or infer_credential_mode(raw_cfg, connector_row, discovery)
     meta = _display_meta_from_connector(connector_row, server_slug)
-    connector_id = (raw_cfg.get("aion_connector_id") or meta.get("aion_connector_id") or "").strip() or None
+    connector_id = (
+        raw_cfg.get("aion_connector_id") or meta.get("aion_connector_id") or ""
+    ).strip() or None
 
     async with get_async_session_maker()() as session:
         row = (
-            await session.execute(
-                select(McpServerConfig).where(McpServerConfig.server_slug == server_slug)
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == server_slug
+                    )
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         now = datetime.now(timezone.utc)
         if row:
             if force_schema_from_catalog and schema:
@@ -349,7 +385,11 @@ async def sync_mcp_server_config_from_registry(
             row.requires_user_credentials = mode == "per_user"
             if raw_cfg.get("type") == "remote-bridge":
                 try:
-                    oauth_cfg = json.loads(row.oauth_config_json) if row.oauth_config_json else {}
+                    oauth_cfg = (
+                        json.loads(row.oauth_config_json)
+                        if row.oauth_config_json
+                        else {}
+                    )
                 except Exception:
                     oauth_cfg = {}
                 if not oauth_cfg.get("remote_url"):
@@ -395,16 +435,24 @@ async def sync_mcp_server_config_from_registry(
 
 async def sync_all_mcp_server_configs_from_registry() -> Dict[str, Any]:
     mcp_manager.load_registry()
-    slugs = [s for s in mcp_manager.get_all_servers() if s and not str(s).startswith("_")]
+    slugs = [
+        s for s in mcp_manager.get_all_servers() if s and not str(s).startswith("_")
+    ]
     created = updated = skipped = 0
     for slug in slugs:
         existing_before = None
         async with get_async_session_maker()() as session:
             existing_before = (
-                await session.execute(
-                    select(McpServerConfig.id).where(McpServerConfig.server_slug == slug)
+                (
+                    await session.execute(
+                        select(McpServerConfig.id).where(
+                            McpServerConfig.server_slug == slug
+                        )
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
         row = await sync_mcp_server_config_from_registry(slug)
         if not row:
             skipped += 1
@@ -412,7 +460,12 @@ async def sync_all_mcp_server_configs_from_registry() -> Dict[str, Any]:
             updated += 1
         else:
             created += 1
-    return {"created": created, "updated": updated, "skipped": skipped, "total": len(slugs)}
+    return {
+        "created": created,
+        "updated": updated,
+        "skipped": skipped,
+        "total": len(slugs),
+    }
 
 
 def normalize_env_override(
@@ -460,9 +513,15 @@ def merge_suggested_env_into_registry(
     preview = build_integration_preview(server_slug, credential_mode=credential_mode)
     if not preview.get("ok"):
         return preview
-    schema = credential_schema if credential_schema is not None else (preview.get("credential_schema") or [])
+    schema = (
+        credential_schema
+        if credential_schema is not None
+        else (preview.get("credential_schema") or [])
+    )
     if env_override:
-        suggested, norm_warnings = normalize_env_override(env_override, credential_mode, server_slug)
+        suggested, norm_warnings = normalize_env_override(
+            env_override, credential_mode, server_slug
+        )
         preview_warnings = list(preview.get("warnings") or [])
         preview_warnings.extend(norm_warnings)
     elif credential_mode == "per_user":
@@ -485,9 +544,16 @@ def merge_suggested_env_into_registry(
     mcp_manager.update_server_config(server_slug, {"env": env})
     cfg_after = mcp_manager.get_server_config(server_slug) or {}
     cfg_after = {**cfg_after, "env": env}
-    policy_warnings = validate_policy_vs_registry(server_slug, cfg_after, credential_mode)
+    policy_warnings = validate_policy_vs_registry(
+        server_slug, cfg_after, credential_mode
+    )
     all_warnings = list(preview_warnings) + policy_warnings
-    return {"ok": True, "env": env, "server_slug": server_slug, "warnings": all_warnings}
+    return {
+        "ok": True,
+        "env": env,
+        "server_slug": server_slug,
+        "warnings": all_warnings,
+    }
 
 
 async def apply_integration_config(
@@ -519,7 +585,14 @@ async def apply_integration_config(
         requires_user_credentials,
     )
 
-    allowed_registry = {"command", "args", "env", "description", "security", "aion_connector_id"}
+    allowed_registry = {
+        "command",
+        "args",
+        "env",
+        "description",
+        "security",
+        "aion_connector_id",
+    }
     if registry_patch:
         update_data = {k: v for k, v in registry_patch.items() if k in allowed_registry}
         if update_data:
@@ -539,7 +612,10 @@ async def apply_integration_config(
     # Cleanup per "none": rimuovi env e auth headers dai remote MCP
     if mode == "none":
         cfg = mcp_manager.get_server_config(server_slug) or {}
-        is_remote = cfg.get("type") == "remote-bridge" or cfg.get("aion_market_install") == "remote"
+        is_remote = (
+            cfg.get("type") == "remote-bridge"
+            or cfg.get("aion_market_install") == "remote"
+        )
 
         updates: Dict[str, Any] = {}
 
@@ -575,10 +651,16 @@ async def apply_integration_config(
         )
         async with get_async_session_maker()() as session:
             db_row = (
-                await session.execute(
-                    select(McpServerConfig).where(McpServerConfig.server_slug == server_slug)
+                (
+                    await session.execute(
+                        select(McpServerConfig).where(
+                            McpServerConfig.server_slug == server_slug
+                        )
+                    )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if db_row:
                 db_row.credential_mode = mode
                 db_row.requires_user_credentials = req_creds

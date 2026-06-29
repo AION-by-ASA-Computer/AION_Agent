@@ -1,4 +1,5 @@
 """Integration tests: plan finalizer and fake-LLM chat stream smoke tests."""
+
 from __future__ import annotations
 
 import asyncio
@@ -112,6 +113,7 @@ class FakeLLMServer:
         while time.monotonic() < deadline:
             try:
                 import urllib.request
+
                 urllib.request.urlopen(f"{self.base_url}/", timeout=0.5)
                 break
             except Exception:
@@ -170,11 +172,15 @@ async def test_chat_stream_route_yields_token_events(monkeypatch):
         fake_agent = MagicMock()
         from haystack.dataclasses import ChatMessage as CM
 
-        async def _fake_run_async(messages, streaming_callback=None, generation_kwargs=None):
+        async def _fake_run_async(
+            messages, streaming_callback=None, generation_kwargs=None
+        ):
             if streaming_callback:
                 try:
                     # Simulate streaming callbacks
-                    from haystack.components.generators.utils import print_streaming_chunk
+                    from haystack.components.generators.utils import (
+                        print_streaming_chunk,
+                    )
                 except ImportError:
                     pass
             return {"messages": messages + [CM.from_assistant("Hello from AION!")]}
@@ -247,7 +253,9 @@ async def test_chat_stream_route_yields_token_events(monkeypatch):
             from src.api.main import app
 
             transport = ASGITransport(app=app)
-            async with AsyncClient(transport=transport, base_url="http://test") as client:
+            async with AsyncClient(
+                transport=transport, base_url="http://test"
+            ) as client:
                 resp = await client.post(
                     "/v1/chat/stream",
                     json={
@@ -300,7 +308,9 @@ Test
     assert ok is not None
     assert ok.plan_id == pid
 
-    bad = await PlanFinalizer.finalize("solo chiacchiere", user_message="x", plan_id=pid)
+    bad = await PlanFinalizer.finalize(
+        "solo chiacchiere", user_message="x", plan_id=pid
+    )
     assert bad is None
 
 

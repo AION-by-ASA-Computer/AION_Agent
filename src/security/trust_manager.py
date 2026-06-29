@@ -9,9 +9,10 @@ from ..data.models import TrustedPath
 
 logger = logging.getLogger("aion.security.trust")
 
+
 class TrustManager:
     """Manages the database of trusted files and paths using unified SQLAlchemy engine."""
-    
+
     def __init__(self):
         self.session_maker = get_async_session_maker()
 
@@ -40,6 +41,7 @@ class TrustManager:
             await session.execute(q)
             await session.commit()
             logger.info(f"🚫 Trust removed from path: {path}")
+
 
 # Singleton instance
 trust_manager = TrustManager()

@@ -1,4 +1,5 @@
 """REST API for MemPalace navigation memory (per SQL QueryMemory project)."""
+
 from __future__ import annotations
 
 import logging

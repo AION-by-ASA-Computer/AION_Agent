@@ -1,4 +1,5 @@
 """Admin API for SQL QueryMemory tenant settings and cross-user management."""
+
 from __future__ import annotations
 
 import os
@@ -49,7 +50,9 @@ async def admin_list_projects(
 ) -> List[AdminProjectOut]:
     if not sql_query_memory_enabled():
         return []
-    projects = await sql_query_memory.admin_list_projects_with_members(tenant_id=_tenant())
+    projects = await sql_query_memory.admin_list_projects_with_members(
+        tenant_id=_tenant()
+    )
     if profile:
         p_slug = profile.strip().lower()
         projects = [p for p in projects if p.profile_slug == p_slug]
@@ -134,7 +137,9 @@ async def admin_add_project_member(
         if code == "not_found":
             raise HTTPException(status_code=404, detail="Project not found")
         if code == "already_member":
-            raise HTTPException(status_code=409, detail="User is already a member of this project")
+            raise HTTPException(
+                status_code=409, detail="User is already a member of this project"
+            )
         raise HTTPException(status_code=400, detail=code)
 
 
@@ -160,7 +165,6 @@ async def admin_remove_project_member(
         if code == "not_found":
             raise HTTPException(status_code=404, detail="Project not found")
         raise HTTPException(status_code=400, detail=code)
-
 
 
 @router.get("/queries")

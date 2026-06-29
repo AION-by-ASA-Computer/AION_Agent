@@ -12,13 +12,17 @@ from src.runtime.deep_research_tools import (
 
 
 @pytest.mark.anyio
-async def test_build_all_tools_includes_deep_research_without_profile_bundle(monkeypatch):
+async def test_build_all_tools_includes_deep_research_without_profile_bundle(
+    monkeypatch,
+):
     """Profiles without deep_research native_tool_group still get trigger_research."""
 
     async def _no_mcp(*_a, **_k):
         return []
 
-    monkeypatch.setattr("src.runtime.native_tools.load_native_tools", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        "src.runtime.native_tools.load_native_tools", lambda *_a, **_k: []
+    )
     monkeypatch.setattr("src.main.build_mcp_tools", _no_mcp)
     monkeypatch.setattr("src.research.handler.deep_research_enabled", lambda: True)
 

@@ -1,4 +1,5 @@
 """Escape-policy tests: container argv must not expose host secrets paths."""
+
 from __future__ import annotations
 
 import unittest
@@ -19,7 +20,9 @@ class TestSessionSandboxEscapePolicy(unittest.TestCase):
         for mount in mount_args:
             self.assertNotIn("/app/.env", mount)
             self.assertNotIn("aion.db", mount)
-            self.assertTrue(mount.startswith("/app/data/sessions/escape-test-1234:/session"))
+            self.assertTrue(
+                mount.startswith("/app/data/sessions/escape-test-1234:/session")
+            )
 
     def test_read_only_rootfs_and_no_new_privileges(self):
         argv = build_container_run_argv(

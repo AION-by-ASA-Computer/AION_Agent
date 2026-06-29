@@ -88,7 +88,13 @@ async def fetch_webpage_content(url: str, *, timeout: float = 25.0) -> Dict[str,
     try:
         data = json.loads(raw)
     except json.JSONDecodeError:
-        return {"success": False, "url": url, "content": "", "title": "", "og_image": ""}
+        return {
+            "success": False,
+            "url": url,
+            "content": "",
+            "title": "",
+            "og_image": "",
+        }
 
     if data.get("error"):
         return {

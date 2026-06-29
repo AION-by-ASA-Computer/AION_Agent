@@ -1,4 +1,5 @@
 """Identità utente per path e API (sanitizzazione coerente)."""
+
 from __future__ import annotations
 
 import re

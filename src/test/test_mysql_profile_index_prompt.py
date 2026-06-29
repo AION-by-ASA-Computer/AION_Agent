@@ -1,4 +1,5 @@
 """MySQL metadata profile uses index mode + critical_skills (not full skill dump)."""
+
 from __future__ import annotations
 
 import os

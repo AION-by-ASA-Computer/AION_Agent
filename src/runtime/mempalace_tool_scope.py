@@ -1,4 +1,5 @@
 """Force MemPalace navigation tools to use the active SQL QueryMemory project wing."""
+
 from __future__ import annotations
 
 import json

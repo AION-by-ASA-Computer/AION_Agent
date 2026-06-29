@@ -1,4 +1,5 @@
 """APScheduler integration for per-user cron jobs."""
+
 from __future__ import annotations
 
 import logging
@@ -18,7 +19,12 @@ _APS_JOB_PREFIX = "aion_cron:"
 
 
 def cron_enabled() -> bool:
-    return os.environ.get("AION_CRON_ENABLED", "0").lower() in ("1", "true", "yes", "on")
+    return os.environ.get("AION_CRON_ENABLED", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def _aps_job_id(job_id: str) -> str:
@@ -72,7 +78,12 @@ def register_job_on_scheduler(sched: AsyncIOScheduler, job: Dict[str, Any]) -> N
         coalesce=True,
         misfire_grace_time=int(os.getenv("AION_CRON_MISFIRE_GRACE_SEC", "300")),
     )
-    logger.info("cron registered job_id=%s expr=%s tz=%s", job_id[:8], job["cron_expression"], tz)
+    logger.info(
+        "cron registered job_id=%s expr=%s tz=%s",
+        job_id[:8],
+        job["cron_expression"],
+        tz,
+    )
 
 
 def unregister_job_on_scheduler(sched: AsyncIOScheduler, job_id: str) -> None:

@@ -49,8 +49,14 @@ def test_skill_search_respects_allowed_names(tmp_path, monkeypatch):
     )
     d = tmp_path / "skills"
     d.mkdir(parents=True)
-    (d / "alpha.md").write_text("---\nname: alpha\ndescription: alpha skill\ntags: []\n---\nbody", encoding="utf-8")
-    (d / "beta.md").write_text("---\nname: beta\ndescription: beta skill\ntags: []\n---\nbody", encoding="utf-8")
+    (d / "alpha.md").write_text(
+        "---\nname: alpha\ndescription: alpha skill\ntags: []\n---\nbody",
+        encoding="utf-8",
+    )
+    (d / "beta.md").write_text(
+        "---\nname: beta\ndescription: beta skill\ntags: []\n---\nbody",
+        encoding="utf-8",
+    )
     reg.reload()
     hits = reg.search("alpha", top_k=5, allowed_names=["alpha"])
     assert len(hits) == 1

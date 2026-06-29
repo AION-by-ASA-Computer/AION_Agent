@@ -1,4 +1,5 @@
 """Serialize the full prompt sent to the Haystack agent (system + tools + messages)."""
+
 from __future__ import annotations
 
 import json
@@ -69,7 +70,11 @@ def _serialize_message_content(message: ChatMessage) -> str:
                 lines.append(f"[IMAGE {mime}: {rel or 'embedded'}]")
                 continue
             if cls_name == "FileContent":
-                fname = getattr(part, "filename", None) or getattr(part, "name", None) or "file"
+                fname = (
+                    getattr(part, "filename", None)
+                    or getattr(part, "name", None)
+                    or "file"
+                )
                 lines.append(f"[FILE: {fname}]")
                 continue
             text = chat_message_text(message)
@@ -166,7 +171,9 @@ def store_prompt_snapshot(
         "assistant_message_id": assistant_message_id,
         "stored_at_ms": int(time.time() * 1000),
     }
-    bucket = _SESSION_SNAPSHOTS.setdefault(session_id, deque(maxlen=_MAX_SNAPSHOTS_PER_SESSION))
+    bucket = _SESSION_SNAPSHOTS.setdefault(
+        session_id, deque(maxlen=_MAX_SNAPSHOTS_PER_SESSION)
+    )
     bucket.append(row)
 
 

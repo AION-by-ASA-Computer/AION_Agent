@@ -3,6 +3,7 @@ Container run policy for session sandbox (Podman/Docker).
 
 Builds argv for hardened per-session MCP workers.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -21,7 +22,11 @@ def container_name_for_session(session_id: str) -> str:
 
 
 def _selinux_mount_suffix() -> str:
-    if os.environ.get("AION_SANDBOX_CONTAINER_SELINUX", "1").lower() in ("1", "true", "yes"):
+    if os.environ.get("AION_SANDBOX_CONTAINER_SELINUX", "1").lower() in (
+        "1",
+        "true",
+        "yes",
+    ):
         return ",Z"
     return ""
 
@@ -30,7 +35,9 @@ def _network_mode() -> str:
     allow_pip = _truthy("AION_SANDBOX_ALLOW_PACKAGE_INSTALL", "1")
     allow_npm = _truthy("AION_SANDBOX_ALLOW_NPM_INSTALL", "1")
     if allow_pip or allow_npm:
-        return (os.environ.get("AION_SANDBOX_CONTAINER_NETWORK") or "slirp4netns").strip()
+        return (
+            os.environ.get("AION_SANDBOX_CONTAINER_NETWORK") or "slirp4netns"
+        ).strip()
     return "none"
 
 

@@ -18,7 +18,9 @@ def connector_catalog_path() -> Path:
     return _repo_root() / "config" / "mcp_connector_catalog.yaml"
 
 
-def infer_connector_id_for_registry_name(registry_name: str, catalog: Dict[str, Any]) -> str | None:
+def infer_connector_id_for_registry_name(
+    registry_name: str, catalog: Dict[str, Any]
+) -> str | None:
     """
     Associa un nome server MCP nel registry (es. ``clickup-mcp-server``) a un ``id`` del catalogo connettori,
     usando ``mcp_name_hints`` se presenti, altrimenti l'id del connettore come hint debole.
@@ -57,7 +59,9 @@ def valid_connector_ids(catalog: Dict[str, Any]) -> set[str]:
     }
 
 
-def _connector_by_id(catalog: Dict[str, Any], connector_id: str) -> Dict[str, Any] | None:
+def _connector_by_id(
+    catalog: Dict[str, Any], connector_id: str
+) -> Dict[str, Any] | None:
     want = (connector_id or "").strip().lower()
     if not want:
         return None
@@ -101,7 +105,14 @@ def _parse_runtime_env_alias_entries(raw: Any) -> List[Tuple[str, List[str]]]:
                 out.append((dest, [sources]))
             elif isinstance(sources, list):
                 out.append(
-                    (dest, [str(s) for s in sources if isinstance(s, str) and str(s).strip()])
+                    (
+                        dest,
+                        [
+                            str(s)
+                            for s in sources
+                            if isinstance(s, str) and str(s).strip()
+                        ],
+                    )
                 )
         return out
     if isinstance(raw, list):
@@ -111,12 +122,21 @@ def _parse_runtime_env_alias_entries(raw: Any) -> List[Tuple[str, List[str]]]:
             dest = row.get("env_key") or row.get("key") or row.get("target")
             if not isinstance(dest, str) or not dest.strip():
                 continue
-            sources = row.get("from_env_keys") or row.get("from_keys") or row.get("from")
+            sources = (
+                row.get("from_env_keys") or row.get("from_keys") or row.get("from")
+            )
             if isinstance(sources, str):
                 out.append((dest, [sources]))
             elif isinstance(sources, list):
                 out.append(
-                    (dest, [str(s) for s in sources if isinstance(s, str) and str(s).strip()])
+                    (
+                        dest,
+                        [
+                            str(s)
+                            for s in sources
+                            if isinstance(s, str) and str(s).strip()
+                        ],
+                    )
                 )
     return out
 
@@ -139,7 +159,9 @@ def apply_runtime_env_aliases(
     senza codice dedicato per integrazione.
     """
     data = catalog if catalog is not None else load_mcp_connector_catalog()
-    row = resolve_connector_row_for_mcp_server(registry_server_name, server_config, data)
+    row = resolve_connector_row_for_mcp_server(
+        registry_server_name, server_config, data
+    )
     if not row:
         return
     entries = _parse_runtime_env_alias_entries(row.get("runtime_env_aliases"))

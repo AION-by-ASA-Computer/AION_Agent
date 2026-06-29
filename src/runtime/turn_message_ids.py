@@ -1,4 +1,5 @@
 """Stable turn message IDs for streaming, Redis recovery, and incremental DB persist."""
+
 from __future__ import annotations
 
 from typing import Optional, Tuple

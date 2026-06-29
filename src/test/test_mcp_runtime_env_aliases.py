@@ -1,6 +1,9 @@
 """Catalog-driven runtime env aliases (no per-connector code in mcp_manager)."""
 
-from src.mcp_connector_catalog import apply_runtime_env_aliases, resolve_connector_row_for_mcp_server
+from src.mcp_connector_catalog import (
+    apply_runtime_env_aliases,
+    resolve_connector_row_for_mcp_server,
+)
 from src.mcp_manager import _merge_mcp_subprocess_env
 
 
@@ -33,7 +36,11 @@ def test_apply_aliases_dict_form_in_catalog():
                 "id": "clickup",
                 "mcp_name_hints": ["clickup"],
                 "runtime_env_aliases": {
-                    "CLICKUP_API_KEY": ["clickupApiKey", "CLICKUP_API_TOKEN", "CLICKUP_PERSONAL_TOKEN"],
+                    "CLICKUP_API_KEY": [
+                        "clickupApiKey",
+                        "CLICKUP_API_TOKEN",
+                        "CLICKUP_PERSONAL_TOKEN",
+                    ],
                     "CLICKUP_TEAM_ID": ["clickupTeamId"],
                 },
             }
@@ -53,7 +60,11 @@ def test_apply_clickup_aliases_from_registry_style_keys():
                 "id": "clickup",
                 "mcp_name_hints": ["clickup"],
                 "runtime_env_aliases": {
-                    "CLICKUP_API_KEY": ["clickupApiKey", "CLICKUP_API_TOKEN", "CLICKUP_PERSONAL_TOKEN"],
+                    "CLICKUP_API_KEY": [
+                        "clickupApiKey",
+                        "CLICKUP_API_TOKEN",
+                        "CLICKUP_PERSONAL_TOKEN",
+                    ],
                     "CLICKUP_TEAM_ID": ["clickupTeamId"],
                 },
             }
@@ -63,6 +74,8 @@ def test_apply_clickup_aliases_from_registry_style_keys():
     apply_runtime_env_aliases(env, "clickup-mcp-server", {}, catalog=catalog)
     assert env["CLICKUP_API_KEY"] == "pk_x"
     assert env["CLICKUP_TEAM_ID"] == "9012"
+
+
 def test_apply_aliases_list_form_in_catalog():
     catalog = {
         "connectors": [

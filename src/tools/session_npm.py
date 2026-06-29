@@ -2,6 +2,7 @@
 npm install in session workspace (no exec allowlist policy).
 Used for docx-js and other workspace-scoped Node dependencies.
 """
+
 from __future__ import annotations
 
 import logging
@@ -75,7 +76,9 @@ def workspace_dir(session_id: str) -> Path:
     return ws
 
 
-def install_npm_packages(session_id: str, packages: List[str], *, init_if_missing: bool = True) -> str:
+def install_npm_packages(
+    session_id: str, packages: List[str], *, init_if_missing: bool = True
+) -> str:
     """
     Run ``npm install <packages>`` under ``data/sessions/<id>/workspace``.
     Does not require ``sandbox_exec_allowlisted`` / exec policy.
@@ -88,9 +91,7 @@ def install_npm_packages(session_id: str, packages: List[str], *, init_if_missin
 
     npm_exe = shutil.which("npm")
     if not npm_exe:
-        return (
-            "Error: npm not found on server PATH. Install Node.js/npm or use python-docx instead."
-        )
+        return "Error: npm not found on server PATH. Install Node.js/npm or use python-docx instead."
 
     try:
         pkgs = _validate_package_names(packages)
@@ -143,5 +144,5 @@ def install_npm_packages(session_id: str, packages: List[str], *, init_if_missin
 
     return (
         f"OK: installed {', '.join(pkgs)} in {ws.relative_to(session_root(session_id))}/node_modules.\n"
-        f"Run scripts with sandbox_run_node_file(relative_path=\"workspace/<script>.js\")."
+        f'Run scripts with sandbox_run_node_file(relative_path="workspace/<script>.js").'
     )

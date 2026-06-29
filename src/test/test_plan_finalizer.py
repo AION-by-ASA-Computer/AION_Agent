@@ -1,9 +1,14 @@
 """Tests for PlanFinalizer and PlanModeController."""
+
 import pytest
 
 from src.a2a.plan_markdown import markdown_to_plan
 from src.runtime.plan_coercion import looks_like_chat_plan
-from src.runtime.plan_engine import PlanFinalizer, PlanModeController, next_pending_task_id
+from src.runtime.plan_engine import (
+    PlanFinalizer,
+    PlanModeController,
+    next_pending_task_id,
+)
 
 
 WWDC_ITALIAN_PLAN = """# Piano: Documento Markdown — Novità Apple WWDC 2026
@@ -36,7 +41,9 @@ Ricerca web già effettuata; output in italiano per lettori non tecnici.
 async def test_plan_finalizer_wwdc_italian_coercion(monkeypatch):
     monkeypatch.setenv("AION_PLAN_FINALIZE_LLM", "0")
     assert looks_like_chat_plan(WWDC_ITALIAN_PLAN)
-    result = await PlanFinalizer.finalize(WWDC_ITALIAN_PLAN, user_message="WWDC 2026 doc")
+    result = await PlanFinalizer.finalize(
+        WWDC_ITALIAN_PLAN, user_message="WWDC 2026 doc"
+    )
     assert result is not None
     assert result.source in ("coercion", "fallback")
     assert result.tasks_count >= 14

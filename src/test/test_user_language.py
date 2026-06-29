@@ -1,4 +1,5 @@
 """UI language resolution and prompt injection."""
+
 import os
 
 import pytest

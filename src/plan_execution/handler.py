@@ -183,7 +183,9 @@ class PlanExecutionHandler:
             self._stream_events[run_id] = asyncio.Event()
         return self._stream_events[run_id]
 
-    async def wait_stream_update(self, run_id: str, last_seq: int, *, timeout: float = 0.5) -> int:
+    async def wait_stream_update(
+        self, run_id: str, last_seq: int, *, timeout: float = 0.5
+    ) -> int:
         if self._stream_seq.get(run_id, 0) > last_seq:
             return self._stream_seq[run_id]
         ev = self._stream_event(run_id)
@@ -203,14 +205,18 @@ class PlanExecutionHandler:
         profile_name: str = "",
     ) -> dict:
         if not plan_execution_enabled():
-            raise RuntimeError("Plan execution is disabled (AION_PLAN_EXECUTION_ENABLED=0)")
+            raise RuntimeError(
+                "Plan execution is disabled (AION_PLAN_EXECUTION_ENABLED=0)"
+            )
 
         pid = (plan_id or "").strip()
         if not pid:
             raise ValueError("plan_id is required")
 
         run_id = new_plan_execution_run_id()
-        profile = (profile_name or os.getenv("AION_DEFAULT_PROFILE") or "aion_std").strip()
+        profile = (
+            profile_name or os.getenv("AION_DEFAULT_PROFILE") or "aion_std"
+        ).strip()
 
         entry: Dict[str, Any] = {
             "task": None,
@@ -277,7 +283,13 @@ class PlanExecutionHandler:
                 self._save_result(run_id, entry)
                 raise
             except Exception as exc:
-                logger.error("Plan execution failed run=%s plan=%s: %s", run_id, pid, exc, exc_info=True)
+                logger.error(
+                    "Plan execution failed run=%s plan=%s: %s",
+                    run_id,
+                    pid,
+                    exc,
+                    exc_info=True,
+                )
                 entry["status"] = "error"
                 entry["result"] = str(exc)
                 on_progress({"phase": "error", "message": str(exc)})
@@ -415,8 +427,12 @@ class PlanExecutionHandler:
                     if entry.get("_cancel"):
                         raise asyncio.CancelledError()
                     if chunk.get("type") == "turn_started":
-                        task_user_id = (chunk.get("user_message_id") or "").strip() or None
-                        task_asst_id = (chunk.get("assistant_message_id") or "").strip() or None
+                        task_user_id = (
+                            chunk.get("user_message_id") or ""
+                        ).strip() or None
+                        task_asst_id = (
+                            chunk.get("assistant_message_id") or ""
+                        ).strip() or None
                         for t in entry.get("tasks") or []:
                             if t.get("task_id") == task_id:
                                 if task_user_id:
@@ -528,7 +544,9 @@ class PlanExecutionHandler:
             )
 
         rec_final = await odb.fetch_plan_record(plan_id)
-        final_md = (rec_final.get("approved_markdown") or "").strip() if rec_final else ""
+        final_md = (
+            (rec_final.get("approved_markdown") or "").strip() if rec_final else ""
+        )
         deliverable = infer_deliverable_path(final_md) if final_md else None
         goal = _extract_goal(final_md)
 
@@ -539,7 +557,9 @@ class PlanExecutionHandler:
             plan_markdown=final_md,
             deliverable_path=deliverable,
         )
-        on_progress({"phase": "complete", "plan_id": plan_id, "message": "Plan completed"})
+        on_progress(
+            {"phase": "complete", "plan_id": plan_id, "message": "Plan completed"}
+        )
         return summary, deliverable
 
     async def _synthesize_final_summary(
@@ -860,7 +880,10 @@ class PlanExecutionHandler:
             if data.get("status") != "running":
                 continue
             rid = path.stem
-            if rid in self._active_tasks and self._active_tasks[rid].get("status") == "running":
+            if (
+                rid in self._active_tasks
+                and self._active_tasks[rid].get("status") == "running"
+            ):
                 continue
             self._recover_orphaned_session(rid, data)
 
@@ -878,7 +901,9 @@ class PlanExecutionHandler:
         try:
             path = plan_execution_data_dir() / f"{run_id}.json"
             path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-            logger.warning("Plan execution orphaned run=%s — marked interrupted", run_id)
+            logger.warning(
+                "Plan execution orphaned run=%s — marked interrupted", run_id
+            )
         except Exception as e:
             logger.error("recover orphaned plan execution %s: %s", run_id, e)
 

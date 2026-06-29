@@ -7,8 +7,7 @@ def test_salvage_malformed_wwdc_fence_without_hash_metadata():
         "artifact_id: wwdc-2026-complete-guide\n"
         "title: Apple WWDC 2026\n"
         "filename: wwdc-2026-guide.md\n"
-        "# Apple WWDC 2026\n\n"
-        + "Annunci principali.\n" * 40
+        "# Apple WWDC 2026\n\n" + "Annunci principali.\n" * 40
     )
     raw = f"Intro\n```markdown\n{body}```\nTail"
     salvaged = salvage_artifact_from_response(raw)

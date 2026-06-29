@@ -1,4 +1,7 @@
-from src.runtime.pg_query_guard import is_postgres_query_tool, postgres_query_timeout_sec
+from src.runtime.pg_query_guard import (
+    is_postgres_query_tool,
+    postgres_query_timeout_sec,
+)
 
 
 def test_is_postgres_query_tool():

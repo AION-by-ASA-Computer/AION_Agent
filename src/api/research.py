@@ -80,7 +80,9 @@ async def research_active(
     if not deep_research_enabled():
         return {"active": []}
     handler = get_research_handler()
-    return {"active": handler.list_active_for_owner(owner, chat_session_id=chat_session_id)}
+    return {
+        "active": handler.list_active_for_owner(owner, chat_session_id=chat_session_id)
+    }
 
 
 @router.get("/research/status/{session_id}")

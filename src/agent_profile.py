@@ -70,7 +70,9 @@ def profiles_write_path() -> Path:
 
 def profiles_template_path() -> Path:
     """Git-tracked templates used to detect local customizations."""
-    return _resolve_profiles_path(os.getenv("AION_PROFILES_TEMPLATE_DIR", "config_std/profiles"))
+    return _resolve_profiles_path(
+        os.getenv("AION_PROFILES_TEMPLATE_DIR", "config_std/profiles")
+    )
 
 
 def _iter_profile_yaml_files(directory: Path) -> Iterator[Path]:
@@ -127,6 +129,7 @@ def migrate_profiles_to_write_dir(*, dry_run: bool = False) -> int:
         logger.info("Migrated profile overlay: %s -> %s", src, dest)
         copied += 1
     return copied
+
 
 # Full inlined bodies when AION_SKILL_SYSTEM_PROMPT_MODE=index unless overridden per profile.
 DEFAULT_CRITICAL_SKILL_NAMES = frozenset(
@@ -191,8 +194,12 @@ class AgentProfile:
         # Sostituzione placeholder dinamici nelle istruzioni
         instructions = self.instructions
         now = datetime.now()
-        instructions = instructions.replace("{{current_date}}", now.strftime("%Y-%m-%d"))
-        instructions = instructions.replace("{{current_time}}", now.strftime("%H:%M:%S"))
+        instructions = instructions.replace(
+            "{{current_date}}", now.strftime("%Y-%m-%d")
+        )
+        instructions = instructions.replace(
+            "{{current_time}}", now.strftime("%H:%M:%S")
+        )
 
         parts = [f"# Role: {self.name}", instructions]
 
@@ -200,7 +207,9 @@ class AgentProfile:
             from .mcp_manager import mcp_manager
             from .runtime.mcp_tooling_prompt import build_mcp_tooling_prompt_section
 
-            mcp_extra = build_mcp_tooling_prompt_section(self.mcp_servers, mcp_manager.get_server_config)
+            mcp_extra = build_mcp_tooling_prompt_section(
+                self.mcp_servers, mcp_manager.get_server_config
+            )
             if mcp_extra:
                 parts.append(mcp_extra)
         except Exception:
@@ -228,7 +237,11 @@ class AgentProfile:
                     body = skill_registry.get_skill_full(actual_name)
                     if body:
                         # Display it as 'artifact_protocol' to the agent for consistency
-                        display_name = "artifact_protocol" if skill_name == "artifact_protocol" else skill_name
+                        display_name = (
+                            "artifact_protocol"
+                            if skill_name == "artifact_protocol"
+                            else skill_name
+                        )
                         parts.append(f"\n### Protocol rules ({display_name})\n{body}")
                         inlined_critical.add(skill_name)
 
@@ -253,9 +266,15 @@ class AgentProfile:
                 )
                 for s in summaries:
                     tags = ", ".join(s.get("tags") or []) or "—"
-                    parts.append(f"- **`{s['name']}`** ({tags}): {s.get('description', '')}")
+                    parts.append(
+                        f"- **`{s['name']}`** ({tags}): {s.get('description', '')}"
+                    )
 
-        if os.getenv("AION_SOUL_MEMORY_USER_SPLIT", "0").lower() in ("1", "true", "yes"):
+        if os.getenv("AION_SOUL_MEMORY_USER_SPLIT", "0").lower() in (
+            "1",
+            "true",
+            "yes",
+        ):
             from .memory.memory_files import ProfileMemoryBundle
 
             snap = ProfileMemoryBundle(self.slug, user_id).snapshot()
@@ -388,7 +407,9 @@ class ProfileManager:
                     data = yaml.safe_load(f) or {}
                 schema = ProfileSchema.from_yaml_dict(data, stem_low)
             except Exception as exc:
-                report.issues.append(ProfileValidationIssue(stem_low, "error", str(exc)))
+                report.issues.append(
+                    ProfileValidationIssue(stem_low, "error", str(exc))
+                )
                 continue
             ref_report = validate_profile_references(
                 schema,

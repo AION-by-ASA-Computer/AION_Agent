@@ -1,4 +1,5 @@
 """Testo utente/assistente da Haystack ChatMessage (API .text, non .content)."""
+
 from __future__ import annotations
 
 from haystack.dataclasses import ChatMessage

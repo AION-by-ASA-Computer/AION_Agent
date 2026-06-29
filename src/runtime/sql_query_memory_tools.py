@@ -1,4 +1,5 @@
 """Built-in in-process SQL QueryMemory tools (merge into agent tool list)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -29,7 +30,12 @@ SQL_QM_BUILTIN_TOOL_NAMES = (
 def sql_native_tools_enabled() -> bool:
     if not sql_query_memory_enabled():
         return False
-    return os.getenv("AION_SQL_QM_NATIVE_TOOLS", "1").strip().lower() in ("1", "true", "yes", "on")
+    return os.getenv("AION_SQL_QM_NATIVE_TOOLS", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def profile_wants_sql_query_memory(profile) -> bool:
@@ -106,14 +112,18 @@ def build_sql_query_memory_haystack_tools(
         verified_only: bool = False,
         sql_draft: str = "",
     ) -> str:
-        from src.runtime.sql_query_memory_gate import block_exploration_tool_if_sql_cache
+        from src.runtime.sql_query_memory_gate import (
+            block_exploration_tool_if_sql_cache,
+        )
 
         blocked = block_exploration_tool_if_sql_cache(
             "sql_query_memory", "sql_memory_search", session_id, {}
         )
         if blocked:
             return blocked
-        tenant, uid, prof, proj, _ = _resolve_ctx(session_id, user_id, profile_slug, project)
+        tenant, uid, prof, proj, _ = _resolve_ctx(
+            session_id, user_id, profile_slug, project
+        )
         access_err = _access_error_or_none(tenant, uid, proj)
         if access_err:
             return access_err
@@ -140,7 +150,9 @@ def build_sql_query_memory_haystack_tools(
         is_verified: bool = False,
         tables_used: Optional[List[str]] = None,
     ) -> str:
-        tenant, uid, prof, proj, _ = _resolve_ctx(session_id, user_id, profile_slug, project)
+        tenant, uid, prof, proj, _ = _resolve_ctx(
+            session_id, user_id, profile_slug, project
+        )
         access_err = _access_error_or_none(tenant, uid, proj)
         if access_err:
             return access_err
@@ -161,7 +173,9 @@ def build_sql_query_memory_haystack_tools(
                     {"ok": False, "error": "save_failed_or_forbidden", "project": proj},
                     ensure_ascii=False,
                 )
-            return json.dumps({"ok": True, "id": eid, "project": proj}, ensure_ascii=False)
+            return json.dumps(
+                {"ok": True, "id": eid, "project": proj}, ensure_ascii=False
+            )
 
         return _run_async(_run())
 
@@ -172,7 +186,9 @@ def build_sql_query_memory_haystack_tools(
         is_verified: Optional[bool] = None,
         project: str = "",
     ) -> str:
-        tenant, uid, prof, proj, _ = _resolve_ctx(session_id, user_id, profile_slug, project)
+        tenant, uid, prof, proj, _ = _resolve_ctx(
+            session_id, user_id, profile_slug, project
+        )
         access_err = _access_error_or_none(tenant, uid, proj)
         if access_err:
             return access_err
@@ -189,7 +205,9 @@ def build_sql_query_memory_haystack_tools(
                 project_slug=proj,
             )
             if ok:
-                return json.dumps({"ok": True, "id": id, "project": proj}, ensure_ascii=False)
+                return json.dumps(
+                    {"ok": True, "id": id, "project": proj}, ensure_ascii=False
+                )
             msg = await sql_query_memory.resolve_mutation_error_message(
                 err, entry_id=id, project_slug=proj
             )
@@ -201,7 +219,9 @@ def build_sql_query_memory_haystack_tools(
         return _run_async(_run())
 
     def sql_memory_delete_fn(id: int, project: str = "") -> str:
-        tenant, uid, prof, proj, _ = _resolve_ctx(session_id, user_id, profile_slug, project)
+        tenant, uid, prof, proj, _ = _resolve_ctx(
+            session_id, user_id, profile_slug, project
+        )
         access_err = _access_error_or_none(tenant, uid, proj)
         if access_err:
             return access_err
@@ -215,7 +235,9 @@ def build_sql_query_memory_haystack_tools(
                 project_slug=proj,
             )
             if ok:
-                return json.dumps({"ok": True, "id": id, "project": proj}, ensure_ascii=False)
+                return json.dumps(
+                    {"ok": True, "id": id, "project": proj}, ensure_ascii=False
+                )
             msg = await sql_query_memory.resolve_mutation_error_message(
                 err, entry_id=id, project_slug=proj
             )
@@ -269,7 +291,9 @@ def build_sql_query_memory_haystack_tools(
         limit: int = 50,
         verified_only: bool = False,
     ) -> str:
-        tenant, uid, prof, proj, _ = _resolve_ctx(session_id, user_id, profile_slug, project)
+        tenant, uid, prof, proj, _ = _resolve_ctx(
+            session_id, user_id, profile_slug, project
+        )
         access_err = _access_error_or_none(tenant, uid, proj)
         if access_err:
             return access_err
@@ -282,7 +306,9 @@ def build_sql_query_memory_haystack_tools(
                 verified_only=verified_only,
                 limit=min(max(int(limit), 1), 200),
             )
-            return sql_query_memory.format_list_results_markdown(rows, project_slug=proj)
+            return sql_query_memory.format_list_results_markdown(
+                rows, project_slug=proj
+            )
 
         return _run_async(_run())
 

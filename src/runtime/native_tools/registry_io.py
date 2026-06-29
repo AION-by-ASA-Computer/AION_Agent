@@ -13,7 +13,10 @@ logger = __import__("logging").getLogger(__name__)
 
 
 def _default_registry_path() -> str:
-    return os.getenv("AION_NATIVE_TOOL_REGISTRY_PATH", os.path.join("config", "native_tool_registry.yaml"))
+    return os.getenv(
+        "AION_NATIVE_TOOL_REGISTRY_PATH",
+        os.path.join("config", "native_tool_registry.yaml"),
+    )
 
 
 def _default_local_registry_path(base_path: str) -> str:

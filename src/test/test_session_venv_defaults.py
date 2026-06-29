@@ -1,4 +1,5 @@
 """Default gate for session sandbox package install."""
+
 from __future__ import annotations
 
 import os

@@ -1,4 +1,5 @@
 """Registry skill Markdown con frontmatter, curated + generated (Hermes FASE A)."""
+
 from __future__ import annotations
 
 import logging
@@ -23,7 +24,9 @@ class SkillRegistry:
         self._root = Path(__file__).resolve().parent.parent
         self.curated_dir = self._root / curated_dir
         self.curated_fallback_dir = self._root / curated_fallback_dir
-        gen = generated_dir or os.getenv("AION_SKILL_GENERATED_DIR", "data/skills/generated")
+        gen = generated_dir or os.getenv(
+            "AION_SKILL_GENERATED_DIR", "data/skills/generated"
+        )
         self.generated_dir = self._root / gen
         self._skills: Dict[str, Dict[str, Any]] = {}
         self._dir_mtime: float = 0.0
@@ -78,7 +81,7 @@ class SkillRegistry:
             # Se è in una sottocartella, deve chiamarsi SKILL.md o skill.md per essere la radice
             if f.parent != d and f.name.lower() not in ["skill.md", "index.md"]:
                 continue
-                
+
             try:
                 post = frontmatter.loads(f.read_text(encoding="utf-8"))
                 meta_raw = dict(post.metadata) if post.metadata else {}

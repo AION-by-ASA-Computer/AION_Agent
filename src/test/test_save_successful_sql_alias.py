@@ -1,4 +1,5 @@
 """MCP tool argument aliases for SQL save tools."""
+
 from __future__ import annotations
 
 from src.runtime.mcp_tool_args import prepare_mcp_tool_arguments

@@ -1,19 +1,21 @@
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from query_memory import memory
 import time
 
+
 def test_realistic_flow():
     print("--- Testing Realistic Agent Flow ---")
-    
+
     # 1. Define a realistic request (similar to what user asks in main.py)
-    # We use a timestamp to ensure uniqueness for 'new' test cases, 
+    # We use a timestamp to ensure uniqueness for 'new' test cases,
     # or we can use a fixed string to test persistence across runs.
     base_request = "Qual è l'utilizzo attuale della CPU del monitoring-server?"
     request_unique = f"{base_request} [TEST-{int(time.time())}]"
-    
+
     expected_query = '100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle", instance="monitoring-server"}[5m])) * 100)'
 
     print(f"\nUser Request: '{request_unique}'")
@@ -21,23 +23,23 @@ def test_realistic_flow():
     # 2. STEP 1: Search in Memory
     print("\nStep 1: Searching in memory...")
     results = memory.search(request_unique, limit=1)
-    
+
     if results:
         print("CACHE HIT! Found existing query.")
         print(f"   Saved Request: {results[0][0]}")
         print(f"   Saved Query:   {results[0][1]}")
     else:
         print("CACHE MISS. No matching query found.")
-        
+
         # 3. Simulate Agent Work (Generation + Execution)
         print("\n Step 2: Agent generates and executes query (Simulated)...")
         print(f"   Generated PromQL: {expected_query}")
-        
+
         # 4. STEP 3: Save to Memory
         print("\nStep 3: Saving successful query to memory...")
         memory.add(request_unique, expected_query)
         print("Saved to database.")
-        
+
         # 5. Verify it's now in memory
         print("\nStep 4: Verifying persistence (Search again)...")
         results_after = memory.search(request_unique, limit=1)
@@ -50,6 +52,7 @@ def test_realistic_flow():
 
     print("\n------------------------------------------------")
     print("Test Scenario Completed Successfully")
+
 
 if __name__ == "__main__":
     test_realistic_flow()

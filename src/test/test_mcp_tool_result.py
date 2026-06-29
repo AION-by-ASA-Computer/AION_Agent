@@ -1,9 +1,13 @@
 """Tests for MCP tool result error classification."""
+
 from __future__ import annotations
 
 import json
 
-from src.runtime.mcp_tool_result import classify_tool_result_text, format_exception_for_tool
+from src.runtime.mcp_tool_result import (
+    classify_tool_result_text,
+    format_exception_for_tool,
+)
 
 
 def test_classify_empty_query_result_as_error():

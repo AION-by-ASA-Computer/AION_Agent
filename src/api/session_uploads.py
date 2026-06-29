@@ -1,4 +1,5 @@
 """Upload file nella workspace di sessione (chat-ui e altri client)."""
+
 from __future__ import annotations
 
 import asyncio
@@ -30,16 +31,19 @@ async def upload_session_files(
         raise HTTPException(status_code=400, detail="Nessun file")
 
     import os
+
     otel_enabled = os.getenv("AION_OTEL_ENABLED", "0") == "1"
     tracer = None
     if otel_enabled:
         try:
             from opentelemetry import trace
+
             tracer = trace.get_tracer("aion.session")
         except ImportError:
             pass
 
     from contextlib import nullcontext
+
     span_ctx = nullcontext()
     if tracer:
         try:
@@ -53,7 +57,9 @@ async def upload_session_files(
             try:
                 span.set_attribute("aion.session_id", session_id)
                 span.set_attribute("upload.file_count", len(files))
-                span.set_attribute("upload.filenames", [f.filename for f in files if f.filename])
+                span.set_attribute(
+                    "upload.filenames", [f.filename for f in files if f.filename]
+                )
                 if _auth.identifier:
                     span.set_attribute("aion.user_id", _auth.identifier)
             except Exception:
@@ -64,7 +70,7 @@ async def upload_session_files(
                 data = await f.read()
                 meta = save_upload(session_id, f.filename or "upload", data)
                 out.append(meta)
-            
+
             logger.info(
                 "file_upload_success session_id=%s file_count=%d filenames=%s user_id=%s",
                 session_id,
@@ -76,12 +82,13 @@ async def upload_session_files(
                     "file_count": len(files),
                     "filenames": [f.filename for f in files if f.filename],
                     "user_id": _auth.identifier or "anonymous",
-                }
+                },
             )
         except ValueError as e:
             if span and span.is_recording():
                 try:
                     from opentelemetry.trace import Status, StatusCode
+
                     span.record_exception(e)
                     span.set_status(Status(StatusCode.ERROR, str(e)))
                 except Exception:
@@ -91,6 +98,7 @@ async def upload_session_files(
             if span and span.is_recording():
                 try:
                     from opentelemetry.trace import Status, StatusCode
+
                     span.record_exception(e)
                     span.set_status(Status(StatusCode.ERROR, str(e)))
                 except Exception:
@@ -113,7 +121,9 @@ async def list_session_files(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except OSError as e:
         # Tipico: AION_DATA_DIR=/app/data copiato da Docker ma API avviata sulla macchina host.
-        logger.exception("session files list: storage error session=%s subdir=%s", session_id, subdir)
+        logger.exception(
+            "session files list: storage error session=%s subdir=%s", session_id, subdir
+        )
         raise HTTPException(
             status_code=503,
             detail=(
@@ -132,7 +142,9 @@ def _top_segment(rel: str) -> str:
 @router.get("/sessions/{session_id}/download")
 async def download_session_file(
     session_id: str,
-    relative_path: str = Query(..., description="Path relativo, es. workspace/matricielle.csv"),
+    relative_path: str = Query(
+        ..., description="Path relativo, es. workspace/matricielle.csv"
+    ),
     _auth: ChatAuthIdentity = Depends(require_chat_auth),
 ):
     """
@@ -143,11 +155,15 @@ async def download_session_file(
 
     rel = (relative_path or "").strip().replace("\\", "/").lstrip("/")
     if rel.startswith("."):
-        raise HTTPException(status_code=400, detail="Path non consentito per il download")
+        raise HTTPException(
+            status_code=400, detail="Path non consentito per il download"
+        )
     top = _top_segment(rel)
     if "/" in rel:
         if top not in ("uploads", "derived", "workspace", "unpacked"):
-            raise HTTPException(status_code=400, detail="Path non consentito per il download")
+            raise HTTPException(
+                status_code=400, detail="Path non consentito per il download"
+            )
     try:
         path = safe_resolve(session_id, rel, must_exist=True)
     except ValueError as e:
@@ -181,7 +197,9 @@ async def session_events_sse(
 
         try:
             while True:
-                events = await redis_drain_session_events(session_id.strip(), max_items=25)
+                events = await redis_drain_session_events(
+                    session_id.strip(), max_items=25
+                )
                 for ev in events:
                     yield {"event": "session_event", "data": json.dumps(ev)}
                 await asyncio.sleep(0.45)

@@ -3,6 +3,7 @@ Agent Filesystem Policy loader.
 Caricato da AION_FS_POLICY_PATH (opzionale).
 Se il file non esiste, usa i default sicuri (deny exec, allow workspace).
 """
+
 from __future__ import annotations
 
 import logging
@@ -27,9 +28,15 @@ class FSPolicy:
         self.exec_allowlist: List[Dict[str, Any]] = list(ex.get("allowlist", []))
 
         lim = raw.get("limits") or {}
-        self.max_file_read_bytes: int = int(lim.get("max_file_read_bytes", 2 * 1024 * 1024))
-        self.max_file_write_bytes: int = int(lim.get("max_file_write_bytes", 10 * 1024 * 1024))
-        self.max_edit_file_bytes: int = int(lim.get("max_edit_file_bytes", 2 * 1024 * 1024))
+        self.max_file_read_bytes: int = int(
+            lim.get("max_file_read_bytes", 2 * 1024 * 1024)
+        )
+        self.max_file_write_bytes: int = int(
+            lim.get("max_file_write_bytes", 10 * 1024 * 1024)
+        )
+        self.max_edit_file_bytes: int = int(
+            lim.get("max_edit_file_bytes", 2 * 1024 * 1024)
+        )
         self.grep_max_file_bytes: int = int(lim.get("grep_max_file_bytes", 500_000))
         self.grep_max_matches: int = int(lim.get("grep_max_matches", 200))
         self.glob_max_paths: int = int(lim.get("glob_max_paths", 500))
@@ -51,7 +58,9 @@ def load_fs_policy() -> FSPolicy:
     path_env = (os.environ.get("AION_FS_POLICY_PATH") or "").strip()
 
     if not path_env:
-        logger.info("AION_FS_POLICY_PATH non impostato: uso policy default (exec disabilitato)")
+        logger.info(
+            "AION_FS_POLICY_PATH non impostato: uso policy default (exec disabilitato)"
+        )
         return FSPolicy.default()
 
     path = Path(path_env).expanduser().resolve()

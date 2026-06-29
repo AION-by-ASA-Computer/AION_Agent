@@ -1,4 +1,5 @@
 """Per-turn guard rails: tool/output/reasoning budgets and no-progress timeout."""
+
 from __future__ import annotations
 
 import os
@@ -59,7 +60,9 @@ class TurnGuards:
         self.max_tool_events = tb.max_tool_events
         self.max_tool_calls = tb.max_tool_calls
         self.max_stream_events = tb.max_stream_events
-        self.max_control_events = int(os.getenv("AION_CONTROL_EVENTS_MAX_PER_TURN", "300"))
+        self.max_control_events = int(
+            os.getenv("AION_CONTROL_EVENTS_MAX_PER_TURN", "300")
+        )
         self.max_output_events = int(os.getenv("AION_OUTPUT_EVENTS_MAX_PER_TURN", "0"))
         self.max_output_chars = int(os.getenv("AION_OUTPUT_CHARS_MAX_PER_TURN", "0"))
         self.no_progress_timeout = tb.no_progress_timeout
@@ -70,7 +73,9 @@ class TurnGuards:
         self.max_reasoning_events_without_tool = int(
             os.getenv("AION_AGENT_MAX_REASONING_WITHOUT_TOOL", "0")
         )
-        self.reasoning_hard_stop = os.getenv("AION_REASONING_HARD_STOP", "0").strip().lower() in (
+        self.reasoning_hard_stop = os.getenv(
+            "AION_REASONING_HARD_STOP", "0"
+        ).strip().lower() in (
             "1",
             "true",
             "yes",
@@ -95,7 +100,8 @@ class TurnGuards:
     def check_no_progress(self) -> StopDecision:
         if (
             self.no_progress_timeout > 0
-            and self._loop_time() - self.state.last_progress_at > self.no_progress_timeout
+            and self._loop_time() - self.state.last_progress_at
+            > self.no_progress_timeout
         ):
             self.state.stop_reason = "no_progress"
             return StopDecision(
@@ -108,7 +114,10 @@ class TurnGuards:
 
     def on_stream_event(self) -> Optional[StopDecision]:
         self.state.stream_events += 1
-        if self.max_stream_events > 0 and self.state.stream_events > self.max_stream_events:
+        if (
+            self.max_stream_events > 0
+            and self.state.stream_events > self.max_stream_events
+        ):
             self.state.stop_reason = "stream_events"
             return StopDecision(
                 should_stop=True,
@@ -123,7 +132,10 @@ class TurnGuards:
 
     def on_control_event(self) -> Optional[StopDecision]:
         self.state.control_events += 1
-        if self.max_control_events > 0 and self.state.control_events > self.max_control_events:
+        if (
+            self.max_control_events > 0
+            and self.state.control_events > self.max_control_events
+        ):
             self.state.stop_reason = "control_events"
             return StopDecision(
                 should_stop=True,

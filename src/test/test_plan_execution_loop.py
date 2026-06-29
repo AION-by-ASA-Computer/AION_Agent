@@ -36,7 +36,9 @@ async def test_mark_no_continue_on_pending_event(monkeypatch):
         captured.append(ev)
 
     monkeypatch.setattr(ot.tool_event_bus, "put_event", lambda *_a, **_k: None)
-    monkeypatch.setattr("src.runtime.redis_client.redis_enqueue_session_event", capture_redis)
+    monkeypatch.setattr(
+        "src.runtime.redis_client.redis_enqueue_session_event", capture_redis
+    )
 
     await ot._persist_plan_markdown(
         "execution_plan_evt1",
@@ -86,7 +88,9 @@ async def test_handler_emits_task_activities(monkeypatch):
     class FakePipe:
         session_id = "sess-loop"
 
-        async def run_stream(self, user_input: str, *args, plan_execution_task_id=None, **kwargs):
+        async def run_stream(
+            self, user_input: str, *args, plan_execution_task_id=None, **kwargs
+        ):
             tid = (plan_execution_task_id or "").strip()
             yield {
                 "type": "turn_started",
@@ -96,11 +100,19 @@ async def test_handler_emits_task_activities(monkeypatch):
             if tid == "task_01":
                 state["md"] = _PLAN_MD_T1_DONE
                 state["revision"] = 2
-                yield {"type": "turn_outcome", "code": "plan_task_completed", "task_id": tid}
+                yield {
+                    "type": "turn_outcome",
+                    "code": "plan_task_completed",
+                    "task_id": tid,
+                }
             elif tid == "task_02":
                 state["md"] = _PLAN_MD_ALL_DONE
                 state["revision"] = 3
-                yield {"type": "turn_outcome", "code": "plan_task_completed", "task_id": tid}
+                yield {
+                    "type": "turn_outcome",
+                    "code": "plan_task_completed",
+                    "task_id": tid,
+                }
 
     async def fake_synth(**_k):
         return "Riepilogo finale di test."
@@ -312,7 +324,11 @@ async def test_approve_starts_handler(monkeypatch):
 
     def fake_start(plan_id, **kwargs):
         started.update({"plan_id": plan_id, **kwargs})
-        return {"run_id": "pe-abc", "status": "running", "ui_event": "plan_execution_started"}
+        return {
+            "run_id": "pe-abc",
+            "status": "running",
+            "ui_event": "plan_execution_started",
+        }
 
     monkeypatch.setattr(
         "src.plan_execution.handler.plan_execution_enabled",
@@ -323,7 +339,10 @@ async def test_approve_starts_handler(monkeypatch):
         lambda: type("H", (), {"start_plan_execution": staticmethod(fake_start)})(),
     )
 
-    from src.plan_execution.handler import plan_execution_enabled, get_plan_execution_handler
+    from src.plan_execution.handler import (
+        plan_execution_enabled,
+        get_plan_execution_handler,
+    )
 
     assert plan_execution_enabled()
     out = get_plan_execution_handler().start_plan_execution(

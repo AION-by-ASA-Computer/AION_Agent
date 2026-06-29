@@ -1,4 +1,5 @@
 """Orchestration API auth: JWT + session ownership."""
+
 from __future__ import annotations
 
 import os
@@ -15,7 +16,9 @@ from src.api.orchestration import _assert_session_owner, orchestration_auth
 async def test_orchestration_auth_rejects_anonymous_when_password_auth(monkeypatch):
     monkeypatch.setenv("AION_CHAT_PASSWORD_AUTH", "1")
     with pytest.raises(HTTPException) as exc:
-        await orchestration_auth(x_aion_orch_secret=None, auth=ChatAuthIdentity(via="anonymous"))
+        await orchestration_auth(
+            x_aion_orch_secret=None, auth=ChatAuthIdentity(via="anonymous")
+        )
     assert exc.value.status_code == 401
 
 
@@ -33,6 +36,7 @@ async def test_orchestration_auth_accepts_valid_secret(monkeypatch):
 @pytest.mark.anyio
 async def test_assert_session_owner_forbidden_for_other_user(monkeypatch):
     monkeypatch.setenv("AION_CHAT_PASSWORD_AUTH", "1")
+
     class _Row:
         def first(self):
             return ("alice",)
@@ -43,7 +47,9 @@ async def test_assert_session_owner_forbidden_for_other_user(monkeypatch):
     mock_cm.__aenter__.return_value = mock_session
     mock_cm.__aexit__.return_value = None
 
-    with patch("src.api.orchestration.get_async_session_maker", return_value=lambda: mock_cm):
+    with patch(
+        "src.api.orchestration.get_async_session_maker", return_value=lambda: mock_cm
+    ):
         with pytest.raises(HTTPException) as exc:
             await _assert_session_owner(
                 "sess-1",

@@ -30,7 +30,9 @@ def _is_project_wing(wing: str) -> bool:
     return w.startswith(prefix) or w.startswith("wing_proj_")
 
 
-def _filter_ltm_drawer(d: Dict[str, Any], default_wing: str) -> Optional[Dict[str, Any]]:
+def _filter_ltm_drawer(
+    d: Dict[str, Any], default_wing: str
+) -> Optional[Dict[str, Any]]:
     """Validate/normalize one drawer from LTM JSON (no user-text regex)."""
     wing = (d.get("wing") or default_wing).strip()
     room = (d.get("room") or "general").strip()
@@ -65,7 +67,7 @@ def _filter_ltm_drawer(d: Dict[str, Any], default_wing: str) -> Optional[Dict[st
 def sanitize_id(part: str) -> str:
     s = re.sub(r"[^a-z0-9_\-]", "_", (part or "default").lower())
     s = re.sub(r"_+", "_", s).strip("_")
-    return (s[:80] or "default")
+    return s[:80] or "default"
 
 
 def _tool_texts(result: Any) -> List[str]:
@@ -148,9 +150,9 @@ class LTMOrchestrator:
         alt = await _call_mcp_optional(chat_session_id, "mempalace_list_agents", {})
         if alt is not None:
             return alt
-        return await _call_mcp_optional(
-            chat_session_id, "mempalace_list_wings", {}
-        ) or ""
+        return (
+            await _call_mcp_optional(chat_session_id, "mempalace_list_wings", {}) or ""
+        )
 
     async def diary_write_for_agent(
         self,
@@ -207,11 +209,39 @@ class LTMOrchestrator:
         tokens = clean.split()
         if len(tokens) <= 3:
             stops = {
-                "ciao", "buongiorno", "buonasera", "ehi", "hey", "salve",
-                "grazie", "ottimo", "perfetto", "ok", "bene", "male",
-                "stai", "va", "fai", "chi", "sei", "cosa", "fai",
-                "hello", "hi", "thanks", "thank", "good", "bad", "well",
-                "how", "are", "you", "doing", "today", "help", "me"
+                "ciao",
+                "buongiorno",
+                "buonasera",
+                "ehi",
+                "hey",
+                "salve",
+                "grazie",
+                "ottimo",
+                "perfetto",
+                "ok",
+                "bene",
+                "male",
+                "stai",
+                "va",
+                "fai",
+                "chi",
+                "sei",
+                "cosa",
+                "fai",
+                "hello",
+                "hi",
+                "thanks",
+                "thank",
+                "good",
+                "bad",
+                "well",
+                "how",
+                "are",
+                "you",
+                "doing",
+                "today",
+                "help",
+                "me",
             }
             if all(t in stops for t in tokens):
                 return True
@@ -222,7 +252,7 @@ class LTMOrchestrator:
     ) -> str:
         if os.getenv("AION_LTM_RETRIEVAL", "1").lower() in ("0", "false", "no"):
             return ""
-        
+
         # SKIP retrieval for small talk to avoid context pollution
         if self.is_small_talk(user_input):
             logger.debug("LTM: skipping retrieval for small talk: %s", user_input)
@@ -269,18 +299,22 @@ class LTMOrchestrator:
 
         # Optional: Secondary filter to ensure at least one keyword overlap if query is short
         final_chunks = []
-        query_words = set(re.findall(r"\w{4,}", user_input.lower())) # Solo parole lunghe (keywords)
-        
+        query_words = set(
+            re.findall(r"\w{4,}", user_input.lower())
+        )  # Solo parole lunghe (keywords)
+
         for c in chunks:
-            if not query_words: # Se la query è troppo corta o generica, fidati della ricerca (ma is_small_talk ha già filtrato i saluti)
+            if not query_words:  # Se la query è troppo corta o generica, fidati della ricerca (ma is_small_talk ha già filtrato i saluti)
                 final_chunks.append(c)
                 continue
-                
+
             content_lower = c.lower()
             if any(w in content_lower for w in query_words):
                 final_chunks.append(c)
             else:
-                logger.debug("LTM: filtering out potentially irrelevant chunk (no keyword overlap)")
+                logger.debug(
+                    "LTM: filtering out potentially irrelevant chunk (no keyword overlap)"
+                )
 
         if not final_chunks:
             return ""
@@ -337,8 +371,15 @@ class LTMOrchestrator:
 
         batch_note = ""
         if mode == "batch":
-            batch_note = "\nModalità: consolidamento batch — sintetizza senza duplicare.\n"
-            user_prompt = ctx_prefix + batch_note + "TRANSCRIPT:\n" + user_input[:_LTM_BATCH_CHARS]
+            batch_note = (
+                "\nModalità: consolidamento batch — sintetizza senza duplicare.\n"
+            )
+            user_prompt = (
+                ctx_prefix
+                + batch_note
+                + "TRANSCRIPT:\n"
+                + user_input[:_LTM_BATCH_CHARS]
+            )
         else:
             user_prompt = ctx_prefix + (
                 "USER_INPUT:\n"
@@ -463,7 +504,7 @@ class LTMOrchestrator:
         """
         if os.getenv("AION_LTM_PREFIX_IN_USER", "1").lower() in ("0", "false", "no"):
             return user_input
-            
+
         blocks: List[str] = []
         wake_short = self._format_wake_summary(wake_raw)
         if wake_short:

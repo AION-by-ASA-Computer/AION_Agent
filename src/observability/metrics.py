@@ -7,6 +7,7 @@ from prometheus_client import (
 
 logger = logging.getLogger(__name__)
 
+
 class OTelPrometheusCounter:
     def __init__(self, name, documentation, labelnames=()):
         self.name = name
@@ -14,13 +15,12 @@ class OTelPrometheusCounter:
         self.labelnames = labelnames
         self.prom_metric = PromCounter(name, documentation, labelnames)
         self.otel_instrument = None
-        
+
     def _init_otel(self, meter):
         if not self.otel_instrument and meter:
             try:
                 self.otel_instrument = meter.create_counter(
-                    name=self.name,
-                    description=self.documentation
+                    name=self.name, description=self.documentation
                 )
             except Exception as e:
                 logger.warning(f"Failed to create OTel counter {self.name}: {e}")
@@ -28,6 +28,7 @@ class OTelPrometheusCounter:
     def labels(self, **kwargs):
         prom_child = self.prom_metric.labels(**kwargs)
         return OTelPrometheusCounterChild(self, prom_child, kwargs)
+
 
 class OTelPrometheusCounterChild:
     def __init__(self, parent, prom_child, labels_dict):
@@ -50,13 +51,16 @@ class OTelPrometheusCounterChild:
     def _value(self):
         return self.prom_child._value
 
+
 class OTelPrometheusHistogram:
     def __init__(self, name, documentation, labelnames=(), buckets=None):
         self.name = name
         self.documentation = documentation
         self.labelnames = labelnames
         if buckets:
-            self.prom_metric = PromHistogram(name, documentation, labelnames, buckets=buckets)
+            self.prom_metric = PromHistogram(
+                name, documentation, labelnames, buckets=buckets
+            )
         else:
             self.prom_metric = PromHistogram(name, documentation, labelnames)
         self.otel_instrument = None
@@ -65,8 +69,7 @@ class OTelPrometheusHistogram:
         if not self.otel_instrument and meter:
             try:
                 self.otel_instrument = meter.create_histogram(
-                    name=self.name,
-                    description=self.documentation
+                    name=self.name, description=self.documentation
                 )
             except Exception as e:
                 logger.warning(f"Failed to create OTel histogram {self.name}: {e}")
@@ -74,6 +77,7 @@ class OTelPrometheusHistogram:
     def labels(self, **kwargs):
         prom_child = self.prom_metric.labels(**kwargs)
         return OTelPrometheusHistogramChild(self, prom_child, kwargs)
+
 
 class OTelPrometheusHistogramChild:
     def __init__(self, parent, prom_child, labels_dict):
@@ -90,11 +94,14 @@ class OTelPrometheusHistogramChild:
             try:
                 self.parent.otel_instrument.record(value, self.labels_dict)
             except Exception as e:
-                logger.debug(f"Failed to record to OTel histogram {self.parent.name}: {e}")
+                logger.debug(
+                    f"Failed to record to OTel histogram {self.parent.name}: {e}"
+                )
 
     @property
     def _value(self):
         return self.prom_child._value
+
 
 class OTelPrometheusGauge:
     def __init__(self, name, documentation, labelnames=()):
@@ -109,24 +116,25 @@ class OTelPrometheusGauge:
             try:
                 # OTel Python API >= 1.25.0 supports meter.create_gauge
                 self.otel_instrument = meter.create_gauge(
-                    name=self.name,
-                    description=self.documentation
+                    name=self.name, description=self.documentation
                 )
             except AttributeError:
                 # Fallback to UpDownCounter
                 try:
                     self.otel_instrument = meter.create_up_down_counter(
-                        name=self.name,
-                        description=self.documentation
+                        name=self.name, description=self.documentation
                     )
                 except Exception as e:
-                    logger.warning(f"Failed to create OTel fallback gauge {self.name}: {e}")
+                    logger.warning(
+                        f"Failed to create OTel fallback gauge {self.name}: {e}"
+                    )
             except Exception as e:
                 logger.warning(f"Failed to create OTel gauge {self.name}: {e}")
 
     def labels(self, **kwargs):
         prom_child = self.prom_metric.labels(**kwargs)
         return OTelPrometheusGaugeChild(self, prom_child, kwargs)
+
 
 class OTelPrometheusGaugeChild:
     def __init__(self, parent, prom_child, labels_dict):
@@ -180,6 +188,7 @@ class OTelPrometheusGaugeChild:
     def _value(self):
         return self.prom_child._value
 
+
 Counter = OTelPrometheusCounter
 Histogram = OTelPrometheusHistogram
 Gauge = OTelPrometheusGauge
@@ -194,7 +203,13 @@ aion_messages_total = Counter(
 aion_tool_calls_total = Counter(
     "aion_tool_calls_total",
     "Total tool invocations",
-    ["tenant_id", "profile", "tool_name", "mcp_server", "status"],  # status: ok | error | blocked
+    [
+        "tenant_id",
+        "profile",
+        "tool_name",
+        "mcp_server",
+        "status",
+    ],  # status: ok | error | blocked
 )
 
 # Histograms
@@ -209,7 +224,7 @@ aion_tool_call_duration_seconds = Histogram(
     "aion_tool_call_duration_seconds",
     "Tool execution duration",
     ["tool_name", "mcp_server"],
-    buckets=[0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 10.0, 30.0]
+    buckets=[0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 10.0, 30.0],
 )
 
 aion_session_cache_size_bytes = Gauge(
@@ -222,13 +237,23 @@ aion_session_cache_size_bytes = Gauge(
 aion_llm_tokens_total = Counter(
     "aion_llm_tokens_total",
     "LLM token usage",
-    ["tenant_id", "profile", "model", "token_type"],  # token_type: prompt | completion | reasoning
+    [
+        "tenant_id",
+        "profile",
+        "model",
+        "token_type",
+    ],  # token_type: prompt | completion | reasoning
 )
 
 aion_llm_turn_tokens = Gauge(
     "aion_llm_turn_tokens",
     "LLM tokens used in the last turn",
-    ["tenant_id", "profile", "model", "token_type"],  # token_type: prompt | completion | reasoning
+    [
+        "tenant_id",
+        "profile",
+        "model",
+        "token_type",
+    ],  # token_type: prompt | completion | reasoning
 )
 
 aion_llm_turn_calls = Gauge(
@@ -240,7 +265,11 @@ aion_llm_turn_calls = Gauge(
 aion_agent_failures_total = Counter(
     "aion_agent_failures_total",
     "Total agent turn failures",
-    ["tenant_id", "profile", "error_type"],  # error_type: timeout | error | cancelled | ...
+    [
+        "tenant_id",
+        "profile",
+        "error_type",
+    ],  # error_type: timeout | error | cancelled | ...
 )
 
 aion_mcp_server_healthy = Gauge(
@@ -250,8 +279,8 @@ aion_mcp_server_healthy = Gauge(
 )
 
 
-
 _meter_provider = None
+
 
 def set_meter_provider(provider):
     global _meter_provider
@@ -260,8 +289,14 @@ def set_meter_provider(provider):
         try:
             meter = provider.get_meter("aion-agent")
             for name, obj in list(globals().items()):
-                if isinstance(obj, (OTelPrometheusCounter, OTelPrometheusHistogram, OTelPrometheusGauge)):
+                if isinstance(
+                    obj,
+                    (
+                        OTelPrometheusCounter,
+                        OTelPrometheusHistogram,
+                        OTelPrometheusGauge,
+                    ),
+                ):
                     obj._init_otel(meter)
         except Exception as e:
             logger.warning(f"Error initializing OTel instruments: {e}")
-

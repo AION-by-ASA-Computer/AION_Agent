@@ -1,4 +1,5 @@
 """CRUD for scheduled_jobs / scheduled_job_runs."""
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,11 @@ from sqlalchemy import delete, func, select, update
 
 from src.data.engine import get_async_session_maker
 from src.data.models import ScheduledJob, ScheduledJobRun
-from src.runtime.cron_expression import compute_next_run_at, validate_cron_expression, validate_session_mode
+from src.runtime.cron_expression import (
+    compute_next_run_at,
+    validate_cron_expression,
+    validate_session_mode,
+)
 
 RUN_STATUSES = frozenset({"running", "success", "error", "skipped"})
 
@@ -20,7 +25,9 @@ def _tenant_id() -> str:
     return (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
 
-def _job_to_dict(row: ScheduledJob, *, last_run: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def _job_to_dict(
+    row: ScheduledJob, *, last_run: Optional[Dict[str, Any]] = None
+) -> Dict[str, Any]:
     meta: Dict[str, Any] = {}
     if row.metadata_json:
         try:
@@ -192,14 +199,18 @@ async def update_job(
         if "name" in patch and patch["name"] is not None:
             row.name = str(patch["name"]).strip() or row.name
         if "description" in patch:
-            row.description = (str(patch["description"]).strip() if patch["description"] else None)
+            row.description = (
+                str(patch["description"]).strip() if patch["description"] else None
+            )
         if "cron_expression" in patch and patch["cron_expression"] is not None:
             row.cron_expression = validate_cron_expression(
                 str(patch["cron_expression"]), row.timezone
             )
         if "timezone" in patch and patch["timezone"] is not None:
             row.timezone = str(patch["timezone"]).strip() or row.timezone
-            row.cron_expression = validate_cron_expression(row.cron_expression, row.timezone)
+            row.cron_expression = validate_cron_expression(
+                row.cron_expression, row.timezone
+            )
         if "profile_slug" in patch and patch["profile_slug"] is not None:
             row.profile_slug = str(patch["profile_slug"]).strip()
         if "prompt" in patch and patch["prompt"] is not None:
@@ -210,7 +221,7 @@ async def update_job(
             row.session_mode = validate_session_mode(str(patch["session_mode"]))
         if "session_id" in patch:
             sid = patch["session_id"]
-            row.session_id = (str(sid).strip() if sid else None)
+            row.session_id = str(sid).strip() if sid else None
         if "enabled" in patch and patch["enabled"] is not None:
             row.enabled = bool(patch["enabled"])
         if "agent_mode" in patch and patch["agent_mode"] is not None:
@@ -306,7 +317,9 @@ async def has_running_run(job_id: str) -> bool:
         r = await session.execute(
             select(func.count())
             .select_from(ScheduledJobRun)
-            .where(ScheduledJobRun.job_id == job_id, ScheduledJobRun.status == "running")
+            .where(
+                ScheduledJobRun.job_id == job_id, ScheduledJobRun.status == "running"
+            )
         )
         return int(r.scalar() or 0) > 0
 

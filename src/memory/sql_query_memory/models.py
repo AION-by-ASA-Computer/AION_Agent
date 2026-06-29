@@ -1,4 +1,5 @@
 """DTOs for SQL QueryMemory API and tools."""
+
 from __future__ import annotations
 
 from datetime import datetime
@@ -68,4 +69,3 @@ class TenantSqlQmSettingsPatch(BaseModel):
     sql_default_scope: Optional[str] = None  # shared | per_user
     sql_auto_learn: Optional[bool] = None
     sql_search_before_run: Optional[bool] = None
-

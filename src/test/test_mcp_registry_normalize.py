@@ -1,4 +1,5 @@
 """Entrypoint detection for installed MCP servers."""
+
 from __future__ import annotations
 
 import json
@@ -90,11 +91,13 @@ def test_detect_stdio_node_bin_over_main(tmp_path, monkeypatch):
     clone = root / "mcp_servers" / "fake-bin"
     clone.mkdir(parents=True)
     (clone / "package.json").write_text(
-        json.dumps({
-            "name": "fake-bin",
-            "main": "index.js",
-            "bin": {"fake-bin": "cli.js"},
-        }),
+        json.dumps(
+            {
+                "name": "fake-bin",
+                "main": "index.js",
+                "bin": {"fake-bin": "cli.js"},
+            }
+        ),
         encoding="utf-8",
     )
     # index.js esiste fisicamente (modulo export, NON il CLI)
@@ -129,10 +132,12 @@ def test_detect_stdio_node_bin_only(tmp_path, monkeypatch):
     clone = root / "mcp_servers" / "fake-bin-only"
     clone.mkdir(parents=True)
     (clone / "package.json").write_text(
-        json.dumps({
-            "name": "fake-bin-only",
-            "bin": {"fake-bin-only": "cli.js"},
-        }),
+        json.dumps(
+            {
+                "name": "fake-bin-only",
+                "bin": {"fake-bin-only": "cli.js"},
+            }
+        ),
         encoding="utf-8",
     )
     # index.js esiste fisicamente (modulo export)
@@ -167,11 +172,13 @@ def test_detect_stdio_node_bin_file_missing_fallback(tmp_path, monkeypatch):
     clone = root / "mcp_servers" / "fake-bin-missing"
     clone.mkdir(parents=True)
     (clone / "package.json").write_text(
-        json.dumps({
-            "name": "fake-bin-missing",
-            "bin": {"fake-bin-missing": "nonexistent.js"},
-            "main": "index.js",
-        }),
+        json.dumps(
+            {
+                "name": "fake-bin-missing",
+                "bin": {"fake-bin-missing": "nonexistent.js"},
+                "main": "index.js",
+            }
+        ),
         encoding="utf-8",
     )
     # index.js esiste fisicamente

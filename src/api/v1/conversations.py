@@ -37,12 +37,16 @@ class ConversationCreate(BaseModel):
 
 def _require_unified():
     if os.getenv("AION_UNIFIED_DB", "1").lower() not in ("1", "true", "yes"):
-        raise HTTPException(503, "Unified DB disabled (set AION_UNIFIED_DB=0 to use legacy chat DB only)")
+        raise HTTPException(
+            503,
+            "Unified DB disabled (set AION_UNIFIED_DB=0 to use legacy chat DB only)",
+        )
 
 
 @router.post("/conversations")
 async def create_conversation(
-    body: ConversationCreate, ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_WRITE))
+    body: ConversationCreate,
+    ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     _require_unified()
     cid = new_uuid7_str()
@@ -78,7 +82,9 @@ async def list_conversations(
 ):
     _require_unified()
     async with get_async_session_maker()() as session:
-        q = select(Conversation).where(Conversation.tenant_id == ctx.tenant_id, Conversation.archived_at.is_(None))
+        q = select(Conversation).where(
+            Conversation.tenant_id == ctx.tenant_id, Conversation.archived_at.is_(None)
+        )
         if user_id:
             q = q.where(Conversation.user_id == user_id)
         q = q.order_by(Conversation.updated_at.desc()).limit(limit)
@@ -101,7 +107,8 @@ async def list_conversations(
 
 @router.get("/conversations/{conversation_id}")
 async def get_conversation(
-    conversation_id: str, ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_READ))
+    conversation_id: str,
+    ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_READ)),
 ):
     _require_unified()
     async with get_async_session_maker()() as session:
@@ -137,14 +144,19 @@ async def patch_conversation(
             vals["tags_json"] = json.dumps(body["tags"])
         if "metadata" in body:
             vals["metadata_json"] = json.dumps(body["metadata"])
-        await session.execute(update(Conversation).where(Conversation.id == conversation_id).values(**vals))
+        await session.execute(
+            update(Conversation)
+            .where(Conversation.id == conversation_id)
+            .values(**vals)
+        )
         await session.commit()
     return await get_conversation(conversation_id, ctx)
 
 
 @router.delete("/conversations/{conversation_id}")
 async def delete_conversation(
-    conversation_id: str, ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_WRITE))
+    conversation_id: str,
+    ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     _require_unified()
     async with get_async_session_maker()() as session:
@@ -158,6 +170,7 @@ async def delete_conversation(
         )
         await session.commit()
     from src.mcp_manager import mcp_manager
+
     await mcp_manager.release_session(conversation_id)
     return {"ok": True}
 
@@ -197,10 +210,7 @@ async def get_conversation_messages(
             (not is_ui_visible_role(nr))
             or looks_like_internal_content(r.content)
             or looks_like_raw_plan_content(r.content)
-            or (
-                is_empty_technical_message(nr, r.content)
-                and not has_assistant_payload
-            )
+            or (is_empty_technical_message(nr, r.content) and not has_assistant_payload)
         ):
             continue
         out.append(

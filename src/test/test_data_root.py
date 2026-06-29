@@ -1,4 +1,5 @@
 """data_root() fallback when .env still has Docker paths on the host."""
+
 from __future__ import annotations
 
 import os

@@ -1,4 +1,5 @@
 """Plan Mode: blocked tools, research budget, and Cursor-aligned system prompt."""
+
 from __future__ import annotations
 
 import os
@@ -36,7 +37,7 @@ DEFAULT_PLAN_MODE_RESEARCH_TOOLS: FrozenSet[str] = frozenset(
         "skill_list",
         "list_files_tree",
         "search_company_documents",
-        "search_files_by_name"
+        "search_files_by_name",
     }
 )
 

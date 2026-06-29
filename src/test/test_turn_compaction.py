@@ -1,4 +1,5 @@
 """Tests for intra-turn tool truncation and budget helpers."""
+
 from __future__ import annotations
 
 import os

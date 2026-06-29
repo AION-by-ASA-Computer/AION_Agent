@@ -36,7 +36,8 @@ async def consolidate(
     await ltm_orchestrator.extract_and_persist(
         session_id,
         user_id,
-        f"[BATCH transcript session={session_id} profile={profile_name}]\n" + transcript[:16000],
+        f"[BATCH transcript session={session_id} profile={profile_name}]\n"
+        + transcript[:16000],
         "",
         mode="batch",
     )
