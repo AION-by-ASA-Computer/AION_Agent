@@ -21,9 +21,17 @@ YAML profiles, skills, and Plan Mode for structured multi-step work.
 
 ## Screenshots
 
-| Chat UI | Admin UI |
-|---------|----------|
-| ![AION Chat UI — streaming chat, plan dock, attachments](assets/images/chat-ui.png) | ![AION Admin UI — profiles, users, memory, agent DB](assets/images/admin-panel.png) |
+### Chat UI
+
+<p align="center">
+  <img src="assets/images/chat-ui.png" alt="AION Chat UI: streaming chat, plan dock, attachments" width="900" />
+</p>
+
+### Admin UI
+
+<p align="center">
+  <img src="assets/images/admin-panel.png" alt="AION Admin UI: profiles, users, memory, agent DB" width="900" />
+</p>
 
 ## Quick start (Docker)
 
