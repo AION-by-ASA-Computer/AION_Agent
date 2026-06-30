@@ -41,8 +41,8 @@ export default function FirstSetupPage() {
     api_base_url: "",
     api_key: "",
     timeout: 120,
-    max_chat_tokens: 4096,
-    thinking_token_budget: 1024,
+    max_chat_tokens: 8192,
+    thinking_token_budget: 0,
   });
   const [showLlmKey, setShowLlmKey] = useState(false);
 
@@ -119,30 +119,40 @@ export default function FirstSetupPage() {
       slug: "default-openai",
       display_name: "OpenAI GPT-4o",
       model_name: "gpt-4o",
+      max_chat_tokens: 8192,
+      thinking_token_budget: 0,
     };
     if (provider === "anthropic") {
       defaults = {
         slug: "default-anthropic",
         display_name: "Anthropic Claude 3.5 Sonnet",
         model_name: "claude-3-5-sonnet-20241022",
+        max_chat_tokens: 16384,
+        thinking_token_budget: 8192,
       };
     } else if (provider === "gemini") {
       defaults = {
         slug: "default-gemini",
         display_name: "Google Gemini 1.5 Pro",
         model_name: "gemini-1.5-pro",
+        max_chat_tokens: 8192,
+        thinking_token_budget: 0,
       };
     } else if (provider === "ollama") {
       defaults = {
         slug: "local-ollama",
         display_name: "Ollama Llama 3",
         model_name: "llama3",
+        max_chat_tokens: 4096,
+        thinking_token_budget: 0,
       };
     } else if (provider === "vllm") {
       defaults = {
         slug: "local-vllm",
         display_name: "vLLM Model",
         model_name: "meta-llama/Meta-Llama-3-8B-Instruct",
+        max_chat_tokens: 16384,
+        thinking_token_budget: 8192,
       };
     }
     setLlmForm((prev) => ({
@@ -220,6 +230,9 @@ export default function FirstSetupPage() {
           AION_SEARXNG_BASE_URL: searchForm.searxng_url,
           AION_WEB_SEARCH_DEFAULT_PROVIDER: searchForm.default_provider,
           AION_WEB_SEARCH_FALLBACK_ORDER: searchForm.fallback_order,
+          // LLM Limits
+          AION_CHAT_MAX_TOKENS: String(llmForm.max_chat_tokens),
+          AION_THINKING_TOKEN_BUDGET: String(llmForm.thinking_token_budget),
           // Setup Completion Flag
           AION_FIRST_SETUP_COMPLETE: "1",
         },
@@ -469,6 +482,28 @@ export default function FirstSetupPage() {
                       />
                     </div>
                   )}
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Max Chat Tokens (AION_CHAT_MAX_TOKENS)</label>
+                    <input
+                      type="number"
+                      value={llmForm.max_chat_tokens}
+                      onChange={(e) => setLlmForm((prev) => ({ ...prev, max_chat_tokens: parseInt(e.target.value) || 0 }))}
+                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                      placeholder="e.g. 8192"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Thinking Token Budget (AION_THINKING_TOKEN_BUDGET)</label>
+                    <input
+                      type="number"
+                      value={llmForm.thinking_token_budget}
+                      onChange={(e) => setLlmForm((prev) => ({ ...prev, thinking_token_budget: parseInt(e.target.value) || 0 }))}
+                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                      placeholder="e.g. 1024 (0 to disable)"
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -921,6 +956,9 @@ export default function FirstSetupPage() {
                       <span className="font-bold text-white">{llmForm.display_name}</span>
                       <span className="text-xs text-gray-400 font-mono">
                         {llmForm.provider} / {llmForm.model_name}
+                      </span>
+                      <span className="text-xs text-gray-500 font-mono mt-1">
+                        Max Chat Tokens: {llmForm.max_chat_tokens} | Thinking Budget: {llmForm.thinking_token_budget}
                       </span>
                     </div>
                   </div>

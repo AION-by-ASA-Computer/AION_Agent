@@ -129,6 +129,7 @@ services:
         # Same-origin via Caddy: /api and /admin work for any DOMAIN under the reverse proxy
         NEXT_PUBLIC_AION_API_URL: "/api"
         NEXT_PUBLIC_AION_ADMIN_UI_URL: "/admin"
+        NEXT_PUBLIC_AION_PROMPT_DEBUG: ${NEXT_PUBLIC_AION_PROMPT_DEBUG:-1}
     image: aion/chat-ui:latest
     restart: unless-stopped
     expose:

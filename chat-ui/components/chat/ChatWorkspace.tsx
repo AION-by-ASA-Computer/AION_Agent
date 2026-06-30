@@ -1807,9 +1807,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               }
               return [merged, ...prev];
             });
+            // Do not auto-open the prompt debug tab on every turn
+            /*
             if (showPromptDebug) {
               setDockTab("prompt_debug");
             }
+            */
           }
           if (chunk.type === "presentation_preview") {
             const rp = String((chunk as { relative_path?: string }).relative_path || "").trim();
