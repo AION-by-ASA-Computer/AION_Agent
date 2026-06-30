@@ -824,7 +824,7 @@ class AgentPipeline:
             ),
         )
 
-    async def _reload_stm_window(self) -> List[ChatMessage]:
+    async def _reload_stm_window(self, exclude_message_ids: Optional[List[str]] = None) -> List[ChatMessage]:
         from .settings import get_settings as _gs
 
         _s = _gs()
@@ -843,6 +843,7 @@ class AgentPipeline:
             max_turns=max_turns,
             token_budget=stm_msg_budget,
             char_limit=stm_char_limit,
+            exclude_message_ids=exclude_message_ids,
         )
 
     async def _apply_context_compression(
@@ -850,6 +851,7 @@ class AgentPipeline:
         messages: List[ChatMessage],
         *,
         force: bool = False,
+        exclude_message_ids: Optional[List[str]] = None,
     ) -> tuple[List[ChatMessage], bool, bool]:
         """Ritorna (messages, did_compact, reloaded_from_db)."""
         enabled = os.getenv("AION_CONTEXT_COMPRESS_ENABLED", "1").strip().lower() in (
@@ -949,7 +951,7 @@ class AgentPipeline:
                             self.session_id[:8],
                             persist_exc,
                         )
-                reloaded = await self._reload_stm_window()
+                reloaded = await self._reload_stm_window(exclude_message_ids=exclude_message_ids)
                 after_stats = estimate_full_prompt_tokens(self.agent, reloaded)
                 log_context_budget(
                     self.session_id,

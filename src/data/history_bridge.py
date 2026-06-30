@@ -347,6 +347,7 @@ class UnifiedHistoryBridge:
         max_turns: int = 10,
         token_budget: Optional[int] = None,
         char_limit: int = 60000,
+        exclude_message_ids: Optional[List[str]] = None,
     ) -> List[ChatMessage]:
         approx_rows = max(max_turns * 4, 32)
         async with get_async_session_maker()() as session:
@@ -356,9 +357,10 @@ class UnifiedHistoryBridge:
                     Message.role, Message.content, Message.tool_name, Message.reasoning
                 )
                 .where(Message.conversation_id == session_id)
-                .order_by(Message.seq.desc())
-                .limit(approx_rows)
             )
+            if exclude_message_ids:
+                q = q.where(Message.id.not_in(exclude_message_ids))
+            q = q.order_by(Message.seq.desc()).limit(approx_rows)
             rows = list((await session.execute(q)).all())
         rows.reverse()
         parts: List[Tuple[str, str, Optional[str], Optional[str]]] = [
