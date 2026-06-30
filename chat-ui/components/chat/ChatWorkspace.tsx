@@ -3553,7 +3553,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
                           {/* Opzione: Selezione Modello LLM */}
                           {llmProviders && llmProviders.length > 0 && (
-                            <div className="relative" onMouseLeave={() => setIsLlmProviderOpen(false)}>
+                            <div ref={llmProviderMenuRef} className="relative" onMouseLeave={() => setIsLlmProviderOpen(false)}>
                               <button
                                 type="button"
                                 onClick={() => {
@@ -3578,48 +3578,49 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
                               {/* Sottomenu Selezione Modello */}
                               {isLlmProviderOpen && (
-                                <div
-                                  onMouseEnter={() => setIsLlmProviderOpen(true)}
-                                  className="absolute bottom-full left-0 z-50 mb-1.5 w-48 rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:bottom-0 sm:left-full sm:mb-0 sm:ml-1.5 sm:slide-in-from-left-2"
-                                >
-                                  <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
-                                    {selectedProvider ? "Switch Model" : "Select Model"}
-                                  </div>
-                                  <div className="space-y-0.5">
-                                    {providersLoading ? (
-                                      <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-                                        <div className="w-3 h-3 border-2 border-border border-t-primary rounded-full animate-spin" />
-                                        Loading...
-                                      </div>
-                                    ) : (
-                                      <>
-                                        {llmProviders.map((provider) => (
-                                          <button
-                                            key={provider.slug}
-                                            type="button"
-                                            onClick={() => {
-                                              setSelectedProvider(provider.slug === selectedProvider ? null : provider.slug);
-                                              setIsPlusOpen(false);
-                                              setIsLlmProviderOpen(false);
-                                            }}
-                                            className={cn(
-                                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                              provider.slug === selectedProvider
-                                                ? "bg-primary/10 text-primary"
-                                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                            )}
-                                          >
-                                            <span className="truncate">{provider.display_name}</span>
-                                            <span className="ml-auto text-[9px] text-muted-foreground font-mono shrink-0">{provider.provider}/{provider.model_name}</span>
-                                          </button>
-                                        ))}
-                                        {llmProviders.length === 0 && (
-                                          <div className="px-2 py-1.5 text-xs text-muted-foreground italic">
-                                            No models available
-                                          </div>
-                                        )}
-                                      </>
-                                    )}
+                                <div className="absolute bottom-full left-0 z-50 pb-1.5 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                                  <div
+                                    onMouseEnter={() => setIsLlmProviderOpen(true)}
+                                    className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
+                                  >
+                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
+                                      {selectedProvider ? "Switch Model" : "Select Model"}
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      {providersLoading ? (
+                                        <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
+                                          <div className="w-3 h-3 border-2 border-border border-t-primary rounded-full animate-spin" />
+                                          Loading...
+                                        </div>
+                                      ) : (
+                                        <>
+                                          {llmProviders.map((provider) => (
+                                            <button
+                                              key={provider.slug}
+                                              type="button"
+                                              onClick={() => {
+                                                setSelectedProvider(provider.slug === selectedProvider ? null : provider.slug);
+                                                setIsPlusOpen(false);
+                                                setIsLlmProviderOpen(false);
+                                              }}
+                                              className={cn(
+                                                "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                                provider.slug === selectedProvider
+                                                  ? "bg-primary/10 text-primary"
+                                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                              )}
+                                            >
+                                              <span className="truncate pr-2">{provider.display_name}</span>
+                                            </button>
+                                          ))}
+                                          {llmProviders.length === 0 && (
+                                            <div className="px-2 py-1.5 text-xs text-muted-foreground italic">
+                                              No models available
+                                            </div>
+                                          )}
+                                        </>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               )}
@@ -3652,70 +3653,72 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
                             {/* Sottomenu Vista Tools */}
                             {isToolsViewSubOpen && (
-                              <div
-                                onMouseEnter={() => setIsToolsViewSubOpen(true)}
-                                className="absolute bottom-full left-0 z-50 mb-1.5 w-48 rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:bottom-0 sm:left-full sm:mb-0 sm:ml-1.5 sm:slide-in-from-left-2"
-                              >
-                                <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
-                                  {t("chat.tools.select_view")}
-                                </div>
-                                <div className="space-y-0.5">
-                                  {/* Opzione: Nascondi */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleToolsViewChange("hidden");
-                                      setIsPlusOpen(false);
-                                      setIsToolsViewSubOpen(false);
-                                    }}
-                                    className={cn(
-                                      "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                      toolsView === "hidden"
-                                        ? "bg-primary/10 text-primary"
-                                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                    )}
-                                  >
-                                    <span>{t("chat.tools.hide")}</span>
-                                    {toolsView === "hidden" && <Check size={12} className="shrink-0 text-primary" />}
-                                  </button>
+                              <div className="absolute bottom-full left-0 z-50 pb-1.5 w-48 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                                <div
+                                  onMouseEnter={() => setIsToolsViewSubOpen(true)}
+                                  className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
+                                >
+                                  <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
+                                    {t("chat.tools.select_view")}
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    {/* Opzione: Nascondi */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToolsViewChange("hidden");
+                                        setIsPlusOpen(false);
+                                        setIsToolsViewSubOpen(false);
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        toolsView === "hidden"
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                      )}
+                                    >
+                                      <span>{t("chat.tools.hide")}</span>
+                                      {toolsView === "hidden" && <Check size={12} className="shrink-0 text-primary" />}
+                                    </button>
 
-                                  {/* Opzione: Parziale */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleToolsViewChange("partial");
-                                      setIsPlusOpen(false);
-                                      setIsToolsViewSubOpen(false);
-                                    }}
-                                    className={cn(
-                                      "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                      toolsView === "partial"
-                                        ? "bg-primary/10 text-primary"
-                                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                    )}
-                                  >
-                                    <span>{t("chat.tools.partial")}</span>
-                                    {toolsView === "partial" && <Check size={12} className="shrink-0 text-primary" />}
-                                  </button>
+                                    {/* Opzione: Parziale */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToolsViewChange("partial");
+                                        setIsPlusOpen(false);
+                                        setIsToolsViewSubOpen(false);
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        toolsView === "partial"
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                      )}
+                                    >
+                                      <span>{t("chat.tools.partial")}</span>
+                                      {toolsView === "partial" && <Check size={12} className="shrink-0 text-primary" />}
+                                    </button>
 
-                                  {/* Opzione: Completa */}
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      handleToolsViewChange("full");
-                                      setIsPlusOpen(false);
-                                      setIsToolsViewSubOpen(false);
-                                    }}
-                                    className={cn(
-                                      "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                      toolsView === "full"
-                                        ? "bg-primary/10 text-primary"
-                                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                    )}
-                                  >
-                                    <span>{t("chat.tools.full")}</span>
-                                    {toolsView === "full" && <Check size={12} className="shrink-0 text-primary" />}
-                                  </button>
+                                    {/* Opzione: Completa */}
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToolsViewChange("full");
+                                        setIsPlusOpen(false);
+                                        setIsToolsViewSubOpen(false);
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        toolsView === "full"
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                      )}
+                                    >
+                                      <span>{t("chat.tools.full")}</span>
+                                      {toolsView === "full" && <Check size={12} className="shrink-0 text-primary" />}
+                                    </button>
+                                  </div>
                                 </div>
                               </div>
                             )}

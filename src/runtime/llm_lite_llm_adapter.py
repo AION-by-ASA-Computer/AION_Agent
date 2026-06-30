@@ -13,6 +13,48 @@ from haystack.utils.auth import Secret
 logger = logging.getLogger("aion.lite_llm")
 
 
+# --- Monkeypatch per supportare l'estrazione di reasoning_content da LiteLLM ---
+try:
+    import haystack_integrations.components.generators.litellm.chat.chat_generator as litellm_chat_mod
+
+    _original_convert = litellm_chat_mod._convert_litellm_chunk_to_streaming_chunk
+
+    def _patched_convert_litellm_chunk_to_streaming_chunk(
+        chunk, previous_chunks, component_info
+    ):
+        stream_chunk = _original_convert(chunk, previous_chunks, component_info)
+
+        # Estrai reasoning_content da LiteLLM (es. DeepSeek, Gemini, Claude 3.7, OpenAI o3-mini)
+        if chunk.choices and len(chunk.choices) > 0:
+            delta = chunk.choices[0].delta
+            reasoning = getattr(delta, "reasoning_content", None)
+            if not reasoning and isinstance(delta, dict):
+                reasoning = delta.get("reasoning_content")
+            if not reasoning:
+                reasoning = getattr(delta, "reasoning", None)
+                if not reasoning and isinstance(delta, dict):
+                    reasoning = delta.get("reasoning")
+
+            if reasoning:
+                if stream_chunk.meta is None:
+                    stream_chunk.meta = {}
+                stream_chunk.meta["reasoning"] = reasoning
+                stream_chunk.meta["reasoning_content"] = reasoning
+
+        return stream_chunk
+
+    litellm_chat_mod._convert_litellm_chunk_to_streaming_chunk = (
+        _patched_convert_litellm_chunk_to_streaming_chunk
+    )
+    logger.info(
+        "Successfully applied monkeypatch to _convert_litellm_chunk_to_streaming_chunk for reasoning extraction."
+    )
+except Exception as e:
+    logger.warning(
+        "Failed to apply monkeypatch for LiteLLM reasoning extraction: %s", e
+    )
+
+
 @component
 class LiteLLMChatGeneratorWrapper:
     """

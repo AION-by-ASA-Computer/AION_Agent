@@ -382,31 +382,11 @@ export default function SettingsPage() {
                     onChange={(e) => setProviderForm(p => ({ ...p, provider: e.target.value }))}
                     className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all font-mono"
                   >
-                    <option value="openai">OpenAI-compatible</option>
+                    <option value="openai">OpenAI</option>
                     <option value="anthropic">Anthropic</option>
-                    <option value="google">Google Gemini</option>
-                    <option value="groq">Groq</option>
-                    <option value="mistral">Mistral</option>
+                    <option value="gemini">Google Gemini</option>
                     <option value="ollama">Ollama</option>
-                    <option value="azure">Azure OpenAI</option>
-                    <option value="cohere">Cohere</option>
-                    <option value="bedrock">AWS Bedrock</option>
-                    <option value="vertex">Google Vertex</option>
-                    <option value="fireworks">Fireworks</option>
-                    <option value="together">Together</option>
-                    <option value="perplexity">Perplexity</option>
-                    <option value="nvidia">NVIDIA</option>
-                    <option value="cerebras">Cerebras</option>
-                    <option value="deepinfra">DeepInfra</option>
-                    <option value="hyperbolic">Hyperbolic</option>
-                    <option value="lepton">Lepton</option>
-                    <option value="novita">Novita</option>
-                    <option value="samba">SambaNova</option>
                     <option value="vllm">vLLM</option>
-                    <option value="watsonx">IBM watsonx</option>
-                    <option value="yi">01.AI Yi</option>
-                    <option value="zhipu">Zhipu</option>
-                    <option value="other">Other (custom)</option>
                   </select>
                 </div>
 
@@ -428,7 +408,7 @@ export default function SettingsPage() {
                     value={providerForm.api_base_url}
                     onChange={(e) => setProviderForm(p => ({ ...p, api_base_url: e.target.value }))}
                     className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all font-mono"
-                    placeholder="https://api.openai.com/v1"
+                    placeholder=""
                   />
                 </div>
 
@@ -437,7 +417,7 @@ export default function SettingsPage() {
                   <input
                     type="number"
                     value={providerForm.timeout}
-                    onChange={(e) => setProviderForm(p => ({ ...p, timeout: parseInt(e.target.value) || 300 }))}
+                    onChange={(e) => setProviderForm(p => ({ ...p, timeout: parseInt(e.target.value) }))}
                     className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all font-mono"
                   />
                 </div>
