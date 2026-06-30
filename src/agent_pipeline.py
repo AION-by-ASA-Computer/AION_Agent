@@ -1078,38 +1078,40 @@ class AgentPipeline:
 
         # Opik self-hosted telemetry tracking
         try:
-            from opik.opik_context import update_current_trace
-            from src.observability.opik_setup import get_or_create_prompt
+            from src.observability.opik_setup import OPIK_AVAILABLE
+            if OPIK_AVAILABLE:
+                from opik.opik_context import update_current_trace
+                from src.observability.opik_setup import get_or_create_prompt
 
-            prompt_name = (
-                f"profile-{self.profile_name.replace(' ', '_').lower()}-prompt"
-            )
-            system_prompt_template = (
-                self.agent.system_prompt
-                if (
-                    hasattr(self, "agent")
-                    and self.agent
-                    and hasattr(self.agent, "system_prompt")
+                prompt_name = (
+                    f"profile-{self.profile_name.replace(' ', '_').lower()}-prompt"
                 )
-                else f"Instructions for the agent based on profile {self.profile_name}"
-            )
-            prompt_obj = get_or_create_prompt(
-                prompt_name=prompt_name,
-                template_content=system_prompt_template
-                + "\n\nUser request: {{user_input}}",
-            )
-            update_current_trace(
-                thread_id=self.session_id,
-                tags=[self.profile_name, "AION-Agent-Turn"],
-                metadata={
-                    "session_id": self.session_id,
-                    "user_id": self.user_id,
-                    "profile_name": self.profile_name,
-                    "model": (os.getenv("AION_MODEL") or "").strip() or "unknown",
-                    "user_input": user_input,
-                },
-                prompts=[prompt_obj],
-            )
+                system_prompt_template = (
+                    self.agent.system_prompt
+                    if (
+                        hasattr(self, "agent")
+                        and self.agent
+                        and hasattr(self.agent, "system_prompt")
+                    )
+                    else f"Instructions for the agent based on profile {self.profile_name}"
+                )
+                prompt_obj = get_or_create_prompt(
+                    prompt_name=prompt_name,
+                    template_content=system_prompt_template
+                    + "\n\nUser request: {{user_input}}",
+                )
+                update_current_trace(
+                    thread_id=self.session_id,
+                    tags=[self.profile_name, "AION-Agent-Turn"],
+                    metadata={
+                        "session_id": self.session_id,
+                        "user_id": self.user_id,
+                        "profile_name": self.profile_name,
+                        "model": (os.getenv("AION_MODEL") or "").strip() or "unknown",
+                        "user_input": user_input,
+                    },
+                    prompts=[prompt_obj],
+                )
         except Exception as opik_err:
             logger.warning(
                 "Errore durante l'inizializzazione del tracciamento Opik: %s", opik_err
@@ -1335,14 +1337,35 @@ class AgentPipeline:
                     return
 
             # Check LLM connection before database persistence and model invocation
-            llm_url = os.getenv("AION_API_URL", "")
+            llm_url = ""
+            api_key = ""
+            if hasattr(self, "agent") and self.agent and hasattr(self.agent, "chat_generator"):
+                generator = self.agent.chat_generator
+                if generator:
+                    if hasattr(generator, "api_base_url") and generator.api_base_url:
+                        llm_url = generator.api_base_url
+                    if hasattr(generator, "api_key") and generator.api_key:
+                        from haystack.utils import Secret
+                        if isinstance(generator.api_key, Secret):
+                            resolved = generator.api_key.resolve_value()
+                            if resolved:
+                                api_key = resolved
+                        elif isinstance(generator.api_key, str):
+                            api_key = generator.api_key
+
+            # Fallback to env variables if not found/resolved from the generator
+            if not llm_url:
+                llm_url = os.getenv("AION_API_URL", "")
+            if not api_key or api_key == "placeholder-token":
+                api_key = os.getenv("AION_LLM_API_KEY", "placeholder-token")
+
             if not llm_url:
                 yield {
                     "type": "error",
-                    "content": "Configuration error: AION_API_URL is not set",
+                    "content": "Configuration error: LLM URL is not set",
                 }
                 return
-            api_key = os.getenv("AION_LLM_API_KEY", "placeholder-token")
+
             from src.runtime.llm_health import check_llm_connection
 
             is_connected, err_msg = await asyncio.to_thread(
