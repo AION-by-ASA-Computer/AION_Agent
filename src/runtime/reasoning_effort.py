@@ -3,7 +3,6 @@
 OpenAIChatGenerator unisce con shallow merge: passare solo `extra_body` sovrascriverebbe il resto.
 Qui si ricopia la base dal generatore e si aggiornano solo i rami necessari.
 """
-
 from __future__ import annotations
 
 import os
@@ -82,9 +81,8 @@ def _thinking_token_budget_for_effort(effort: ReasoningEffortLevel) -> Optional[
     return None
 
 
-def merge_generation_kwargs(
-    base: Dict[str, Any], effort: ReasoningEffortLevel
-) -> Dict[str, Any]:
+
+def merge_generation_kwargs(base: Dict[str, Any], effort: ReasoningEffortLevel) -> Dict[str, Any]:
     out = dict(base or {})
     eb = dict(out.get("extra_body") or {})
     ctk = dict(eb.get("chat_template_kwargs") or {})
@@ -105,19 +103,58 @@ def merge_generation_kwargs(
     return out
 
 
-def generation_kwargs_for_agent(
-    agent: Any, effort: Optional[str]
-) -> Optional[Dict[str, Any]]:
+def generation_kwargs_for_agent(agent: Any, effort: Optional[str]) -> Optional[Dict[str, Any]]:
     """Ritorna kwargs completi per il turno (thinking esplicito + budget anche per medium)."""
     e = normalize_reasoning_effort(effort)
     gen = getattr(agent, "chat_generator", None)
-    base = (
-        dict(getattr(gen, "generation_kwargs", None) or {}) if gen is not None else {}
-    )
-    # extra_body è vLLM/OpenAI-specific — saltalo per altri provider (es. anthropic, google)
-    if gen is not None and getattr(gen, "provider", "openai") not in (
-        "openai",
-        "azure",
-    ):
+    base = dict(getattr(gen, "generation_kwargs", None) or {}) if gen is not None else {}
+    
+    if gen is None:
         return base or None
+
+    provider = getattr(gen, "provider", "openai")
+    model_lower = getattr(gen, "model", "").lower()
+
+    # Supporto Anthropic (Claude 3.7 Sonnet) e Google Gemini (pensiero configurabile)
+    if provider in ("anthropic", "google"):
+        out = dict(base or {})
+        if e == "min":
+            out.pop("thinking", None)
+        else:
+            # Abilita il thinking solo se già configurato nel DB o se è un modello che supporta il thinking (es. Claude 3.7, Gemini 2.0/2.5)
+            has_thinking = (
+                "thinking" in out
+            )
+            if has_thinking:
+                budget = _thinking_token_budget_for_effort(e)
+                if budget is not None:
+                    out["thinking"] = {"type": "enabled", "budget_tokens": budget}
+                    # Assicura che max_tokens sia maggiore del budget di thinking
+                    max_tokens = out.get("max_tokens") or 8192
+                    if max_tokens <= budget:
+                        out["max_tokens"] = budget + 2048
+        return out
+
+    # Supporto OpenAI o1 e o3-mini (ragionamento nativo tramite parametro reasoning_effort)
+    is_openai_reasoning = provider == "openai" and (
+        model_lower.startswith("o1")
+        or model_lower.startswith("o3")
+        or "/o1" in model_lower
+        or "/o3" in model_lower
+    )
+    if is_openai_reasoning:
+        out = dict(base or {})
+        if e == "min":
+            out["reasoning_effort"] = "low"
+        elif e == "medium":
+            out["reasoning_effort"] = "medium"
+        else:
+            out["reasoning_effort"] = "high"
+        return out
+
+    # extra_body è vLLM/OpenAI-specific — saltalo per altri provider (es. google)
+    if provider not in ("openai", "azure"):
+        return base or None
+
     return merge_generation_kwargs(base, e)
+
