@@ -1079,6 +1079,7 @@ class AgentPipeline:
         # Opik self-hosted telemetry tracking
         try:
             from src.observability.opik_setup import OPIK_AVAILABLE
+
             if OPIK_AVAILABLE:
                 from opik.opik_context import update_current_trace
                 from src.observability.opik_setup import get_or_create_prompt
@@ -1339,13 +1340,18 @@ class AgentPipeline:
             # Check LLM connection before database persistence and model invocation
             llm_url = ""
             api_key = ""
-            if hasattr(self, "agent") and self.agent and hasattr(self.agent, "chat_generator"):
+            if (
+                hasattr(self, "agent")
+                and self.agent
+                and hasattr(self.agent, "chat_generator")
+            ):
                 generator = self.agent.chat_generator
                 if generator:
                     if hasattr(generator, "api_base_url") and generator.api_base_url:
                         llm_url = generator.api_base_url
                     if hasattr(generator, "api_key") and generator.api_key:
                         from haystack.utils import Secret
+
                         if isinstance(generator.api_key, Secret):
                             resolved = generator.api_key.resolve_value()
                             if resolved:

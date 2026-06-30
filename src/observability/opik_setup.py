@@ -15,7 +15,12 @@ if not logger.handlers:
 
 # Configura le variabili d'ambiente per l'SDK di Opik (Self-Hosted local instance)
 # Inietta i valori configurati nel file .env se presenti, altrimenti imposta i default.
-OPIK_ENABLED = os.getenv("AION_OPIK_ENABLED", "0").strip().lower() in ("1", "true", "yes", "on")
+OPIK_ENABLED = os.getenv("AION_OPIK_ENABLED", "0").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 
 if OPIK_ENABLED:
     OPIK_URL = os.getenv("OPIK_URL_OVERRIDE", "http://localhost:5173/api").strip("'\"")

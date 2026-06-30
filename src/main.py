@@ -1384,6 +1384,7 @@ async def _finish_get_agent_build(
     # === OPIK TELEMETRY WRAPPERS ===
     try:
         from src.observability.opik_setup import OPIK_AVAILABLE
+
         if OPIK_AVAILABLE:
             import functools
             from opik import track
@@ -1440,7 +1441,9 @@ async def _finish_get_agent_build(
                             if isinstance(usage, dict) and usage:
                                 p_tok = usage.get("prompt_tokens", 0) or 0
                                 c_tok = usage.get("completion_tokens", 0) or 0
-                                details = usage.get("completion_tokens_details", {}) or {}
+                                details = (
+                                    usage.get("completion_tokens_details", {}) or {}
+                                )
                                 r_tok = (
                                     details.get("reasoning_tokens", 0)
                                     or usage.get("reasoning_tokens", 0)
