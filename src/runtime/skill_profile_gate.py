@@ -14,7 +14,13 @@ def _enforce_enabled() -> bool:
     )
 
 
+_OFFICE_SLUGS = {"docx", "pdf", "xlsx", "pptx"}
+
+
 def skill_allowed_for_profile_slug(skill_name: str, profile_slug: str) -> bool:
+    name_strip = (skill_name or "").strip()
+    if name_strip in _OFFICE_SLUGS:
+        return True
     if not _enforce_enabled() or not (profile_slug or "").strip():
         return True
     try:
@@ -24,7 +30,7 @@ def skill_allowed_for_profile_slug(skill_name: str, profile_slug: str) -> bool:
         prof = profile_manager.get_profile(profile_slug.strip())
         if not prof or not prof.skills:
             return True
-        return (skill_name or "").strip() in prof.skills
+        return name_strip in prof.skills
     except Exception:
         return True
 

@@ -159,6 +159,32 @@ def prepare_mcp_tool_arguments(
     raw = dict(arguments or {})
     args = {k: v for k, v in raw.items() if k not in _RESERVED_KEYS}
     args = _apply_aliases(tool_name, args)
+
+    # Automatically resolve save_path for download_attachment to the session sandbox
+    t_name = tool_name.lower().replace("-", "_")
+    if (t_name == "download_attachment" or t_name.endswith("_download_attachment")) and "save_path" in args:
+        val = args["save_path"]
+        if isinstance(val, str):
+            cleaned = val.strip().replace("\\", "/").lstrip("/")
+            import re
+            for prefix in ("app/data/sessions/[^/]+/", "app/", "workspace/workspace/", "workspace/"):
+                cleaned = re.sub("^" + prefix, "", cleaned)
+            cleaned = cleaned.lstrip("/")
+            if "/" not in cleaned:
+                cleaned = f"uploads/{cleaned}"
+            elif not cleaned.startswith(("uploads/", "workspace/", "derived/", "unpacked/")):
+                cleaned = f"uploads/{cleaned}"
+            
+            from src.runtime.context import get_current_session_id
+            from src.session_workspace import safe_resolve
+            sid = get_current_session_id()
+            if sid and sid != "default":
+                try:
+                    resolved = safe_resolve(sid, cleaned, must_exist=False)
+                    args["save_path"] = str(resolved.absolute())
+                except Exception:
+                    pass
+
     if tool_name in _WORKSPACE_PATH_TOOLS and _has_value(args.get("relative_path")):
         before = str(args["relative_path"])
         args["relative_path"] = normalize_workspace_relative_path(before)

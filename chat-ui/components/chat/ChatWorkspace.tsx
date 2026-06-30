@@ -3499,7 +3499,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     type="file"
                     multiple
                     className="hidden"
-                    onChange={(e) => setPendingFiles(Array.from(e.target.files || []))}
+                    onChange={(e) => {
+                      const selected = Array.from(e.target.files || []);
+                      setPendingFiles((prev) => {
+                        const filtered = selected.filter(
+                          (sf) => !prev.some((pf) => pf.name === sf.name && pf.size === sf.size)
+                        );
+                        return [...prev, ...filtered];
+                      });
+                    }}
                   />
                   {/* Pulsante "+" con Menu di Allega File */}
                   <div className="flex items-center gap-2">

@@ -13,12 +13,24 @@ from croniter import croniter
 def default_timezone() -> str:
     return (os.environ.get("AION_CRON_DEFAULT_TIMEZONE") or "UTC").strip() or "UTC"
 
+def parse_cron_fields(expr: str) -> dict[str, str]:
+    parts = (expr or "").strip().split()
+    if len(parts) != 5:
+        raise ValueError(f"Expected 5-field cron, got {len(parts)} fields")
+    return {
+        "minute": parts[0],
+        "hour": parts[1],
+        "day": parts[2],
+        "month": parts[3],
+        "day_of_week": parts[4],
+    }
 
 def validate_cron_expression(expr: str, tz_name: Optional[str] = None) -> str:
     """Return normalized cron expression or raise ValueError."""
     s = (expr or "").strip()
     if not s:
         raise ValueError("cron_expression is required")
+    parse_cron_fields(s)
     tz = (tz_name or default_timezone()).strip() or "UTC"
     try:
         ZoneInfo(tz)

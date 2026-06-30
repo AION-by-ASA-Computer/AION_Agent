@@ -313,7 +313,7 @@ def compact_agent_messages_in_place() -> bool:
         },
     )
 
-    _schedule_db_persist(rt, summary_msg, keep)
+    _schedule_db_persist(rt, summary_msg, len(tail))
     return True
 
 

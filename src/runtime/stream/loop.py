@@ -100,6 +100,7 @@ class StreamLoop:
         plan_text_parser_enabled_fn: Optional[Callable[[], bool]] = None,
         demux: Optional["StreamDemux"] = None,
         track_sse: Optional[Callable[[Dict[str, Any]], Dict[str, Any]]] = None,
+        timeline_builder: Optional[Any] = None,
     ) -> None:
         self.queue = queue
         self.stop_event = stop_event
@@ -117,6 +118,7 @@ class StreamLoop:
         self._plan_text_parser_enabled = plan_text_parser_enabled_fn or (lambda: False)
         self._demux = demux
         self._track_sse = track_sse or (lambda x: x)
+        self.timeline_builder = timeline_builder
 
         # Budget limits (unpacked for fast inner-loop access)
         g = turn_guards
@@ -146,8 +148,8 @@ class StreamLoop:
         self.artifact_salvage: int = 0
         self.plan_intercepts: int = 0
         self.plan_finalize_source: Optional[str] = None
-        self.plan_text_fallback_count: int = 0
         self.raw_token_fallback_chunks: int = 0
+        self.llm_calls: int = 0
 
         # Inner counters mirroring turn_guards.state
         self.is_streaming: bool = False
@@ -162,6 +164,27 @@ class StreamLoop:
         self.last_progress_at: float = g.state.last_progress_at
         self.reasoning_guard_logged: bool = g.state.reasoning_guard_logged
         self.reasoning_no_tool_warned: bool = g.state.reasoning_no_tool_warned
+
+    #------------------------------------------------------------------
+    # Flush Assistant = force persist assistant stream content & timeline (JSON)
+    #------------------------------------------------------------------
+
+    async def _flush_assistant(self) -> None:
+        import json
+        tl_json = None
+        if self.timeline_builder and self.timeline_builder.segments:
+            try:
+                tl_json = json.dumps(self.timeline_builder.segments, ensure_ascii=False)
+            except Exception:
+                pass
+        await self.turn_persist.flush_assistant_stream_content(
+            full_response=self.full_response,
+            full_reasoning=self.full_reasoning,
+            profile_name=self.profile_name,
+            user_id=self.user_id,
+            loop_time=self.loop.time(),
+            timeline_json=tl_json,
+        )
 
     # ------------------------------------------------------------------
     # Public: main async generator
@@ -199,6 +222,10 @@ class StreamLoop:
                 # Route through demux side channels
                 if self._demux is not None:
                     self._demux.feed(chunk)
+
+                if ctype == "llm_call":
+                    self.llm_calls += 1
+                    continue
 
                 # --- Hard-stop budget guards ---
                 hard_stop = self._check_budget_guards(ctype)
@@ -295,13 +322,7 @@ class StreamLoop:
                     text_emitted = True
                 self.last_progress_at = self.loop.time()
                 yield self._track_sse({"type": "token", "content": pe.content})
-                await self.turn_persist.flush_assistant_stream_content(
-                    full_response=self.full_response,
-                    full_reasoning=self.full_reasoning,
-                    profile_name=self.profile_name,
-                    user_id=self.user_id,
-                    loop_time=self.loop.time(),
-                )
+                await self._flush_assistant()
             elif pe.event == ArtifactEvent.ARTIFACT_START:
                 had_only_text = False
                 self.artifact_parse_hits += 1
@@ -359,13 +380,7 @@ class StreamLoop:
             if not _suppress_plan_token:
                 self.last_progress_at = self.loop.time()
                 yield self._track_sse({"type": "token", "content": raw_token})
-                await self.turn_persist.flush_assistant_stream_content(
-                    full_response=self.full_response,
-                    full_reasoning=self.full_reasoning,
-                    profile_name=self.profile_name,
-                    user_id=self.user_id,
-                    loop_time=self.loop.time(),
-                )
+                await self._flush_assistant()
         elif had_only_text:
             self.raw_token_fallback_chunks += 1
 
@@ -465,13 +480,7 @@ class StreamLoop:
 
         self.full_reasoning.append(reasoning_piece)
         yield self._track_sse(chunk)
-        await self.turn_persist.flush_assistant_stream_content(
-            full_response=self.full_response,
-            full_reasoning=self.full_reasoning,
-            profile_name=self.profile_name,
-            user_id=self.user_id,
-            loop_time=self.loop.time(),
-        )
+        await self._flush_assistant()
 
     # ------------------------------------------------------------------
     # Private: tool_event handler

@@ -303,6 +303,7 @@ def build_sql_query_memory_haystack_tools(
                 project_slug=proj,
                 tenant_id=tenant,
                 user_id=uid,
+                profile_slug=prof,
                 verified_only=verified_only,
                 limit=min(max(int(limit), 1), 200),
             )

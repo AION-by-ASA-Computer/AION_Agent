@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.api.cron_schemas import (
@@ -159,11 +159,14 @@ async def delete_my_cron_job(
 
 @router.post("/{job_id}/run-now")
 async def run_my_cron_job_now(
-    job_id: str, auth: ChatAuthIdentity = Depends(require_chat_auth)
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
 ):
     _require_cron()
     await _get_owned(job_id, _user_id(auth))
-    return await execute_job(job_id, trigger="user")
+    background_tasks.add_task(execute_job, job_id, trigger="user")
+    return {"ok": True, "job_id": job_id, "status": "running"}
 
 
 @router.get("/{job_id}/runs", response_model=ScheduledRunListResponse)
