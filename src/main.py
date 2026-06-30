@@ -1271,16 +1271,32 @@ async def _finish_get_agent_build(
                             eb = provider_gen_kw.get("extra_body") or {}
                             eb["thinking_token_budget"] = row.thinking_token_budget
                             provider_gen_kw["extra_body"] = eb
-                        elif row.provider == "anthropic":
-                            provider_gen_kw["max_tokens"] = row.thinking_token_budget
+                        elif row.provider in ("anthropic", "google"):
+                            budget = row.thinking_token_budget
+                            provider_gen_kw["thinking"] = {
+                                "type": "enabled",
+                                "budget_tokens": budget,
+                            }
+                            max_tokens = row.max_chat_tokens or 8192
+                            if max_tokens <= budget:
+                                max_tokens = budget + 2048
+                            provider_gen_kw["max_tokens"] = max_tokens
                 elif row.thinking_token_budget:
                     provider_gen_kw = {}
                     if row.provider in ("openai", "azure"):
                         provider_gen_kw["extra_body"] = {
                             "thinking_token_budget": row.thinking_token_budget
                         }
-                    elif row.provider == "anthropic":
-                        provider_gen_kw["max_tokens"] = row.thinking_token_budget
+                    elif row.provider in ("anthropic", "google"):
+                        budget = row.thinking_token_budget
+                        provider_gen_kw["thinking"] = {
+                            "type": "enabled",
+                            "budget_tokens": budget,
+                        }
+                        max_tokens = row.max_chat_tokens or 8192
+                        if max_tokens <= budget:
+                            max_tokens = budget + 2048
+                        provider_gen_kw["max_tokens"] = max_tokens
 
                 chat_generator = LiteLLMChatGeneratorWrapper(
                     api_base_url=provider_api_base,

@@ -260,34 +260,36 @@ async def update_llm_provider(slug: str, body: LlmProviderUpdate):
                 .values(is_default=False)
             )
 
-        # Aggiornamenti
-        if body.display_name is not None:
-            row.display_name = body.display_name
-        if body.description is not None:
-            row.description = body.description
-        if body.icon_url is not None:
-            row.icon_url = body.icon_url
-        if body.provider is not None:
-            row.provider = body.provider
-        if body.model_name is not None:
-            row.model_name = body.model_name
-        if body.api_base_url is not None:
-            row.api_base_url = body.api_base_url
-        if body.api_key is not None:
-            # Cripta la nuova API key
-            row.api_key_encrypted = encrypt_value(body.api_key)
-        if body.timeout is not None:
-            row.timeout = body.timeout
-        if body.max_chat_tokens is not None:
-            row.max_chat_tokens = body.max_chat_tokens
-        if body.thinking_token_budget is not None:
-            row.thinking_token_budget = body.thinking_token_budget
-        if body.enabled is not None:
-            row.enabled = body.enabled
-        if body.is_default is not None:
-            row.is_default = body.is_default
-        if body.metadata is not None:
-            row.metadata_json = json.dumps(body.metadata)
+        # Aggiornamenti basati sui campi esplicitamente inviati
+        update_data = body.model_dump(exclude_unset=True)
+
+        if "display_name" in update_data:
+            row.display_name = update_data["display_name"]
+        if "description" in update_data:
+            row.description = update_data["description"]
+        if "icon_url" in update_data:
+            row.icon_url = update_data["icon_url"]
+        if "provider" in update_data:
+            row.provider = update_data["provider"]
+        if "model_name" in update_data:
+            row.model_name = update_data["model_name"]
+        if "api_base_url" in update_data:
+            row.api_base_url = update_data["api_base_url"]
+        if "api_key" in update_data:
+            if update_data["api_key"] is not None:
+                row.api_key_encrypted = encrypt_value(update_data["api_key"])
+        if "timeout" in update_data:
+            row.timeout = update_data["timeout"]
+        if "max_chat_tokens" in update_data:
+            row.max_chat_tokens = update_data["max_chat_tokens"]
+        if "thinking_token_budget" in update_data:
+            row.thinking_token_budget = update_data["thinking_token_budget"]
+        if "enabled" in update_data:
+            row.enabled = update_data["enabled"]
+        if "is_default" in update_data:
+            row.is_default = update_data["is_default"]
+        if "metadata" in update_data:
+            row.metadata_json = json.dumps(update_data["metadata"])
 
         row.updated_at = datetime.now(timezone.utc)
         await session.commit()
@@ -339,3 +341,13 @@ async def delete_llm_provider(slug: str):
         await session.execute(delete(LlmProvider).where(LlmProvider.id == row.id))
         await session.commit()
     return {"ok": True}
+
+
+async def fake_function() -> None:
+    # This is a fake function
+    a = 1
+    try:
+        b = 2
+
+    except Exception as e:
+        print(e)
