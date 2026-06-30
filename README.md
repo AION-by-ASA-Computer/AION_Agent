@@ -18,7 +18,7 @@ YAML profiles, skills, and Plan Mode for structured multi-step work.
 [![MCP](https://img.shields.io/badge/MCP-stdio%2FSSE-8B5CF6)](docs/mcp/)
 [![Caddy](https://img.shields.io/badge/Caddy-reverse%20proxy-1F88C0)](https://caddyserver.com/)
 
-**Commercial site:** [https://aion-asa.com](https://aion-asa.com) · **Italian README:** [README.it.md](README.it.md) · **Docs:** [docs/](docs/)
+**Commercial site:** [https://aion-asa.com](https://aion-asa.com) · **Docs:** [docs/](docs/)
 
 ## Screenshots
 

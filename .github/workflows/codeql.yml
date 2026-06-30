@@ -9,6 +9,10 @@ on:
     # Weekly rescan (Monday 06:00 UTC).
     - cron: "0 6 * * 1"
 
+permissions:
+  contents: read
+  security-events: write
+
 concurrency:
   group: codeql-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
@@ -18,9 +22,6 @@ jobs:
     name: CodeQL Analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    permissions:
-      contents: read
-      security-events: write
 
     strategy:
       fail-fast: false
