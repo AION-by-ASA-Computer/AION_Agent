@@ -47,11 +47,11 @@ If an old rule exists under **Settings → Branches → Branch protection rules*
 
 ### 3. Bypass list
 
-Leave **empty** for maximum strictness (no one bypasses the ruleset).
+**Required when Restrict updates is enabled** (see below): add **Repository admin** → mode **For pull requests only**.
 
-Optional (break-glass only): **Add bypass** → **Repository admin** → mode **For pull requests only** so admins still open PRs but cannot push directly to `main`.
+With **Restrict updates** on and an **empty** bypass list, approved PRs with green CI still fail to merge with *Cannot update this protected ref* — GitHub treats the merge as a ref update that only bypass actors may perform. **For pull requests only** lets admins merge via the PR UI after requirements pass; it does **not** allow direct pushes to `main`.
 
-Do **not** add broad bypass for all writers unless you intend to allow direct pushes.
+Do **not** use **Always allow** for broad roles unless you intend break-glass direct pushes. Do **not** add all writers to bypass.
 
 ### 4. Target branches
 
@@ -75,7 +75,8 @@ Enable the following rules in **Branch protections**:
 
 #### Restrict updates
 
-- **On** — only bypass actors can push commits directly to `main`. Everyone else merges via pull request.
+- **On** — blocks direct pushes to `main` (only bypass actors can push). Merges also require a bypass actor with **For pull requests only** (or **Always allow**); pair with **Require a pull request before merging** below.
+- **Off** — if you prefer fewer moving parts: **Require a pull request before merging** alone already blocks direct pushes for non-bypass users.
 
 #### Block force pushes
 
@@ -232,7 +233,8 @@ Direct pushes and force pushes to `main` are blocked.
 |---------|----------------|
 | Status check missing in ruleset UI | Run CI successfully on `main` first; use exact job `name` from workflow |
 | Security job fails immediately | Add `GITLEAKS_LICENSE` repository secret (not available to Dependabot — gitleaks is skipped for `dependabot[bot]`) |
-| Merge blocked despite green CI | Branch out of date — click **Update branch** on the PR; or missing **Approve** (comment ≠ approval) |
+| Merge blocked despite green CI | Branch out of date — click **Update branch**; missing **Approve** (comment ≠ approval); or **Restrict updates** with empty bypass — add **Repository admin** → **For pull requests only** |
+| `Cannot update this protected ref` (API/UI) | **Restrict updates** is on and bypass list is empty (or merger lacks bypass). Add admin bypass **For pull requests only**, or disable **Restrict updates** and rely on **Require a pull request** |
 | OSV Code Scanning: `configuration not found` on PRs | Legacy `osv-scanner-scheduled.yml` SARIF on `main` — use unified [osv-scanner.yml](workflows/osv-scanner.yml); after merge, re-run **OSV-Scanner** on `main` |
 | Rules seem duplicated | Remove legacy rule under **Settings → Branches** |
 | Admin can still push | Admin may be on bypass list — remove bypass or use **For pull requests only** |
