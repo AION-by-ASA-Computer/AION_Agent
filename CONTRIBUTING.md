@@ -134,7 +134,7 @@ Pull requests to `main` run:
 | [codeql.yml](.github/workflows/codeql.yml) | CodeQL SAST (Python + TypeScript) |
 | [governance.yml](.github/workflows/governance.yml) | actionlint + typos |
 | [pull-request.yml](.github/workflows/pull-request.yml) | Conventional Commits PR title (release-please) |
-| [osv-scanner-pr.yml](.github/workflows/osv-scanner-pr.yml) | New dependency vulnerabilities only |
+| [osv-scanner.yml](.github/workflows/osv-scanner.yml) | New dependency vulnerabilities only (PR); scheduled full scan on `main` |
 
 Scheduled: OSV-Scanner, OpenSSF Scorecard, CodeQL, stale bot. Dependabot opens weekly update PRs ([dependabot.yml](.github/dependabot.yml)).
 
