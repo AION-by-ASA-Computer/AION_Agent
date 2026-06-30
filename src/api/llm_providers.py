@@ -1,4 +1,5 @@
 """Admin API: CRUD per LLM providers."""
+
 from __future__ import annotations
 
 import json
@@ -21,6 +22,7 @@ router = APIRouter(prefix="/llm-providers", tags=["admin-llm-providers"])
 
 # --- Pydantic models ---
 
+
 class LlmProviderCreate(BaseModel):
     slug: str
     display_name: str
@@ -37,6 +39,7 @@ class LlmProviderCreate(BaseModel):
     is_default: bool = False
     metadata: Optional[Dict] = None
 
+
 class LlmProviderUpdate(BaseModel):
     display_name: Optional[str] = None
     description: Optional[str] = None
@@ -51,6 +54,7 @@ class LlmProviderUpdate(BaseModel):
     enabled: Optional[bool] = None
     is_default: Optional[bool] = None
     metadata: Optional[Dict] = None
+
 
 class LlmProviderPublic(BaseModel):
     id: str
@@ -69,17 +73,25 @@ class LlmProviderPublic(BaseModel):
     is_default: bool
     metadata: Dict = Field(default_factory=dict)
 
+
 # --- Endpoints ---
+
 
 @router.get("", response_model=List[LlmProviderPublic])
 async def list_llm_providers(tenant_id: str = "default"):
     """Lista tutti i provider LLM per tenant."""
     async with get_async_session_maker()() as session:
-        rows = (await session.execute(
-            select(LlmProvider)
-            .where(LlmProvider.tenant_id == tenant_id)
-            .order_by(LlmProvider.is_default.desc(), LlmProvider.display_name)
-        )).scalars().all()
+        rows = (
+            (
+                await session.execute(
+                    select(LlmProvider)
+                    .where(LlmProvider.tenant_id == tenant_id)
+                    .order_by(LlmProvider.is_default.desc(), LlmProvider.display_name)
+                )
+            )
+            .scalars()
+            .all()
+        )
     return [
         LlmProviderPublic(
             id=r.id,
@@ -101,16 +113,23 @@ async def list_llm_providers(tenant_id: str = "default"):
         for r in rows
     ]
 
+
 @router.get("/{slug}", response_model=LlmProviderPublic)
 async def get_llm_provider(slug: str, tenant_id: str = "default"):
     """Ottieni un singolo provider LLM."""
     async with get_async_session_maker()() as session:
-        row = (await session.execute(
-            select(LlmProvider).where(
-                LlmProvider.tenant_id == tenant_id,
-                LlmProvider.slug == slug,
+        row = (
+            (
+                await session.execute(
+                    select(LlmProvider).where(
+                        LlmProvider.tenant_id == tenant_id,
+                        LlmProvider.slug == slug,
+                    )
+                )
             )
-        )).scalars().first()
+            .scalars()
+            .first()
+        )
     if not row:
         raise HTTPException(status_code=404, detail="LLM provider not found")
     return LlmProviderPublic(
@@ -131,6 +150,7 @@ async def get_llm_provider(slug: str, tenant_id: str = "default"):
         metadata=json.loads(row.metadata_json or "{}"),
     )
 
+
 @router.post("", response_model=LlmProviderPublic)
 async def create_llm_provider(body: LlmProviderCreate):
     """Crea un nuovo provider LLM."""
@@ -138,21 +158,28 @@ async def create_llm_provider(body: LlmProviderCreate):
     if body.provider not in ("openai", "anthropic", "google"):
         if not body.api_key:
             raise HTTPException(
-                status_code=400,
-                detail="API key required for third-party providers"
+                status_code=400, detail="API key required for third-party providers"
             )
-    
+
     async with get_async_session_maker()() as session:
         # Controlla duplicato
-        existing = (await session.execute(
-            select(LlmProvider).where(
-                LlmProvider.tenant_id == "default",
-                LlmProvider.slug == body.slug,
+        existing = (
+            (
+                await session.execute(
+                    select(LlmProvider).where(
+                        LlmProvider.tenant_id == "default",
+                        LlmProvider.slug == body.slug,
+                    )
+                )
             )
-        )).scalars().first()
+            .scalars()
+            .first()
+        )
         if existing:
-            raise HTTPException(status_code=409, detail="Provider with this slug already exists")
-        
+            raise HTTPException(
+                status_code=409, detail="Provider with this slug already exists"
+            )
+
         # Se is_default=True, deseleziona gli altri
         if body.is_default:
             await session.execute(
@@ -160,12 +187,12 @@ async def create_llm_provider(body: LlmProviderCreate):
                 .where(LlmProvider.tenant_id == "default")
                 .values(is_default=False)
             )
-        
+
         # Cripta l'API key
         api_key_encrypted = None
         if body.api_key:
             api_key_encrypted = encrypt_value(body.api_key)
-        
+
         provider = LlmProvider(
             id=new_uuid7_str(),
             tenant_id="default",
@@ -186,7 +213,7 @@ async def create_llm_provider(body: LlmProviderCreate):
         )
         session.add(provider)
         await session.commit()
-    
+
     return LlmProviderPublic(
         id=provider.id,
         slug=provider.slug,
@@ -205,19 +232,26 @@ async def create_llm_provider(body: LlmProviderCreate):
         metadata=json.loads(provider.metadata_json or "{}"),
     )
 
+
 @router.put("/{slug}", response_model=LlmProviderPublic)
 async def update_llm_provider(slug: str, body: LlmProviderUpdate):
     """Aggiorna un provider LLM."""
     async with get_async_session_maker()() as session:
-        row = (await session.execute(
-            select(LlmProvider).where(
-                LlmProvider.tenant_id == "default",
-                LlmProvider.slug == slug,
+        row = (
+            (
+                await session.execute(
+                    select(LlmProvider).where(
+                        LlmProvider.tenant_id == "default",
+                        LlmProvider.slug == slug,
+                    )
+                )
             )
-        )).scalars().first()
+            .scalars()
+            .first()
+        )
         if not row:
             raise HTTPException(status_code=404, detail="LLM provider not found")
-        
+
         # Se is_default=True, deseleziona gli altri
         if body.is_default is True:
             await session.execute(
@@ -226,10 +260,8 @@ async def update_llm_provider(slug: str, body: LlmProviderUpdate):
                 .values(is_default=False)
             )
 
-
         # Aggiornamenti basati sui campi esplicitamente inviati
         update_data = body.model_dump(exclude_unset=True)
-
 
         if "display_name" in update_data:
             row.display_name = update_data["display_name"]
@@ -258,10 +290,10 @@ async def update_llm_provider(slug: str, body: LlmProviderUpdate):
             row.is_default = update_data["is_default"]
         if "metadata" in update_data:
             row.metadata_json = json.dumps(update_data["metadata"])
-        
+
         row.updated_at = datetime.now(timezone.utc)
         await session.commit()
-    
+
     return LlmProviderPublic(
         id=row.id,
         slug=row.slug,
@@ -280,37 +312,42 @@ async def update_llm_provider(slug: str, body: LlmProviderUpdate):
         metadata=json.loads(row.metadata_json or "{}"),
     )
 
+
 @router.delete("/{slug}")
 async def delete_llm_provider(slug: str):
     """Elimina un provider LLM."""
     async with get_async_session_maker()() as session:
-        row = (await session.execute(
-            select(LlmProvider).where(
-                LlmProvider.tenant_id == "default",
-                LlmProvider.slug == slug,
+        row = (
+            (
+                await session.execute(
+                    select(LlmProvider).where(
+                        LlmProvider.tenant_id == "default",
+                        LlmProvider.slug == slug,
+                    )
+                )
             )
-        )).scalars().first()
+            .scalars()
+            .first()
+        )
         if not row:
             raise HTTPException(status_code=404, detail="LLM provider not found")
-        
+
         # Se è il default, lanciare errore
         if row.is_default:
             raise HTTPException(
-                status_code=400,
-                detail="Cannot delete the default LLM provider"
+                status_code=400, detail="Cannot delete the default LLM provider"
             )
-        
+
         await session.execute(delete(LlmProvider).where(LlmProvider.id == row.id))
         await session.commit()
     return {"ok": True}
 
 
 async def fake_function() -> None:
-    #This is a fake function
+    # This is a fake function
     a = 1
     try:
         b = 2
-        
+
     except Exception as e:
         print(e)
-    

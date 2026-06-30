@@ -3,6 +3,7 @@
 OpenAIChatGenerator unisce con shallow merge: passare solo `extra_body` sovrascriverebbe il resto.
 Qui si ricopia la base dal generatore e si aggiornano solo i rami necessari.
 """
+
 from __future__ import annotations
 
 import os
@@ -81,8 +82,9 @@ def _thinking_token_budget_for_effort(effort: ReasoningEffortLevel) -> Optional[
     return None
 
 
-
-def merge_generation_kwargs(base: Dict[str, Any], effort: ReasoningEffortLevel) -> Dict[str, Any]:
+def merge_generation_kwargs(
+    base: Dict[str, Any], effort: ReasoningEffortLevel
+) -> Dict[str, Any]:
     out = dict(base or {})
     eb = dict(out.get("extra_body") or {})
     ctk = dict(eb.get("chat_template_kwargs") or {})
@@ -103,12 +105,16 @@ def merge_generation_kwargs(base: Dict[str, Any], effort: ReasoningEffortLevel) 
     return out
 
 
-def generation_kwargs_for_agent(agent: Any, effort: Optional[str]) -> Optional[Dict[str, Any]]:
+def generation_kwargs_for_agent(
+    agent: Any, effort: Optional[str]
+) -> Optional[Dict[str, Any]]:
     """Ritorna kwargs completi per il turno (thinking esplicito + budget anche per medium)."""
     e = normalize_reasoning_effort(effort)
     gen = getattr(agent, "chat_generator", None)
-    base = dict(getattr(gen, "generation_kwargs", None) or {}) if gen is not None else {}
-    
+    base = (
+        dict(getattr(gen, "generation_kwargs", None) or {}) if gen is not None else {}
+    )
+
     if gen is None:
         return base or None
 
@@ -122,9 +128,7 @@ def generation_kwargs_for_agent(agent: Any, effort: Optional[str]) -> Optional[D
             out.pop("thinking", None)
         else:
             # Abilita il thinking solo se già configurato nel DB o se è un modello che supporta il thinking (es. Claude 3.7, Gemini 2.0/2.5)
-            has_thinking = (
-                "thinking" in out
-            )
+            has_thinking = "thinking" in out
             if has_thinking:
                 budget = _thinking_token_budget_for_effort(e)
                 if budget is not None:
@@ -157,4 +161,3 @@ def generation_kwargs_for_agent(agent: Any, effort: Optional[str]) -> Optional[D
         return base or None
 
     return merge_generation_kwargs(base, e)
-
