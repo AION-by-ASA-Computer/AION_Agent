@@ -129,7 +129,7 @@ Optional governance checks (add after first green run; not required for day-one 
 | `Workflow Lint` | [governance.yml](workflows/governance.yml) |
 | `Typos Check` | [governance.yml](workflows/governance.yml) |
 | `Semantic PR Title` | [pull-request.yml](workflows/pull-request.yml) |
-| `OSV-Scanner PR` | [osv-scanner-pr.yml](workflows/osv-scanner-pr.yml) |
+| `OSV-Scanner PR` | [osv-scanner.yml](workflows/osv-scanner.yml) (job `osv-scan`) |
 
 **Source:** leave **Any source** unless you later pin checks to a specific GitHub App integration.
 
@@ -232,7 +232,8 @@ Direct pushes and force pushes to `main` are blocked.
 |---------|----------------|
 | Status check missing in ruleset UI | Run CI successfully on `main` first; use exact job `name` from workflow |
 | Security job fails immediately | Add `GITLEAKS_LICENSE` repository secret (not available to Dependabot — gitleaks is skipped for `dependabot[bot]`) |
-| Merge blocked despite green CI | Branch out of date — click **Update branch** on the PR |
+| Merge blocked despite green CI | Branch out of date — click **Update branch** on the PR; or missing **Approve** (comment ≠ approval) |
+| OSV Code Scanning: `configuration not found` on PRs | Legacy `osv-scanner-scheduled.yml` SARIF on `main` — use unified [osv-scanner.yml](workflows/osv-scanner.yml); after merge, re-run **OSV-Scanner** on `main` |
 | Rules seem duplicated | Remove legacy rule under **Settings → Branches** |
 | Admin can still push | Admin may be on bypass list — remove bypass or use **For pull requests only** |
 
