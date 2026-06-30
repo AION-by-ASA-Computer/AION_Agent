@@ -824,7 +824,9 @@ class AgentPipeline:
             ),
         )
 
-    async def _reload_stm_window(self, exclude_message_ids: Optional[List[str]] = None) -> List[ChatMessage]:
+    async def _reload_stm_window(
+        self, exclude_message_ids: Optional[List[str]] = None
+    ) -> List[ChatMessage]:
         from .settings import get_settings as _gs
 
         _s = _gs()
@@ -951,7 +953,9 @@ class AgentPipeline:
                             self.session_id[:8],
                             persist_exc,
                         )
-                reloaded = await self._reload_stm_window(exclude_message_ids=exclude_message_ids)
+                reloaded = await self._reload_stm_window(
+                    exclude_message_ids=exclude_message_ids
+                )
                 after_stats = estimate_full_prompt_tokens(self.agent, reloaded)
                 log_context_budget(
                     self.session_id,

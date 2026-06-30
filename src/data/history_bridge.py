@@ -352,12 +352,9 @@ class UnifiedHistoryBridge:
         approx_rows = max(max_turns * 4, 32)
         async with get_async_session_maker()() as session:
             await self._ensure()
-            q = (
-                select(
-                    Message.role, Message.content, Message.tool_name, Message.reasoning
-                )
-                .where(Message.conversation_id == session_id)
-            )
+            q = select(
+                Message.role, Message.content, Message.tool_name, Message.reasoning
+            ).where(Message.conversation_id == session_id)
             if exclude_message_ids:
                 q = q.where(Message.id.not_in(exclude_message_ids))
             q = q.order_by(Message.seq.desc()).limit(approx_rows)
