@@ -194,6 +194,7 @@ async def build_turn_context(
         max_turns=max_turns,
         token_budget=stm_msg_budget,
         char_limit=stm_char_limit,
+        exclude_message_ids=[user_message_id] if user_message_id else None,
     )
 
     # ------------------------------------------------------------------
@@ -484,6 +485,7 @@ async def build_turn_context(
     messages, did_compact, reloaded_from_db = await pipeline._apply_context_compression(
         messages,
         force=force_compact,
+        exclude_message_ids=[user_message_id] if user_message_id else None,
     )
     if reloaded_from_db:
         user_turn = _build_user_turn_chat_message(
