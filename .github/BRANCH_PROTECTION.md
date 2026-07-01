@@ -88,11 +88,14 @@ Enable the following rules in **Branch protections**:
 
 | Setting | Value |
 |---------|-------|
-| Required approvals | **1** |
+| Required approvals | **2** (OpenSSF Scorecard tier 4) |
+| Require review from Code Owners | **On** (requires [`.github/CODEOWNERS`](CODEOWNERS)) |
 | Dismiss stale pull request approvals when new commits are pushed | **On** |
-| Require approval of the most recent reviewable push | Off (optional; enable for stricter review) |
+| Require approval of the most recent reviewable push | **On** (OpenSSF Scorecard tier 2 for administrators) |
 | Require conversation resolution before merging | **On** |
 | Allowed merge methods | At least one of **Squash**, **Merge**, **Rebase** (match repo preferences) |
+
+> **OpenSSF Branch-Protection:** score **9** needs two approving reviews plus CODEOWNERS; score **10** also needs stale-review dismissal and rules that apply to administrators (empty bypass list, no **Always allow** for admins). See [Scorecard checks](https://github.com/ossf/scorecard/blob/main/docs/checks.md#branch-protection).
 
 #### Require status checks to pass before merging
 
@@ -190,10 +193,10 @@ gh api \
   -f 'rules[][type]=update' \
   -f 'rules[][type]=non_fast_forward' \
   -f 'rules[][type]=pull_request' \
-  -f 'rules[][parameters][required_approving_review_count]=1' \
+  -f 'rules[][parameters][required_approving_review_count]=2' \
   -f 'rules[][parameters][dismiss_stale_reviews_on_push]=true' \
-  -f 'rules[][parameters][require_code_owner_review]=false' \
-  -f 'rules[][parameters][require_last_push_approval]=false' \
+  -f 'rules[][parameters][require_code_owner_review]=true' \
+  -f 'rules[][parameters][require_last_push_approval]=true' \
   -f 'rules[][parameters][required_review_thread_resolution]=true' \
   -f 'rules[][type]=required_status_checks' \
   -f 'rules[][parameters][strict_required_status_checks_policy]=true' \
@@ -219,7 +222,7 @@ gh api repos/AION-by-ASA-Computer/AION_Agent/rulesets
 2. `git checkout -b feature/my-change`
 3. Push and open a PR to `main`
 4. Wait for all CI jobs to pass (four core jobs; plus CodeQL if required in the ruleset)
-5. Obtain **one approving review**
+5. Obtain **two approving reviews** (including **@AION-by-ASA-Computer/asa-core** when CODEOWNERS applies)
 6. Resolve all review conversations
 7. Merge (squash, merge, or rebase — per allowed methods in the ruleset)
 
