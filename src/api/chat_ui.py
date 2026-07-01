@@ -249,6 +249,10 @@ async def get_conversation_messages_chat_ui(
     user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
+    from src.settings import get_settings
+
+    show_tool_calls = get_settings().show_tool_calls
+
     async with get_async_session_maker()() as session:
         conv = await session.get(Conversation, conv_id)
         if not conv:
@@ -340,17 +344,39 @@ async def get_conversation_messages_chat_ui(
                 orphan_steps = []
                 orphan_atts = []
 
+            # Filter out tool steps if configured to hide them
+            if show_tool_calls == "null":
+                final_steps = []
+            elif show_tool_calls == "minimum":
+                for step in final_steps:
+                    step["input"] = None
+                    step["output"] = None
+                    step["masked"] = "minimum"
+
             timeline: Optional[List[Dict[str, Any]]] = None
             if nr == "assistant":
                 timeline = _resolve_message_timeline(r, final_steps, final_atts)
                 if not (r.timeline_json or "").strip() and timeline:
-                    r.timeline_json = timeline_json_from_legacy(
-                        reasoning=r.reasoning,
-                        content=r.content,
-                        steps=final_steps,
-                        artifacts=final_atts,
-                    )
-                    timeline_backfilled = True
+                    # Backfill only if we are displaying all calls, so we don't accidentally persist a stripped timeline
+                    if show_tool_calls == "complete":
+                        r.timeline_json = timeline_json_from_legacy(
+                            reasoning=r.reasoning,
+                            content=r.content,
+                            steps=final_steps,
+                            artifacts=final_atts,
+                        )
+                        timeline_backfilled = True
+                if timeline:
+                    if show_tool_calls == "null":
+                        timeline = [
+                            item for item in timeline if item.get("kind") != "tool"
+                        ]
+                    elif show_tool_calls == "minimum":
+                        for item in timeline:
+                            if item.get("kind") == "tool":
+                                item["input"] = None
+                                item["output"] = None
+                                item["masked"] = "minimum"
 
             row: Dict[str, Any] = {
                 "id": r.id,
@@ -373,9 +399,17 @@ async def get_conversation_messages_chat_ui(
         if orphan_steps or orphan_atts:
             for idx in range(len(data) - 1, -1, -1):
                 if data[idx].get("role") == "assistant":
-                    data[idx]["steps"] = orphan_steps + list(
-                        data[idx].get("steps") or []
-                    )
+                    if show_tool_calls == "null":
+                        data[idx]["steps"] = []
+                    else:
+                        data[idx]["steps"] = orphan_steps + list(
+                            data[idx].get("steps") or []
+                        )
+                        if show_tool_calls == "minimum":
+                            for step in data[idx]["steps"]:
+                                step["input"] = None
+                                step["output"] = None
+                                step["masked"] = "minimum"
                     data[idx]["artifacts"] = orphan_atts + list(
                         data[idx].get("artifacts") or []
                     )
@@ -387,6 +421,19 @@ async def get_conversation_messages_chat_ui(
                                 data[idx]["steps"],
                                 data[idx]["artifacts"],
                             )
+                            if data[idx]["timeline"]:
+                                if show_tool_calls == "null":
+                                    data[idx]["timeline"] = [
+                                        item
+                                        for item in data[idx]["timeline"]
+                                        if item.get("kind") != "tool"
+                                    ]
+                                elif show_tool_calls == "minimum":
+                                    for item in data[idx]["timeline"]:
+                                        if item.get("kind") == "tool":
+                                            item["input"] = None
+                                            item["output"] = None
+                                            item["masked"] = "minimum"
                     break
 
         if timeline_backfilled:

@@ -375,6 +375,7 @@ export function AssistantToolStepBlock({
   toolsView,
   tokens_in,
   tokens_out,
+  masked,
 }: {
   name: string;
   input?: unknown;
@@ -384,6 +385,7 @@ export function AssistantToolStepBlock({
   toolsView: ToolsViewMode;
   tokens_in?: number;
   tokens_out?: number;
+  masked?: string;
 }) {
   const t = useT();
   const isWeb = name === "web_search" || name === "web_fetch_page";
@@ -405,6 +407,14 @@ export function AssistantToolStepBlock({
       ) : null}
     </div>
   );
+
+  if (masked === "minimum") {
+    return (
+      <ToolCardShell isError={isError}>
+        {header}
+      </ToolCardShell>
+    );
+  }
 
   if (toolsView === "partial") {
     if (isWeb) {

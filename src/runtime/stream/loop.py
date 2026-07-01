@@ -165,6 +165,10 @@ class StreamLoop:
         self.reasoning_guard_logged: bool = g.state.reasoning_guard_logged
         self.reasoning_no_tool_warned: bool = g.state.reasoning_no_tool_warned
 
+        from src.settings import get_settings as _gs
+
+        self.show_tool_calls = _gs().show_tool_calls
+
     # ------------------------------------------------------------------
     # Flush Assistant = force persist assistant stream content & timeline (JSON)
     # ------------------------------------------------------------------
@@ -885,7 +889,46 @@ class StreamLoop:
                     include_attachments=False,
                 )
 
-        yield self._track_sse(chunk)
+        if self.show_tool_calls == "null":
+            et = evt.get("type")
+            if et == "tool_start":
+                masked_evt = {
+                    "type": "tool_start",
+                    "id": evt.get("id"),
+                    "name": "thinking",
+                    "input": {},
+                }
+                yield self._track_sse({"type": "tool_event", "event": masked_evt})
+            elif et in ("tool_end", "tool_error"):
+                masked_evt = {
+                    "type": "tool_end",
+                    "id": evt.get("id"),
+                    "name": "thinking",
+                    "output": "",
+                }
+                yield self._track_sse({"type": "tool_event", "event": masked_evt})
+        elif self.show_tool_calls == "minimum":
+            et = evt.get("type")
+            if et == "tool_start":
+                masked_evt = {
+                    "type": "tool_start",
+                    "id": evt.get("id"),
+                    "name": evt.get("name"),
+                    "input": {},
+                    "masked": "minimum",
+                }
+                yield self._track_sse({"type": "tool_event", "event": masked_evt})
+            elif et in ("tool_end", "tool_error"):
+                masked_evt = {
+                    "type": "tool_end",
+                    "id": evt.get("id"),
+                    "name": evt.get("name"),
+                    "output": "",
+                    "masked": "minimum",
+                }
+                yield self._track_sse({"type": "tool_event", "event": masked_evt})
+        else:
+            yield self._track_sse(chunk)
 
     # ------------------------------------------------------------------
     # Private: artifact finalizer (shared by token and tool_event)
