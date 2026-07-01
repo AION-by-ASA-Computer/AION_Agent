@@ -588,6 +588,22 @@ class AgentPipeline:
             lines.append(f"- `{rp}`{extra} ({mime})")
             if orp and orp != rp:
                 lines.append(f"  alias: `{orp}`")
+
+        # If there are multiple files, add a strong prompt instruction to ensure the agent analyzes all of them
+        if len(attachments) > 1:
+            lines.append("")
+            lines.append(
+                "IMPORTANT: Multiple documents have been uploaded for this session. "
+                "You MUST read, analyze, and consider ALL of them in your response. "
+                "CRITICAL RULES:\n"
+                "- NEVER process documents in parallel\n"
+                "- ALWAYS process documents sequentially\n"
+                "- Call ocr_file on one document at a time\n"
+                "- Wait for the ocr_file call to complete before processing the next document\n"
+                "- Do not ignore any of the uploaded documents\n"
+                "Ensure you use your tools (like read_file, ocr, or custom scripts) to inspect all of them."
+            )
+
         return "\n".join(lines) + "\n\n"
 
     async def _augment_user_input(self, user_input: str) -> str:
@@ -1754,6 +1770,16 @@ class AgentPipeline:
 
             async def _flush_assistant_stream_content(*, force: bool = False) -> None:
                 nonlocal assistant_message_persisted
+                import json
+
+                tl_json = None
+                if timeline_builder and timeline_builder.segments:
+                    try:
+                        tl_json = json.dumps(
+                            timeline_builder.segments, ensure_ascii=False
+                        )
+                    except Exception:
+                        pass
                 await turn_persist.flush_assistant_stream_content(
                     full_response=full_response,
                     full_reasoning=full_reasoning,
@@ -1761,6 +1787,7 @@ class AgentPipeline:
                     user_id=self.user_id,
                     loop_time=loop.time(),
                     force=force,
+                    timeline_json=tl_json,
                 )
                 assistant_message_persisted = turn_persist.assistant_message_persisted
 
@@ -1815,6 +1842,7 @@ class AgentPipeline:
                         ),
                         demux=_sl_demux,
                         track_sse=_track_sse,
+                        timeline_builder=timeline_builder,
                     )
                     async for _sl_evt in _stream_loop.consume():
                         yield _sl_evt
@@ -1839,6 +1867,7 @@ class AgentPipeline:
                     assistant_message_persisted = (
                         turn_persist.assistant_message_persisted
                     )
+                    _llm_steps_done = _stream_loop._llm_steps_done
                 else:
                     async with asyncio.timeout(turn_guards.turn_timeout):
                         while True:
@@ -1970,6 +1999,10 @@ class AgentPipeline:
                                 )
                                 yield _track_sse(chunk)
                                 break
+
+                            if chunk.get("type") == "llm_call":
+                                _llm_steps_done += 1
+                                continue
 
                             if chunk.get("type") == "token":
                                 is_streaming = True

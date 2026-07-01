@@ -38,6 +38,7 @@ async def probe_mcp_server(
     *,
     user_id: str,
     session_id: str,
+    profile_slug: str = "",
 ) -> Dict[str, Any]:
     """Handshake + list_tools; returns {ok, tool_count?, error?}."""
     mcp_manager.load_registry()
@@ -60,7 +61,9 @@ async def probe_mcp_server(
             "note": "Server in-process: i tool sono registrati nativamente nel processo API.",
         }
 
-    mcp_manager._session_ctx[session_id] = ("", user_id, "default")
+    old_ctx = mcp_manager._session_ctx.get(session_id)
+    slug = old_ctx[0] if (old_ctx and old_ctx[0]) else profile_slug
+    mcp_manager._session_ctx[session_id] = (slug, user_id, "default")
     try:
         async with mcp_manager.session_context(
             server_slug, chat_session_id=session_id
@@ -179,5 +182,12 @@ async def probe_profile_mcp_servers(
     for slug in profile.mcp_servers or []:
         if not slug or slug == "aion_subagents":
             continue
-        out.append(await probe_mcp_server(slug, user_id=user_id, session_id=session_id))
+        out.append(
+            await probe_mcp_server(
+                slug,
+                user_id=user_id,
+                session_id=session_id,
+                profile_slug=profile.slug,
+            )
+        )
     return out

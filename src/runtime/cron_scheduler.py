@@ -10,6 +10,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 
 from src.runtime import cron_db
+from src.runtime.cron_expression import parse_cron_fields as _parse_cron_fields
 from src.runtime.cron_runner import execute_job
 
 logger = logging.getLogger("aion.cron_scheduler")
@@ -36,19 +37,6 @@ async def _fire_job(job_id: str) -> None:
         await execute_job(job_id, trigger="scheduler")
     except Exception:
         logger.exception("scheduled job fire failed job_id=%s", job_id)
-
-
-def _parse_cron_fields(expr: str) -> Dict[str, str]:
-    parts = (expr or "").strip().split()
-    if len(parts) != 5:
-        raise ValueError(f"Expected 5-field cron, got {len(parts)} fields")
-    return {
-        "minute": parts[0],
-        "hour": parts[1],
-        "day": parts[2],
-        "month": parts[3],
-        "day_of_week": parts[4],
-    }
 
 
 def register_job_on_scheduler(sched: AsyncIOScheduler, job: Dict[str, Any]) -> None:
@@ -96,6 +84,7 @@ async def reload_all_jobs() -> None:
     sched = get_scheduler()
     if not sched:
         return
+    await cron_db.cleanup_orphaned_runs()
     for j in list(sched.get_jobs()):
         if j.id and j.id.startswith(_APS_JOB_PREFIX):
             sched.remove_job(j.id)

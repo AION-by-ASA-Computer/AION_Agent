@@ -49,8 +49,50 @@ def _profile_allowed_skill_names() -> list[str] | None:
     return None
 
 
+def _profile_allowed_skill_names() -> list[str] | None:
+    """Limit search to skills on the active profile when slug is set on the MCP subprocess."""
+    slug = (os.getenv("AION_CURRENT_PROFILE_SLUG") or "").strip()
+    session_id = os.getenv("AION_CHAT_SESSION_ID")
+    if session_id:
+        import sqlite3
+        db_path = "data/aion.db"
+        db_url = os.getenv("AION_DB_URL", "")
+        if "sqlite" in db_url:
+            parts = db_url.split(":///")
+            if len(parts) == 2:
+                db_path = parts[1]
+        try:
+            repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../"))
+            abs_db_path = os.path.join(repo_root, db_path)
+            if os.path.exists(abs_db_path):
+                with sqlite3.connect(abs_db_path, timeout=5) as conn:
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT profile_slug FROM conversations WHERE id = ?", (session_id,))
+                    row = cursor.fetchone()
+                    if row and row[0]:
+                        slug = row[0]
+        except Exception as e:
+            logger.warning("Failed to query profile_slug from database for session %s: %s", session_id, e)
+
+    if not slug:
+        return None
+    try:
+        from src.agent_profile import profile_manager
+
+        profile_manager.load_all()
+        prof = profile_manager.get_profile(slug)
+        if prof and prof.skills:
+            return list(prof.skills)
+    except Exception:
+        pass
+    return None
+
+
 def _skill_allowed_for_profile(name: str) -> bool:
     """Enforce profile.skills allowlist on skill_view / skill_list (search already filters)."""
+    slug = (name or "").strip()
+    if slug in _OFFICE_SLUGS:
+        return True
     if os.getenv("AION_SKILL_VIEW_ENFORCE_PROFILE", "1").strip().lower() in (
         "0",
         "false",
@@ -60,7 +102,8 @@ def _skill_allowed_for_profile(name: str) -> bool:
     allowed = _profile_allowed_skill_names()
     if allowed is None:
         return True
-    return (name or "").strip() in allowed
+    return slug in allowed
+
 
 
 _OFFICE_SLUGS = ("docx", "pdf", "xlsx", "pptx")
@@ -204,6 +247,7 @@ def skill_list() -> str:
     allowed = _profile_allowed_skill_names()
     if allowed is not None:
         allow_set = set(allowed)
+        allow_set.update(_OFFICE_SLUGS)
         summaries = [s for s in summaries if s.get("name") in allow_set]
     if not summaries:
         return "No skills loaded for this profile."

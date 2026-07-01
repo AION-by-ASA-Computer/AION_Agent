@@ -35,6 +35,8 @@ def sandbox_list_files(subdir: str = "uploads", recursive: bool = False) -> str:
             return json.dumps(rows, ensure_ascii=False, indent=2)
 
         root_rel = subdir.strip().replace("\\", "/").strip("/")
+        if root_rel == ".":
+            root_rel = ""
         if root_rel not in SESSION_CONTENT_ROOTS:
             allowed = ", ".join(sorted(SESSION_CONTENT_ROOTS))
             return f"Error: subdir must be one of: {allowed}"
@@ -76,6 +78,17 @@ def sandbox_read_text_file(relative_path: str, max_bytes: int = 500000) -> str:
     if p.stat().st_size > max_bytes:
         return f"File too large (max {max_bytes} bytes)."
     return p.read_text(encoding="utf-8", errors="replace")
+
+
+@mcp.tool()
+def sandbox_get_absolute_path(relative_path: str) -> str:
+    """Get the host's absolute path of a session file/directory (uploads/, workspace/, derived/)."""
+    from src.session_workspace import safe_resolve
+    try:
+        p = safe_resolve(_sid(), relative_path, must_exist=False)
+        return str(p.absolute())
+    except Exception as e:
+        return f"Error: {e}"
 
 
 @mcp.tool()

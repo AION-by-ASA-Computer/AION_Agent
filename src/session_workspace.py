@@ -131,9 +131,9 @@ def safe_resolve(
     `relative_path` non deve iniziare con / o contenere ..
     """
     rel = (relative_path or "").strip().replace("\\", "/").lstrip("/")
-    if ".." in rel or not rel:
+    if ".." in rel:
         raise ValueError("path non consentito")
-    if not _SAFE_REL.match(rel):
+    if rel and not _SAFE_REL.match(rel):
         raise ValueError("caratteri path non consentiti")
     root = ensure_session_dirs(session_id)
     full = (root / rel).resolve()
@@ -147,6 +147,8 @@ def safe_resolve(
 def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
     root = ensure_session_dirs(session_id)
     sub = subdir.strip().replace("\\", "/").strip("/")
+    if sub == ".":
+        sub = ""
     if sub not in SESSION_CONTENT_ROOTS:
         raise ValueError(
             f"subdir deve essere uno tra: {', '.join(sorted(SESSION_CONTENT_ROOTS))}"

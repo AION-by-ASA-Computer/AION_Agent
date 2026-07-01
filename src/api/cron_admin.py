@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from src.api.auth_login import require_admin_role
@@ -135,12 +135,17 @@ async def delete_cron_job(job_id: str, _admin=Depends(require_admin_role)):
 
 
 @router.post("/{job_id}/run-now")
-async def run_cron_job_now(job_id: str, _admin=Depends(require_admin_role)):
+async def run_cron_job_now(
+    job_id: str,
+    background_tasks: BackgroundTasks,
+    _admin=Depends(require_admin_role),
+):
     _require_cron()
     job = await cron_db.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
-    return await execute_job(job_id, trigger="admin")
+    background_tasks.add_task(execute_job, job_id, trigger="admin")
+    return {"ok": True, "job_id": job_id, "status": "running"}
 
 
 @router.get("/{job_id}/runs", response_model=ScheduledRunListResponse)

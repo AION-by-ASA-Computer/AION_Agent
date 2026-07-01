@@ -108,9 +108,19 @@ def classify_tool_result_text(text: str, tool_name: str = "") -> Tuple[bool, str
             )
         return False, raw
 
+    is_json = False
+    if stripped.startswith("{") or stripped.startswith("["):
+        try:
+            json.loads(stripped)
+            is_json = True
+        except json.JSONDecodeError:
+            pass
+
     is_json_err, normalized = _parse_json_error(stripped)
     if is_json_err:
         return True, normalized
+    if is_json:
+        return False, raw
 
     low = stripped.lower()
     if "mcperror" in low or "mcp error" in low:

@@ -8,6 +8,10 @@ import base64
 import os
 import sys
 import mimetypes
+import httpx
+import asyncio
+
+_ocr_lock = asyncio.Lock()
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
@@ -46,19 +50,25 @@ async def _ocr_via_api_async(image_bytes: bytes, mime: str, instruction: str, cl
                 ],
             }
         ],
-        "max_tokens": min(int(os.environ.get("AION_OCR_MAX_TOKENS", "8192")), 16384),
+        "max_tokens": min(int(os.environ.get("AION_OCR_MAX_TOKENS", "4096")), 4096),
     }
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {key}"}
     
-    if client:
-        r = await client.post(f"{base}/chat/completions", json=payload, headers=headers)
-        r.raise_for_status()
-        data = r.json()
-    else:
-        async with httpx.AsyncClient(timeout=float(os.environ.get("AION_OCR_TIMEOUT", "120"))) as client_new:
-            r = await client_new.post(f"{base}/chat/completions", json=payload, headers=headers)
-            r.raise_for_status()
-            data = r.json()
+    try:
+        async with _ocr_lock:
+            if client:
+                r = await client.post(f"{base}/chat/completions", json=payload, headers=headers)
+                r.raise_for_status()
+                data = r.json()
+            else:
+                async with httpx.AsyncClient(timeout=float(os.environ.get("AION_OCR_TIMEOUT", "120"))) as client_new:
+                    r = await client_new.post(f"{base}/chat/completions", json=payload, headers=headers)
+                    r.raise_for_status()
+                    data = r.json()
+    except httpx.HTTPStatusError as e:
+        err_msg = f"HTTP {e.response.status_code} from OCR server: {e.response.text}"
+        logger.error(err_msg)
+        raise RuntimeError(err_msg) from e
     
     choices = data.get("choices") or []
     if not choices:
