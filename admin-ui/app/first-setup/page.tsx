@@ -597,7 +597,7 @@ export default function FirstSetupPage() {
 
             {/* Step 3: OCR */}
             {currentStep === "ocr" && (
-              <div className="space-y-6 animate-in fade-in duration-300">
+              <div className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
@@ -623,7 +623,7 @@ export default function FirstSetupPage() {
                 </div>
 
                 {ocrEnabled ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 duration-300">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div className="space-y-2 md:col-span-2">
                       <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Service Base URL</label>
                       <input

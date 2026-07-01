@@ -60,3 +60,5 @@ openlit
 json-repair
 opik
 pydantic-settings>=2.0.0
+pymupdf4llm
+pytesseract

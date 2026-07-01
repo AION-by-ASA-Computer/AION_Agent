@@ -109,6 +109,7 @@ import { MemoryDockPanel } from "@/components/memory/MemoryDockPanel";
 import { ProjectMemoryChip } from "@/components/memory/ProjectMemoryChip";
 import { readStoredSqlProject } from "@/components/memory/ProjectMemoryToolbar";
 import { ProjectCreateModal } from "@/components/memory/ProjectCreateModal";
+import { fetchSqlProjects, type SqlProject } from "@/lib/api/query-memory";
 import {
   hasMempalaceMcp,
   hasSqlQueryMemory,
@@ -665,9 +666,70 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const [projectCreateOpen, setProjectCreateOpen] = useState(false);
 
+  // States for available SQL QueryMemory projects
+  const [sqlProjects, setSqlProjects] = useState<SqlProject[]>([]);
+  const [loadingSqlProjects, setLoadingSqlProjects] = useState(false);
+
+  // Fetch available projects from backend
+  const fetchProjectsList = useCallback(async () => {
+    if (!userId) return;
+    setLoadingSqlProjects(true);
+    try {
+      const list = await fetchSqlProjects(userId, token, activeProfileSlug);
+      setSqlProjects(list);
+    } catch (err) {
+      console.error("Error fetching SQL projects:", err);
+    } finally {
+      setLoadingSqlProjects(false);
+    }
+  }, [userId, token, activeProfileSlug]);
+
+  // Load project list when memory capabilities are enabled
+  useEffect(() => {
+    if (showSqlQueryMemory) {
+      void fetchProjectsList();
+    } else {
+      setSqlProjects([]);
+    }
+  }, [showSqlQueryMemory, fetchProjectsList]);
+
+  // Auto-resolve stale or invalid project slug selections
+  useEffect(() => {
+    if (!showSqlQueryMemory || loadingSqlProjects) return;
+
+    const isValid = sqlProjects.some((p) => p.slug === sqlQueryProject);
+    if (!isValid && sqlProjects.length > 0) {
+      const firstProj = sqlProjects[0].slug;
+      setSqlQueryProject(firstProj);
+      localStorage.setItem("aion_sql_query_project", firstProj);
+      if (messages.length > 0) {
+        updateConversationMetadata(conversationId, { sql_query_project: firstProj }, userId, token)
+          .catch((err) => console.error("Error saving auto-selected project preference to DB:", err));
+      }
+    }
+  }, [
+    sqlProjects,
+    sqlQueryProject,
+    showSqlQueryMemory,
+    loadingSqlProjects,
+    conversationId,
+    messages.length,
+    userId,
+    token,
+  ]);
+
+
+
   const isProjectRequiredButMissing = useMemo(() => {
-    return showSqlQueryMemory && (!sqlQueryProject || sqlQueryProject.trim().toLowerCase() === "default");
-  }, [showSqlQueryMemory, sqlQueryProject]);
+    if (!showSqlQueryMemory) return false;
+    if (loadingSqlProjects) return false;
+    if (sqlProjects.length === 0) return true;
+    return (
+      !sqlQueryProject ||
+      sqlQueryProject.trim().toLowerCase() === "default" ||
+      !sqlProjects.some((p) => p.slug === sqlQueryProject)
+    );
+  }, [showSqlQueryMemory, sqlProjects, sqlQueryProject, loadingSqlProjects]);
 
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [reasoningEffort, setReasoningEffort] = useState<"min" | "medium" | "max">("medium");
@@ -817,7 +879,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       updateConversationMetadata(conversationId, { sql_query_project: proj }, userId, token)
         .catch((err) => console.error("Error saving project preference to DB:", err));
     }
-  }, [conversationId, messages.length, userId, token]);
+    void fetchProjectsList();
+  }, [conversationId, messages.length, userId, token, fetchProjectsList]);
 
   const handleAgentModeChange = useCallback((mode: AgentMode) => {
     setAgentMode(mode);
