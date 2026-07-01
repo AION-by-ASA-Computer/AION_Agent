@@ -5,6 +5,30 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.0.0...v1.1.0) (2026-07-01)
+
+
+### Features
+
+* add availability checks for Opik telemetry and improve dynamic LLM configuration resolution ([cf5bfbc](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/cf5bfbcb128f011362cdb3a323cd37d1c82a5d0a))
+* add LLM token configuration to setup, update debug flags, and adjust default prompt debug behavior ([4c08832](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/4c08832b2ac06bbaf1ce433ca6849e1e19638c2a))
+* add normalize_litellm_provider function and update LiteLLMChatGenerator ([fbe939d](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/fbe939d708806a0f5ccbdd8f46923ebba1cb52e2))
+* add normalize_litellm_provider function and update LiteLLMChatGeneratorWrapper to use it ([6aec389](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/6aec3898c988dae3aa056234b459df8fadf1d500))
+* add support for excluding specific message IDs during STM windo… ([174ce21](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/174ce211ee64a52a3a3a7c28a339a2a22c8fbe18))
+* add support for excluding specific message IDs during STM window retrieval and context compression ([57904f4](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/57904f49f8b651a5d8bcfe39bc0711370b4ca924))
+* add support for filesystem policy mounting in container runtime ([c81a9be](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/c81a9be5e3e52c2ebd4ca216070e8eba645a61f1))
+* implement first-setup flow, add OCR settings configuration, and introduce filesystem policy management API ([bc4f3f7](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/bc4f3f77b1962bbba3bf44d3ca1290ef91fe2e1d))
+* tutorial setup ([46c74b3](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/46c74b3e8fb9887c31a5ac72b814cde6f1fc5f81))
+
+
+### Bug Fixes
+
+* ci workflow and codeowners. Updated contribution and branch protection policies ([fd48578](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/fd485789acd9d0d4a1f63899e3a905e3775d71e9))
+* cron bug and multi-file upload ([64cfd66](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/64cfd66eb46b470aacee931abc4b215e3124da1a))
+* cron bug and multi-file upload ([72678ff](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/72678ffc0074c95c235c78644afec03d80ab080f))
+* restore actions:read on OSV PR job for reusable workflow ([e886dc8](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/e886dc8352c89394361b0efe36072071c2b1d8e9))
+* restore workflow-level permissions for OSV reusable workflow ([70177ae](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/70177ae59dfb43eb2e1d5d9b6bc9d0eb18a5ebbb))
+
 ## 1.0.0 (2026-06-30)
 
 
