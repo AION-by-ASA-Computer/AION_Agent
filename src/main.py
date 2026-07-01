@@ -1192,6 +1192,7 @@ async def _finish_get_agent_build(
 
     # 1. Resolve LLM Configuration from Environment
     from src.runtime.llm_adapter import (
+        normalize_litellm_provider,
         resolve_llm_adapter,
         resolve_llm_endpoint,
         resolve_llm_timeout,
@@ -1246,8 +1247,11 @@ async def _finish_get_agent_build(
                 )
             else:
                 provider_api_base = row.api_base_url
+                litellm_provider = normalize_litellm_provider(
+                    row.provider, provider_api_base
+                )
                 provider_model = (
-                    f"{row.provider}/{row.model_name}"
+                    f"{litellm_provider}/{row.model_name}"
                     if "/" not in row.model_name
                     else row.model_name
                 )
@@ -1307,8 +1311,9 @@ async def _finish_get_agent_build(
                     tools_strict=tools_strict,
                 )
                 logger.info(
-                    "Using LiteLLMChatGeneratorWrapper for model: %s (provider: %s)",
+                    "Using LiteLLMChatGeneratorWrapper for model: %s (provider: %s, stored: %s)",
                     provider_model,
+                    litellm_provider,
                     row.provider,
                 )
                 provider_loaded = True
