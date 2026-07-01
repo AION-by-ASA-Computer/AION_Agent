@@ -19,6 +19,9 @@ async def _reset_unified_db(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("AION_DEFAULT_TENANT_ID", "default")
     monkeypatch.setenv("AION_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 'aion.db'}")
     monkeypatch.delenv("AION_CHAT_UI_INTERNAL_SECRET", raising=False)
+    monkeypatch.setenv("AION_SHOW_TOOL_CALLS", "complete")
+    from src.settings import get_settings
+    get_settings.cache_clear()
 
 
 def test_chat_ui_history_preserves_steps_artifacts_and_reasoning(monkeypatch, tmp_path):
@@ -297,7 +300,8 @@ def test_chat_ui_history_get_last_assistant_steps(monkeypatch, tmp_path):
                 "type TEXT NOT NULL,"
                 "input TEXT,"
                 "output TEXT,"
-                "is_error INTEGER DEFAULT 0"
+                "is_error INTEGER DEFAULT 0,"
+                "metadata TEXT"
                 ")"
             )
             await db.execute(
@@ -331,5 +335,78 @@ def test_chat_ui_history_get_last_assistant_steps(monkeypatch, tmp_path):
         assert len(fallback_steps) == 1
         assert fallback_steps[0]["name"] == "execute_command"
         assert fallback_steps[0]["output"] == "file1\nfile2"
+
+    asyncio.run(run())
+
+
+def test_chat_ui_history_respects_show_tool_calls_flag(monkeypatch, tmp_path):
+    async def run():
+        await _reset_unified_db(monkeypatch, tmp_path)
+        monkeypatch.setenv("AION_SHOW_TOOL_CALLS", "0")
+
+        from src.settings import get_settings
+        get_settings.cache_clear()
+        assert get_settings().show_tool_calls == "null"
+
+        bridge = UnifiedHistoryBridge()
+        await bridge.add_message(
+            "conv-hide", "user", "Run tool", user_id="u1", message_id="user-1"
+        )
+        await bridge.add_message(
+            "conv-hide",
+            "assistant",
+            "Here is the result.",
+            user_id="u1",
+            reasoning="Running tool...",
+            message_id="assistant-1",
+        )
+        await bridge.add_step(
+            "conv-hide",
+            name="web_search",
+            type="tool",
+            input="{}",
+            output='{"results":[]}',
+            message_id="assistant-1",
+        )
+        await bridge.add_attachment(
+            "conv-hide",
+            storage_key="workspace/result.txt",
+            original_name="result.txt",
+            mime="text/plain",
+            size_bytes=10,
+            kind="artifact",
+            message_id="assistant-1",
+        )
+
+        payload = await get_conversation_messages_chat_ui("conv-hide", x_aion_user_id="u1")
+        assistant = payload["messages"][1]
+        assert assistant["id"] == "assistant-1"
+        assert assistant["reasoning"] == "Running tool..."
+        assert assistant["steps"] == []
+        assert assistant["artifacts"][0]["storage_key"] == "workspace/result.txt"
+
+        assert "timeline" in assistant
+        assert isinstance(assistant["timeline"], list)
+        kinds = [s["kind"] for s in assistant["timeline"]]
+        assert "tool" not in kinds
+        assert "reasoning" in kinds
+        assert "text" in kinds
+
+        # Test minimum mode
+        monkeypatch.setenv("AION_SHOW_TOOL_CALLS", "minimum")
+        get_settings.cache_clear()
+        assert get_settings().show_tool_calls == "minimum"
+
+        payload = await get_conversation_messages_chat_ui("conv-hide", x_aion_user_id="u1")
+        assistant = payload["messages"][1]
+        assert len(assistant["steps"]) == 1
+        assert assistant["steps"][0]["name"] == "web_search"
+        assert assistant["steps"][0]["input"] is None
+        assert assistant["steps"][0]["output"] is None
+        assert assistant["steps"][0]["masked"] == "minimum"
+
+        # Restore
+        monkeypatch.setenv("AION_SHOW_TOOL_CALLS", "complete")
+        get_settings.cache_clear()
 
     asyncio.run(run())

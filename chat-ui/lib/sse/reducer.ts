@@ -214,15 +214,16 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
     } else if (et === "tool_start") {
       const id =
         typeof ev.id === "string" && ev.id ? ev.id : `${name}:${next.toolOrder.length}`;
-      const toolSeg: Extract<TurnSegment, { kind: "tool" }> = {
+      const toolSeg: any = {
         kind: "tool",
         id,
         name,
         input: ev.input,
         status: "running",
+        masked: ev.masked,
       };
       next.segments = upsertToolSegment(next.segments, toolSeg);
-      next.toolSteps[id] = { id, name, input: ev.input, status: "running" };
+      next.toolSteps[id] = { id, name, input: ev.input, status: "running", masked: ev.masked } as any;
       if (!next.toolOrder.includes(id)) next.toolOrder.push(id);
       next.activeToolKeyByName[name] = id;
       if (typeof ev.id === "string" && ev.id) next.activeToolKeyById[ev.id] = id;
@@ -232,7 +233,7 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
       const output = String(ev.output ?? "");
       const tokens_in = typeof ev.tokens_in === "number" ? ev.tokens_in : undefined;
       const tokens_out = typeof ev.tokens_out === "number" ? ev.tokens_out : undefined;
-      const toolSeg: Extract<TurnSegment, { kind: "tool" }> = {
+      const toolSeg: any = {
         kind: "tool",
         id,
         name: cur.name || name,
@@ -241,9 +242,10 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
         status: "done",
         tokens_in,
         tokens_out,
+        masked: ev.masked || (cur as any).masked,
       };
       next.segments = upsertToolSegment(next.segments, toolSeg);
-      next.toolSteps[id] = { ...cur, output, status: "done", tokens_in, tokens_out };
+      next.toolSteps[id] = { ...cur, output, status: "done", tokens_in, tokens_out, masked: ev.masked || (cur as any).masked } as any;
       if (!next.toolOrder.includes(id)) next.toolOrder.push(id);
       delete next.activeToolKeyByName[name];
       if (typeof ev.id === "string") delete next.activeToolKeyById[ev.id];
@@ -274,7 +276,7 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
     } else if (et === "tool_error") {
       const id = resolveToolId(next, ev, name);
       const cur = next.toolSteps[id] || { id, name, input: ev.input ?? {} };
-      const toolSeg: Extract<TurnSegment, { kind: "tool" }> = {
+      const toolSeg: any = {
         kind: "tool",
         id,
         name: cur.name || name,
@@ -282,6 +284,7 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
         output: String(ev.error ?? ""),
         status: "error",
         isError: true,
+        masked: ev.masked || (cur as any).masked,
       };
       next.segments = upsertToolSegment(next.segments, toolSeg);
       next.toolSteps[id] = {
@@ -289,7 +292,8 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
         output: String(ev.error ?? ""),
         isError: true,
         status: "error",
-      };
+        masked: ev.masked || (cur as any).masked,
+      } as any;
       if (!next.toolOrder.includes(id)) next.toolOrder.push(id);
       delete next.activeToolKeyByName[name];
       if (typeof ev.id === "string") delete next.activeToolKeyById[ev.id];
@@ -584,7 +588,8 @@ export function segmentsFromHistoryMessage(msg: {
       isError: Boolean(s.is_error),
       tokens_in: typeof meta.tokens_in === "number" ? meta.tokens_in : undefined,
       tokens_out: typeof meta.tokens_out === "number" ? meta.tokens_out : undefined,
-    });
+      masked: (s as any).masked,
+    } as any);
   }
   for (const a of msg.artifacts || []) {
     segs.push({
