@@ -603,6 +603,7 @@ class ChatHistoryManager:
         max_turns: int = 10,
         token_budget: Optional[int] = None,
         char_limit: int = 60000,
+        exclude_message_ids: Optional[List[str]] = None,
     ) -> List[ChatMessage]:
         """Recent messages for the agent (chronological). Caps by approximate rows then char/token budget."""
         if self._unified:
@@ -613,17 +614,26 @@ class ChatHistoryManager:
                 max_turns=max_turns,
                 token_budget=token_budget,
                 char_limit=char_limit,
+                exclude_message_ids=exclude_message_ids,
             )
         await self._init_db()
         approx_rows = max(max_turns * 4, 32)
+        where_clause = "WHERE session_id = ?"
+        params = [session_id]
+        if exclude_message_ids:
+            placeholders = ",".join("?" * len(exclude_message_ids))
+            where_clause += f" AND id NOT IN ({placeholders})"
+            params.extend(exclude_message_ids)
+        params.append(approx_rows)
+
         async with aiosqlite.connect(self.db_path) as db:
             async with db.execute(
-                """
+                f"""
                 SELECT role, content, tool_name FROM messages
-                WHERE session_id = ?
+                {where_clause}
                 ORDER BY id DESC LIMIT ?
                 """,
-                (session_id, approx_rows),
+                tuple(params),
             ) as cursor:
                 rows = await cursor.fetchall()
         rows.reverse()

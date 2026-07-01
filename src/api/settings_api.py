@@ -231,3 +231,100 @@ async def update_settings(update: SettingsUpdate):
     except Exception as e:
         logger.error(f"Failed to update settings: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class FSPolicyResponse(BaseModel):
+    path: str
+    enabled: bool
+    yaml_content: str
+    dev_template: str
+    example_template: str
+
+
+class FSPolicyUpdate(BaseModel):
+    yaml_content: str
+    enabled: bool
+
+
+@router.get("/fs-policy", response_model=FSPolicyResponse)
+async def get_fs_policy():
+    """Get the current filesystem policy and templates."""
+    env_dict = _parse_env()
+    path_str = (env_dict.get("AION_FS_POLICY_PATH") or "").strip()
+    enabled = bool(path_str)
+
+    if not path_str:
+        path_str = "config/fs_policy.yaml"
+
+    repo_root = _get_repo_root()
+    policy_path = repo_root / path_str
+
+    yaml_content = ""
+    if policy_path.is_file():
+        try:
+            yaml_content = policy_path.read_text(encoding="utf-8")
+        except Exception as e:
+            logger.error(f"Failed to read policy file {policy_path}: {e}")
+
+    dev_template_path = repo_root / "config_std" / "fs_policy.dev.yaml"
+    example_template_path = repo_root / "config_std" / "fs_policy.example.yaml"
+
+    dev_template = ""
+    if dev_template_path.is_file():
+        dev_template = dev_template_path.read_text(encoding="utf-8")
+
+    example_template = ""
+    if example_template_path.is_file():
+        example_template = example_template_path.read_text(encoding="utf-8")
+
+    if not yaml_content:
+        yaml_content = dev_template
+
+    return FSPolicyResponse(
+        path=path_str,
+        enabled=enabled,
+        yaml_content=yaml_content,
+        dev_template=dev_template,
+        example_template=example_template,
+    )
+
+
+@router.post("/fs-policy")
+async def update_fs_policy(body: FSPolicyUpdate):
+    """Update the filesystem policy YAML and toggle its enablement in .env."""
+    try:
+        env_dict = _parse_env()
+        path_str = (env_dict.get("AION_FS_POLICY_PATH") or "").strip()
+        if not path_str:
+            path_str = "config/fs_policy.yaml"
+
+        repo_root = _get_repo_root()
+        policy_path = repo_root / path_str
+
+        policy_path.parent.mkdir(parents=True, exist_ok=True)
+        policy_path.write_text(body.yaml_content, encoding="utf-8")
+
+        updates = {}
+        if body.enabled:
+            updates["AION_FS_POLICY_PATH"] = path_str
+        else:
+            updates["AION_FS_POLICY_PATH"] = ""
+
+        _write_env(updates)
+
+        restarting = False
+        if os.path.exists("/.dockerenv"):
+            restarting = True
+            logger.info("Docker environment detected. Scheduling container restart...")
+            asyncio.create_task(_deferred_exit())
+
+        return {
+            "status": "success",
+            "message": "Filesystem policy updated. Restarting API container..."
+            if restarting
+            else "Filesystem policy updated. Some changes may require a restart.",
+            "restarting": restarting,
+        }
+    except Exception as e:
+        logger.error(f"Failed to update filesystem policy: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))

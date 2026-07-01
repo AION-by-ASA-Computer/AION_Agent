@@ -4,5 +4,6 @@
  *
  * Backend snapshot capture still requires `AION_PROMPT_DEBUG=1` in the root `.env`.
  */
-export const AION_PROMPT_DEBUG_UI_ENABLED = true;
+export const AION_PROMPT_DEBUG_UI_ENABLED =
+    process.env.NEXT_PUBLIC_AION_PROMPT_DEBUG != "0";
 export const AION_CHAT_STREAM_DEBUG_ENABLED = true;

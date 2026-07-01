@@ -96,6 +96,19 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
           router.replace("/change-password");
           return;
         }
+        if (!status.first_setup_complete) {
+          if (pathname !== "/first-setup") {
+            setState("redirecting");
+            router.replace("/first-setup");
+            return;
+          }
+        } else {
+          if (pathname === "/first-setup") {
+            setState("redirecting");
+            router.replace("/");
+            return;
+          }
+        }
         setState("ok");
       } catch {
         // Errore di rete: non sloggare. apiFetch interceptera' eventuali 401
