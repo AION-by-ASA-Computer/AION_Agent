@@ -7,6 +7,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
+from src.security.container_paths import (
+    SANDBOX_FS_POLICY_CONTAINER_PATH,
+    resolve_fs_policy_host_mount,
+    resolve_host_repo_path,
+)
 from src.security.container_policy import (
     build_container_run_argv,
     container_name_for_session,
@@ -89,6 +94,117 @@ class TestContainerPolicy(unittest.TestCase):
         self.assertIn("--user", argv)
         self.assertIn("--userns=keep-id", argv)
         self.assertIn("1000:1000", argv)
+
+    def test_run_argv_mounts_fs_policy_when_configured(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "aion"
+            data = repo / "data"
+            config = repo / "config"
+            config.mkdir(parents=True)
+            (config / "fs_policy.yaml").write_text(
+                "exec:\n  enabled: true\n", encoding="utf-8"
+            )
+            session_host = data / "sessions" / "sess-1234"
+            session_host.mkdir(parents=True)
+            with patch.dict(
+                os.environ,
+                {
+                    "AION_FS_POLICY_PATH": "config/fs_policy.yaml",
+                    "AION_DATA_DIR": str(data),
+                    "AION_SANDBOX_HOST_DATA_DIR": str(data),
+                },
+                clear=False,
+            ):
+                argv = build_container_run_argv(
+                    runtime="podman",
+                    image="aion/sandbox:latest",
+                    session_id="sess-1234",
+                    session_host_path=session_host,
+                )
+            joined = " ".join(argv)
+            policy_host = (config / "fs_policy.yaml").resolve()
+            self.assertIn(
+                f"{policy_host}:{SANDBOX_FS_POLICY_CONTAINER_PATH}:ro",
+                joined,
+            )
+            self.assertIn(
+                f"AION_FS_POLICY_PATH={SANDBOX_FS_POLICY_CONTAINER_PATH}",
+                joined,
+            )
+
+
+class TestContainerPaths(unittest.TestCase):
+    def test_resolve_host_repo_path(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AION_DATA_DIR": "/app/data",
+                "AION_SANDBOX_HOST_DATA_DIR": "/host/aion/data",
+            },
+            clear=False,
+        ):
+            mapped = resolve_host_repo_path(Path("/app/config/fs_policy.yaml"))
+        self.assertEqual(mapped, Path("/host/aion/config/fs_policy.yaml").resolve())
+
+    def test_resolve_fs_policy_host_mount(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "aion"
+            data = repo / "data"
+            config = repo / "config"
+            config.mkdir(parents=True)
+            policy = config / "fs_policy.yaml"
+            policy.write_text("exec:\n  enabled: true\n", encoding="utf-8")
+            with patch.dict(
+                os.environ,
+                {
+                    "AION_FS_POLICY_PATH": "config/fs_policy.yaml",
+                    "AION_DATA_DIR": str(data),
+                    "AION_SANDBOX_HOST_DATA_DIR": str(data),
+                },
+                clear=False,
+            ):
+                host = resolve_fs_policy_host_mount()
+            self.assertEqual(host, policy.resolve())
+
+    def test_resolve_fs_policy_host_mount_when_host_path_invisible_in_backend(self):
+        """Podman host path may not exist inside the backend Docker filesystem."""
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "aion"
+            data = repo / "data"
+            config = repo / "config"
+            config.mkdir(parents=True)
+            policy = config / "fs_policy.yaml"
+            policy.write_text("exec:\n  enabled: true\n", encoding="utf-8")
+            invisible_host = Path("/host/aion/config/fs_policy.yaml")
+            with patch.dict(
+                os.environ,
+                {
+                    "AION_FS_POLICY_PATH": "config/fs_policy.yaml",
+                    "AION_DATA_DIR": str(data),
+                    "AION_SANDBOX_HOST_DATA_DIR": str(data),
+                },
+                clear=False,
+            ):
+                original_is_file = Path.is_file
+
+                def _is_file(self):
+                    if self == invisible_host:
+                        return False
+                    return original_is_file(self)
+
+                with patch.object(Path, "is_file", _is_file):
+                    with patch(
+                        "src.security.container_paths.resolve_host_repo_path",
+                        return_value=invisible_host,
+                    ):
+                        host = resolve_fs_policy_host_mount()
+            self.assertEqual(host, invisible_host)
 
 
 class TestContainerRuntime(unittest.TestCase):
