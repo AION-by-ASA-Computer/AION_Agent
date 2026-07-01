@@ -23,6 +23,7 @@ export default function SettingsPage() {
   const [restarting, setRestarting] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showOcrApiKey, setShowOcrApiKey] = useState(false);
+  const [ocrEnabled, setOcrEnabled] = useState(false);
 
   // LLM Providers state
   const [llmProviders, setLlmProviders] = useState<any[]>([]);
@@ -187,6 +188,8 @@ export default function SettingsPage() {
       const currentSettings = data.settings || {};
       setSettings(currentSettings);
 
+      const hasOcr = !!(currentSettings.AION_OCR_BASE_URL || currentSettings.AION_OCR_API_KEY || currentSettings.AION_OCR_MODEL);
+      setOcrEnabled(hasOcr);
     } catch (err) {
       console.error("Failed to fetch settings", err);
     } finally {
@@ -234,11 +237,76 @@ export default function SettingsPage() {
     setSaving(true);
     setMessage(null);
 
+    // Validation when OCR is enabled
+    if (ocrEnabled) {
+      if (!settings.AION_OCR_BASE_URL?.trim()) {
+        setMessage({ type: 'error', text: "OCR Base URL is required when OCR is enabled." });
+        setSaving(false);
+        return;
+      }
+      if (!settings.AION_OCR_BASE_URL.startsWith("http://") && !settings.AION_OCR_BASE_URL.startsWith("https://")) {
+        setMessage({ type: 'error', text: "OCR Base URL must start with http:// or https://" });
+        setSaving(false);
+        return;
+      }
+      if (!settings.AION_OCR_MODEL?.trim()) {
+        setMessage({ type: 'error', text: "OCR Model is required when OCR is enabled." });
+        setSaving(false);
+        return;
+      }
+      if (!settings.AION_OCR_API_KEY?.trim()) {
+        setMessage({ type: 'error', text: "OCR API Key is required when OCR is enabled." });
+        setSaving(false);
+        return;
+      }
+
+      // Max tokens validation
+      if (settings.AION_OCR_MAX_TOKENS) {
+        const val = parseInt(settings.AION_OCR_MAX_TOKENS, 10);
+        if (isNaN(val) || val <= 0) {
+          setMessage({ type: 'error', text: "OCR Max Tokens must be a positive integer." });
+          setSaving(false);
+          return;
+        }
+      }
+
+      // Timeout validation
+      if (settings.AION_OCR_TIMEOUT) {
+        const val = parseInt(settings.AION_OCR_TIMEOUT, 10);
+        if (isNaN(val) || val <= 0) {
+          setMessage({ type: 'error', text: "OCR Timeout must be a positive integer." });
+          setSaving(false);
+          return;
+        }
+      }
+
+      // Max image bytes validation
+      if (settings.AION_OCR_MAX_IMAGE_BYTES) {
+        const val = parseInt(settings.AION_OCR_MAX_IMAGE_BYTES, 10);
+        if (isNaN(val) || val <= 0) {
+          setMessage({ type: 'error', text: "OCR Max Image Bytes must be a positive integer." });
+          setSaving(false);
+          return;
+        }
+      }
+    }
+
+    // Build the payload
+    const payloadSettings = { ...settings };
+    if (!ocrEnabled) {
+      payloadSettings.AION_OCR_BASE_URL = "";
+      payloadSettings.AION_OCR_MODEL = "";
+      payloadSettings.AION_OCR_API_KEY = "";
+      payloadSettings.AION_OCR_MAX_TOKENS = "";
+      payloadSettings.AION_OCR_TIMEOUT = "";
+      payloadSettings.AION_OCR_MAX_IMAGE_BYTES = "";
+    }
+
     try {
       const res = await apiFetch(`${apiBase()}/admin/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify({ settings: payloadSettings }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -771,136 +839,85 @@ export default function SettingsPage() {
 
         {/* OCR Document Processing */}
         <section className="glass-card p-6 border-[#262626] hover:border-amber-500/30 transition-colors group">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform">
-              <Eye className="w-5 h-5 text-amber-500" />
-            </div>
-            <div>
-              <h3 className="font-bold text-white">OCR Document Processing</h3>
-              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Vision-based Text Extraction</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <ConfigInput
-              label="OCR Base URL (AION_OCR_BASE_URL)"
-              value={settings.AION_OCR_BASE_URL || ""}
-              onChange={(v) => handleUpdate('AION_OCR_BASE_URL', v)}
-              description="Base URL for the vision-based OCR service"
-            />
-            <ConfigInput
-              label="OCR Model (AION_OCR_MODEL)"
-              value={settings.AION_OCR_MODEL || ""}
-              onChange={(v) => handleUpdate('AION_OCR_MODEL', v)}
-              description="Model identifier, e.g. zai-org/GLM-OCR"
-            />
-            <div className="space-y-1.5 font-mono">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">OCR API Key (AION_OCR_API_KEY)</label>
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform">
+                <Eye className="w-5 h-5 text-amber-500" />
               </div>
-              <div className="relative">
-                <input
-                  type={showOcrApiKey ? "text" : "password"}
-                  value={settings.AION_OCR_API_KEY || ""}
-                  onChange={(e) => handleUpdate('AION_OCR_API_KEY', e.target.value)}
-                  placeholder="Enter OCR API Key"
-                  className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl pl-4 pr-10 py-2.5 text-sm text-gray-200 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowOcrApiKey(!showOcrApiKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors cursor-pointer"
-                >
-                  {showOcrApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+              <div>
+                <h3 className="font-bold text-white">OCR Document Processing</h3>
+                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Vision-based Text Extraction</p>
               </div>
             </div>
-            <ConfigInput
-              label="OCR Max Tokens (AION_OCR_MAX_TOKENS)"
-              value={settings.AION_OCR_MAX_TOKENS || ""}
-              onChange={(v) => handleUpdate('AION_OCR_MAX_TOKENS', v)}
-            />
-            <ConfigInput
-              label="OCR Timeout in Seconds (AION_OCR_TIMEOUT)"
-              value={settings.AION_OCR_TIMEOUT || ""}
-              onChange={(v) => handleUpdate('AION_OCR_TIMEOUT', v)}
-            />
-            <ConfigInput
-              label="OCR Max Image Bytes (AION_OCR_MAX_IMAGE_BYTES)"
-              value={settings.AION_OCR_MAX_IMAGE_BYTES || ""}
-              onChange={(v) => handleUpdate('AION_OCR_MAX_IMAGE_BYTES', v)}
-            />
-          </div>
-        </section>
-
-        {/* Infrastructure */}
-        <section className="glass-card p-6 border-[#262626] hover:border-green-500/30 transition-colors group">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center border border-green-500/20 group-hover:scale-110 transition-transform">
-              <Database className="w-5 h-5 text-green-500" />
-            </div>
-            <div>
-              <h3 className="font-bold text-white">Infrastructure</h3>
-              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Storage & Databases</p>
-            </div>
+            <button
+              onClick={() => setOcrEnabled(!ocrEnabled)}
+              className={`w-10 h-5 rounded-full transition-all flex items-center px-1 cursor-pointer ${ocrEnabled ? 'bg-amber-500' : 'bg-gray-700'}`}
+              title={ocrEnabled ? "Disable OCR" : "Enable OCR"}
+            >
+              <div className={`w-3 h-3 bg-white rounded-full transition-transform ${ocrEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
           </div>
 
-          <div className="space-y-4">
-            <ConfigInput
-              label="Unified DB URL"
-              value={settings.AION_DB_URL || ""}
-              onChange={(v) => handleUpdate('AION_DB_URL', v)}
-              description="AION V2 Core Database (SQLite/PG)"
-            />
-            <ConfigInput
-              label="Redis Connection"
-              value={settings.AION_REDIS_URL || ""}
-              onChange={(v) => handleUpdate('AION_REDIS_URL', v)}
-              description="Optional cache for SSE & Tools"
-            />
-            <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-bold text-gray-400 uppercase">Storage Backend</span>
-                <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-1.5 rounded uppercase tracking-tighter">
-                  {settings.AION_STORAGE_BACKEND || 'local'}
-                </span>
+          {ocrEnabled ? (
+            <div className="space-y-4">
+              <ConfigInput
+                label="OCR Base URL (AION_OCR_BASE_URL)"
+                value={settings.AION_OCR_BASE_URL || ""}
+                onChange={(v) => handleUpdate('AION_OCR_BASE_URL', v)}
+                description="Base URL for the vision-based OCR service"
+              />
+              <ConfigInput
+                label="OCR Model (AION_OCR_MODEL)"
+                value={settings.AION_OCR_MODEL || ""}
+                onChange={(v) => handleUpdate('AION_OCR_MODEL', v)}
+                description="Model identifier, e.g. zai-org/GLM-OCR"
+              />
+              <div className="space-y-1.5 font-mono">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">OCR API Key (AION_OCR_API_KEY)</label>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showOcrApiKey ? "text" : "password"}
+                    value={settings.AION_OCR_API_KEY || ""}
+                    onChange={(e) => handleUpdate('AION_OCR_API_KEY', e.target.value)}
+                    placeholder="Enter OCR API Key"
+                    className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl pl-4 pr-10 py-2.5 text-sm text-gray-200 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOcrApiKey(!showOcrApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors cursor-pointer"
+                  >
+                    {showOcrApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
+              <ConfigInput
+                label="OCR Max Tokens (AION_OCR_MAX_TOKENS)"
+                value={settings.AION_OCR_MAX_TOKENS || ""}
+                onChange={(v) => handleUpdate('AION_OCR_MAX_TOKENS', v)}
+              />
+              <ConfigInput
+                label="OCR Timeout in Seconds (AION_OCR_TIMEOUT)"
+                value={settings.AION_OCR_TIMEOUT || ""}
+                onChange={(v) => handleUpdate('AION_OCR_TIMEOUT', v)}
+              />
+              <ConfigInput
+                label="OCR Max Image Bytes (AION_OCR_MAX_IMAGE_BYTES)"
+                value={settings.AION_OCR_MAX_IMAGE_BYTES || ""}
+                onChange={(v) => handleUpdate('AION_OCR_MAX_IMAGE_BYTES', v)}
+              />
             </div>
-          </div>
+          ) : (
+            <div className="p-5 rounded-2xl border border-dashed border-[#262626] bg-[#0d0d0d]/30 text-center text-gray-500 text-sm">
+              <Info className="w-8 h-8 mx-auto mb-2 text-gray-600" />
+              OCR document processing is disabled. <br />
+              The agent will run OCR MCP without vision-based text extraction but with basic extraction scripts.
+            </div>
+          )}
         </section>
 
-
-
-        {/* Security & Governance */}
-        <section className="glass-card p-6 border-[#262626] hover:border-orange-500/30 transition-colors group">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20 group-hover:scale-110 transition-transform">
-              <Shield className="w-5 h-5 text-orange-500" />
-            </div>
-            <div>
-              <h3 className="font-bold text-white">Governance</h3>
-              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Privacy & Control</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <ConfigToggle
-              label="PII Redaction"
-              enabled={settings.AION_PII_REDACT === "1"}
-              onChange={(e) => handleUpdate('AION_PII_REDACT', e ? "1" : "0")}
-            />
-            <ConfigToggle
-              label="Tool Approval Required"
-              enabled={settings.AION_APPROVAL_ENABLED === "1"}
-              onChange={(e) => handleUpdate('AION_APPROVAL_ENABLED', e ? "1" : "0")}
-            />
-            <ConfigToggle
-              label="Persistent Stdio Pool"
-              enabled={settings.AION_MCP_POOL === "1"}
-              onChange={(e) => handleUpdate('AION_MCP_POOL', e ? "1" : "0")}
-            />
-          </div>
-        </section>
       </div>
 
 

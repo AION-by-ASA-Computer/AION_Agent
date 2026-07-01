@@ -1257,8 +1257,13 @@ async def admin_advise_mcp_integration(body: McpIntegrationAdviseBody):
     steps_md = ""
     llm_used = False
     llm_error: str | None = None
-    llm_url = os.getenv("AION_API_URL", "").strip()
-    llm_available = bool(llm_url)
+    llm_available = False
+    try:
+        from src.runtime.llm_adapter import resolve_llm_endpoint
+        llm_url, _ = resolve_llm_endpoint()
+        llm_available = bool(llm_url)
+    except Exception:
+        pass
 
     if llm_available:
         try:
@@ -1585,16 +1590,12 @@ async def _call_llm_advise_async(
     _log = _logging.getLogger("aion.admin.advise")
 
     try:
-        base = (os.getenv("AION_API_URL") or "").rstrip("/")
-        if not base:
-            return "", "AION_API_URL non configurata"
+        from src.runtime.llm_adapter import resolve_llm_credentials
+
+        base, model, token = resolve_llm_credentials()
         if not base.endswith("/v1"):
             base = base + "/v1" if "/v1" not in base else base.split("/v1")[0] + "/v1"
         url = base.rstrip("/") + "/chat/completions"
-        from src.runtime.llm_adapter import resolve_llm_endpoint
-
-        _, model = resolve_llm_endpoint()
-        token = os.getenv("AION_LLM_API_KEY", "placeholder-token")
     except Exception as e:
         return "", f"Errore costruzione URL LLM: {e}"
 
@@ -1728,92 +1729,68 @@ async def _call_llm_advise_async(
         _disable_reasoning = (
             os.getenv("AION_MCP_ADVISE_DISABLE_REASONING", "1").strip().lower()
         )
-        if _disable_reasoning not in ("0", "false", "no", "off"):
-            extra_body: dict = {"chat_template_kwargs": {"enable_thinking": False}}
-        else:
-            extra_body: dict = {}
-
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
+        generation_kwargs = {
             "temperature": 0.2,
             "max_tokens": max_tokens,
-            "extra_body": extra_body,
         }
+        if _disable_reasoning not in ("0", "false", "no", "off"):
+            generation_kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+
+        from src.runtime.llm_lite_llm_adapter import LiteLLMChatGeneratorWrapper
+        from haystack.dataclasses import ChatMessage
+        from haystack.utils import Secret
+
+        generator = LiteLLMChatGeneratorWrapper(
+            model=model,
+            api_base_url=base,
+            api_key=Secret.from_token(token),
+            timeout=advise_timeout,
+            generation_kwargs=generation_kwargs,
+        )
+
+        chat_messages = [
+            ChatMessage.from_system(system_prompt),
+            ChatMessage.from_user(user_prompt),
+        ]
 
         _log.info(
-            "POST %s model=%s max_tokens=%d timeout=%.0fs prompt_chars=%d",
-            url,
+            "LiteLLM Advise: model=%s base=%s max_tokens=%d timeout=%.0fs prompt_chars=%d",
             model,
+            base,
             max_tokens,
             advise_timeout,
             len(system_prompt) + len(user_prompt),
         )
-        async with httpx.AsyncClient(timeout=advise_timeout) as client:
-            r = await client.post(
-                url,
-                json=payload,
-                headers={
-                    "Authorization": f"Bearer {token}",
-                    "Content-Type": "application/json",
-                },
-            )
-        _log.info("LLM response status=%d", r.status_code)
-        if r.status_code != 200:
-            body_preview = (r.text or "")[:500]
-            _log.warning("LLM non-200: %s", body_preview)
-            return "", f"HTTP {r.status_code}: {body_preview[:200]}"
-        r.raise_for_status()
-        data = r.json()
-        _log.info(
-            "LLM response keys: %s",
-            list(data.keys()) if isinstance(data, dict) else type(data).__name__,
-        )
-        choices = data.get("choices") or []
-        if not choices:
-            _log.warning(
-                "LLM response: empty choices. Full: %s",
-                _json.dumps(data, ensure_ascii=False)[:500],
-            )
-            return "", f"Nessuna scelta nella risposta LLM."
-        msg = choices[0].get("message") or {}
-        content = msg.get("content")
-        reasoning = msg.get("reasoning") or ""
-        finish = choices[0].get("finish_reason", "?")
 
-        if content is None:
-            # Fallback: alcuni modelli reasoning mettono output nel campo reasoning
+        res = await generator.run_async(messages=chat_messages)
+        if not res or "replies" not in res or not res["replies"]:
+            return "", "Nessuna risposta ricevuta dall'LLM"
+
+        reply = res["replies"][0]
+        content = reply.text
+        meta = reply.meta or {}
+        reasoning = meta.get("reasoning") or meta.get("reasoning_content") or ""
+
+        if content is None or len(content.strip()) < 50:
+            # Fallback reasoning
             if isinstance(reasoning, str) and len(reasoning.strip()) > 100:
                 _log.info(
-                    "LLM: content null, uso reasoning come fallback (%d caratteri)",
+                    "LLM: content vuoto, provo ad estrarre dal reasoning (%d caratteri)",
                     len(reasoning),
                 )
-
-                # Strategia A: cerca blocco ```json nell'intero reasoning
                 import re as _re
-
                 json_block = _re.search(
                     r"```json\s*\n(.*?)\n```", reasoning, _re.DOTALL
                 )
                 if json_block:
-                    _log.info(
-                        "LLM: trovato blocco JSON nel reasoning (%d caratteri)",
-                        len(json_block.group(0)),
-                    )
                     return json_block.group(0).strip(), None
 
-                # Strategia B: cerca credential_mode e prova a estrarre JSON bilanciato
                 cred_match = _re.search(
                     r'"credential_mode"\s*:\s*"(?:none|org_shared|per_user)"', reasoning
                 )
                 if cred_match:
-                    # Cerca la parentesi graffa di apertura più vicina prima del match
                     start = reasoning.rfind("{", 0, cred_match.start())
                     if start >= 0:
-                        # Cerca la parentesi di chiusura bilanciata
                         depth = 0
                         for i in range(start, min(len(reasoning), start + 8000)):
                             if reasoning[i] == "{":
@@ -1824,76 +1801,41 @@ async def _call_llm_advise_async(
                                     candidate = reasoning[start : i + 1]
                                     try:
                                         _json.loads(candidate)
-                                        _log.info(
-                                            "LLM: JSON valido estratto dal reasoning (%d caratteri)",
-                                            len(candidate),
-                                        )
                                         return candidate.strip(), None
                                     except _json.JSONDecodeError:
                                         pass
                                     break
-
-                # Strategia C: prendi l'ultimo terzo del reasoning (più probabile la risposta finale)
+                
+                # fallback ultimo terzo del reasoning
                 third = max(len(reasoning) // 3, 500)
-                fallback = reasoning[-third:].strip()
-                _log.info(
-                    "LLM: fallback ultimo terzo del reasoning (%d caratteri)",
-                    len(fallback),
-                )
-                return fallback, None
+                return reasoning[-third:].strip(), None
 
-            # Secondo fallback: riprova con max_tokens aumentato e reasoning disabilitato
+            # Riprova con max_tokens incrementato se cut-off
+            finish = meta.get("finish_reason", "?")
             if finish == "length" and max_tokens < 8192:
                 _log.warning(
-                    "LLM content null (finish=%s), riprovo con max_tokens=8192 e reasoning disabilitato",
-                    finish,
+                    "LLM content corto (finish=length), riprovo con max_tokens=8192 e reasoning disabilitato"
                 )
-                payload["max_tokens"] = 8192
-                payload["extra_body"] = {
-                    "chat_template_kwargs": {"enable_thinking": False}
-                }
-                async with httpx.AsyncClient(timeout=90.0) as client2:
-                    r2 = await client2.post(
-                        url,
-                        json=payload,
-                        headers={
-                            "Authorization": f"Bearer {token}",
-                            "Content-Type": "application/json",
-                        },
-                    )
-                if r2.status_code == 200:
-                    data2 = r2.json()
-                    choices2 = data2.get("choices") or []
-                    if choices2:
-                        msg2 = choices2[0].get("message") or {}
-                        content2 = msg2.get("content")
-                        if isinstance(content2, str) and len(content2.strip()) > 50:
-                            return content2.strip(), None
+                generation_kwargs["max_tokens"] = 8192
+                generation_kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+                
+                generator2 = LiteLLMChatGeneratorWrapper(
+                    model=model,
+                    api_base_url=base,
+                    api_key=Secret.from_token(token),
+                    timeout=90.0,
+                    generation_kwargs=generation_kwargs,
+                )
+                res2 = await generator2.run_async(messages=chat_messages)
+                if res2 and "replies" in res2 and res2["replies"]:
+                    content2 = res2["replies"][0].text
+                    if isinstance(content2, str) and len(content2.strip()) > 50:
+                        return content2.strip(), None
 
-            _log.warning(
-                "LLM content null definitivo, finish=%s, full_msg=%s",
-                finish,
-                _json.dumps(msg, ensure_ascii=False)[:300],
-            )
-            return "", (
-                f"LLM non ha prodotto contenuto (finish_reason={finish}). "
-                "Aumentare AION_CHAT_MAX_TOKENS (min 4096 per modelli reasoning)."
-            )
-        if isinstance(content, str) and len(content.strip()) > 50:
-            return content.strip(), None
-        return (
-            "",
-            f"Risposta LLM troppo breve ({len(str(content))} caratteri, finish={finish})",
-        )
-    except httpx.TimeoutException:
-        tout = float(
-            os.getenv("AION_MCP_ADVISE_TIMEOUT", os.getenv("AION_LLM_TIMEOUT", "120"))
-        )
-        _log.warning("Timeout LLM advise per %s dopo %.0fs", slug, tout)
-        return "", f"Timeout ({tout:.0f}s) — il server LLM non risponde in tempo"
-    except httpx.HTTPStatusError as e:
-        _log.warning("HTTP error LLM advise per %s: %s", slug, e)
-        return "", f"Errore HTTP {e.response.status_code} dal server LLM"
+            return "", f"LLM non ha prodotto contenuto valido (finish_reason={finish})."
+
+        return content.strip(), None
+
     except Exception as e:
         _log.exception("LLM advise fallita per %s", slug)
         return "", str(e)

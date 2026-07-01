@@ -340,21 +340,19 @@ export default function FirstSetupPage() {
                 <div key={step} className="flex items-center flex-1 last:flex-none">
                   <button
                     disabled
-                    className={`w-8 h-8 rounded-full flex items-center justify-center border text-xs font-bold transition-all ${
-                      isActive
+                    className={`w-8 h-8 rounded-full flex items-center justify-center border text-xs font-bold transition-all ${isActive
                         ? "border-blue-500 bg-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
                         : isCompleted
-                        ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
-                        : "border-neutral-800 bg-neutral-900 text-neutral-500"
-                    }`}
+                          ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
+                          : "border-neutral-800 bg-neutral-900 text-neutral-500"
+                      }`}
                   >
                     {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
                   </button>
                   {idx < stepsOrder.length - 1 && (
                     <div
-                      className={`h-0.5 flex-1 mx-2 transition-all ${
-                        idx < currIdx ? "bg-emerald-500/50" : "bg-neutral-800"
-                      }`}
+                      className={`h-0.5 flex-1 mx-2 transition-all ${idx < currIdx ? "bg-emerald-500/50" : "bg-neutral-800"
+                        }`}
                     />
                   )}
                 </div>
@@ -476,8 +474,8 @@ export default function FirstSetupPage() {
                           llmForm.provider === "ollama"
                             ? "http://localhost:11434/v1"
                             : llmForm.provider === "vllm"
-                            ? "http://localhost:8000/v1"
-                            : "https://api.openai.com/v1"
+                              ? "http://localhost:8000/v1"
+                              : "https://api.openai.com/v1"
                         }
                       />
                     </div>
@@ -587,90 +585,105 @@ export default function FirstSetupPage() {
 
             {/* Step 3: OCR */}
             {currentStep === "ocr" && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                    <Eye className="w-5 h-5 text-amber-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold">3. OCR Document Processing</h2>
-                    <p className="text-xs text-gray-400">Configure the vision-based OCR service for extracting text from images and scanned PDFs.</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Service Base URL</label>
-                    <input
-                      type="text"
-                      value={ocrForm.base_url}
-                      onChange={(e) => setOcrForm((prev) => ({ ...prev, base_url: e.target.value }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. http://localhost:8002/v1"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Model</label>
-                    <input
-                      type="text"
-                      value={ocrForm.model}
-                      onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. zai-org/GLM-OCR"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR API Key</label>
-                    <div className="relative">
-                      <input
-                        type={showOcrKey ? "text" : "password"}
-                        value={ocrForm.api_key}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, api_key: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        placeholder="Enter API key"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowOcrKey(!showOcrKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
-                      >
-                        {showOcrKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                      <Eye className="w-5 h-5 text-amber-500" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold">3. OCR Document Processing</h2>
+                      <p className="text-xs text-gray-400">Configure the vision-based OCR service for extracting text from images and scanned PDFs.</p>
                     </div>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Tokens</label>
-                    <input
-                      type="number"
-                      value={ocrForm.max_tokens}
-                      onChange={(e) => setOcrForm((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 0 }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                  <button
+                    type="button"
+                    onClick={() => setOcrEnabled(!ocrEnabled)}
+                    className={`w-12 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${ocrEnabled ? "bg-amber-500" : "bg-neutral-800"
+                      }`}
+                  >
+                    <div
+                      className={`w-4 h-4 rounded-full bg-white transition-all ${ocrEnabled ? "translate-x-6" : "translate-x-0"
+                        }`}
                     />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Timeout (seconds)</label>
-                    <input
-                      type="number"
-                      value={ocrForm.timeout}
-                      onChange={(e) => setOcrForm((prev) => ({ ...prev, timeout: parseInt(e.target.value) || 0 }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                    />
-                  </div>
-
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Image Bytes</label>
-                    <input
-                      type="number"
-                      value={ocrForm.max_image_bytes}
-                      onChange={(e) => setOcrForm((prev) => ({ ...prev, max_image_bytes: parseInt(e.target.value) || 0 }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                    />
-                  </div>
+                  </button>
                 </div>
+
+                {ocrEnabled ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Service Base URL</label>
+                      <input
+                        type="text"
+                        value={ocrForm.base_url}
+                        onChange={(e) => setOcrForm((prev) => ({ ...prev, base_url: e.target.value }))}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                        placeholder="e.g. http://localhost:8002/v1"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Model</label>
+                      <input
+                        type="text"
+                        value={ocrForm.model}
+                        onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                        placeholder="e.g. zai-org/GLM-OCR"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR API Key</label>
+                      <div className="relative">
+                        <input
+                          type={showOcrKey ? "text" : "password"}
+                          value={ocrForm.api_key}
+                          onChange={(e) => setOcrForm((prev) => ({ ...prev, api_key: e.target.value }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                          placeholder="Enter API key"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowOcrKey(!showOcrKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                        >
+                          {showOcrKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Tokens</label>
+                      <input
+                        type="number"
+                        value={ocrForm.max_tokens}
+                        onChange={(e) => setOcrForm((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 0 }))}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Timeout (seconds)</label>
+                      <input
+                        type="number"
+                        value={ocrForm.timeout}
+                        onChange={(e) => setOcrForm((prev) => ({ ...prev, timeout: parseInt(e.target.value) || 0 }))}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                      />
+                    </div>
+
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Image Bytes</label>
+                      <input
+                        type="number"
+                        value={ocrForm.max_image_bytes}
+                        onChange={(e) => setOcrForm((prev) => ({ ...prev, max_image_bytes: parseInt(e.target.value) || 0 }))}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                      />
+                    </div>
+                  </div>
               </div>
             )}
 
@@ -698,14 +711,12 @@ export default function FirstSetupPage() {
                       <button
                         type="button"
                         onClick={() => setSearchForm((prev) => ({ ...prev, tavily_enabled: !prev.tavily_enabled }))}
-                        className={`w-10 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${
-                          searchForm.tavily_enabled ? "bg-cyan-500" : "bg-neutral-800"
-                        }`}
+                        className={`w-10 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${searchForm.tavily_enabled ? "bg-cyan-500" : "bg-neutral-800"
+                          }`}
                       >
                         <div
-                          className={`w-4 h-4 rounded-full bg-white transition-all ${
-                            searchForm.tavily_enabled ? "translate-x-4" : "translate-x-0"
-                          }`}
+                          className={`w-4 h-4 rounded-full bg-white transition-all ${searchForm.tavily_enabled ? "translate-x-4" : "translate-x-0"
+                            }`}
                         />
                       </button>
                     </div>
@@ -743,14 +754,12 @@ export default function FirstSetupPage() {
                       <button
                         type="button"
                         onClick={() => setSearchForm((prev) => ({ ...prev, brave_enabled: !prev.brave_enabled }))}
-                        className={`w-10 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${
-                          searchForm.brave_enabled ? "bg-cyan-500" : "bg-neutral-800"
-                        }`}
+                        className={`w-10 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${searchForm.brave_enabled ? "bg-cyan-500" : "bg-neutral-800"
+                          }`}
                       >
                         <div
-                          className={`w-4 h-4 rounded-full bg-white transition-all ${
-                            searchForm.brave_enabled ? "translate-x-4" : "translate-x-0"
-                          }`}
+                          className={`w-4 h-4 rounded-full bg-white transition-all ${searchForm.brave_enabled ? "translate-x-4" : "translate-x-0"
+                            }`}
                         />
                       </button>
                     </div>
@@ -788,14 +797,12 @@ export default function FirstSetupPage() {
                       <button
                         type="button"
                         onClick={() => setSearchForm((prev) => ({ ...prev, searxng_enabled: !prev.searxng_enabled }))}
-                        className={`w-10 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${
-                          searchForm.searxng_enabled ? "bg-cyan-500" : "bg-neutral-800"
-                        }`}
+                        className={`w-10 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${searchForm.searxng_enabled ? "bg-cyan-500" : "bg-neutral-800"
+                          }`}
                       >
                         <div
-                          className={`w-4 h-4 rounded-full bg-white transition-all ${
-                            searchForm.searxng_enabled ? "translate-x-4" : "translate-x-0"
-                          }`}
+                          className={`w-4 h-4 rounded-full bg-white transition-all ${searchForm.searxng_enabled ? "translate-x-4" : "translate-x-0"
+                            }`}
                         />
                       </button>
                     </div>
@@ -859,14 +866,12 @@ export default function FirstSetupPage() {
                   <button
                     type="button"
                     onClick={() => setPolicyEnabled(!policyEnabled)}
-                    className={`w-12 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${
-                      policyEnabled ? "bg-amber-500" : "bg-neutral-800"
-                    }`}
+                    className={`w-12 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${policyEnabled ? "bg-amber-500" : "bg-neutral-800"
+                      }`}
                   >
                     <div
-                      className={`w-4 h-4 rounded-full bg-white transition-all ${
-                        policyEnabled ? "translate-x-6" : "translate-x-0"
-                      }`}
+                      className={`w-4 h-4 rounded-full bg-white transition-all ${policyEnabled ? "translate-x-6" : "translate-x-0"
+                        }`}
                     />
                   </button>
                 </div>
@@ -878,11 +883,10 @@ export default function FirstSetupPage() {
                       <button
                         type="button"
                         onClick={() => handleTemplateChange("dev")}
-                        className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all ${
-                          policyTemplate === "dev"
+                        className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all ${policyTemplate === "dev"
                             ? "bg-amber-500/5 border-amber-500/30 text-amber-300"
                             : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center gap-2 font-bold text-sm">
                           <Sparkles className="w-4 h-4" /> Development Policy
@@ -896,11 +900,10 @@ export default function FirstSetupPage() {
                       <button
                         type="button"
                         onClick={() => handleTemplateChange("example")}
-                        className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all ${
-                          policyTemplate === "example"
+                        className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all ${policyTemplate === "example"
                             ? "bg-amber-500/5 border-amber-500/30 text-amber-300"
                             : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
-                        }`}
+                          }`}
                       >
                         <div className="flex items-center gap-2 font-bold text-sm">
                           <Lock className="w-4 h-4" /> Production Policy
