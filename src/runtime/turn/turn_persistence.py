@@ -92,7 +92,7 @@ class TurnPersistence:
         seen_updates: set[str] = set()
         for step in self.pending_db_steps:
             sig = self._step_persist_sig(step)
-            if only_new and sig in self._persisted_step_sigs:
+            if sig in self._persisted_step_sigs:
                 continue
             try:
                 sid = step.get("step_id")
@@ -113,8 +113,7 @@ class TurnPersistence:
                         is_error=bool(step.get("is_error")),
                         metadata_json=meta_str,
                     )
-                    if only_new:
-                        self._persisted_step_sigs.add(sig)
+                    self._persisted_step_sigs.add(sig)
                     continue
                 await self.history_manager.add_step(
                     self.session_id,
@@ -127,8 +126,7 @@ class TurnPersistence:
                     step_id=sid,
                     metadata_json=meta_str,
                 )
-                if only_new:
-                    self._persisted_step_sigs.add(sig)
+                self._persisted_step_sigs.add(sig)
             except Exception as db_err:
                 logger.warning("Failed to persist tool step: %s", db_err)
         if not include_attachments:
@@ -156,6 +154,7 @@ class TurnPersistence:
         user_id: str,
         loop_time: float,
         force: bool = False,
+        timeline_json: Optional[str] = None,
     ) -> None:
         if not self.assistant_message_id:
             return
@@ -176,6 +175,7 @@ class TurnPersistence:
                 profile_name=profile_name,
                 user_id=user_id,
                 reasoning=reasoning_text,
+                timeline_json=timeline_json,
                 metadata_json=self.metadata_json,
             )
             self.assistant_message_persisted = True

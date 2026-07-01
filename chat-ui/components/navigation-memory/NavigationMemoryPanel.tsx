@@ -123,8 +123,11 @@ export function NavigationMemoryPanel({
         setWing(data.wing);
         loaded = data.drawers ?? [];
       }
-      if (loaded.length === 0 && (st.sample_drawers?.length ?? 0) > 0) {
+      if (!roomFilter && !searchQ.trim() && loaded.length === 0 && (st.sample_drawers?.length ?? 0) > 0) {
         loaded = st.sample_drawers ?? [];
+      }
+      if (roomFilter) {
+        loaded = loaded.filter((row) => row.room === roomFilter);
       }
       setRows(loaded);
     } catch (e) {

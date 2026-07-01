@@ -16,6 +16,7 @@ from src.runtime.cron_expression import (
     compute_next_run_at,
     validate_cron_expression,
     validate_session_mode,
+    default_timezone,
 )
 
 RUN_STATUSES = frozenset({"running", "success", "error", "skipped"})
@@ -101,7 +102,7 @@ async def create_job(
     tenant_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     tid = tenant_id or _tenant_id()
-    tz = (timezone or "UTC").strip() or "UTC"
+    tz = (timezone or default_timezone()).strip() or "UTC"
     expr = validate_cron_expression(cron_expression, tz)
     smode = validate_session_mode(session_mode)
     job_id = str(uuid.uuid4())
@@ -344,4 +345,19 @@ async def bump_next_run_after_fire(job_id: str) -> None:
             return
         row.next_run_at = compute_next_run_at(row.cron_expression, row.timezone)
         row.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+
+
+async def cleanup_orphaned_runs() -> None:
+    maker = get_async_session_maker()
+    async with maker() as session:
+        await session.execute(
+            update(ScheduledJobRun)
+            .where(ScheduledJobRun.status == "running")
+            .values(
+                status="error",
+                finished_at=datetime.now(timezone.utc),
+                error_message="Orphaned run reset at startup",
+            )
+        )
         await session.commit()

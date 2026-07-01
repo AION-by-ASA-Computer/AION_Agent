@@ -125,6 +125,7 @@ def _build_exec_env(sid: str, argv: List[str]) -> Dict[str, str]:
         "PATH": os.environ.get("PATH", "/usr/bin:/bin"),
         "HOME": cwd,
         "LANG": "en_US.UTF-8",
+        "PYTHONUTF8": "1",
     }
     _extend_path_for_exec(env)
     for k, v in os.environ.items():
