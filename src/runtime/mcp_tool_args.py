@@ -162,21 +162,32 @@ def prepare_mcp_tool_arguments(
 
     # Automatically resolve save_path for download_attachment to the session sandbox
     t_name = tool_name.lower().replace("-", "_")
-    if (t_name == "download_attachment" or t_name.endswith("_download_attachment")) and "save_path" in args:
+    if (
+        t_name == "download_attachment" or t_name.endswith("_download_attachment")
+    ) and "save_path" in args:
         val = args["save_path"]
         if isinstance(val, str):
             cleaned = val.strip().replace("\\", "/").lstrip("/")
             import re
-            for prefix in ("app/data/sessions/[^/]+/", "app/", "workspace/workspace/", "workspace/"):
+
+            for prefix in (
+                "app/data/sessions/[^/]+/",
+                "app/",
+                "workspace/workspace/",
+                "workspace/",
+            ):
                 cleaned = re.sub("^" + prefix, "", cleaned)
             cleaned = cleaned.lstrip("/")
             if "/" not in cleaned:
                 cleaned = f"uploads/{cleaned}"
-            elif not cleaned.startswith(("uploads/", "workspace/", "derived/", "unpacked/")):
+            elif not cleaned.startswith(
+                ("uploads/", "workspace/", "derived/", "unpacked/")
+            ):
                 cleaned = f"uploads/{cleaned}"
-            
+
             from src.runtime.context import get_current_session_id
             from src.session_workspace import safe_resolve
+
             sid = get_current_session_id()
             if sid and sid != "default":
                 try:

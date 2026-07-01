@@ -165,12 +165,13 @@ class StreamLoop:
         self.reasoning_guard_logged: bool = g.state.reasoning_guard_logged
         self.reasoning_no_tool_warned: bool = g.state.reasoning_no_tool_warned
 
-    #------------------------------------------------------------------
+    # ------------------------------------------------------------------
     # Flush Assistant = force persist assistant stream content & timeline (JSON)
-    #------------------------------------------------------------------
+    # ------------------------------------------------------------------
 
     async def _flush_assistant(self) -> None:
         import json
+
         tl_json = None
         if self.timeline_builder and self.timeline_builder.segments:
             try:

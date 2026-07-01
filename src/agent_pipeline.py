@@ -1771,10 +1771,13 @@ class AgentPipeline:
             async def _flush_assistant_stream_content(*, force: bool = False) -> None:
                 nonlocal assistant_message_persisted
                 import json
+
                 tl_json = None
                 if timeline_builder and timeline_builder.segments:
                     try:
-                        tl_json = json.dumps(timeline_builder.segments, ensure_ascii=False)
+                        tl_json = json.dumps(
+                            timeline_builder.segments, ensure_ascii=False
+                        )
                     except Exception:
                         pass
                 await turn_persist.flush_assistant_stream_content(

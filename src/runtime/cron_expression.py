@@ -13,6 +13,7 @@ from croniter import croniter
 def default_timezone() -> str:
     return (os.environ.get("AION_CRON_DEFAULT_TIMEZONE") or "UTC").strip() or "UTC"
 
+
 def parse_cron_fields(expr: str) -> dict[str, str]:
     parts = (expr or "").strip().split()
     if len(parts) != 5:
@@ -24,6 +25,7 @@ def parse_cron_fields(expr: str) -> dict[str, str]:
         "month": parts[3],
         "day_of_week": parts[4],
     }
+
 
 def validate_cron_expression(expr: str, tz_name: Optional[str] = None) -> str:
     """Return normalized cron expression or raise ValueError."""

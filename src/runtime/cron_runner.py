@@ -163,7 +163,6 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
         )
         # ---------------------------------------------------------
 
-
         assistant_text = ""
         err_msg: Optional[str] = None
         status = "success"
@@ -205,11 +204,10 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
                 # Ogni N chunk salviamo lo stato parziale sul DB per il polling
                 # ---------------------------------------------------------
                 chunk_count += 1
-                if chunk_count % 8 == 0: 
+                if chunk_count % 8 == 0:
                     partial_text = "".join(parts).strip()
                     # Salva il messaggio parziale (Sostituisci con la tua funzione DB)
                     # await save_assistant_message(conversation_id, assistant_message_id, partial_text, user_id=user_id)
-                    
 
             assistant_text = "".join(parts).strip()
             if not assistant_text and not err_msg:
@@ -230,7 +228,7 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
             # Diciamo alla UI che lo stream è finito e può smettere di fare polling
             # ---------------------------------------------------------
             await redis_clear_stream_active(conversation_id)
-            
+
             preview = assistant_text[: _preview_max()] if assistant_text else None
             await asyncio.shield(
                 cron_db.finish_run(
@@ -242,7 +240,6 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
             )
             if job.get("enabled"):
                 await asyncio.shield(cron_db.bump_next_run_after_fire(job_id))
-
 
         return {
             "ok": status == "success",

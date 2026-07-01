@@ -38,6 +38,7 @@ async def _fire_job(job_id: str) -> None:
     except Exception:
         logger.exception("scheduled job fire failed job_id=%s", job_id)
 
+
 def register_job_on_scheduler(sched: AsyncIOScheduler, job: Dict[str, Any]) -> None:
     job_id = job["job_id"]
     aps_id = _aps_job_id(job_id)

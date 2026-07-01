@@ -1496,10 +1496,13 @@ async def _finish_get_agent_build(
     # === LLM CALL TELEMETRY WRAPPERS ===
     try:
         import functools
+
         original_generator_run = chat_generator.run
+
         @functools.wraps(original_generator_run)
         def telemetry_wrapped_run(*args, **kwargs):
             from src.runtime.turn_compaction import _turn_runtime
+
             if _turn_runtime is not None:
                 try:
                     rt = _turn_runtime.get()
@@ -1507,17 +1510,22 @@ async def _finish_get_agent_build(
                         loop = rt.get("loop")
                         queue = rt.get("queue")
                         if loop and queue:
-                            loop.call_soon_threadsafe(queue.put_nowait, {"type": "llm_call"})
+                            loop.call_soon_threadsafe(
+                                queue.put_nowait, {"type": "llm_call"}
+                            )
                 except Exception:
                     pass
             return original_generator_run(*args, **kwargs)
+
         chat_generator.run = telemetry_wrapped_run
 
         if hasattr(chat_generator, "run_async"):
             original_generator_run_async = chat_generator.run_async
+
             @functools.wraps(original_generator_run_async)
             async def telemetry_wrapped_run_async(*args, **kwargs):
                 from src.runtime.turn_compaction import _turn_runtime
+
                 if _turn_runtime is not None:
                     try:
                         rt = _turn_runtime.get()
@@ -1525,10 +1533,13 @@ async def _finish_get_agent_build(
                             loop = rt.get("loop")
                             queue = rt.get("queue")
                             if loop and queue:
-                                loop.call_soon_threadsafe(queue.put_nowait, {"type": "llm_call"})
+                                loop.call_soon_threadsafe(
+                                    queue.put_nowait, {"type": "llm_call"}
+                                )
                     except Exception:
                         pass
                 return await original_generator_run_async(*args, **kwargs)
+
             chat_generator.run_async = telemetry_wrapped_run_async
     except Exception as telemetry_err:
         logger.warning("Failed to apply LLM call telemetry wrappers: %s", telemetry_err)
