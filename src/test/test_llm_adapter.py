@@ -25,9 +25,7 @@ def test_resolve_llm_endpoint_ok(monkeypatch):
 def test_normalize_litellm_provider_remote_vllm():
     from src.runtime.llm_adapter import normalize_litellm_provider
 
-    assert (
-        normalize_litellm_provider("vllm", "http://localhost:8000/v1") == "openai"
-    )
+    assert normalize_litellm_provider("vllm", "http://localhost:8000/v1") == "openai"
     assert normalize_litellm_provider("vllm", "") == "vllm"
     assert normalize_litellm_provider("openai", "http://x/v1") == "openai"
 
