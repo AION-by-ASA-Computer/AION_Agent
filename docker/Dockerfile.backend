@@ -31,8 +31,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY --from=uv-bin /uv /uvx /usr/local/bin/
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends build-essential gcc \
- && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends build-essential gcc \
+    && rm -rf /var/lib/apt/lists/*
 
 # Creiamo un venv portabile in /opt/venv. Cosi' lo stage runtime puo' copiarlo
 # in blocco senza dipendere dal path di python (3.13.x) hardcoded.
@@ -68,18 +68,18 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - nodejs and npm for Node-based MCP servers (e.g. toolbox-postgres)
 # - git for MCP Hub install-github (marketplace git clone)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends \
-        tesseract-ocr \
-        tesseract-ocr-ita \
-        poppler-utils \
-        libmagic1 \
-        tini \
-        curl \
-        git \
-        nodejs \
-        npm \
-        podman \
- && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-ita \
+    poppler-utils \
+    libmagic1 \
+    tini \
+    curl \
+    git \
+    nodejs \
+    npm \
+    podman \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copia il venv (contiene tutti i pacchetti Python + console scripts)
 COPY --from=builder /opt/venv /opt/venv
@@ -102,14 +102,14 @@ COPY mempalace.yaml    ./
 COPY docker/backend-entrypoint.sh /usr/local/bin/aion-backend-entrypoint.sh
 
 RUN sed -i 's/\r$//' /usr/local/bin/aion-backend-entrypoint.sh \
- && chmod +x /usr/local/bin/aion-backend-entrypoint.sh \
- && python scripts/sync_config.py --force \
- && python scripts/sync_mcp_servers.py --force
+    && chmod +x /usr/local/bin/aion-backend-entrypoint.sh \
+    && python scripts/sync_config.py --force \
+    && python scripts/sync_mcp_servers.py --force
 
 # Writable runtime directories (mounted as volume in compose, created here as fallback)
 RUN mkdir -p /app/data /app/data/sessions /app/data/profiles \
-             /app/data/skills/generated /app/data/agent_dbs \
-             /app/data/chroma_embedding_cache
+    /app/data/skills/generated /app/data/agent_dbs \
+    /app/data/chroma_embedding_cache
 
 # Pre-download Chroma ONNX embeddings (~80MB) so first MemPalace call does not block SSE.
 RUN XDG_CACHE_HOME=/app/data/chroma_embedding_cache \
@@ -124,8 +124,8 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/aion-backend-entrypoint.sh"]
 CMD ["uvicorn", "src.api.main:app", \
-     "--host", "0.0.0.0", "--port", "8001", \
-     "--workers", "1", \
-     "--loop", "asyncio", \
-     "--proxy-headers", \
-     "--forwarded-allow-ips", "*"]
+    "--host", "0.0.0.0", "--port", "8001", \
+    "--workers", "1", \
+    "--loop", "asyncio", \
+    "--proxy-headers", \
+    "--forwarded-allow-ips", "*"]
