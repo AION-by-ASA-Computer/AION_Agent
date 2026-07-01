@@ -211,6 +211,7 @@ async def me(authorization: Optional[str] = Header(None)):
             "metadata": meta,
             "roles": get_roles(u),
             "must_change_password": bool(getattr(u, "must_change_password", False)),
+            "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
         }
 
 
@@ -312,6 +313,7 @@ async def auth_status():
         "admin_password_auth_enabled": admin_password_auth_enabled(),
         "login_endpoint": "/auth/login",
         "token_ttl_seconds": _TOKEN_TTL_SEC,
+        "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
     }
 
 

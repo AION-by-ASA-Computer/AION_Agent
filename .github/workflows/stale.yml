@@ -6,14 +6,16 @@ on:
   workflow_dispatch:
 
 permissions:
-  issues: write
-  pull-requests: write
+  contents: read
 
 jobs:
   stale:
     name: Mark Stale Items
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      issues: write
+      pull-requests: write
     steps:
       - name: Mark and close stale issues and PRs
         uses: actions/stale@v10

@@ -25,6 +25,8 @@ def _cache_ttl_sec() -> float:
 
 def _ping_llm(url: str, key: str) -> Tuple[bool, str]:
     try:
+        if not url.startswith(("http://", "https://")):
+            url = "http://" + url
         endpoint = url.rstrip("/") + "/models"
         headers: dict[str, str] = {}
         if key and key != "placeholder-token":

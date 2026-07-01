@@ -38,7 +38,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setUserId(getStoredUserId());
   }, [pathname]);
   const isDbEditor = pathname.startsWith("/agent-db/");
-  const isAuthPage = pathname === "/login" || pathname === "/change-password";
+  const isAuthPage = pathname === "/login" || pathname === "/change-password" || pathname === "/first-setup";
   const hideChrome = embedded && isDbEditor;
 
   if (hideChrome) {

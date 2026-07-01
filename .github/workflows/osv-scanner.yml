@@ -12,9 +12,9 @@ on:
   workflow_dispatch:
 
 permissions:
+  contents: read
   actions: read
   security-events: write
-  contents: read
 
 jobs:
   # PR delta scan — uploads SARIF to Code Scanning (must run on pull_request).

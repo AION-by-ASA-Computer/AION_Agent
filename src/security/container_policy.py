@@ -49,6 +49,9 @@ def _container_run_user() -> Optional[str]:
     return f"{uid}:{gid}"
 
 
+SANDBOX_FS_POLICY_CONTAINER_PATH = "/etc/aion/fs_policy.yaml"
+
+
 def build_container_run_argv(
     *,
     runtime: str,
@@ -60,6 +63,11 @@ def build_container_run_argv(
     """
     Return argv for ``runtime run -i ... image`` (stdio-attached MCP worker).
     """
+    from .container_paths import (
+        SANDBOX_FS_POLICY_CONTAINER_PATH,
+        resolve_fs_policy_host_mount,
+    )
+
     name = container_name_for_session(session_id)
     host_path = session_host_path.resolve()
     mount = f"{host_path}:/session:rw{_selinux_mount_suffix()}"
@@ -84,18 +92,28 @@ def build_container_run_argv(
         "/tmp:rw,noexec,nosuid,size=256m",
         "-v",
         mount,
-        "--memory",
-        memory,
-        "--cpus",
-        cpus,
-        "--pids-limit",
-        pids,
-        f"--network={_network_mode()}",
-        "--label",
-        f"aion.session_id={session_id[:64]}",
-        "--label",
-        "aion.component=session_sandbox",
     ]
+
+    policy_host = resolve_fs_policy_host_mount()
+    if policy_host is not None:
+        policy_mount = f"{policy_host}:{SANDBOX_FS_POLICY_CONTAINER_PATH}:ro{_selinux_mount_suffix()}"
+        argv.extend(["-v", policy_mount])
+
+    argv.extend(
+        [
+            "--memory",
+            memory,
+            "--cpus",
+            cpus,
+            "--pids-limit",
+            pids,
+            f"--network={_network_mode()}",
+            "--label",
+            f"aion.session_id={session_id[:64]}",
+            "--label",
+            "aion.component=session_sandbox",
+        ]
+    )
 
     run_user = _container_run_user()
     if run_user:
@@ -110,6 +128,8 @@ def build_container_run_argv(
         "NO_COLOR": "1",
         "RUFF_CACHE_DIR": "/tmp/ruff_cache",
     }
+    if policy_host is not None:
+        env["AION_FS_POLICY_PATH"] = SANDBOX_FS_POLICY_CONTAINER_PATH
     if extra_env:
         for key, val in extra_env.items():
             if key.startswith("AION_CURRENT_"):

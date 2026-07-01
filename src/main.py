@@ -1192,6 +1192,7 @@ async def _finish_get_agent_build(
 
     # 1. Resolve LLM Configuration from Environment
     from src.runtime.llm_adapter import (
+        normalize_litellm_provider,
         resolve_llm_adapter,
         resolve_llm_endpoint,
         resolve_llm_timeout,
@@ -1246,8 +1247,11 @@ async def _finish_get_agent_build(
                 )
             else:
                 provider_api_base = row.api_base_url
+                litellm_provider = normalize_litellm_provider(
+                    row.provider, provider_api_base
+                )
                 provider_model = (
-                    f"{row.provider}/{row.model_name}"
+                    f"{litellm_provider}/{row.model_name}"
                     if "/" not in row.model_name
                     else row.model_name
                 )
@@ -1307,8 +1311,9 @@ async def _finish_get_agent_build(
                     tools_strict=tools_strict,
                 )
                 logger.info(
-                    "Using LiteLLMChatGeneratorWrapper for model: %s (provider: %s)",
+                    "Using LiteLLMChatGeneratorWrapper for model: %s (provider: %s, stored: %s)",
                     provider_model,
+                    litellm_provider,
                     row.provider,
                 )
                 provider_loaded = True
@@ -1383,113 +1388,118 @@ async def _finish_get_agent_build(
 
     # === OPIK TELEMETRY WRAPPERS ===
     try:
-        import functools
-        from opik import track
-        from opik.opik_context import update_current_span
+        from src.observability.opik_setup import OPIK_AVAILABLE
 
-        # Wrap OpenAIChatGenerator.run to trace LLM calls while preserving signature
-        original_run = chat_generator.run
+        if OPIK_AVAILABLE:
+            import functools
+            from opik import track
+            from opik.opik_context import update_current_span
 
-        # This helper executes the actual LLM call and is decorated with @track
-        @track(type="llm", name=f"llm-{llm_model}")
-        def _execute_tracked_llm(
-            messages, streaming_callback, generation_kwargs, tools, **kwargs
-        ):
-            try:
-                update_current_span(
-                    metadata={
-                        "model": llm_model,
-                        "api_base_url": llm_url,
-                        "generation_kwargs": generation_kwargs or {},
-                    }
+            # Wrap OpenAIChatGenerator.run to trace LLM calls while preserving signature
+            original_run = chat_generator.run
+
+            # This helper executes the actual LLM call and is decorated with @track
+            @track(type="llm", name=f"llm-{llm_model}")
+            def _execute_tracked_llm(
+                messages, streaming_callback, generation_kwargs, tools, **kwargs
+            ):
+                try:
+                    update_current_span(
+                        metadata={
+                            "model": llm_model,
+                            "api_base_url": llm_url,
+                            "generation_kwargs": generation_kwargs or {},
+                        }
+                    )
+                except Exception:
+                    pass
+                return original_run(
+                    messages,
+                    streaming_callback=streaming_callback,
+                    generation_kwargs=generation_kwargs,
+                    tools=tools,
+                    **kwargs,
                 )
-            except Exception:
-                pass
-            return original_run(
+
+            # The actual method wrapper doesn't have the decorator directly, preventing signature issues.
+            # functools.wraps preserves signature, making `inspect.signature` check in Agent constructor succeed.
+            @functools.wraps(original_run)
+            def opik_wrapped_run(
                 messages,
-                streaming_callback=streaming_callback,
-                generation_kwargs=generation_kwargs,
-                tools=tools,
+                streaming_callback=None,
+                generation_kwargs=None,
+                tools=None,
                 **kwargs,
-            )
-
-        # The actual method wrapper doesn't have the decorator directly, preventing signature issues.
-        # functools.wraps preserves signature, making `inspect.signature` check in Agent constructor succeed.
-        @functools.wraps(original_run)
-        def opik_wrapped_run(
-            messages,
-            streaming_callback=None,
-            generation_kwargs=None,
-            tools=None,
-            **kwargs,
-        ):
-            res = _execute_tracked_llm(
-                messages,
-                streaming_callback=streaming_callback,
-                generation_kwargs=generation_kwargs,
-                tools=tools,
-                **kwargs,
-            )
-            try:
-                if isinstance(res, dict) and "replies" in res:
-                    for msg in res["replies"]:
-                        meta = getattr(msg, "meta", None) or {}
-                        usage = meta.get("usage", {}) or {}
-                        if isinstance(usage, dict) and usage:
-                            p_tok = usage.get("prompt_tokens", 0) or 0
-                            c_tok = usage.get("completion_tokens", 0) or 0
-                            details = usage.get("completion_tokens_details", {}) or {}
-                            r_tok = (
-                                details.get("reasoning_tokens", 0)
-                                or usage.get("reasoning_tokens", 0)
-                                or 0
-                            )
-
-                            from src.runtime.turn_compaction import _turn_runtime
-
-                            if _turn_runtime is not None:
-                                rt = _turn_runtime.get()
-                                if isinstance(rt, dict):
-                                    loop = rt.get("loop")
-                                    queue = rt.get("queue")
-                                    if loop and queue:
-                                        loop.call_soon_threadsafe(
-                                            queue.put_nowait,
-                                            {
-                                                "type": "llm_tokens",
-                                                "prompt_tokens": p_tok,
-                                                "completion_tokens": c_tok,
-                                                "reasoning_tokens": r_tok,
-                                            },
-                                        )
-            except Exception as tok_err:
-                logger.debug(
-                    "Failed to extract token usage in opik_wrapped_run: %s", tok_err
+            ):
+                res = _execute_tracked_llm(
+                    messages,
+                    streaming_callback=streaming_callback,
+                    generation_kwargs=generation_kwargs,
+                    tools=tools,
+                    **kwargs,
                 )
-            return res
+                try:
+                    if isinstance(res, dict) and "replies" in res:
+                        for msg in res["replies"]:
+                            meta = getattr(msg, "meta", None) or {}
+                            usage = meta.get("usage", {}) or {}
+                            if isinstance(usage, dict) and usage:
+                                p_tok = usage.get("prompt_tokens", 0) or 0
+                                c_tok = usage.get("completion_tokens", 0) or 0
+                                details = (
+                                    usage.get("completion_tokens_details", {}) or {}
+                                )
+                                r_tok = (
+                                    details.get("reasoning_tokens", 0)
+                                    or usage.get("reasoning_tokens", 0)
+                                    or 0
+                                )
 
-        chat_generator.run = opik_wrapped_run
+                                from src.runtime.turn_compaction import _turn_runtime
 
-        # Wrap all tools to trace execution, using closure factory to prevent scope leaks
-        wrapped_tools = []
-        for tool in tools:
-            original_fn = tool.function
+                                if _turn_runtime is not None:
+                                    rt = _turn_runtime.get()
+                                    if isinstance(rt, dict):
+                                        loop = rt.get("loop")
+                                        queue = rt.get("queue")
+                                        if loop and queue:
+                                            loop.call_soon_threadsafe(
+                                                queue.put_nowait,
+                                                {
+                                                    "type": "llm_tokens",
+                                                    "prompt_tokens": p_tok,
+                                                    "completion_tokens": c_tok,
+                                                    "reasoning_tokens": r_tok,
+                                                },
+                                            )
+                except Exception as tok_err:
+                    logger.debug(
+                        "Failed to extract token usage in opik_wrapped_run: %s", tok_err
+                    )
+                return res
 
-            def make_wrapped_tool(orig_fn, name):
-                @track(type="tool", name=name)
-                @functools.wraps(orig_fn)
-                def opik_wrapped_tool_fn(*args, **kwargs):
-                    return orig_fn(*args, **kwargs)
+            chat_generator.run = opik_wrapped_run
 
-                return opik_wrapped_tool_fn
+            # Wrap all tools to trace execution, using closure factory to prevent scope leaks
+            wrapped_tools = []
+            for tool in tools:
+                original_fn = tool.function
 
-            tool.function = make_wrapped_tool(original_fn, tool.name)
-            wrapped_tools.append(tool)
+                def make_wrapped_tool(orig_fn, name):
+                    @track(type="tool", name=name)
+                    @functools.wraps(orig_fn)
+                    def opik_wrapped_tool_fn(*args, **kwargs):
+                        return orig_fn(*args, **kwargs)
 
-        tools = wrapped_tools
-        logger.info(
-            "Opik telemetry wrappers successfully applied to chat_generator and tools with signature preservation."
-        )
+                    return opik_wrapped_tool_fn
+
+                tool.function = make_wrapped_tool(original_fn, tool.name)
+                wrapped_tools.append(tool)
+
+            tools = wrapped_tools
+            logger.info(
+                "Opik telemetry wrappers successfully applied to chat_generator and tools with signature preservation."
+            )
     except Exception as opik_err:
         logger.warning("Failed to apply Opik telemetry wrappers: %s", opik_err)
 

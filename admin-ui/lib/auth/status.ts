@@ -5,6 +5,7 @@ export type AuthStatus = {
   admin_password_auth_enabled: boolean;
   login_endpoint: string;
   token_ttl_seconds: number;
+  first_setup_complete: boolean;
 };
 
 const DEFAULT_STATUS: AuthStatus = {
@@ -13,6 +14,7 @@ const DEFAULT_STATUS: AuthStatus = {
   admin_password_auth_enabled: true,
   login_endpoint: "/auth/login",
   token_ttl_seconds: 0,
+  first_setup_complete: false,
 };
 
 let cachedStatus: Promise<AuthStatus> | null = null;
@@ -32,6 +34,7 @@ export function fetchAuthStatus(force = false): Promise<AuthStatus> {
             : Boolean(j.admin_password_auth_enabled),
         login_endpoint: j.login_endpoint || "/auth/login",
         token_ttl_seconds: Number(j.token_ttl_seconds || 0),
+        first_setup_complete: Boolean(j.first_setup_complete),
       };
     } catch {
       return DEFAULT_STATUS;

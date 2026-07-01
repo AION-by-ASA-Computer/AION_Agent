@@ -97,6 +97,7 @@ These variables configure tracking, metrics, and structured logging:
 |-----------|---------|-------------|
 | `AION_ENV` | `dev` | Environment label (`dev` / `staging` / `prod`) propagated in trace/log |
 | `AION_OTEL_ENABLED` | `0` | Enables OpenTelemetry tracing |
+| `AION_OPIK_ENABLED` | `0` | Enables Opik (Comet ML) LLM telemetry tracing |
 | `AION_OTEL_ENDPOINT` | `http://localhost:4317` | gRPC/HTTP endpoint of the OTel collector |
 | `AION_OTEL_PROTOCOL` | `grpc` | Protocol to the collector (`grpc` or `http/protobuf`) |
 | `AION_OTEL_SERVICE_NAME` | `aion-agent` | Service name reported in traces |

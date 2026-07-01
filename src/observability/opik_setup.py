@@ -15,41 +15,54 @@ if not logger.handlers:
 
 # Configura le variabili d'ambiente per l'SDK di Opik (Self-Hosted local instance)
 # Inietta i valori configurati nel file .env se presenti, altrimenti imposta i default.
-OPIK_URL = os.getenv("OPIK_URL_OVERRIDE", "http://localhost:5173/api").strip("'\"")
-OPIK_PROJECT = os.getenv("OPIK_PROJECT_NAME", "AION-Agent").strip("'\"")
-
-os.environ["OPIK_URL_OVERRIDE"] = OPIK_URL
-os.environ["OPIK_PROJECT_NAME"] = OPIK_PROJECT
-
-# Per l'istanza locale di Opik non è richiesta alcuna API key, ma se il client dovesse richiederla,
-# ne impostiamo una fittizia per evitare errori di validazione del client.
-if not os.getenv("OPIK_API_KEY"):
-    os.environ["OPIK_API_KEY"] = "local-self-hosted-placeholder"
-
-logger.info(
-    f"Inizializzazione SDK Opik. Target URL: {OPIK_URL} | Progetto: {OPIK_PROJECT}"
+OPIK_ENABLED = os.getenv("AION_OPIK_ENABLED", "0").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
 )
 
-# Ritarda l'importazione di Opik finché l'ambiente non è configurato correttamente
-try:
-    from opik import Opik
-    from opik.exceptions import OpikException
+if OPIK_ENABLED:
+    OPIK_URL = os.getenv("OPIK_URL_OVERRIDE", "http://localhost:5173/api").strip("'\"")
+    OPIK_PROJECT = os.getenv("OPIK_PROJECT_NAME", "AION-Agent").strip("'\"")
 
-    opik_client = Opik()
-    OPIK_AVAILABLE = True
-except ImportError:
-    OpikException = Exception  # type: ignore[misc, assignment]
-    opik_client = None
-    OPIK_AVAILABLE = False
-    logger.warning(
-        "SDK Opik non installato — telemetria Opik disabilitata. "
-        "Eseguire: uv pip install -r requirements.txt"
+    os.environ["OPIK_URL_OVERRIDE"] = OPIK_URL
+    os.environ["OPIK_PROJECT_NAME"] = OPIK_PROJECT
+
+    # Per l'istanza locale di Opik non è richiesta alcuna API key, ma se il client dovesse richiederla,
+    # ne impostiamo una fittizia per evitare errori di validazione del client.
+    if not os.getenv("OPIK_API_KEY"):
+        os.environ["OPIK_API_KEY"] = "local-self-hosted-placeholder"
+
+    logger.info(
+        f"Inizializzazione SDK Opik. Target URL: {OPIK_URL} | Progetto: {OPIK_PROJECT}"
     )
-except Exception as e:
+
+    # Ritarda l'importazione di Opik finché l'ambiente non è configurato correttamente
+    try:
+        from opik import Opik
+        from opik.exceptions import OpikException
+
+        opik_client = Opik()
+        OPIK_AVAILABLE = True
+    except ImportError:
+        OpikException = Exception  # type: ignore[misc, assignment]
+        opik_client = None
+        OPIK_AVAILABLE = False
+        logger.warning(
+            "SDK Opik non installato — telemetria Opik disabilitata. "
+            "Eseguire: uv pip install -r requirements.txt"
+        )
+    except Exception as e:
+        OpikException = Exception  # type: ignore[misc, assignment]
+        opik_client = None
+        OPIK_AVAILABLE = False
+        logger.error("Errore durante l'inizializzazione del client Opik: %s", e)
+else:
     OpikException = Exception  # type: ignore[misc, assignment]
     opik_client = None
     OPIK_AVAILABLE = False
-    logger.error("Errore durante l'inizializzazione del client Opik: %s", e)
+    logger.info("Telemetria Opik disabilitata tramite AION_OPIK_ENABLED=0")
 
 
 def get_or_create_prompt(
