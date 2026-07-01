@@ -250,6 +250,7 @@ async def get_conversation_messages_chat_ui(
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     from src.settings import get_settings
+
     show_tool_calls = get_settings().show_tool_calls
 
     async with get_async_session_maker()() as session:
@@ -367,7 +368,9 @@ async def get_conversation_messages_chat_ui(
                         timeline_backfilled = True
                 if timeline:
                     if show_tool_calls == "null":
-                        timeline = [item for item in timeline if item.get("kind") != "tool"]
+                        timeline = [
+                            item for item in timeline if item.get("kind") != "tool"
+                        ]
                     elif show_tool_calls == "minimum":
                         for item in timeline:
                             if item.get("kind") == "tool":
@@ -421,7 +424,9 @@ async def get_conversation_messages_chat_ui(
                             if data[idx]["timeline"]:
                                 if show_tool_calls == "null":
                                     data[idx]["timeline"] = [
-                                        item for item in data[idx]["timeline"] if item.get("kind") != "tool"
+                                        item
+                                        for item in data[idx]["timeline"]
+                                        if item.get("kind") != "tool"
                                     ]
                                 elif show_tool_calls == "minimum":
                                     for item in data[idx]["timeline"]:

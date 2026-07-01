@@ -2747,7 +2747,9 @@ class AgentPipeline:
                                             "name": "thinking",
                                             "input": {},
                                         }
-                                        yield _track_sse({"type": "tool_event", "event": masked_evt})
+                                        yield _track_sse(
+                                            {"type": "tool_event", "event": masked_evt}
+                                        )
                                     elif et in ("tool_end", "tool_error"):
                                         masked_evt = {
                                             "type": "tool_end",
@@ -2755,7 +2757,9 @@ class AgentPipeline:
                                             "name": "thinking",
                                             "output": "",
                                         }
-                                        yield _track_sse({"type": "tool_event", "event": masked_evt})
+                                        yield _track_sse(
+                                            {"type": "tool_event", "event": masked_evt}
+                                        )
                                 elif _gs().show_tool_calls == "minimum":
                                     et = evt.get("type")
                                     if et == "tool_start":
@@ -2766,7 +2770,9 @@ class AgentPipeline:
                                             "input": {},
                                             "masked": "minimum",
                                         }
-                                        yield _track_sse({"type": "tool_event", "event": masked_evt})
+                                        yield _track_sse(
+                                            {"type": "tool_event", "event": masked_evt}
+                                        )
                                     elif et in ("tool_end", "tool_error"):
                                         masked_evt = {
                                             "type": "tool_end",
@@ -2775,7 +2781,9 @@ class AgentPipeline:
                                             "output": "",
                                             "masked": "minimum",
                                         }
-                                        yield _track_sse({"type": "tool_event", "event": masked_evt})
+                                        yield _track_sse(
+                                            {"type": "tool_event", "event": masked_evt}
+                                        )
                                 else:
                                     yield _track_sse(chunk)
 

@@ -100,7 +100,6 @@ class AionSettings(BaseSettings):
         description="Allow tool/MCP call visibility in the user interface: 'null' (hidden), 'minimum' (name only), or 'complete' (full parameters/results).",
     )
 
-
     # Web search
     web_search_require_client_opt_in: bool = Field(
         False,

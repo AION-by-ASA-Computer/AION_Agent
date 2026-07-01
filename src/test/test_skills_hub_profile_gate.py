@@ -51,6 +51,7 @@ def test_skill_view_denies_office_skill_not_on_profile(monkeypatch):
 def test_skill_list_excludes_unallowed_office_skills(monkeypatch):
     monkeypatch.setenv("AION_CURRENT_PROFILE_SLUG", "postgres_metadata_assistant")
     from src.agent_profile import profile_manager
+
     print("\n--- DEBUG TEST ---")
     print("profile_manager.base_path:", profile_manager.base_path)
     print("profile_manager._by_slug keys:", list(profile_manager._by_slug.keys()))

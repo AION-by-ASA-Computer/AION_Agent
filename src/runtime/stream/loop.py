@@ -166,6 +166,7 @@ class StreamLoop:
         self.reasoning_no_tool_warned: bool = g.state.reasoning_no_tool_warned
 
         from src.settings import get_settings as _gs
+
         self.show_tool_calls = _gs().show_tool_calls
 
     # ------------------------------------------------------------------

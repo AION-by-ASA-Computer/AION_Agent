@@ -21,6 +21,7 @@ async def _reset_unified_db(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.delenv("AION_CHAT_UI_INTERNAL_SECRET", raising=False)
     monkeypatch.setenv("AION_SHOW_TOOL_CALLS", "complete")
     from src.settings import get_settings
+
     get_settings.cache_clear()
 
 
@@ -345,6 +346,7 @@ def test_chat_ui_history_respects_show_tool_calls_flag(monkeypatch, tmp_path):
         monkeypatch.setenv("AION_SHOW_TOOL_CALLS", "0")
 
         from src.settings import get_settings
+
         get_settings.cache_clear()
         assert get_settings().show_tool_calls == "null"
 
@@ -378,7 +380,9 @@ def test_chat_ui_history_respects_show_tool_calls_flag(monkeypatch, tmp_path):
             message_id="assistant-1",
         )
 
-        payload = await get_conversation_messages_chat_ui("conv-hide", x_aion_user_id="u1")
+        payload = await get_conversation_messages_chat_ui(
+            "conv-hide", x_aion_user_id="u1"
+        )
         assistant = payload["messages"][1]
         assert assistant["id"] == "assistant-1"
         assert assistant["reasoning"] == "Running tool..."
@@ -397,7 +401,9 @@ def test_chat_ui_history_respects_show_tool_calls_flag(monkeypatch, tmp_path):
         get_settings.cache_clear()
         assert get_settings().show_tool_calls == "minimum"
 
-        payload = await get_conversation_messages_chat_ui("conv-hide", x_aion_user_id="u1")
+        payload = await get_conversation_messages_chat_ui(
+            "conv-hide", x_aion_user_id="u1"
+        )
         assistant = payload["messages"][1]
         assert len(assistant["steps"]) == 1
         assert assistant["steps"][0]["name"] == "web_search"
