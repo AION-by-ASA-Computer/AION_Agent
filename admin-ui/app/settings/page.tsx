@@ -7,8 +7,11 @@ import {
   Save, Shield, Globe, Server,
   Database, Zap, Lock, RefreshCw, AlertTriangle,
   Info, CheckCircle2, Search, Settings as SettingsIcon,
-  Eye, EyeOff, Plus, Trash2, Edit2, X, ChevronDown, ChevronUp, Star
+  Eye, EyeOff, Plus, Trash2, Edit2, X, ChevronDown, ChevronUp, Star,
+  ShieldAlert
 } from "lucide-react";
+import { PolicyEditor } from "@/components/policy-editor";
+import { load as yamlLoad } from "js-yaml";
 
 interface Settings {
   [key: string]: string;
@@ -24,6 +27,15 @@ export default function SettingsPage() {
   const [showApiKey, setShowApiKey] = useState(false);
   const [showOcrApiKey, setShowOcrApiKey] = useState(false);
   const [ocrEnabled, setOcrEnabled] = useState(false);
+
+  // Filesystem Policy State
+  const [fsPolicyEnabled, setFsPolicyEnabled] = useState(true);
+  const [fsPolicyYaml, setFsPolicyYaml] = useState("");
+  const [devTemplateYaml, setDevTemplateYaml] = useState("");
+  const [exampleTemplateYaml, setExampleTemplateYaml] = useState("");
+  const [customYaml, setCustomYaml] = useState("");
+  const [selectedPolicyType, setSelectedPolicyType] = useState<"dev" | "production" | "custom">("dev");
+  const [policySaving, setPolicySaving] = useState(false);
 
   // LLM Providers state
   const [llmProviders, setLlmProviders] = useState<any[]>([]);
@@ -51,6 +63,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
     fetchLlmProviders();
+    fetchFsPolicy();
   }, []);
 
   const fetchLlmProviders = async () => {
@@ -194,6 +207,109 @@ export default function SettingsPage() {
       console.error("Failed to fetch settings", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFsPolicy = async () => {
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/settings/fs-policy`);
+      if (res.ok) {
+        const data = await res.json();
+        setFsPolicyEnabled(data.enabled);
+        setDevTemplateYaml(data.dev_template || "");
+        setExampleTemplateYaml(data.example_template || "");
+
+        const activeYaml = data.yaml_content || "";
+        setFsPolicyYaml(activeYaml);
+
+        // Detect if the active policy matches one of the templates
+        if (activeYaml === data.dev_template) {
+          setSelectedPolicyType("dev");
+          setCustomYaml(data.dev_template);
+        } else if (activeYaml === data.example_template) {
+          setSelectedPolicyType("production");
+          setCustomYaml(data.example_template);
+        } else {
+          setSelectedPolicyType("custom");
+          setCustomYaml(activeYaml);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch filesystem policy", err);
+    }
+  };
+
+  const saveFsPolicy = async () => {
+    setPolicySaving(true);
+    setMessage(null);
+
+    let yamlToSave = "";
+    if (selectedPolicyType === "dev") {
+      yamlToSave = devTemplateYaml;
+    } else if (selectedPolicyType === "production") {
+      yamlToSave = exampleTemplateYaml;
+    } else {
+      yamlToSave = customYaml;
+    }
+
+    // Validate rules: no rule can have an empty or whitespace-only executable name
+    if (fsPolicyEnabled) {
+      try {
+        const parsed = yamlLoad(yamlToSave) as any;
+        if (parsed && parsed.exec && Array.isArray(parsed.exec.allowlist)) {
+          for (let i = 0; i < parsed.exec.allowlist.length; i++) {
+            const rule = parsed.exec.allowlist[i];
+            if (!rule || typeof rule !== "object" || !rule.executable || !rule.executable.trim()) {
+              setMessage({
+                type: 'error',
+                text: `Validation failed: Rule #${i + 1} has an empty executable name.`
+              });
+              setPolicySaving(false);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        setMessage({
+          type: 'error',
+          text: "Invalid YAML format. Please correct it before saving."
+        });
+        setPolicySaving(false);
+        return;
+      }
+    }
+
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/settings/fs-policy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          yaml_content: yamlToSave,
+          enabled: fsPolicyEnabled,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.restarting) {
+          setRestarting(true);
+          pollHealth();
+        } else {
+          setMessage({ type: 'success', text: "Filesystem policy updated successfully." });
+          fetchFsPolicy();
+        }
+      } else {
+        try {
+          const errData = await res.json();
+          setMessage({ type: 'error', text: errData.detail || "Failed to save filesystem policy." });
+        } catch {
+          setMessage({ type: 'error', text: "Failed to save filesystem policy." });
+        }
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: "Network error while saving filesystem policy." });
+    } finally {
+      setPolicySaving(false);
     }
   };
 
@@ -354,13 +470,6 @@ export default function SettingsPage() {
         </div>
 
         <div className="flex gap-3">
-          <button
-            onClick={fetchSettings}
-            className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all"
-            title="Reload from disk"
-          >
-            <RefreshCw className="w-5 h-5" />
-          </button>
           <button
             onClick={saveSettings}
             disabled={saving}
@@ -914,6 +1023,164 @@ export default function SettingsPage() {
               <Info className="w-8 h-8 mx-auto mb-2 text-gray-600" />
               OCR document processing is disabled. <br />
               The agent will run OCR MCP without vision-based text extraction but with basic extraction scripts.
+            </div>
+          )}
+        </section>
+
+        {/* Sandbox Security & Filesystem Exec Policy */}
+        <section className="glass-card p-6 border-[#262626] hover:border-amber-500/30 transition-colors group md:col-span-2 animate-in fade-in duration-500">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform">
+                <ShieldAlert className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white">Sandbox Security & Filesystem Policy</h3>
+                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Configure sandbox boundaries and command allowlists</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setFsPolicyEnabled(!fsPolicyEnabled)}
+              className={`w-10 h-5 rounded-full transition-all flex items-center px-1 cursor-pointer ${fsPolicyEnabled ? 'bg-amber-500' : 'bg-gray-700'}`}
+              title={fsPolicyEnabled ? "Disable Filesystem Policy" : "Enable Filesystem Policy"}
+            >
+              <div className={`w-3 h-3 bg-white rounded-full transition-transform ${fsPolicyEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {fsPolicyEnabled ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Dev Template Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedPolicyType("dev")}
+                  className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${selectedPolicyType === "dev"
+                    ? "bg-amber-500/5 border-amber-500/30 text-amber-300 shadow-md shadow-amber-500/5"
+                    : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
+                    }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <Zap className="w-4 h-4" /> Development Policy
+                  </div>
+                  <span className="text-xs opacity-80">
+                    Enables a minimal allowlist of commands (grep, wc, sort, python3) for local agent operations.
+                  </span>
+                </button>
+
+                {/* Production Template Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedPolicyType("production")}
+                  className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${selectedPolicyType === "production"
+                    ? "bg-amber-500/5 border-amber-500/30 text-amber-300 shadow-md shadow-amber-500/5"
+                    : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
+                    }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <Lock className="w-4 h-4" /> Production Policy
+                  </div>
+                  <span className="text-xs opacity-80">
+                    Advanced template with detailed descriptions, strict path boundaries, and hardened execute constraints.
+                  </span>
+                </button>
+
+                {/* Custom Policy Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedPolicyType("custom")}
+                  className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${selectedPolicyType === "custom"
+                    ? "bg-amber-500/5 border-amber-500/30 text-amber-300 shadow-md shadow-amber-500/5"
+                    : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
+                    }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <SettingsIcon className="w-4 h-4" /> Custom Policy
+                  </div>
+                  <span className="text-xs opacity-80">
+                    Manually edit and write custom command rules and directory access policies to meet your specific needs.
+                  </span>
+                </button>
+              </div>
+
+              {/* View/Edit – visual policy editor */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                    {selectedPolicyType === "custom" ? "Edit Policy" : "Policy Blueprint Preview (Read Only)"}
+                  </label>
+                  <span className="text-[10px] text-gray-500 font-mono">config/fs_policy.yaml</span>
+                </div>
+
+                {selectedPolicyType !== "custom" && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between text-xs text-amber-400">
+                    <div className="flex items-center gap-2">
+                      <Info className="w-4 h-4 shrink-0" />
+                      <span>You are viewing a standard template. To make edits, switch to <strong>Custom</strong>.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomYaml(selectedPolicyType === "dev" ? devTemplateYaml : exampleTemplateYaml);
+                        setSelectedPolicyType("custom");
+                      }}
+                      className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg text-amber-300 font-bold transition-all text-xs active:scale-95 cursor-pointer"
+                    >
+                      Derive Custom from Template
+                    </button>
+                  </div>
+                )}
+
+                <PolicyEditor
+                  value={
+                    selectedPolicyType === "dev"
+                      ? devTemplateYaml
+                      : selectedPolicyType === "production"
+                        ? exampleTemplateYaml
+                        : customYaml
+                  }
+                  onChange={(yaml) => {
+                    if (selectedPolicyType === "custom") {
+                      setCustomYaml(yaml);
+                    }
+                  }}
+                  readOnly={selectedPolicyType !== "custom"}
+                />
+              </div>
+
+              {/* Save policy changes */}
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={saveFsPolicy}
+                  disabled={policySaving}
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg cursor-pointer ${policySaving
+                    ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                    : 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-500/20 active:scale-95'
+                    }`}
+                >
+                  {policySaving ? (
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : <Save className="w-4 h-4" />}
+                  {policySaving ? "Committing Changes..." : "Commit Changes"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="p-6 rounded-2xl border border-dashed border-[#262626] bg-[#0d0d0d]/30 text-center text-gray-500 text-sm">
+              <Info className="w-8 h-8 mx-auto mb-2 text-gray-600" />
+              Filesystem Policy is disabled. All filesystem and command execution restrictions are off.
+              <div className="flex justify-center mt-4">
+                <button
+                  onClick={saveFsPolicy}
+                  disabled={policySaving}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold bg-amber-600 hover:bg-amber-500 text-white transition-all active:scale-95 cursor-pointer"
+                >
+                  {policySaving ? (
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : <Save className="w-4 h-4" />}
+                  {policySaving ? "Committing Changes..." : "Commit Changes"}
+                </button>
+              </div>
             </div>
           )}
         </section>

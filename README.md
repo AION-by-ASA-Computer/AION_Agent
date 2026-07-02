@@ -64,6 +64,9 @@ docker compose up -d --build
 ### Production (HTTPS via Let's Encrypt)
 
 ```bash
+git clone https://github.com/AION-by-ASA-Computer/AION_Agent.git
+cd AION_Agent
+
 cp .env.example .env
 # Set DOMAIN=your.example.com, LETS_ENCRYPT_EMAIL, AION_PUBLIC_API_URL, secrets
 ./scripts/setup-aion-env.sh --docker
@@ -93,45 +96,6 @@ API + chat-ui + Redis only — run admin-ui and docs via `pnpm dev` when needed:
 ```bash
 docker compose -f docker-compose.dev.yml up
 ```
-
-## Features
-
-| Area | Description |
-|------|-------------|
-| **Chat UI** (`chat-ui/`) | Primary Next.js client: SSE streaming, attachments, plan dock |
-| **Admin UI** (`admin-ui/`) | Profiles, users, memory, agent DB management |
-| **MCP tools** | Dynamic stdio/SSE tools; registry in `config_std/mcp_registry.yaml` |
-| **Memory** | STM window, LTM extraction (MemPalace), SQLite + FTS history |
-| **Profiles & skills** | YAML profiles; Markdown skills with frontmatter |
-| **Plan Mode** | Tool-first plans, human approval, background execution |
-| **Docker** | Production stack with Caddy path routing; dev compose with hot reload |
-
-## Default credentials
-
-When admin auth is enabled (default): **`admin` / `admin`** — change password on first login.
-
-Chat auth is optional (`AION_CHAT_PASSWORD_AUTH=0` opens chat without login; useful for local dev).
-
-Generate secrets for production:
-
-```bash
-openssl rand -hex 32   # AION_CHAT_AUTH_SECRET (if chat password auth enabled)
-```
-
-## Project layout
-
-```text
-src/              FastAPI backend, agent pipeline, memory, MCP manager
-chat-ui/          Primary Next.js chat client
-admin-ui/         Admin dashboard (Next.js)
-website/          Docusaurus docs site
-config_std/       Committed config templates (synced to config/ at setup)
-mcp_servers_std/  Committed MCP server sources
-docs/             Documentation source of truth
-data/             Runtime data (gitignored; eval fixtures whitelisted)
-```
-
-See [docs/architecture/source-tree.md](docs/architecture/source-tree.md).
 
 ## Local development (without Docker)
 
@@ -165,6 +129,61 @@ uv run ruff format --check --config ruff.toml src/
 **Constraints:** backend must run with **one worker**; use **pnpm** in JS packages; import `src.aion_env` before reading `os.environ` in scripts.
 
 Assistant onboarding: [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md).
+
+## Setup
+
+After successfully booting the AION Agent codebase (either using Docker or through Local Development), you MUST perform the initial configuration using the interactive [First Setup Wizard](admin-ui/app/first-setup/page.tsx) in the Admin Panel:
+
+1. **Access the Admin Panel**: Open your browser and navigate to the `/admin` path (e.g., `http://localhost/admin` or `http://localhost:3870` in dev).
+2. **Log In**: Authenticate using the default credentials:
+   - **Username**: `admin`
+   - **Password**: `admin`
+3. **Configure the System**: If the platform is not yet initialized, you will be redirected automatically to `/first-setup`. Follow the steps on screen:
+   - **1. Default LLM Provider**: Select your target language model provider (OpenAI, Anthropic, Google Gemini, Ollama, or vLLM), then specify the model name, API key, optional API base URL, max chat tokens, and thinking token budget.
+   - **2. Autonomous Memory (Embeddings)**: Set up the embeddings model (such as `text-embedding-3-small` or Google's `models/text-embedding-004`) and API credentials used to compute vector embeddings for Long-Term Memory (LTM).
+   - **3. OCR Document Processing (Optional)**: Toggle vision-based OCR capabilities and configure service parameters (e.g., GLM-OCR model and base URL) to enable parsing and extracting text from uploaded images and PDFs.
+   - **4. Web Integration & Search**: Configure web search providers (Tavily, Brave Search, or a self-hosted SearXNG instance) to allow the agent to fetch search results. Define the default search provider and the search fallback order.
+   - **5. Sandbox Security & Exec Policy**: Secure your local environment by selecting an execution and path security template. You can choose between the **Development Policy** (loads [fs_policy.dev.yaml](config_std/fs_policy.dev.yaml)), the **Production Policy** (loads [fs_policy.example.yaml](config_std/fs_policy.example.yaml)), or write a custom YAML policy blueprint.
+   - **6. Review & Initialize**: Confirm all configurations. Clicking **Initialize AION Kernel** saves these settings directly to the `.env` file (handled by [settings_api.py](src/api/settings_api.py)), writes the security policy to `config/fs_policy.yaml`, and automatically restarts the AION kernel/backend to apply changes.
+
+## Default credentials
+
+When admin auth is enabled (default): **`admin` / `admin`** — change password on first login.
+
+Chat auth is optional (`AION_CHAT_PASSWORD_AUTH=0` opens chat without login; useful for local dev).
+
+Generate secrets for production:
+
+```bash
+openssl rand -hex 32   # AION_CHAT_AUTH_SECRET (if chat password auth enabled)
+```
+
+## Features
+
+| Area | Description |
+|------|-------------|
+| **Chat UI** (`chat-ui/`) | Primary Next.js client: SSE streaming, attachments, plan dock |
+| **Admin UI** (`admin-ui/`) | Profiles, users, memory, agent DB management |
+| **MCP tools** | Dynamic stdio/SSE tools; registry in `config_std/mcp_registry.yaml` |
+| **Memory** | STM window, LTM extraction (MemPalace), SQLite + FTS history |
+| **Profiles & skills** | YAML profiles; Markdown skills with frontmatter |
+| **Plan Mode** | Tool-first plans, human approval, background execution |
+| **Docker** | Production stack with Caddy path routing; dev compose with hot reload |
+
+## Project layout
+
+```text
+src/              FastAPI backend, agent pipeline, memory, MCP manager
+chat-ui/          Primary Next.js chat client
+admin-ui/         Admin dashboard (Next.js)
+website/          Docusaurus docs site
+config_std/       Committed config templates (synced to config/ at setup)
+mcp_servers_std/  Committed MCP server sources
+docs/             Documentation source of truth
+data/             Runtime data (gitignored; eval fixtures whitelisted)
+```
+
+See [docs/architecture/source-tree.md](docs/architecture/source-tree.md).
 
 ## Contributing
 
