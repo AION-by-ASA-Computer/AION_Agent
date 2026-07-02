@@ -6,8 +6,8 @@
 # Usage:
 #   cp .env.example .env
 #   ./scripts/setup-aion-env.sh --docker
-#   AION_VERSION=0.1.0 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
-#   AION_VERSION=0.1.0 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
+#   AION_VERSION=latest docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
+#   AION_VERSION=latest docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
 #
 # Pin a version in production (avoid relying on :latest). See docs/opensource/releases.md.
 
@@ -15,13 +15,13 @@ name: aion-agent
 
 services:
   backend:
-    image: ghcr.io/aion-by-asa-computer/aion-backend:${AION_VERSION:-0.1.0}
+    image: ghcr.io/aion-by-asa-computer/aion-backend:${AION_VERSION:-latest}
 
   chat-ui:
-    image: ghcr.io/aion-by-asa-computer/aion-chat-ui:${AION_VERSION:-0.1.0}
+    image: ghcr.io/aion-by-asa-computer/aion-chat-ui:${AION_VERSION:-latest}
 
   admin-ui:
-    image: ghcr.io/aion-by-asa-computer/aion-admin-ui:${AION_VERSION:-0.1.0}
+    image: ghcr.io/aion-by-asa-computer/aion-admin-ui:${AION_VERSION:-latest}
 
   website:
-    image: ghcr.io/aion-by-asa-computer/aion-website:${AION_VERSION:-0.1.0}
+    image: ghcr.io/aion-by-asa-computer/aion-website:${AION_VERSION:-latest}
