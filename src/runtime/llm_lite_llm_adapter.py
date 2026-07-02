@@ -10,6 +10,8 @@ from haystack import component
 from haystack.dataclasses import ChatMessage, StreamingChunk
 from haystack.utils.auth import Secret
 
+from src.runtime.llm_adapter import normalize_litellm_provider
+
 logger = logging.getLogger("aion.lite_llm")
 
 
@@ -86,6 +88,8 @@ class LiteLLMChatGeneratorWrapper:
         else:
             self.provider = "openai"
             self.model_name = model
+
+        self.provider = normalize_litellm_provider(self.provider, api_base_url)
 
         # Inizializza generatore LiteLLM
         self.generator = self._instantiate_generator()

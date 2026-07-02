@@ -22,6 +22,7 @@ export default function SettingsPage() {
 
   const [restarting, setRestarting] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showOcrApiKey, setShowOcrApiKey] = useState(false);
 
   // LLM Providers state
   const [llmProviders, setLlmProviders] = useState<any[]>([]);
@@ -402,7 +403,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">API Base URL (optional)</label>
+                  <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">API Base URL</label>
                   <input
                     type="text"
                     value={providerForm.api_base_url}
@@ -765,6 +766,70 @@ export default function SettingsPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* OCR Document Processing */}
+        <section className="glass-card p-6 border-[#262626] hover:border-amber-500/30 transition-colors group">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform">
+              <Eye className="w-5 h-5 text-amber-500" />
+            </div>
+            <div>
+              <h3 className="font-bold text-white">OCR Document Processing</h3>
+              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Vision-based Text Extraction</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <ConfigInput
+              label="OCR Base URL (AION_OCR_BASE_URL)"
+              value={settings.AION_OCR_BASE_URL || ""}
+              onChange={(v) => handleUpdate('AION_OCR_BASE_URL', v)}
+              description="Base URL for the vision-based OCR service"
+            />
+            <ConfigInput
+              label="OCR Model (AION_OCR_MODEL)"
+              value={settings.AION_OCR_MODEL || ""}
+              onChange={(v) => handleUpdate('AION_OCR_MODEL', v)}
+              description="Model identifier, e.g. zai-org/GLM-OCR"
+            />
+            <div className="space-y-1.5 font-mono">
+              <div className="flex items-center justify-between">
+                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">OCR API Key (AION_OCR_API_KEY)</label>
+              </div>
+              <div className="relative">
+                <input
+                  type={showOcrApiKey ? "text" : "password"}
+                  value={settings.AION_OCR_API_KEY || ""}
+                  onChange={(e) => handleUpdate('AION_OCR_API_KEY', e.target.value)}
+                  placeholder="Enter OCR API Key"
+                  className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl pl-4 pr-10 py-2.5 text-sm text-gray-200 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowOcrApiKey(!showOcrApiKey)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors cursor-pointer"
+                >
+                  {showOcrApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+            <ConfigInput
+              label="OCR Max Tokens (AION_OCR_MAX_TOKENS)"
+              value={settings.AION_OCR_MAX_TOKENS || ""}
+              onChange={(v) => handleUpdate('AION_OCR_MAX_TOKENS', v)}
+            />
+            <ConfigInput
+              label="OCR Timeout in Seconds (AION_OCR_TIMEOUT)"
+              value={settings.AION_OCR_TIMEOUT || ""}
+              onChange={(v) => handleUpdate('AION_OCR_TIMEOUT', v)}
+            />
+            <ConfigInput
+              label="OCR Max Image Bytes (AION_OCR_MAX_IMAGE_BYTES)"
+              value={settings.AION_OCR_MAX_IMAGE_BYTES || ""}
+              onChange={(v) => handleUpdate('AION_OCR_MAX_IMAGE_BYTES', v)}
+            />
           </div>
         </section>
 

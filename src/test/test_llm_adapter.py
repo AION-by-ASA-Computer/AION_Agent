@@ -22,6 +22,28 @@ def test_resolve_llm_endpoint_ok(monkeypatch):
     assert model == "test-model"
 
 
+def test_normalize_litellm_provider_remote_vllm():
+    from src.runtime.llm_adapter import normalize_litellm_provider
+
+    assert normalize_litellm_provider("vllm", "http://localhost:8000/v1") == "openai"
+    assert normalize_litellm_provider("vllm", "") == "vllm"
+    assert normalize_litellm_provider("openai", "http://x/v1") == "openai"
+
+
+def test_lite_llm_wrapper_remotes_vllm_provider(monkeypatch):
+    monkeypatch.delenv("AION_LLM_ADAPTER", raising=False)
+
+    wrapper = LiteLLMChatGeneratorWrapper(
+        model="vllm/AIONQ35-35-Q8B",
+        api_base_url="http://localhost:8000/v1",
+        api_key=Secret.from_token("test-key"),
+        timeout=60.0,
+    )
+
+    assert wrapper.provider == "openai"
+    assert wrapper.generator.model == "openai/AIONQ35-35-Q8B"
+
+
 def test_lite_llm_wrapper_basic(monkeypatch):
     monkeypatch.delenv("AION_LLM_ADAPTER", raising=False)
 

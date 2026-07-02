@@ -256,12 +256,13 @@ Logs go only to stdout (no file logging). Uvicorn and FastAPI loggers are propag
 
 The `opik_setup.py` module manages the initialization of the Opik SDK:
 
-1. Reads `OPIK_URL_OVERRIDE` and `OPIK_PROJECT_NAME` from environment variables
-2. Automatically sets a placeholder for `OPIK_API_KEY` if not configured (required for client validation in self-hosted mode)
-3. Initializes the Opik client with `Opik()`
-4. Exports `OPIK_AVAILABLE` (bool) for graceful degradation
+1. Checks if `AION_OPIK_ENABLED` is set to `1` (or `true` / `yes` / `on`). If not enabled, it completely bypasses Opik client initialization and sets `OPIK_AVAILABLE` to `False`.
+2. Reads `OPIK_URL_OVERRIDE` and `OPIK_PROJECT_NAME` from environment variables.
+3. Automatically sets a placeholder for `OPIK_API_KEY` if not configured (required for client validation in self-hosted mode).
+4. Initializes the Opik client with `Opik()`.
+5. Exports `OPIK_AVAILABLE` (bool) for graceful degradation.
 
-If the SDK is not installed or the server is unreachable, `OPIK_AVAILABLE` becomes `False` and no requests fail — the application continues normally.
+If `AION_OPIK_ENABLED=0`, the SDK is not installed, or the server is unreachable, `OPIK_AVAILABLE` becomes `False` and no requests fail — the application continues normally without attempting connections.
 
 ### Prompt Library
 
@@ -337,6 +338,7 @@ Opik wrappers are applied at runtime in:
 
 | Variable | Default | Description |
 |---|---|---|
+| `AION_OPIK_ENABLED` | `0` | Enables/disables Opik (Comet ML) LLM telemetry tracing (0 = disabled, 1 = enabled) |
 | `OPIK_API_KEY` | `local-self-hosted-placeholder` | Opik API key (placeholder for self-hosted client validation) |
 | `OPIK_PROJECT_NAME` | `AION-Agent` | Opik project name |
 | `OPIK_URL_OVERRIDE` | `http://localhost:5173/api` | API endpoint of the self-hosted Opik instance |
