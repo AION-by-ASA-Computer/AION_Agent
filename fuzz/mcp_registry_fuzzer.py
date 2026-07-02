@@ -5,11 +5,11 @@ from __future__ import annotations
 import json
 import sys
 
-import atheris
-
 sys.path.insert(0, ".")
 
-with atheris.instrument_import():
+import atheris
+
+with atheris.instrument_imports():
     from src.mcp_registry_io import flatten_registry_document
 
 
@@ -23,11 +23,5 @@ def TestOneInput(data: bytes) -> None:
     flatten_registry_document(obj)
 
 
-def main() -> None:
-    atheris.instrument_all()
-    atheris.Setup(sys.argv, TestOneInput)
-    atheris.Fuzz()
-
-
-if __name__ == "__main__":
-    main()
+atheris.Setup(sys.argv, TestOneInput)
+atheris.Fuzz()

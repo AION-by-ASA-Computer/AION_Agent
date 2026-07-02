@@ -2,6 +2,7 @@
 # ClusterFuzzLite build script for Python fuzz targets (Atheris).
 
 cd "$SRC/aion-agent"
+export PYTHONPATH="$SRC/aion-agent${PYTHONPATH:+:$PYTHONPATH}"
 
 pip3 install --no-cache-dir atheris croniter pyyaml bcrypt
 

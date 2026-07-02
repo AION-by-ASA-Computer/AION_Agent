@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import sys
 
-import atheris
-
 sys.path.insert(0, ".")
 
-with atheris.instrument_import():
+import atheris
+
+with atheris.instrument_imports():
     from src.api.auth.api_key import parse_api_key
 
 
@@ -22,11 +22,5 @@ def TestOneInput(data: bytes) -> None:
     parse_api_key(text)
 
 
-def main() -> None:
-    atheris.instrument_all()
-    atheris.Setup(sys.argv, TestOneInput)
-    atheris.Fuzz()
-
-
-if __name__ == "__main__":
-    main()
+atheris.Setup(sys.argv, TestOneInput)
+atheris.Fuzz()

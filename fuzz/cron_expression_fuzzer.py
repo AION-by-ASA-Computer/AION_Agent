@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import sys
 
-import atheris
-
 sys.path.insert(0, ".")
 
-with atheris.instrument_import():
+import atheris
+
+with atheris.instrument_imports():
     from src.runtime.cron_expression import validate_cron_expression
 
 
@@ -25,11 +25,5 @@ def TestOneInput(data: bytes) -> None:
         pass
 
 
-def main() -> None:
-    atheris.instrument_all()
-    atheris.Setup(sys.argv, TestOneInput)
-    atheris.Fuzz()
-
-
-if __name__ == "__main__":
-    main()
+atheris.Setup(sys.argv, TestOneInput)
+atheris.Fuzz()
