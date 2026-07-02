@@ -1757,8 +1757,6 @@ async def _call_llm_advise_async(
             ChatMessage.from_user(user_prompt),
         ]
 
-
-
         res = await generator.run_async(messages=chat_messages)
         if not res or "replies" not in res or not res["replies"]:
             return "", "Nessuna risposta ricevuta dall'LLM"
@@ -1771,7 +1769,6 @@ async def _call_llm_advise_async(
         if content is None or len(content.strip()) < 50:
             # Fallback reasoning
             if isinstance(reasoning, str) and len(reasoning.strip()) > 100:
-
                 import re as _re
 
                 json_block = _re.search(
