@@ -2,11 +2,8 @@
 """Fuzz target for cron expression validation."""
 from __future__ import annotations
 
-import sys
-
-sys.path.insert(0, ".")
-
 import atheris
+import sys
 
 with atheris.instrument_imports():
     from src.runtime.cron_expression import validate_cron_expression

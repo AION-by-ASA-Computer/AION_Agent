@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 import sys
 
-sys.path.insert(0, ".")
-
 import atheris
 
 with atheris.instrument_imports():
