@@ -10,7 +10,7 @@
 # strict su lockfile non versionati).
 # `admin-ui/pnpm-lock.yaml` e' gitignored -> su fresh clone non c'e' lockfile,
 # quindi usiamo `pnpm install` (no `--frozen-lockfile`).
-ARG NODE_VERSION=22-alpine
+ARG NODE_VERSION=22-alpine@sha256:16e22a550f3863206a3f701448c45f7912c6896a62de43add43bb9c86130c3e2
 ARG PNPM_VERSION=10.30.1
 
 # ---------- deps ----------

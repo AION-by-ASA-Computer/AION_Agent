@@ -2,8 +2,8 @@
 # Per-session sandbox MCP worker (Podman/Docker sidecar)
 # Build: docker build -f docker/Dockerfile.sandbox -t aion/sandbox .
 
-ARG PYTHON_VERSION=3.13-slim
-ARG UV_VERSION=latest
+ARG PYTHON_VERSION=3.13-slim@sha256:eb43ff125d8d58d7449dcba7d336c23bcac412f526d861db493b9994d8010280
+ARG UV_VERSION=latest@sha256:3d868e555f8f1dbc324afa005066cd11e1053fc4743b9808ca8025283e65efa5
 
 FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv-bin
 
