@@ -742,6 +742,14 @@ export default function FirstSetupPage() {
                       />
                     </div>
                   </div>
+                ) :
+                  <>
+                    <div className="p-5 rounded-2xl border border-dashed border-[#262626] bg-[#0d0d0d]/30 text-center text-gray-500 text-sm">
+                      <Info className="w-8 h-8 mx-auto mb-2 text-gray-600" />
+                      OCR document processing is disabled. <br />
+                      The agent will run OCR MCP without vision-based text extraction but with basic extraction scripts.
+                    </div>
+                  </>}
               </div>
             )}
 

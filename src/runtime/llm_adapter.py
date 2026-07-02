@@ -9,6 +9,25 @@ from typing import Optional, Tuple
 logger = logging.getLogger("aion.llm_generator")
 
 
+def normalize_litellm_provider(
+    provider: str, api_base_url: Optional[str] = None
+) -> str:
+    """
+    Map stored provider ids to LiteLLM routing names.
+
+    ``vllm`` in LiteLLM means in-process ``import vllm`` (local GPU). Remote
+    OpenAI-compatible vLLM servers must use ``openai`` (or ``hosted_vllm``)
+    together with ``api_base_url``.
+    """
+    p = (provider or "openai").strip().lower()
+    if p == "vllm" and (api_base_url or "").strip():
+        logger.debug(
+            "Remapping LiteLLM provider vllm -> openai for remote api_base_url"
+        )
+        return "openai"
+    return p
+
+
 def resolve_llm_credentials() -> Tuple[str, str, str]:
     """
     Returns (api_url, model_name, api_key).
