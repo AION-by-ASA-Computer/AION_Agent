@@ -42,7 +42,7 @@ export default function FirstSetupPage() {
     api_key: "",
     timeout: 120,
     max_chat_tokens: 8192,
-    thinking_token_budget: 0,
+    thinking_token_budget: 12000,
   });
   const [showLlmKey, setShowLlmKey] = useState(false);
 
@@ -65,6 +65,7 @@ export default function FirstSetupPage() {
     max_image_bytes: 20971520,
   });
   const [showOcrKey, setShowOcrKey] = useState(false);
+  const [ocrEnabled, setOcrEnabled] = useState(false);
 
   // --- Step 4: Web Search State ---
   const [searchForm, setSearchForm] = useState({
@@ -120,7 +121,7 @@ export default function FirstSetupPage() {
       display_name: "OpenAI GPT-4o",
       model_name: "gpt-4o",
       max_chat_tokens: 8192,
-      thinking_token_budget: 0,
+      thinking_token_budget: 12000,
     };
     if (provider === "anthropic") {
       defaults = {
@@ -215,12 +216,12 @@ export default function FirstSetupPage() {
           AION_EMBEDDING_URL: embForm.url,
           AION_EMBEDDINGS_API_KEY: embForm.api_key,
           // OCR
-          AION_OCR_BASE_URL: ocrForm.base_url,
-          AION_OCR_MODEL: ocrForm.model,
-          AION_OCR_API_KEY: ocrForm.api_key,
-          AION_OCR_MAX_TOKENS: String(ocrForm.max_tokens),
-          AION_OCR_TIMEOUT: String(ocrForm.timeout),
-          AION_OCR_MAX_IMAGE_BYTES: String(ocrForm.max_image_bytes),
+          AION_OCR_BASE_URL: ocrEnabled ? ocrForm.base_url : "",
+          AION_OCR_MODEL: ocrEnabled ? ocrForm.model : "",
+          AION_OCR_API_KEY: ocrEnabled ? ocrForm.api_key : "",
+          AION_OCR_MAX_TOKENS: ocrEnabled ? String(ocrForm.max_tokens) : "",
+          AION_OCR_TIMEOUT: ocrEnabled ? String(ocrForm.timeout) : "",
+          AION_OCR_MAX_IMAGE_BYTES: ocrEnabled ? String(ocrForm.max_image_bytes) : "",
           // Web Search
           AION_WEB_SEARCH_TAVILY_ENABLED: searchForm.tavily_enabled ? "1" : "0",
           AION_TAVILY_API_KEY: searchForm.tavily_key,
@@ -540,10 +541,21 @@ export default function FirstSetupPage() {
                     <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Thinking Token Budget (AION_THINKING_TOKEN_BUDGET)</label>
                     <input
                       type="number"
-                      value={llmForm.thinking_token_budget}
-                      onChange={(e) => setLlmForm((prev) => ({ ...prev, thinking_token_budget: parseInt(e.target.value) || 0 }))}
+                      min={0}
+                      value={llmForm.thinking_token_budget ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val === "") {
+                          setLlmForm((prev) => ({ ...prev, thinking_token_budget: "" as any }));
+                          return;
+                        }
+                        const parsed = parseInt(val, 10);
+                        if (!isNaN(parsed)) {
+                          setLlmForm((prev) => ({ ...prev, thinking_token_budget: Math.max(0, parsed) }));
+                        }
+                      }}
                       className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. 1024 (0 to disable)"
+                      placeholder="e.g. 12000 (0 to disable)"
                     />
                   </div>
                 </div>
@@ -972,7 +984,7 @@ export default function FirstSetupPage() {
                       <textarea
                         value={policyYaml}
                         onChange={(e) => setPolicyYaml(e.target.value)}
-                        rows={10}
+                        rows={20}
                         readOnly
                         className="w-full bg-[#030303] border border-[#222] rounded-xl p-4 text-xs font-mono text-amber-400/90 focus:border-amber-500/40 outline-none transition-all leading-relaxed"
                       />
@@ -1029,10 +1041,10 @@ export default function FirstSetupPage() {
                     <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">OCR Processing</span>
                     <div className="flex flex-col">
                       <span className="font-bold text-white">
-                        {ocrForm.base_url ? ocrForm.base_url : "Not Configured"}
+                        {ocrEnabled && ocrForm.base_url ? ocrForm.base_url : "Disabled"}
                       </span>
                       <span className="text-xs text-gray-400 font-mono">
-                        Model: {ocrForm.model} | Key: {ocrForm.api_key ? "••••••••" : "None"}
+                        {ocrEnabled ? `Model: ${ocrForm.model} | Key: ${ocrForm.api_key ? "••••••••" : "None"}` : "OCR capabilities will be inactive."}
                       </span>
                     </div>
                   </div>
