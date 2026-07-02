@@ -162,6 +162,7 @@ jobs:
       - name: Sync config before image build
         run: |
           uv venv .venv-ci
+          source .venv-ci/bin/activate
           uv pip install -r requirements.txt
           uv run python scripts/setup_core.py --non-interactive --skip-promo-playwright
 
