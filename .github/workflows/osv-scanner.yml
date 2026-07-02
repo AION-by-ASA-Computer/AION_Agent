@@ -14,13 +14,16 @@ on:
 permissions:
   contents: read
   actions: read
-  security-events: write
 
 jobs:
   # PR delta scan — uploads SARIF to Code Scanning (must run on pull_request).
   osv-scan:
     name: OSV-Scanner PR
     if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
 
   # Full scan on main / weekly — logs + fail-on-vuln; no SARIF upload (avoids a
@@ -28,6 +31,10 @@ jobs:
   osv-scan-scheduled:
     name: OSV-Scanner Scheduled
     if: github.event_name == 'schedule' || github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
     with:
       upload-sarif: false
