@@ -35,7 +35,11 @@ def _require_session() -> str:
 def _is_advanced_ocr_enabled() -> bool:
     base = os.environ.get("AION_OCR_BASE_URL", "").strip()
     key = os.environ.get("AION_OCR_API_KEY", "").strip()
-    logger.info(f"OCR base: {base}, key: {key}")
+    logger.info(
+        "OCR configuration loaded (base_set=%s, api_key_set=%s)",
+        bool(base),
+        bool(key and key != "EMPTY"),
+    )
     if not base or not key or key == "EMPTY":
         return False
     return True
