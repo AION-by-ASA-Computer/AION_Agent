@@ -2632,12 +2632,82 @@ async def get_stats():
 
     mcp_count = len(mcp_manager._registry)
 
+    # Calculate scheduled jobs and api keys
+    jobs_total = 0
+    jobs_enabled = 0
+    api_keys_total = 0
+    api_keys_by_scope = {}
+    model_usage = {}
+    projects_total = 0
+
+    from ..data.models import Conversation, LlmProvider, ApiKey, ScheduledJob, SqlQueryProject
+    from sqlalchemy import select
+
+    try:
+        async with get_async_session_maker()() as session:
+            # 1) Get all providers to resolve slugs to display names
+            providers_query = select(LlmProvider)
+            providers = (await session.execute(providers_query)).scalars().all()
+            provider_names = {p.slug: p.display_name for p in providers}
+            default_provider = next((p for p in providers if p.is_default), None)
+            default_name = default_provider.display_name if default_provider else (default_provider.slug if default_provider else "Default Model")
+
+            # 2) Get all conversations metadata
+            conv_query = select(Conversation.metadata_json)
+            convs = (await session.execute(conv_query)).scalars().all()
+
+            for meta_str in convs:
+                try:
+                    meta = json.loads(meta_str or "{}")
+                    prov_slug = meta.get("llm_provider_name")
+                    if prov_slug and prov_slug in provider_names:
+                        name = provider_names[prov_slug]
+                    elif default_provider:
+                        name = default_name
+                    else:
+                        name = "Default Model"
+                    model_usage[name] = model_usage.get(name, 0) + 1
+                except Exception:
+                    name = default_name if default_provider else "Default Model"
+                    model_usage[name] = model_usage.get(name, 0) + 1
+
+            # 3) Get scheduled jobs
+            jobs_rows = (await session.execute(select(ScheduledJob))).scalars().all()
+            jobs_total = len(jobs_rows)
+            jobs_enabled = sum(1 for j in jobs_rows if j.enabled)
+
+            # 4) Get API keys and group by scopes
+            keys_rows = (await session.execute(select(ApiKey))).scalars().all()
+            api_keys_total = len(keys_rows)
+            for k in keys_rows:
+                scopes = json.loads(k.scopes_json or "[]")
+                if not scopes:
+                    api_keys_by_scope["no_scopes"] = api_keys_by_scope.get("no_scopes", 0) + 1
+                for s in scopes:
+                    api_keys_by_scope[s] = api_keys_by_scope.get(s, 0) + 1
+
+            # 5) Get SQL query projects count
+            projects_rows = (await session.execute(select(SqlQueryProject))).scalars().all()
+            projects_total = len(projects_rows)
+    except Exception as e:
+        logger.exception("Failed to query database stats: %s", e)
+
     return {
         "active_profiles": len(profiles),
         "total_skills": skills_count,
         "installed_mcp": mcp_count,
         "security_score": "100%",  # Placeholder for future dynamic score
         "recent_scans": 5,  # Placeholder
+        "model_usage": model_usage,
+        "total_projects": projects_total,
+        "cron_jobs": {
+            "total": jobs_total,
+            "enabled": jobs_enabled,
+        },
+        "api_keys": {
+            "total": api_keys_total,
+            "by_scope": api_keys_by_scope,
+        }
     }
 
 
