@@ -49,6 +49,7 @@ def init_engine(url: str | None = None) -> AsyncEngine:
             try:
                 cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.execute("PRAGMA synchronous=NORMAL")
+                cursor.execute("PRAGMA foreign_keys=ON")
             except Exception as e:
                 logger.warning("Failed to configure SQLite pragmas: %s", e)
             finally:

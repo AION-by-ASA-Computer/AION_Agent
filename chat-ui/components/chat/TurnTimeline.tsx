@@ -27,10 +27,10 @@ type Props = {
   token?: string | null;
   isPlanArtifact?: (art: { identifier: string; type?: string; title?: string }, buffer: string) => boolean;
   renderMarkdownLink?: React.ComponentProps<typeof ReactMarkdown>["components"] extends infer C
-    ? C extends { a?: infer A }
-      ? A
-      : never
-    : never;
+  ? C extends { a?: infer A }
+  ? A
+  : never
+  : never;
   formatTextWithCitations?: (text: string) => string;
 };
 
@@ -101,24 +101,60 @@ export function TurnTimeline({
             />
           );
         }
-        if (seg.kind === "tool" && toolsView === "hidden") {
-          if (seg.status === "running") {
+        if (seg.kind === "tool") {
+          if (seg.name === "thinking") {
+            if (seg.status === "running") {
+              return (
+                <div
+                  key={seg.id}
+                  className="rounded-lg border border-border/50 bg-muted/25 px-3 py-2 text-xs"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <ShimmerText className="text-xs">
+                    {t("chat.agent_status.working")}
+                  </ShimmerText>
+                </div>
+              );
+            }
+            return null;
+          }
+
+          if ((seg as any).masked === "minimum") {
             return (
-              <div
+              <AssistantToolStepBlock
                 key={seg.id}
-                className="rounded-lg border border-border/50 bg-muted/25 px-3 py-2 text-xs"
-                role="status"
-                aria-live="polite"
-              >
-                <ShimmerText className="text-xs">
-                  {t("chat.tool.running", { name: seg.name })}
-                </ShimmerText>
-              </div>
+                name={seg.name}
+                input={seg.input}
+                output={seg.output}
+                isError={seg.isError}
+                status={seg.status}
+                toolsView={toolsView}
+                tokens_in={seg.tokens_in}
+                tokens_out={seg.tokens_out}
+                masked={(seg as any).masked}
+              />
             );
           }
-          return null;
-        }
-        if (seg.kind === "tool" && toolsView !== "hidden") {
+
+          if (toolsView === "hidden") {
+            if (seg.status === "running") {
+              return (
+                <div
+                  key={seg.id}
+                  className="rounded-lg border border-border/50 bg-muted/25 px-3 py-2 text-xs"
+                  role="status"
+                  aria-live="polite"
+                >
+                  <ShimmerText className="text-xs">
+                    {t("chat.tool.running", { name: seg.name })}
+                  </ShimmerText>
+                </div>
+              );
+            }
+            return null;
+          }
+
           return (
             <AssistantToolStepBlock
               key={seg.id}
@@ -136,9 +172,9 @@ export function TurnTimeline({
         if (seg.kind === "artifact") {
           const planCheck = isPlanArtifact
             ? isPlanArtifact(
-                { identifier: seg.id, type: seg.artType, title: seg.title },
-                seg.buffer,
-              )
+              { identifier: seg.id, type: seg.artType, title: seg.title },
+              seg.buffer,
+            )
             : false;
           if (planCheck) return null;
           return (
@@ -175,9 +211,9 @@ export function TurnTimeline({
         return null;
       })}
       {streaming &&
-      segments.length > 0 &&
-      lastSeg?.kind === "reasoning" &&
-      !segments.some((s) => s.kind === "tool" && s.status === "running") ? (
+        segments.length > 0 &&
+        lastSeg?.kind === "reasoning" &&
+        !segments.some((s) => s.kind === "tool" && s.status === "running") ? (
         <ShimmerText className="mt-1 text-sm">{t("chat.agent_status.working")}</ShimmerText>
       ) : null}
     </div>

@@ -960,6 +960,41 @@ async def get_agent(
     from .agent_profile import ProfileNotFoundError
 
     try:
+        if user_id and user_id != "default":
+            from sqlalchemy import select
+            from .data.engine import get_async_session_maker
+            from .data.models import UserProfileAccess
+
+            async with get_async_session_maker()() as session:
+                q = select(UserProfileAccess.profile_slug).where(
+                    UserProfileAccess.user_id == user_id
+                )
+                res = await session.execute(q)
+                allowed_slugs = [r[0] for r in res.all()]
+
+            if allowed_slugs:
+                try:
+                    resolved_p = profile_manager.resolve_profile(profile_name)
+                    resolved_slug = resolved_p.slug
+                except ProfileNotFoundError:
+                    resolved_slug = profile_name
+
+                if resolved_slug not in allowed_slugs:
+                    if resolved_slug == "aion_std":
+                        profile_name = allowed_slugs[0]
+                        logger.info(
+                            "Default profile aion_std not allowed. Falling back to %s for user %s",
+                            profile_name,
+                            user_id,
+                        )
+                    else:
+                        logger.warning(
+                            "User %s denied access to profile %s",
+                            user_id,
+                            resolved_slug,
+                        )
+                        raise ProfileNotFoundError(profile_name, allowed_slugs)
+
         profile = profile_manager.resolve_profile(profile_name)
     except ProfileNotFoundError:
         raise
