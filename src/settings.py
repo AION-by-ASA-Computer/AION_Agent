@@ -95,10 +95,6 @@ class AionSettings(BaseSettings):
     otel_enabled: bool = Field(
         False, description="Enable OpenTelemetry tracing/spans for agent turns."
     )
-    show_tool_calls: str = Field(
-        "complete",
-        description="Allow tool/MCP call visibility in the user interface: 'null' (hidden), 'minimum' (name only), or 'complete' (full parameters/results).",
-    )
 
     # Web search
     web_search_require_client_opt_in: bool = Field(
@@ -169,20 +165,6 @@ class AionSettings(BaseSettings):
             return None
         return v
 
-    @field_validator("show_tool_calls", mode="before")
-    @classmethod
-    def _coerce_show_tool_calls(cls, v):
-        if v is None:
-            return "null"
-        if isinstance(v, bool):
-            return "complete" if v else "null"
-        s = str(v).strip().lower()
-        if s in ("0", "false", "none", "null", "no", "off"):
-            return "null"
-        if s in ("1", "true", "yes", "on", "complete", "full"):
-            return "complete"
-        if s in ("minimum", "min"):
-            return "minimum"
         return "complete"
 
 

@@ -33,7 +33,7 @@ async def test_build_turn_context_minimal(monkeypatch):
     pipeline._format_attachments_block = MagicMock(return_value="")
     pipeline._augment_user_input = AsyncMock(return_value="augmented hello")
     pipeline._apply_context_compression = AsyncMock(
-        side_effect=lambda msgs, force=False: (list(msgs), False, False)
+        side_effect=lambda msgs, force=False, **kwargs: (list(msgs), False, False)
     )
 
     _ltm = SimpleNamespace(
@@ -115,3 +115,42 @@ def test_turn_context_dataclass_fields():
         effective_agent_mode="chat",
     )
     assert ctx.qm_profile_slug == "aion_std"
+
+
+def test_format_attachments_block_separation():
+    from src.agent_pipeline import AgentPipeline
+
+    pipeline = AgentPipeline(
+        agent=None,
+        session_id="sess-1",
+        profile_name="aion_std",
+    )
+
+    attachments = [
+        {
+            "relative_path": "uploads/1_file1.txt",
+            "original_name": "file1.txt",
+            "mime": "text/plain",
+        },
+        {
+            "relative_path": "uploads/2_file2.txt",
+            "original_name": "file2.txt",
+            "mime": "text/plain",
+        },
+    ]
+    turn_attachments = [
+        {
+            "relative_path": "uploads/2_file2.txt",
+            "original_name": "file2.txt",
+            "mime": "text/plain",
+        }
+    ]
+
+    block = pipeline._format_attachments_block(attachments, turn_attachments)
+
+    assert "Newly uploaded files in this prompt:" in block
+    assert "uploads/2_file2.txt" in block
+    assert "Historical files available from previous turns:" in block
+    assert "uploads/1_file1.txt" in block
+    assert "IMPORTANT: A new document has been uploaded in this prompt." in block
+    assert "NOTE: The historical files listed above are available" in block
