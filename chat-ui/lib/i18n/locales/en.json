@@ -245,6 +245,11 @@
       "select": "Select Profile",
       "none": "No profile"
     },
+    "model": {
+      "label": "Model",
+      "select": "Select Model",
+      "switch": "Switch Model"
+    },
     "sql_project": {
       "hint": "Active SQL / navigation project (click to open panel). New messages use this project."
     },

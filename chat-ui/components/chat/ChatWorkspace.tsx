@@ -3645,7 +3645,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               >
                                 <div className="flex items-center gap-2">
                                   <Sparkles size={12} className={selectedProvider ? "text-primary" : "text-muted-foreground"} aria-hidden />
-                                  <span>{selectedProvider ? (llmProviders.find((p) => p.slug === selectedProvider)?.display_name || selectedProvider) : "Model"}</span>
+                                  <span>{selectedProvider ? (llmProviders.find((p) => p.slug === selectedProvider)?.display_name || selectedProvider) : t("chat.model.label")}</span>
                                 </div>
                                 <ChevronRight size={12} className="shrink-0" aria-hidden />
                               </button>
@@ -3658,13 +3658,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                     className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                   >
                                     <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
-                                      {selectedProvider ? "Switch Model" : "Select Model"}
+                                      {selectedProvider ? t("chat.model.switch") : t("chat.model.select")}
                                     </div>
                                     <div className="space-y-0.5">
                                       {providersLoading ? (
                                         <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
                                           <div className="w-3 h-3 border-2 border-border border-t-primary rounded-full animate-spin" />
-                                          Loading...
+                                          {t("integrationsPage.loading")}
                                         </div>
                                       ) : (
                                         <>

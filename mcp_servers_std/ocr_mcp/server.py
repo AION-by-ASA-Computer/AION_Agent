@@ -80,7 +80,7 @@ def _extract_image_via_pytesseract(path) -> str:
 async def _ocr_via_api_async(image_bytes: bytes, mime: str, instruction: str, client: httpx.AsyncClient | None = None) -> str:
     import httpx
     base = os.environ.get("AION_OCR_BASE_URL", "http://localhost:8000/ocr/v1").rstrip("/")
-    model = os.environ.get("AION_OCR_MODEL", "zai-org/GLM-OCR")
+    model = os.environ.get("AION_OCR_MODEL", "")
     key = os.environ.get("AION_OCR_API_KEY", "EMPTY")
     b64 = base64.standard_b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime};base64,{b64}"

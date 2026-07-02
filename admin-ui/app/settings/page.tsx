@@ -631,6 +631,7 @@ export default function SettingsPage() {
                       onChange={(e) => setProviderForm(p => ({ ...p, api_key: e.target.value }))}
                       className="flex-1 bg-[#0d0d0d] border border-[#262626] rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all font-mono"
                       placeholder="sk-... (required, encrypted at rest)"
+                      autoComplete="new-password"
                     />
                     <button
                       onClick={() => setShowApiKeyField(!showApiKeyField)}
@@ -933,6 +934,7 @@ export default function SettingsPage() {
                   onChange={(e) => handleUpdate('AION_EMBEDDINGS_API_KEY', e.target.value)}
                   placeholder="Enter Embedding API Key"
                   className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl pl-4 pr-10 py-2.5 text-sm text-gray-200 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono"
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"
@@ -979,7 +981,7 @@ export default function SettingsPage() {
                 label="OCR Model (AION_OCR_MODEL)"
                 value={settings.AION_OCR_MODEL || ""}
                 onChange={(v) => handleUpdate('AION_OCR_MODEL', v)}
-                description="Model identifier, e.g. zai-org/GLM-OCR"
+                description="Model identifier"
               />
               <div className="space-y-1.5 font-mono">
                 <div className="flex items-center justify-between">
@@ -992,6 +994,7 @@ export default function SettingsPage() {
                     onChange={(e) => handleUpdate('AION_OCR_API_KEY', e.target.value)}
                     placeholder="Enter OCR API Key"
                     className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl pl-4 pr-10 py-2.5 text-sm text-gray-200 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono"
+                    autoComplete="new-password"
                   />
                   <button
                     type="button"
