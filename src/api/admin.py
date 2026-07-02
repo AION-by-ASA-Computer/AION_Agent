@@ -1757,34 +1757,7 @@ async def _call_llm_advise_async(
             ChatMessage.from_user(user_prompt),
         ]
 
-        parsed_base = urlsplit(base)
-        redacted_netloc = parsed_base.netloc
-        if "@" in parsed_base.netloc:
-            userinfo, hostinfo = parsed_base.netloc.rsplit("@", 1)
-            if ":" in userinfo:
-                username, _ = userinfo.split(":", 1)
-                redacted_userinfo = f"{username}:***"
-            else:
-                redacted_userinfo = userinfo
-            redacted_netloc = f"{redacted_userinfo}@{hostinfo}"
-        safe_base = urlunsplit(
-            (
-                parsed_base.scheme,
-                redacted_netloc,
-                parsed_base.path,
-                parsed_base.query,
-                parsed_base.fragment,
-            )
-        )
 
-        _log.info(
-            "LiteLLM Advise: model=%s base=%s max_tokens=%d timeout=%.0fs prompt_chars=%d",
-            model,
-            safe_base,
-            max_tokens,
-            advise_timeout,
-            len(system_prompt) + len(user_prompt),
-        )
 
         res = await generator.run_async(messages=chat_messages)
         if not res or "replies" not in res or not res["replies"]:
@@ -1798,10 +1771,7 @@ async def _call_llm_advise_async(
         if content is None or len(content.strip()) < 50:
             # Fallback reasoning
             if isinstance(reasoning, str) and len(reasoning.strip()) > 100:
-                _log.info(
-                    "LLM: content vuoto, provo ad estrarre dal reasoning (%d caratteri)",
-                    len(reasoning),
-                )
+
                 import re as _re
 
                 json_block = _re.search(
