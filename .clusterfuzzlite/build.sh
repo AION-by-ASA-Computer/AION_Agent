@@ -6,7 +6,7 @@
 cd "$SRC/aion-agent"
 export PYTHONPATH="$SRC/aion-agent${PYTHONPATH:+:$PYTHONPATH}"
 
-pip3 install --no-cache-dir croniter pyyaml
+pip3 install --no-cache-dir --require-hashes -r requirements-fuzz.txt
 
 for fuzzer in $(find "$SRC/aion-agent/fuzz" -name '*_fuzzer.py'); do
   compile_python_fuzzer "$fuzzer"

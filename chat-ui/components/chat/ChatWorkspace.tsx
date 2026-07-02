@@ -3512,6 +3512,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         );
                         return [...prev, ...filtered];
                       });
+                      e.target.value = "";
                     }}
                   />
                   {/* Pulsante "+" con Menu di Allega File */}
