@@ -572,37 +572,92 @@ class AgentPipeline:
         self.agent_mode = (agent_mode or "normal").strip().lower()
 
     def _format_attachments_block(
-        self, attachments: Optional[List[Dict[str, Any]]]
+        self,
+        attachments: Optional[List[Dict[str, Any]]],
+        turn_attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         if not attachments:
             return ""
-        lines = [
-            "## Files available in the session (sandbox: write `workspace/*.py` + `sandbox_run_python_file` to run):"
-        ]
+
+        turn_paths = (
+            {a.get("relative_path") for a in turn_attachments}
+            if turn_attachments
+            else set()
+        )
+
+        new_files = []
+        old_files = []
+
         for a in attachments:
             rp = a.get("relative_path", "")
-            orp = a.get("original_relative_path", "")
-            on = a.get("original_name") or ""
-            mime = a.get("mime") or ""
-            extra = f" — `{on}`" if on else ""
-            lines.append(f"- `{rp}`{extra} ({mime})")
-            if orp and orp != rp:
-                lines.append(f"  alias: `{orp}`")
+            if rp in turn_paths:
+                new_files.append(a)
+            else:
+                old_files.append(a)
 
-        # If there are multiple files, add a strong prompt instruction to ensure the agent analyzes all of them
-        if len(attachments) > 1:
+        lines = [
+            "## Files available in the session sandbox (under `uploads/`, `derived/`, or `workspace/`):"
+        ]
+
+        if new_files:
+            lines.append("### Newly uploaded files in this prompt:")
+            for a in new_files:
+                rp = a.get("relative_path", "")
+                orp = a.get("original_relative_path", "")
+                on = a.get("original_name") or ""
+                mime = a.get("mime") or ""
+                extra = f" — `{on}`" if on else ""
+                lines.append(f"- `{rp}`{extra} ({mime})")
+                if orp and orp != rp:
+                    lines.append(f"  alias: `{orp}`")
             lines.append("")
-            lines.append(
-                "IMPORTANT: Multiple documents have been uploaded for this session. "
-                "You MUST read, analyze, and consider ALL of them in your response. "
-                "CRITICAL RULES:\n"
-                "- NEVER process documents in parallel\n"
-                "- ALWAYS process documents sequentially\n"
-                "- Call ocr_file on one document at a time\n"
-                "- Wait for the ocr_file call to complete before processing the next document\n"
-                "- Do not ignore any of the uploaded documents\n"
-                "Ensure you use your tools (like read_file, ocr, or custom scripts) to inspect all of them."
-            )
+
+        if old_files:
+            lines.append("### Historical files available from previous turns:")
+            for a in old_files:
+                rp = a.get("relative_path", "")
+                orp = a.get("original_relative_path", "")
+                on = a.get("original_name") or ""
+                mime = a.get("mime") or ""
+                extra = f" — `{on}`" if on else ""
+                lines.append(f"- `{rp}`{extra} ({mime})")
+                if orp and orp != rp:
+                    lines.append(f"  alias: `{orp}`")
+            lines.append("")
+
+        # Formatting context-aware instructions
+        if new_files:
+            if len(new_files) > 1:
+                lines.append(
+                    "IMPORTANT: Multiple new documents have been uploaded in this prompt. "
+                    "You MUST read, analyze, and consider ALL of these newly uploaded documents to answer the current request. "
+                    "CRITICAL RULES:\n"
+                    "- NEVER process documents in parallel\n"
+                    "- ALWAYS process documents sequentially by using OCR tool.\n"
+                    "- Call ocr_file on one document at a time\n"
+                    "- Wait for the ocr_file call to complete before processing the next document\n"
+                    "- Do not ignore any of these newly uploaded documents\n"
+                    "Ensure you use your tools (like read_file, ocr, or custom scripts) to inspect all of them."
+                )
+            else:
+                lines.append(
+                    "IMPORTANT: A new document has been uploaded in this prompt. "
+                    "You MUST read, analyze, and consider this document to answer the current request."
+                )
+
+            if old_files:
+                lines.append(
+                    "NOTE: The historical files listed above are available in your sandbox but were uploaded in previous turns. "
+                    "Do NOT read, analyze, or process these historical files unless the user's current prompt explicitly asks you to "
+                    "compare them, reference them, or analyze them."
+                )
+        else:
+            # No new files uploaded in this turn, but historical files exist
+            if old_files:
+                lines.append(
+                    "NOTE: The historical files listed above are available in your sandbox from previous turns. "
+                    "Do NOT read or process them unless the user's current prompt refers to them or asks you to perform an action on them."
+                )
 
         return "\n".join(lines) + "\n\n"
 
@@ -2770,54 +2825,7 @@ class AgentPipeline:
                                             include_attachments=False,
                                         )
 
-                                if _gs().show_tool_calls == "null":
-                                    et = evt.get("type")
-                                    if et == "tool_start":
-                                        masked_evt = {
-                                            "type": "tool_start",
-                                            "id": evt.get("id"),
-                                            "name": "thinking",
-                                            "input": {},
-                                        }
-                                        yield _track_sse(
-                                            {"type": "tool_event", "event": masked_evt}
-                                        )
-                                    elif et in ("tool_end", "tool_error"):
-                                        masked_evt = {
-                                            "type": "tool_end",
-                                            "id": evt.get("id"),
-                                            "name": "thinking",
-                                            "output": "",
-                                        }
-                                        yield _track_sse(
-                                            {"type": "tool_event", "event": masked_evt}
-                                        )
-                                elif _gs().show_tool_calls == "minimum":
-                                    et = evt.get("type")
-                                    if et == "tool_start":
-                                        masked_evt = {
-                                            "type": "tool_start",
-                                            "id": evt.get("id"),
-                                            "name": evt.get("name"),
-                                            "input": {},
-                                            "masked": "minimum",
-                                        }
-                                        yield _track_sse(
-                                            {"type": "tool_event", "event": masked_evt}
-                                        )
-                                    elif et in ("tool_end", "tool_error"):
-                                        masked_evt = {
-                                            "type": "tool_end",
-                                            "id": evt.get("id"),
-                                            "name": evt.get("name"),
-                                            "output": "",
-                                            "masked": "minimum",
-                                        }
-                                        yield _track_sse(
-                                            {"type": "tool_event", "event": masked_evt}
-                                        )
-                                else:
-                                    yield _track_sse(chunk)
+                                yield _track_sse(chunk)
 
                 drain_sec = float(os.getenv("AION_AGENT_DRAIN_TIMEOUT_SEC", "0"))
                 if stop_event.is_set() and stop_reason != "completed" and drain_sec > 0:

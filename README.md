@@ -82,10 +82,12 @@ Details: [docs/deployment/docker.md](docs/deployment/docker.md)
 Published on each [GitHub Release](https://github.com/AION-by-ASA-Computer/AION_Agent/releases). Pin a version in production:
 
 ```bash
-export AION_VERSION=0.1.0
+export AION_VERSION=1.0.0
 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
 ```
+
+For always-current dev/staging pulls, omit `AION_VERSION` (defaults to `latest` via `docker-compose.ghcr.yml`).
 
 See [docs/opensource/releases.md](docs/opensource/releases.md).
 
