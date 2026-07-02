@@ -25,7 +25,7 @@ jobs:
   build-push:
     name: Build and push ${{ matrix.image }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     permissions:
       contents: read
       packages: write
@@ -70,6 +70,8 @@ jobs:
 
       - name: Setup Docker Buildx
         uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4
+        with:
+          platforms: linux/amd64,linux/arm64
 
       - name: Log in to GHCR
         uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4 # v4
@@ -83,6 +85,7 @@ jobs:
         with:
           context: .
           file: ${{ matrix.file }}
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ matrix.image }}:${{ steps.ver.outputs.version }}
