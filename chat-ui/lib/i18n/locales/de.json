@@ -232,6 +232,11 @@
       "select": "Profil auswählen",
       "none": "Keine Profile"
     },
+    "model": {
+      "label": "Modell",
+      "select": "Modell auswählen",
+      "switch": "Modell wechseln"
+    },
     "edit": {
       "placeholder": "Nachricht bearbeiten...",
       "save_send": "Speichern & Senden",

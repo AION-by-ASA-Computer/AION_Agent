@@ -58,7 +58,7 @@ export default function FirstSetupPage() {
   // --- Step 3: OCR State ---
   const [ocrForm, setOcrForm] = useState({
     base_url: "",
-    model: "zai-org/GLM-OCR",
+    model: "",
     api_key: "",
     max_tokens: 8192,
     timeout: 120,
@@ -300,6 +300,49 @@ export default function FirstSetupPage() {
 
   const stepsOrder: Step[] = ["llm", "embeddings", "ocr", "search", "policy", "review"];
 
+  const handleNext = () => {
+    setError(null);
+    if (currentStep === "ocr" && ocrEnabled) {
+      if (!ocrForm.base_url.trim()) {
+        setError("OCR Base URL is required when OCR is enabled.");
+        return;
+      }
+      if (!ocrForm.base_url.trim().startsWith("http://") && !ocrForm.base_url.trim().startsWith("https://")) {
+        setError("OCR Base URL must start with http:// or https://");
+        return;
+      }
+      if (!ocrForm.model.trim()) {
+        setError("OCR Model is required when OCR is enabled.");
+        return;
+      }
+      if (!ocrForm.api_key.trim()) {
+        setError("OCR API Key is required when OCR is enabled.");
+        return;
+      }
+
+      // Max tokens validation
+      if (ocrForm.max_tokens <= 0) {
+        setError("OCR Max Tokens must be a positive integer.");
+        return;
+      }
+
+      // Timeout validation
+      if (ocrForm.timeout <= 0) {
+        setError("OCR Timeout must be a positive integer.");
+        return;
+      }
+
+      // Max image bytes validation
+      if (ocrForm.max_image_bytes <= 0) {
+        setError("OCR Max Image Bytes must be a positive integer.");
+        return;
+      }
+    }
+
+    const idx = stepsOrder.indexOf(currentStep);
+    setCurrentStep(stepsOrder[idx + 1]);
+  };
+
   // --- Render Steps ---
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-[#060606] text-white px-4 py-12">
@@ -341,10 +384,10 @@ export default function FirstSetupPage() {
                   <button
                     disabled
                     className={`w-8 h-8 rounded-full flex items-center justify-center border text-xs font-bold transition-all ${isActive
-                        ? "border-blue-500 bg-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
-                        : isCompleted
-                          ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
-                          : "border-neutral-800 bg-neutral-900 text-neutral-500"
+                      ? "border-blue-500 bg-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
+                      : isCompleted
+                        ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
+                        : "border-neutral-800 bg-neutral-900 text-neutral-500"
                       }`}
                   >
                     {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
@@ -448,6 +491,7 @@ export default function FirstSetupPage() {
                           onChange={(e) => setLlmForm((prev) => ({ ...prev, api_key: e.target.value }))}
                           className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
                           placeholder="Enter API key"
+                          autoComplete="new-password"
                         />
                         <button
                           type="button"
@@ -558,6 +602,7 @@ export default function FirstSetupPage() {
                         onChange={(e) => setEmbForm((prev) => ({ ...prev, api_key: e.target.value }))}
                         className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
                         placeholder="Enter API key"
+                        autoComplete="new-password"
                       />
                       <button
                         type="button"
@@ -630,7 +675,7 @@ export default function FirstSetupPage() {
                         value={ocrForm.model}
                         onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
                         className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        placeholder="e.g. zai-org/GLM-OCR"
+                        placeholder=""
                       />
                     </div>
 
@@ -643,6 +688,7 @@ export default function FirstSetupPage() {
                           onChange={(e) => setOcrForm((prev) => ({ ...prev, api_key: e.target.value }))}
                           className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
                           placeholder="Enter API key"
+                          autoComplete="new-password"
                         />
                         <button
                           type="button"
@@ -731,6 +777,7 @@ export default function FirstSetupPage() {
                             onChange={(e) => setSearchForm((prev) => ({ ...prev, tavily_key: e.target.value }))}
                             className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-2.5 text-sm text-gray-200 focus:border-cyan-500/50 outline-none transition-all font-mono"
                             placeholder="tvly-..."
+                            autoComplete="new-password"
                           />
                           <button
                             type="button"
@@ -774,6 +821,7 @@ export default function FirstSetupPage() {
                             onChange={(e) => setSearchForm((prev) => ({ ...prev, brave_key: e.target.value }))}
                             className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-2.5 text-sm text-gray-200 focus:border-cyan-500/50 outline-none transition-all font-mono"
                             placeholder="BS..."
+                            autoComplete="new-password"
                           />
                           <button
                             type="button"
@@ -884,8 +932,8 @@ export default function FirstSetupPage() {
                         type="button"
                         onClick={() => handleTemplateChange("dev")}
                         className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all ${policyTemplate === "dev"
-                            ? "bg-amber-500/5 border-amber-500/30 text-amber-300"
-                            : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
+                          ? "bg-amber-500/5 border-amber-500/30 text-amber-300"
+                          : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
                           }`}
                       >
                         <div className="flex items-center gap-2 font-bold text-sm">
@@ -901,8 +949,8 @@ export default function FirstSetupPage() {
                         type="button"
                         onClick={() => handleTemplateChange("example")}
                         className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all ${policyTemplate === "example"
-                            ? "bg-amber-500/5 border-amber-500/30 text-amber-300"
-                            : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
+                          ? "bg-amber-500/5 border-amber-500/30 text-amber-300"
+                          : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
                           }`}
                       >
                         <div className="flex items-center gap-2 font-bold text-sm">
@@ -925,6 +973,7 @@ export default function FirstSetupPage() {
                         value={policyYaml}
                         onChange={(e) => setPolicyYaml(e.target.value)}
                         rows={10}
+                        readOnly
                         className="w-full bg-[#030303] border border-[#222] rounded-xl p-4 text-xs font-mono text-amber-400/90 focus:border-amber-500/40 outline-none transition-all leading-relaxed"
                       />
                     </div>
@@ -1042,6 +1091,7 @@ export default function FirstSetupPage() {
               <button
                 type="button"
                 onClick={() => {
+                  setError(null);
                   const idx = stepsOrder.indexOf(currentStep);
                   setCurrentStep(stepsOrder[idx - 1]);
                 }}
@@ -1056,10 +1106,7 @@ export default function FirstSetupPage() {
             {currentStep !== "review" ? (
               <button
                 type="button"
-                onClick={() => {
-                  const idx = stepsOrder.indexOf(currentStep);
-                  setCurrentStep(stepsOrder[idx + 1]);
-                }}
+                onClick={handleNext}
                 className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95 cursor-pointer"
               >
                 Next <ChevronRight className="w-4 h-4" />

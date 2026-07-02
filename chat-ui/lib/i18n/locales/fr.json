@@ -232,6 +232,11 @@
       "select": "Sélectionner un Profil",
       "none": "Aucun profil"
     },
+    "model": {
+      "label": "Modèle",
+      "select": "Sélectionner le modèle",
+      "switch": "Changer de modèle"
+    },
     "edit": {
       "placeholder": "Modifier le message...",
       "save_send": "Sauvegarder et Envoyer",
