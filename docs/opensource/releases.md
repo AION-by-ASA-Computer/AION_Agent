@@ -84,6 +84,8 @@ When a GitHub Release is **published**, [`.github/workflows/release-images.yml`]
 
 Each image is tagged with **`X.Y.Z`** (from the release tag) and **`latest`**.
 
+Published platforms: **`linux/amd64`** and **`linux/arm64`** (Apple Silicon, ARM servers).
+
 **Production:** pin an explicit version, e.g. `AION_VERSION=1.0.0`. Do not rely on `latest` in production.
 
 ### Deploy from GHCR
