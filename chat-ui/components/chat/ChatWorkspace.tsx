@@ -2187,26 +2187,28 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       .then((p) => {
         setProfiles(p);
         if (p.length) {
-          const matched = p.find((x) => x.slug === profile || x.name === profile);
-          if (matched) {
-            setProfile(matched.slug || matched.name);
-          } else {
-            setProfile(p[0].slug || p[0].name);
-          }
+          setProfile((curr) => {
+            const matched = p.find((x) => x.slug === curr || x.name === curr);
+            if (matched) {
+              return matched.slug || matched.name;
+            }
+            return p[0].slug || p[0].name;
+          });
         }
       })
       .catch((e: unknown) => console.error("profiles fetch", e));
     queueMicrotask(() => {
       void refreshThreads().catch((e: unknown) => console.error("threads refresh", e));
     });
-  }, [userId, token, refreshThreads, profile]);
+  }, [userId, token, refreshThreads]);
 
   // Carica le preferenze di Thinking, Reasoning Effort e Profilo quando cambia conversationId
   useEffect(() => {
     if (!conversationId) return;
 
-    // Reset immediato a "aion_std" per le nuove chat / fallback
-    setProfile("aion_std");
+    // Reset immediato a "aion_std" (o primo profilo abilitato) per le nuove chat / fallback
+    const defaultProfile = profiles.some((x) => x.slug === "aion_std") ? "aion_std" : (profiles[0]?.slug || "aion_std");
+    setProfile(defaultProfile);
     setSqlQueryProject(readStoredSqlProject());
     setConversationTitle(null);
 
@@ -2270,7 +2272,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       .catch((err) => {
         console.debug("Could not fetch conversation details (new conversation):", err);
       });
-  }, [conversationId, userId, token]);
+  }, [conversationId, userId, token, profiles]);
 
   useEffect(() => {
     if (!conversationId) return;

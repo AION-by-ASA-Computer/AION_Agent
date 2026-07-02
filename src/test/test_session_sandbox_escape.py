@@ -17,12 +17,16 @@ class TestSessionSandboxEscapePolicy(unittest.TestCase):
             session_host_path=Path("/app/data/sessions/escape-test-1234"),
         )
         mount_args = [argv[i + 1] for i, a in enumerate(argv) if a == "-v"]
+        expected_prefix = (
+            f"{Path('/app/data/sessions/escape-test-1234').resolve()}:/session"
+        )
         for mount in mount_args:
             self.assertNotIn("/app/.env", mount)
             self.assertNotIn("aion.db", mount)
-            self.assertTrue(
-                mount.startswith("/app/data/sessions/escape-test-1234:/session")
-            )
+
+        session_mounts = [m for m in mount_args if ":/session" in m]
+        self.assertEqual(len(session_mounts), 1)
+        self.assertTrue(session_mounts[0].startswith(expected_prefix))
 
     def test_read_only_rootfs_and_no_new_privileges(self):
         argv = build_container_run_argv(
