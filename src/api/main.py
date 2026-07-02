@@ -490,12 +490,35 @@ async def chat_stop_compat(
     return {"ok": True, "session_id": session_id.strip()}
 
 
+async def get_allowed_profiles_for_user(user_id: Optional[str]) -> List[dict]:
+    from src.agent_profile import profile_manager
+    from src.data.engine import get_async_session_maker
+    from src.data.models import UserProfileAccess
+    from sqlalchemy import select
+
+    all_profiles = profile_manager.list_profiles()
+    if not user_id or user_id == "default":
+        return all_profiles
+
+    async with get_async_session_maker()() as session:
+        q = select(UserProfileAccess.profile_slug).where(
+            UserProfileAccess.user_id == user_id
+        )
+        res = await session.execute(q)
+        allowed_slugs = [r[0] for r in res.all()]
+
+    if not allowed_slugs:
+        return all_profiles
+
+    return [p for p in all_profiles if p.get("slug") in allowed_slugs]
+
+
 @app.get("/profiles")
 async def profiles_list_compat(
     _auth: ChatAuthIdentity = Depends(require_chat_auth),
 ):
     """Compat: alcuni client chiamano /profiles invece di /admin/profiles."""
-    return await admin_list_profiles()
+    return await get_allowed_profiles_for_user(_auth.user_row_id)
 
 
 @app.get("/debug/prompt/{profile_name}")

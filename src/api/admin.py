@@ -336,9 +336,7 @@ async def investigate_code(path: str, profile: str = "Security Officer"):
     Triggers an LLM-based investigation of a specific file using a selectable profile.
     Returns a stream of tokens and reasoning.
     """
-
-    logger.info(f"QUI VAAA")
-
+    
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="File not found")
 
@@ -2844,6 +2842,11 @@ class UserUpdate(BaseModel):
     must_change_password: Optional[bool] = None
 
 
+class UserProfilesUpdate(BaseModel):
+    allowed_profiles: List[str]
+
+
+
 @router.get("/users")
 async def list_users():
     """List all users in the unified database."""
@@ -2923,12 +2926,58 @@ async def update_user(user_id: str, body: UserUpdate):
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str):
     """Delete a user."""
-    from ..data.models import User
+    from ..data.models import User, UserProfileAccess
 
     async with get_async_session_maker()() as session:
         await session.execute(delete(User).where(User.id == user_id))
+        await session.execute(delete(UserProfileAccess).where(UserProfileAccess.user_id == user_id))
         await session.commit()
     return {"status": "success"}
+
+
+@router.get("/users/{user_id}/profiles")
+async def get_user_profiles(user_id: str):
+    """Get the list of profiles allowed for a user."""
+    from ..data.models import UserProfileAccess
+
+    async with get_async_session_maker()() as session:
+        q = select(UserProfileAccess.profile_slug).where(
+            UserProfileAccess.user_id == user_id
+        )
+        rows = (await session.execute(q)).scalars().all()
+        return {"allowed_profiles": list(rows)}
+
+
+@router.post("/users/{user_id}/profiles")
+async def update_user_profiles(user_id: str, body: UserProfilesUpdate):
+    """Update the list of profiles allowed for a user."""
+    from ..data.models import User, UserProfileAccess
+
+    async with get_async_session_maker()() as session:
+        # Check user exists
+        u = await session.get(User, user_id)
+        if not u:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # Clear existing access
+        await session.execute(
+            delete(UserProfileAccess).where(UserProfileAccess.user_id == user_id)
+        )
+
+        # Add new access rules
+        tenant_id = u.tenant_id or "default"
+        for slug in body.allowed_profiles:
+            new_access = UserProfileAccess(
+                tenant_id=tenant_id,
+                user_id=user_id,
+                profile_slug=slug,
+            )
+            session.add(new_access)
+
+        await session.commit()
+
+    return {"status": "success"}
+
 
 
 @router.get("/api-keys")

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Plus, Trash2, Edit2, Key, CheckCircle, Save, X, AlertTriangle } from "lucide-react";
+import { Users, Plus, Trash2, Edit2, Key, CheckCircle, Save, X, AlertTriangle, Shield } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { PageToast, ToastState } from "@/components/PageToast";
@@ -23,9 +23,28 @@ export default function UsersPage() {
   const [userToDelete, setUserToDelete] = useState<any>(null);
   const [deleting, setDeleting] = useState(false);
 
+  // Profiles access state
+  const [allProfiles, setAllProfiles] = useState<any[]>([]);
+  const [selectedProfiles, setSelectedProfiles] = useState<string[]>([]);
+  const [userForProfiles, setUserForProfiles] = useState<any | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
   useEffect(() => {
     fetchUsers();
+    fetchProfiles();
   }, []);
+
+  const fetchProfiles = async () => {
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/profiles`);
+      if (res.ok) {
+        const data = await res.json();
+        setAllProfiles(data || []);
+      }
+    } catch (err) {
+      console.error("Failed to fetch profiles", err);
+    }
+  };
 
   const fetchUsers = async () => {
     setLoading(true);
@@ -69,12 +88,12 @@ export default function UsersPage() {
     setLoading(true);
     try {
       const isEdit = editingUserId !== null;
-      const url = isEdit 
-        ? `${apiBase()}/admin/users/${editingUserId}` 
+      const url = isEdit
+        ? `${apiBase()}/admin/users/${editingUserId}`
         : `${apiBase()}/admin/users`;
-      
+
       const method = isEdit ? "PUT" : "POST";
-      
+
       const payload: any = {
         display_name: displayName,
         email: email
@@ -131,6 +150,51 @@ export default function UsersPage() {
       setToast({ message: "Errore durante l'eliminazione dell'utente: " + err.message, variant: "error" });
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const openProfileModal = async (user: any) => {
+    if (loading) return;
+    setLoading(true);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/users/${user.id}/profiles`);
+      if (!res.ok) throw new Error("Failed to fetch user profiles");
+      const data = await res.json();
+      setSelectedProfiles(data.allowed_profiles || []);
+      setUserForProfiles(user);
+      setIsProfileModalOpen(true);
+    } catch (err: any) {
+      setToast({ message: "Impossibile caricare i profili dell'utente: " + err.message, variant: "error" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeProfileModal = () => {
+    setIsProfileModalOpen(false);
+    setUserForProfiles(null);
+    setSelectedProfiles([]);
+  };
+
+  const saveUserProfiles = async () => {
+    if (!userForProfiles) return;
+    setLoading(true);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/users/${userForProfiles.id}/profiles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allowed_profiles: selectedProfiles })
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.detail || "Failed to save user profiles");
+      }
+      closeProfileModal();
+      setToast({ message: "Profili utente aggiornati con successo!", variant: "success" });
+    } catch (err: any) {
+      setToast({ message: err.message, variant: "error" });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -298,6 +362,13 @@ export default function UsersPage() {
                 </td>
                 <td className="px-6 py-4 text-right space-x-2">
                   <button
+                    onClick={() => openProfileModal(u)}
+                    title="Manage Profiles"
+                    className="p-2.5 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400 border border-purple-500/20 rounded-xl transition-all hover:border-purple-500/40 cursor-pointer inline-flex items-center justify-center mr-2"
+                  >
+                    <Users className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => openEditForm(u)}
                     title="Edit User"
                     className="p-2.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-xl transition-all hover:border-blue-500/40 cursor-pointer inline-flex items-center justify-center mr-2"
@@ -365,6 +436,104 @@ export default function UsersPage() {
               >
                 <Trash2 className="w-4 h-4" />
                 {deleting ? "Eliminazione in corso..." : "Elimina Utente"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {isProfileModalOpen && userForProfiles && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-[#1a1a1a] border border-white/10 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-white/10 flex justify-between items-center bg-white/5 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-purple-500/10 border border-purple-500/20 rounded-xl text-purple-400">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-white">Gestisci Profili Abilitati</h3>
+                  <p className="text-xs text-gray-400">
+                    Seleziona a quali profili ha accesso l'utente <b>{userForProfiles.identifier}</b>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={closeProfileModal}
+                className="p-2 text-gray-500 hover:text-white hover:bg-white/5 rounded-xl transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+              <div className="flex items-center justify-between gap-4 mb-2">
+                <p className="text-xs text-gray-400 italic">
+                  Di base, se nessun profilo viene selezionato, l'utente avrà accesso a tutti i profili.
+                </p>
+                {selectedProfiles.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedProfiles([])}
+                    className="text-xs font-bold text-purple-400 hover:text-purple-300 transition-colors cursor-pointer shrink-0"
+                  >
+                    Deseleziona tutti
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                {allProfiles.map((p) => {
+                  const isChecked = selectedProfiles.includes(p.slug);
+                  return (
+                    <label
+                      key={p.slug}
+                      className="flex items-start gap-3 p-3 bg-black/20 hover:bg-white/[0.02] border border-white/5 hover:border-white/10 rounded-xl transition-all cursor-pointer group"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedProfiles([...selectedProfiles, p.slug]);
+                          } else {
+                            setSelectedProfiles(selectedProfiles.filter((slug) => slug !== p.slug));
+                          }
+                        }}
+                        className="mt-1 accent-purple-500 cursor-pointer"
+                      />
+                      <div>
+                        <div className="text-sm font-bold text-white group-hover:text-purple-400 transition-colors">
+                          {p.name}
+                        </div>
+                        {p.description && (
+                          <div className="text-xs text-gray-500 mt-0.5">{p.description}</div>
+                        )}
+                        <div className="text-[10px] text-gray-600 font-mono mt-1">Slug: {p.slug}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+                {allProfiles.length === 0 && (
+                  <p className="text-sm text-gray-500 text-center py-4">Nessun profilo trovato nel sistema.</p>
+                )}
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-white/10 flex justify-end gap-3 bg-black/20 shrink-0">
+              <button
+                type="button"
+                onClick={closeProfileModal}
+                className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white border border-white/10 rounded-xl text-sm font-semibold transition-all cursor-pointer"
+              >
+                Annulla
+              </button>
+              <button
+                type="button"
+                onClick={saveUserProfiles}
+                disabled={loading}
+                className="px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-purple-500/20 cursor-pointer transform active:scale-98 disabled:opacity-50 flex items-center gap-2"
+              >
+                <Save className="w-4 h-4" /> Salva Configurazione
               </button>
             </div>
           </div>

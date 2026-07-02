@@ -678,3 +678,31 @@ class LlmProvider(Base):
     __table_args__ = (
         UniqueConstraint("tenant_id", "slug", name="uq_llm_provider_tenant_slug"),
     )
+
+
+class UserProfileAccess(Base):
+    """Mappa l'accesso di ogni utente ai soli profili selezionati."""
+
+    __tablename__ = "user_profile_access"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default", server_default="default"
+    )
+    profile_slug: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "tenant_id",
+            "profile_slug",
+            name="uq_user_profile_access",
+        ),
+    )
+
