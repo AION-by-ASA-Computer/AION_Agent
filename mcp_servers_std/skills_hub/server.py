@@ -35,23 +35,6 @@ mcp = FastMCP("AION Skills Hub")
 def _profile_allowed_skill_names() -> list[str] | None:
     """Limit search to skills on the active profile when slug is set on the MCP subprocess."""
     slug = (os.getenv("AION_CURRENT_PROFILE_SLUG") or "").strip()
-    if not slug:
-        return None
-    try:
-        from src.agent_profile import profile_manager
-
-        profile_manager.load_all()
-        prof = profile_manager.get_profile(slug)
-        if prof and prof.skills:
-            return list(prof.skills)
-    except Exception:
-        pass
-    return None
-
-
-def _profile_allowed_skill_names() -> list[str] | None:
-    """Limit search to skills on the active profile when slug is set on the MCP subprocess."""
-    slug = (os.getenv("AION_CURRENT_PROFILE_SLUG") or "").strip()
     session_id = os.getenv("AION_CHAT_SESSION_ID")
     if session_id:
         import sqlite3
@@ -81,8 +64,8 @@ def _profile_allowed_skill_names() -> list[str] | None:
 
         profile_manager.load_all()
         prof = profile_manager.get_profile(slug)
-        if prof and prof.skills:
-            return list(prof.skills)
+        if prof:
+            return list(prof.skills or [])
     except Exception:
         pass
     return None
@@ -91,8 +74,6 @@ def _profile_allowed_skill_names() -> list[str] | None:
 def _skill_allowed_for_profile(name: str) -> bool:
     """Enforce profile.skills allowlist on skill_view / skill_list (search already filters)."""
     slug = (name or "").strip()
-    if slug in _OFFICE_SLUGS:
-        return True
     if os.getenv("AION_SKILL_VIEW_ENFORCE_PROFILE", "1").strip().lower() in (
         "0",
         "false",
@@ -102,7 +83,7 @@ def _skill_allowed_for_profile(name: str) -> bool:
     allowed = _profile_allowed_skill_names()
     if allowed is None:
         return True
-    return slug in allowed
+    return slug in allowed or slug == "core_protocol"
 
 
 
@@ -247,7 +228,7 @@ def skill_list() -> str:
     allowed = _profile_allowed_skill_names()
     if allowed is not None:
         allow_set = set(allowed)
-        allow_set.update(_OFFICE_SLUGS)
+        allow_set.add("core_protocol")
         summaries = [s for s in summaries if s.get("name") in allow_set]
     if not summaries:
         return "No skills loaded for this profile."

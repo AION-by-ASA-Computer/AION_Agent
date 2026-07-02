@@ -2773,7 +2773,54 @@ class AgentPipeline:
                                             include_attachments=False,
                                         )
 
-                                yield _track_sse(chunk)
+                                if _gs().show_tool_calls == "null":
+                                    et = evt.get("type")
+                                    if et == "tool_start":
+                                        masked_evt = {
+                                            "type": "tool_start",
+                                            "id": evt.get("id"),
+                                            "name": "thinking",
+                                            "input": {},
+                                        }
+                                        yield _track_sse(
+                                            {"type": "tool_event", "event": masked_evt}
+                                        )
+                                    elif et in ("tool_end", "tool_error"):
+                                        masked_evt = {
+                                            "type": "tool_end",
+                                            "id": evt.get("id"),
+                                            "name": "thinking",
+                                            "output": "",
+                                        }
+                                        yield _track_sse(
+                                            {"type": "tool_event", "event": masked_evt}
+                                        )
+                                elif _gs().show_tool_calls == "minimum":
+                                    et = evt.get("type")
+                                    if et == "tool_start":
+                                        masked_evt = {
+                                            "type": "tool_start",
+                                            "id": evt.get("id"),
+                                            "name": evt.get("name"),
+                                            "input": {},
+                                            "masked": "minimum",
+                                        }
+                                        yield _track_sse(
+                                            {"type": "tool_event", "event": masked_evt}
+                                        )
+                                    elif et in ("tool_end", "tool_error"):
+                                        masked_evt = {
+                                            "type": "tool_end",
+                                            "id": evt.get("id"),
+                                            "name": evt.get("name"),
+                                            "output": "",
+                                            "masked": "minimum",
+                                        }
+                                        yield _track_sse(
+                                            {"type": "tool_event", "event": masked_evt}
+                                        )
+                                else:
+                                    yield _track_sse(chunk)
 
                 drain_sec = float(os.getenv("AION_AGENT_DRAIN_TIMEOUT_SEC", "0"))
                 if stop_event.is_set() and stop_reason != "completed" and drain_sec > 0:
