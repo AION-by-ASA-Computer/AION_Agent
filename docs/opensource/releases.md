@@ -33,6 +33,31 @@ On every push to `main`, [release-please](https://github.com/googleapis/release-
 
 Workflow: [`.github/workflows/release-please.yml`](../../.github/workflows/release-please.yml)
 
+### GitHub token (`RELEASE_PLEASE_TOKEN`)
+
+Release-please must use a **Personal Access Token** stored as the repository secret
+`RELEASE_PLEASE_TOKEN`. The default `GITHUB_TOKEN` creates releases that **do not**
+trigger [`.github/workflows/release-images.yml`](../../.github/workflows/release-images.yml)
+(GitHub loop-prevention).
+
+**Fine-grained PAT** (recommended) on the org account:
+
+| Setting | Value |
+|---------|--------|
+| Repository access | `AION_Agent` only |
+| Contents | Read and write |
+| Pull requests | Read and write |
+| Metadata | Read |
+
+**Classic PAT** alternative: scope `repo` (full).
+
+Store the secret:
+
+```bash
+gh secret set RELEASE_PLEASE_TOKEN --repo AION-by-ASA-Computer/AION_Agent
+# paste the PAT when prompted
+```
+
 ### First release (0.1.0)
 
 1. Merge pending work to `main` (including this release setup).
@@ -59,7 +84,7 @@ When a GitHub Release is **published**, [`.github/workflows/release-images.yml`]
 
 Each image is tagged with **`X.Y.Z`** (from the release tag) and **`latest`**.
 
-**Production:** pin an explicit version, e.g. `AION_VERSION=0.1.0`. Do not rely on `latest` in production.
+**Production:** pin an explicit version, e.g. `AION_VERSION=1.0.0`. Do not rely on `latest` in production.
 
 ### Deploy from GHCR
 
@@ -67,7 +92,12 @@ Each image is tagged with **`X.Y.Z`** (from the release tag) and **`latest`**.
 cp .env.example .env
 ./scripts/setup-aion-env.sh --docker
 
-export AION_VERSION=0.1.0
+# Latest release (dev/staging):
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
+
+# Pinned version (production):
+export AION_VERSION=1.0.0
 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
 ```
@@ -83,6 +113,18 @@ See also [Docker deployment](../deployment/docker.md).
 ## GitHub Packages visibility
 
 After the first image push, set package visibility to **public** under the org’s GitHub Packages settings so pull works without authentication.
+
+## Backfill / manual image publish
+
+If a release was published before `RELEASE_PLEASE_TOKEN` was configured, run the workflow manually:
+
+```bash
+gh workflow run "Publish container images" \
+  --repo AION-by-ASA-Computer/AION_Agent \
+  -f tag_name=v1.0.0
+```
+
+Or use **Actions → Publish container images → Run workflow** in the GitHub UI.
 
 ## Manual release (fallback)
 
