@@ -50,24 +50,28 @@ class TestSessionConfinement(unittest.TestCase):
 
     def test_path_allowed_session_only(self):
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
+            td_path = Path(td)
+            root = td_path / "session"
+            root.mkdir(parents=True)
             inside = root / "workspace" / "ok.txt"
             inside.parent.mkdir(parents=True)
             inside.write_text("hi", encoding="utf-8")
             deactivate = self._with_guards(root)
             try:
                 self.assertTrue(path_allowed(inside))
-                self.assertFalse(path_allowed("/etc/passwd"))
+                self.assertFalse(path_allowed("/proc/version"))
             finally:
                 deactivate()
 
     def test_open_guard_blocks_outside_session(self):
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
+            td_path = Path(td)
+            root = td_path / "session"
+            root.mkdir(parents=True)
             deactivate = self._with_guards(root)
             try:
                 with self.assertRaises(PermissionError):
-                    open("/etc/passwd").read()  # noqa: SIM115
+                    open("/proc/version").read()  # noqa: SIM115
             finally:
                 deactivate()
 
@@ -95,7 +99,9 @@ class TestSessionConfinement(unittest.TestCase):
 
     def test_runner_blocks_proc_and_host_paths(self):
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
+            td_path = Path(td)
+            root = td_path / "session"
+            root.mkdir(parents=True)
             ws = root / "workspace"
             ws.mkdir(parents=True)
             script = ws / "probe.py"
@@ -111,8 +117,8 @@ def check(label, fn):
     except PermissionError:
         print(f"{label}:BLOCKED")
 
-check("proc", lambda: open("/proc/1/environ").read())
-check("passwd", lambda: Path("/etc/passwd").read_text())
+check("proc_environ", lambda: open("/proc/1/environ").read())
+check("proc_version", lambda: open("/proc/version").read())
 """,
                 encoding="utf-8",
             )
@@ -133,13 +139,15 @@ check("passwd", lambda: Path("/etc/passwd").read_text())
                 timeout=30,
             )
             self.assertEqual(proc.returncode, 0, proc.stderr)
-            self.assertIn("proc:BLOCKED", proc.stdout)
-            self.assertIn("passwd:BLOCKED", proc.stdout)
+            self.assertIn("proc_environ:BLOCKED", proc.stdout)
+            self.assertIn("proc_version:BLOCKED", proc.stdout)
             self.assertNotIn("LEAK", proc.stdout)
 
     def test_exec_mode_blocks_host_file_read(self):
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
+            td_path = Path(td)
+            root = td_path / "session"
+            root.mkdir(parents=True)
             ws = root / "workspace"
             ws.mkdir(parents=True)
             script = ws / "node_probe.js"
@@ -147,7 +155,7 @@ check("passwd", lambda: Path("/etc/passwd").read_text())
                 """
 const fs = require('fs');
 try {
-  fs.readFileSync('/etc/passwd');
+  fs.readFileSync('/proc/version');
   console.log('LEAK');
 } catch (e) {
   console.log('BLOCKED');

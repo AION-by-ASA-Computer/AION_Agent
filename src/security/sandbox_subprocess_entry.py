@@ -50,11 +50,13 @@ def _landlock_abort_if_required() -> None:
     raise SystemExit(126)
 
 
-def _apply_landlock() -> None:
+def _apply_landlock() -> bool:
     from .session_confinement import apply_landlock_from_environ
 
-    if not apply_landlock_from_environ():
+    ok = bool(apply_landlock_from_environ())
+    if not ok:
         _landlock_abort_if_required()
+    return ok
 
 
 def _run_python_script(script_args: list[str]) -> int:
@@ -91,17 +93,66 @@ def _exec_confined(exec_args: list[str]) -> int:
         print("usage: ... -- <exe> [args...]", file=sys.stderr)
         return 2
 
-    from .session_confinement import inject_node_hook
+    from .session_confinement import (
+        confinement_enabled,
+        inject_node_hook,
+        landlock_required,
+    )
+    from .session_confinement import _paths_from_env
 
     exec_args = inject_node_hook(list(exec_args))
-    _apply_landlock()
+    landlock_ok = _apply_landlock()
+    exe_path = exec_args[0]
     try:
-        os.execvp(exec_args[0], list(exec_args))
+        os.execvp(exe_path, list(exec_args))
     except FileNotFoundError:
-        print(f"sandbox entry: executable not found: {exec_args[0]!r}", file=sys.stderr)
+        print(f"sandbox entry: executable not found: {exe_path!r}", file=sys.stderr)
         return 127
     except PermissionError as exc:
-        print(f"sandbox entry: exec denied: {exc}", file=sys.stderr)
+        try:
+            real_exe = str(Path(exe_path).resolve())
+        except OSError as resolve_exc:
+            real_exe = f"<unresolvable: {resolve_exc}>"
+        try:
+            parent_exe = str(Path(real_exe).parent)
+        except OSError:
+            parent_exe = "<unresolvable>"
+        x_ok = os.access(exe_path, os.X_OK)
+        ll_read = _paths_from_env("AION_SANDBOX_LL_READ")
+        ll_write = _paths_from_env("AION_SANDBOX_LL_WRITE")
+        if ll_read:
+            try:
+                resolved = Path(real_exe).resolve()
+                in_read = any(
+                    str(resolved) == str(p.resolve())
+                    or str(resolved).startswith(str(p.resolve()) + "/")
+                    for p in ll_read
+                    if p.resolve() and p.exists()
+                )
+            except OSError:
+                in_read = False
+        else:
+            in_read = None
+        print(f"sandbox entry: exec denied: {exc} (errno={exc.errno})", file=sys.stderr)
+        print(
+            f"  exe={exe_path!r} realpath={real_exe!r} x_ok={x_ok}",
+            file=sys.stderr,
+        )
+        print(
+            f"  parent={parent_exe!r} parent_in_ll_read={in_read}",
+            file=sys.stderr,
+        )
+        print(
+            f"  platform={platform.system()} python={sys.version.split()[0]} "
+            f"confinement_enabled={confinement_enabled()} "
+            f"landlock_required={landlock_required()} "
+            f"landlock_applied={landlock_ok}",
+            file=sys.stderr,
+        )
+        ll_read_str = ":".join(str(p) for p in ll_read) or "<empty>"
+        ll_write_str = ":".join(str(p) for p in ll_write) or "<empty>"
+        print(f"  AION_SANDBOX_LL_READ={ll_read_str}", file=sys.stderr)
+        print(f"  AION_SANDBOX_LL_WRITE={ll_write_str}", file=sys.stderr)
         return 126
     return 127
 

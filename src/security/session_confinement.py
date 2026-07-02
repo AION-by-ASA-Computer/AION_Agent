@@ -25,6 +25,7 @@ import os
 import platform
 import sqlite3
 import sys
+import sysconfig
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
@@ -196,6 +197,25 @@ def collect_confinement_paths(
         read.append(tmp.resolve())
         write.append(tmp.resolve())
 
+    # System library dirs + dynamic linker cache: required so the kernel
+    # can open ld.so / libc / libm during execve. Without these, Landlock
+    # denies exec with EACCES even when the executable itself is in an
+    # allowed path (the kernel open()s the dynamic linker as part of
+    # execve, and that open is also Landlock-checked).
+    for syslib in ("/lib", "/lib64", "/usr/lib", "/usr/lib64"):
+        p = Path(syslib)
+        if p.exists():
+            read.append(p.resolve())
+    multiarch = sysconfig.get_config_var("MULTIARCH")
+    if multiarch:
+        for base in ("/lib", "/usr/lib"):
+            p = Path(base) / multiarch
+            if p.exists():
+                read.append(p.resolve())
+    etc = Path("/etc")
+    if etc.is_dir():
+        read.append(etc.resolve())
+
     proc_self = Path("/proc/self")
     if proc_self.exists():
         # Keep literal /proc/self — resolve() becomes /proc/<pid> and widens Landlock rules.
@@ -260,12 +280,59 @@ def apply_landlock_from_environ() -> bool:
     return apply_landlock(read_paths, write_paths)
 
 
+def _mount_type_for_path(path: Path) -> str:
+    """Return the filesystem type of the longest mount point containing ``path``."""
+    try:
+        with open("/proc/self/mountinfo", encoding="utf-8") as f:
+            lines = f.readlines()
+    except OSError:
+        return ""
+    target = str(path.resolve())
+    best_mount = ""
+    best_type = ""
+    for line in lines:
+        parts = line.split()
+        if len(parts) < 7:
+            continue
+        mount_point = parts[4]
+        sep_idx = None
+        for i, tok in enumerate(parts):
+            if tok == "-":
+                sep_idx = i
+                break
+        if sep_idx is not None and sep_idx + 1 < len(parts):
+            fs_type = parts[sep_idx + 1]
+        else:
+            fs_type = ""
+        if target.startswith(mount_point) and len(mount_point) > len(best_mount):
+            best_mount = mount_point
+            best_type = fs_type
+    return best_type
+
+
+_LANDLOCK_INCOMPATIBLE_FS = frozenset({"fakeowner", "virtiofs", "osxfs", "fuse.osxfs"})
+
+
+def _has_incompatible_fs(paths: Sequence[Path]) -> bool:
+    for p in paths:
+        if _mount_type_for_path(p) in _LANDLOCK_INCOMPATIBLE_FS:
+            return True
+    return False
+
+
 def apply_landlock(read_paths: Sequence[Path], write_paths: Sequence[Path]) -> bool:
     if platform.system() != "Linux":
         return False
     try:
         import ctypes
     except ImportError:
+        return False
+
+    if _has_incompatible_fs(read_paths):
+        logger.warning(
+            "Landlock skipped: session path is on an incompatible filesystem "
+            "(fakeowner/virtiofs/osxfs). Falling back to Python guards only."
+        )
         return False
 
     LANDLOCK_ACCESS_FS_EXECUTE = 1 << 0
