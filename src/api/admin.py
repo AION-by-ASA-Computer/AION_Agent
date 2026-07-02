@@ -1261,6 +1261,7 @@ async def admin_advise_mcp_integration(body: McpIntegrationAdviseBody):
     llm_available = False
     try:
         from src.runtime.llm_adapter import resolve_llm_endpoint
+
         llm_url, _ = resolve_llm_endpoint()
         llm_available = bool(llm_url)
     except Exception:
@@ -1735,7 +1736,9 @@ async def _call_llm_advise_async(
             "max_tokens": max_tokens,
         }
         if _disable_reasoning not in ("0", "false", "no", "off"):
-            generation_kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
+            generation_kwargs["extra_body"] = {
+                "chat_template_kwargs": {"enable_thinking": False}
+            }
 
         from src.runtime.llm_lite_llm_adapter import LiteLLMChatGeneratorWrapper
         from haystack.dataclasses import ChatMessage
@@ -1765,7 +1768,13 @@ async def _call_llm_advise_async(
                 redacted_userinfo = userinfo
             redacted_netloc = f"{redacted_userinfo}@{hostinfo}"
         safe_base = urlunsplit(
-            (parsed_base.scheme, redacted_netloc, parsed_base.path, parsed_base.query, parsed_base.fragment)
+            (
+                parsed_base.scheme,
+                redacted_netloc,
+                parsed_base.path,
+                parsed_base.query,
+                parsed_base.fragment,
+            )
         )
 
         _log.info(
@@ -1794,6 +1803,7 @@ async def _call_llm_advise_async(
                     len(reasoning),
                 )
                 import re as _re
+
                 json_block = _re.search(
                     r"```json\s*\n(.*?)\n```", reasoning, _re.DOTALL
                 )
@@ -1820,7 +1830,7 @@ async def _call_llm_advise_async(
                                     except _json.JSONDecodeError:
                                         pass
                                     break
-                
+
                 # fallback ultimo terzo del reasoning
                 third = max(len(reasoning) // 3, 500)
                 return reasoning[-third:].strip(), None
@@ -1832,8 +1842,10 @@ async def _call_llm_advise_async(
                     "LLM content corto (finish=length), riprovo con max_tokens=8192 e reasoning disabilitato"
                 )
                 generation_kwargs["max_tokens"] = 8192
-                generation_kwargs["extra_body"] = {"chat_template_kwargs": {"enable_thinking": False}}
-                
+                generation_kwargs["extra_body"] = {
+                    "chat_template_kwargs": {"enable_thinking": False}
+                }
+
                 generator2 = LiteLLMChatGeneratorWrapper(
                     model=model,
                     api_base_url=base,
@@ -2653,7 +2665,13 @@ async def get_stats():
     model_usage = {}
     projects_total = 0
 
-    from ..data.models import Conversation, LlmProvider, ApiKey, ScheduledJob, SqlQueryProject
+    from ..data.models import (
+        Conversation,
+        LlmProvider,
+        ApiKey,
+        ScheduledJob,
+        SqlQueryProject,
+    )
     from sqlalchemy import select
 
     try:
@@ -2663,7 +2681,11 @@ async def get_stats():
             providers = (await session.execute(providers_query)).scalars().all()
             provider_names = {p.slug: p.display_name for p in providers}
             default_provider = next((p for p in providers if p.is_default), None)
-            default_name = default_provider.display_name if default_provider else (default_provider.slug if default_provider else "Default Model")
+            default_name = (
+                default_provider.display_name
+                if default_provider
+                else (default_provider.slug if default_provider else "Default Model")
+            )
 
             # 2) Get all conversations metadata
             conv_query = select(Conversation.metadata_json)
@@ -2695,12 +2717,16 @@ async def get_stats():
             for k in keys_rows:
                 scopes = json.loads(k.scopes_json or "[]")
                 if not scopes:
-                    api_keys_by_scope["no_scopes"] = api_keys_by_scope.get("no_scopes", 0) + 1
+                    api_keys_by_scope["no_scopes"] = (
+                        api_keys_by_scope.get("no_scopes", 0) + 1
+                    )
                 for s in scopes:
                     api_keys_by_scope[s] = api_keys_by_scope.get(s, 0) + 1
 
             # 5) Get SQL query projects count
-            projects_rows = (await session.execute(select(SqlQueryProject))).scalars().all()
+            projects_rows = (
+                (await session.execute(select(SqlQueryProject))).scalars().all()
+            )
             projects_total = len(projects_rows)
     except Exception as e:
         logger.exception("Failed to query database stats: %s", e)
@@ -2720,7 +2746,7 @@ async def get_stats():
         "api_keys": {
             "total": api_keys_total,
             "by_scope": api_keys_by_scope,
-        }
+        },
     }
 
 

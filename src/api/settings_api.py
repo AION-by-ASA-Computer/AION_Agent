@@ -203,26 +203,29 @@ def _reload_env():
     """Reload dotenv files into os.environ and clear the fs policy LRU cache."""
     try:
         from dotenv import load_dotenv
+
         repo_root = _get_repo_root()
-        
+
         # 1. Load .env
         load_dotenv(repo_root / ".env", override=True)
         # 2. Load .env.local
         load_dotenv(repo_root / ".env.local", override=True)
-        
+
         # 3. Load runtime.env if it exists
         runtime_env = _get_data_dir() / "runtime.env"
         if runtime_env.is_file():
             load_dotenv(runtime_env, override=True)
-            
+
         # 4. Clear FSPolicy cache
         from src.runtime.agent_fs_policy import load_fs_policy
+
         load_fs_policy.cache_clear()
-        
+
         # 5. Reload Config singleton
         from src.config import config
+
         config.load()
-        
+
         logger.info("AION Environment and Config reloaded successfully in-process.")
     except Exception as e:
         logger.error(f"Error reloading AION Environment: {e}")
