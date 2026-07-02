@@ -687,7 +687,10 @@ class UserProfileAccess(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     tenant_id: Mapped[str] = mapped_column(
         String(64), nullable=False, default="default", server_default="default"
@@ -705,4 +708,3 @@ class UserProfileAccess(Base):
             name="uq_user_profile_access",
         ),
     )
-

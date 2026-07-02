@@ -6,16 +6,20 @@ from src.api.main import get_allowed_profiles_for_user
 from src.main import get_agent
 from src.agent_profile import profile_manager, ProfileNotFoundError
 
+
 @pytest.mark.anyio
 async def test_user_profile_access_mapping(monkeypatch):
     # Mock resolve_profile to avoid starting MCP servers during test
     original_resolve = profile_manager.resolve_profile
+
     def mock_resolve(name):
         p = original_resolve(name)
         import copy
+
         p_copy = copy.copy(p)
         p_copy.mcp_servers = []
         return p_copy
+
     monkeypatch.setattr(profile_manager, "resolve_profile", mock_resolve)
 
     # 1. Create a dummy user and add access rules
@@ -28,20 +32,22 @@ async def test_user_profile_access_mapping(monkeypatch):
                 tenant_id="default",
                 identifier="test_access_user",
                 display_name="Test Access User",
-                roles_json="[]"
+                roles_json="[]",
             )
             session.add(u)
         else:
             # Clear existing access
             await session.execute(
-                delete(UserProfileAccess).where(UserProfileAccess.user_id == "test_access_user")
+                delete(UserProfileAccess).where(
+                    UserProfileAccess.user_id == "test_access_user"
+                )
             )
-        
+
         # Add profile access to a specific fake profile slug
         access = UserProfileAccess(
             user_id="test_access_user",
             tenant_id="default",
-            profile_slug="coding_workspace"
+            profile_slug="coding_workspace",
         )
         session.add(access)
         await session.commit()
@@ -57,22 +63,24 @@ async def test_user_profile_access_mapping(monkeypatch):
     agent, profile_name = await get_agent(
         profile_name="aion_std",
         session_id="test_sess_access",
-        user_id="test_access_user"
+        user_id="test_access_user",
     )
     assert profile_name == "coding_workspace"
 
     # 4. Test get_agent raises ProfileNotFoundError for unallowed profiles other than aion_std
     with pytest.raises(ProfileNotFoundError):
         await get_agent(
-            profile_name="infra_sre", # infra_sre is a real profile but not allowed for this user
+            profile_name="infra_sre",  # infra_sre is a real profile but not allowed for this user
             session_id="test_sess_access",
-            user_id="test_access_user"
+            user_id="test_access_user",
         )
 
     # Clean up
     async with get_async_session_maker()() as session:
         await session.execute(
-            delete(UserProfileAccess).where(UserProfileAccess.user_id == "test_access_user")
+            delete(UserProfileAccess).where(
+                UserProfileAccess.user_id == "test_access_user"
+            )
         )
         u = await session.get(User, "test_access_user")
         if u:

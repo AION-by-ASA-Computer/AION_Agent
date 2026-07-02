@@ -982,9 +982,17 @@ async def get_agent(
                 if resolved_slug not in allowed_slugs:
                     if resolved_slug == "aion_std":
                         profile_name = allowed_slugs[0]
-                        logger.info("Default profile aion_std not allowed. Falling back to %s for user %s", profile_name, user_id)
+                        logger.info(
+                            "Default profile aion_std not allowed. Falling back to %s for user %s",
+                            profile_name,
+                            user_id,
+                        )
                     else:
-                        logger.warning("User %s denied access to profile %s", user_id, resolved_slug)
+                        logger.warning(
+                            "User %s denied access to profile %s",
+                            user_id,
+                            resolved_slug,
+                        )
                         raise ProfileNotFoundError(profile_name, allowed_slugs)
 
         profile = profile_manager.resolve_profile(profile_name)

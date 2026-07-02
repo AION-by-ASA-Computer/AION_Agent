@@ -336,7 +336,7 @@ async def investigate_code(path: str, profile: str = "Security Officer"):
     Triggers an LLM-based investigation of a specific file using a selectable profile.
     Returns a stream of tokens and reasoning.
     """
-    
+
     if not os.path.exists(path):
         raise HTTPException(status_code=404, detail="File not found")
 
@@ -2846,7 +2846,6 @@ class UserProfilesUpdate(BaseModel):
     allowed_profiles: List[str]
 
 
-
 @router.get("/users")
 async def list_users():
     """List all users in the unified database."""
@@ -2930,7 +2929,9 @@ async def delete_user(user_id: str):
 
     async with get_async_session_maker()() as session:
         await session.execute(delete(User).where(User.id == user_id))
-        await session.execute(delete(UserProfileAccess).where(UserProfileAccess.user_id == user_id))
+        await session.execute(
+            delete(UserProfileAccess).where(UserProfileAccess.user_id == user_id)
+        )
         await session.commit()
     return {"status": "success"}
 
@@ -2977,7 +2978,6 @@ async def update_user_profiles(user_id: str, body: UserProfilesUpdate):
         await session.commit()
 
     return {"status": "success"}
-
 
 
 @router.get("/api-keys")
