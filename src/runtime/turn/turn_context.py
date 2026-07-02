@@ -200,7 +200,7 @@ async def build_turn_context(
     # ------------------------------------------------------------------
     # 4. Attachment block (for message assembly later)
     # ------------------------------------------------------------------
-    attach_block = pipeline._format_attachments_block(attachments)
+    attach_block = pipeline._format_attachments_block(attachments, turn_attachments)
 
     # ------------------------------------------------------------------
     # 5. Prompt-inject layers & user-input augmentation
