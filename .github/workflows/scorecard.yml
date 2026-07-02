@@ -7,8 +7,7 @@ on:
     branches: [main, master]
   workflow_dispatch:
 
-permissions:
-  contents: read
+permissions: read-all
 
 concurrency:
   group: scorecard-${{ github.ref }}
@@ -22,8 +21,6 @@ jobs:
     permissions:
       security-events: write
       id-token: write
-      contents: read
-      actions: read
 
     steps:
       - name: Checkout Repository
@@ -33,7 +30,7 @@ jobs:
           persist-credentials: false
 
       - name: Run OpenSSF Scorecard
-        uses: ossf/scorecard-action@99c09fe975337306107572b4fdf4db224cf8e2f2 # v2.4.3
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
         with:
           results_file: results.sarif
           results_format: sarif
