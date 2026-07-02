@@ -19,6 +19,7 @@ import json
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit, urlunsplit
 from sse_starlette.sse import EventSourceResponse
 
 
@@ -1753,10 +1754,24 @@ async def _call_llm_advise_async(
             ChatMessage.from_user(user_prompt),
         ]
 
+        parsed_base = urlsplit(base)
+        redacted_netloc = parsed_base.netloc
+        if "@" in parsed_base.netloc:
+            userinfo, hostinfo = parsed_base.netloc.rsplit("@", 1)
+            if ":" in userinfo:
+                username, _ = userinfo.split(":", 1)
+                redacted_userinfo = f"{username}:***"
+            else:
+                redacted_userinfo = userinfo
+            redacted_netloc = f"{redacted_userinfo}@{hostinfo}"
+        safe_base = urlunsplit(
+            (parsed_base.scheme, redacted_netloc, parsed_base.path, parsed_base.query, parsed_base.fragment)
+        )
+
         _log.info(
             "LiteLLM Advise: model=%s base=%s max_tokens=%d timeout=%.0fs prompt_chars=%d",
             model,
-            base,
+            safe_base,
             max_tokens,
             advise_timeout,
             len(system_prompt) + len(user_prompt),
