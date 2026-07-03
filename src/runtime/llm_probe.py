@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 import logging
 import time
 from typing import Any, Dict, List, Optional
@@ -100,6 +101,52 @@ def should_use_catalog_fallback(provider: str, base_url: str) -> bool:
     return is_official_vendor_endpoint(base_url)
 
 
+def _is_ip_literal(host: str) -> bool:
+    try:
+        ipaddress.ip_address(host)
+        return True
+    except ValueError:
+        return False
+
+
+def _is_private_or_local_host(host: str) -> bool:
+    h = (host or "").strip().lower()
+    if not h:
+        return True
+    if h in ("localhost",):
+        return True
+    if _is_ip_literal(h):
+        ip = ipaddress.ip_address(h)
+        return (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        )
+    return False
+
+
+def _is_allowed_probe_base_url(provider: str, base_url: str) -> bool:
+    parsed = urlparse(base_url)
+    scheme = (parsed.scheme or "").lower()
+    host = (parsed.hostname or "").lower()
+    p = (provider or "").strip().lower()
+
+    if scheme not in ("http", "https") or not host:
+        return False
+
+    # Self-hosted/local providers may target local or private addresses.
+    if p in ("ollama", "vllm"):
+        return True
+
+    # Cloud providers must not probe local/private networks and must be official hosts.
+    if _is_private_or_local_host(host):
+        return False
+    return is_official_vendor_endpoint(base_url)
+
+
 def list_catalog_models(litellm_provider: str) -> List[str]:
     try:
         from litellm import get_valid_models
@@ -189,6 +236,11 @@ async def probe_llm_connection(
     if not base_url:
         raise ValueError(
             "API base URL is required for this provider (e.g. vLLM endpoint)."
+        )
+    if not _is_allowed_probe_base_url(p, base_url):
+        raise ValueError(
+            "API base URL is not allowed for probe. "
+            "Use an official vendor endpoint, or use a local/self-hosted provider."
         )
 
     litellm_provider = infer_litellm_provider(p, base_url)
