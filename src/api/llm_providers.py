@@ -83,6 +83,20 @@ class LlmProviderPublic(BaseModel):
 # --- Endpoints ---
 
 
+_SAFE_PROBE_VALUE_ERROR_PREFIXES = (
+    "API base URL is required",
+    "API base URL is not allowed",
+    "Endpoint unreachable",
+)
+
+
+def _probe_value_error_detail(exc: ValueError) -> str:
+    msg = str(exc).strip()
+    if any(msg.startswith(prefix) for prefix in _SAFE_PROBE_VALUE_ERROR_PREFIXES):
+        return msg
+    return "Connection failed. Check provider settings and endpoint availability."
+
+
 @router.post("/probe")
 async def probe_llm_provider(body: LlmProviderProbeRequest):
     """Test connectivity and list models (GET /v1/models + LiteLLM catalog fallback)."""
@@ -95,10 +109,10 @@ async def probe_llm_provider(body: LlmProviderProbeRequest):
             api_key=body.api_key,
         )
     except ValueError as e:
-        logger.exception("LLM probe validation failed for provider=%s", body.provider)
+        logger.warning("LLM probe validation failed for provider=%s: %s", body.provider, e)
         raise HTTPException(
             status_code=502,
-            detail="Connection failed. Check provider settings and endpoint availability.",
+            detail=_probe_value_error_detail(e),
         ) from e
     except Exception as e:
         logger.exception("LLM probe failed for provider=%s", body.provider)

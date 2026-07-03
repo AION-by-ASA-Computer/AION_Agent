@@ -29,6 +29,8 @@ _OFFICIAL_VENDOR_HOSTS = frozenset(
     }
 )
 
+_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
 _URL_PROVIDER_HINTS: list[tuple[str, str]] = [
     ("api.openai.com", "openai"),
     ("api.anthropic.com", "anthropic"),
@@ -85,10 +87,17 @@ def infer_litellm_provider(provider: str, base_url: str) -> str:
     return litellm_p
 
 
+def is_azure_openai_endpoint(base_url: str) -> bool:
+    host = urlparse(base_url).netloc.lower().split(":")[0]
+    return host == "openai.azure.com" or host.endswith(".openai.azure.com")
+
+
 def is_official_vendor_endpoint(base_url: str) -> bool:
     host = urlparse(base_url).netloc.lower().split(":")[0]
     if host in ("localhost", "127.0.0.1", "0.0.0.0"):
         return False
+    if is_azure_openai_endpoint(base_url):
+        return True
     if host in _OFFICIAL_VENDOR_HOSTS:
         return True
     return any(official in host for official in _OFFICIAL_VENDOR_HOSTS)
@@ -128,20 +137,48 @@ def _is_private_or_local_host(host: str) -> bool:
     return False
 
 
+def _is_link_local_or_metadata_host(host: str) -> bool:
+    if not _is_ip_literal(host):
+        return False
+    return ipaddress.ip_address(host).is_link_local
+
+
+def resolve_probe_provider(provider: str, base_url: str) -> str:
+    """Map UI provider + URL to the probe provider used for SSRF policy."""
+    p = (provider or "openai").strip().lower()
+    if p in ("ollama", "vllm"):
+        return p
+
+    host = (urlparse(base_url).hostname or "").lower()
+    netloc = urlparse(base_url).netloc or ""
+
+    # Loopback dev endpoints (Ollama/vLLM on the same machine) may keep a cloud label in the UI.
+    if host in _LOOPBACK_HOSTS:
+        if "11434" in netloc:
+            return "ollama"
+        return "vllm"
+
+    return p
+
+
 def _is_allowed_probe_base_url(provider: str, base_url: str) -> bool:
     parsed = urlparse(base_url)
     scheme = (parsed.scheme or "").lower()
     host = (parsed.hostname or "").lower()
-    p = (provider or "").strip().lower()
 
     if scheme not in ("http", "https") or not host:
         return False
 
-    # Self-hosted/local providers may target local or private addresses.
-    if p in ("ollama", "vllm"):
+    if _is_link_local_or_metadata_host(host):
+        return False
+
+    effective = resolve_probe_provider(provider, base_url)
+
+    # Self-hosted providers may target local or private addresses.
+    if effective in ("ollama", "vllm"):
         return True
 
-    # Cloud providers must not probe local/private networks and must be official hosts.
+    # Cloud providers must not probe private/LAN networks; official hosts only.
     if _is_private_or_local_host(host):
         return False
     return is_official_vendor_endpoint(base_url)
@@ -237,14 +274,15 @@ async def probe_llm_connection(
         raise ValueError(
             "API base URL is required for this provider (e.g. vLLM endpoint)."
         )
-    if not _is_allowed_probe_base_url(p, base_url):
+    probe_provider = resolve_probe_provider(p, base_url)
+    if not _is_allowed_probe_base_url(probe_provider, base_url):
         raise ValueError(
             "API base URL is not allowed for probe. "
-            "Use an official vendor endpoint, or use a local/self-hosted provider."
+            "Use an official vendor endpoint, or select vLLM/Ollama for local/private hosts."
         )
 
-    litellm_provider = infer_litellm_provider(p, base_url)
-    use_catalog = should_use_catalog_fallback(p, base_url)
+    litellm_provider = infer_litellm_provider(probe_provider, base_url)
+    use_catalog = should_use_catalog_fallback(probe_provider, base_url)
     catalog = list_catalog_models(litellm_provider) if use_catalog else []
 
     start = time.monotonic()

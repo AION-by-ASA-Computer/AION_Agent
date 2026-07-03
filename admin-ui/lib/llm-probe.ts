@@ -85,6 +85,37 @@ export function providerSupportsProbe(provider: string): boolean {
   return ["openai", "anthropic", "gemini", "ollama", "vllm", "google"].includes(provider);
 }
 
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+
+function isPrivateOrLocalHost(hostname: string): boolean {
+  const h = (hostname || "").trim().toLowerCase();
+  if (!h || LOOPBACK_HOSTS.has(h)) return true;
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)) return true;
+  if (/^169\.254\./.test(h)) return true;
+  return false;
+}
+
+/** Map UI provider + URL to backend probe provider (SSRF-safe self-hosted detection). */
+export function resolveProbeProvider(provider: string, apiBaseUrl?: string | null): string {
+  const p = (provider || "openai").trim().toLowerCase();
+  if (p === "ollama" || p === "vllm") return p;
+
+  const raw = (apiBaseUrl || "").trim();
+  if (!raw) return p;
+
+  try {
+    const url = new URL(raw.startsWith("http") ? raw : `http://${raw}`);
+    const host = url.hostname.toLowerCase();
+    if (LOOPBACK_HOSTS.has(host)) {
+      return url.port === "11434" || url.host.includes("11434") ? "ollama" : "vllm";
+    }
+    if (isPrivateOrLocalHost(host)) return "vllm";
+  } catch {
+    /* keep original provider */
+  }
+  return p;
+}
+
 export function embeddingProviderToProbeProvider(provider: string): string {
   return provider === "google" ? "gemini" : "openai";
 }
@@ -142,10 +173,11 @@ export async function runModelProbe(
   apiBaseUrl: string,
   body: { provider: string; api_base_url?: string | null; api_key?: string | null },
 ): Promise<LlmProbeResponse> {
+  const probeProvider = resolveProbeProvider(body.provider, body.api_base_url);
   const res = await apiFetchFn(`${apiBaseUrl}/admin/llm-providers/probe`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, provider: probeProvider }),
   });
   if (!res.ok) {
     const errData = await res.json().catch(() => ({}));
