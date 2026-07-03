@@ -94,5 +94,6 @@ jobs:
           labels: |
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.version=${{ steps.ver.outputs.version }}
-          cache-from: type=gha,scope=${{ matrix.image }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
+          # No GHA cache on release builds: multi-arch + mode=max often fails with
+          # "error writing layer blob: not_found" during cache export (flaky GHA cache API).
+          # PR CI still caches via docker-build-checks in ci.yml.
