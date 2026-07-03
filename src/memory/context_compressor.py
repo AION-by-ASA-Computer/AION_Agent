@@ -504,13 +504,11 @@ def log_context_budget(
 
 
 def is_context_length_error(exc: BaseException) -> bool:
-    text = str(exc).lower()
-    return (
-        "maximum context length" in text
-        or "context length" in text
-        or "input_tokens" in text
-        or "too many tokens" in text
+    from src.runtime.litellm_errors import (
+        is_context_length_error as _is_context_length_error,
     )
+
+    return _is_context_length_error(exc)
 
 
 def get_default_compressor() -> ContextCompressor:

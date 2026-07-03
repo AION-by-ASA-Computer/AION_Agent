@@ -129,6 +129,21 @@ function upsertToolSegment(
   return [...segments, tool];
 }
 
+function applyStreamError(
+  next: TurnState,
+  chunk: { message?: unknown; content?: unknown },
+  fallback = "LLM request failed.",
+): TurnState {
+  const message =
+    typeof chunk.message === "string" && chunk.message.trim()
+      ? chunk.message.trim()
+      : typeof chunk.content === "string" && chunk.content.trim()
+        ? chunk.content.trim()
+        : fallback;
+  next.error = message;
+  return next;
+}
+
 export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
   const next: TurnState = {
     ...prev,
@@ -185,9 +200,11 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
     return next;
   }
 
-  if (cType === "error") {
-    next.error = String(chunk.content ?? "Errore");
-    return next;
+  if (cType === "llm_error" || cType === "context_length_error" || cType === "error") {
+    return applyStreamError(
+      next,
+      chunk as { message?: unknown; content?: unknown },
+    );
   }
 
   if (cType === "tool_event") {
@@ -458,7 +475,7 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
         : "";
     if (msg.trim()) {
       next.segments = upsertStatusSegment(next.segments, msg.trim(), "warning");
-      if (!next.assistantContent.trim()) {
+      if (!next.assistantContent.trim() && !next.error) {
         next.assistantContent = msg.trim();
       }
     }
