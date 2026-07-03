@@ -251,9 +251,7 @@ async def _fetch_live_model_ids(
         resp.raise_for_status()
         data = resp.json()
     return [
-        str(m.get("id", "")).strip()
-        for m in (data.get("data") or [])
-        if m.get("id")
+        str(m.get("id", "")).strip() for m in (data.get("data") or []) if m.get("id")
     ]
 
 

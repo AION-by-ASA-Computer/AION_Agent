@@ -28,9 +28,7 @@ def test_resolve_probe_base_url_explicit():
 
 
 def test_infer_litellm_provider_vllm_remote():
-    assert (
-        infer_litellm_provider("vllm", "http://localhost:8000/v1") == "openai"
-    )
+    assert infer_litellm_provider("vllm", "http://localhost:8000/v1") == "openai"
 
 
 def test_should_use_catalog_fallback_self_hosted():

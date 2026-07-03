@@ -102,7 +102,12 @@ def _sync_default_provider_env(row: LlmProvider) -> None:
     if not row.is_default:
         return
     try:
-        from src.api.settings_api import _filter_settings_post, _parse_env, _reload_env, _write_env
+        from src.api.settings_api import (
+            _filter_settings_post,
+            _parse_env,
+            _reload_env,
+            _write_env,
+        )
 
         merged = _filter_settings_post(_parse_env())
         if row.max_chat_tokens is not None:
@@ -133,7 +138,9 @@ async def probe_llm_provider(body: LlmProviderProbeRequest):
             api_key=body.api_key,
         )
     except ValueError as e:
-        logger.warning("LLM probe validation failed for provider=%s: %s", body.provider, e)
+        logger.warning(
+            "LLM probe validation failed for provider=%s: %s", body.provider, e
+        )
         raise HTTPException(
             status_code=502,
             detail=_probe_value_error_detail(e),

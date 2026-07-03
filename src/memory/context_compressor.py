@@ -501,7 +501,9 @@ def log_context_budget(
 
 
 def is_context_length_error(exc: BaseException) -> bool:
-    from src.runtime.litellm_errors import is_context_length_error as _is_context_length_error
+    from src.runtime.litellm_errors import (
+        is_context_length_error as _is_context_length_error,
+    )
 
     return _is_context_length_error(exc)
 
