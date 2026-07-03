@@ -644,7 +644,7 @@ function ScheduleJobDialog({
                 userId={userId}
                 token={token}
                 profileSlug={profile}
-                value={sqlProject || "default"}
+                value={sqlProject || ""}
                 onChange={setSqlProject}
                 className="w-full"
               />

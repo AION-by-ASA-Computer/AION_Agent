@@ -99,7 +99,7 @@ export default function Home() {
       description: "MCP tool servers"
     },
     {
-      name: "SQL Projects",
+      name: "Memory Projects",
       value: projectsTotal,
       icon: FolderOpen,
       color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20",

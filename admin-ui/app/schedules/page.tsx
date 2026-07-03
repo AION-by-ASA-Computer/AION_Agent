@@ -12,6 +12,7 @@ import {
   History,
   X,
   AlertTriangle,
+  ChevronDown,
 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
@@ -41,6 +42,11 @@ type CronRun = {
   assistant_preview?: string;
 };
 
+type SqlProject = {
+  slug: string;
+  display_name: string;
+};
+
 export default function SchedulesPage() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,12 +65,27 @@ export default function SchedulesPage() {
   const [formTz, setFormTz] = useState("Europe/Rome");
   const [formSessionMode, setFormSessionMode] = useState("fixed");
   const [formEnabled, setFormEnabled] = useState(true);
+  const [formSqlProject, setFormSqlProject] = useState<string>("");
+
+  const [sqlProjects, setSqlProjects] = useState<SqlProject[]>([]);
 
   const [cronEnabledGlobal, setCronEnabledGlobal] = useState<boolean | null>(null);
   const [updatingGlobal, setUpdatingGlobal] = useState(false);
   const [restarting, setRestarting] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingGlobalValue, setPendingGlobalValue] = useState<boolean | null>(null);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/query-memory/projects`);
+      if (res.ok) {
+        const data = await res.json();
+        setSqlProjects((data.projects || []).map((p: { slug: string; display_name: string }) => ({ slug: p.slug, display_name: p.display_name })));
+      }
+    } catch {
+      // non-critical: silently ignore
+    }
+  }, []);
 
   const fetchGlobalCronStatus = useCallback(async () => {
     try {
@@ -210,7 +231,8 @@ export default function SchedulesPage() {
   useEffect(() => {
     fetchGlobalCronStatus();
     fetchJobs();
-  }, [fetchJobs, fetchGlobalCronStatus]);
+    fetchProjects();
+  }, [fetchJobs, fetchGlobalCronStatus, fetchProjects]);
 
   const openEdit = (job: CronJob) => {
     setEditing(job);
@@ -221,6 +243,7 @@ export default function SchedulesPage() {
     setFormTz(job.timezone);
     setFormSessionMode(job.session_mode);
     setFormEnabled(job.enabled);
+    setFormSqlProject((job as CronJob & { sql_query_project?: string }).sql_query_project ?? "");
   };
 
   const saveEdit = async () => {
@@ -238,6 +261,7 @@ export default function SchedulesPage() {
           timezone: formTz,
           session_mode: formSessionMode,
           enabled: formEnabled,
+          sql_query_project: formSqlProject || null,
         }),
       });
       if (!res.ok) {
@@ -532,14 +556,43 @@ export default function SchedulesPage() {
                 onChange={(e) => setFormTz(e.target.value)}
                 placeholder="Timezone"
               />
-              <select
-                className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2"
-                value={formSessionMode}
-                onChange={(e) => setFormSessionMode(e.target.value)}
-              >
-                <option value="fixed">fixed session</option>
-                <option value="new">new session each run</option>
-              </select>
+              <div className="relative w-full">
+                <select
+                  className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2 text-white appearance-none cursor-pointer pr-8"
+                  style={{ colorScheme: "dark" }}
+                  value={formSessionMode}
+                  onChange={(e) => setFormSessionMode(e.target.value)}
+                >
+                  <option value="fixed">fixed session</option>
+                  <option value="new">new session each run</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              </div>
+
+              {/* SQL Query Project */}
+              <div className="space-y-1">
+                <label className="text-xs text-gray-400 font-medium uppercase tracking-wide">SQL Query Project</label>
+                <div className="relative w-full">
+                  <select
+                    className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2 text-white appearance-none cursor-pointer pr-8"
+                    style={{ colorScheme: "dark" }}
+                    value={formSqlProject}
+                    onChange={(e) => setFormSqlProject(e.target.value)}
+                  >
+                    <option value="">— None —</option>
+                    {sqlProjects.map((p) => (
+                      <option key={p.slug} value={p.slug}>
+                        {p.display_name} ({p.slug})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                </div>
+                {sqlProjects.length === 0 && (
+                  <p className="text-xs text-gray-500">No SQL projects found. Create one in the Memory page.</p>
+                )}
+              </div>
+
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
