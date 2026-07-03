@@ -28,6 +28,8 @@ data/mempalace/
 !data/plugins/**
 # Re-ignore bytecode under data/plugins (whitelist above would track __pycache__/.pyc)
 data/plugins/**/__pycache__/
+data/plugins/__pycache__/
+data/plugins/__pycache__/**
 data/plugins/**/*.py[codz]
 data/plugins/**/*$py.class
 

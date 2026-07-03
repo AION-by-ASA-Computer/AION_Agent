@@ -321,6 +321,8 @@ async def chat_stream(
                         meta["deep_research_mode"] = body.deep_research_mode
                     if body.sql_query_project is not None:
                         meta["sql_query_project"] = body.sql_query_project
+                    if body.llm_provider_name is not None:
+                        meta["llm_provider_name"] = body.llm_provider_name
 
                     tenant = (
                         os.getenv("AION_DEFAULT_TENANT_ID") or "default"
@@ -369,11 +371,12 @@ async def chat_stream(
                     ):
                         meta["sql_query_project"] = body.sql_query_project
                         updated = True
-                    if updated:
-                        r.metadata_json = json.dumps(meta)
-                        r.updated_at = datetime.now(timezone.utc)
-                        session.add(r)
-                        await session.commit()
+                    if (
+                        body.llm_provider_name is not None
+                        and meta.get("llm_provider_name") != body.llm_provider_name
+                    ):
+                        meta["llm_provider_name"] = body.llm_provider_name
+                        updated = True
                     if updated:
                         r.metadata_json = json.dumps(meta)
                         r.updated_at = datetime.now(timezone.utc)

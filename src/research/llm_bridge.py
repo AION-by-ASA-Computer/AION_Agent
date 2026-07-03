@@ -26,12 +26,12 @@ async def complete_messages(
     timeout: float = 60.0,
 ) -> str:
     """Async chat completion; returns stripped text."""
-    from src.runtime.llm_adapter import resolve_llm_endpoint
+    from src.runtime.llm_adapter import resolve_llm_credentials
     from src.runtime.llm_lite_llm_adapter import LiteLLMChatGeneratorWrapper
     from haystack.dataclasses import ChatMessage
     from haystack.utils import Secret
 
-    base, model = resolve_llm_endpoint()
+    base, model, token = resolve_llm_credentials()
 
     adapter_env = (os.getenv("AION_LLM_ADAPTER") or "").strip().lower()
     if (
@@ -54,7 +54,6 @@ async def complete_messages(
             else:
                 base = base + "/v1"
         url = base + "/chat/completions"
-        token = os.getenv("AION_LLM_API_KEY", "placeholder-token")
         headers = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -89,9 +88,7 @@ async def complete_messages(
         generator = LiteLLMChatGeneratorWrapper(
             model=model,
             api_base_url=base,
-            api_key=Secret.from_token(
-                os.getenv("AION_LLM_API_KEY", "placeholder-token")
-            ),
+            api_key=Secret.from_token(token),
             timeout=timeout,
             generation_kwargs={
                 "temperature": temperature,

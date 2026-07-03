@@ -1436,9 +1436,6 @@ class AgentPipeline:
                         elif isinstance(generator.api_key, str):
                             api_key = generator.api_key
 
-            # Fallback to env variables if not found/resolved from the generator
-            if not llm_url:
-                llm_url = os.getenv("AION_API_URL", "")
             if not api_key or api_key == "placeholder-token":
                 api_key = os.getenv("AION_LLM_API_KEY", "placeholder-token")
 

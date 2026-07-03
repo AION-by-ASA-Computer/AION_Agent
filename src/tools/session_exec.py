@@ -314,7 +314,7 @@ def run_allowlisted(
 
     if not policy.exec_is_enabled():
         raise ExecDeniedError(
-            "Esecuzione exec disableda (exec.enabled=false nella policy). "
+            "Esecuzione exec disabled (exec.enabled=false nella policy). "
             "Imposta AION_FS_POLICY_PATH su una policy con exec.enabled=true dopo audit."
         )
 

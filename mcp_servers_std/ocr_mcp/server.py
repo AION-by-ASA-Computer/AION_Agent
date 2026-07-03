@@ -32,10 +32,59 @@ def _require_session() -> str:
     return sid
 
 
+def _is_advanced_ocr_enabled() -> bool:
+    base = os.environ.get("AION_OCR_BASE_URL", "").strip()
+    key = os.environ.get("AION_OCR_API_KEY", "").strip()
+    logger.info(
+        "OCR configuration loaded (base_set=%s, api_key_set=%s)",
+        bool(base),
+        bool(key and key != "EMPTY"),
+    )
+    if not base or not key or key == "EMPTY":
+        return False
+    return True
+
+
+def _env_int(name: str, default: int) -> int:
+    val = os.environ.get(name, "").strip()
+    if not val:
+        return default
+    try:
+        return int(val)
+    except ValueError:
+        return default
+
+
+def _env_float(name: str, default: float) -> float:
+    val = os.environ.get(name, "").strip()
+    if not val:
+        return default
+    try:
+        return float(val)
+    except ValueError:
+        return default
+
+
+def _extract_pdf_via_pymu4llm(path) -> str:
+    try:
+        import pymupdf4llm
+        return pymupdf4llm.to_markdown(str(path))
+    except ImportError:
+        return "Error pymypdf4llm not installed"
+
+
+def _extract_image_via_pytesseract(path) -> str:
+    try:
+        import pytesseract
+        return pytesseract.image_to_string(str(path))
+    except Exception as e:
+        raise RuntimeError(str(e))
+
+
 async def _ocr_via_api_async(image_bytes: bytes, mime: str, instruction: str, client: httpx.AsyncClient | None = None) -> str:
     import httpx
     base = os.environ.get("AION_OCR_BASE_URL", "http://localhost:8000/ocr/v1").rstrip("/")
-    model = os.environ.get("AION_OCR_MODEL", "zai-org/GLM-OCR")
+    model = os.environ.get("AION_OCR_MODEL", "")
     key = os.environ.get("AION_OCR_API_KEY", "EMPTY")
     b64 = base64.standard_b64encode(image_bytes).decode("ascii")
     data_url = f"data:{mime};base64,{b64}"
@@ -50,7 +99,7 @@ async def _ocr_via_api_async(image_bytes: bytes, mime: str, instruction: str, cl
                 ],
             }
         ],
-        "max_tokens": min(int(os.environ.get("AION_OCR_MAX_TOKENS", "4096")), 4096),
+        "max_tokens": min(_env_int("AION_OCR_MAX_TOKENS", 4096), 4096),
     }
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {key}"}
     
@@ -61,7 +110,7 @@ async def _ocr_via_api_async(image_bytes: bytes, mime: str, instruction: str, cl
                 r.raise_for_status()
                 data = r.json()
             else:
-                async with httpx.AsyncClient(timeout=float(os.environ.get("AION_OCR_TIMEOUT", "120"))) as client_new:
+                async with httpx.AsyncClient(timeout=_env_float("AION_OCR_TIMEOUT", 120.0)) as client_new:
                     r = await client_new.post(f"{base}/chat/completions", json=payload, headers=headers)
                     r.raise_for_status()
                     data = r.json()
@@ -105,12 +154,38 @@ async def ocr_file(
     mime, _ = mimetypes.guess_type(path.name)
     mime = mime or "application/octet-stream"
 
+
+
+    if not _is_advanced_ocr_enabled():
+        logger.info("Advanced OCR is disabled. Using local parsers.")
+        if mime == "application/pdf":
+            try:
+                text = _extract_pdf_via_pymu4llm(path)
+                logger.info(f"pymu4llm extraction success for {path.name}: {len(text)} chars")
+                return text
+            except Exception as e:
+                logger.exception("pymu4llm extraction failed")
+                return f"Error during local PDF text extraction (pymu4llm): {e}"
+        elif mime.startswith("image/"):
+            try:
+                text = _extract_image_via_pytesseract(path)
+                logger.info(f"pytesseract extraction success for {path.name}: {len(text)} chars")
+                return text
+            except Exception as e:
+                logger.warning(f"pytesseract extraction failed: {e}")
+                return (
+                    f"Advanced OCR is disabled. Local extraction via pytesseract failed: {e}. "
+                    "Make sure the 'tesseract' binary is installed on the system."
+                )
+        else:
+            return f"Advanced OCR is disabled. Local extraction is not supported for MIME type: {mime}."
+
     if mime == "application/pdf":
         try:
             from pdf2image import convert_from_path
             
             # Carichiamo le impostazioni o usiamo il parametro
-            limit = int(os.environ.get("AION_OCR_PDF_MAX_PAGES", str(max_pages)))
+            limit = _env_int("AION_OCR_PDF_MAX_PAGES", max_pages)
             images = convert_from_path(str(path), first_page=1, last_page=limit)
             
             # Limit parallel calls to avoid overloading the OCR server
@@ -144,7 +219,7 @@ async def ocr_file(
 
     if mime.startswith("image/"):
         data = path.read_bytes()
-        limit_bytes = int(os.environ.get("AION_OCR_MAX_IMAGE_BYTES", str(20 * 1024 * 1024)))
+        limit_bytes = _env_int("AION_OCR_MAX_IMAGE_BYTES", 20 * 1024 * 1024)
         if len(data) > limit_bytes:
             return f"Image too large (max {limit_bytes} bytes)."
         try:

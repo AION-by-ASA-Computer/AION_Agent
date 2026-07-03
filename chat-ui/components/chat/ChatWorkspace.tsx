@@ -109,6 +109,7 @@ import { MemoryDockPanel } from "@/components/memory/MemoryDockPanel";
 import { ProjectMemoryChip } from "@/components/memory/ProjectMemoryChip";
 import { readStoredSqlProject } from "@/components/memory/ProjectMemoryToolbar";
 import { ProjectCreateModal } from "@/components/memory/ProjectCreateModal";
+import { fetchSqlProjects, type SqlProject } from "@/lib/api/query-memory";
 import {
   hasMempalaceMcp,
   hasSqlQueryMemory,
@@ -665,9 +666,70 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const [projectCreateOpen, setProjectCreateOpen] = useState(false);
 
+  // States for available SQL QueryMemory projects
+  const [sqlProjects, setSqlProjects] = useState<SqlProject[]>([]);
+  const [loadingSqlProjects, setLoadingSqlProjects] = useState(false);
+
+  // Fetch available projects from backend
+  const fetchProjectsList = useCallback(async () => {
+    if (!userId) return;
+    setLoadingSqlProjects(true);
+    try {
+      const list = await fetchSqlProjects(userId, token, activeProfileSlug);
+      setSqlProjects(list);
+    } catch (err) {
+      console.error("Error fetching SQL projects:", err);
+    } finally {
+      setLoadingSqlProjects(false);
+    }
+  }, [userId, token, activeProfileSlug]);
+
+  // Load project list when memory capabilities are enabled
+  useEffect(() => {
+    if (showSqlQueryMemory) {
+      void fetchProjectsList();
+    } else {
+      setSqlProjects([]);
+    }
+  }, [showSqlQueryMemory, fetchProjectsList]);
+
+  // Auto-resolve stale or invalid project slug selections
+  useEffect(() => {
+    if (!showSqlQueryMemory || loadingSqlProjects) return;
+
+    const isValid = sqlProjects.some((p) => p.slug === sqlQueryProject);
+    if (!isValid && sqlProjects.length > 0) {
+      const firstProj = sqlProjects[0].slug;
+      setSqlQueryProject(firstProj);
+      localStorage.setItem("aion_sql_query_project", firstProj);
+      if (messages.length > 0) {
+        updateConversationMetadata(conversationId, { sql_query_project: firstProj }, userId, token)
+          .catch((err) => console.error("Error saving auto-selected project preference to DB:", err));
+      }
+    }
+  }, [
+    sqlProjects,
+    sqlQueryProject,
+    showSqlQueryMemory,
+    loadingSqlProjects,
+    conversationId,
+    messages.length,
+    userId,
+    token,
+  ]);
+
+
+
   const isProjectRequiredButMissing = useMemo(() => {
-    return showSqlQueryMemory && (!sqlQueryProject || sqlQueryProject.trim().toLowerCase() === "default");
-  }, [showSqlQueryMemory, sqlQueryProject]);
+    if (!showSqlQueryMemory) return false;
+    if (loadingSqlProjects) return false;
+    if (sqlProjects.length === 0) return true;
+    return (
+      !sqlQueryProject ||
+      sqlQueryProject.trim().toLowerCase() === "default" ||
+      !sqlProjects.some((p) => p.slug === sqlQueryProject)
+    );
+  }, [showSqlQueryMemory, sqlProjects, sqlQueryProject, loadingSqlProjects]);
 
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [reasoningEffort, setReasoningEffort] = useState<"min" | "medium" | "max">("medium");
@@ -817,7 +879,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       updateConversationMetadata(conversationId, { sql_query_project: proj }, userId, token)
         .catch((err) => console.error("Error saving project preference to DB:", err));
     }
-  }, [conversationId, messages.length, userId, token]);
+    void fetchProjectsList();
+  }, [conversationId, messages.length, userId, token, fetchProjectsList]);
 
   const handleAgentModeChange = useCallback((mode: AgentMode) => {
     setAgentMode(mode);
@@ -3585,7 +3648,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               >
                                 <div className="flex items-center gap-2">
                                   <Sparkles size={12} className={selectedProvider ? "text-primary" : "text-muted-foreground"} aria-hidden />
-                                  <span>{selectedProvider ? (llmProviders.find((p) => p.slug === selectedProvider)?.display_name || selectedProvider) : "Model"}</span>
+                                  <span>{selectedProvider ? (llmProviders.find((p) => p.slug === selectedProvider)?.display_name || selectedProvider) : t("chat.model.label")}</span>
                                 </div>
                                 <ChevronRight size={12} className="shrink-0" aria-hidden />
                               </button>
@@ -3598,13 +3661,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                     className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                   >
                                     <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
-                                      {selectedProvider ? "Switch Model" : "Select Model"}
+                                      {selectedProvider ? t("chat.model.switch") : t("chat.model.select")}
                                     </div>
                                     <div className="space-y-0.5">
                                       {providersLoading ? (
                                         <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
                                           <div className="w-3 h-3 border-2 border-border border-t-primary rounded-full animate-spin" />
-                                          Loading...
+                                          {t("integrationsPage.loading")}
                                         </div>
                                       ) : (
                                         <>

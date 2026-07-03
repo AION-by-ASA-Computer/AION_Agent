@@ -7,8 +7,11 @@ import {
   Save, Shield, Globe, Server,
   Database, Zap, Lock, RefreshCw, AlertTriangle,
   Info, CheckCircle2, Search, Settings as SettingsIcon,
-  Eye, EyeOff, Plus, Trash2, Edit2, X, ChevronDown, ChevronUp, Star
+  Eye, EyeOff, Plus, Trash2, Edit2, X, ChevronDown, ChevronUp, Star,
+  ShieldAlert
 } from "lucide-react";
+import { PolicyEditor } from "@/components/policy-editor";
+import { load as yamlLoad } from "js-yaml";
 
 interface Settings {
   [key: string]: string;
@@ -23,6 +26,16 @@ export default function SettingsPage() {
   const [restarting, setRestarting] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [showOcrApiKey, setShowOcrApiKey] = useState(false);
+  const [ocrEnabled, setOcrEnabled] = useState(false);
+
+  // Filesystem Policy State
+  const [fsPolicyEnabled, setFsPolicyEnabled] = useState(true);
+  const [fsPolicyYaml, setFsPolicyYaml] = useState("");
+  const [devTemplateYaml, setDevTemplateYaml] = useState("");
+  const [exampleTemplateYaml, setExampleTemplateYaml] = useState("");
+  const [customYaml, setCustomYaml] = useState("");
+  const [selectedPolicyType, setSelectedPolicyType] = useState<"dev" | "production" | "custom">("dev");
+  const [policySaving, setPolicySaving] = useState(false);
 
   // LLM Providers state
   const [llmProviders, setLlmProviders] = useState<any[]>([]);
@@ -50,6 +63,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetchSettings();
     fetchLlmProviders();
+    fetchFsPolicy();
   }, []);
 
   const fetchLlmProviders = async () => {
@@ -187,10 +201,115 @@ export default function SettingsPage() {
       const currentSettings = data.settings || {};
       setSettings(currentSettings);
 
+      const hasOcr = !!(currentSettings.AION_OCR_BASE_URL || currentSettings.AION_OCR_API_KEY || currentSettings.AION_OCR_MODEL);
+      setOcrEnabled(hasOcr);
     } catch (err) {
       console.error("Failed to fetch settings", err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchFsPolicy = async () => {
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/settings/fs-policy`);
+      if (res.ok) {
+        const data = await res.json();
+        setFsPolicyEnabled(data.enabled);
+        setDevTemplateYaml(data.dev_template || "");
+        setExampleTemplateYaml(data.example_template || "");
+
+        const activeYaml = data.yaml_content || "";
+        setFsPolicyYaml(activeYaml);
+
+        // Detect if the active policy matches one of the templates
+        if (activeYaml === data.dev_template) {
+          setSelectedPolicyType("dev");
+          setCustomYaml(data.dev_template);
+        } else if (activeYaml === data.example_template) {
+          setSelectedPolicyType("production");
+          setCustomYaml(data.example_template);
+        } else {
+          setSelectedPolicyType("custom");
+          setCustomYaml(activeYaml);
+        }
+      }
+    } catch (err) {
+      console.error("Failed to fetch filesystem policy", err);
+    }
+  };
+
+  const saveFsPolicy = async () => {
+    setPolicySaving(true);
+    setMessage(null);
+
+    let yamlToSave = "";
+    if (selectedPolicyType === "dev") {
+      yamlToSave = devTemplateYaml;
+    } else if (selectedPolicyType === "production") {
+      yamlToSave = exampleTemplateYaml;
+    } else {
+      yamlToSave = customYaml;
+    }
+
+    // Validate rules: no rule can have an empty or whitespace-only executable name
+    if (fsPolicyEnabled) {
+      try {
+        const parsed = yamlLoad(yamlToSave) as any;
+        if (parsed && parsed.exec && Array.isArray(parsed.exec.allowlist)) {
+          for (let i = 0; i < parsed.exec.allowlist.length; i++) {
+            const rule = parsed.exec.allowlist[i];
+            if (!rule || typeof rule !== "object" || !rule.executable || !rule.executable.trim()) {
+              setMessage({
+                type: 'error',
+                text: `Validation failed: Rule #${i + 1} has an empty executable name.`
+              });
+              setPolicySaving(false);
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        setMessage({
+          type: 'error',
+          text: "Invalid YAML format. Please correct it before saving."
+        });
+        setPolicySaving(false);
+        return;
+      }
+    }
+
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/settings/fs-policy`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          yaml_content: yamlToSave,
+          enabled: fsPolicyEnabled,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.restarting) {
+          setRestarting(true);
+          pollHealth();
+        } else {
+          setMessage({ type: 'success', text: "Filesystem policy updated successfully." });
+          fetchFsPolicy();
+        }
+      } else {
+        try {
+          const errData = await res.json();
+          setMessage({ type: 'error', text: errData.detail || "Failed to save filesystem policy." });
+        } catch {
+          setMessage({ type: 'error', text: "Failed to save filesystem policy." });
+        }
+      }
+    } catch (err) {
+      setMessage({ type: 'error', text: "Network error while saving filesystem policy." });
+    } finally {
+      setPolicySaving(false);
     }
   };
 
@@ -234,11 +353,76 @@ export default function SettingsPage() {
     setSaving(true);
     setMessage(null);
 
+    // Validation when OCR is enabled
+    if (ocrEnabled) {
+      if (!settings.AION_OCR_BASE_URL?.trim()) {
+        setMessage({ type: 'error', text: "OCR Base URL is required when OCR is enabled." });
+        setSaving(false);
+        return;
+      }
+      if (!settings.AION_OCR_BASE_URL.startsWith("http://") && !settings.AION_OCR_BASE_URL.startsWith("https://")) {
+        setMessage({ type: 'error', text: "OCR Base URL must start with http:// or https://" });
+        setSaving(false);
+        return;
+      }
+      if (!settings.AION_OCR_MODEL?.trim()) {
+        setMessage({ type: 'error', text: "OCR Model is required when OCR is enabled." });
+        setSaving(false);
+        return;
+      }
+      if (!settings.AION_OCR_API_KEY?.trim()) {
+        setMessage({ type: 'error', text: "OCR API Key is required when OCR is enabled." });
+        setSaving(false);
+        return;
+      }
+
+      // Max tokens validation
+      if (settings.AION_OCR_MAX_TOKENS) {
+        const val = parseInt(settings.AION_OCR_MAX_TOKENS, 10);
+        if (isNaN(val) || val <= 0) {
+          setMessage({ type: 'error', text: "OCR Max Tokens must be a positive integer." });
+          setSaving(false);
+          return;
+        }
+      }
+
+      // Timeout validation
+      if (settings.AION_OCR_TIMEOUT) {
+        const val = parseInt(settings.AION_OCR_TIMEOUT, 10);
+        if (isNaN(val) || val <= 0) {
+          setMessage({ type: 'error', text: "OCR Timeout must be a positive integer." });
+          setSaving(false);
+          return;
+        }
+      }
+
+      // Max image bytes validation
+      if (settings.AION_OCR_MAX_IMAGE_BYTES) {
+        const val = parseInt(settings.AION_OCR_MAX_IMAGE_BYTES, 10);
+        if (isNaN(val) || val <= 0) {
+          setMessage({ type: 'error', text: "OCR Max Image Bytes must be a positive integer." });
+          setSaving(false);
+          return;
+        }
+      }
+    }
+
+    // Build the payload
+    const payloadSettings = { ...settings };
+    if (!ocrEnabled) {
+      payloadSettings.AION_OCR_BASE_URL = "";
+      payloadSettings.AION_OCR_MODEL = "";
+      payloadSettings.AION_OCR_API_KEY = "";
+      payloadSettings.AION_OCR_MAX_TOKENS = "";
+      payloadSettings.AION_OCR_TIMEOUT = "";
+      payloadSettings.AION_OCR_MAX_IMAGE_BYTES = "";
+    }
+
     try {
       const res = await apiFetch(`${apiBase()}/admin/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify({ settings: payloadSettings }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -286,13 +470,6 @@ export default function SettingsPage() {
         </div>
 
         <div className="flex gap-3">
-          <button
-            onClick={fetchSettings}
-            className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-gray-400 hover:text-white transition-all"
-            title="Reload from disk"
-          >
-            <RefreshCw className="w-5 h-5" />
-          </button>
           <button
             onClick={saveSettings}
             disabled={saving}
@@ -454,6 +631,7 @@ export default function SettingsPage() {
                       onChange={(e) => setProviderForm(p => ({ ...p, api_key: e.target.value }))}
                       className="flex-1 bg-[#0d0d0d] border border-[#262626] rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 outline-none transition-all font-mono"
                       placeholder="sk-... (required, encrypted at rest)"
+                      autoComplete="new-password"
                     />
                     <button
                       onClick={() => setShowApiKeyField(!showApiKeyField)}
@@ -756,6 +934,7 @@ export default function SettingsPage() {
                   onChange={(e) => handleUpdate('AION_EMBEDDINGS_API_KEY', e.target.value)}
                   placeholder="Enter Embedding API Key"
                   className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl pl-4 pr-10 py-2.5 text-sm text-gray-200 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono"
+                  autoComplete="new-password"
                 />
                 <button
                   type="button"
@@ -771,136 +950,244 @@ export default function SettingsPage() {
 
         {/* OCR Document Processing */}
         <section className="glass-card p-6 border-[#262626] hover:border-amber-500/30 transition-colors group">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform">
-              <Eye className="w-5 h-5 text-amber-500" />
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform">
+                <Eye className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white">OCR Document Processing</h3>
+                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Vision-based Text Extraction</p>
+              </div>
             </div>
-            <div>
-              <h3 className="font-bold text-white">OCR Document Processing</h3>
-              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Vision-based Text Extraction</p>
-            </div>
+            <button
+              onClick={() => setOcrEnabled(!ocrEnabled)}
+              className={`w-10 h-5 rounded-full transition-all flex items-center px-1 cursor-pointer ${ocrEnabled ? 'bg-amber-500' : 'bg-gray-700'}`}
+              title={ocrEnabled ? "Disable OCR" : "Enable OCR"}
+            >
+              <div className={`w-3 h-3 bg-white rounded-full transition-transform ${ocrEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
           </div>
 
-          <div className="space-y-4">
-            <ConfigInput
-              label="OCR Base URL (AION_OCR_BASE_URL)"
-              value={settings.AION_OCR_BASE_URL || ""}
-              onChange={(v) => handleUpdate('AION_OCR_BASE_URL', v)}
-              description="Base URL for the vision-based OCR service"
-            />
-            <ConfigInput
-              label="OCR Model (AION_OCR_MODEL)"
-              value={settings.AION_OCR_MODEL || ""}
-              onChange={(v) => handleUpdate('AION_OCR_MODEL', v)}
-              description="Model identifier, e.g. zai-org/GLM-OCR"
-            />
-            <div className="space-y-1.5 font-mono">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">OCR API Key (AION_OCR_API_KEY)</label>
+          {ocrEnabled ? (
+            <div className="space-y-4">
+              <ConfigInput
+                label="OCR Base URL (AION_OCR_BASE_URL)"
+                value={settings.AION_OCR_BASE_URL || ""}
+                onChange={(v) => handleUpdate('AION_OCR_BASE_URL', v)}
+                description="Base URL for the vision-based OCR service"
+              />
+              <ConfigInput
+                label="OCR Model (AION_OCR_MODEL)"
+                value={settings.AION_OCR_MODEL || ""}
+                onChange={(v) => handleUpdate('AION_OCR_MODEL', v)}
+                description="Model identifier"
+              />
+              <div className="space-y-1.5 font-mono">
+                <div className="flex items-center justify-between">
+                  <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">OCR API Key (AION_OCR_API_KEY)</label>
+                </div>
+                <div className="relative">
+                  <input
+                    type={showOcrApiKey ? "text" : "password"}
+                    value={settings.AION_OCR_API_KEY || ""}
+                    onChange={(e) => handleUpdate('AION_OCR_API_KEY', e.target.value)}
+                    placeholder="Enter OCR API Key"
+                    className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl pl-4 pr-10 py-2.5 text-sm text-gray-200 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono"
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowOcrApiKey(!showOcrApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors cursor-pointer"
+                  >
+                    {showOcrApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-              <div className="relative">
-                <input
-                  type={showOcrApiKey ? "text" : "password"}
-                  value={settings.AION_OCR_API_KEY || ""}
-                  onChange={(e) => handleUpdate('AION_OCR_API_KEY', e.target.value)}
-                  placeholder="Enter OCR API Key"
-                  className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl pl-4 pr-10 py-2.5 text-sm text-gray-200 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono"
-                />
+              <ConfigInput
+                label="OCR Max Tokens (AION_OCR_MAX_TOKENS)"
+                value={settings.AION_OCR_MAX_TOKENS || ""}
+                onChange={(v) => handleUpdate('AION_OCR_MAX_TOKENS', v)}
+              />
+              <ConfigInput
+                label="OCR Timeout in Seconds (AION_OCR_TIMEOUT)"
+                value={settings.AION_OCR_TIMEOUT || ""}
+                onChange={(v) => handleUpdate('AION_OCR_TIMEOUT', v)}
+              />
+              <ConfigInput
+                label="OCR Max Image Bytes (AION_OCR_MAX_IMAGE_BYTES)"
+                value={settings.AION_OCR_MAX_IMAGE_BYTES || ""}
+                onChange={(v) => handleUpdate('AION_OCR_MAX_IMAGE_BYTES', v)}
+              />
+            </div>
+          ) : (
+            <div className="p-5 rounded-2xl border border-dashed border-[#262626] bg-[#0d0d0d]/30 text-center text-gray-500 text-sm">
+              <Info className="w-8 h-8 mx-auto mb-2 text-gray-600" />
+              OCR document processing is disabled. <br />
+              The agent will run OCR MCP without vision-based text extraction but with basic extraction scripts.
+            </div>
+          )}
+        </section>
+
+        {/* Sandbox Security & Filesystem Exec Policy */}
+        <section className="glass-card p-6 border-[#262626] hover:border-amber-500/30 transition-colors group md:col-span-2 animate-in fade-in duration-500">
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20 group-hover:scale-110 transition-transform">
+                <ShieldAlert className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-white">Sandbox Security & Filesystem Policy</h3>
+                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Configure sandbox boundaries and command allowlists</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setFsPolicyEnabled(!fsPolicyEnabled)}
+              className={`w-10 h-5 rounded-full transition-all flex items-center px-1 cursor-pointer ${fsPolicyEnabled ? 'bg-amber-500' : 'bg-gray-700'}`}
+              title={fsPolicyEnabled ? "Disable Filesystem Policy" : "Enable Filesystem Policy"}
+            >
+              <div className={`w-3 h-3 bg-white rounded-full transition-transform ${fsPolicyEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+            </button>
+          </div>
+
+          {fsPolicyEnabled ? (
+            <div className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Dev Template Card */}
                 <button
                   type="button"
-                  onClick={() => setShowOcrApiKey(!showOcrApiKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors cursor-pointer"
+                  onClick={() => setSelectedPolicyType("dev")}
+                  className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${selectedPolicyType === "dev"
+                    ? "bg-amber-500/5 border-amber-500/30 text-amber-300 shadow-md shadow-amber-500/5"
+                    : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
+                    }`}
                 >
-                  {showOcrApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <Zap className="w-4 h-4" /> Development Policy
+                  </div>
+                  <span className="text-xs opacity-80">
+                    Enables a minimal allowlist of commands (grep, wc, sort, python3) for local agent operations.
+                  </span>
+                </button>
+
+                {/* Production Template Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedPolicyType("production")}
+                  className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${selectedPolicyType === "production"
+                    ? "bg-amber-500/5 border-amber-500/30 text-amber-300 shadow-md shadow-amber-500/5"
+                    : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
+                    }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <Lock className="w-4 h-4" /> Production Policy
+                  </div>
+                  <span className="text-xs opacity-80">
+                    Advanced template with detailed descriptions, strict path boundaries, and hardened execute constraints.
+                  </span>
+                </button>
+
+                {/* Custom Policy Card */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedPolicyType("custom")}
+                  className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all cursor-pointer ${selectedPolicyType === "custom"
+                    ? "bg-amber-500/5 border-amber-500/30 text-amber-300 shadow-md shadow-amber-500/5"
+                    : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
+                    }`}
+                >
+                  <div className="flex items-center gap-2 font-bold text-sm">
+                    <SettingsIcon className="w-4 h-4" /> Custom Policy
+                  </div>
+                  <span className="text-xs opacity-80">
+                    Manually edit and write custom command rules and directory access policies to meet your specific needs.
+                  </span>
+                </button>
+              </div>
+
+              {/* View/Edit – visual policy editor */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                    {selectedPolicyType === "custom" ? "Edit Policy" : "Policy Blueprint Preview (Read Only)"}
+                  </label>
+                  <span className="text-[10px] text-gray-500 font-mono">config/fs_policy.yaml</span>
+                </div>
+
+                {selectedPolicyType !== "custom" && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl flex items-center justify-between text-xs text-amber-400">
+                    <div className="flex items-center gap-2">
+                      <Info className="w-4 h-4 shrink-0" />
+                      <span>You are viewing a standard template. To make edits, switch to <strong>Custom</strong>.</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCustomYaml(selectedPolicyType === "dev" ? devTemplateYaml : exampleTemplateYaml);
+                        setSelectedPolicyType("custom");
+                      }}
+                      className="px-3 py-1 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg text-amber-300 font-bold transition-all text-xs active:scale-95 cursor-pointer"
+                    >
+                      Derive Custom from Template
+                    </button>
+                  </div>
+                )}
+
+                <PolicyEditor
+                  value={
+                    selectedPolicyType === "dev"
+                      ? devTemplateYaml
+                      : selectedPolicyType === "production"
+                        ? exampleTemplateYaml
+                        : customYaml
+                  }
+                  onChange={(yaml) => {
+                    if (selectedPolicyType === "custom") {
+                      setCustomYaml(yaml);
+                    }
+                  }}
+                  readOnly={selectedPolicyType !== "custom"}
+                />
+              </div>
+
+              {/* Save policy changes */}
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={saveFsPolicy}
+                  disabled={policySaving}
+                  className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg cursor-pointer ${policySaving
+                    ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                    : 'bg-amber-600 hover:bg-amber-500 text-white shadow-amber-500/20 active:scale-95'
+                    }`}
+                >
+                  {policySaving ? (
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : <Save className="w-4 h-4" />}
+                  {policySaving ? "Committing Changes..." : "Commit Changes"}
                 </button>
               </div>
             </div>
-            <ConfigInput
-              label="OCR Max Tokens (AION_OCR_MAX_TOKENS)"
-              value={settings.AION_OCR_MAX_TOKENS || ""}
-              onChange={(v) => handleUpdate('AION_OCR_MAX_TOKENS', v)}
-            />
-            <ConfigInput
-              label="OCR Timeout in Seconds (AION_OCR_TIMEOUT)"
-              value={settings.AION_OCR_TIMEOUT || ""}
-              onChange={(v) => handleUpdate('AION_OCR_TIMEOUT', v)}
-            />
-            <ConfigInput
-              label="OCR Max Image Bytes (AION_OCR_MAX_IMAGE_BYTES)"
-              value={settings.AION_OCR_MAX_IMAGE_BYTES || ""}
-              onChange={(v) => handleUpdate('AION_OCR_MAX_IMAGE_BYTES', v)}
-            />
-          </div>
-        </section>
-
-        {/* Infrastructure */}
-        <section className="glass-card p-6 border-[#262626] hover:border-green-500/30 transition-colors group">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center border border-green-500/20 group-hover:scale-110 transition-transform">
-              <Database className="w-5 h-5 text-green-500" />
-            </div>
-            <div>
-              <h3 className="font-bold text-white">Infrastructure</h3>
-              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Storage & Databases</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <ConfigInput
-              label="Unified DB URL"
-              value={settings.AION_DB_URL || ""}
-              onChange={(v) => handleUpdate('AION_DB_URL', v)}
-              description="AION V2 Core Database (SQLite/PG)"
-            />
-            <ConfigInput
-              label="Redis Connection"
-              value={settings.AION_REDIS_URL || ""}
-              onChange={(v) => handleUpdate('AION_REDIS_URL', v)}
-              description="Optional cache for SSE & Tools"
-            />
-            <div className="p-3 bg-white/5 rounded-xl border border-white/10">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs font-bold text-gray-400 uppercase">Storage Backend</span>
-                <span className="text-[10px] font-bold text-green-500 bg-green-500/10 px-1.5 rounded uppercase tracking-tighter">
-                  {settings.AION_STORAGE_BACKEND || 'local'}
-                </span>
+          ) : (
+            <div className="p-6 rounded-2xl border border-dashed border-[#262626] bg-[#0d0d0d]/30 text-center text-gray-500 text-sm">
+              <Info className="w-8 h-8 mx-auto mb-2 text-gray-600" />
+              Filesystem Policy is disabled. All filesystem and command execution restrictions are off.
+              <div className="flex justify-center mt-4">
+                <button
+                  onClick={saveFsPolicy}
+                  disabled={policySaving}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold bg-amber-600 hover:bg-amber-500 text-white transition-all active:scale-95 cursor-pointer"
+                >
+                  {policySaving ? (
+                    <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  ) : <Save className="w-4 h-4" />}
+                  {policySaving ? "Committing Changes..." : "Commit Changes"}
+                </button>
               </div>
             </div>
-          </div>
+          )}
         </section>
 
-
-
-        {/* Security & Governance */}
-        <section className="glass-card p-6 border-[#262626] hover:border-orange-500/30 transition-colors group">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center border border-orange-500/20 group-hover:scale-110 transition-transform">
-              <Shield className="w-5 h-5 text-orange-500" />
-            </div>
-            <div>
-              <h3 className="font-bold text-white">Governance</h3>
-              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Privacy & Control</p>
-            </div>
-          </div>
-
-          <div className="space-y-4">
-            <ConfigToggle
-              label="PII Redaction"
-              enabled={settings.AION_PII_REDACT === "1"}
-              onChange={(e) => handleUpdate('AION_PII_REDACT', e ? "1" : "0")}
-            />
-            <ConfigToggle
-              label="Tool Approval Required"
-              enabled={settings.AION_APPROVAL_ENABLED === "1"}
-              onChange={(e) => handleUpdate('AION_APPROVAL_ENABLED', e ? "1" : "0")}
-            />
-            <ConfigToggle
-              label="Persistent Stdio Pool"
-              enabled={settings.AION_MCP_POOL === "1"}
-              onChange={(e) => handleUpdate('AION_MCP_POOL', e ? "1" : "0")}
-            />
-          </div>
-        </section>
       </div>
 
 

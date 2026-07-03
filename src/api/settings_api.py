@@ -15,25 +15,28 @@ def _get_repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _get_data_dir() -> Path:
+    repo_root = _get_repo_root()
+    default_dir = "/app/data" if os.path.exists("/.dockerenv") else "data"
+    data_dir_str = os.environ.get("AION_DATA_DIR", default_dir).strip()
+    data_path = Path(data_dir_str)
+    if not data_path.is_absolute():
+        data_path = repo_root / data_path
+    return data_path
+
+
 def _get_env_path() -> Path:
-    if os.path.exists("/.dockerenv"):
-        data_dir = os.environ.get("AION_DATA_DIR", "/app/data")
-        return Path(data_dir) / "runtime.env"
-    return _get_repo_root() / ".env"
+    repo_root = _get_repo_root()
+    runtime_env = _get_data_dir() / "runtime.env"
+    if os.path.exists("/.dockerenv") or runtime_env.is_file():
+        return runtime_env
+    return repo_root / ".env"
 
 
-def _parse_env() -> Dict[str, str]:
-    path = _get_env_path()
+def _parse_env_file(path: Path) -> Dict[str, str]:
     out = {}
-
-    # Initialize from current system process environment (only AION_* keys)
-    for k, v in os.environ.items():
-        if k.startswith("AION_"):
-            out[k] = v
-
     if not path.is_file():
         return out
-
     try:
         for line in path.read_text(encoding="utf-8").splitlines():
             line = line.strip()
@@ -47,6 +50,35 @@ def _parse_env() -> Dict[str, str]:
             out[key] = val
     except Exception as e:
         logger.error(f"Failed to parse env file {path}: {e}")
+    return out
+
+
+def _parse_env() -> Dict[str, str]:
+    repo_root = _get_repo_root()
+    out = {}
+
+    # 1. Initialize from current system process environment (only AION_* keys)
+    for k, v in os.environ.items():
+        if k.startswith("AION_"):
+            out[k] = v
+
+    # 2. Parse .env (without overriding existing keys)
+    dot_env = _parse_env_file(repo_root / ".env")
+    for k, v in dot_env.items():
+        if k not in out:
+            out[k] = v
+
+    # 3. Parse .env.local (without overriding existing keys)
+    dot_env_local = _parse_env_file(repo_root / ".env.local")
+    for k, v in dot_env_local.items():
+        if k not in out:
+            out[k] = v
+
+    # 4. Parse runtime.env (overrides everything)
+    runtime_env_path = _get_data_dir() / "runtime.env"
+    runtime_env = _parse_env_file(runtime_env_path)
+    for k, v in runtime_env.items():
+        out[k] = v
 
     return out
 
@@ -167,6 +199,38 @@ async def _deferred_exit():
     os._exit(0)
 
 
+def _reload_env():
+    """Reload dotenv files into os.environ and clear the fs policy LRU cache."""
+    try:
+        from dotenv import load_dotenv
+
+        repo_root = _get_repo_root()
+
+        # 1. Load .env
+        load_dotenv(repo_root / ".env", override=True)
+        # 2. Load .env.local
+        load_dotenv(repo_root / ".env.local", override=True)
+
+        # 3. Load runtime.env if it exists
+        runtime_env = _get_data_dir() / "runtime.env"
+        if runtime_env.is_file():
+            load_dotenv(runtime_env, override=True)
+
+        # 4. Clear FSPolicy cache
+        from src.runtime.agent_fs_policy import load_fs_policy
+
+        load_fs_policy.cache_clear()
+
+        # 5. Reload Config singleton
+        from src.config import config
+
+        config.load()
+
+        logger.info("AION Environment and Config reloaded successfully in-process.")
+    except Exception as e:
+        logger.error(f"Error reloading AION Environment: {e}")
+
+
 @router.post("")
 async def update_settings(update: SettingsUpdate):
     """Update .env settings."""
@@ -212,6 +276,7 @@ async def update_settings(update: SettingsUpdate):
                 )
 
         _write_env(merged)
+        _reload_env()
 
         restarting = False
         if os.path.exists("/.dockerenv"):
@@ -253,11 +318,11 @@ async def get_fs_policy():
     path_str = (env_dict.get("AION_FS_POLICY_PATH") or "").strip()
     enabled = bool(path_str)
 
-    if not path_str:
-        path_str = "config/fs_policy.yaml"
-
     repo_root = _get_repo_root()
-    policy_path = repo_root / path_str
+    if path_str:
+        policy_path = Path(path_str).expanduser().resolve()
+    else:
+        policy_path = repo_root / "config" / "fs_policy.yaml"
 
     yaml_content = ""
     if policy_path.is_file():
@@ -281,7 +346,7 @@ async def get_fs_policy():
         yaml_content = dev_template
 
     return FSPolicyResponse(
-        path=path_str,
+        path=path_str or "config/fs_policy.yaml",
         enabled=enabled,
         yaml_content=yaml_content,
         dev_template=dev_template,
@@ -298,8 +363,7 @@ async def update_fs_policy(body: FSPolicyUpdate):
         if not path_str:
             path_str = "config/fs_policy.yaml"
 
-        repo_root = _get_repo_root()
-        policy_path = repo_root / path_str
+        policy_path = Path(path_str).expanduser().resolve()
 
         policy_path.parent.mkdir(parents=True, exist_ok=True)
         policy_path.write_text(body.yaml_content, encoding="utf-8")
@@ -311,6 +375,7 @@ async def update_fs_policy(body: FSPolicyUpdate):
             updates["AION_FS_POLICY_PATH"] = ""
 
         _write_env(updates)
+        _reload_env()
 
         restarting = False
         if os.path.exists("/.dockerenv"):
