@@ -84,6 +84,15 @@ The package [src/runtime/](src/runtime/) contains the internal logic of the agen
   - [mcp_installer.py](src/runtime/mcp_installer.py) and [mcp_health.py](src/runtime/mcp_health.py): Control the installation and health of external MCP connectors.
 - **Turn, Prompts & Context Budgets**:
   - [turn_compaction.py](src/runtime/turn_compaction.py) and [turn_budget.py](src/runtime/turn_budget.py): Dynamically reduce the context of intermediate messages and reasonings within a single turn if the model's capacity is exceeded.
+- **Tool-first agent loop (OpenCode-style)**:
+  - [stream/loop.py](src/runtime/stream/loop.py): StreamLoop v2 — Haystack SSE demux, settlement, file-preview bridge (`AION_STREAM_LOOP_V2`).
+  - [tool_settlement.py](src/runtime/tool_settlement.py), [settlement_tool_registry.py](src/runtime/settlement_tool_registry.py): Phantom-tool blocking and arg validation before MCP.
+  - [file_tool_preview.py](src/runtime/file_tool_preview.py): Early `artifact_*` events from filesystem tool args.
+  - [doom_loop.py](src/runtime/doom_loop.py), [json_recovery.py](src/runtime/json_recovery.py), [mcp_tool_args.py](src/runtime/mcp_tool_args.py): Loop guards and tool JSON repair.
+  - [model_tool_policy.py](src/runtime/model_tool_policy.py), [apply_patch/](src/runtime/apply_patch/): Per-model tool exposure and patch format.
+  - [system_prompt.py](src/runtime/system_prompt.py): Model prompt fragments from `config_std/prompts/`.
+  - [llm_probe.py](src/runtime/llm_probe.py), [llm_call_audit.py](src/runtime/llm_call_audit.py), [litellm_errors.py](src/runtime/litellm_errors.py): Admin probe, per-step LLM audit, safe error mapping.
+- [llm_providers.py](src/api/llm_providers.py): Admin CRUD + `POST /admin/llm-providers/probe`.
 - **Sub-agents Delegation**:
   - [delegate_subagent.py](src/runtime/delegate_subagent.py), [subagent_orchestrator.py](src/runtime/subagent_orchestrator.py) and [subagent_tools.py](src/runtime/subagent_tools.py): Protocol to spawn isolated hierarchical sub-agents with a dedicated file workspace.
 - **Database & Query Memory Integration**:

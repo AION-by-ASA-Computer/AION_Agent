@@ -19,6 +19,12 @@ The construction takes place in **`AgentProfile.generate_system_prompt()`** (`sr
 
 Extended tool descriptions for sandbox write/edit/patch live in `config_std/tool_descriptions/` (loaded via `load_tool_description()` when wiring MCP descriptions).
 
+### Artifact protocol (tool-first)
+
+The curated skill **`artifact_protocol`** (`config_std/skills/artifact_protocol.md`, v8) is the single source for file-delivery rules. Legacy per-strategy skills (`artifact_protocol_tool`, `artifact_protocol_xml`, `artifact_protocol_markdown`) were removed — delivery is always via sandbox tools unless `AION_ARTIFACT_STREAM_LEGACY=1`.
+
+Companion skill **`docx`** documents the docx-js workflow (`skill_view` → `sandbox_install_npm_packages` → write script → `sandbox_run_node_file`).
+
 ## Skill file format
 
 Skills are **Markdown** files with **YAML frontmatter** (`python-frontmatter`):

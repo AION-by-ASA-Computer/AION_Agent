@@ -394,7 +394,7 @@ During SSE streaming, `tool_start` / `tool_end` events are queued in `pending_db
 
 ## Tool-first file delivery (OpenCode-style)
 
-File creation and edits use **registered sandbox tools**, not chat-stream XML:
+File creation and edits use **registered sandbox tools**, not chat-stream XML. The skill `artifact_protocol` (single curated file in `config_std/skills/artifact_protocol.md`) replaces the former strategy-specific variants (`artifact_protocol_tool`, `_xml`, `_markdown`).
 
 | Tool | Use |
 |------|-----|
@@ -402,17 +402,47 @@ File creation and edits use **registered sandbox tools**, not chat-stream XML:
 | `sandbox_edit_workspace_file` | Surgical replace on existing file |
 | `sandbox_apply_patch` | Multi-file hunks (exposed for GPT models when `AION_MODEL_TOOL_POLICY=1`) |
 
-**Settlement layer** (`src/runtime/tool_settlement.py`) rejects phantom tool names (`aion_artifact`, `artifact`, `create_file`) and empty required arguments before MCP runs.
+### Settlement and phantom tools
 
-**SSE artifact panel:** `src/runtime/stream/loop.py` bridges `tool_start`/`tool_end` from write/edit/patch tools into `artifact_*` events for chat-ui — no `<aion_artifact>` stream required.
+**Settlement layer** (`src/runtime/tool_settlement.py` + `settlement_tool_registry.py`) runs before MCP:
+
+- Rejects phantom tool names (`aion_artifact`, `artifact`, `create_file`).
+- Blocks empty required arguments and invalid tool payloads.
+- Surfaces structured errors back to the model via `src/tools/settlement_tools.py`.
+
+### StreamLoop v2 (`AION_STREAM_LOOP_V2=1`)
+
+`src/runtime/stream/loop.py` is the primary Haystack streaming adapter:
+
+- Integrates settlement, doom-loop detection, and file-tool preview bridging.
+- Emits `artifact_start` / `artifact_content` / `artifact_end` from `tool_start`/`tool_end` on write/edit/patch tools (`file_tool_preview.py`) so chat-ui can show the dock panel without `<aion_artifact>` in the token stream.
+- Maps LiteLLM/vLLM errors to user-safe messages (`litellm_errors.py`).
 
 **Legacy:** `<aion_artifact>` parsing remains for Plan Mode overlays and when `AION_ARTIFACT_STREAM_LEGACY=1` (also re-blocks the write tool via `artifact_tool_policy`).
 
-**Doom loop:** `src/runtime/doom_loop.py` detects identical `(tool, args)` repeats (`AION_DOOM_LOOP_THRESHOLD`, action `reminder` or `stop`).
+### Doom loop, JSON recovery, vLLM
+
+| Module | Role |
+|--------|------|
+| `doom_loop.py` | Identical `(tool, args)` repeats (`AION_DOOM_LOOP_THRESHOLD`, `AION_DOOM_LOOP_ACTION`). |
+| `json_recovery.py` | Repair truncated tool-call JSON; `AION_JSON_RECOVERY_ALLOW_EMPTY` controls empty-string mapping. |
+| `mcp_tool_args.py` | Normalizes args (e.g. infer `relative_path`), run preflight for `sandbox_run_*`. |
+| `model_tool_policy.py` | Filters exposed tools per provider/model id. |
+| `apply_patch/` | OpenCode-style patch parser and applier for `sandbox_apply_patch`. |
 
 **Run preflight:** `sandbox_run_node_file` / `sandbox_run_python_file` require a non-empty existing script (`preflight_run_file_tool` in `mcp_tool_args.py`).
 
-Model-specific prompt fragments live in `config_std/prompts/` and are merged by `src/runtime/system_prompt.py`.
+**vLLM + thinking:** large tool JSON inside Qwen thinking budget is a known vLLM issue; mitigate with upgraded vLLM, higher `AION_THINKING_TOKEN_BUDGET`, and `AION_VLLM_TOOL_ARG_TOKEN_FLOOR`. Do not disable thinking solely for tool calls.
+
+Model-specific prompt fragments live in `config_std/prompts/` (`qwen_vllm.txt`, `gpt.txt`, …) and are merged by `src/runtime/system_prompt.py` when `AION_MODEL_PROMPT_FRAGMENTS=1`.
+
+### LLM call audit (debug)
+
+With `AION_LLM_CALL_AUDIT=1`, each agent step persists request/response JSON under `data/diagnostics/llm_calls/<session_id>/`. Inspect with:
+
+```bash
+python scripts/audit_llm_calls.py list|show|latest|analyze
+```
 
 ## Tool-first plan mode
 

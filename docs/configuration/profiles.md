@@ -511,6 +511,8 @@ mcp_servers:
 | `src/agent_profile.py` | Profile manager, YAML loading |
 | `src/runtime/profile_schema.py` | Pydantic validation P2.1 |
 | `src/runtime/skill_alias.py` | Maps logical `artifact_protocol` → `artifact_protocol` skill file |
+| `config_std/skills/artifact_protocol.md` | Tool-first file delivery protocol (replaces strategy-specific artifact skills) |
+| `config_std/skills/docx.md` | docx-js workflow for Word generation in sandbox |
 | `config_std/profiles/` | Profile templates (versioned in Git) |
 | `config/profiles/*.yaml`| Active profiles loaded by the agent (local) |
 | `config/skills/` | Skills referenced by profiles (local) |

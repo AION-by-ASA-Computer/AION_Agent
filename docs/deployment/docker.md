@@ -215,6 +215,7 @@ docker compose -f docker-compose.dev.yml up
 
 # Upgrade in-place (rebuild immagini + restart + alembic stato)
 ./scripts/upgrade-aion.sh --docker
+# Aggiunge chiavi tool-first mancanti in .env (es. AION_STREAM_LOOP_V2), rimuove AION_ARTIFACT_STRATEGY
 
 # Solo profili/skill/MCP da git (senza rebuild)
 docker compose restart backend
