@@ -255,14 +255,13 @@ async def probe_llm_connection(
     try:
         live_ids = await _fetch_live_model_ids(base_url, api_key)
     except Exception as e:
-        logger.info("Live /models probe failed for %s: %s", base_url, e)
+        logger.exception("Live /models probe failed for %s", base_url)
         if not catalog:
             raise ValueError(
                 f"Endpoint unreachable ({base_url}). "
-                "Check URL, API key, and that GET /v1/models returns available models. "
-                f"Detail: {e}"
+                "Check URL, API key, and that GET /v1/models returns available models."
             ) from e
-        warning = f"Live probe failed, showing LiteLLM catalog only: {e}"
+        warning = "Live probe failed, showing LiteLLM catalog only."
         models_source = "catalog"
 
     if live_ids:
