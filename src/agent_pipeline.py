@@ -45,7 +45,6 @@ from .memory.context_compressor import (
     estimate_full_prompt_tokens,
     format_compaction_block,
     get_default_compressor,
-    is_context_length_error,
     log_context_budget,
     model_context_window,
     reserve_output_tokens,
@@ -69,6 +68,7 @@ logger.setLevel(logging.INFO)
 
 # Haystack Agent su errore serializza gli input del chat_generator: niente closure annidate.
 from .runtime.context import clear_context, get_context, set_context
+from .runtime.litellm_errors import litellm_error_to_sse
 from .runtime.turn_compaction import (
     clear_turn_runtime,
     maybe_compact_after_reasoning,
@@ -1654,12 +1654,13 @@ class AgentPipeline:
                     if not stop_event.is_set():
                         logger.error("Agent.run_async failed: %s", e)
                         logger.error(traceback.format_exc())
-                        if is_context_length_error(e):
-                            queue.put_nowait(
-                                {"type": "context_length_error", "content": str(e)}
-                            )
-                        else:
-                            queue.put_nowait({"type": "error", "content": str(e)})
+                        payload = litellm_error_to_sse(e)
+                        logger.info(
+                            "LLM error classified: code=%s exc_type=%s",
+                            payload.get("code"),
+                            payload.get("exc_type"),
+                        )
+                        queue.put_nowait(payload)
                 finally:
                     clear_turn_runtime()
                     clear_context()
@@ -1726,15 +1727,13 @@ class AgentPipeline:
                     if not stop_event.is_set():
                         logger.error("Agent.run crashed in thread: %s", e)
                         logger.error(traceback.format_exc())
-                        if is_context_length_error(e):
-                            loop.call_soon_threadsafe(
-                                queue.put_nowait,
-                                {"type": "context_length_error", "content": str(e)},
-                            )
-                        else:
-                            loop.call_soon_threadsafe(
-                                queue.put_nowait, {"type": "error", "content": str(e)}
-                            )
+                        payload = litellm_error_to_sse(e)
+                        logger.info(
+                            "LLM error classified: code=%s exc_type=%s",
+                            payload.get("code"),
+                            payload.get("exc_type"),
+                        )
+                        loop.call_soon_threadsafe(queue.put_nowait, payload)
                 finally:
                     clear_turn_runtime()
                     clear_context()

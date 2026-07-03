@@ -15,6 +15,14 @@ export type ChatChunk =
   | { type: "token"; content?: string | null }
   | { type: "reasoning"; reasoning?: unknown }
   | { type: "error"; content?: string }
+  | {
+      type: "llm_error";
+      code?: string;
+      message?: string;
+      content?: string;
+      exc_type?: string;
+    }
+  | { type: "context_length_error"; content?: string; message?: string }
   | { type: "tool_event"; event?: Record<string, unknown> }
   | { type: "artifact_start"; artifact?: Record<string, unknown> }
   | { type: "artifact_content"; content?: string; artifact_id?: string }

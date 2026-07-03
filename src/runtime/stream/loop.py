@@ -254,8 +254,8 @@ class StreamLoop:
                     )
                     break
 
-                # --- Error / context_length_error ---
-                if ctype in ("error", "context_length_error"):
+                # --- LLM / generic errors ---
+                if ctype in ("error", "context_length_error", "llm_error"):
                     _agent_debug_log(
                         "H1",
                         "stream_loop:queue_error",
