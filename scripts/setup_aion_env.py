@@ -8,7 +8,7 @@ Setup guidato per ``.env`` (AION Agent): modalità **semplice** o **avanzata**.
   python scripts/setup_aion_env.py --advanced
   python scripts/setup_aion_env.py --dry-run    # anteprima senza scrivere file
   python scripts/setup_aion_env.py --import-state FILE -y   # merge da script
-  python scripts/check_env_example_coverage.py              # audit .env.example vs src
+  python scripts/check_env_example_coverage.py              # audit .env.example vs src + settings + upgrade
 
 Quando il login chat e' abilitato (``AION_CHAT_PASSWORD_AUTH``), dopo la scrittura del
 ``.env`` viene eseguito il bootstrap del DB + creazione utente (interattivo senza ``-y``;
@@ -18,7 +18,8 @@ Le chiavi gestite sono quelle presenti in ``.env.example``; le altre chiavi in u
 esistente vengono preservate in coda sotto un blocco commentato.
 ``./scripts/upgrade-aion.sh`` (``upgrade_core._ensure_*_env_keys``) appende in ``.env`` le chiavi
 mancanti (web search, context compress, tool-first runtime ``AION_MODEL_PROMPT_FRAGMENTS`` /
-``AION_ARTIFACT_STREAM_LEGACY`` / doom loop / vLLM tool args / ``AION_LLM_CALL_AUDIT``, SQL QueryMemory ``AION_SQL_QM_*``,
+``AION_ARTIFACT_STREAM_LEGACY`` / ``AION_STREAM_LOOP_V2`` / doom loop / vLLM tool args /
+``AION_LLM_CALL_AUDIT``, SQL QueryMemory ``AION_SQL_QM_*``,
 MemPalace navigazione ``AION_MEMPALACE_NAV_*``, allowlist ``skill_view`` ``AION_SKILL_VIEW_ENFORCE_PROFILE``, …).
 ``setup_core.py`` / ``upgrade_core.py`` applicano anche ``patch_sql_query_memory_config.py`` e
 ``patch_mempalace_navigation_config.py`` (profilo Postgres, skill, wing ``wing_proj_{project}``).
