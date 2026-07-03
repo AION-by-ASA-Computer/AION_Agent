@@ -56,6 +56,12 @@ class LlmProviderUpdate(BaseModel):
     metadata: Optional[Dict] = None
 
 
+class LlmProviderProbeRequest(BaseModel):
+    provider: str = Field(..., description="openai, anthropic, gemini, ollama, vllm, …")
+    api_base_url: Optional[str] = None
+    api_key: Optional[str] = None
+
+
 class LlmProviderPublic(BaseModel):
     id: str
     slug: str
@@ -75,6 +81,24 @@ class LlmProviderPublic(BaseModel):
 
 
 # --- Endpoints ---
+
+
+@router.post("/probe")
+async def probe_llm_provider(body: LlmProviderProbeRequest):
+    """Test connectivity and list models (GET /v1/models + LiteLLM catalog fallback)."""
+    from src.runtime.llm_probe import probe_llm_connection
+
+    try:
+        return await probe_llm_connection(
+            provider=body.provider,
+            api_base_url=body.api_base_url,
+            api_key=body.api_key,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("LLM probe failed for provider=%s", body.provider)
+        raise HTTPException(status_code=502, detail=f"Connection failed: {e}") from e
 
 
 @router.get("", response_model=List[LlmProviderPublic])
@@ -341,13 +365,3 @@ async def delete_llm_provider(slug: str):
         await session.execute(delete(LlmProvider).where(LlmProvider.id == row.id))
         await session.commit()
     return {"ok": True}
-
-
-async def fake_function() -> None:
-    # This is a fake function
-    a = 1
-    try:
-        b = 2
-
-    except Exception as e:
-        print(e)

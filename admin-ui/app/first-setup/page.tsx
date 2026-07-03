@@ -21,6 +21,14 @@ import {
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { fetchAuthStatus } from "@/lib/auth/status";
+import {
+  hintForModel,
+  LlmProbeResponse,
+  modelIdsFromProbe,
+  providerNeedsBaseUrl,
+  providerSupportsProbe,
+  validateMaxChatTokens,
+} from "@/lib/llm-probe";
 
 type Step = "llm" | "embeddings" | "ocr" | "search" | "policy" | "review";
 
@@ -45,6 +53,11 @@ export default function FirstSetupPage() {
     thinking_token_budget: 12000,
   });
   const [showLlmKey, setShowLlmKey] = useState(false);
+  const [llmProbing, setLlmProbing] = useState(false);
+  const [llmProbeResult, setLlmProbeResult] = useState<LlmProbeResponse | null>(null);
+  const [llmProbeLatencyMs, setLlmProbeLatencyMs] = useState<number | null>(null);
+  const [llmModelsDiscovered, setLlmModelsDiscovered] = useState(false);
+  const [llmDiscoveredModelIds, setLlmDiscoveredModelIds] = useState<string[]>([]);
 
   // --- Step 2: Embeddings State ---
   const [embForm, setEmbForm] = useState({
@@ -160,6 +173,83 @@ export default function FirstSetupPage() {
       ...prev,
       provider,
       ...defaults,
+    }));
+    setLlmProbeResult(null);
+    setLlmProbeLatencyMs(null);
+    setLlmModelsDiscovered(false);
+    setLlmDiscoveredModelIds([]);
+  };
+
+  const probeLlmConnection = async (): Promise<boolean> => {
+    if (providerNeedsBaseUrl(llmForm.provider) && !llmForm.api_base_url.trim()) {
+      setError("API Base URL is required for this provider.");
+      return false;
+    }
+    if (llmForm.provider !== "ollama" && !llmForm.api_key.trim()) {
+      setError("API Key is required to test the connection.");
+      return false;
+    }
+
+    setLlmProbing(true);
+    setError(null);
+    setLlmProbeLatencyMs(null);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/llm-providers/probe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: llmForm.provider,
+          api_base_url: llmForm.api_base_url.trim() || null,
+          api_key: llmForm.api_key.trim() || null,
+        }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || "Connection test failed.");
+      }
+      const result = (await res.json()) as LlmProbeResponse;
+      const ids = modelIdsFromProbe(result);
+      if (!ids.length) {
+        throw new Error("Endpoint responded but returned no models.");
+      }
+      setLlmProbeResult(result);
+      setLlmDiscoveredModelIds(ids);
+      setLlmModelsDiscovered(true);
+      setLlmProbeLatencyMs(result.latency_ms);
+      setLlmForm((prev) => ({
+        ...prev,
+        model_name: ids.includes(prev.model_name) ? prev.model_name : ids[0],
+        api_base_url: result.base_url || prev.api_base_url,
+      }));
+      const hint = hintForModel(result, ids.includes(llmForm.model_name) ? llmForm.model_name : ids[0]);
+      if (hint) {
+        setLlmForm((prev) => ({
+          ...prev,
+          max_chat_tokens: hint.suggested_max_chat_tokens,
+        }));
+      }
+      if (result.warning) {
+        setError(result.warning);
+      }
+      return true;
+    } catch (err: any) {
+      setLlmProbeResult(null);
+      setLlmModelsDiscovered(false);
+      setLlmDiscoveredModelIds([]);
+      setError(err.message || "Connection test failed.");
+      return false;
+    } finally {
+      setLlmProbing(false);
+    }
+  };
+
+  const applyModelHint = (modelId: string) => {
+    const hint = hintForModel(llmProbeResult, modelId);
+    if (!hint) return;
+    setLlmForm((prev) => ({
+      ...prev,
+      model_name: modelId,
+      max_chat_tokens: hint.suggested_max_chat_tokens,
     }));
   };
 
@@ -301,8 +391,39 @@ export default function FirstSetupPage() {
 
   const stepsOrder: Step[] = ["llm", "embeddings", "ocr", "search", "policy", "review"];
 
-  const handleNext = () => {
+  const handleNext = async () => {
     setError(null);
+    if (currentStep === "llm") {
+      if (providerNeedsBaseUrl(llmForm.provider) && !llmForm.api_base_url.trim()) {
+        setError("API Base URL is required for this provider.");
+        return;
+      }
+      if (llmForm.provider !== "ollama" && !llmForm.api_key.trim()) {
+        setError("API Key is required.");
+        return;
+      }
+      if (!llmForm.model_name.trim()) {
+        setError("Model name is required.");
+        return;
+      }
+      if (providerSupportsProbe(llmForm.provider) && !llmModelsDiscovered) {
+        const ok = await probeLlmConnection();
+        if (!ok) return;
+      }
+      const hint = hintForModel(llmProbeResult, llmForm.model_name);
+      const tokenErr = validateMaxChatTokens(
+        llmForm.max_chat_tokens,
+        Number(llmForm.thinking_token_budget) || 0,
+        hint,
+      );
+      if (tokenErr) {
+        setError(tokenErr);
+        return;
+      }
+      const idx = stepsOrder.indexOf(currentStep);
+      setCurrentStep(stepsOrder[idx + 1]);
+      return;
+    }
     if (currentStep === "ocr" && ocrEnabled) {
       if (!ocrForm.base_url.trim()) {
         setError("OCR Base URL is required when OCR is enabled.");
@@ -453,13 +574,38 @@ export default function FirstSetupPage() {
 
                   <div className="space-y-2">
                     <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Model Name</label>
-                    <input
-                      type="text"
-                      value={llmForm.model_name}
-                      onChange={(e) => setLlmForm((prev) => ({ ...prev, model_name: e.target.value }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. gpt-4o, claude-3-5-sonnet-20241022"
-                    />
+                    {llmModelsDiscovered && llmDiscoveredModelIds.length > 0 ? (
+                      <select
+                        value={llmForm.model_name}
+                        onChange={(e) => applyModelHint(e.target.value)}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono cursor-pointer"
+                      >
+                        {llmDiscoveredModelIds.map((id) => (
+                          <option key={id} value={id}>
+                            {id}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={llmForm.model_name}
+                        onChange={(e) => setLlmForm((prev) => ({ ...prev, model_name: e.target.value }))}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                        placeholder="e.g. gpt-4o, claude-3-5-sonnet-20241022"
+                      />
+                    )}
+                    {llmModelsDiscovered && llmProbeLatencyMs != null && (
+                      <p className="text-[11px] text-emerald-400/90 font-mono">
+                        Connection OK · {llmProbeLatencyMs}ms · {llmDiscoveredModelIds.length} models
+                        {llmProbeResult?.models_source ? ` (${llmProbeResult.models_source})` : ""}
+                      </p>
+                    )}
+                    {hintForModel(llmProbeResult, llmForm.model_name) && (
+                      <p className="text-[11px] text-gray-500 font-mono">
+                        Context window: {hintForModel(llmProbeResult, llmForm.model_name)?.context_window.toLocaleString()} tokens
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -489,7 +635,13 @@ export default function FirstSetupPage() {
                         <input
                           type={showLlmKey ? "text" : "password"}
                           value={llmForm.api_key}
-                          onChange={(e) => setLlmForm((prev) => ({ ...prev, api_key: e.target.value }))}
+                          onChange={(e) => {
+                            setLlmForm((prev) => ({ ...prev, api_key: e.target.value }));
+                            setLlmProbeResult(null);
+                            setLlmModelsDiscovered(false);
+                            setLlmDiscoveredModelIds([]);
+                            setLlmProbeLatencyMs(null);
+                          }}
                           className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
                           placeholder="Enter API key"
                           autoComplete="new-password"
@@ -513,7 +665,13 @@ export default function FirstSetupPage() {
                       <input
                         type="text"
                         value={llmForm.api_base_url}
-                        onChange={(e) => setLlmForm((prev) => ({ ...prev, api_base_url: e.target.value }))}
+                        onChange={(e) => {
+                          setLlmForm((prev) => ({ ...prev, api_base_url: e.target.value }));
+                          setLlmProbeResult(null);
+                          setLlmModelsDiscovered(false);
+                          setLlmDiscoveredModelIds([]);
+                          setLlmProbeLatencyMs(null);
+                        }}
                         className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
                         placeholder={
                           llmForm.provider === "ollama"
@@ -523,6 +681,25 @@ export default function FirstSetupPage() {
                               : "https://api.openai.com/v1"
                         }
                       />
+                    </div>
+                  )}
+
+                  {providerSupportsProbe(llmForm.provider) && (
+                    <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={probeLlmConnection}
+                        disabled={llmProbing}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-300 text-sm font-semibold hover:bg-blue-500/20 transition-all disabled:opacity-50"
+                      >
+                        {llmProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                        Test connection & list models
+                      </button>
+                      {llmProbeLatencyMs != null && (
+                        <span className="text-xs text-emerald-400 font-mono">
+                          Last test OK · {llmProbeLatencyMs}ms
+                        </span>
+                      )}
                     </div>
                   )}
 
