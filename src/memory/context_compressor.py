@@ -218,6 +218,7 @@ class ContextCompressor:
         return sum(count_tokens(chat_message_text(m)) for m in messages)
 
     def compress_trigger_tokens(self) -> int:
+        logger.warning(f"CALCULATING TRIGGER TOKENS: {self.window_size} * {self.threshold} = {self.window_size * self.threshold}")
         return max(1024, int(self.window_size * self.threshold))
 
     def max_prompt_tokens(self) -> int:
