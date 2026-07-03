@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   Info,
   Lock,
+  Cloud,
+  ScanLine,
 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
@@ -30,6 +32,7 @@ import {
   LlmProbeResponse,
   modelIdsFromProbe,
   pickDefaultModel,
+  probeBaseUrlFromOcrServiceUrl,
   probeBaseUrlFromServiceUrl,
   providerNeedsBaseUrl,
   providerSupportsProbe,
@@ -37,6 +40,8 @@ import {
   slugFromModelId,
   validateMaxChatTokens,
 } from "@/lib/llm-probe";
+
+type OcrMode = "remote" | "local";
 
 type Step = "llm" | "embeddings" | "ocr" | "search" | "policy" | "review";
 
@@ -92,8 +97,14 @@ export default function FirstSetupPage() {
     timeout: 120,
     max_image_bytes: 20971520,
   });
+  const [ocrMode, setOcrMode] = useState<OcrMode>("local");
   const [showOcrKey, setShowOcrKey] = useState(false);
-  const [ocrEnabled, setOcrEnabled] = useState(false);
+  const [ocrProbing, setOcrProbing] = useState(false);
+  const [ocrProbeResult, setOcrProbeResult] = useState<LlmProbeResponse | null>(null);
+  const [ocrProbeLatencyMs, setOcrProbeLatencyMs] = useState<number | null>(null);
+  const [ocrConnectionTested, setOcrConnectionTested] = useState(false);
+  const [ocrDiscoveredModelIds, setOcrDiscoveredModelIds] = useState<string[]>([]);
+  const [ocrManualModelEntry, setOcrManualModelEntry] = useState(false);
 
   // --- Step 4: Web Search State ---
   const [searchForm, setSearchForm] = useState({
@@ -309,6 +320,90 @@ export default function FirstSetupPage() {
     }
   };
 
+  const resetOcrProbeState = () => {
+    setOcrProbeResult(null);
+    setOcrProbeLatencyMs(null);
+    setOcrConnectionTested(false);
+    setOcrDiscoveredModelIds([]);
+    setOcrManualModelEntry(false);
+    setOcrForm((prev) => ({ ...prev, model: "" }));
+  };
+
+  const handleOcrModeChange = (mode: OcrMode) => {
+    setOcrMode(mode);
+    resetOcrProbeState();
+    if (mode === "local") {
+      setOcrForm((prev) => ({
+        ...prev,
+        base_url: "",
+        model: "",
+        api_key: "",
+      }));
+    }
+  };
+
+  const probeOcrConnection = async (): Promise<boolean> => {
+    const probeBase = probeBaseUrlFromOcrServiceUrl(ocrForm.base_url);
+    if (!probeBase) {
+      setError("OCR service base URL is required to test the connection.");
+      return false;
+    }
+    if (!probeBase.startsWith("http://") && !probeBase.startsWith("https://")) {
+      setError("OCR service URL must start with http:// or https://");
+      return false;
+    }
+    const apiKey = ocrForm.api_key.trim();
+    if (!apiKey || apiKey === "EMPTY") {
+      setError(
+        "A non-empty API token is required for remote vision OCR (use any placeholder if the server has no auth — do not use EMPTY).",
+      );
+      return false;
+    }
+
+    setOcrProbing(true);
+    setError(null);
+    setOcrProbeLatencyMs(null);
+    try {
+      const result = await runModelProbe(apiFetch, apiBase(), {
+        provider: "vllm",
+        api_base_url: probeBase,
+        api_key: apiKey,
+      });
+      const allIds = modelIdsFromProbe(result);
+      const ocrIds = filterModelsForKind(allIds, "ocr");
+      setOcrProbeResult(result);
+      setOcrDiscoveredModelIds(ocrIds);
+      setOcrConnectionTested(true);
+      setOcrProbeLatencyMs(result.latency_ms);
+      setOcrForm((prev) => ({
+        ...prev,
+        base_url: result.base_url || probeBase,
+      }));
+
+      if (ocrIds.length > 0) {
+        setOcrManualModelEntry(false);
+        setOcrForm((prev) => ({
+          ...prev,
+          model: pickDefaultModel(allIds, "ocr"),
+        }));
+      } else {
+        setOcrManualModelEntry(true);
+        setOcrForm((prev) => ({ ...prev, model: "" }));
+      }
+
+      if (result.warning) {
+        setError(result.warning);
+      }
+      return true;
+    } catch (err: any) {
+      resetOcrProbeState();
+      setError(err.message || "OCR connection test failed.");
+      return false;
+    } finally {
+      setOcrProbing(false);
+    }
+  };
+
   // --- Sequential Saving Flow ---
   const handleSave = async () => {
     setLoading(true);
@@ -361,13 +456,13 @@ export default function FirstSetupPage() {
           AION_EMBEDDING_MODEL: embForm.model,
           AION_EMBEDDING_URL: embForm.url,
           AION_EMBEDDINGS_API_KEY: embForm.api_key,
-          // OCR
-          AION_OCR_BASE_URL: ocrEnabled ? ocrForm.base_url : "",
-          AION_OCR_MODEL: ocrEnabled ? ocrForm.model : "",
-          AION_OCR_API_KEY: ocrEnabled ? ocrForm.api_key : "",
-          AION_OCR_MAX_TOKENS: ocrEnabled ? String(ocrForm.max_tokens) : "",
-          AION_OCR_TIMEOUT: ocrEnabled ? String(ocrForm.timeout) : "",
-          AION_OCR_MAX_IMAGE_BYTES: ocrEnabled ? String(ocrForm.max_image_bytes) : "",
+          // OCR — remote vision server only; local mode clears env (MCP uses pymupdf/tesseract)
+          AION_OCR_BASE_URL: ocrMode === "remote" ? ocrForm.base_url : "",
+          AION_OCR_MODEL: ocrMode === "remote" ? ocrForm.model : "",
+          AION_OCR_API_KEY: ocrMode === "remote" ? ocrForm.api_key : "",
+          AION_OCR_MAX_TOKENS: ocrMode === "remote" ? String(ocrForm.max_tokens) : "",
+          AION_OCR_TIMEOUT: ocrMode === "remote" ? String(ocrForm.timeout) : "",
+          AION_OCR_MAX_IMAGE_BYTES: ocrMode === "remote" ? String(ocrForm.max_image_bytes) : "",
           // Web Search
           AION_WEB_SEARCH_TAVILY_ENABLED: searchForm.tavily_enabled ? "1" : "0",
           AION_TAVILY_API_KEY: searchForm.tavily_key,
@@ -509,41 +604,50 @@ export default function FirstSetupPage() {
       setCurrentStep(stepsOrder[idx + 1]);
       return;
     }
-    if (currentStep === "ocr" && ocrEnabled) {
-      if (!ocrForm.base_url.trim()) {
-        setError("OCR Base URL is required when OCR is enabled.");
-        return;
+    if (currentStep === "ocr") {
+      if (ocrMode === "remote") {
+        const probeBase = probeBaseUrlFromOcrServiceUrl(ocrForm.base_url);
+        if (!probeBase) {
+          setError("OCR service base URL is required for remote vision OCR.");
+          return;
+        }
+        if (!probeBase.startsWith("http://") && !probeBase.startsWith("https://")) {
+          setError("OCR service URL must start with http:// or https://");
+          return;
+        }
+        const apiKey = ocrForm.api_key.trim();
+        if (!apiKey || apiKey === "EMPTY") {
+          setError("A non-empty API token is required for remote vision OCR.");
+          return;
+        }
+        if (!ocrConnectionTested) {
+          const ok = await probeOcrConnection();
+          if (!ok) return;
+        }
+        if (!ocrForm.model.trim()) {
+          setError(
+            ocrManualModelEntry
+              ? "Enter the OCR model name manually — the endpoint did not list any models."
+              : "Select an OCR model from the list discovered by the connection test.",
+          );
+          return;
+        }
+        if (ocrForm.max_tokens <= 0) {
+          setError("OCR Max Tokens must be a positive integer.");
+          return;
+        }
+        if (ocrForm.timeout <= 0) {
+          setError("OCR Timeout must be a positive integer.");
+          return;
+        }
+        if (ocrForm.max_image_bytes <= 0) {
+          setError("OCR Max Image Bytes must be a positive integer.");
+          return;
+        }
       }
-      if (!ocrForm.base_url.trim().startsWith("http://") && !ocrForm.base_url.trim().startsWith("https://")) {
-        setError("OCR Base URL must start with http:// or https://");
-        return;
-      }
-      if (!ocrForm.model.trim()) {
-        setError("OCR Model is required when OCR is enabled.");
-        return;
-      }
-      if (!ocrForm.api_key.trim()) {
-        setError("OCR API Key is required when OCR is enabled.");
-        return;
-      }
-
-      // Max tokens validation
-      if (ocrForm.max_tokens <= 0) {
-        setError("OCR Max Tokens must be a positive integer.");
-        return;
-      }
-
-      // Timeout validation
-      if (ocrForm.timeout <= 0) {
-        setError("OCR Timeout must be a positive integer.");
-        return;
-      }
-
-      // Max image bytes validation
-      if (ocrForm.max_image_bytes <= 0) {
-        setError("OCR Max Image Bytes must be a positive integer.");
-        return;
-      }
+      const idx = stepsOrder.indexOf(currentStep);
+      setCurrentStep(stepsOrder[idx + 1]);
+      return;
     }
 
     const idx = stepsOrder.indexOf(currentStep);
@@ -986,63 +1090,85 @@ export default function FirstSetupPage() {
             {/* Step 3: OCR */}
             {currentStep === "ocr" && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                      <Eye className="w-5 h-5 text-amber-500" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold">3. OCR Document Processing</h2>
-                      <p className="text-xs text-gray-400">Configure the vision-based OCR service for extracting text from images and scanned PDFs.</p>
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                    <Eye className="w-5 h-5 text-amber-500" />
                   </div>
+                  <div>
+                    <h2 className="text-xl font-bold">3. OCR Document Processing</h2>
+                    <p className="text-xs text-gray-400">
+                      OCR is always available via the MCP tool. Choose how text is extracted from images and scanned PDFs.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => handleOcrModeChange("remote")}
+                    className={`p-4 rounded-xl border text-left flex flex-col gap-2 transition-all ${ocrMode === "remote"
+                      ? "bg-amber-500/5 border-amber-500/40 text-amber-200"
+                      : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
+                      }`}
+                  >
+                    <div className="flex items-center gap-2 font-bold text-sm">
+                      <Cloud className="w-4 h-4" /> Remote vision OCR (recommended)
+                    </div>
+                    <span className="text-xs opacity-90 leading-relaxed">
+                      OpenAI-compatible vLLM vision server (e.g. GLM-OCR). Highest accuracy on images and scanned PDF pages.
+                    </span>
+                  </button>
 
                   <button
                     type="button"
-                    onClick={() => setOcrEnabled(!ocrEnabled)}
-                    className={`w-12 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${ocrEnabled ? "bg-amber-500" : "bg-neutral-800"
+                    onClick={() => handleOcrModeChange("local")}
+                    className={`p-4 rounded-xl border text-left flex flex-col gap-2 transition-all ${ocrMode === "local"
+                      ? "bg-amber-500/5 border-amber-500/40 text-amber-200"
+                      : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
                       }`}
                   >
-                    <div
-                      className={`w-4 h-4 rounded-full bg-white transition-all ${ocrEnabled ? "translate-x-6" : "translate-x-0"
-                        }`}
-                    />
+                    <div className="flex items-center gap-2 font-bold text-sm">
+                      <ScanLine className="w-4 h-4" /> Local Python OCR (basic)
+                    </div>
+                    <span className="text-xs opacity-90 leading-relaxed">
+                      PDF via <span className="font-mono">pymupdf4llm</span>, images via <span className="font-mono">pytesseract</span>. No remote server — lower accuracy, requires Tesseract on the host.
+                    </span>
                   </button>
                 </div>
 
-                {ocrEnabled ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {ocrMode === "remote" ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
                     <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Service Base URL</label>
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
+                        OCR Service Base URL (OpenAI-compatible)
+                      </label>
                       <input
                         type="text"
                         value={ocrForm.base_url}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, base_url: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                        onChange={(e) => {
+                          setOcrForm((prev) => ({ ...prev, base_url: e.target.value }));
+                          resetOcrProbeState();
+                        }}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
                         placeholder="e.g. http://localhost:8002/v1"
                       />
+                      <p className="text-[11px] text-gray-500">
+                        Base URL for <span className="font-mono">POST /v1/chat/completions</span> — probe uses <span className="font-mono">GET /v1/models</span>.
+                      </p>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Model</label>
-                      <input
-                        type="text"
-                        value={ocrForm.model}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        placeholder=""
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR API Key</label>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR API Token</label>
                       <div className="relative">
                         <input
                           type={showOcrKey ? "text" : "password"}
                           value={ocrForm.api_key}
-                          onChange={(e) => setOcrForm((prev) => ({ ...prev, api_key: e.target.value }))}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                          placeholder="Enter API key"
+                          onChange={(e) => {
+                            setOcrForm((prev) => ({ ...prev, api_key: e.target.value }));
+                            resetOcrProbeState();
+                          }}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
+                          placeholder="Bearer token (any non-empty value if auth is disabled)"
                           autoComplete="new-password"
                         />
                         <button
@@ -1055,44 +1181,115 @@ export default function FirstSetupPage() {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Tokens</label>
-                      <input
-                        type="number"
-                        value={ocrForm.max_tokens}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 0 }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      />
+                    <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={probeOcrConnection}
+                        disabled={ocrProbing}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-semibold hover:bg-amber-500/20 transition-all disabled:opacity-50"
+                      >
+                        {ocrProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                        Test connection & discover models
+                      </button>
+                      {ocrConnectionTested && ocrProbeLatencyMs != null && (
+                        <span className="text-xs text-emerald-400 font-mono">
+                          Connection OK · {ocrProbeLatencyMs}ms
+                          {ocrDiscoveredModelIds.length > 0
+                            ? ` · ${ocrDiscoveredModelIds.length} vision/OCR models`
+                            : " · enter model manually"}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Timeout (seconds)</label>
-                      <input
-                        type="number"
-                        value={ocrForm.timeout}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, timeout: parseInt(e.target.value) || 0 }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      />
-                    </div>
+                    {!ocrConnectionTested ? (
+                      <div className="md:col-span-2 p-4 rounded-xl border border-dashed border-[#262626] bg-[#0a0a0a]/60 text-sm text-gray-500 flex items-start gap-3">
+                        <Info className="w-5 h-5 shrink-0 mt-0.5 text-gray-600" />
+                        <span>
+                          Test the vision OCR endpoint to discover models. Vision/OCR models are preferred when detected.
+                        </span>
+                      </div>
+                    ) : ocrManualModelEntry ? (
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR model (manual)</label>
+                        <input
+                          type="text"
+                          value={ocrForm.model}
+                          onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
+                          placeholder="e.g. zai-org/GLM-OCR"
+                        />
+                        <p className="text-[11px] text-amber-400/90">
+                          No models were returned by GET /v1/models — enter the vision model id manually.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR model (auto-discovered)</label>
+                        <select
+                          value={ocrForm.model}
+                          onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono cursor-pointer"
+                        >
+                          {ocrDiscoveredModelIds.map((id) => (
+                            <option key={id} value={id}>
+                              {id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Image Bytes</label>
-                      <input
-                        type="number"
-                        value={ocrForm.max_image_bytes}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, max_image_bytes: parseInt(e.target.value) || 0 }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      />
+                    {ocrConnectionTested && ocrForm.model && (
+                      <>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Tokens</label>
+                          <input
+                            type="number"
+                            value={ocrForm.max_tokens}
+                            onChange={(e) => setOcrForm((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 0 }))}
+                            className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Timeout (seconds)</label>
+                          <input
+                            type="number"
+                            value={ocrForm.timeout}
+                            onChange={(e) => setOcrForm((prev) => ({ ...prev, timeout: parseInt(e.target.value) || 0 }))}
+                            className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
+                          />
+                        </div>
+
+                        <div className="space-y-2 md:col-span-2">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Image Bytes</label>
+                          <input
+                            type="number"
+                            value={ocrForm.max_image_bytes}
+                            onChange={(e) => setOcrForm((prev) => ({ ...prev, max_image_bytes: parseInt(e.target.value) || 0 }))}
+                            className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-5 rounded-2xl border border-dashed border-[#262626] bg-[#0d0d0d]/30 text-sm text-gray-400 flex items-start gap-3">
+                    <Info className="w-8 h-8 shrink-0 text-gray-600" />
+                    <div className="space-y-2">
+                      <p>
+                        The OCR MCP tool stays active. Without a remote vision server it falls back to local extractors:
+                      </p>
+                      <ul className="list-disc list-inside text-xs text-gray-500 space-y-1">
+                        <li>PDF → <span className="font-mono">pymupdf4llm</span> (text layer / markdown)</li>
+                        <li>Images → <span className="font-mono">pytesseract</span> (requires Tesseract binary on the host)</li>
+                      </ul>
+                      <p className="text-xs text-amber-400/80">
+                        No <span className="font-mono">AION_OCR_*</span> variables will be written — switch to remote mode anytime in Admin Settings.
+                      </p>
                     </div>
                   </div>
-                ) :
-                  <>
-                    <div className="p-5 rounded-2xl border border-dashed border-[#262626] bg-[#0d0d0d]/30 text-center text-gray-500 text-sm">
-                      <Info className="w-8 h-8 mx-auto mb-2 text-gray-600" />
-                      OCR document processing is disabled. <br />
-                      The agent will run OCR MCP without vision-based text extraction but with basic extraction scripts.
-                    </div>
-                  </>}
+                )}
               </div>
             )}
 
@@ -1392,10 +1589,12 @@ export default function FirstSetupPage() {
                     <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">OCR Processing</span>
                     <div className="flex flex-col">
                       <span className="font-bold text-white">
-                        {ocrEnabled && ocrForm.base_url ? ocrForm.base_url : "Disabled"}
+                        {ocrMode === "remote" ? "Remote vision OCR" : "Local Python OCR"}
                       </span>
                       <span className="text-xs text-gray-400 font-mono">
-                        {ocrEnabled ? `Model: ${ocrForm.model} | Key: ${ocrForm.api_key ? "••••••••" : "None"}` : "OCR capabilities will be inactive."}
+                        {ocrMode === "remote"
+                          ? `${ocrForm.base_url || "—"} · model: ${ocrForm.model || "—"}`
+                          : "pymupdf4llm + pytesseract (no AION_OCR_* env vars)"}
                       </span>
                     </div>
                   </div>

@@ -21,10 +21,26 @@ export type LlmProbeResponse = {
   };
 };
 
-export type ModelProbeKind = "chat" | "embedding";
+export type ModelProbeKind = "chat" | "embedding" | "ocr";
+
+const EMBEDDING_MODEL_RE = /embed/i;
+const OCR_MODEL_RE = /ocr|glm-ocr|vision|pixtral|qwen.*vl|llava/i;
 
 export function modelIdsFromProbe(result: LlmProbeResponse): string[] {
   return (result.models?.data ?? []).map((m) => m.id).filter(Boolean);
+}
+
+export function filterModelsForKind(ids: string[], kind: ModelProbeKind): string[] {
+  if (kind === "embedding") {
+    const embedding = ids.filter((id) => EMBEDDING_MODEL_RE.test(id));
+    return embedding.length ? embedding : ids;
+  }
+  if (kind === "ocr") {
+    const ocr = ids.filter((id) => OCR_MODEL_RE.test(id));
+    return ocr.length ? ocr : ids;
+  }
+  const chat = ids.filter((id) => !EMBEDDING_MODEL_RE.test(id));
+  return chat.length ? chat : ids;
 }
 
 export function hintForModel(
@@ -73,17 +89,6 @@ export function embeddingProviderToProbeProvider(provider: string): string {
   return provider === "google" ? "gemini" : "openai";
 }
 
-const EMBEDDING_MODEL_RE = /embed/i;
-
-export function filterModelsForKind(ids: string[], kind: ModelProbeKind): string[] {
-  if (kind === "embedding") {
-    const embedding = ids.filter((id) => EMBEDDING_MODEL_RE.test(id));
-    return embedding.length ? embedding : ids;
-  }
-  const chat = ids.filter((id) => !EMBEDDING_MODEL_RE.test(id));
-  return chat.length ? chat : ids;
-}
-
 export function pickDefaultModel(ids: string[], kind: ModelProbeKind): string {
   const pool = filterModelsForKind(ids, kind);
   return pool[0] ?? "";
@@ -108,6 +113,13 @@ export function probeBaseUrlFromServiceUrl(serviceUrl: string): string {
   const trimmed = (serviceUrl || "").trim().replace(/\/$/, "");
   if (!trimmed) return "";
   return trimmed.replace(/\/embeddings$/i, "");
+}
+
+/** Strip /chat/completions suffix for OCR OpenAI-compatible bases. */
+export function probeBaseUrlFromOcrServiceUrl(serviceUrl: string): string {
+  const trimmed = (serviceUrl || "").trim().replace(/\/$/, "");
+  if (!trimmed) return "";
+  return trimmed.replace(/\/chat\/completions$/i, "");
 }
 
 /** Normalize stored AION_EMBEDDING_URL (POST target). */
