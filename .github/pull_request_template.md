@@ -13,7 +13,9 @@
 ## Test plan
 
 - [ ] `./scripts/run_ci_tests.sh` (or `python -m pytest src/test/...` for affected modules)
-- [ ] `uv run ruff check --config ruff.toml src/`
+- [ ] `uv run ruff check --config ruff.toml src/` (lint — same as CI)
+- [ ] `uv run ruff format --check --config ruff.toml src/` (formatting — CI fails if this is skipped)
+- [ ] Auto-fix formatting if needed: `uv run ruff format --config ruff.toml src/`
 - [ ] `python scripts/check_data_git_tracking.py`
 - [ ] Frontend build if UI touched (`cd <package> && pnpm build`)
 - [ ] Manual smoke test:
