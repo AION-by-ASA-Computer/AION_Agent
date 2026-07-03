@@ -20,6 +20,8 @@ YAML profiles, skills, and Plan Mode for structured multi-step work.
 
 **Commercial site:** [https://aion-asa.com](https://aion-asa.com) · **Docs:** [docs/](docs/)
 
+AION Agent is a self-hosted, enterprise-grade platform for building and running truly sovereign AI. Design custom agent profiles, extend capabilities through modular skills and native MCP tool integration, and share memory seamlessly across teams — all while keeping fully autonomous agents isolated at the organizational level. Built for security, control, and scale, AION Agent puts your AI infrastructure entirely in your hands.
+
 ## Screenshots
 
 ### Chat UI
