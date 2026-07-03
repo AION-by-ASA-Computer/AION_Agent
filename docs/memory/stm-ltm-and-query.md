@@ -43,6 +43,10 @@ flowchart LR
 
 **Trade-off:** STM sacrifices long-term persistence to achieve maximum speed. STM messages are periodically compressed/deleted (compaction and extraction into LTM before pruning).
 
+:::info See also
+For a complete description of how compaction works (pre-turn, mid-turn, manual trigger, DB verification), see **[Context Compaction](./context-compaction.md)**.
+:::
+
 #### Role of `UnifiedHistoryBridge`
 When the environment variable `AION_UNIFIED_DB=1` (active by default), the history of the current conversation (Short-Term Memory) is not stored in isolated SQLite files, but is funneled into the main relational database `data/aion.db` (tables `conversations`, `messages`, `steps`, `attachments`) via the `src/data/history_bridge.py` module.
 

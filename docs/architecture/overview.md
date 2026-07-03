@@ -15,7 +15,7 @@ AION Agent exposes an HTTP API (FastAPI) that for each user message executes the
    - Persists conversations, messages and attachments in the **unified database** of runtime (configured via `AION_DB_URL`, by default local SQLite in `data/aion.db` or PostgreSQL).
    - Manages isolated per-user operating databases saved under `data/agent_dbs/<tenant>/<user>.db`.
    - If enabled, extracts long-term memory (**LTM**) using the integration with **MemPalace v3**.
-   - Applies short-term memory (**STM**) context compression if the context window exceeds the established token threshold (`AION_CONTEXT_COMPRESS_ENABLED=1`), with optional database persistence (`AION_CONTEXT_COMPRESS_PERSIST=1`).
+   - Applies short-term memory (**STM**) context compression if the context window exceeds the established token threshold (`AION_CONTEXT_COMPRESS_ENABLED=1`), with optional database persistence (`AION_CONTEXT_COMPRESS_PERSIST=1`). See **[Context Compaction](../memory/context-compaction.md)** for the full two-level architecture (pre-turn and mid-turn).
 
 > [!WARNING]
 > The delegation and execution module of **Sub-agents** (`SubagentOrchestrator` / `delegate_task` / `delegate_to_subagent`) is currently **under active development and not working** in this version of the codebase. It must not be configured or used in production environments.
