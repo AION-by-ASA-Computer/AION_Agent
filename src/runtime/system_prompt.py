@@ -23,7 +23,9 @@ def _prompts_dir() -> Path:
 
 
 def _tool_descriptions_dir() -> Path:
-    raw = (os.getenv("AION_TOOL_DESCRIPTIONS_DIR") or "config_std/tool_descriptions").strip()
+    raw = (
+        os.getenv("AION_TOOL_DESCRIPTIONS_DIR") or "config_std/tool_descriptions"
+    ).strip()
     p = Path(raw)
     return p if p.is_absolute() else _repo_root() / p
 
@@ -85,7 +87,11 @@ def select_model_prompt(
     Return ordered prompt fragments for the active model.
     Always includes default.txt; adds provider-specific overlay when matched.
     """
-    if os.getenv("AION_MODEL_PROMPT_FRAGMENTS", "1").strip().lower() in ("0", "false", "no"):
+    if os.getenv("AION_MODEL_PROMPT_FRAGMENTS", "1").strip().lower() in (
+        "0",
+        "false",
+        "no",
+    ):
         return []
 
     out: List[str] = []
@@ -118,7 +124,9 @@ def build_skills_catalog_xml(allowed_names: Optional[List[str]] = None) -> str:
     for s in summaries:
         name = _xml_escape(str(s.get("name") or ""))
         desc = _xml_escape(str(s.get("description") or ""))
-        lines.append(f"  <skill><name>{name}</name><description>{desc}</description></skill>")
+        lines.append(
+            f"  <skill><name>{name}</name><description>{desc}</description></skill>"
+        )
     lines.append("</available_skills>")
     return "\n".join(lines)
 

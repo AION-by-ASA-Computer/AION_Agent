@@ -46,7 +46,9 @@ Hunk = AddHunk | DeleteHunk | UpdateHunk
 def _strip_heredoc(text: str) -> str:
     import re
 
-    m = re.match(r"^(?:cat\s+)?<<['\"]?(\w+)['\"]?\s*\n([\s\S]*?)\n\1\s*$", text.strip())
+    m = re.match(
+        r"^(?:cat\s+)?<<['\"]?(\w+)['\"]?\s*\n([\s\S]*?)\n\1\s*$", text.strip()
+    )
     if m:
         return m.group(2)
     return text
@@ -91,7 +93,11 @@ def _parse_update_chunks(lines: List[str], start: int) -> tuple[List[UpdateChunk
             old_lines: List[str] = []
             new_lines: List[str] = []
             eof = False
-            while i < len(lines) and not lines[i].startswith("@@") and not lines[i].startswith("***"):
+            while (
+                i < len(lines)
+                and not lines[i].startswith("@@")
+                and not lines[i].startswith("***")
+            ):
                 cl = lines[i]
                 if cl == "*** End of File":
                     eof = True
@@ -126,7 +132,9 @@ def parse_patch(patch_text: str) -> List[Hunk]:
         begin = next(i for i, ln in enumerate(lines) if ln.strip() == BEGIN)
         end = next(i for i, ln in enumerate(lines) if ln.strip() == END)
     except StopIteration as exc:
-        raise PatchParseError("Invalid patch format: missing Begin/End markers") from exc
+        raise PatchParseError(
+            "Invalid patch format: missing Begin/End markers"
+        ) from exc
     if begin >= end:
         raise PatchParseError("Invalid patch format: Begin must precede End")
 
@@ -147,6 +155,8 @@ def parse_patch(patch_text: str) -> List[Hunk]:
             i = nxt
         else:
             chunks, nxt2 = _parse_update_chunks(lines, nxt)
-            hunks.append(UpdateHunk(type="update", path=path, move_path=move, chunks=chunks))
+            hunks.append(
+                UpdateHunk(type="update", path=path, move_path=move, chunks=chunks)
+            )
             i = nxt2
     return hunks

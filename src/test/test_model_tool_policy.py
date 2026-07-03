@@ -2,7 +2,10 @@
 
 from types import SimpleNamespace
 
-from src.runtime.model_tool_policy import filter_tools_for_model, model_prefers_apply_patch
+from src.runtime.model_tool_policy import (
+    filter_tools_for_model,
+    model_prefers_apply_patch,
+)
 
 
 def _tool(name: str):

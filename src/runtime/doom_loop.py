@@ -83,7 +83,9 @@ def reset_tracker(session_id: str, turn_id: str = "") -> None:
     _TRACKERS.pop(_tracker_key(session_id, turn_id), None)
 
 
-def check_doom_loop(session_id: str, tool_name: str, args: Any, turn_id: str = "") -> Optional[str]:
+def check_doom_loop(
+    session_id: str, tool_name: str, args: Any, turn_id: str = ""
+) -> Optional[str]:
     return get_tracker(session_id, turn_id).record(tool_name, args)
 
 

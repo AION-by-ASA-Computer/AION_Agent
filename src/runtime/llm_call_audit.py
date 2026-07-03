@@ -13,7 +13,11 @@ from typing import Any, Dict, List, Optional
 from haystack.dataclasses import ChatMessage
 
 from src.haystack_chat import chat_message_text
-from src.runtime.prompt_snapshot import _message_role, _serialize_message_content, serialize_tools
+from src.runtime.prompt_snapshot import (
+    _message_role,
+    _serialize_message_content,
+    serialize_tools,
+)
 
 logger = logging.getLogger("aion.llm_call_audit")
 
@@ -52,7 +56,11 @@ def _redact_generation_kwargs(kwargs: Optional[Dict[str, Any]]) -> Dict[str, Any
     extra = raw.get("extra_body")
     if isinstance(extra, dict):
         for key in list(extra):
-            if "key" in key.lower() or "secret" in key.lower() or "token" in key.lower():
+            if (
+                "key" in key.lower()
+                or "secret" in key.lower()
+                or "token" in key.lower()
+            ):
                 extra[key] = "***"
     return raw
 

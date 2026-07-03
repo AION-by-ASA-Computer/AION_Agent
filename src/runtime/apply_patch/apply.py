@@ -8,7 +8,16 @@ from pathlib import Path
 from typing import List, Tuple
 
 from .errors import PatchApplyError, PatchParseError
-from .parser import AddHunk, DeleteHunk, Hunk, UpdateChunk, UpdateHunk, parse_patch, BEGIN, END
+from .parser import (
+    AddHunk,
+    DeleteHunk,
+    Hunk,
+    UpdateChunk,
+    UpdateHunk,
+    parse_patch,
+    BEGIN,
+    END,
+)
 
 
 def _normalize_unicode(s: str) -> str:
@@ -24,11 +33,15 @@ def _normalize_unicode(s: str) -> str:
     )
 
 
-def _try_match(lines: List[str], pattern: List[str], start: int, compare, eof: bool) -> int:
+def _try_match(
+    lines: List[str], pattern: List[str], start: int, compare, eof: bool
+) -> int:
     if eof and pattern:
         from_end = len(lines) - len(pattern)
         if from_end >= start:
-            if all(compare(lines[from_end + j], pattern[j]) for j in range(len(pattern))):
+            if all(
+                compare(lines[from_end + j], pattern[j]) for j in range(len(pattern))
+            ):
                 return from_end
     for i in range(start, len(lines) - len(pattern) + 1):
         if all(compare(lines[i + j], pattern[j]) for j in range(len(pattern))):
@@ -36,7 +49,9 @@ def _try_match(lines: List[str], pattern: List[str], start: int, compare, eof: b
     return -1
 
 
-def _seek_sequence(lines: List[str], pattern: List[str], start: int, eof: bool = False) -> int:
+def _seek_sequence(
+    lines: List[str], pattern: List[str], start: int, eof: bool = False
+) -> int:
     if not pattern:
         return -1
     for compare in (
@@ -65,20 +80,29 @@ def _compute_replacements(
                 )
             line_index = ctx_idx + 1
         if not chunk.old_lines:
-            ins = len(original_lines) - 1 if original_lines and original_lines[-1] == "" else len(original_lines)
+            ins = (
+                len(original_lines) - 1
+                if original_lines and original_lines[-1] == ""
+                else len(original_lines)
+            )
             replacements.append((ins, 0, chunk.new_lines))
             continue
         pattern = list(chunk.old_lines)
         new_slice = list(chunk.new_lines)
-        found = _seek_sequence(original_lines, pattern, line_index, chunk.is_end_of_file)
+        found = _seek_sequence(
+            original_lines, pattern, line_index, chunk.is_end_of_file
+        )
         if found == -1 and pattern and pattern[-1] == "":
             pattern = pattern[:-1]
             if new_slice and new_slice[-1] == "":
                 new_slice = new_slice[:-1]
-            found = _seek_sequence(original_lines, pattern, line_index, chunk.is_end_of_file)
+            found = _seek_sequence(
+                original_lines, pattern, line_index, chunk.is_end_of_file
+            )
         if found == -1:
             raise PatchApplyError(
-                f"Failed to find expected lines in {file_path}:\n" + "\n".join(chunk.old_lines)
+                f"Failed to find expected lines in {file_path}:\n"
+                + "\n".join(chunk.old_lines)
             )
         replacements.append((found, len(pattern), new_slice))
         line_index = found + len(pattern)
@@ -86,7 +110,9 @@ def _compute_replacements(
     return replacements
 
 
-def _apply_replacements(lines: List[str], replacements: List[Tuple[int, int, List[str]]]) -> List[str]:
+def _apply_replacements(
+    lines: List[str], replacements: List[Tuple[int, int, List[str]]]
+) -> List[str]:
     result = list(lines)
     for start, old_len, new_seg in reversed(replacements):
         del result[start : start + old_len]
@@ -95,11 +121,15 @@ def _apply_replacements(lines: List[str], replacements: List[Tuple[int, int, Lis
     return result
 
 
-def derive_new_contents(chunks: List[UpdateChunk], original_text: str, file_path: str) -> str:
+def derive_new_contents(
+    chunks: List[UpdateChunk], original_text: str, file_path: str
+) -> str:
     lines = original_text.split("\n")
     if lines and lines[-1] == "":
         lines.pop()
-    new_lines = _apply_replacements(lines, _compute_replacements(lines, file_path, chunks))
+    new_lines = _apply_replacements(
+        lines, _compute_replacements(lines, file_path, chunks)
+    )
     if not new_lines or new_lines[-1] != "":
         new_lines.append("")
     return "\n".join(new_lines)
@@ -168,7 +198,9 @@ def apply_patch_text(session_root: Path, patch_text: str) -> ApplyResult:
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 dst.write_text(new_content, encoding="utf-8")
                 src.unlink()
-                applied.append(AppliedFile(path=hunk.path, action="move", move_path=hunk.move_path))
+                applied.append(
+                    AppliedFile(path=hunk.path, action="move", move_path=hunk.move_path)
+                )
             else:
                 src.write_text(new_content, encoding="utf-8")
                 applied.append(AppliedFile(path=hunk.path, action="update"))

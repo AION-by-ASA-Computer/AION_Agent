@@ -76,7 +76,14 @@ def build_file_tool_preview_events(
         aid = artifact_id_for_path(rp)
         a_type = artifact_type_for_path(rp)
         title = Path(rp).name or rp
-        meta.update({"content": content, "mode": "write", "relative_path": rp, "artifact_id": aid})
+        meta.update(
+            {
+                "content": content,
+                "mode": "write",
+                "relative_path": rp,
+                "artifact_id": aid,
+            }
+        )
         if not content.strip():
             return events, meta
         events.append(
@@ -167,6 +174,8 @@ def build_file_tool_preview_events(
     return events, meta
 
 
-def iter_preview_events(tool_name: str, args: Dict[str, Any]) -> Iterator[Dict[str, Any]]:
+def iter_preview_events(
+    tool_name: str, args: Dict[str, Any]
+) -> Iterator[Dict[str, Any]]:
     events, _ = build_file_tool_preview_events(tool_name, args)
     yield from events

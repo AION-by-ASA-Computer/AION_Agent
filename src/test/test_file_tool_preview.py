@@ -1,6 +1,9 @@
 """Early SSE preview for filesystem write tools."""
 
-from src.runtime.file_tool_preview import build_file_tool_preview_events, is_file_preview_tool
+from src.runtime.file_tool_preview import (
+    build_file_tool_preview_events,
+    is_file_preview_tool,
+)
 
 
 def test_is_file_preview_tool():

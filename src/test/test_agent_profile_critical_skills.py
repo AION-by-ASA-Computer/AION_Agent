@@ -11,6 +11,8 @@ from src.agent_profile import AgentProfile, DEFAULT_CRITICAL_SKILL_NAMES
 def prompt_env(monkeypatch):
     monkeypatch.setenv("AION_SKILL_SYSTEM_PROMPT_MODE", "index")
     monkeypatch.setenv("AION_SOUL_MEMORY_USER_SPLIT", "0")
+
+
 def test_critical_override_only_core_loaded_full():
     p = AgentProfile(
         name="T",

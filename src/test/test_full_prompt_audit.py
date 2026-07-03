@@ -67,7 +67,10 @@ def test_skill_discovery_nudge_write_tool_first():
 
 def test_aion_std_thinking_english_rule():
     body = _aion_std_prompt()
-    assert "thinking/reasoning blocks" in body.lower() or "internal thinking" in body.lower()
+    assert (
+        "thinking/reasoning blocks" in body.lower()
+        or "internal thinking" in body.lower()
+    )
     assert "english" in body.lower()
 
 
@@ -89,7 +92,11 @@ def test_config_std_critical_skill_files_english_prose():
     reg.reload()
     for path in sorted(_SKILLS_DIR.glob("*.md")):
         name = path.stem
-        if name not in ("core_protocol", "artifact_protocol", "filesystem_tools_protocol"):
+        if name not in (
+            "core_protocol",
+            "artifact_protocol",
+            "filesystem_tools_protocol",
+        ):
             continue
         full = reg.get_skill_full(name) or path.read_text(encoding="utf-8")
         # Strip frontmatter

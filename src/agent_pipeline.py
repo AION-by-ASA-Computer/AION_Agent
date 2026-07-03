@@ -1957,7 +1957,9 @@ class AgentPipeline:
                         turn_persist.assistant_message_persisted
                     )
                     _llm_steps_done = getattr(
-                        _stream_loop, "_llm_steps_done", getattr(_stream_loop, "llm_calls", 0)
+                        _stream_loop,
+                        "_llm_steps_done",
+                        getattr(_stream_loop, "llm_calls", 0),
                     )
                 else:
                     async with asyncio.timeout(turn_guards.turn_timeout):
@@ -2653,7 +2655,9 @@ class AgentPipeline:
                                     ct = data.get("content") or ""
                                     aid = str(
                                         data.get("artifact_id")
-                                        or saved_path.replace("/", "_").replace(".", "_")
+                                        or saved_path.replace("/", "_").replace(
+                                            ".", "_"
+                                        )
                                     )
                                     a_type = (
                                         "html"

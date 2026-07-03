@@ -26,7 +26,9 @@ PHANTOM_TOOL_NAMES: FrozenSet[str] = frozenset(
 # Registered but must not be called by the model (settlement-only).
 INTERNAL_TOOL_NAMES: FrozenSet[str] = frozenset({"invalid"})
 
-_JSON_RECOVERY_ALLOW_EMPTY = os.getenv("AION_JSON_RECOVERY_ALLOW_EMPTY", "0").lower() in (
+_JSON_RECOVERY_ALLOW_EMPTY = os.getenv(
+    "AION_JSON_RECOVERY_ALLOW_EMPTY", "0"
+).lower() in (
     "1",
     "true",
     "yes",
@@ -44,7 +46,10 @@ def tool_base_name(tool_name: str) -> str:
 
 def is_phantom_tool(tool_name: str) -> bool:
     base = tool_base_name(tool_name)
-    return base in PHANTOM_TOOL_NAMES or (tool_name or "").strip().lower() in PHANTOM_TOOL_NAMES
+    return (
+        base in PHANTOM_TOOL_NAMES
+        or (tool_name or "").strip().lower() in PHANTOM_TOOL_NAMES
+    )
 
 
 def invalid_arguments_message(tool: str, detail: str) -> str:
@@ -75,7 +80,9 @@ def phantom_tool_message(tool_name: str) -> str:
     )
 
 
-def unknown_tool_message(tool_name: str, registered_sample: Optional[Set[str]] = None) -> str:
+def unknown_tool_message(
+    tool_name: str, registered_sample: Optional[Set[str]] = None
+) -> str:
     hint = ""
     if registered_sample:
         sample = sorted(registered_sample)[:12]
@@ -118,7 +125,10 @@ def settle_tool_call(
             return unknown_tool_message(name, registered_tools)
 
     if not _JSON_RECOVERY_ALLOW_EMPTY and kwargs is not None:
-        from src.runtime.mcp_tool_args import tool_has_required_fields, missing_required_fields
+        from src.runtime.mcp_tool_args import (
+            tool_has_required_fields,
+            missing_required_fields,
+        )
 
         if tool_has_required_fields(name) and not kwargs:
             detail = f"missing required fields: {', '.join(missing_required_fields(name, kwargs))}"

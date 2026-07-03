@@ -13,7 +13,10 @@ from src.runtime.skill_alias import resolve_skill_alias
 def test_resolve_skill_alias_matrix():
     assert resolve_skill_alias("core_protocol") == "core_protocol"
     assert resolve_skill_alias("artifact_protocol") == "artifact_protocol"
-    assert resolve_skill_alias("artifact_protocol", "legacy_ignored") == "artifact_protocol"
+    assert (
+        resolve_skill_alias("artifact_protocol", "legacy_ignored")
+        == "artifact_protocol"
+    )
 
 
 def test_get_profile_slug_only(tmp_path: Path, monkeypatch):

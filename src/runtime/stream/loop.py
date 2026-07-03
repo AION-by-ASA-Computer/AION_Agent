@@ -791,7 +791,10 @@ class StreamLoop:
                 saved_path, {"content": "", "mode": "write"}
             )
             ct = data.get("content") or ""
-            aid = str(data.get("artifact_id") or saved_path.replace("/", "_").replace(".", "_"))
+            aid = str(
+                data.get("artifact_id")
+                or saved_path.replace("/", "_").replace(".", "_")
+            )
             a_type = (
                 "html"
                 if saved_path.endswith(".html")
@@ -920,10 +923,7 @@ class StreamLoop:
                     size_bytes=len(updated_content),
                 )
 
-        elif (
-            evt.get("type") == "tool_end"
-            and evt.get("name") == "sandbox_apply_patch"
-        ):
+        elif evt.get("type") == "tool_end" and evt.get("name") == "sandbox_apply_patch":
             patch_data = self.pending_write_artifacts.pop("__patch__", {})
             output_text = str(evt.get("output") or "")
             touched: list[str] = []
