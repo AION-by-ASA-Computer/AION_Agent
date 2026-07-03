@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Bootstrap db_navigation_map.md into MemPalace wing_proj_{slug} drawers."""
+
 from __future__ import annotations
 
 import argparse

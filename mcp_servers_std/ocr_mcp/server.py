@@ -2,6 +2,7 @@
 MCP OCR: chiama il servizio OpenAI-compatibile (es. vLLM GLM-OCR) su file nella sessione.
 Richiede AION_CHAT_SESSION_ID (impostato dal pool MCP).
 """
+
 from __future__ import annotations
 
 import base64
@@ -21,8 +22,10 @@ mcp = FastMCP("AION OCR")
 
 
 import logging
+
 logger = logging.getLogger("mcp_ocr")
 logging.basicConfig(level=logging.INFO)
+
 
 def _require_session() -> str:
     sid = os.environ.get("AION_CHAT_SESSION_ID", "").strip()
@@ -68,6 +71,7 @@ def _env_float(name: str, default: float) -> float:
 def _extract_pdf_via_pymu4llm(path) -> str:
     try:
         import pymupdf4llm
+
         return pymupdf4llm.to_markdown(str(path))
     except ImportError:
         return "Error pymypdf4llm not installed"
@@ -76,14 +80,23 @@ def _extract_pdf_via_pymu4llm(path) -> str:
 def _extract_image_via_pytesseract(path) -> str:
     try:
         import pytesseract
+
         return pytesseract.image_to_string(str(path))
     except Exception as e:
         raise RuntimeError(str(e))
 
 
-async def _ocr_via_api_async(image_bytes: bytes, mime: str, instruction: str, client: httpx.AsyncClient | None = None) -> str:
+async def _ocr_via_api_async(
+    image_bytes: bytes,
+    mime: str,
+    instruction: str,
+    client: httpx.AsyncClient | None = None,
+) -> str:
     import httpx
-    base = os.environ.get("AION_OCR_BASE_URL", "http://localhost:8000/ocr/v1").rstrip("/")
+
+    base = os.environ.get("AION_OCR_BASE_URL", "http://localhost:8000/ocr/v1").rstrip(
+        "/"
+    )
     model = os.environ.get("AION_OCR_MODEL", "")
     key = os.environ.get("AION_OCR_API_KEY", "EMPTY")
     b64 = base64.standard_b64encode(image_bytes).decode("ascii")
@@ -102,28 +115,35 @@ async def _ocr_via_api_async(image_bytes: bytes, mime: str, instruction: str, cl
         "max_tokens": min(_env_int("AION_OCR_MAX_TOKENS", 4096), 4096),
     }
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {key}"}
-    
+
     try:
         async with _ocr_lock:
             if client:
-                r = await client.post(f"{base}/chat/completions", json=payload, headers=headers)
+                r = await client.post(
+                    f"{base}/chat/completions", json=payload, headers=headers
+                )
                 r.raise_for_status()
                 data = r.json()
             else:
-                async with httpx.AsyncClient(timeout=_env_float("AION_OCR_TIMEOUT", 120.0)) as client_new:
-                    r = await client_new.post(f"{base}/chat/completions", json=payload, headers=headers)
+                async with httpx.AsyncClient(
+                    timeout=_env_float("AION_OCR_TIMEOUT", 120.0)
+                ) as client_new:
+                    r = await client_new.post(
+                        f"{base}/chat/completions", json=payload, headers=headers
+                    )
                     r.raise_for_status()
                     data = r.json()
     except httpx.HTTPStatusError as e:
         err_msg = f"HTTP {e.response.status_code} from OCR server: {e.response.text}"
         logger.error(err_msg)
         raise RuntimeError(err_msg) from e
-    
+
     choices = data.get("choices") or []
     if not choices:
         return f"Risposta OCR vuota: {data!r}"
     content = choices[0].get("message", {}).get("content")
     return content if isinstance(content, str) else str(content)
+
 
 @mcp.tool()
 async def ocr_file(
@@ -154,14 +174,14 @@ async def ocr_file(
     mime, _ = mimetypes.guess_type(path.name)
     mime = mime or "application/octet-stream"
 
-
-
     if not _is_advanced_ocr_enabled():
         logger.info("Advanced OCR is disabled. Using local parsers.")
         if mime == "application/pdf":
             try:
                 text = _extract_pdf_via_pymu4llm(path)
-                logger.info(f"pymu4llm extraction success for {path.name}: {len(text)} chars")
+                logger.info(
+                    f"pymu4llm extraction success for {path.name}: {len(text)} chars"
+                )
                 return text
             except Exception as e:
                 logger.exception("pymu4llm extraction failed")
@@ -169,7 +189,9 @@ async def ocr_file(
         elif mime.startswith("image/"):
             try:
                 text = _extract_image_via_pytesseract(path)
-                logger.info(f"pytesseract extraction success for {path.name}: {len(text)} chars")
+                logger.info(
+                    f"pytesseract extraction success for {path.name}: {len(text)} chars"
+                )
                 return text
             except Exception as e:
                 logger.warning(f"pytesseract extraction failed: {e}")
@@ -183,35 +205,39 @@ async def ocr_file(
     if mime == "application/pdf":
         try:
             from pdf2image import convert_from_path
-            
+
             # Carichiamo le impostazioni o usiamo il parametro
             limit = _env_int("AION_OCR_PDF_MAX_PAGES", max_pages)
             images = convert_from_path(str(path), first_page=1, last_page=limit)
-            
+
             # Limit parallel calls to avoid overloading the OCR server
             sem = asyncio.Semaphore(5)
-            
+
             async def limited_ocr(img_data, mime, page_instr):
                 async with sem:
                     return await _ocr_via_api_async(img_data, mime, page_instr)
-            
+
             tasks = []
             for i, img in enumerate(images):
                 buf = BytesIO()
                 img.save(buf, format="JPEG", quality=85)
                 img_data = buf.getvalue()
-                tasks.append(limited_ocr(img_data, "image/jpeg", f"Page {i+1}: {instruction}"))
-            
-            logger.info(f"Starting parallel OCR (limit 5) for {len(tasks)} pages of {path.name}")
+                tasks.append(
+                    limited_ocr(img_data, "image/jpeg", f"Page {i + 1}: {instruction}")
+                )
+
+            logger.info(
+                f"Starting parallel OCR (limit 5) for {len(tasks)} pages of {path.name}"
+            )
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
+
             all_text = []
             for i, res in enumerate(results):
                 if isinstance(res, Exception):
-                    all_text.append(f"--- PAGE {i+1} ERROR ---\n{res}")
+                    all_text.append(f"--- PAGE {i + 1} ERROR ---\n{res}")
                 else:
-                    all_text.append(f"--- PAGE {i+1} ---\n{res}")
-            
+                    all_text.append(f"--- PAGE {i + 1} ---\n{res}")
+
             return "\n\n".join(all_text)
         except Exception as e:
             logger.exception("PDF OCR failed")

@@ -9,6 +9,7 @@ Propaga skill e patch profilo Postgres per QueryMemory SQL in config/ (locale).
 Chiamato da setup_core.py e upgrade_core.py dopo sync_config.
 Vedi anche patch_mempalace_navigation_config.py (layer navigazione MemPalace).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -128,7 +129,10 @@ def _profile_base_dict() -> dict | None:
     if std and local:
         std_skills = set(std.get("skills") or [])
         local_skills = set(local.get("skills") or [])
-        if "db_navigation_map" in local_skills and "db_navigation_map" not in std_skills:
+        if (
+            "db_navigation_map" in local_skills
+            and "db_navigation_map" not in std_skills
+        ):
             print(
                 f"  [INFO] {LOCAL_PROFILE.relative_to(ROOT)} usa config_std come base "
                 f"(db_navigation_map rimossa dal profilo standard)"
@@ -209,22 +213,32 @@ def run(*, force_skill: bool = False, sync_std_profile: bool = True) -> int:
         skills_std, _ = _strip_removed_nav_skill(data.get("skills") or [])
         data["skills"] = skills_std
         _dump_profile_yaml(STD_PROFILE, data)
-        print(f"  [SYNC] {STD_PROFILE.relative_to(ROOT)} ← profilo locale (QM patch, senza db_navigation_map)")
+        print(
+            f"  [SYNC] {STD_PROFILE.relative_to(ROOT)} ← profilo locale (QM patch, senza db_navigation_map)"
+        )
 
     print("")
     return 0
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Patch config/ per QueryMemory SQL (Postgres profile)")
-    ap.add_argument("--force-skill", action="store_true", help="Sovrascrive config/skills/sql_query_memory_protocol.md")
+    ap = argparse.ArgumentParser(
+        description="Patch config/ per QueryMemory SQL (Postgres profile)"
+    )
+    ap.add_argument(
+        "--force-skill",
+        action="store_true",
+        help="Sovrascrive config/skills/sql_query_memory_protocol.md",
+    )
     ap.add_argument(
         "--no-sync-std-profile",
         action="store_true",
         help="Non riscrive config_std/profiles/postgres_metadata_assistant.yaml",
     )
     args = ap.parse_args()
-    return run(force_skill=args.force_skill, sync_std_profile=not args.no_sync_std_profile)
+    return run(
+        force_skill=args.force_skill, sync_std_profile=not args.no_sync_std_profile
+    )
 
 
 if __name__ == "__main__":

@@ -8,6 +8,7 @@ Usage:
 
 See docs/deployment/podman-sandbox.md
 """
+
 from __future__ import annotations
 
 import argparse
@@ -21,7 +22,9 @@ from typing import Dict, List, Optional, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
-ENV_BLOCK_HEADER = "# --- Podman session sandbox (auto: scripts/setup-podman-sandbox.sh) ---"
+ENV_BLOCK_HEADER = (
+    "# --- Podman session sandbox (auto: scripts/setup-podman-sandbox.sh) ---"
+)
 
 ENV_KEYS: Tuple[str, ...] = (
     "AION_SANDBOX_BACKEND",
@@ -54,7 +57,9 @@ def _fail(msg: str, code: int = 1) -> None:
     sys.exit(code)
 
 
-def _run(cmd: List[str], *, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess:
+def _run(
+    cmd: List[str], *, check: bool = True, capture: bool = False
+) -> subprocess.CompletedProcess:
     _log(f"  $ {' '.join(cmd)}")
     return subprocess.run(
         cmd,
@@ -86,7 +91,9 @@ def _install_podman(*, dry_run: bool) -> None:
         return
     pm = _detect_pkg_manager()
     if pm is None:
-        _fail("Package manager non supportato. Installa podman manualmente e rilancia con --skip-install.")
+        _fail(
+            "Package manager non supportato. Installa podman manualmente e rilancia con --skip-install."
+        )
     if pm == "apt":
         cmd = ["sudo", "apt-get", "update"]
         if dry_run:
@@ -104,9 +111,25 @@ def _install_podman(*, dry_run: bool) -> None:
             "uidmap",
         ]
     elif pm in ("dnf", "yum"):
-        install = ["sudo", pm, "install", "-y", "podman", "slirp4netns", "fuse-overlayfs"]
+        install = [
+            "sudo",
+            pm,
+            "install",
+            "-y",
+            "podman",
+            "slirp4netns",
+            "fuse-overlayfs",
+        ]
     else:
-        install = ["sudo", "pacman", "-S", "--noconfirm", "podman", "slirp4netns", "fuse-overlayfs"]
+        install = [
+            "sudo",
+            "pacman",
+            "-S",
+            "--noconfirm",
+            "podman",
+            "slirp4netns",
+            "fuse-overlayfs",
+        ]
     if dry_run:
         _log(f"[dry-run] {' '.join(install)}")
         return
@@ -121,7 +144,9 @@ def _cleanup_bogus_socket(*, dry_run: bool) -> None:
     sock = _podman_socket_path()
     parent = sock.parent
     if sock.is_dir():
-        _warn(f"{sock} è una directory (tipico se docker compose è partito prima del socket).")
+        _warn(
+            f"{sock} è una directory (tipico se docker compose è partito prima del socket)."
+        )
         if parent.is_dir() and os.geteuid() == 0:
             shutil.rmtree(sock)
         else:
@@ -131,7 +156,10 @@ def _cleanup_bogus_socket(*, dry_run: bool) -> None:
     elif parent.is_dir() and not os.access(parent, os.W_OK):
         _log(f"Correggo permessi su {parent} (owner root da mount Docker precedente).")
         if not dry_run:
-            _run(["sudo", "chown", "-R", f"{os.getuid()}:{os.getgid()}", str(parent)], check=False)
+            _run(
+                ["sudo", "chown", "-R", f"{os.getuid()}:{os.getgid()}", str(parent)],
+                check=False,
+            )
 
 
 def _enable_podman_socket(*, dry_run: bool) -> None:
@@ -292,9 +320,14 @@ def _build_sandbox_image(repo: Path, *, dry_run: bool) -> None:
     load = subprocess.run(["podman", "load"], stdin=save.stdout, check=False)
     save.wait()
     if load.returncode != 0:
-        _warn("podman load fallito — prova: docker save aion/sandbox:latest | podman load")
+        _warn(
+            "podman load fallito — prova: docker save aion/sandbox:latest | podman load"
+        )
     else:
-        _run(["podman", "tag", "aion/sandbox:latest", "localhost/aion/sandbox:latest"], check=False)
+        _run(
+            ["podman", "tag", "aion/sandbox:latest", "localhost/aion/sandbox:latest"],
+            check=False,
+        )
 
 
 def _verify(*, dry_run: bool) -> None:
@@ -310,8 +343,13 @@ def _verify(*, dry_run: bool) -> None:
         capture_output=True,
         check=False,
     )
-    if "aion/sandbox:latest" not in listed.stdout and "docker.io/aion/sandbox:latest" not in listed.stdout:
-        _warn("Immagine aion/sandbox:latest non trovata in Podman — esegui build o podman load.")
+    if (
+        "aion/sandbox:latest" not in listed.stdout
+        and "docker.io/aion/sandbox:latest" not in listed.stdout
+    ):
+        _warn(
+            "Immagine aion/sandbox:latest non trovata in Podman — esegui build o podman load."
+        )
 
 
 def _maybe_restart_backend(repo: Path, *, dry_run: bool, assume_yes: bool) -> None:
@@ -332,25 +370,48 @@ def _maybe_restart_backend(repo: Path, *, dry_run: bool, assume_yes: bool) -> No
         return
     if not assume_yes:
         try:
-            answer = input("Ricostruire e riavviare il backend ora? [y/N] ").strip().lower()
+            answer = (
+                input("Ricostruire e riavviare il backend ora? [y/N] ").strip().lower()
+            )
         except EOFError:
             answer = "n"
         if answer not in ("y", "yes", "s", "si"):
-            _log("Salta restart. Esegui manualmente: docker compose up -d --build backend")
+            _log(
+                "Salta restart. Esegui manualmente: docker compose up -d --build backend"
+            )
             return
     _run(["docker", "compose", "up", "-d", "--build", "backend"], cwd=str(repo))
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Setup Podman rootless per session sandbox AION")
-    parser.add_argument("--dry-run", action="store_true", help="Mostra azioni senza modificare il sistema")
-    parser.add_argument("--skip-install", action="store_true", help="Salta installazione pacchetti Podman")
-    parser.add_argument("--skip-build", action="store_true", help="Salta build/import immagine sandbox")
-    parser.add_argument("-y", "--yes", action="store_true", help="Non chiedere conferma per restart backend")
+    parser = argparse.ArgumentParser(
+        description="Setup Podman rootless per session sandbox AION"
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Mostra azioni senza modificare il sistema",
+    )
+    parser.add_argument(
+        "--skip-install",
+        action="store_true",
+        help="Salta installazione pacchetti Podman",
+    )
+    parser.add_argument(
+        "--skip-build", action="store_true", help="Salta build/import immagine sandbox"
+    )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        help="Non chiedere conferma per restart backend",
+    )
     args = parser.parse_args()
 
     if sys.platform == "darwin":
-        _fail("macOS: usa AION_SANDBOX_BACKEND=subprocess (Podman socket non supportato in dev).")
+        _fail(
+            "macOS: usa AION_SANDBOX_BACKEND=subprocess (Podman socket non supportato in dev)."
+        )
     if not sys.platform.startswith("linux"):
         _fail(f"SO non supportato: {sys.platform}")
 

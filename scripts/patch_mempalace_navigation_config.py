@@ -9,6 +9,7 @@ Propaga skill e profilo Postgres per MemPalace navigazione (wing_proj_{project})
 
 Chiamato da setup_core.py e upgrade_core.py dopo sync_config / patch SQL QM.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -97,10 +98,15 @@ def _sync_profile_from_std(*, force: bool = False) -> bool:
 
     if _STD_MYSQL_PROFILE.is_file():
         LOCAL_PROFILE.parent.mkdir(parents=True, exist_ok=True)
-        if force or not _LOCAL_MYSQL_PROFILE.is_file() or _REMOVED_NAV_SKILL in (
-            _LOCAL_MYSQL_PROFILE.read_text(encoding="utf-8")
-            if _LOCAL_MYSQL_PROFILE.is_file()
-            else ""
+        if (
+            force
+            or not _LOCAL_MYSQL_PROFILE.is_file()
+            or _REMOVED_NAV_SKILL
+            in (
+                _LOCAL_MYSQL_PROFILE.read_text(encoding="utf-8")
+                if _LOCAL_MYSQL_PROFILE.is_file()
+                else ""
+            )
         ):
             shutil.copy2(_STD_MYSQL_PROFILE, _LOCAL_MYSQL_PROFILE)
             print(f"  [SYNC] {_LOCAL_MYSQL_PROFILE.relative_to(ROOT)} ← config_std")
@@ -124,14 +130,18 @@ def _patch_mcp_registry_skill_view_enforce() -> bool:
     hub = local.setdefault("skills_hub", {})
     env = hub.setdefault("env", {})
     if env.get(_SKILL_VIEW_ENV_KEY) == want:
-        print(f"  [OK] {LOCAL_MCP_REGISTRY.relative_to(ROOT)} skills_hub.{_SKILL_VIEW_ENV_KEY}")
+        print(
+            f"  [OK] {LOCAL_MCP_REGISTRY.relative_to(ROOT)} skills_hub.{_SKILL_VIEW_ENV_KEY}"
+        )
         return False
     env[_SKILL_VIEW_ENV_KEY] = want
     LOCAL_MCP_REGISTRY.write_text(
         yaml.safe_dump(local, sort_keys=False, allow_unicode=True),
         encoding="utf-8",
     )
-    print(f"  [PATCH] {LOCAL_MCP_REGISTRY.relative_to(ROOT)} → skills_hub.env.{_SKILL_VIEW_ENV_KEY}={want}")
+    print(
+        f"  [PATCH] {LOCAL_MCP_REGISTRY.relative_to(ROOT)} → skills_hub.env.{_SKILL_VIEW_ENV_KEY}={want}"
+    )
     return True
 
 
@@ -165,15 +175,23 @@ def run(
     if bootstrap:
         rc = _run_bootstrap(bootstrap_project, bootstrap_dry_run)
         if rc != 0:
-            print("  [WARN] bootstrap MemPalace exited non-zero (MCP mempalace disponibile?)")
+            print(
+                "  [WARN] bootstrap MemPalace exited non-zero (MCP mempalace disponibile?)"
+            )
             return rc
     print("")
     return 0
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Patch config/ per MemPalace navigazione ERP")
-    ap.add_argument("--force-skills", action="store_true", help="Sovrascrive skill mempalace in config/skills/")
+    ap = argparse.ArgumentParser(
+        description="Patch config/ per MemPalace navigazione ERP"
+    )
+    ap.add_argument(
+        "--force-skills",
+        action="store_true",
+        help="Sovrascrive skill mempalace in config/skills/",
+    )
     ap.add_argument(
         "--no-sync-profile",
         action="store_true",
@@ -189,7 +207,9 @@ def main() -> int:
         action="store_true",
         help="Esegue bootstrap_db_navigation_mempalace.py (richiede MCP mempalace)",
     )
-    ap.add_argument("--bootstrap-project", default="default", help="Slug progetto per bootstrap")
+    ap.add_argument(
+        "--bootstrap-project", default="default", help="Slug progetto per bootstrap"
+    )
     ap.add_argument(
         "--bootstrap-dry-run",
         action="store_true",

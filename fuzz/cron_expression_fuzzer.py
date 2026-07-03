@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fuzz target for cron expression validation."""
+
 from __future__ import annotations
 
 import atheris

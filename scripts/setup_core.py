@@ -67,7 +67,11 @@ def main() -> int:
     ap.add_argument("--advanced", action="store_true")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("-o", "--output", default=str(ROOT / ".env"))
-    ap.add_argument("--prepare-runtime", action="store_true", help="Create/update venv + install deps")
+    ap.add_argument(
+        "--prepare-runtime",
+        action="store_true",
+        help="Create/update venv + install deps",
+    )
     ap.add_argument(
         "--enable-fs-policy-dev",
         action="store_true",
@@ -79,7 +83,11 @@ def main() -> int:
         help="Skip Playwright/Chromium install for promo_render MCP",
     )
     ap.add_argument("--no-sync-admin-ui", action="store_true")
-    ap.add_argument("--non-interactive", action="store_true", help="Skip wizard prompts and merge defaults only")
+    ap.add_argument(
+        "--non-interactive",
+        action="store_true",
+        help="Skip wizard prompts and merge defaults only",
+    )
     args = ap.parse_args()
 
     if not SETUP_PY.exists():
@@ -139,7 +147,9 @@ def main() -> int:
                 ]
             )
             if rc != 0:
-                print("[warn] patch_mempalace_navigation_config failed", file=sys.stderr)
+                print(
+                    "[warn] patch_mempalace_navigation_config failed", file=sys.stderr
+                )
         if PATCH_SQL_QM_CONFIG.is_file() and not args.dry_run:
             rc = _run([py_exec, str(PATCH_SQL_QM_CONFIG)])
             if rc != 0:
@@ -180,7 +190,9 @@ def main() -> int:
                 if line.startswith("NEXT_PUBLIC_AION_API_URL="):
                     ui_url = line.split("=", 1)[1].strip().strip('"').strip("'")
                     if ui_url:
-                        _merge_env_local(admin_ui / ".env.local", "NEXT_PUBLIC_AION_API_URL", ui_url)
+                        _merge_env_local(
+                            admin_ui / ".env.local", "NEXT_PUBLIC_AION_API_URL", ui_url
+                        )
                     break
 
     if not args.dry_run:
@@ -190,18 +202,31 @@ def main() -> int:
                 import importlib.util
 
                 up_path = ROOT / "scripts" / "upgrade_core.py"
-                spec = importlib.util.spec_from_file_location("aion_upgrade_core", up_path)
+                spec = importlib.util.spec_from_file_location(
+                    "aion_upgrade_core", up_path
+                )
                 if spec and spec.loader:
                     up_mod = importlib.util.module_from_spec(spec)
                     spec.loader.exec_module(up_mod)
                     rep = up_mod.Report()
                     up_mod._ensure_sql_qm_env_keys(out_path, dry_run=False, report=rep)
-                    up_mod._ensure_mempalace_nav_env_keys(out_path, dry_run=False, report=rep)
-                    up_mod._ensure_skill_view_env_keys(out_path, dry_run=False, report=rep)
-                    up_mod._ensure_agent_mode_env_keys(out_path, dry_run=False, report=rep)
-                    up_mod._ensure_deep_research_env_keys(out_path, dry_run=False, report=rep)
+                    up_mod._ensure_mempalace_nav_env_keys(
+                        out_path, dry_run=False, report=rep
+                    )
+                    up_mod._ensure_skill_view_env_keys(
+                        out_path, dry_run=False, report=rep
+                    )
+                    up_mod._ensure_agent_mode_env_keys(
+                        out_path, dry_run=False, report=rep
+                    )
+                    up_mod._ensure_deep_research_env_keys(
+                        out_path, dry_run=False, report=rep
+                    )
             except Exception as exc:
-                print(f"[warn] memory env defaults (SQL QM / MemPalace nav): {exc}", file=sys.stderr)
+                print(
+                    f"[warn] memory env defaults (SQL QM / MemPalace nav): {exc}",
+                    file=sys.stderr,
+                )
 
     return 0
 

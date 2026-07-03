@@ -5,6 +5,7 @@ Merge skill packages from local config/skills/ into config_std/skills/ (maintain
 Copies directories that contain SKILL.md (or skill.md). Does not delete extras in
 config_std. Flat .md skills in config/ are copied if missing in config_std/.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -71,8 +72,12 @@ def sync_packages(
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Merge config/skills packages into config_std/skills")
-    ap.add_argument("--force", action="store_true", help="Overwrite existing packages in config_std")
+    ap = argparse.ArgumentParser(
+        description="Merge config/skills packages into config_std/skills"
+    )
+    ap.add_argument(
+        "--force", action="store_true", help="Overwrite existing packages in config_std"
+    )
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
     root = _root()

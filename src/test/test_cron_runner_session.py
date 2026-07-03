@@ -106,9 +106,7 @@ async def test_create_and_update_job_persists_sql_query_project(
     )
     assert updated and updated["sql_query_project"] == "aion_am"
 
-    cleared = await cron_db.update_job(
-        job["job_id"], patch={"sql_query_project": None}
-    )
+    cleared = await cron_db.update_job(job["job_id"], patch={"sql_query_project": None})
     assert cleared and cleared["sql_query_project"] is None
 
     await cron_db.delete_job(job["job_id"])

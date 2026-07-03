@@ -35,12 +35,22 @@ _MAX_TABLES_PER_USER = int(os.getenv("AION_AGENT_DB_MAX_TABLES_PER_USER", "50"))
 _MAX_ROWS_PER_TABLE = int(os.getenv("AION_AGENT_DB_MAX_ROWS_PER_TABLE", "500000"))
 _QUERY_TIMEOUT_MS = int(os.getenv("AION_AGENT_DB_QUERY_TIMEOUT_MS", "5000"))
 _MAX_EXPORT_ROWS = int(os.getenv("AION_AGENT_DB_MAX_EXPORT_ROWS", "100000"))
-_BACKUP_ON_DROP = os.getenv("AION_AGENT_DB_BACKUP_ON_DROP", "1").lower() in ("1", "true", "yes", "on")
+_BACKUP_ON_DROP = os.getenv("AION_AGENT_DB_BACKUP_ON_DROP", "1").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 _DATE_LOCALE = (os.getenv("AION_AGENT_DB_DATE_LOCALE", "it_IT") or "it_IT").lower()
 _DECIMAL_LOCALE = (os.getenv("AION_AGENT_DB_DECIMAL_LOCALE", "IT") or "IT").upper()
 
 _SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9\-_]{4,128}$")
-_STRICT_IDENTITY = os.getenv("AION_AGENT_DB_STRICT_IDENTITY", "1").lower() in ("1", "true", "yes", "on")
+_STRICT_IDENTITY = os.getenv("AION_AGENT_DB_STRICT_IDENTITY", "1").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 
 
 def _workspace_export_path(conversation_id: str, stem: str, suffix: str) -> Path:
@@ -81,7 +91,9 @@ def _check_table_limit(conn, table_to_create: bool = False) -> None:
     if _MAX_TABLES_PER_USER <= 0:
         return
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM _aion_schema_registry WHERE archived_at IS NULL")
+    cursor.execute(
+        "SELECT COUNT(*) FROM _aion_schema_registry WHERE archived_at IS NULL"
+    )
     current = int(cursor.fetchone()[0])
     if current + (1 if table_to_create else 0) > _MAX_TABLES_PER_USER:
         raise ValueError(
@@ -90,7 +102,9 @@ def _check_table_limit(conn, table_to_create: bool = False) -> None:
         )
 
 
-def _normalize_row_values(row: Dict[str, Any], col_types: Dict[str, str]) -> Dict[str, Any]:
+def _normalize_row_values(
+    row: Dict[str, Any], col_types: Dict[str, str]
+) -> Dict[str, Any]:
     out: Dict[str, Any] = {}
     for k, v in row.items():
         ctype = (col_types.get(k) or "").upper()
@@ -246,19 +260,31 @@ async def list_tools() -> List[Tool]:
                                                 "UUID",
                                             ],
                                         },
-                                        "nullable": {"type": "boolean", "default": True},
+                                        "nullable": {
+                                            "type": "boolean",
+                                            "default": True,
+                                        },
                                         "default": {"type": "string"},
                                         "description": {"type": "string"},
                                     },
                                     "required": ["name", "type"],
                                 },
                             },
-                            {"type": "string", "description": "JSON array string of ColumnDef objects"},
+                            {
+                                "type": "string",
+                                "description": "JSON array string of ColumnDef objects",
+                            },
                         ]
                     },
                     "tenant_id": {"type": "string", "default": "default"},
                 },
-                "required": ["user_id", "schema_name", "table_name", "description", "columns"],
+                "required": [
+                    "user_id",
+                    "schema_name",
+                    "table_name",
+                    "description",
+                    "columns",
+                ],
             },
         ),
         Tool(
@@ -310,10 +336,16 @@ async def list_tools() -> List[Tool]:
                     "rows": {
                         "anyOf": [
                             {"type": "array", "items": {"type": "object"}},
-                            {"type": "string", "description": "JSON array string of row objects"},
+                            {
+                                "type": "string",
+                                "description": "JSON array string of row objects",
+                            },
                         ]
                     },
-                    "rows_json": {"type": "string", "description": "Optional JSON array string fallback"},
+                    "rows_json": {
+                        "type": "string",
+                        "description": "Optional JSON array string fallback",
+                    },
                     "source": {"type": "string", "default": "agent:direct"},
                     "conversation_id": {"type": "string"},
                     "validate_only": {"type": "boolean", "default": False},
@@ -413,7 +445,11 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
         if name == "agent_db_list_schemas":
             schemas = registry.list_schemas()
-            return [TextContent(type="text", text=json.dumps({"schemas": schemas}, indent=2))]
+            return [
+                TextContent(
+                    type="text", text=json.dumps({"schemas": schemas}, indent=2)
+                )
+            ]
 
         if name == "agent_db_describe_table":
             schema_name = arguments.get("schema_name")
@@ -424,7 +460,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 return [
                     TextContent(
                         type="text",
-                        text=json.dumps({"error": f"Table '{schema_name}.{table_name}' not found."}),
+                        text=json.dumps(
+                            {"error": f"Table '{schema_name}.{table_name}' not found."}
+                        ),
                     )
                 ]
 
@@ -452,7 +490,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 type_val = map_aion_to_sqlite(col["type"])
                 null_val = "NULL" if col.get("nullable", True) else "NOT NULL"
                 default_val = f"DEFAULT {col['default']}" if col.get("default") else ""
-                col_defs.append(f'"{name_val}" {type_val} {null_val} {default_val}'.strip())
+                col_defs.append(
+                    f'"{name_val}" {type_val} {null_val} {default_val}'.strip()
+                )
 
             col_defs.extend(
                 [
@@ -481,7 +521,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
             registry.register_table(schema_name, table_name, physical_name, description)
             registry.register_columns(schema_name, table_name, columns)
-            registry.log_history("CREATE_TABLE", schema_name, table_name, json.dumps({"ddl": ddl}))
+            registry.log_history(
+                "CREATE_TABLE", schema_name, table_name, json.dumps({"ddl": ddl})
+            )
             conn.commit()
             _check_db_size_limit(tenant_id, user_id)
 
@@ -497,7 +539,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             return [
                 TextContent(
                     type="text",
-                    text=json.dumps({"ok": True, "physical_name": physical_name}, indent=2),
+                    text=json.dumps(
+                        {"ok": True, "physical_name": physical_name}, indent=2
+                    ),
                 )
             ]
 
@@ -511,7 +555,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 return [
                     TextContent(
                         type="text",
-                        text=json.dumps({"error": f"Table '{schema_name}.{table_name}' not found."}),
+                        text=json.dumps(
+                            {"error": f"Table '{schema_name}.{table_name}' not found."}
+                        ),
                     )
                 ]
 
@@ -522,7 +568,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 col = arguments.get("column_def") or {}
                 col_name = validate_name(col["name"], "Column name")
                 col_type = map_aion_to_sqlite(col["type"])
-                cursor.execute(f'ALTER TABLE "{physical_name}" ADD COLUMN "{col_name}" {col_type}')
+                cursor.execute(
+                    f'ALTER TABLE "{physical_name}" ADD COLUMN "{col_name}" {col_type}'
+                )
                 cursor.execute(
                     "SELECT COALESCE(MAX(ordinal_pos), -1) FROM _aion_schema_columns "
                     "WHERE schema_name = ? AND table_name = ?",
@@ -557,7 +605,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             elif operation == "RENAME_TABLE":
                 new_name = validate_name(arguments.get("new_name"), "New table name")
                 new_physical = manager.get_physical_table_name(schema_name, new_name)
-                cursor.execute(f'ALTER TABLE "{physical_name}" RENAME TO "{new_physical}"')
+                cursor.execute(
+                    f'ALTER TABLE "{physical_name}" RENAME TO "{new_physical}"'
+                )
                 cursor.execute(
                     "UPDATE _aion_schema_registry SET table_name = ?, physical_name = ?, "
                     "updated_at = datetime('now') WHERE schema_name = ? AND table_name = ?",
@@ -604,38 +654,58 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             validate_only = arguments.get("validate_only", False)
 
             if not rows:
-                return [TextContent(type="text", text=json.dumps({"ok": True, "inserted": 0}))]
+                return [
+                    TextContent(
+                        type="text", text=json.dumps({"ok": True, "inserted": 0})
+                    )
+                ]
 
             details = registry.describe_table(schema_name, table_name)
             if not details:
                 return [
                     TextContent(
                         type="text",
-                        text=json.dumps({"error": f"Table '{schema_name}.{table_name}' not found."}),
+                        text=json.dumps(
+                            {"error": f"Table '{schema_name}.{table_name}' not found."}
+                        ),
                     )
                 ]
 
             physical_name = details["physical_name"]
             existing_rows = int(details.get("row_count") or 0)
-            if _MAX_ROWS_PER_TABLE > 0 and (existing_rows + len(rows)) > _MAX_ROWS_PER_TABLE:
+            if (
+                _MAX_ROWS_PER_TABLE > 0
+                and (existing_rows + len(rows)) > _MAX_ROWS_PER_TABLE
+            ):
                 raise ValueError(
                     f"Max rows per table exceeded: existing={existing_rows}, "
                     f"incoming={len(rows)}, limit={_MAX_ROWS_PER_TABLE}"
                 )
             allowed = {c["column_name"] for c in details["columns"]}
-            col_types = {c["column_name"]: c.get("column_type", "TEXT") for c in details["columns"]}
+            col_types = {
+                c["column_name"]: c.get("column_type", "TEXT")
+                for c in details["columns"]
+            }
             errors: List[Dict[str, Any]] = []
             for i, r in enumerate(rows):
                 for k in r.keys():
                     if k not in allowed:
-                        errors.append({"row_index": i, "error": f"unknown column '{k}'"})
+                        errors.append(
+                            {"row_index": i, "error": f"unknown column '{k}'"}
+                        )
             normalized_rows = [_normalize_row_values(r, col_types) for r in rows]
 
             if validate_only:
                 return [
                     TextContent(
                         type="text",
-                        text=json.dumps({"ok": len(errors) == 0, "validate_only": True, "errors": errors}),
+                        text=json.dumps(
+                            {
+                                "ok": len(errors) == 0,
+                                "validate_only": True,
+                                "errors": errors,
+                            }
+                        ),
                     )
                 ]
 
@@ -649,9 +719,13 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
             cols = list(normalized_rows[0].keys())
             placeholders = ", ".join(["?" for _ in cols] + ["?", "?"])
-            insert_cols = ", ".join([f'"{c}"' for c in cols] + ["_conversation_id", "_source"])
+            insert_cols = ", ".join(
+                [f'"{c}"' for c in cols] + ["_conversation_id", "_source"]
+            )
 
-            sql = f'INSERT INTO "{physical_name}" ({insert_cols}) VALUES ({placeholders})'
+            sql = (
+                f'INSERT INTO "{physical_name}" ({insert_cols}) VALUES ({placeholders})'
+            )
 
             data = []
             for r in normalized_rows:
@@ -696,7 +770,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             return [
                 TextContent(
                     type="text",
-                    text=json.dumps({"ok": True, "inserted": len(rows), "new_row_count": new_total}),
+                    text=json.dumps(
+                        {"ok": True, "inserted": len(rows), "new_row_count": new_total}
+                    ),
                 )
             ]
 
@@ -716,7 +792,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             try:
                 _enable_query_timeout(conn_ro, _QUERY_TIMEOUT_MS)
                 engine = QueryEngine(conn_ro)
-                result = engine.execute_query(query, schema_name, limit=limit, offset=offset)
+                result = engine.execute_query(
+                    query, schema_name, limit=limit, offset=offset
+                )
                 return [TextContent(type="text", text=json.dumps(result, indent=2))]
             finally:
                 conn_ro.set_progress_handler(None, 0)
@@ -729,14 +807,20 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             archive_instead = arguments.get("archive_instead", True)
 
             if not confirm:
-                return [TextContent(type="text", text="Error: Confirmation required for DROP TABLE.")]
+                return [
+                    TextContent(
+                        type="text", text="Error: Confirmation required for DROP TABLE."
+                    )
+                ]
 
             details = registry.describe_table(schema_name, table_name)
             if not details:
                 return [
                     TextContent(
                         type="text",
-                        text=json.dumps({"error": f"Table '{schema_name}.{table_name}' not found."}),
+                        text=json.dumps(
+                            {"error": f"Table '{schema_name}.{table_name}' not found."}
+                        ),
                     )
                 ]
 
@@ -751,7 +835,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 backup_payload = None
                 if _BACKUP_ON_DROP:
                     try:
-                        cursor.execute(f'SELECT * FROM "{details["physical_name"]}" LIMIT 200')
+                        cursor.execute(
+                            f'SELECT * FROM "{details["physical_name"]}" LIMIT 200'
+                        )
                         snap_rows = [dict(r) for r in cursor.fetchall()]
                         backup_payload = {
                             "backup_rows": snap_rows,
@@ -780,7 +866,12 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             return [
                 TextContent(
                     type="text",
-                    text=json.dumps({"ok": True, "action": "archived" if archive_instead else "dropped"}),
+                    text=json.dumps(
+                        {
+                            "ok": True,
+                            "action": "archived" if archive_instead else "dropped",
+                        }
+                    ),
                 )
             ]
 
@@ -791,7 +882,12 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             select_sql = (arguments.get("select_sql") or "").strip()
             if not is_readonly_query(select_sql):
                 return [
-                    TextContent(type="text", text=json.dumps({"error": "select_sql must be SELECT or WITH only"}))
+                    TextContent(
+                        type="text",
+                        text=json.dumps(
+                            {"error": "select_sql must be SELECT or WITH only"}
+                        ),
+                    )
                 ]
 
             mapping = logical_table_map(conn, schema_name)
@@ -820,7 +916,10 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
             )
             conn.commit()
             return [
-                TextContent(type="text", text=json.dumps({"ok": True, "physical_name": physical_view}))
+                TextContent(
+                    type="text",
+                    text=json.dumps({"ok": True, "physical_name": physical_view}),
+                )
             ]
 
         if name == "agent_db_export":
@@ -834,7 +933,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 return [
                     TextContent(
                         type="text",
-                        text=json.dumps({"error": f"Table '{schema_name}.{table_name}' not found."}),
+                        text=json.dumps(
+                            {"error": f"Table '{schema_name}.{table_name}' not found."}
+                        ),
                     )
                 ]
 
@@ -938,7 +1039,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                             "ok": True,
                             "format": "xlsx",
                             "rows_exported": len(data_rows),
-                            "content_base64": base64.b64encode(xlsx_bytes).decode("ascii"),
+                            "content_base64": base64.b64encode(xlsx_bytes).decode(
+                                "ascii"
+                            ),
                             "hint": "Decode base64 if conversation_id not provided for workspace write.",
                         },
                         indent=2,
@@ -946,7 +1049,9 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
                 )
             ]
 
-        return [TextContent(type="text", text=json.dumps({"error": f"unknown tool {name}"}))]
+        return [
+            TextContent(type="text", text=json.dumps({"error": f"unknown tool {name}"}))
+        ]
 
     except Exception as e:
         return [TextContent(type="text", text=f"Error: {str(e)}")]
@@ -959,8 +1064,11 @@ async def call_tool(name: str, arguments: Dict[str, Any]) -> List[TextContent]:
 
 
 if __name__ == "__main__":
+
     async def main():
         async with stdio_server() as (read_stream, write_stream):
-            await app.run(read_stream, write_stream, app.create_initialization_options())
+            await app.run(
+                read_stream, write_stream, app.create_initialization_options()
+            )
 
     asyncio.run(main())

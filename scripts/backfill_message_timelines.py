@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Backfill messages.timeline_json for existing assistant messages (idempotent)."""
+
 from __future__ import annotations
 
 import argparse
@@ -19,7 +20,9 @@ from src.runtime.timeline_backfill import backfill_message_timelines  # noqa: E4
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Backfill message timelines")
-    parser.add_argument("--dry-run", action="store_true", help="Count only, do not write")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="Count only, do not write"
+    )
     parser.add_argument("--batch-size", type=int, default=200)
     args = parser.parse_args()
     if not os.getenv("AION_DB_URL"):

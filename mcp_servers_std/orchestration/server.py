@@ -7,6 +7,7 @@ Per HITL in UI Chainlit si consiglia il profilo **Orchestrator** con registry
 Con questo server stdio, l’approve via API funziona se Redis/LocalFallback è condiviso
 con il processo che esegue ``draft_execution_plan``.
 """
+
 from __future__ import annotations
 
 import os
@@ -16,7 +17,10 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../.
 
 from fastmcp import FastMCP
 
-from src.runtime.orchestration_tools import run_draft_execution_plan, run_mark_task_completed
+from src.runtime.orchestration_tools import (
+    run_draft_execution_plan,
+    run_mark_task_completed,
+)
 
 mcp = FastMCP("AION Orchestration")
 

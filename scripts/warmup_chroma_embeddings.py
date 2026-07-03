@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Pre-download Chroma ONNX embeddings (Docker build / setup / upgrade)."""
+
 from __future__ import annotations
 
 import sys

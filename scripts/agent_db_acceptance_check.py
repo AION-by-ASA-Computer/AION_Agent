@@ -66,9 +66,7 @@ def main() -> None:
             "stato INTEGER,"
             "_created_at TEXT,_updated_at TEXT,_conversation_id TEXT,_source TEXT,_archived_at TEXT)"
         )
-        cur.execute(
-            'INSERT INTO "contabilità__fatture" (stato) VALUES (1)'
-        )
+        cur.execute('INSERT INTO "contabilità__fatture" (stato) VALUES (1)')
         conn.commit()
 
         eng = QueryEngine(conn)
