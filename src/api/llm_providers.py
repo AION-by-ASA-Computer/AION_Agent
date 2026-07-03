@@ -95,10 +95,17 @@ async def probe_llm_provider(body: LlmProviderProbeRequest):
             api_key=body.api_key,
         )
     except ValueError as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
+        logger.exception("LLM probe validation failed for provider=%s", body.provider)
+        raise HTTPException(
+            status_code=502,
+            detail="Connection failed. Check provider settings and endpoint availability.",
+        ) from e
     except Exception as e:
         logger.exception("LLM probe failed for provider=%s", body.provider)
-        raise HTTPException(status_code=502, detail=f"Connection failed: {e}") from e
+        raise HTTPException(
+            status_code=502,
+            detail="Connection failed due to an internal error.",
+        ) from e
 
 
 @router.get("", response_model=List[LlmProviderPublic])
