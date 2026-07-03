@@ -643,6 +643,7 @@ export type ScheduledJobRow = {
   prompt: string;
   session_mode: string;
   session_id?: string | null;
+  sql_query_project?: string | null;
   enabled: boolean;
   next_run_at?: string | null;
   last_run?: { status?: string; started_at?: string } | null;
@@ -704,6 +705,7 @@ export async function createCronJob(
     prompt: string;
     profile_slug?: string;
     session_mode?: string;
+    sql_query_project?: string | null;
     timezone?: string;
     enabled?: boolean;
   },

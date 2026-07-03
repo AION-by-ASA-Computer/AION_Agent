@@ -41,6 +41,13 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
   const expression = useMemo(() => buildCronExpression(state), [state]);
   const valid = isValidCronShape(expression);
 
+  // In simple mode, if state.frequency is "custom" (e.g. after switching back from
+  // Advanced), treat it as "daily" so the dropdown and the secondary controls are
+  // always in sync. Without this, the dropdown would display "Every day" while the
+  // hour/minute selects would be hidden because the raw state.frequency is "custom".
+  const effectiveFrequency: ScheduleFrequency =
+    mode === "simple" && state.frequency === "custom" ? "daily" : state.frequency;
+
   // Notify parent after state changes — never inside setState updaters (React 19).
   useEffect(() => {
     if (mode === "simple") {
@@ -57,7 +64,7 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
     if (frequency !== "custom") setMode("simple");
   }
 
-  const summaryKey = `schedulesPage.cron.summary.${state.frequency}` as const;
+  const summaryKey = `schedulesPage.cron.summary.${effectiveFrequency}` as const;
   const summaryVars: Record<string, string | number> = {
     time: formatTime24(state.hour, state.minute),
     day: t(`schedulesPage.cron.weekday.${state.dayOfWeek}`),
@@ -106,7 +113,15 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={() => setMode("simple")}
+          onClick={() => {
+            // If coming back from Advanced mode, reset state.frequency to "daily"
+            // so the simple-mode controls are visible immediately without needing
+            // to interact with the frequency dropdown first.
+            if (state.frequency === "custom") {
+              setState((prev) => ({ ...prev, frequency: "daily" }));
+            }
+            setMode("simple");
+          }}
           className={cn(
             "focus-ring rounded-full px-3 py-1 text-xs font-medium transition-colors",
             mode === "simple"
@@ -145,7 +160,7 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
               {t("schedulesPage.cron.freq_label")}
             </label>
             <AppSelect
-              value={state.frequency === "custom" ? "daily" : state.frequency}
+              value={effectiveFrequency}
               onValueChange={(v) => setFrequency(v as ScheduleFrequency)}
               items={frequencyItems}
               triggerClassName="w-full max-w-none"
@@ -153,10 +168,10 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
             />
           </div>
 
-          {(state.frequency === "daily" ||
-            state.frequency === "weekdays" ||
-            state.frequency === "weekly" ||
-            state.frequency === "monthly") && (
+          {(effectiveFrequency === "daily" ||
+            effectiveFrequency === "weekdays" ||
+            effectiveFrequency === "weekly" ||
+            effectiveFrequency === "monthly") && (
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="mb-1 block text-sm font-medium">
@@ -183,7 +198,7 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
             </div>
           )}
 
-          {state.frequency === "weekly" && (
+          {effectiveFrequency === "weekly" && (
             <div>
               <label className="mb-1 block text-sm font-medium">
                 {t("schedulesPage.cron.weekday_label")}
@@ -197,7 +212,7 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
             </div>
           )}
 
-          {state.frequency === "monthly" && (
+          {effectiveFrequency === "monthly" && (
             <div>
               <label className="mb-1 block text-sm font-medium">
                 {t("schedulesPage.cron.dom_label")}
@@ -211,7 +226,7 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
             </div>
           )}
 
-          {state.frequency === "hourly" && (
+          {effectiveFrequency === "hourly" && (
             <div>
               <label className="mb-1 block text-sm font-medium">
                 {t("schedulesPage.cron.minute_label")}
@@ -225,7 +240,7 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
             </div>
           )}
 
-          {state.frequency === "every_n_minutes" && (
+          {effectiveFrequency === "every_n_minutes" && (
             <div>
               <label className="mb-1 block text-sm font-medium">
                 {t("schedulesPage.cron.interval_label")}

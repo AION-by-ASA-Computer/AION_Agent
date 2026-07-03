@@ -96,6 +96,8 @@
     "field_prompt": "Prompt en cada ejecución",
     "field_timezone": "Zona horaria",
     "field_profile": "Perfil del agente",
+    "field_sql_project": "Proyecto QueryMemory",
+    "field_sql_project_hint": "Obligatorio para perfiles con memoria (el cajón por defecto está bloqueado). Selecciona un proyecto dedicado.",
     "form_required": "Nombre y prompt son obligatorios.",
     "session_fixed": "Misma conversación (se conserva el contexto)",
     "session_new": "Nueva conversación cada vez",

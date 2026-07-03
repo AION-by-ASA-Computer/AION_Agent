@@ -9,6 +9,7 @@ import {
   describeCronHuman,
 } from "@/components/schedules/CronScheduleBuilder";
 import { AppSelect } from "@/components/ui/radix-select";
+import { ProjectSelector } from "@/components/query-memory/ProjectSelector";
 import {
   createCronJob,
   deleteCronJob,
@@ -27,6 +28,30 @@ import { useT } from "@/lib/i18n/use-t";
 
 const inputClass =
   "focus-ring w-full rounded-lg border border-input bg-background px-3 py-2 text-sm";
+
+/**
+ * Format a UTC ISO string (next_run_at from the backend) in the job's own
+ * timezone so the displayed time matches the cron schedule the user set.
+ * Falls back to browser locale if the timezone is invalid or unavailable.
+ */
+function formatNextRunAt(isoUtc: string, tz?: string | null): string {
+  const d = new Date(isoUtc);
+  if (isNaN(d.getTime())) return isoUtc;
+  try {
+    return d.toLocaleString(undefined, {
+      timeZone: tz || undefined,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    // Fallback if tz string is unrecognized by Intl
+    return d.toLocaleString();
+  }
+}
 
 const COMMON_TIMEZONES = [
   "Europe/Rome",
@@ -273,7 +298,7 @@ function ScheduleJobCard({
           </div>
           {job.next_run_at && job.enabled && (
             <p className="mt-1 text-xs text-muted-foreground">
-              {t("schedulesPage.next")}: {new Date(job.next_run_at).toLocaleString()}
+              {t("schedulesPage.next")}: {formatNextRunAt(job.next_run_at, job.timezone)}
             </p>
           )}
           {job.last_run?.status && (
@@ -450,8 +475,13 @@ function ScheduleJobDialog({
     (job?.session_mode as "fixed" | "new") ?? "fixed",
   );
   const [timezone, setTimezone] = useState(job?.timezone ?? "Europe/Rome");
+  const [sqlProject, setSqlProject] = useState(job?.sql_query_project ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const sqlProjectPayload = (sqlProject || "").trim().toLowerCase() === "default"
+    ? null
+    : (sqlProject || "").trim() || null;
 
   useEffect(() => {
     if (!userId) return;
@@ -490,6 +520,7 @@ function ScheduleJobDialog({
             prompt: prompt.trim(),
             profile_slug: profile,
             session_mode: sessionMode,
+            sql_query_project: sqlProjectPayload,
             timezone,
             enabled: true,
           },
@@ -506,6 +537,7 @@ function ScheduleJobDialog({
             prompt: prompt.trim(),
             profile_slug: profile,
             session_mode: sessionMode,
+            sql_query_project: sqlProjectPayload,
             timezone,
           },
           token,
@@ -603,6 +635,23 @@ function ScheduleJobDialog({
                 />
               </div>
             )}
+
+            <div>
+              <label className="mb-1 block text-sm font-medium">
+                {t("schedulesPage.field_sql_project")}
+              </label>
+              <ProjectSelector
+                userId={userId}
+                token={token}
+                profileSlug={profile}
+                value={sqlProject || "default"}
+                onChange={setSqlProject}
+                className="w-full"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {t("schedulesPage.field_sql_project_hint")}
+              </p>
+            </div>
 
             <fieldset className="space-y-2">
               <legend className="text-sm font-medium">{t("schedulesPage.session_legend")}</legend>
