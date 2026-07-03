@@ -17,7 +17,8 @@ con ``-y`` usare ``AION_SETUP_CHAT_*`` nel file importato).
 Le chiavi gestite sono quelle presenti in ``.env.example``; le altre chiavi in un ``.env``
 esistente vengono preservate in coda sotto un blocco commentato.
 ``./scripts/upgrade-aion.sh`` (``upgrade_core._ensure_*_env_keys``) appende in ``.env`` le chiavi
-mancanti (web search, context compress, SQL QueryMemory ``AION_SQL_QM_*``,
+mancanti (web search, context compress, tool-first runtime ``AION_MODEL_PROMPT_FRAGMENTS`` /
+``AION_ARTIFACT_STREAM_LEGACY`` / doom loop / vLLM tool args / ``AION_LLM_CALL_AUDIT``, SQL QueryMemory ``AION_SQL_QM_*``,
 MemPalace navigazione ``AION_MEMPALACE_NAV_*``, allowlist ``skill_view`` ``AION_SKILL_VIEW_ENFORCE_PROFILE``, …).
 ``setup_core.py`` / ``upgrade_core.py`` applicano anche ``patch_sql_query_memory_config.py`` e
 ``patch_mempalace_navigation_config.py`` (profilo Postgres, skill, wing ``wing_proj_{project}``).

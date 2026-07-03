@@ -1,6 +1,6 @@
 ---
 name: artifact_protocol
-description: "Legacy artifact stream + tool-first file delivery for AION."
+description: "Tool-first file delivery for AION (sandbox write/edit/patch tools)."
 tags: [core, protocol, code]
 status: verified
 source: curated

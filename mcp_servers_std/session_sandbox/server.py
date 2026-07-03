@@ -451,9 +451,12 @@ def sandbox_exec_allowlisted(
 # @mcp.tool()
 def sandbox_execute_python(code: str) -> str:
     """
-    [PERMANENTLY DISABLED] — use <aion_artifact> with auto_execute="true".
+    [PERMANENTLY DISABLED] — use sandbox_write_workspace_file + sandbox_run_python_file.
     """
-    return "ERROR: This tool is disabled. Use <aion_artifact identifier='...' type='python' auto_execute='true'> to run code."
+    return (
+        "ERROR: This tool is disabled. Write scripts with "
+        "sandbox_write_workspace_file(relative_path, content), then sandbox_run_python_file."
+    )
 
 
 @mcp.tool()
@@ -498,9 +501,8 @@ def sandbox_run_python_file(relative_path: str, extra_args: list[str] | None = N
         err_msg = str(e)
         if any(h in err_msg.lower() for h in ["not found", "non valido", "no such file"]):
             hint = (
-                "Write the complete script in your chat reply inside "
-                "<aion_artifact filename=\"...\">...</aion_artifact> "
-                "in the SAME turn BEFORE calling this tool."
+                "Call sandbox_write_workspace_file(relative_path, content) in the SAME turn "
+                "BEFORE sandbox_run_python_file."
             )
             return f"Error: {err_msg}\nHINT: {hint}"
         return f"Error: {err_msg}"
