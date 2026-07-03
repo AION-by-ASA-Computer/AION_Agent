@@ -197,17 +197,17 @@ export default function SettingsPage() {
         });
         return;
       }
-      if (providerForm.max_chat_tokens != null) {
-        const hint = hintForModel(providerProbeResult, providerForm.model_name);
-        const tokenErr = validateMaxChatTokens(
-          providerForm.max_chat_tokens,
-          Number(providerForm.thinking_token_budget) || 0,
-          hint,
-        );
-        if (tokenErr) {
-          setMessage({ type: 'error', text: tokenErr });
-          return;
-        }
+    }
+    if (providerForm.max_chat_tokens != null) {
+      const hint = hintForModel(providerProbeResult, providerForm.model_name);
+      const tokenErr = validateMaxChatTokens(
+        providerForm.max_chat_tokens,
+        Number(providerForm.thinking_token_budget) || 0,
+        hint,
+      );
+      if (tokenErr) {
+        setMessage({ type: 'error', text: tokenErr });
+        return;
       }
     }
     if (!providerForm.model_name.trim()) {
@@ -228,8 +228,8 @@ export default function SettingsPage() {
         model_name: providerForm.model_name,
         api_base_url: providerForm.api_base_url || null,
         timeout: providerForm.timeout,
-        max_chat_tokens: providerForm.max_chat_tokens || null,
-        thinking_token_budget: providerForm.thinking_token_budget || null,
+        max_chat_tokens: providerForm.max_chat_tokens ?? null,
+        thinking_token_budget: providerForm.thinking_token_budget ?? null,
         enabled: providerForm.enabled,
         is_default: providerForm.is_default || false,
       };
@@ -246,7 +246,12 @@ export default function SettingsPage() {
         setShowForm(false);
         resetProviderProbeState();
         fetchLlmProviders();
-        setMessage({ type: 'success', text: "Provider saved successfully." });
+        setMessage({
+          type: 'success',
+          text: providerForm.is_default
+            ? "Provider saved. Default token limits synced to AION_CHAT_MAX_TOKENS."
+            : "Provider saved successfully.",
+        });
       } else {
         const data = await res.json();
         setMessage({ type: 'error', text: data.detail || "Failed to save provider." });
@@ -1089,7 +1094,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">Max Chat Tokens (optional)</label>
+                  <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">Max Chat Tokens (AION_CHAT_MAX_TOKENS)</label>
                   <input
                     type="number"
                     value={providerForm.max_chat_tokens || ''}
@@ -1100,7 +1105,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="space-y-1.5">
-                  <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">Thinking Token Budget (optional)</label>
+                  <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">Thinking Token Budget (AION_THINKING_TOKEN_BUDGET)</label>
                   <input
                     type="number"
                     value={providerForm.thinking_token_budget || ''}

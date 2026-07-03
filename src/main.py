@@ -730,6 +730,13 @@ _AGENT_CACHE_ENABLED = os.getenv("AION_AGENT_CACHE", "1").lower() in (
 )
 
 
+def clear_agent_cache() -> None:
+    """Drop cached agents (e.g. after LLM provider or token limit changes)."""
+    _AGENT_CACHE.clear()
+    _AGENT_BUILD_INFLIGHT.clear()
+    logger.info("Agent cache cleared")
+
+
 def _build_chat_generation_kwargs() -> Tuple[Dict[str, Any], str]:
     """
     Haystack/OpenAI SDK: vLLM vendor fields go in ``extra_body`` (not all builds accept
@@ -1336,6 +1343,19 @@ async def _finish_get_agent_build(
                         if max_tokens <= budget:
                             max_tokens = budget + 2048
                         provider_gen_kw["max_tokens"] = max_tokens
+
+                if row.max_chat_tokens is not None:
+                    if provider_gen_kw is None:
+                        provider_gen_kw = {}
+                    max_out = row.max_chat_tokens
+                    if row.thinking_token_budget and row.provider in (
+                        "anthropic",
+                        "google",
+                    ):
+                        budget = row.thinking_token_budget
+                        if max_out <= budget:
+                            max_out = budget + 2048
+                    provider_gen_kw["max_tokens"] = max_out
 
                 chat_generator = LiteLLMChatGeneratorWrapper(
                     api_base_url=provider_api_base,

@@ -97,6 +97,30 @@ def _probe_value_error_detail(exc: ValueError) -> str:
     return "Connection failed. Check provider settings and endpoint availability."
 
 
+def _sync_default_provider_env(row: LlmProvider) -> None:
+    """Mirror default provider token limits into .env for legacy readers."""
+    if not row.is_default:
+        return
+    try:
+        from src.api.settings_api import _filter_settings_post, _parse_env, _reload_env, _write_env
+
+        merged = _filter_settings_post(_parse_env())
+        if row.max_chat_tokens is not None:
+            merged["AION_CHAT_MAX_TOKENS"] = str(row.max_chat_tokens)
+        if row.thinking_token_budget is not None:
+            merged["AION_THINKING_TOKEN_BUDGET"] = str(row.thinking_token_budget)
+        _write_env(merged)
+        _reload_env()
+    except Exception:
+        logger.exception("Failed to sync default provider token limits to .env")
+
+
+def _invalidate_llm_provider_runtime() -> None:
+    from src.main import clear_agent_cache
+
+    clear_agent_cache()
+
+
 @router.post("/probe")
 async def probe_llm_provider(body: LlmProviderProbeRequest):
     """Test connectivity and list models (GET /v1/models + LiteLLM catalog fallback)."""
@@ -259,6 +283,9 @@ async def create_llm_provider(body: LlmProviderCreate):
         session.add(provider)
         await session.commit()
 
+    _invalidate_llm_provider_runtime()
+    _sync_default_provider_env(provider)
+
     return LlmProviderPublic(
         id=provider.id,
         slug=provider.slug,
@@ -339,6 +366,9 @@ async def update_llm_provider(slug: str, body: LlmProviderUpdate):
         row.updated_at = datetime.now(timezone.utc)
         await session.commit()
 
+    _invalidate_llm_provider_runtime()
+    _sync_default_provider_env(row)
+
     return LlmProviderPublic(
         id=row.id,
         slug=row.slug,
@@ -385,4 +415,6 @@ async def delete_llm_provider(slug: str):
 
         await session.execute(delete(LlmProvider).where(LlmProvider.id == row.id))
         await session.commit()
+
+    _invalidate_llm_provider_runtime()
     return {"ok": True}
