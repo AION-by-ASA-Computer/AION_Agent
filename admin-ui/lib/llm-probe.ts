@@ -21,6 +21,8 @@ export type LlmProbeResponse = {
   };
 };
 
+export type ModelProbeKind = "chat" | "embedding";
+
 export function modelIdsFromProbe(result: LlmProbeResponse): string[] {
   return (result.models?.data ?? []).map((m) => m.id).filter(Boolean);
 }
@@ -64,5 +66,80 @@ export function providerNeedsBaseUrl(provider: string): boolean {
 }
 
 export function providerSupportsProbe(provider: string): boolean {
-  return ["openai", "anthropic", "gemini", "ollama", "vllm"].includes(provider);
+  return ["openai", "anthropic", "gemini", "ollama", "vllm", "google"].includes(provider);
+}
+
+export function embeddingProviderToProbeProvider(provider: string): string {
+  return provider === "google" ? "gemini" : "openai";
+}
+
+const EMBEDDING_MODEL_RE = /embed/i;
+
+export function filterModelsForKind(ids: string[], kind: ModelProbeKind): string[] {
+  if (kind === "embedding") {
+    const embedding = ids.filter((id) => EMBEDDING_MODEL_RE.test(id));
+    return embedding.length ? embedding : ids;
+  }
+  const chat = ids.filter((id) => !EMBEDDING_MODEL_RE.test(id));
+  return chat.length ? chat : ids;
+}
+
+export function pickDefaultModel(ids: string[], kind: ModelProbeKind): string {
+  const pool = filterModelsForKind(ids, kind);
+  return pool[0] ?? "";
+}
+
+export function formatModelDisplayName(modelId: string): string {
+  const tail = modelId.split(/[/:]/).pop() || modelId;
+  return tail.replace(/[-_]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+export function slugFromModelId(modelId: string, prefix = "default"): string {
+  const base = modelId
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 40);
+  return base ? `${prefix}-${base}` : prefix;
+}
+
+/** Strip /embeddings suffix to probe GET /v1/models on the service base. */
+export function probeBaseUrlFromServiceUrl(serviceUrl: string): string {
+  const trimmed = (serviceUrl || "").trim().replace(/\/$/, "");
+  if (!trimmed) return "";
+  return trimmed.replace(/\/embeddings$/i, "");
+}
+
+/** Normalize stored AION_EMBEDDING_URL (POST target). */
+export function embeddingServiceUrlFromProbeBase(baseUrl: string): string {
+  const base = (baseUrl || "").trim().replace(/\/$/, "");
+  if (!base) return "";
+  if (/\/embeddings$/i.test(base)) return base;
+  return `${base}/embeddings`;
+}
+
+export function defaultEmbeddingServiceUrl(provider: string): string {
+  if (provider === "google") {
+    return "https://generativelanguage.googleapis.com/v1beta/models";
+  }
+  return "https://api.openai.com/v1/embeddings";
+}
+
+export async function runModelProbe(
+  apiFetchFn: (input: string, init?: RequestInit) => Promise<Response>,
+  apiBaseUrl: string,
+  body: { provider: string; api_base_url?: string | null; api_key?: string | null },
+): Promise<LlmProbeResponse> {
+  const res = await apiFetchFn(`${apiBaseUrl}/admin/llm-providers/probe`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({}));
+    throw new Error(
+      typeof errData.detail === "string" ? errData.detail : "Connection test failed.",
+    );
+  }
+  return (await res.json()) as LlmProbeResponse;
 }

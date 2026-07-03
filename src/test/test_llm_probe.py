@@ -66,6 +66,26 @@ async def test_probe_llm_connection_live_models(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_probe_llm_connection_empty_models(monkeypatch):
+    from src.runtime import llm_probe
+
+    async def fake_fetch(base_url, api_key, timeout=10.0):
+        return []
+
+    monkeypatch.setattr(llm_probe, "_fetch_live_model_ids", fake_fetch)
+    monkeypatch.setattr(llm_probe, "should_use_catalog_fallback", lambda *_: False)
+
+    result = await probe_llm_connection(
+        provider="vllm",
+        api_base_url="http://localhost:8000/v1",
+        api_key="test-key",
+    )
+    assert result["healthy"] is True
+    assert result["models"]["data"] == []
+    assert result["warning"]
+
+
+@pytest.mark.asyncio
 async def test_probe_llm_connection_unreachable(monkeypatch):
     from src.runtime import llm_probe
 

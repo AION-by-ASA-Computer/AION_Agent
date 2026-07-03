@@ -205,7 +205,6 @@ async def probe_llm_connection(
     except Exception as e:
         logger.info("Live /models probe failed for %s: %s", base_url, e)
         if not catalog:
-            latency_ms = (time.monotonic() - start) * 1000
             raise ValueError(
                 f"Endpoint unreachable ({base_url}). "
                 "Check URL, API key, and that GET /v1/models returns available models. "
@@ -222,10 +221,11 @@ async def probe_llm_connection(
         models_payload = catalog_to_openai_models(catalog)
         models_source = "catalog"
     else:
-        latency_ms = (time.monotonic() - start) * 1000
-        raise ValueError(
-            f"Endpoint responded but returned no models ({base_url}). "
-            "Verify the server exposes OpenAI-compatible GET /v1/models."
+        models_payload = catalog_to_openai_models([])
+        models_source = "live"
+        warning = (
+            warning
+            or "Endpoint reachable but returned no models. Enter the model name manually."
         )
 
     latency_ms = (time.monotonic() - start) * 1000

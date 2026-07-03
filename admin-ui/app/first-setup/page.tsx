@@ -22,11 +22,19 @@ import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { fetchAuthStatus } from "@/lib/auth/status";
 import {
+  embeddingProviderToProbeProvider,
+  embeddingServiceUrlFromProbeBase,
+  filterModelsForKind,
+  formatModelDisplayName,
   hintForModel,
   LlmProbeResponse,
   modelIdsFromProbe,
+  pickDefaultModel,
+  probeBaseUrlFromServiceUrl,
   providerNeedsBaseUrl,
   providerSupportsProbe,
+  runModelProbe,
+  slugFromModelId,
   validateMaxChatTokens,
 } from "@/lib/llm-probe";
 
@@ -42,10 +50,10 @@ export default function FirstSetupPage() {
 
   // --- Step 1: LLM Provider State ---
   const [llmForm, setLlmForm] = useState({
-    slug: "default-openai",
-    display_name: "OpenAI GPT-4o",
+    slug: "default-llm",
+    display_name: "Default LLM",
     provider: "openai",
-    model_name: "gpt-4o",
+    model_name: "",
     api_base_url: "",
     api_key: "",
     timeout: 120,
@@ -56,17 +64,24 @@ export default function FirstSetupPage() {
   const [llmProbing, setLlmProbing] = useState(false);
   const [llmProbeResult, setLlmProbeResult] = useState<LlmProbeResponse | null>(null);
   const [llmProbeLatencyMs, setLlmProbeLatencyMs] = useState<number | null>(null);
-  const [llmModelsDiscovered, setLlmModelsDiscovered] = useState(false);
+  const [llmConnectionTested, setLlmConnectionTested] = useState(false);
   const [llmDiscoveredModelIds, setLlmDiscoveredModelIds] = useState<string[]>([]);
+  const [llmManualModelEntry, setLlmManualModelEntry] = useState(false);
 
   // --- Step 2: Embeddings State ---
   const [embForm, setEmbForm] = useState({
     provider: "openai",
-    model: "text-embedding-3-small",
+    model: "",
     url: "",
     api_key: "",
   });
   const [showEmbKey, setShowEmbKey] = useState(false);
+  const [embProbing, setEmbProbing] = useState(false);
+  const [embProbeResult, setEmbProbeResult] = useState<LlmProbeResponse | null>(null);
+  const [embProbeLatencyMs, setEmbProbeLatencyMs] = useState<number | null>(null);
+  const [embConnectionTested, setEmbConnectionTested] = useState(false);
+  const [embDiscoveredModelIds, setEmbDiscoveredModelIds] = useState<string[]>([]);
+  const [embManualModelEntry, setEmbManualModelEntry] = useState(false);
 
   // --- Step 3: OCR State ---
   const [ocrForm, setOcrForm] = useState({
@@ -128,56 +143,64 @@ export default function FirstSetupPage() {
     }
   };
 
+  const resetLlmProbeState = () => {
+    setLlmProbeResult(null);
+    setLlmProbeLatencyMs(null);
+    setLlmConnectionTested(false);
+    setLlmDiscoveredModelIds([]);
+    setLlmManualModelEntry(false);
+    setLlmForm((prev) => ({ ...prev, model_name: "" }));
+  };
+
+  const resetEmbProbeState = () => {
+    setEmbProbeResult(null);
+    setEmbProbeLatencyMs(null);
+    setEmbConnectionTested(false);
+    setEmbDiscoveredModelIds([]);
+    setEmbManualModelEntry(false);
+    setEmbForm((prev) => ({ ...prev, model: "" }));
+  };
+
+  const applyLlmModelSelection = (modelId: string, result: LlmProbeResponse | null) => {
+    const hint = hintForModel(result, modelId);
+    setLlmForm((prev) => ({
+      ...prev,
+      model_name: modelId,
+      display_name: formatModelDisplayName(modelId),
+      slug: slugFromModelId(modelId, prev.provider === "vllm" ? "local" : "default"),
+      max_chat_tokens: hint?.suggested_max_chat_tokens ?? prev.max_chat_tokens,
+    }));
+  };
+
   const handleLlmProviderChange = (provider: string) => {
-    let defaults = {
-      slug: "default-openai",
-      display_name: "OpenAI GPT-4o",
-      model_name: "gpt-4o",
-      max_chat_tokens: 8192,
-      thinking_token_budget: 12000,
+    const providerLabels: Record<string, { slug: string; display_name: string }> = {
+      openai: { slug: "default-llm", display_name: "Default LLM" },
+      anthropic: { slug: "default-llm", display_name: "Default LLM" },
+      gemini: { slug: "default-llm", display_name: "Default LLM" },
+      ollama: { slug: "local-ollama", display_name: "Ollama LLM" },
+      vllm: { slug: "local-vllm", display_name: "vLLM Model" },
     };
-    if (provider === "anthropic") {
-      defaults = {
-        slug: "default-anthropic",
-        display_name: "Anthropic Claude 3.5 Sonnet",
-        model_name: "claude-3-5-sonnet-20241022",
-        max_chat_tokens: 16384,
-        thinking_token_budget: 8192,
-      };
-    } else if (provider === "gemini") {
-      defaults = {
-        slug: "default-gemini",
-        display_name: "Google Gemini 1.5 Pro",
-        model_name: "gemini-1.5-pro",
-        max_chat_tokens: 8192,
-        thinking_token_budget: 0,
-      };
-    } else if (provider === "ollama") {
-      defaults = {
-        slug: "local-ollama",
-        display_name: "Ollama Llama 3",
-        model_name: "llama3",
-        max_chat_tokens: 4096,
-        thinking_token_budget: 0,
-      };
-    } else if (provider === "vllm") {
-      defaults = {
-        slug: "local-vllm",
-        display_name: "vLLM Model",
-        model_name: "meta-llama/Meta-Llama-3-8B-Instruct",
-        max_chat_tokens: 16384,
-        thinking_token_budget: 8192,
-      };
-    }
+    const meta = providerLabels[provider] ?? providerLabels.openai;
     setLlmForm((prev) => ({
       ...prev,
       provider,
-      ...defaults,
+      slug: meta.slug,
+      display_name: meta.display_name,
+      model_name: "",
+      max_chat_tokens: provider === "ollama" ? 4096 : 8192,
+      thinking_token_budget: provider === "gemini" || provider === "ollama" ? 0 : 12000,
     }));
-    setLlmProbeResult(null);
-    setLlmProbeLatencyMs(null);
-    setLlmModelsDiscovered(false);
-    setLlmDiscoveredModelIds([]);
+    resetLlmProbeState();
+  };
+
+  const handleEmbProviderChange = (provider: string) => {
+    setEmbForm((prev) => ({
+      ...prev,
+      provider,
+      model: "",
+      url: "",
+    }));
+    resetEmbProbeState();
   };
 
   const probeLlmConnection = async (): Promise<boolean> => {
@@ -194,48 +217,36 @@ export default function FirstSetupPage() {
     setError(null);
     setLlmProbeLatencyMs(null);
     try {
-      const res = await apiFetch(`${apiBase()}/admin/llm-providers/probe`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: llmForm.provider,
-          api_base_url: llmForm.api_base_url.trim() || null,
-          api_key: llmForm.api_key.trim() || null,
-        }),
+      const result = await runModelProbe(apiFetch, apiBase(), {
+        provider: llmForm.provider,
+        api_base_url: llmForm.api_base_url.trim() || null,
+        api_key: llmForm.api_key.trim() || null,
       });
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.detail || "Connection test failed.");
-      }
-      const result = (await res.json()) as LlmProbeResponse;
-      const ids = modelIdsFromProbe(result);
-      if (!ids.length) {
-        throw new Error("Endpoint responded but returned no models.");
-      }
+      const allIds = modelIdsFromProbe(result);
+      const chatIds = filterModelsForKind(allIds, "chat");
       setLlmProbeResult(result);
-      setLlmDiscoveredModelIds(ids);
-      setLlmModelsDiscovered(true);
+      setLlmDiscoveredModelIds(chatIds);
+      setLlmConnectionTested(true);
       setLlmProbeLatencyMs(result.latency_ms);
       setLlmForm((prev) => ({
         ...prev,
-        model_name: ids.includes(prev.model_name) ? prev.model_name : ids[0],
         api_base_url: result.base_url || prev.api_base_url,
       }));
-      const hint = hintForModel(result, ids.includes(llmForm.model_name) ? llmForm.model_name : ids[0]);
-      if (hint) {
-        setLlmForm((prev) => ({
-          ...prev,
-          max_chat_tokens: hint.suggested_max_chat_tokens,
-        }));
+
+      if (chatIds.length > 0) {
+        setLlmManualModelEntry(false);
+        applyLlmModelSelection(pickDefaultModel(allIds, "chat"), result);
+      } else {
+        setLlmManualModelEntry(true);
+        setLlmForm((prev) => ({ ...prev, model_name: "" }));
       }
+
       if (result.warning) {
         setError(result.warning);
       }
       return true;
     } catch (err: any) {
-      setLlmProbeResult(null);
-      setLlmModelsDiscovered(false);
-      setLlmDiscoveredModelIds([]);
+      resetLlmProbeState();
       setError(err.message || "Connection test failed.");
       return false;
     } finally {
@@ -243,14 +254,59 @@ export default function FirstSetupPage() {
     }
   };
 
-  const applyModelHint = (modelId: string) => {
-    const hint = hintForModel(llmProbeResult, modelId);
-    if (!hint) return;
-    setLlmForm((prev) => ({
-      ...prev,
-      model_name: modelId,
-      max_chat_tokens: hint.suggested_max_chat_tokens,
-    }));
+  const probeEmbConnection = async (): Promise<boolean> => {
+    const probeBase = probeBaseUrlFromServiceUrl(embForm.url);
+    if (!probeBase) {
+      setError("Embedding service URL is required to test the connection.");
+      return false;
+    }
+    if (embForm.provider !== "google" && !embForm.api_key.trim()) {
+      setError("API Key is required to test the connection.");
+      return false;
+    }
+
+    setEmbProbing(true);
+    setError(null);
+    setEmbProbeLatencyMs(null);
+    try {
+      const result = await runModelProbe(apiFetch, apiBase(), {
+        provider: embeddingProviderToProbeProvider(embForm.provider),
+        api_base_url: probeBase,
+        api_key: embForm.api_key.trim() || null,
+      });
+      const allIds = modelIdsFromProbe(result);
+      const embIds = filterModelsForKind(allIds, "embedding");
+      setEmbProbeResult(result);
+      setEmbDiscoveredModelIds(embIds);
+      setEmbConnectionTested(true);
+      setEmbProbeLatencyMs(result.latency_ms);
+      setEmbForm((prev) => ({
+        ...prev,
+        url: embeddingServiceUrlFromProbeBase(result.base_url || probeBase),
+      }));
+
+      if (embIds.length > 0) {
+        setEmbManualModelEntry(false);
+        setEmbForm((prev) => ({
+          ...prev,
+          model: pickDefaultModel(allIds, "embedding"),
+        }));
+      } else {
+        setEmbManualModelEntry(true);
+        setEmbForm((prev) => ({ ...prev, model: "" }));
+      }
+
+      if (result.warning) {
+        setError(result.warning);
+      }
+      return true;
+    } catch (err: any) {
+      resetEmbProbeState();
+      setError(err.message || "Connection test failed.");
+      return false;
+    } finally {
+      setEmbProbing(false);
+    }
   };
 
   // --- Sequential Saving Flow ---
@@ -402,13 +458,17 @@ export default function FirstSetupPage() {
         setError("API Key is required.");
         return;
       }
-      if (!llmForm.model_name.trim()) {
-        setError("Model name is required.");
-        return;
-      }
-      if (providerSupportsProbe(llmForm.provider) && !llmModelsDiscovered) {
+      if (!llmConnectionTested) {
         const ok = await probeLlmConnection();
         if (!ok) return;
+      }
+      if (!llmForm.model_name.trim()) {
+        setError(
+          llmManualModelEntry
+            ? "Enter the model name manually — the endpoint did not list any models."
+            : "Select a model from the list discovered by the connection test.",
+        );
+        return;
       }
       const hint = hintForModel(llmProbeResult, llmForm.model_name);
       const tokenErr = validateMaxChatTokens(
@@ -418,6 +478,31 @@ export default function FirstSetupPage() {
       );
       if (tokenErr) {
         setError(tokenErr);
+        return;
+      }
+      const idx = stepsOrder.indexOf(currentStep);
+      setCurrentStep(stepsOrder[idx + 1]);
+      return;
+    }
+    if (currentStep === "embeddings") {
+      if (!embForm.url.trim()) {
+        setError("Embedding service URL is required.");
+        return;
+      }
+      if (embForm.provider !== "google" && !embForm.api_key.trim()) {
+        setError("Embedding API Key is required.");
+        return;
+      }
+      if (!embConnectionTested) {
+        const ok = await probeEmbConnection();
+        if (!ok) return;
+      }
+      if (!embForm.model.trim()) {
+        setError(
+          embManualModelEntry
+            ? "Enter the embedding model name manually — the endpoint did not list any models."
+            : "Select an embedding model from the list discovered by the connection test.",
+        );
         return;
       }
       const idx = stepsOrder.indexOf(currentStep);
@@ -552,12 +637,14 @@ export default function FirstSetupPage() {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold">1. Default LLM Provider</h2>
-                    <p className="text-xs text-gray-400">Specify the model and credentials for the main LLM orchestration.</p>
+                    <p className="text-xs text-gray-400">
+                      Enter the endpoint and credentials, test the connection, then pick a model from the discovered list.
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-2">
                     <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">LLM Provider</label>
                     <select
                       value={llmForm.provider}
@@ -572,62 +659,6 @@ export default function FirstSetupPage() {
                     </select>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Model Name</label>
-                    {llmModelsDiscovered && llmDiscoveredModelIds.length > 0 ? (
-                      <select
-                        value={llmForm.model_name}
-                        onChange={(e) => applyModelHint(e.target.value)}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono cursor-pointer"
-                      >
-                        {llmDiscoveredModelIds.map((id) => (
-                          <option key={id} value={id}>
-                            {id}
-                          </option>
-                        ))}
-                      </select>
-                    ) : (
-                      <input
-                        type="text"
-                        value={llmForm.model_name}
-                        onChange={(e) => setLlmForm((prev) => ({ ...prev, model_name: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        placeholder="e.g. gpt-4o, claude-3-5-sonnet-20241022"
-                      />
-                    )}
-                    {llmModelsDiscovered && llmProbeLatencyMs != null && (
-                      <p className="text-[11px] text-emerald-400/90 font-mono">
-                        Connection OK · {llmProbeLatencyMs}ms · {llmDiscoveredModelIds.length} models
-                        {llmProbeResult?.models_source ? ` (${llmProbeResult.models_source})` : ""}
-                      </p>
-                    )}
-                    {hintForModel(llmProbeResult, llmForm.model_name) && (
-                      <p className="text-[11px] text-gray-500 font-mono">
-                        Context window: {hintForModel(llmProbeResult, llmForm.model_name)?.context_window.toLocaleString()} tokens
-                      </p>
-                    )}
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Display Name</label>
-                    <input
-                      type="text"
-                      value={llmForm.display_name}
-                      onChange={(e) => setLlmForm((prev) => ({ ...prev, display_name: e.target.value }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Slug (Unique ID)</label>
-                    <input
-                      type="text"
-                      value={llmForm.slug}
-                      onChange={(e) => setLlmForm((prev) => ({ ...prev, slug: e.target.value }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                    />
-                  </div>
-
                   {llmForm.provider !== "ollama" && (
                     <div className="space-y-2 md:col-span-2">
                       <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">API Key</label>
@@ -637,10 +668,7 @@ export default function FirstSetupPage() {
                           value={llmForm.api_key}
                           onChange={(e) => {
                             setLlmForm((prev) => ({ ...prev, api_key: e.target.value }));
-                            setLlmProbeResult(null);
-                            setLlmModelsDiscovered(false);
-                            setLlmDiscoveredModelIds([]);
-                            setLlmProbeLatencyMs(null);
+                            resetLlmProbeState();
                           }}
                           className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
                           placeholder="Enter API key"
@@ -657,32 +685,31 @@ export default function FirstSetupPage() {
                     </div>
                   )}
 
-                  {(llmForm.provider === "ollama" || llmForm.provider === "vllm" || llmForm.provider === "openai") && (
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
-                        API Base URL {llmForm.provider !== "ollama" && llmForm.provider !== "vllm" && "(Optional)"}
-                      </label>
-                      <input
-                        type="text"
-                        value={llmForm.api_base_url}
-                        onChange={(e) => {
-                          setLlmForm((prev) => ({ ...prev, api_base_url: e.target.value }));
-                          setLlmProbeResult(null);
-                          setLlmModelsDiscovered(false);
-                          setLlmDiscoveredModelIds([]);
-                          setLlmProbeLatencyMs(null);
-                        }}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        placeholder={
-                          llmForm.provider === "ollama"
-                            ? "http://localhost:11434/v1"
-                            : llmForm.provider === "vllm"
-                              ? "http://localhost:8000/v1"
-                              : "https://api.openai.com/v1"
-                        }
-                      />
-                    </div>
-                  )}
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
+                      API Base URL {providerNeedsBaseUrl(llmForm.provider) ? "" : "(optional — defaults to vendor API)"}
+                    </label>
+                    <input
+                      type="text"
+                      value={llmForm.api_base_url}
+                      onChange={(e) => {
+                        setLlmForm((prev) => ({ ...prev, api_base_url: e.target.value }));
+                        resetLlmProbeState();
+                      }}
+                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                      placeholder={
+                        llmForm.provider === "ollama"
+                          ? "http://localhost:11434/v1"
+                          : llmForm.provider === "vllm"
+                            ? "http://localhost:8000/v1"
+                            : llmForm.provider === "anthropic"
+                              ? "https://api.anthropic.com"
+                              : llmForm.provider === "gemini"
+                                ? "https://generativelanguage.googleapis.com/v1beta"
+                                : "https://api.openai.com/v1"
+                      }
+                    />
+                  </div>
 
                   {providerSupportsProbe(llmForm.provider) && (
                     <div className="md:col-span-2 flex flex-wrap items-center gap-3">
@@ -693,48 +720,129 @@ export default function FirstSetupPage() {
                         className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-300 text-sm font-semibold hover:bg-blue-500/20 transition-all disabled:opacity-50"
                       >
                         {llmProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                        Test connection & list models
+                        Test connection & discover models
                       </button>
-                      {llmProbeLatencyMs != null && (
+                      {llmConnectionTested && llmProbeLatencyMs != null && (
                         <span className="text-xs text-emerald-400 font-mono">
-                          Last test OK · {llmProbeLatencyMs}ms
+                          Connection OK · {llmProbeLatencyMs}ms
+                          {llmDiscoveredModelIds.length > 0
+                            ? ` · ${llmDiscoveredModelIds.length} models`
+                            : " · enter model manually"}
                         </span>
                       )}
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Max Chat Tokens (AION_CHAT_MAX_TOKENS)</label>
-                    <input
-                      type="number"
-                      value={llmForm.max_chat_tokens}
-                      onChange={(e) => setLlmForm((prev) => ({ ...prev, max_chat_tokens: parseInt(e.target.value) || 0 }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. 8192"
-                    />
-                  </div>
+                  {!llmConnectionTested ? (
+                    <div className="md:col-span-2 p-4 rounded-xl border border-dashed border-[#262626] bg-[#0a0a0a]/60 text-sm text-gray-500 flex items-start gap-3">
+                      <Info className="w-5 h-5 shrink-0 mt-0.5 text-gray-600" />
+                      <span>
+                        Test the endpoint to discover available models. The model will be selected automatically from the list.
+                      </span>
+                    </div>
+                  ) : llmManualModelEntry ? (
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Model name (manual)</label>
+                      <input
+                        type="text"
+                        value={llmForm.model_name}
+                        onChange={(e) => {
+                          const modelId = e.target.value;
+                          setLlmForm((prev) => ({
+                            ...prev,
+                            model_name: modelId,
+                            display_name: modelId ? formatModelDisplayName(modelId) : prev.display_name,
+                            slug: modelId
+                              ? slugFromModelId(modelId, llmForm.provider === "vllm" ? "local" : "default")
+                              : prev.slug,
+                          }));
+                        }}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                        placeholder="Enter the exact model id served by your endpoint"
+                      />
+                      <p className="text-[11px] text-amber-400/90">
+                        No models were returned by GET /v1/models — enter the model id manually.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Model (auto-discovered)</label>
+                      <select
+                        value={llmForm.model_name}
+                        onChange={(e) => applyLlmModelSelection(e.target.value, llmProbeResult)}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono cursor-pointer"
+                      >
+                        {llmDiscoveredModelIds.map((id) => (
+                          <option key={id} value={id}>
+                            {id}
+                          </option>
+                        ))}
+                      </select>
+                      {hintForModel(llmProbeResult, llmForm.model_name) && (
+                        <p className="text-[11px] text-gray-500 font-mono">
+                          Context window:{" "}
+                          {hintForModel(llmProbeResult, llmForm.model_name)?.context_window.toLocaleString()} tokens
+                        </p>
+                      )}
+                    </div>
+                  )}
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Thinking Token Budget (AION_THINKING_TOKEN_BUDGET)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={llmForm.thinking_token_budget ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === "") {
-                          setLlmForm((prev) => ({ ...prev, thinking_token_budget: "" as any }));
-                          return;
-                        }
-                        const parsed = parseInt(val, 10);
-                        if (!isNaN(parsed)) {
-                          setLlmForm((prev) => ({ ...prev, thinking_token_budget: Math.max(0, parsed) }));
-                        }
-                      }}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. 12000 (0 to disable)"
-                    />
-                  </div>
+                  {llmConnectionTested && llmForm.model_name && (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Display Name</label>
+                        <input
+                          type="text"
+                          value={llmForm.display_name}
+                          onChange={(e) => setLlmForm((prev) => ({ ...prev, display_name: e.target.value }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Slug (Unique ID)</label>
+                        <input
+                          type="text"
+                          value={llmForm.slug}
+                          onChange={(e) => setLlmForm((prev) => ({ ...prev, slug: e.target.value }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Max Chat Tokens (AION_CHAT_MAX_TOKENS)</label>
+                        <input
+                          type="number"
+                          value={llmForm.max_chat_tokens}
+                          onChange={(e) => setLlmForm((prev) => ({ ...prev, max_chat_tokens: parseInt(e.target.value) || 0 }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                          placeholder="e.g. 8192"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Thinking Token Budget (AION_THINKING_TOKEN_BUDGET)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={llmForm.thinking_token_budget ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "") {
+                              setLlmForm((prev) => ({ ...prev, thinking_token_budget: "" as any }));
+                              return;
+                            }
+                            const parsed = parseInt(val, 10);
+                            if (!isNaN(parsed)) {
+                              setLlmForm((prev) => ({ ...prev, thinking_token_budget: Math.max(0, parsed) }));
+                            }
+                          }}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                          placeholder="e.g. 12000 (0 to disable)"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -748,22 +856,18 @@ export default function FirstSetupPage() {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold">2. Autonomous Memory (Embeddings)</h2>
-                    <p className="text-xs text-gray-400">Configure the model used to create vector embeddings for Long-Term Memory (LTM).</p>
+                    <p className="text-xs text-gray-400">
+                      Enter the embedding service URL and credentials, test the connection, then pick a model from the discovered list.
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-2">
                     <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding Provider</label>
                     <select
                       value={embForm.provider}
-                      onChange={(e) =>
-                        setEmbForm((prev) => ({
-                          ...prev,
-                          provider: e.target.value,
-                          model: e.target.value === "google" ? "models/text-embedding-004" : "text-embedding-3-small",
-                        }))
-                      }
+                      onChange={(e) => handleEmbProviderChange(e.target.value)}
                       className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all cursor-pointer"
                     >
                       <option value="openai">OpenAI-Compatible</option>
@@ -771,48 +875,110 @@ export default function FirstSetupPage() {
                     </select>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding Model</label>
-                    <input
-                      type="text"
-                      value={embForm.model}
-                      onChange={(e) => setEmbForm((prev) => ({ ...prev, model: e.target.value }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. text-embedding-3-small"
-                    />
-                  </div>
-
                   <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding API Key</label>
-                    <div className="relative">
-                      <input
-                        type={showEmbKey ? "text" : "password"}
-                        value={embForm.api_key}
-                        onChange={(e) => setEmbForm((prev) => ({ ...prev, api_key: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        placeholder="Enter API key"
-                        autoComplete="new-password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowEmbKey(!showEmbKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
-                      >
-                        {showEmbKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding Service URL (Optional)</label>
+                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding Service URL</label>
                     <input
                       type="text"
                       value={embForm.url}
-                      onChange={(e) => setEmbForm((prev) => ({ ...prev, url: e.target.value }))}
+                      onChange={(e) => {
+                        setEmbForm((prev) => ({ ...prev, url: e.target.value }));
+                        resetEmbProbeState();
+                      }}
                       className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. https://api.openai.com/v1"
+                      placeholder={
+                        embForm.provider === "google"
+                          ? "https://generativelanguage.googleapis.com/v1beta/models"
+                          : "http://localhost:11434/v1/embeddings or https://api.openai.com/v1/embeddings"
+                      }
                     />
+                    <p className="text-[11px] text-gray-500">
+                      Base URL or full <span className="font-mono">/v1/embeddings</span> path — used for POST; probe uses GET /v1/models on the base.
+                    </p>
                   </div>
+
+                  {embForm.provider !== "google" && (
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding API Key</label>
+                      <div className="relative">
+                        <input
+                          type={showEmbKey ? "text" : "password"}
+                          value={embForm.api_key}
+                          onChange={(e) => {
+                            setEmbForm((prev) => ({ ...prev, api_key: e.target.value }));
+                            resetEmbProbeState();
+                          }}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                          placeholder="Enter API key"
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowEmbKey(!showEmbKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                        >
+                          {showEmbKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={probeEmbConnection}
+                      disabled={embProbing}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-semibold hover:bg-purple-500/20 transition-all disabled:opacity-50"
+                    >
+                      {embProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                      Test connection & discover models
+                    </button>
+                    {embConnectionTested && embProbeLatencyMs != null && (
+                      <span className="text-xs text-emerald-400 font-mono">
+                        Connection OK · {embProbeLatencyMs}ms
+                        {embDiscoveredModelIds.length > 0
+                          ? ` · ${embDiscoveredModelIds.length} embedding models`
+                          : " · enter model manually"}
+                      </span>
+                    )}
+                  </div>
+
+                  {!embConnectionTested ? (
+                    <div className="md:col-span-2 p-4 rounded-xl border border-dashed border-[#262626] bg-[#0a0a0a]/60 text-sm text-gray-500 flex items-start gap-3">
+                      <Info className="w-5 h-5 shrink-0 mt-0.5 text-gray-600" />
+                      <span>
+                        Test the embedding endpoint to discover available models. Embedding models are preferred when detected in the list.
+                      </span>
+                    </div>
+                  ) : embManualModelEntry ? (
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding model (manual)</label>
+                      <input
+                        type="text"
+                        value={embForm.model}
+                        onChange={(e) => setEmbForm((prev) => ({ ...prev, model: e.target.value }))}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-purple-500/50 outline-none transition-all font-mono"
+                        placeholder="e.g. text-embedding-3-small, qwen3-embedding"
+                      />
+                      <p className="text-[11px] text-amber-400/90">
+                        No models were returned by GET /v1/models — enter the embedding model id manually.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding model (auto-discovered)</label>
+                      <select
+                        value={embForm.model}
+                        onChange={(e) => setEmbForm((prev) => ({ ...prev, model: e.target.value }))}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-purple-500/50 outline-none transition-all font-mono cursor-pointer"
+                      >
+                        {embDiscoveredModelIds.map((id) => (
+                          <option key={id} value={id}>
+                            {id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
