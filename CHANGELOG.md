@@ -45,7 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * **ci:** activate .venv-ci before uv pip install in Docker job ([85b022d](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/85b022d8d915186bf8bccd4a19c7b6da27e8b6c0))
 * **ci:** drop flaky GHA cache from release image builds ([7f4b75f](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7f4b75fa59781b12a0b16563bca6261800e58f57))
 * **ci:** drop flaky GHA cache from release image builds ([2b42946](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/2b4294674eb65f53d8b707a20b887971815df347))
-* **ci:** enable GHCR image publish on release ([c78ba3e](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/c78ba3ef9f0046474c9bb64f126f6e4709406b35))
+* **ci:** enable GHCR image publish on release ([c78be3e](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/c78ba3ef9f0046474c9bb64f126f6e4709406b35))
 * **ci:** enable GHCR image publish on release ([b624838](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/b62483861cad23c3f0656ac476d6151cb8e243e4))
 * **ci:** grant OSV scheduled job permissions for reusable workflow ([319965e](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/319965e6ceae3252662d09d6281e379ddfc76dff))
 * **ci:** publish GHCR images for amd64 and arm64 ([a8d2a7d](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/a8d2a7d6a3c67dde71770d4f730a455da8fd3e22))
