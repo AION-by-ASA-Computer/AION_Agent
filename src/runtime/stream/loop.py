@@ -151,6 +151,9 @@ class StreamLoop:
         self.raw_token_fallback_chunks: int = 0
         self.llm_calls: int = 0
 
+        # Back-compat alias used by agent_pipeline.run_stream post-consume.
+        self._llm_steps_done = 0  # kept in sync via llm_calls property below
+
         # Inner counters mirroring turn_guards.state
         self.is_streaming: bool = False
         self.reasoning_chars: int = 0
@@ -226,6 +229,7 @@ class StreamLoop:
 
                 if ctype == "llm_call":
                     self.llm_calls += 1
+                    self._llm_steps_done = self.llm_calls
                     continue
 
                 # --- Hard-stop budget guards ---
@@ -283,6 +287,7 @@ class StreamLoop:
                 # --- Stream end ---
                 if ctype == "stream_end":
                     self.is_streaming = False
+                    yield self._track_sse(chunk)
                     continue
 
                 # --- Tool events ---
@@ -612,20 +617,71 @@ class StreamLoop:
                 yield _BreakSignal()
                 return
 
-            # Track pending write artifacts
+            from src.runtime.doom_loop import check_doom_loop, doom_loop_action
+
+            _doom = check_doom_loop(
+                self.session_id, str(evt.get("name") or ""), evt.get("input") or {}
+            )
+            if _doom:
+                if doom_loop_action() == "stop":
+                    self.stop_event.set()
+                    self.stop_reason = "doom_loop"
+                    yield {"type": "error", "content": _doom}
+                    yield _BreakSignal()
+                    return
+                yield {
+                    "type": "turn_status",
+                    "phase": "doom_loop",
+                    "tool": str(evt.get("name") or ""),
+                    "message": _doom,
+                }
+
+            # Track pending edit artifacts (edits still surface in the artifact panel)
             if evt.get("name") == "sandbox_write_workspace_file":
                 args = evt.get("input", {}) or {}
                 rp = str(args.get("relative_path") or "workspace/file.txt")
-                ct = str(args.get("content") or "")
-                self.pending_write_artifacts[rp] = {"content": ct, "mode": "write"}
+                from src.runtime.file_tool_preview import build_file_tool_preview_events
+
+                preview_events, preview_meta = build_file_tool_preview_events(
+                    str(evt.get("name") or ""), args
+                )
+                self.pending_write_artifacts[rp] = {
+                    "content": str(args.get("content") or ""),
+                    "mode": "write",
+                    **preview_meta,
+                }
+                for preview_evt in preview_events:
+                    yield self._track_sse(preview_evt)
             elif evt.get("name") == "sandbox_edit_workspace_file":
                 args = evt.get("input", {}) or {}
                 rp = str(args.get("relative_path") or "workspace/file.txt")
+                from src.runtime.file_tool_preview import build_file_tool_preview_events
+
+                preview_events, preview_meta = build_file_tool_preview_events(
+                    str(evt.get("name") or ""), args
+                )
                 self.pending_write_artifacts[rp] = {
                     "old_string": str(args.get("old_string") or ""),
                     "new_string": str(args.get("new_string") or ""),
                     "mode": "edit",
+                    **preview_meta,
                 }
+                for preview_evt in preview_events:
+                    yield self._track_sse(preview_evt)
+            elif evt.get("name") == "sandbox_apply_patch":
+                args = evt.get("input", {}) or {}
+                from src.runtime.file_tool_preview import build_file_tool_preview_events
+
+                preview_events, preview_meta = build_file_tool_preview_events(
+                    str(evt.get("name") or ""), args
+                )
+                self.pending_write_artifacts["__patch__"] = {
+                    "patch_text": str(args.get("patch_text") or ""),
+                    "mode": "patch",
+                    **preview_meta,
+                }
+                for preview_evt in preview_events:
+                    yield self._track_sse(preview_evt)
 
         # --- request_sync ---
         if evt.get("type") == "request_sync":
@@ -701,66 +757,8 @@ class StreamLoop:
             if self.single_orch_channel:
                 return  # continue
 
-        # --- sandbox_write_workspace_file tool_end ---
-        if (
-            evt.get("type") == "tool_end"
-            and evt.get("name") == "sandbox_write_workspace_file"
-        ):
-            output_text = str(evt.get("output") or "")
-            saved_path = ""
-            if "workspace/" in output_text:
-                saved_path = output_text.split("workspace/", 1)[1].strip()
-                saved_path = "workspace/" + saved_path.split()[0].strip("`\"'.,)")
-            if not saved_path:
-                saved_path = "workspace/file.txt"
-            data = self.pending_write_artifacts.pop(
-                saved_path, {"content": "", "mode": "write"}
-            )
-            ct = data.get("content") or ""
-            aid = saved_path.replace("/", "_").replace(".", "_")
-            a_type = (
-                "html"
-                if saved_path.endswith(".html")
-                else "python"
-                if saved_path.endswith(".py")
-                else "text"
-            )
-            yield self._track_sse(
-                {
-                    "type": "artifact_start",
-                    "artifact": {
-                        "identifier": aid,
-                        "type": a_type,
-                        "title": f"📄 Artifact: {saved_path}",
-                        "auto_execute": False,
-                    },
-                }
-            )
-            yield self._track_sse(
-                {"type": "artifact_content", "content": ct, "artifact_id": aid}
-            )
-            yield self._track_sse(
-                {
-                    "type": "artifact_end",
-                    "artifact": {
-                        "identifier": aid,
-                        "type": a_type,
-                        "title": f"📄 Artifact: {saved_path}",
-                        "path": saved_path,
-                        "saved": True,
-                        "version": 1,
-                    },
-                }
-            )
-            self.turn_persist.queue_attachment(
-                storage_key=saved_path,
-                original_name=Path(saved_path).name,
-                mime=a_type,
-                size_bytes=len(ct),
-            )
-
         # --- mark_task_completed tool_end (plan execution) ---
-        elif (
+        if (
             evt.get("type") == "tool_end"
             and evt.get("name") == "mark_task_completed"
             and self._msg_src == "internal_trigger"
@@ -776,6 +774,67 @@ class StreamLoop:
                 ),
             }
             yield self._track_sse(outcome)
+
+        # --- sandbox_write_workspace_file tool_end ---
+        elif (
+            evt.get("type") == "tool_end"
+            and evt.get("name") == "sandbox_write_workspace_file"
+        ):
+            output_text = str(evt.get("output") or "")
+            saved_path = ""
+            if "workspace/" in output_text:
+                saved_path = output_text.split("workspace/", 1)[1].strip()
+                saved_path = "workspace/" + saved_path.split()[0].strip("`\"'.,)")
+            if not saved_path:
+                saved_path = "workspace/file.txt"
+            data = self.pending_write_artifacts.pop(
+                saved_path, {"content": "", "mode": "write"}
+            )
+            ct = data.get("content") or ""
+            aid = str(data.get("artifact_id") or saved_path.replace("/", "_").replace(".", "_"))
+            a_type = (
+                "html"
+                if saved_path.endswith(".html")
+                else "python"
+                if saved_path.endswith(".py")
+                else "javascript"
+                if saved_path.endswith(".js")
+                else "text"
+            )
+            if not data.get("preview_emitted"):
+                yield self._track_sse(
+                    {
+                        "type": "artifact_start",
+                        "artifact": {
+                            "identifier": aid,
+                            "type": a_type,
+                            "title": f"Artifact: {saved_path}",
+                            "auto_execute": False,
+                        },
+                    }
+                )
+                yield self._track_sse(
+                    {"type": "artifact_content", "content": ct, "artifact_id": aid}
+                )
+            yield self._track_sse(
+                {
+                    "type": "artifact_end",
+                    "artifact": {
+                        "identifier": aid,
+                        "type": a_type,
+                        "title": f"Artifact: {saved_path}",
+                        "path": saved_path,
+                        "saved": True,
+                        "version": 1,
+                    },
+                }
+            )
+            self.turn_persist.queue_attachment(
+                storage_key=saved_path,
+                original_name=Path(saved_path).name,
+                mime=a_type,
+                size_bytes=len(ct),
+            )
 
         # --- sandbox_edit_workspace_file tool_end ---
         elif (
@@ -801,32 +860,46 @@ class StreamLoop:
                     updated_content = p.read_text(encoding="utf-8", errors="replace")
                 except Exception:
                     updated_content = f"[file updated: {saved_path}]"
-                aid = saved_path.replace("/", "_").replace(".", "_") + "_edit"
+                aid = str(
+                    data.get("artifact_id")
+                    or saved_path.replace("/", "_").replace(".", "_") + "_edit"
+                )
                 a_type = (
                     "python"
                     if saved_path.endswith(".py")
+                    else "javascript"
+                    if saved_path.endswith(".js")
                     else "html"
                     if saved_path.endswith(".html")
                     else "text"
                 )
-                yield self._track_sse(
-                    {
-                        "type": "artifact_start",
-                        "artifact": {
-                            "identifier": aid,
-                            "type": a_type,
-                            "title": f"✏️ Edit: {saved_path}",
-                            "auto_execute": False,
-                        },
-                    }
-                )
-                yield self._track_sse(
-                    {
-                        "type": "artifact_content",
-                        "content": updated_content,
-                        "artifact_id": aid,
-                    }
-                )
+                if not data.get("preview_emitted"):
+                    yield self._track_sse(
+                        {
+                            "type": "artifact_start",
+                            "artifact": {
+                                "identifier": aid,
+                                "type": a_type,
+                                "title": f"✏️ Edit: {saved_path}",
+                                "auto_execute": False,
+                            },
+                        }
+                    )
+                    yield self._track_sse(
+                        {
+                            "type": "artifact_content",
+                            "content": updated_content,
+                            "artifact_id": aid,
+                        }
+                    )
+                elif updated_content:
+                    yield self._track_sse(
+                        {
+                            "type": "artifact_content",
+                            "content": updated_content,
+                            "artifact_id": aid,
+                        }
+                    )
                 yield self._track_sse(
                     {
                         "type": "artifact_end",
@@ -845,6 +918,72 @@ class StreamLoop:
                     original_name=Path(saved_path).name,
                     mime=a_type,
                     size_bytes=len(updated_content),
+                )
+
+        elif (
+            evt.get("type") == "tool_end"
+            and evt.get("name") == "sandbox_apply_patch"
+        ):
+            patch_data = self.pending_write_artifacts.pop("__patch__", {})
+            output_text = str(evt.get("output") or "")
+            touched: list[str] = []
+            try:
+                out_data = json.loads(output_text)
+                if isinstance(out_data, dict) and out_data.get("ok"):
+                    for f in out_data.get("files") or []:
+                        if isinstance(f, dict) and f.get("path"):
+                            touched.append(str(f["path"]))
+            except Exception:
+                pass
+            patch_preview = str(patch_data.get("patch_text") or "")[:8000]
+            for saved_path in touched or ["workspace/patch"]:
+                aid = saved_path.replace("/", "_").replace(".", "_") + "_patch"
+                a_type = (
+                    "javascript"
+                    if saved_path.endswith(".js")
+                    else "python"
+                    if saved_path.endswith(".py")
+                    else "text"
+                )
+                try:
+                    from src.session_workspace import safe_resolve
+
+                    p = safe_resolve(self.session_id, saved_path, must_exist=True)
+                    file_content = p.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    file_content = patch_preview or f"[patched: {saved_path}]"
+                yield self._track_sse(
+                    {
+                        "type": "artifact_start",
+                        "artifact": {
+                            "identifier": aid,
+                            "type": a_type,
+                            "title": f"Patch: {saved_path}",
+                            "mode": "patch",
+                            "auto_execute": False,
+                        },
+                    }
+                )
+                yield self._track_sse(
+                    {
+                        "type": "artifact_content",
+                        "content": file_content,
+                        "artifact_id": aid,
+                    }
+                )
+                yield self._track_sse(
+                    {
+                        "type": "artifact_end",
+                        "artifact": {
+                            "identifier": aid,
+                            "type": a_type,
+                            "title": f"Patch: {saved_path}",
+                            "path": saved_path,
+                            "saved": True,
+                            "mode": "patch",
+                            "version": 1,
+                        },
+                    }
                 )
 
         # --- Persistence of tool steps ---

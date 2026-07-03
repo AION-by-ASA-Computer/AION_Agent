@@ -510,7 +510,7 @@ mcp_servers:
 |------|-------|
 | `src/agent_profile.py` | Profile manager, YAML loading |
 | `src/runtime/profile_schema.py` | Pydantic validation P2.1 |
-| `src/runtime/skill_alias.py` | Alias `artifact_protocol` → markdown/tool/xml variants |
+| `src/runtime/skill_alias.py` | Maps logical `artifact_protocol` → `artifact_protocol` skill file |
 | `config_std/profiles/` | Profile templates (versioned in Git) |
 | `config/profiles/*.yaml`| Active profiles loaded by the agent (local) |
 | `config/skills/` | Skills referenced by profiles (local) |

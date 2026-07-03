@@ -392,11 +392,31 @@ During SSE streaming, `tool_start` / `tool_end` events are queued in `pending_db
 
 ---
 
-## Tool-first plan mode and artifact strategy
+## Tool-first file delivery (OpenCode-style)
+
+File creation and edits use **registered sandbox tools**, not chat-stream XML:
+
+| Tool | Use |
+|------|-----|
+| `sandbox_write_workspace_file` | New file or full rewrite under `workspace/` |
+| `sandbox_edit_workspace_file` | Surgical replace on existing file |
+| `sandbox_apply_patch` | Multi-file hunks (exposed for GPT models when `AION_MODEL_TOOL_POLICY=1`) |
+
+**Settlement layer** (`src/runtime/tool_settlement.py`) rejects phantom tool names (`aion_artifact`, `artifact`, `create_file`) and empty required arguments before MCP runs.
+
+**SSE artifact panel:** `src/runtime/stream/loop.py` bridges `tool_start`/`tool_end` from write/edit/patch tools into `artifact_*` events for chat-ui — no `<aion_artifact>` stream required.
+
+**Legacy:** `<aion_artifact>` parsing remains for Plan Mode overlays and when `AION_ARTIFACT_STREAM_LEGACY=1` (also re-blocks the write tool via `artifact_tool_policy`).
+
+**Doom loop:** `src/runtime/doom_loop.py` detects identical `(tool, args)` repeats (`AION_DOOM_LOOP_THRESHOLD`, action `reminder` or `stop`).
+
+**Run preflight:** `sandbox_run_node_file` / `sandbox_run_python_file` require a non-empty existing script (`preflight_run_file_tool` in `mcp_tool_args.py`).
+
+Model-specific prompt fragments live in `config_std/prompts/` and are merged by `src/runtime/system_prompt.py`.
+
+## Tool-first plan mode
 
 With `AION_PLAN_MODE_TOOL_FIRST=1` (default), the model registers the plan by calling **`draft_execution_plan`**; the backend persists to the orchestration DB and emits `orchestration_plan_pending` SSE with structured JSON (`plan_id`, `plan.tasks[]`). The `<plan>` textual parser is opt-in via `AION_PLAN_TEXT_PARSER=1`.
-
-`AION_ARTIFACT_STRATEGY=tool` (default) disables artifact parsing from the stream text; artifacts pass through native tools. With `text`, the legacy layer remains active (`PlanTagInterceptor`, coercion).
 
 The chat-ui consumes the orchestration JSON as SSOT (`planDisplay.ts`, polling `GET /internal/orchestration/plans/{plan_id}`) without re-parsing markdown from the transcript.
 

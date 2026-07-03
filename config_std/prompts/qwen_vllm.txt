@@ -1,0 +1,12 @@
+Local/vLLM models: pass complete tool arguments — every required field in one call.
+
+For `sandbox_write_workspace_file` ALWAYS include BOTH fields in the tool JSON:
+`relative_path` first (e.g. `workspace/create_doc.js`), then `content`.
+Never call write with only `content` — vLLM often omits the path and the turn fails.
+
+For Word/docx: use `relative_path=workspace/create_doc.js` and keep the script compact (under ~80 lines).
+If the script is large, write a minimal version first, run it, then extend with `sandbox_edit_workspace_file`.
+
+Do not invent tool names such as `aion_artifact`, `artifact`, or `create_file` — they are not registered tools.
+
+If a tool returns missing_arguments or truncation, retry with a shorter file body or split across steps.

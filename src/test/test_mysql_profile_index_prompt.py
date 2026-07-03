@@ -13,9 +13,6 @@ from src.agent_profile import profile_manager
 def prompt_env(monkeypatch):
     monkeypatch.setenv("AION_SKILL_SYSTEM_PROMPT_MODE", "index")
     monkeypatch.setenv("AION_SOUL_MEMORY_USER_SPLIT", "0")
-    monkeypatch.setenv("AION_ARTIFACT_STRATEGY", "markdown")
-
-
 def test_mysql_profile_critical_only_full_bodies():
     profile_manager.load_all()
     p = profile_manager.get_profile("mysql_metadata_assistant")

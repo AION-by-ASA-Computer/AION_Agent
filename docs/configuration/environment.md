@@ -237,7 +237,6 @@ AION V2 introduces Redis for multi-worker scalability.
 | `AION_PLAN_MODE_TOOL_FIRST` | `1` | Plan mode uses `draft_execution_plan` (tool) instead of `<plan>` tags. |
 | `AION_PLAN_TEXT_PARSER` | `0` | Legacy text parser (only if tool-first off or rollback). |
 | `AION_PLAN_FINALIZER_TIMEOUT_SEC` | `20` | Plan finalizer timeout (seconds). |
-| `AION_ARTIFACT_STRATEGY` | `tool` | `tool` = artifact via native tools; `text` = stream parsing. |
 | `AION_PROMPT_LAYER_TOTAL_BUDGET` | `6000` | Estimated token budget for layers injected in the turn. |
 | `AION_AGENT_EXEC_LEGACY_THREAD` | `0` | `1` = `Agent.run` in thread; `0` = `run_async` (default). |
 | `AION_SETTINGS_LEGACY_FALLBACK` | `1` | Fallback `os.getenv` during migration to `src/settings.py`. |

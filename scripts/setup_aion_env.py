@@ -766,13 +766,6 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
         "1" if _prompt_yesno("Abilitare AION_NUDGE_ENABLED?", state.get("AION_NUDGE_ENABLED", "0") == "1") else "0"
     )
 
-    print("\n--- Strategia di generazione Artifact ---\n")
-    state["AION_ARTIFACT_STRATEGY"] = _prompt_choice(
-        "Formato artifact (AION_ARTIFACT_STRATEGY):",
-        ["xml", "markdown", "tool"],
-        state.get("AION_ARTIFACT_STRATEGY", "markdown"),
-    )
-
     print("\n--- Opzionale: API key bootstrap /v1 ---\n")
     if _prompt_yesno("Impostare AION_API_KEY_BOOTSTRAP (solo dev)?", bool(state.get("AION_API_KEY_BOOTSTRAP", "").strip())):
         if _prompt_yesno("Generare valore casuale?", not bool(state.get("AION_API_KEY_BOOTSTRAP", "").strip())):

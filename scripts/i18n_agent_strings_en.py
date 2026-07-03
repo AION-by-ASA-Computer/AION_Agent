@@ -217,10 +217,10 @@ R("src/runtime/native_tools/factory_table.py", "Restituisce JSON con campo text.
 
 # skill_discovery_nudge
 R("src/runtime/skill_discovery_nudge.py", "[Istruzione sistema — skill discovery]", "[System instruction — skill discovery]")
-R("src/runtime/skill_discovery_nudge.py", "Prima di scrivere codice o file nel workspace per questo task, devi usare skills_hub:", "Before writing code or files in the workspace for this task, you must use skills_hub:")
-R("src/runtime/skill_discovery_nudge.py", "Se `skill_search` non trova risultati ma il profilo elenca la skill, chiama direttamente ", "If `skill_search` finds nothing but the profile lists the skill, call ")
-R("src/runtime/skill_discovery_nudge.py", "Dopo `skill_view`, gli script della skill (es. `scripts/office/unpack.py`) sono nella sessione;", "After `skill_view`, skill scripts (e.g. `scripts/office/unpack.py`) are in the session;")
-R("src/runtime/skill_discovery_nudge.py", "Solo dopo aver caricato la skill procedi con tool mutanti o artifact.", "Only after loading the skill proceed with mutating tools or artifacts.")
+R("src/runtime/skill_discovery_nudge.py", "Prima di scrivere codice o file nel workspace per questo task, devi usare skills_hub:", "Before specialized work, try skills_hub:")
+R("src/runtime/skill_discovery_nudge.py", "Se `skill_search` non trova risultati ma il profilo elenca la skill, chiama direttamente ", "If `skill_search` returns nothing, proceed with `artifact_protocol` / `core_protocol`:")
+R("src/runtime/skill_discovery_nudge.py", "Dopo `skill_view`, gli script della skill (es. `scripts/office/unpack.py`) sono nella sessione;", "**write the full file in your chat reply** inside `<aion_artifact>...</aion_artifact>`")
+R("src/runtime/skill_discovery_nudge.py", "Solo dopo aver caricato la skill procedi con tool mutanti o artifact.", "Never call `sandbox_write_workspace_file` — it is not available.")
 
 # turn_diagnostics
 R("src/runtime/turn_diagnostics.py", "Ho creato il piano di esecuzione nella barra laterale **Plan**. ", "I created the execution plan in the **Plan** sidebar. ")

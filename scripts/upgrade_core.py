@@ -184,6 +184,34 @@ def _rewrite_env_key(env_path: Path, key: str, value: str) -> bool:
     return True
 
 
+def _remove_env_key(env_path: Path, key: str) -> bool:
+    """Drop KEY=... from .env (deprecated keys)."""
+    if not env_path.is_file():
+        return False
+    entries = _parse_env_simple(env_path)
+    out_lines: list[str] = []
+    seen: set[str] = set()
+    removed = False
+    for k, _, raw in entries:
+        if not k:
+            out_lines.append(raw)
+            continue
+        if k in seen:
+            continue
+        seen.add(k)
+        if k == key:
+            removed = True
+            continue
+        out_lines.append(raw)
+    if not removed:
+        return True
+    try:
+        env_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
 def _migrate_env_legacy_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
     """Migra le chiavi legacy del .env ai nomi moderni (AION_CHAT_*).
 
@@ -536,7 +564,6 @@ _PLAN_MODE_ENV_DEFAULTS: dict[str, str] = {
     "AION_PLAN_MODE_TOOL_FIRST": "1",
     "AION_PLAN_TEXT_PARSER": "0",
     "AION_PLAN_FINALIZER_TIMEOUT_SEC": "20",
-    "AION_ARTIFACT_STRATEGY": "tool",
     "AION_ORCHESTRATION_SECRET_AUTH": "1",
 }
 
@@ -884,13 +911,13 @@ def _ensure_plan_mode_env_keys(env_path: Path, *, dry_run: bool, report: Report)
     keys_file = {k for k, _, _ in entries if k}
     missing = [(k, v) for k, v in _PLAN_MODE_ENV_DEFAULTS.items() if k not in keys_file]
     for k, v, _ in entries:
-        if k == "AION_ARTIFACT_STRATEGY" and (v or "").strip().lower() in ("plan", "markdown"):
+        if k == "AION_ARTIFACT_STRATEGY":
             if dry_run:
-                report.log_ok("Plan mode: would set AION_ARTIFACT_STRATEGY=xml (was legacy)")
-            elif _rewrite_env_key(env_path, "AION_ARTIFACT_STRATEGY", "xml"):
-                report.log_ok("Plan mode: upgraded AION_ARTIFACT_STRATEGY to xml")
+                report.log_ok("Artifact protocol: would remove deprecated AION_ARTIFACT_STRATEGY")
+            elif _remove_env_key(env_path, "AION_ARTIFACT_STRATEGY"):
+                report.log_ok("Artifact protocol: removed deprecated AION_ARTIFACT_STRATEGY")
             else:
-                report.log_fail("Plan mode: failed to rewrite AION_ARTIFACT_STRATEGY in .env")
+                report.log_fail("Artifact protocol: failed to remove AION_ARTIFACT_STRATEGY from .env")
     if not missing:
         report.log_ok("Plan mode env defaults: chiavi già presenti")
         return 0

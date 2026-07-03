@@ -35,13 +35,10 @@ def build_skill_discovery_nudge(user_message: str) -> str:
     del user_message  # nudge is generic; profile skills vary
     return (
         "[System instruction — skill discovery]\n"
-        "Before writing code or files in the workspace for this task, you must use skills_hub: "
-        "`skill_search` with a relevant query, then `skill_view` for the matching profile skill.\n"
-        "If `skill_search` finds nothing but the profile lists a relevant skill, call "
-        "`skill_view` with that slug.\n"
-        "After `skill_view`, any skill scripts are materialized in the session; "
-        "use `sandbox_exec_allowlisted` with paths relative to the session root when needed.\n"
-        "Only after loading the skill proceed with mutating tools or artifacts.\n\n"
+        "Before specialized work, try skills_hub: `skill_search` then `skill_view` if a match exists.\n"
+        "Then create files with **`sandbox_write_workspace_file`** (or **`sandbox_apply_patch`** on GPT models), "
+        "not `<aion_artifact>` in chat and not phantom tools (`aion_artifact`, `artifact`, `create_file`).\n"
+        "Run scripts with `sandbox_run_node_file` or `sandbox_run_python_file` after the file exists.\n\n"
     )
 
 

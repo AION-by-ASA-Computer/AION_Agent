@@ -15,6 +15,10 @@ Controlled by **`AION_SKILL_SYSTEM_PROMPT_MODE`**:
 
 The construction takes place in **`AgentProfile.generate_system_prompt()`** (`src/agent_profile.py`), used by **`get_agent()`** in `src/main.py`.
 
+**Model routing:** `src/runtime/system_prompt.py` merges fragments from `config_std/prompts/` (`default.txt`, `gpt.txt`, `anthropic.txt`, `qwen_vllm.txt`) based on provider/model id. Disable with `AION_MODEL_PROMPT_FRAGMENTS=0`.
+
+Extended tool descriptions for sandbox write/edit/patch live in `config_std/tool_descriptions/` (loaded via `load_tool_description()` when wiring MCP descriptions).
+
 ## Skill file format
 
 Skills are **Markdown** files with **YAML frontmatter** (`python-frontmatter`):

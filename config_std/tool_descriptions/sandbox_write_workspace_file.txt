@@ -1,0 +1,1 @@
+Write a new file or overwrite an existing file under workspace/. Prefer sandbox_edit_workspace_file for small changes. Read the file first if it may already exist.
