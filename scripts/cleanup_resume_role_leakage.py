@@ -46,7 +46,11 @@ async def main() -> None:
     parser = argparse.ArgumentParser(
         description="Cleanup legacy role leakage: retag suspicious user messages as internal."
     )
-    parser.add_argument("--conversation-id", default=None, help="Restrict cleanup to one conversation id.")
+    parser.add_argument(
+        "--conversation-id",
+        default=None,
+        help="Restrict cleanup to one conversation id.",
+    )
     parser.add_argument(
         "--apply",
         action="store_true",
@@ -55,7 +59,9 @@ async def main() -> None:
     args = parser.parse_args()
 
     candidates = list(await _load_candidates(args.conversation_id))
-    print(f"[cleanup] candidates={len(candidates)} conversation={args.conversation_id or 'ALL'}")
+    print(
+        f"[cleanup] candidates={len(candidates)} conversation={args.conversation_id or 'ALL'}"
+    )
     for m in candidates[:40]:
         print(f"- {m.conversation_id} | {m.id} | role={m.role} | {_snippet(m.content)}")
     if len(candidates) > 40:
@@ -71,4 +77,3 @@ async def main() -> None:
 
 if __name__ == "__main__":
     asyncio.run(main())
-

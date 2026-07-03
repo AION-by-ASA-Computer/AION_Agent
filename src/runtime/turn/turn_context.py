@@ -482,9 +482,7 @@ async def build_turn_context(
             }
         )
 
-
     logger.info(f"CONTEXT ENHANCEMENT DEBUG - force_compact: {force_compact}")
-    
 
     messages, did_compact, reloaded_from_db = await pipeline._apply_context_compression(
         messages,

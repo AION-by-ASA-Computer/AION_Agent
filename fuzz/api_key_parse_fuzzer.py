@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fuzz target for API key header parsing."""
+
 from __future__ import annotations
 
 import atheris

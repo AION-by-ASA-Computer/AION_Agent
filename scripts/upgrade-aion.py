@@ -14,7 +14,9 @@ def main() -> int:
         print(f"Missing script: {core_script}", file=sys.stderr)
         return 2
 
-    ap = argparse.ArgumentParser(description="Python wrapper for scripts/upgrade_core.py")
+    ap = argparse.ArgumentParser(
+        description="Python wrapper for scripts/upgrade_core.py"
+    )
     ap.add_argument("args", nargs=argparse.REMAINDER, help="Pass-through args")
     ns = ap.parse_args()
 

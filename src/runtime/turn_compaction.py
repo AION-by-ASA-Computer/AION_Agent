@@ -243,7 +243,9 @@ def compact_agent_messages_in_place() -> bool:
     threshold_ratio = float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_RATIO", "0.85"))
     mid_trigger = int(stats["max_prompt"] * threshold_ratio)
 
-    logger.warning(f"THRESOLD RATIO {threshold_ratio} MID TRIGGER: {mid_trigger}   TOTAL {stats['total']} TRIGGER {compressor.compress_trigger_tokens()}")
+    logger.warning(
+        f"THRESOLD RATIO {threshold_ratio} MID TRIGGER: {mid_trigger}   TOTAL {stats['total']} TRIGGER {compressor.compress_trigger_tokens()}"
+    )
 
     if (
         stats["total"] < mid_trigger

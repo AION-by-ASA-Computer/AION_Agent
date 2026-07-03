@@ -8,6 +8,7 @@ Uso:
   ./.venv/bin/python scripts/sync_mcp_integration_from_catalog.py --slug clickup
   ./.venv/bin/python scripts/sync_mcp_integration_from_catalog.py --apply-registry-env --slug clickup
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +27,9 @@ async def main() -> int:
     except ImportError:
         pass
 
-    parser = argparse.ArgumentParser(description="Sync MCP integration policy from catalog")
+    parser = argparse.ArgumentParser(
+        description="Sync MCP integration policy from catalog"
+    )
     parser.add_argument("--slug", help="Sync only this registry server slug")
     parser.add_argument(
         "--apply-registry-env",
@@ -57,12 +60,16 @@ async def main() -> int:
             return 1
         preview = build_integration_preview(args.slug)
         mode = preview.get("credential_mode") or "none"
-        print(f"  synced: {args.slug} mode={mode} schema_fields={len(preview.get('credential_schema') or [])}")
+        print(
+            f"  synced: {args.slug} mode={mode} schema_fields={len(preview.get('credential_schema') or [])}"
+        )
         if preview.get("warnings"):
             for w in preview["warnings"]:
                 print(f"  WARN: {w}")
         if args.apply_registry_env and mode in ("per_user", "org_shared"):
-            r = merge_suggested_env_into_registry(args.slug, mode, preserve_existing_keys=True)
+            r = merge_suggested_env_into_registry(
+                args.slug, mode, preserve_existing_keys=True
+            )
             print(f"  registry env updated: {list((r.get('env') or {}).keys())}")
         return 0
 
@@ -89,7 +96,9 @@ async def main() -> int:
         elif mode == "org_shared" and preview.get("warnings"):
             global_secret_candidates.append(f"{slug} ({mode})")
         else:
-            aligned.append(f"{slug} ({mode}, {len(preview.get('credential_schema') or [])} fields)")
+            aligned.append(
+                f"{slug} ({mode}, {len(preview.get('credential_schema') or [])} fields)"
+            )
 
     if no_connector:
         print("\nSenza match catalogo / schema vuoto:")
@@ -116,7 +125,9 @@ async def main() -> int:
                 (build_integration_preview(slug).get("connector")),
             )
             if catalog_mode in ("per_user", "org_shared"):
-                merge_suggested_env_into_registry(slug, catalog_mode, preserve_existing_keys=True)
+                merge_suggested_env_into_registry(
+                    slug, catalog_mode, preserve_existing_keys=True
+                )
                 applied += 1
         print(f"\nRegistry env patch (preserve existing): {applied} server")
 

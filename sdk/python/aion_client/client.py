@@ -11,7 +11,9 @@ class AionClient:
         self.base_url = base_url.rstrip("/")
         self.headers = {"X-Api-Key": api_key}
 
-    async def create_conversation(self, profile: str, user_id: str, **extra: Any) -> Dict[str, Any]:
+    async def create_conversation(
+        self, profile: str, user_id: str, **extra: Any
+    ) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=60.0) as c:
             r = await c.post(
                 f"{self.base_url}/v1/conversations",
@@ -22,7 +24,11 @@ class AionClient:
             return r.json()
 
     async def chat_stream(
-        self, conversation_id: str, message: str, profile: str = "aion_std", attachments: Optional[List[Dict[str, Any]]] = None
+        self,
+        conversation_id: str,
+        message: str,
+        profile: str = "aion_std",
+        attachments: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncIterator[Dict[str, Any]]:
         async with httpx.AsyncClient(timeout=None) as c:
             payload = {
@@ -46,28 +52,40 @@ class AionClient:
                     if line.startswith("data:"):
                         yield json.loads(line[5:].strip())
 
-    async def list_conversations(self, user_id: Optional[str] = None, limit: int = 20) -> Dict[str, Any]:
+    async def list_conversations(
+        self, user_id: Optional[str] = None, limit: int = 20
+    ) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=30.0) as c:
             params = {"limit": limit}
             if user_id:
                 params["user_id"] = user_id
-            r = await c.get(f"{self.base_url}/v1/conversations", headers=self.headers, params=params)
+            r = await c.get(
+                f"{self.base_url}/v1/conversations", headers=self.headers, params=params
+            )
             r.raise_for_status()
             return r.json()
 
     async def get_conversation(self, conversation_id: str) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=30.0) as c:
-            r = await c.get(f"{self.base_url}/v1/conversations/{conversation_id}", headers=self.headers)
+            r = await c.get(
+                f"{self.base_url}/v1/conversations/{conversation_id}",
+                headers=self.headers,
+            )
             r.raise_for_status()
             return r.json()
 
     async def delete_conversation(self, conversation_id: str) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=30.0) as c:
-            r = await c.delete(f"{self.base_url}/v1/conversations/{conversation_id}", headers=self.headers)
+            r = await c.delete(
+                f"{self.base_url}/v1/conversations/{conversation_id}",
+                headers=self.headers,
+            )
             r.raise_for_status()
             return r.json()
 
-    async def get_messages(self, conversation_id: str, limit: int = 50) -> Dict[str, Any]:
+    async def get_messages(
+        self, conversation_id: str, limit: int = 50
+    ) -> Dict[str, Any]:
         async with httpx.AsyncClient(timeout=30.0) as c:
             r = await c.get(
                 f"{self.base_url}/v1/conversations/{conversation_id}/messages",
@@ -97,7 +115,9 @@ class AionClient:
             r.raise_for_status()
             return r.json()
 
-    async def list_files(self, session_id: str, subdir: str = "uploads") -> Dict[str, Any]:
+    async def list_files(
+        self, session_id: str, subdir: str = "uploads"
+    ) -> Dict[str, Any]:
         """Elenco file nella sessione."""
         async with httpx.AsyncClient(timeout=30.0) as c:
             r = await c.get(

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fuzz target for MCP registry document normalization."""
+
 from __future__ import annotations
 
 import json

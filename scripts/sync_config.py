@@ -4,6 +4,7 @@ Sincronizza la directory 'config/' (locale, ignorata da git) partendo dai templa
 Inizializza i file mancanti senza sovrascrivere quelli esistenti.
 Con --force sovrascrive anche i file esistenti (utile per propagare aggiornamenti da config_std/).
 """
+
 import argparse
 import json
 import shutil
@@ -39,7 +40,9 @@ _NEVER_FORCE_OVERWRITE = frozenset(
 def _read_version(root: Path) -> str:
     """Legge la versione dal file centralizzato version.json nella root del repo."""
     try:
-        return json.loads((root / "version.json").read_text(encoding="utf-8")).get("version", "unknown")
+        return json.loads((root / "version.json").read_text(encoding="utf-8")).get(
+            "version", "unknown"
+        )
     except Exception:
         return "unknown"
 
@@ -153,7 +156,9 @@ def sync_config(
                 f.write("# Formato: \n")
                 f.write("# skills:\n")
                 f.write("#   - name: my_skill\n")
-                f.write("#     url: https://github.com/user/skill-repo/raw/main/skill.md\n")
+                f.write(
+                    "#     url: https://github.com/user/skill-repo/raw/main/skill.md\n"
+                )
 
     print(
         f"\nSincronizzazione completata. "
@@ -162,7 +167,9 @@ def sync_config(
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Sincronizza config_std/ -> config/ per AION Agent")
+    ap = argparse.ArgumentParser(
+        description="Sincronizza config_std/ -> config/ per AION Agent"
+    )
     ap.add_argument(
         "--force",
         action="store_true",

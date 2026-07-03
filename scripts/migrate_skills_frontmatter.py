@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Aggiunge frontmatter minimo alle skill .md senza YAML."""
+
 from pathlib import Path
 
 import frontmatter
@@ -48,7 +49,9 @@ def main() -> None:
         stem = md.stem
         d = DEFAULTS.get(stem, {})
         post.metadata["name"] = stem
-        post.metadata["description"] = d.get("description", stem.replace("_", " ").title())
+        post.metadata["description"] = d.get(
+            "description", stem.replace("_", " ").title()
+        )
         post.metadata["tags"] = d.get("tags", [])
         post.metadata["status"] = "verified"
         post.metadata["source"] = "curated"

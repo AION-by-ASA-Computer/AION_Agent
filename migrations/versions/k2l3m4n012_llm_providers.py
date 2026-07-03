@@ -4,6 +4,7 @@ Revision ID: k2l3m4n012
 Revises: k1l2m3n011
 Create Date: 2026-06-26
 """
+
 from alembic import op
 import sqlalchemy as sa
 
@@ -11,6 +12,7 @@ revision = "k2l3m4n012"
 down_revision = "k1l2m3n011"
 branch_labels = None
 depends_on = None
+
 
 def upgrade() -> None:
     op.create_table(
@@ -31,10 +33,18 @@ def upgrade() -> None:
         sa.Column("enabled", sa.Boolean, server_default="1", nullable=False),
         sa.Column("is_default", sa.Boolean, server_default="0", nullable=False),
         sa.Column("metadata", sa.Text(), server_default="{}"),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            server_default=sa.func.now(),
+            onupdate=sa.func.now(),
+        ),
         sa.UniqueConstraint("tenant_id", "slug", name="uq_llm_provider_tenant_slug"),
     )
+
 
 def downgrade() -> None:
     op.drop_table("llm_providers")

@@ -3,6 +3,7 @@
 Popola la tabella mcp_server_configs con gli slug presenti nel registry MCP merge.
 Idempotente: salta slug già presenti. Eseguire dopo le migration Alembic.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -34,7 +35,9 @@ async def main() -> None:
         f"Done. created={summary['created']} updated={summary['updated']} "
         f"skipped={summary['skipped']} total={summary['total']}"
     )
-    print("Per schema/env senza toccare registry: scripts/sync_mcp_integration_from_catalog.py")
+    print(
+        "Per schema/env senza toccare registry: scripts/sync_mcp_integration_from_catalog.py"
+    )
 
 
 if __name__ == "__main__":
