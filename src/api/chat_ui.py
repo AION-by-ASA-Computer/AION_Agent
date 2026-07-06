@@ -14,7 +14,7 @@ from fastapi import APIRouter, Header, HTTPException, Query, Response
 from pydantic import AliasChoices, BaseModel, Field
 
 from src.data.engine import get_async_session_maker
-from src.data.history_bridge import fetch_message_by_id
+from src.data.history_bridge import fetch_message_by_id, fetch_message_by_id_for_conversation
 from src.data.ids import new_uuid7_str
 from src.data.models import Conversation, Message, Step, Attachment
 from src.data.message_roles import (
@@ -28,7 +28,6 @@ from src.khub_auth import khub_token_manager
 from src.runtime.timeline_reconstruct import (
     parse_timeline_json,
     reconstruct_timeline_from_legacy,
-    timeline_json_from_legacy,
 )
 
 logger = logging.getLogger("aion.api.chat_ui")
@@ -294,9 +293,6 @@ async def get_conversation_messages_chat_ui(
             atts_by_msg.setdefault(mid, []).append(_serialize_attachment_row(a))
 
         data = []
-        orphan_steps = list(steps_by_msg.get("orphan", []))
-        orphan_atts = list(atts_by_msg.get("orphan", []))
-        timeline_backfilled = False
 
         for r in msgs:
             nr = normalize_message_role(r.role)
@@ -305,7 +301,6 @@ async def get_conversation_messages_chat_ui(
                 r, nr, meta
             )
 
-            # Collect steps and attachments for this message
             current_steps = steps_by_msg.get(r.id, [])
             current_atts = atts_by_msg.get(r.id, [])
 
@@ -315,7 +310,6 @@ async def get_conversation_messages_chat_ui(
                 or bool(current_atts)
                 or bool((r.timeline_json or "").strip())
             )
-            # Keep terminal empty assistant rows (in-progress or failed final persist).
             is_terminal_assistant = nr == "assistant" and r.id == last_msg_id
             if (
                 ((not is_ui_visible_role(nr)) and not plan_internal)
@@ -327,30 +321,11 @@ async def get_conversation_messages_chat_ui(
                     and not is_terminal_assistant
                 )
             ):
-                # Technical messages are intentionally hidden from chat-ui replay.
-                # Canonical tool/artifact records should point to the visible assistant message.
                 continue
-
-            final_steps = current_steps
-            final_atts = current_atts
-            if nr == "assistant":
-                # Legacy fallback only: older records may have no message_id.
-                final_steps = orphan_steps + final_steps
-                final_atts = orphan_atts + final_atts
-                orphan_steps = []
-                orphan_atts = []
 
             timeline: Optional[List[Dict[str, Any]]] = None
             if nr == "assistant":
-                timeline = _resolve_message_timeline(r, final_steps, final_atts)
-                if not (r.timeline_json or "").strip() and timeline:
-                    r.timeline_json = timeline_json_from_legacy(
-                        reasoning=r.reasoning,
-                        content=r.content,
-                        steps=final_steps,
-                        artifacts=final_atts,
-                    )
-                    timeline_backfilled = True
+                timeline = _resolve_message_timeline(r, current_steps, current_atts)
 
             row: Dict[str, Any] = {
                 "id": r.id,
@@ -361,8 +336,8 @@ async def get_conversation_messages_chat_ui(
                 "tool_call_id": r.tool_call_id,
                 "created_at": r.created_at,
                 "seq": r.seq,
-                "steps": final_steps,
-                "artifacts": final_atts,
+                "steps": current_steps,
+                "artifacts": current_atts,
             }
             if meta:
                 row["metadata"] = meta
@@ -370,77 +345,7 @@ async def get_conversation_messages_chat_ui(
                 row["timeline"] = timeline
             data.append(row)
 
-        if orphan_steps or orphan_atts:
-            for idx in range(len(data) - 1, -1, -1):
-                if data[idx].get("role") == "assistant":
-                    data[idx]["steps"] = orphan_steps + list(
-                        data[idx].get("steps") or []
-                    )
-                    data[idx]["artifacts"] = orphan_atts + list(
-                        data[idx].get("artifacts") or []
-                    )
-                    if not data[idx].get("timeline"):
-                        msg_row = await fetch_message_by_id(session, data[idx]["id"])
-                        if msg_row:
-                            data[idx]["timeline"] = _resolve_message_timeline(
-                                msg_row,
-                                data[idx]["steps"],
-                                data[idx]["artifacts"],
-                            )
-                    break
-
-        if timeline_backfilled:
-            await session.commit()
-
-        # ── Deduplication pass: remove stale duplicate assistant messages ──────────
-        # When the client's optimistic saveAssistantMessage fires alongside the
-        # backend persisting its own message (different UUID), two consecutive
-        # assistant rows with the same content prefix end up in the DB. One of them
-        # is always a bare duplicate with no steps/artifacts/timeline.  We remove it
-        # while keeping the richer one.
-        # Signal: same content prefix ≥ DEDUP_PREFIX_LEN chars for adjacent assistant rows.
-        _DEDUP_PREFIX_LEN = 20
-
-        def _payload_score(r: Dict[str, Any]) -> int:
-            return (
-                len(r.get("steps") or [])
-                + len(r.get("artifacts") or [])
-                + (1 if (r.get("timeline") or []) else 0)
-                + (1 if (r.get("reasoning") or "").strip() else 0)
-            )
-
-        # Identify ids to suppress (the "empty" side of each duplicate pair).
-        ids_to_suppress: set = set()
-        asst_rows = [
-            (idx, r) for idx, r in enumerate(data) if r.get("role") == "assistant"
-        ]
-        last_asst_id_in_data = asst_rows[-1][1]["id"] if asst_rows else None
-        for i in range(len(asst_rows) - 1):
-            _, row_a = asst_rows[i]
-            _, row_b = asst_rows[i + 1]
-            # Only consider non-terminal messages.
-            if (
-                row_a["id"] == last_asst_id_in_data
-                or row_b["id"] == last_asst_id_in_data
-            ):
-                continue
-            prefix_a = (row_a.get("content") or "").strip()[:_DEDUP_PREFIX_LEN]
-            prefix_b = (row_b.get("content") or "").strip()[:_DEDUP_PREFIX_LEN]
-            if (
-                not prefix_a
-                or len(prefix_a) < _DEDUP_PREFIX_LEN
-                or prefix_a != prefix_b
-            ):
-                continue
-            # Same prefix — suppress the one with less payload.
-            score_a, score_b = _payload_score(row_a), _payload_score(row_b)
-            if score_a >= score_b:
-                ids_to_suppress.add(row_b["id"])
-            else:
-                ids_to_suppress.add(row_a["id"])
-
-        dedup_filtered = [r for r in data if r.get("id") not in ids_to_suppress]
-        return {"messages": dedup_filtered}
+        return {"messages": data}
 
 
 @router.get("/conversations/{conv_id}")
@@ -631,6 +536,7 @@ class MessageTimelinePatchBody(BaseModel):
 
 
 class StepItem(BaseModel):
+    step_id: Optional[str] = None
     name: str
     type: str = "tool"
     input: Optional[str] = None
@@ -664,7 +570,14 @@ async def save_partial_message_chat_ui(
 
         mid = (body.message_id or "").strip() or new_uuid7_str()
 
-        existing = await fetch_message_by_id(session, mid)
+        existing = await fetch_message_by_id_for_conversation(session, mid, conv_id)
+        if not existing:
+            cross = await fetch_message_by_id(session, mid)
+            if cross and cross.conversation_id != conv_id:
+                raise HTTPException(
+                    409, "Message id belongs to another conversation"
+                )
+
         role = normalize_message_role(body.role)
         timeline_json: Optional[str] = None
         if body.timeline:
@@ -771,9 +684,28 @@ async def save_partial_steps_chat_ui(
                 meta["tokens_in"] = item.tokens_in
             if item.tokens_out is not None:
                 meta["tokens_out"] = item.tokens_out
+            meta_str = json.dumps(meta) if meta else None
+
+            sid = (item.step_id or "").strip() or new_uuid7_str()
+            existing_step = await session.get(Step, sid)
+            if existing_step:
+                if existing_step.conversation_id != conv_id:
+                    continue
+                if item.output is not None:
+                    existing_step.output = item.output
+                if item.input is not None:
+                    existing_step.input = item.input
+                existing_step.is_error = 1 if item.is_error else 0
+                if meta_str is not None:
+                    existing_step.metadata_json = meta_str
+                if not existing_step.message_id:
+                    existing_step.message_id = message_id
+                session.add(existing_step)
+                saved += 1
+                continue
 
             step = Step(
-                id=new_uuid7_str(),
+                id=sid,
                 conversation_id=conv_id,
                 tenant_id=tenant,
                 message_id=message_id,
@@ -782,7 +714,7 @@ async def save_partial_steps_chat_ui(
                 input=item.input,
                 output=item.output,
                 is_error=1 if item.is_error else 0,
-                metadata_json=json.dumps(meta) if meta else None,
+                metadata_json=meta_str,
             )
             session.add(step)
             saved += 1

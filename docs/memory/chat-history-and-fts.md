@@ -45,6 +45,23 @@ Optionally, the **`ContextCompressor`** module (see [Hermes learning features](.
 
 ---
 
+## Transcript contract (write → store → read)
+
+Single contract for chat persistence and UI replay. See also comments in [history_bridge.py](../../src/data/history_bridge.py) and [use-conversation-transcript.ts](../../chat-ui/lib/use-conversation-transcript.ts).
+
+| Invariant | Rule |
+|-----------|------|
+| Turn IDs | `user_message_id` + `assistant_message_id` fixed at `turn_started`, immutable |
+| Writer | Only `agent_pipeline` + `TurnPersistence` write assistant/steps/attachments |
+| Step binding | Every step/attachment in a turn has `message_id = assistant_message_id` |
+| Compaction | Atomic transaction: delete messages + child steps/attachments + insert summary + recount |
+| Retrieve | `GET /chat-ui/.../messages` is read-only (no orphan attach, no dedup, no DB backfill) |
+| Client | Conversation switch = replace transcript; merge only in-stream for the same conversation |
+
+Forward-only: existing corrupted sessions are not repaired automatically; new compactions and turns follow this contract.
+
+---
+
 ## FTS5 — Full-Text Search and Virtual Tables
 
 SQLite supports the **FTS5** extension to allow ultra-fast text searches on past messages. The database implements a virtual table in **External Content** mode (that is, the FTS index indexes the data but references the physical `messages` table to save disk space).

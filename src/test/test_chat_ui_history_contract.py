@@ -170,7 +170,7 @@ def test_chat_ui_history_404_for_wrong_user(monkeypatch, tmp_path):
     asyncio.run(run())
 
 
-def test_chat_ui_history_attaches_orphans_only_to_next_assistant(monkeypatch, tmp_path):
+def test_chat_ui_history_excludes_orphan_steps(monkeypatch, tmp_path):
     async def run():
         await _reset_unified_db(monkeypatch, tmp_path)
         bridge = UnifiedHistoryBridge()
@@ -199,8 +199,90 @@ def test_chat_ui_history_attaches_orphans_only_to_next_assistant(monkeypatch, tm
         first_user, second_user, assistant = payload["messages"]
         assert first_user["steps"] == []
         assert second_user["steps"] == []
-        assert assistant["steps"][0]["name"] == "legacy_tool"
-        assert assistant["artifacts"][0]["storage_key"] == "workspace/legacy.txt"
+        assert assistant["steps"] == []
+        assert assistant["artifacts"] == []
+
+    asyncio.run(run())
+
+
+def test_get_does_not_mutate_timeline_json(monkeypatch, tmp_path):
+    async def run():
+        await _reset_unified_db(monkeypatch, tmp_path)
+        bridge = UnifiedHistoryBridge()
+        await bridge.add_message(
+            "conv-mut", "user", "Hi", user_id="u1", message_id="user-1"
+        )
+        await bridge.add_message(
+            "conv-mut",
+            "assistant",
+            "Answer",
+            user_id="u1",
+            reasoning="think",
+            message_id="assistant-1",
+        )
+        await bridge.add_step(
+            "conv-mut",
+            name="tool",
+            type="tool",
+            output="x",
+            message_id="assistant-1",
+        )
+
+        from src.data.engine import get_async_session_maker
+        from src.data.models import Message
+
+        async with get_async_session_maker()() as session:
+            before = (
+                await session.execute(
+                    select(Message.timeline_json).where(Message.id == "assistant-1")
+                )
+            ).scalar_one()
+
+        await get_conversation_messages_chat_ui("conv-mut", x_aion_user_id="u1")
+
+        async with get_async_session_maker()() as session:
+            after = (
+                await session.execute(
+                    select(Message.timeline_json).where(Message.id == "assistant-1")
+                )
+            ).scalar_one()
+        assert before == after
+
+    asyncio.run(run())
+
+
+def test_no_dedup_needed_with_single_writer(monkeypatch, tmp_path):
+    async def run():
+        await _reset_unified_db(monkeypatch, tmp_path)
+        bridge = UnifiedHistoryBridge()
+        await bridge.add_message(
+            "conv-dedup", "user", "Q", user_id="u1", message_id="user-1"
+        )
+        await bridge.add_message(
+            "conv-dedup",
+            "assistant",
+            "First distinct answer here.",
+            user_id="u1",
+            message_id="assistant-1",
+        )
+        await bridge.add_message(
+            "conv-dedup", "user", "Q2", user_id="u1", message_id="user-2"
+        )
+        await bridge.add_message(
+            "conv-dedup",
+            "assistant",
+            "Second distinct answer here.",
+            user_id="u1",
+            message_id="assistant-2",
+        )
+
+        payload = await get_conversation_messages_chat_ui(
+            "conv-dedup", x_aion_user_id="u1"
+        )
+        assistants = [m for m in payload["messages"] if m["role"] == "assistant"]
+        assert len(assistants) == 2
+        assert assistants[0]["id"] == "assistant-1"
+        assert assistants[1]["id"] == "assistant-2"
 
     asyncio.run(run())
 
