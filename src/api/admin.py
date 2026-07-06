@@ -2294,7 +2294,6 @@ async def install_from_remote_url(body: RemoteInstallBody):
 
     # Estrae il nome dell'host o un valore di default
     if not body.display_name:
-
         try:
             parsed = urllib.parse.urlparse(url)
             name_parts = parsed.netloc.split(".")
