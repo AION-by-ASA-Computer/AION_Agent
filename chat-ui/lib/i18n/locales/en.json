@@ -11,10 +11,49 @@
   },
   "settings": {
     "title": "User Settings",
+    "subtitle": "Manage profile, appearance, security, and custom instructions.",
     "back": "Go back",
     "tab": {
       "account": "Profile & Account",
-      "usermd": "Profiles"
+      "usermd": "Profiles",
+      "profile": "Profile",
+      "appearance": "Appearance",
+      "security": "Security",
+      "instructions": "Instructions"
+    },
+    "profile": {
+      "title": "Profile",
+      "desc": "Photo, avatar color, and account details shown in the sidebar.",
+      "color_label": "Profile color",
+      "upload_photo": "Upload photo",
+      "remove_photo": "Remove photo",
+      "avatar_too_large": "Image must be smaller than 256 KB.",
+      "appearance_saved": "Profile appearance updated.",
+      "username_hint": "Login identifier. Must be unique.",
+      "shortcuts_title": "Quick links",
+      "shortcuts_desc": "Fast access to main app sections."
+    },
+    "appearance": {
+      "title": "Appearance",
+      "desc": "Interface theme and application language.",
+      "theme_label": "Theme",
+      "theme_desc": "Choose light or dark mode.",
+      "language_label": "Interface language"
+    },
+    "security": {
+      "password_title": "Password",
+      "password_desc": "Update your account password.",
+      "current_password": "Current password",
+      "new_password": "New password",
+      "confirm_password": "Confirm password",
+      "password_hint": "At least 6 characters.",
+      "password_min": "New password must be at least 6 characters.",
+      "password_mismatch": "Confirmation does not match the new password.",
+      "password_error": "Could not update password.",
+      "password_updated": "Password updated successfully.",
+      "update_password": "Update password",
+      "must_change_title": "Temporary password",
+      "must_change_desc": "For security, please update your password before continuing."
     },
     "section": {
       "profile": {
@@ -71,24 +110,49 @@
     "delete_confirm": "Delete chat?",
     "settings": "Settings",
     "login": "Sign in",
-    "integrations": "My integrations",
-    "schedules": "Scheduled jobs"
+    "integrations": "Integrations",
+    "schedules": "Automations",
+    "chat": "Chat",
+    "profile": "Profile",
+    "search_placeholder": "Search conversations…",
+    "favorites": "Favorites",
+    "add_favorite": "Add to favorites",
+    "remove_favorite": "Remove from favorites",
+    "rename": "Rename",
+    "delete": "Delete",
+    "chat_options": "Chat options",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar",
+    "theme": "Theme",
+    "bucket_today": "Today",
+    "bucket_yesterday": "Yesterday",
+    "bucket_previous_7_days": "Previous 7 days",
+    "bucket_previous_30_days": "Previous 30 days",
+    "bucket_older": "Older",
+    "profile_menu": {
+      "appearance": "Appearance",
+      "theme_light": "Light",
+      "theme_dark": "Dark",
+      "language": "Language",
+      "customize": "Customize instructions",
+      "logout": "Sign out"
+    }
   },
   "schedulesPage": {
-    "title": "Scheduled jobs",
+    "title": "Automations",
     "subtitle": "Recurring prompts run automatically by the agent.",
     "back_chat": "← Chat",
     "loading": "Loading…",
-    "empty": "No scheduled jobs yet.",
-    "empty_hint": "Create a job to run a prompt on a schedule — daily, weekly, or at a custom interval.",
-    "new": "New job",
+    "empty": "No automations yet.",
+    "empty_hint": "Create an automation to run a prompt on a schedule — daily, weekly, or at a custom interval.",
+    "new": "New automation",
     "create": "Create",
     "save": "Save changes",
     "saving": "Saving…",
     "cancel": "Cancel",
     "edit": "Edit",
-    "create_title": "New scheduled job",
-    "edit_title": "Edit scheduled job",
+    "create_title": "New automation",
+    "edit_title": "Edit automation",
     "dialog_subtitle": "Choose when to run and what the agent should do.",
     "schedule_label": "When should it run?",
     "session_legend": "Conversation",
@@ -109,15 +173,46 @@
     "pause": "Pause",
     "resume": "Resume",
     "delete": "Delete",
-    "delete_confirm": "Delete this scheduled job?",
+    "delete_confirm": "Delete this automation?",
     "open_session": "Open fixed session",
     "recent_runs": "Recent runs",
     "runs_loading": "Loading runs…",
     "runs_empty": "No runs yet.",
     "open_run_chat": "Open chat",
-    "load_error": "Could not load scheduled jobs",
-    "save_error": "Could not save job",
-    "feature_disabled": "Scheduled jobs are disabled on the server (set AION_CRON_ENABLED=1 in backend .env and restart the API).",
+    "load_error": "Could not load automations",
+    "save_error": "Could not save automation",
+    "feature_disabled": "Automations are disabled on the server (set AION_CRON_ENABLED=1 in backend .env and restart the API).",
+    "prompt_templates": "Quick templates",
+    "profile_none": "No profiles available",
+    "session_fixed_desc": "Reuse one thread so the agent remembers prior runs.",
+    "session_new_desc": "Start fresh each time — best for isolated reports.",
+    "stats": {
+      "total": "Total",
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "templates": {
+      "briefing": {
+        "name": "Morning briefing",
+        "desc": "Daily summary of priorities and calendar",
+        "prompt": "Give me a concise morning briefing: top priorities, anything due today, and one suggested focus block."
+      },
+      "inbox": {
+        "name": "Inbox digest",
+        "desc": "Weekly recap of open threads",
+        "prompt": "Summarize what I should follow up on this week. Group by urgency and suggest next actions."
+      },
+      "weekly": {
+        "name": "Weekly review",
+        "desc": "Friday retrospective and next-week plan",
+        "prompt": "Run my weekly review: wins, blockers, lessons learned, and three goals for next week."
+      },
+      "research": {
+        "name": "Research pulse",
+        "desc": "Track a topic with fresh sources",
+        "prompt": "Research the latest developments on [topic]. Cite sources and highlight what changed since last week."
+      }
+    },
     "cron": {
       "mode_simple": "Simple",
       "mode_advanced": "Advanced",
@@ -165,10 +260,13 @@
     "subtitle": "Connect your personal accounts to organization-enabled MCP servers. Values are encrypted on the server.",
     "loading": "Loading…",
     "empty": "No integrations available. Ask an admin to enable MCP servers.",
+    "empty_hint": "Integrations connect your accounts to organization-enabled MCP services.",
     "section_configured": "Connected",
     "section_pending": "Needs setup",
     "badge_configured": "connected",
     "badge_pending": "to set up",
+    "badge_connected": "connected",
+    "badge_pending_short": "needs setup",
     "connect": "Connect",
     "edit": "Edit",
     "cancel": "Cancel",
@@ -193,7 +291,32 @@
     "add_credential": "Add credential field",
     "custom_field": "extra",
     "new_field_label": "New field",
-    "field_label": "Label"
+    "field_label": "Label",
+    "stats": {
+      "total": "Total",
+      "configured": "Connected",
+      "pending": "Needs setup"
+    },
+    "oauth_connected": "OAuth connected",
+    "oauth_required": "OAuth required",
+    "credential_expired": "expired",
+    "toggle_active": "Active",
+    "disconnect": "Disconnect",
+    "disconnect_error": "OAuth disconnect failed",
+    "oauth_title": "OAuth2 authentication",
+    "oauth_intro": "Connect this integration by signing in securely with your account.",
+    "oauth_reconnect": "Reconnect account",
+    "oauth_login_google": "Sign in with Google",
+    "oauth_login_github": "Sign in with GitHub",
+    "oauth_login_microsoft": "Sign in with Microsoft",
+    "oauth_login_auth0": "Sign in with Auth0",
+    "oauth_login_generic": "Sign in with {{provider}}",
+    "oauth_start_error": "Could not start OAuth",
+    "oauth_network_error": "Network error while starting OAuth.",
+    "oauth_unknown_error": "Unknown error",
+    "oauth_callback_missing_slug": "OAuth callback error: missing integration identifier.",
+    "oauth_callback_state_mismatch": "OAuth security check failed: state mismatch.",
+    "oauth_exchange_error": "OAuth token exchange failed"
   },
   "header": {
     "toggle_sidebar": {
@@ -217,7 +340,11 @@
       "min": "Thinking: Minimal",
       "med": "Thinking: Medium",
       "max": "Thinking: Maximum",
-      "disable": "Disable"
+      "disable": "Disable",
+      "disable_desc": "Skip extended reasoning for the fastest replies.",
+      "min_desc": "Light reasoning — good for everyday questions.",
+      "med_desc": "Balanced depth before answering.",
+      "max_desc": "Deepest reasoning for hard problems; slower replies."
     },
     "stream_recovery": "The agent is still working on this chat on the server. Refreshing automatically…",
     "agent_status": {
@@ -245,12 +372,41 @@
     "profile": {
       "label": "Profile",
       "select": "Select Profile",
-      "none": "No profile"
+      "none": "No profile",
+      "active_hint": "Tools, skills, and memory sources for this chat.",
+      "customize": "Customize profile & instructions"
+    },
+    "agent_mode": {
+      "select": "Agent mode",
+      "soon": "Soon",
+      "normal": "Normal",
+      "normal_desc": "Balanced chat — tools and memory as configured.",
+      "plan": "Plan",
+      "plan_desc": "Break work into steps before executing.",
+      "deep_research": "Deep research",
+      "deep_research_desc": "Longer research runs with the research panel.",
+      "ask": "Ask",
+      "ask_desc": "Read-only answers without tool side effects.",
+      "debug": "Debug",
+      "debug_desc": "Verbose traces for troubleshooting."
     },
     "model": {
       "label": "Model",
       "select": "Select Model",
-      "switch": "Switch Model"
+      "switch": "Switch Model",
+      "default_hint": "Default model for this server."
+    },
+    "empty": {
+      "title": "What can I help you with?",
+      "subtitle": "Ask anything, attach a file, or turn on web search. Answers stream in as they're written.",
+      "subtitle_profile": "You're on the {{profile}} profile. Ask anything, attach files, or enable web search — replies stream live.",
+      "hint_attach": "Drag files here or use + to attach",
+      "suggestions": {
+        "explain": "Explain a hard concept simply",
+        "plan": "Draft a project kickoff plan",
+        "attach": "Summarize a document I'll attach",
+        "research": "Research a topic with sources"
+      }
     },
     "sql_project": {
       "hint": "Active SQL / navigation project (click to open panel). New messages use this project."
@@ -314,6 +470,10 @@
       "restricted": "Restricted · {{count}} hosts",
       "global": "Global web search",
       "global_desc": "Active Internet connection to obtain updated answers from web sources.",
+      "on_short": "Web on",
+      "off_short": "Web off",
+      "on_desc": "Search the web when the model needs fresh information.",
+      "off_desc": "Answers use only local context and attached files.",
       "toggle_aria": "Enable or disable web search",
       "advanced": "Advanced Search (Specific Sources)",
       "modal_title": "Advanced Web Search",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, memo } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
@@ -8,13 +8,17 @@ import { MermaidBlock } from "@/components/chat/MermaidBlock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
   AION_PROMPT_DEBUG_UI_ENABLED,
 } from "@/lib/dev-flags";
 import { ShimmerText } from "@/components/chat/ShimmerText";
+import Link from "next/link";
+import { AgentModeSelectChip } from "@/components/chat/AgentModeSelectChip";
+import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
+import { ComposerOptionRow } from "@/components/chat/ComposerOptionRow";
 import { mergeAttachmentRefs } from "@/lib/attachments";
 import { artifactLanguage } from "@/lib/artifacts";
 import {
@@ -25,7 +29,6 @@ import {
   drainSessionEventsLoop,
   fetchProfiles,
   fetchSessionCharts,
-  listChatUiConversations,
   listSessionFilesSubdir,
   type SessionFileRow,
   openSessionEventsStream,
@@ -41,7 +44,6 @@ import {
   updateConversationMetadata,
   updateConversationProfile,
   updateConversationTitle,
-  deleteConversation,
   patchMessageTimeline,
   saveAssistantMessage,
   saveChatMessage,
@@ -50,7 +52,6 @@ import {
   type ChatHistoryArtifact,
   type ChatHistoryMessage,
   type ChatHistoryStep,
-  type ConversationSummary,
   type ProfileRow,
   type SessionChart,
 } from "@/lib/api/aion";
@@ -80,9 +81,8 @@ import {
 } from "@/lib/use-conversation-transcript";
 import type { ChatChunk, TurnSegment, TurnState, WebSourceCard } from "@/lib/sse/types";
 
-import { AppShell } from "@/components/layout/AppShell";
 import { ChatHeader } from "@/components/layout/ChatHeader";
-import { ThreadSidebar } from "@/components/layout/ThreadSidebar";
+import { useShellActions, useSidebarOpen } from "@/lib/shell/shell-context";
 import { cn } from "@/lib/cn";
 import { DeepResearchPanel } from "@/components/research/DeepResearchPanel";
 import { PlanExecutionChatBanner } from "@/components/plan/PlanExecutionChatBanner";
@@ -124,7 +124,6 @@ import {
   toggleMessageRating,
   type MessageRating,
 } from "@/lib/message-feedback";
-import { useIsLgUp } from "@/lib/hooks/use-breakpoint";
 import { SessionCharts } from "@/components/chat/SessionCharts";
 
 import type { DockTab } from "@/lib/layout/dock-tab";
@@ -360,6 +359,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const COMPOSER_MIN_HEIGHT = 110;
   const userId = useStoredUserId();
   const token = useStoredToken();
+  const shellActions = useShellActions();
+  const sidebarOpen = useSidebarOpen();
   const [conversationId, setConversationId] = useState(initialConversationId);
 
   const [dockTab, setDockTab] = useState<DockTab>("none");
@@ -535,22 +536,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   useEffect(() => {
     setConversationId(initialConversationId);
   }, [initialConversationId]);
-
-  const handleSelectConversation = useCallback(
-    (newId: string) => {
-      setConversationId(newId);
-      window.history.pushState(null, "", `/c/${newId}`);
-      if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) {
-        setSidebarOpen(false);
-        try {
-          localStorage.setItem("aion-chat-sidebar-open", "0");
-        } catch {
-          /* ignore */
-        }
-      }
-    },
-    [],
-  );
 
   useEffect(() => {
     const onPopState = () => {
@@ -902,10 +887,16 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   // Stati e logica per i nuovi menù popover "+", "Profilo", "Thinking" e "Agent Mode"
   const [isPlusOpen, setIsPlusOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isThinkingOpen, setIsThinkingOpen] = useState(false);
   const [isAgentModeOpen, setIsAgentModeOpen] = useState(false);
-  const [isLlmProviderOpen, setIsLlmProviderOpen] = useState(false);
   const [isToolsViewSubOpen, setIsToolsViewSubOpen] = useState(false);
+  const [isWebSearchSubOpen, setIsWebSearchSubOpen] = useState(false);
+  const [isThinkingSubOpen, setIsThinkingSubOpen] = useState(false);
+
+  const closePlusSubMenus = useCallback(() => {
+    setIsToolsViewSubOpen(false);
+    setIsWebSearchSubOpen(false);
+    setIsThinkingSubOpen(false);
+  }, []);
 
   const [toolsView, setToolsView] = useState<"hidden" | "partial" | "full">(() => {
     if (typeof window !== "undefined") {
@@ -968,50 +959,22 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
-  const thinkingMenuRef = useRef<HTMLDivElement>(null);
-  const agentModeMenuRef = useRef<HTMLDivElement>(null);
-  const llmProviderMenuRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (plusMenuRef.current && !plusMenuRef.current.contains(event.target as Node)) {
         setIsPlusOpen(false);
-        setIsToolsViewSubOpen(false);
-      }
-      if (thinkingMenuRef.current && !thinkingMenuRef.current.contains(event.target as Node)) {
-        setIsThinkingOpen(false);
+        closePlusSubMenus();
       }
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setIsProfileOpen(false);
-      }
-      if (agentModeMenuRef.current && !agentModeMenuRef.current.contains(event.target as Node)) {
-        setIsAgentModeOpen(false);
-      }
-      if (llmProviderMenuRef.current && !llmProviderMenuRef.current.contains(event.target as Node)) {
-        setIsLlmProviderOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
+  }, [closePlusSubMenus]);
 
-  const getThinkingLabel = useCallback(() => {
-    if (!thinkingEnabled) return t("chat.thinking.off");
-    switch (reasoningEffort) {
-      case "min":
-        return t("chat.thinking.min");
-      case "medium":
-        return t("chat.thinking.med");
-      case "max":
-        return t("chat.thinking.max");
-      default:
-        return t("chat.thinking.label");
-    }
-  }, [thinkingEnabled, reasoningEffort, t]);
-
-  const [threads, setThreads] = useState<ConversationSummary[]>([]);
   const [turnVisual, setTurnVisual] = useState<TurnState | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [streamRecovery, setStreamRecovery] = useState(false);
@@ -1091,34 +1054,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       }
     }
   }, [turnVisual, adoptResearchSession]);
-
-  const isLgUp = useIsLgUp();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem("aion-chat-sidebar-open");
-      if (v === "1") setSidebarOpen(true);
-      else if (v === "0") setSidebarOpen(false);
-      else if (typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches) {
-        setSidebarOpen(true);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const toggleSidebar = useCallback(() => {
-    setSidebarOpen((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("aion-chat-sidebar-open", next ? "1" : "0");
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }, []);
 
   const {
     planChunk,
@@ -1209,6 +1144,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [composerResizing, setComposerResizing] = useState(false);
   const composerContainerRef = useRef<HTMLDivElement | null>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composerHeightRef = useRef(COMPOSER_MIN_HEIGHT);
   const composerPendingHeightRef = useRef(COMPOSER_MIN_HEIGHT);
   const composerRafRef = useRef<number | null>(null);
@@ -1378,10 +1314,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const effectiveEffort = thinkingEnabled ? reasoningEffort : "min";
 
-  const refreshThreads = useCallback(async () => {
-    const data = await listChatUiConversations(userId, token);
-    setThreads(data);
-  }, [userId, token]);
+  const refreshThreads = shellActions.refreshThreads;
 
   const handleTitleChange = useCallback(async (newTitle: string) => {
     if (!conversationId) return;
@@ -1393,43 +1326,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       console.error("Error saving conversation title to DB:", err);
     }
   }, [conversationId, userId, token, refreshThreads]);
-
-  const handleDeleteConversation = useCallback(async (idToDelete: string) => {
-    try {
-      await deleteConversation(idToDelete, userId, token);
-      await refreshThreads();
-      if (conversationId === idToDelete) {
-        const nextId = crypto.randomUUID();
-        setConversationId(nextId);
-        window.history.pushState(null, "", `/c/${nextId}`);
-      }
-    } catch (err) {
-      console.error("Error deleting conversation:", err);
-    }
-  }, [conversationId, userId, token, refreshThreads]);
-
-  const handleRenameConversation = useCallback(async (idToRename: string, newTitle: string) => {
-    try {
-      await updateConversationTitle(idToRename, newTitle, userId, token);
-      if (conversationId === idToRename) {
-        setConversationTitle(newTitle);
-      }
-      await refreshThreads();
-    } catch (err) {
-      console.error("Error renaming conversation:", err);
-    }
-  }, [conversationId, userId, token, refreshThreads]);
-
-  const handleToggleFavorite = useCallback(async (idToToggle: string, isFav: boolean) => {
-    try {
-      await updateConversationMetadata(idToToggle, { favorite: !isFav }, userId, token);
-      await refreshThreads();
-    } catch (err) {
-      console.error("Error toggling favorite:", err);
-    }
-  }, [userId, token, refreshThreads]);
-
-
 
   const adoptPlanExecution = useCallback(
     (
@@ -1644,6 +1540,31 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       allPlanExecutionMessageIds(planExecutionProgress?.tasks).has(recoveryAssistantId)
     ),
   );
+
+  const showEmptyState = useMemo(
+    () =>
+      chatView.kind === "main" &&
+      mainFeedMessages.length === 0 &&
+      !streaming &&
+      !streamRecovery &&
+      !showMainTurnVisual &&
+      !historyError,
+    [
+      chatView.kind,
+      mainFeedMessages.length,
+      streaming,
+      streamRecovery,
+      showMainTurnVisual,
+      historyError,
+    ],
+  );
+
+  const handleEmptySuggestion = useCallback((text: string) => {
+    setInput(text);
+    requestAnimationFrame(() => {
+      composerTextareaRef.current?.focus();
+    });
+  }, []);
 
   const handleCancelPlanExecution = useCallback(async () => {
     const rid = (planExecAdoptRunId || "").trim();
@@ -2790,14 +2711,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   );
 
   const closeDock = useCallback(() => setDockTab("none"), []);
-  const closeSidebar = useCallback(() => {
-    setSidebarOpen(false);
-    try {
-      localStorage.setItem("aion-chat-sidebar-open", "0");
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   const dockBody = (
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -2964,54 +2877,87 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     ? t("chat.agent_status.thinking")
     : t("chat.agent_status.working");
 
+  const {
+    setHeader,
+    setDock,
+    setDockOpen,
+    clearChrome,
+    setDockCloseHandler,
+    toggleSidebar,
+  } = shellActions;
+
+  useLayoutEffect(() => {
+    setDockCloseHandler(closeDock);
+    return () => setDockCloseHandler(null);
+  }, [setDockCloseHandler, closeDock]);
+
+  useLayoutEffect(() => {
+    setHeader(
+      <ChatHeader
+        conversationId={conversationId}
+        profiles={profiles}
+        profile={activeProfileName}
+        onProfileChange={handleProfileChange}
+        agentMode={agentMode}
+        onAgentModeChange={handleAgentModeChange}
+        dockTab={dockTab}
+        onToggleDock={toggleDock}
+        isSidebarOpen={sidebarOpen}
+        onToggleSidebar={toggleSidebar}
+        title={conversationTitle}
+        onTitleChange={handleTitleChange}
+        llmProviders={llmProviders}
+        selectedProvider={selectedProvider}
+        providersLoading={providersLoading}
+        onProviderChange={setSelectedProvider}
+      />,
+    );
+  }, [
+    setHeader,
+    sidebarOpen,
+    toggleSidebar,
+    conversationId,
+    profiles,
+    activeProfileName,
+    handleProfileChange,
+    agentMode,
+    handleAgentModeChange,
+    dockTab,
+    toggleDock,
+    conversationTitle,
+    handleTitleChange,
+    llmProviders,
+    selectedProvider,
+    providersLoading,
+  ]);
+
+  useLayoutEffect(() => {
+    setDockOpen(dockTab !== "none");
+    if (dockTab === "none") {
+      setDock(null);
+      return;
+    }
+    setDock(
+      <>
+        {dockTabs}
+        {dockBody}
+      </>,
+    );
+  });
+
+  useLayoutEffect(() => {
+    return () => clearChrome();
+  }, [clearChrome]);
+
   return (
     <>
-      <AppShell
-        sidebar={
-          <ThreadSidebar
-            currentId={conversationId}
-            userId={userId}
-            items={threads}
-            onRefresh={refreshThreads}
-            onSelectConversation={handleSelectConversation}
-            onDeleteConversation={handleDeleteConversation}
-            onRenameConversation={handleRenameConversation}
-            onToggleFavorite={handleToggleFavorite}
-            isCollapsed={!sidebarOpen && isLgUp}
-            onToggleCollapse={toggleSidebar}
-          />
-        }
-        header={
-          <ChatHeader
-            conversationId={conversationId}
-            profiles={profiles}
-            profile={activeProfileName}
-            onProfileChange={handleProfileChange}
-            agentMode={agentMode}
-            onAgentModeChange={handleAgentModeChange}
-            dockTab={dockTab}
-            onToggleDock={toggleDock}
-            isSidebarOpen={sidebarOpen}
-            onToggleSidebar={toggleSidebar}
-            title={conversationTitle}
-            onTitleChange={handleTitleChange}
-          />
-        }
-        dock={
-          <>
-            {dockTabs}
-            {dockBody}
-          </>
-        }
-        isDockOpen={dockTab !== "none"}
-        isSidebarOpen={sidebarOpen}
-        onCloseDock={closeDock}
-        onCloseSidebar={closeSidebar}
-      >
-        <div id="chat-pane" className="relative flex min-h-0 flex-1 flex-col">
+        <div id="chat-pane" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
           <div
             ref={messagesContainerRef}
-            className="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-8"
+            className={cn(
+              "flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-8",
+              showEmptyState && "flex flex-col justify-center",
+            )}
             aria-busy={streaming}
             aria-live="polite"
           >
@@ -3068,6 +3014,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     </button>
                   </div>
                 </div>
+              ) : null}
+              {showEmptyState ? (
+                <ChatEmptyState
+                  profileName={activeProfileName}
+                  onSuggestion={handleEmptySuggestion}
+                />
               ) : null}
               {chatView.kind === "task" && openPlanTask && planExecutionProgress ? (
                 <TaskChatView
@@ -3144,7 +3096,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   onOpenAllTasks={() => setDockTab("plan")}
                 />
               ) : null}
-              {chatView.kind === "main"
+              {chatView.kind === "main" && !showEmptyState
                 ? mainFeedMessages.map((m, msgIdx) => {
                   const isLastUser = m.role === "user" && m.id === lastUserMessageId;
                   const prevMsg = msgIdx > 0 ? mainFeedMessages[msgIdx - 1] : null;
@@ -3426,8 +3378,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             </div>
           </div>
 
-          <div className="shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
-            <div className="mx-auto w-full max-w-3xl">
+          <div className="relative z-20 min-w-0 shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
+            <div className="mx-auto w-full min-w-0 max-w-3xl">
               {pendingFiles.length > 0 && (
                 <div className="mb-3 flex flex-wrap gap-2">
                   {pendingFiles.map((f) => (
@@ -3466,7 +3418,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               <div
                 ref={composerContainerRef}
                 className={cn(
-                  "relative flex flex-col rounded-[26px] border bg-card/45 p-2.5 shadow-md backdrop-blur-xl focus-within:ring-1",
+                  "relative flex min-w-0 flex-col overflow-visible rounded-[26px] border bg-card/45 p-2.5 shadow-md backdrop-blur-xl focus-within:ring-1",
                   agentMode === "plan"
                     ? "border-orange-500/35 shadow-[0_0_12px_rgba(249,115,22,0.08)] focus-within:ring-orange-500/30"
                     : agentMode === "deep_research"
@@ -3496,7 +3448,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     ) : null}
                   </div>
                 )}
+                <div className="min-h-0 flex-1 overflow-hidden">
                 <textarea
+                  ref={composerTextareaRef}
                   value={input}
                   disabled={streaming || isProjectRequiredButMissing}
                   onChange={(e) => setInput(e.target.value)}
@@ -3510,10 +3464,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     }
                   }}
                   placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
-                  className="focus-ring min-h-0 flex-1 w-full resize-none rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground/75 focus-visible:ring-0"
+                  className="focus-ring box-border h-full min-h-0 min-w-0 max-w-full w-full resize-none overflow-x-hidden overflow-y-auto break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
                   rows={1}
                 />
-                <div className="mt-1 flex items-center justify-between px-2 pb-1">
+                </div>
+                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-2 pb-1">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -3531,20 +3486,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     }}
                   />
                   {/* Pulsante "+" con Menu di Allega File */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <div ref={plusMenuRef} className="relative">
                       <button
                         type="button"
                         onClick={() => {
                           setIsPlusOpen((prev) => !prev);
-                          setIsToolsViewSubOpen(false);
-                          setIsThinkingOpen(false);
+                          closePlusSubMenus();
                           setIsProfileOpen(false);
                           setIsAgentModeOpen(false);
                         }}
                         className={cn(
                           "focus-ring inline-flex size-7 items-center justify-center rounded-full border transition-all duration-200 active:scale-95",
-                          isPlusOpen
+                          isPlusOpen || !webSearchEnabled || thinkingEnabled
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-border bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                         )}
@@ -3569,10 +3523,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                             onClick={() => {
                               fileInputRef.current?.click();
                               setIsPlusOpen(false);
-                              setIsToolsViewSubOpen(false);
+                              closePlusSubMenus();
                             }}
                             onMouseEnter={() => {
-                              setIsToolsViewSubOpen(false);
+                              closePlusSubMenus();
                             }}
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors text-left"
                           >
@@ -3580,91 +3534,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                             <span>{t("chat.tools.attach_file")}</span>
                           </button>
 
-                          {/* Opzione: Selezione Modello LLM */}
-                          {llmProviders && llmProviders.length > 0 && (
-                            <div ref={llmProviderMenuRef} className="relative" onMouseLeave={() => setIsLlmProviderOpen(false)}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIsLlmProviderOpen((prev) => !prev);
-                                }}
-                                onMouseEnter={() => {
-                                  setIsLlmProviderOpen(true);
-                                }}
-                                className={cn(
-                                  "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                  isLlmProviderOpen || selectedProvider
-                                    ? "bg-muted/60 text-foreground"
-                                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                )}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <Sparkles size={12} className={selectedProvider ? "text-primary" : "text-muted-foreground"} aria-hidden />
-                                  <span>{selectedProvider ? (llmProviders.find((p) => p.slug === selectedProvider)?.display_name || selectedProvider) : t("chat.model.label")}</span>
-                                </div>
-                                <ChevronRight size={12} className="shrink-0" aria-hidden />
-                              </button>
-
-                              {/* Sottomenu Selezione Modello */}
-                              {isLlmProviderOpen && (
-                                <div className="absolute bottom-full left-0 z-50 pb-1.5 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
-                                  <div
-                                    onMouseEnter={() => setIsLlmProviderOpen(true)}
-                                    className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
-                                  >
-                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
-                                      {selectedProvider ? t("chat.model.switch") : t("chat.model.select")}
-                                    </div>
-                                    <div className="space-y-0.5">
-                                      {providersLoading ? (
-                                        <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-                                          <div className="w-3 h-3 border-2 border-border border-t-primary rounded-full animate-spin" />
-                                          {t("integrationsPage.loading")}
-                                        </div>
-                                      ) : (
-                                        <>
-                                          {llmProviders.map((provider) => (
-                                            <button
-                                              key={provider.slug}
-                                              type="button"
-                                              onClick={() => {
-                                                setSelectedProvider(provider.slug === selectedProvider ? null : provider.slug);
-                                                setIsPlusOpen(false);
-                                                setIsLlmProviderOpen(false);
-                                              }}
-                                              className={cn(
-                                                "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                                provider.slug === selectedProvider
-                                                  ? "bg-primary/10 text-primary"
-                                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                              )}
-                                            >
-                                              <span className="truncate pr-2">{provider.display_name}</span>
-                                            </button>
-                                          ))}
-                                          {llmProviders.length === 0 && (
-                                            <div className="px-2 py-1.5 text-xs text-muted-foreground italic">
-                                              No models available
-                                            </div>
-                                          )}
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
-
                           {/* Opzione: Vista Tools > */}
                           <div className="relative" onMouseLeave={() => setIsToolsViewSubOpen(false)}>
                             <button
                               type="button"
                               onClick={() => {
                                 setIsToolsViewSubOpen((prev) => !prev);
+                                setIsWebSearchSubOpen(false);
+                                setIsThinkingSubOpen(false);
                               }}
                               onMouseEnter={() => {
                                 setIsToolsViewSubOpen(true);
+                                setIsWebSearchSubOpen(false);
+                                setIsThinkingSubOpen(false);
                               }}
                               className={cn(
                                 "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
@@ -3697,7 +3579,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                       onClick={() => {
                                         handleToolsViewChange("hidden");
                                         setIsPlusOpen(false);
-                                        setIsToolsViewSubOpen(false);
+                                        closePlusSubMenus();
                                       }}
                                       className={cn(
                                         "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
@@ -3716,7 +3598,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                       onClick={() => {
                                         handleToolsViewChange("partial");
                                         setIsPlusOpen(false);
-                                        setIsToolsViewSubOpen(false);
+                                        closePlusSubMenus();
                                       }}
                                       className={cn(
                                         "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
@@ -3735,7 +3617,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                       onClick={() => {
                                         handleToolsViewChange("full");
                                         setIsPlusOpen(false);
-                                        setIsToolsViewSubOpen(false);
+                                        closePlusSubMenus();
                                       }}
                                       className={cn(
                                         "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
@@ -3752,49 +3634,217 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               </div>
                             )}
                           </div>
-                          <div className="my-1.5 border-t border-border/50 pt-1.5">
-                            <div className="rounded-xl bg-card/40 p-2 border border-border/50 shadow-sm backdrop-blur-sm transition-colors hover:bg-card/60">
-                              <div className="flex items-start gap-3">
-                                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className={cn(
-                                      "flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors",
-                                      webSearchEnabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                                    )}>
-                                      <Globe size={13} aria-hidden />
-                                    </span>
-                                    <span className="text-[12px] font-semibold leading-none text-foreground">{t("chat.web_search.global")}</span>
-                                  </div>
-                                  <p className="pl-8 text-[10px] leading-[1.3] text-muted-foreground">
-                                    {t("chat.web_search.global_desc")}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  role="switch"
-                                  aria-checked={webSearchEnabled}
-                                  aria-label={t("chat.web_search.toggle_aria")}
-                                  className={cn(
-                                    "relative mt-1 h-6 w-10 shrink-0 rounded-full border-2 border-transparent transition-colors focus-ring",
-                                    webSearchEnabled
-                                      ? "bg-primary shadow-inner shadow-primary/20"
-                                      : "bg-muted/80 ring-1 ring-border/80",
-                                  )}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    persistWebSearchEnabled(!webSearchEnabled);
-                                  }}
-                                >
-                                  <span
-                                    className={cn(
-                                      "pointer-events-none absolute top-1/2 size-[0.875rem] -translate-y-1/2 rounded-full bg-background shadow-sm ring-1 ring-black/5 transition-[left] duration-200",
-                                      webSearchEnabled ? "left-[calc(100%-1rem)]" : "left-0.5",
-                                    )}
-                                  />
-                                </button>
+
+                          {/* Opzione: Web search > */}
+                          <div className="relative" onMouseLeave={() => setIsWebSearchSubOpen(false)}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsWebSearchSubOpen((prev) => !prev);
+                                setIsToolsViewSubOpen(false);
+                                setIsThinkingSubOpen(false);
+                              }}
+                              onMouseEnter={() => {
+                                setIsWebSearchSubOpen(true);
+                                setIsToolsViewSubOpen(false);
+                                setIsThinkingSubOpen(false);
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                isWebSearchSubOpen
+                                  ? "bg-muted/60 text-foreground"
+                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                              )}
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                {webSearchEnabled ? (
+                                  <Globe size={12} className="shrink-0" aria-hidden />
+                                ) : (
+                                  <GlobeLock size={12} className="shrink-0" aria-hidden />
+                                )}
+                                <span className="truncate">{t("chat.web_search.global")}</span>
                               </div>
-                            </div>
+                              <ChevronRight size={12} className="shrink-0" aria-hidden />
+                            </button>
+
+                            {isWebSearchSubOpen ? (
+                              <div className="absolute bottom-full left-0 z-50 pb-1.5 w-44 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                                <div
+                                  onMouseEnter={() => setIsWebSearchSubOpen(true)}
+                                  className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
+                                >
+                                  <div className="border-b border-border/45 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                                    {t("chat.web_search.global")}
+                                  </div>
+                                  <div className="space-y-0.5 p-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        persistWebSearchEnabled(false);
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        !webSearchEnabled
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.web_search.off_short")}</span>
+                                      {!webSearchEnabled ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        persistWebSearchEnabled(true);
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        webSearchEnabled
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.web_search.on_short")}</span>
+                                      {webSearchEnabled ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
                           </div>
+
+                          {/* Opzione: Thinking > */}
+                          <div className="relative" onMouseLeave={() => setIsThinkingSubOpen(false)}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsThinkingSubOpen((prev) => !prev);
+                                setIsToolsViewSubOpen(false);
+                                setIsWebSearchSubOpen(false);
+                              }}
+                              onMouseEnter={() => {
+                                setIsThinkingSubOpen(true);
+                                setIsToolsViewSubOpen(false);
+                                setIsWebSearchSubOpen(false);
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                isThinkingSubOpen || thinkingEnabled
+                                  ? "bg-muted/60 text-foreground"
+                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                              )}
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <Sparkles size={12} className="shrink-0" aria-hidden />
+                                <span className="truncate">{t("chat.thinking.label")}</span>
+                              </div>
+                              <ChevronRight size={12} className="shrink-0" aria-hidden />
+                            </button>
+
+                            {isThinkingSubOpen ? (
+                              <div className="absolute bottom-full left-0 z-50 pb-1.5 w-44 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                                <div
+                                  onMouseEnter={() => setIsThinkingSubOpen(true)}
+                                  className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
+                                >
+                                  <div className="border-b border-border/45 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                                    {t("chat.thinking.label")}
+                                  </div>
+                                  <div className="space-y-0.5 p-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToggleThinking(false);
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        !thinkingEnabled
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.thinking.disable")}</span>
+                                      {!thinkingEnabled ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToggleThinking(true);
+                                        handleReasoningEffortChange("min");
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        thinkingEnabled && reasoningEffort === "min"
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.thinking.min")}</span>
+                                      {thinkingEnabled && reasoningEffort === "min" ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToggleThinking(true);
+                                        handleReasoningEffortChange("medium");
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        thinkingEnabled && reasoningEffort === "medium"
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.thinking.med")}</span>
+                                      {thinkingEnabled && reasoningEffort === "medium" ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToggleThinking(true);
+                                        handleReasoningEffortChange("max");
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        thinkingEnabled && reasoningEffort === "max"
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.thinking.max")}</span>
+                                      {thinkingEnabled && reasoningEffort === "max" ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="my-1 border-t border-border/45" />
                           <button
                             type="button"
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors text-left border border-transparent hover:border-primary/20"
@@ -3804,7 +3854,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               setWebRestrictInputError(null);
                               setWebRestrictModalOpen(true);
                               setIsPlusOpen(false);
-                              setIsToolsViewSubOpen(false);
+                              closePlusSubMenus();
                             }}
                           >
                             <Settings size={12} className="shrink-0" aria-hidden />
@@ -3821,56 +3871,63 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         onClick={() => {
                           setIsProfileOpen((prev) => !prev);
                           setIsPlusOpen(false);
-                          setIsThinkingOpen(false);
-                          setIsToolsViewSubOpen(false);
+                          closePlusSubMenus();
                           setIsAgentModeOpen(false);
-                          setIsLlmProviderOpen(false);
                         }}
                         className={cn(
-                          "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                          "focus-ring inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
                           isProfileOpen
                             ? "border-primary/45 bg-primary/10 text-primary"
                             : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                         )}
                       >
                         <User size={12} className="shrink-0" aria-hidden />
-                        <span>{activeProfileName || t("chat.profile.label")}</span>
+                        <span className="max-w-[6.5rem] truncate sm:max-w-[9rem]">
+                          {activeProfileName || t("chat.profile.label")}
+                        </span>
                         <ChevronDown size={10} className="opacity-70" aria-hidden />
                       </button>
 
                       {isProfileOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 z-50 w-48 rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/45 mb-1 select-none">
+                        <div className="absolute bottom-full left-0 mb-2 z-50 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
+                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             {t("chat.profile.select")}
                           </div>
-                          <div className="max-h-48 overflow-y-auto space-y-0.5">
+                          <p className="px-2.5 py-1 text-[10px] leading-snug text-muted-foreground">
+                            {t("chat.profile.active_hint")}
+                          </p>
+                          <div className="max-h-52 overflow-y-auto p-0.5">
                             {profiles.map((p) => {
+                              const slug = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
                               const isSelected = p.slug === profile || p.name === profile;
                               return (
-                                <button
+                                <ComposerOptionRow
                                   key={p.name}
-                                  type="button"
+                                  label={p.name}
+                                  description={p.description}
+                                  selected={isSelected}
                                   onClick={() => {
-                                    handleProfileChange(p.slug || p.name.replace(/\s+/g, "_").toLowerCase());
+                                    handleProfileChange(slug);
                                     setIsProfileOpen(false);
                                   }}
-                                  className={cn(
-                                    "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors text-left",
-                                    isSelected
-                                      ? "bg-primary/10 text-primary"
-                                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                                  )}
-                                >
-                                  <span className="truncate">{p.name}</span>
-                                  {isSelected && <Check size={12} className="shrink-0 text-primary" />}
-                                </button>
+                                />
                               );
                             })}
-                            {profiles.length === 0 && (
-                              <div className="px-2 py-1.5 text-xs text-muted-foreground italic">
+                            {profiles.length === 0 ? (
+                              <div className="px-2.5 py-2 text-xs italic text-muted-foreground">
                                 {t("chat.profile.none")}
                               </div>
-                            )}
+                            ) : null}
+                          </div>
+                          <div className="border-t border-border/45 p-1">
+                            <Link
+                              href="/settings?tab=user-md"
+                              className="focus-ring flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted/55 hover:text-foreground"
+                              onClick={() => setIsProfileOpen(false)}
+                            >
+                              <Settings size={12} className="shrink-0" aria-hidden />
+                              <span>{t("chat.profile.customize")}</span>
+                            </Link>
                           </div>
                         </div>
                       )}
@@ -3887,271 +3944,26 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       />
                     )}
 
-                    {/* Pulsante Agent Mode con Dropdown Opzioni */}
-                    <div ref={agentModeMenuRef} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsAgentModeOpen((prev) => !prev);
+                    <AgentModeSelectChip
+                      mode={agentMode}
+                      onChange={handleAgentModeChange}
+                      open={isAgentModeOpen}
+                      onOpenChange={(open) => {
+                        setIsAgentModeOpen(open);
+                        if (open) {
                           setIsPlusOpen(false);
-                          setIsToolsViewSubOpen(false);
-                          setIsThinkingOpen(false);
+                          closePlusSubMenus();
                           setIsProfileOpen(false);
-                          setIsLlmProviderOpen(false);
-                        }}
-                        className={cn(
-                          "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
-                          isAgentModeOpen
-                            ? "border-primary/45 bg-primary/10 text-primary"
-                            : agentMode === "plan"
-                              ? "border-orange-500/40 bg-orange-500/10 text-orange-400"
-                              : agentMode === "deep_research"
-                                ? "border-violet-500/40 bg-violet-500/10 text-violet-400"
-                                : agentMode === "ask"
-                                  ? "border-blue-500/40 bg-blue-500/10 text-blue-400"
-                                  : agentMode === "debug"
-                                    ? "border-rose-500/40 bg-rose-500/10 text-rose-350"
-                                    : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-                        )}
-                      >
-                        {agentMode === "plan" ? (
-                          <Sparkles size={12} className="text-orange-450" aria-hidden />
-                        ) : agentMode === "deep_research" ? (
-                          <BookOpen size={12} className="text-violet-450" aria-hidden />
-                        ) : agentMode === "ask" ? (
-                          <HelpCircle size={12} className="text-blue-400" aria-hidden />
-                        ) : agentMode === "debug" ? (
-                          <Bug size={12} className="text-rose-450" aria-hidden />
-                        ) : (
-                          <MessageSquare size={12} aria-hidden />
-                        )}
-                        <span>
-                          {agentMode === "plan"
-                            ? "Plan Mode"
-                            : agentMode === "deep_research"
-                              ? "Deep Research"
-                              : agentMode === "ask"
-                                ? "Ask Mode"
-                                : agentMode === "debug"
-                                  ? "Debug Mode"
-                                  : "Normal Mode"}
-                        </span>
-                        <ChevronDown size={10} className="opacity-70" aria-hidden />
-                      </button>
-
-                      {isAgentModeOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 z-50 w-44 rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          {/* Normal Mode */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleAgentModeChange("normal");
-                              setIsAgentModeOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors text-left",
-                              agentMode === "normal"
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                            )}
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <MessageSquare size={12} />
-                              Normal Mode
-                            </span>
-                            {agentMode === "normal" && <Check size={12} className="shrink-0 text-primary" />}
-                          </button>
-
-                          {/* Plan Mode */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleAgentModeChange("plan");
-                              setIsAgentModeOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors text-left",
-                              agentMode === "plan"
-                                ? "bg-orange-500/10 text-orange-400"
-                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                            )}
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <Sparkles
-                                size={12}
-                                className={agentMode === "plan" ? "text-orange-450" : "text-orange-400/80"}
-                              />
-                              Plan Mode
-                            </span>
-                            {agentMode === "plan" && <Check size={12} className="shrink-0 text-orange-455" />}
-                          </button>
-
-                          {/* Deep Research Mode */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleAgentModeChange("deep_research");
-                              setIsAgentModeOpen(false);
-                              setDockTab("research");
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors text-left",
-                              agentMode === "deep_research"
-                                ? "bg-violet-500/10 text-violet-400"
-                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                            )}
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <BookOpen
-                                size={12}
-                                className={agentMode === "deep_research" ? "text-violet-455" : "text-violet-400/80"}
-                              />
-                              Deep Research
-                            </span>
-                            {agentMode === "deep_research" && (
-                              <Check size={12} className="shrink-0 text-violet-400" />
-                            )}
-                          </button>
-
-                          {/* Ask Mode */}
-                          <div
-                            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground/60 opacity-50 cursor-not-allowed text-left"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <HelpCircle size={12} className="text-blue-500/50" />
-                              Ask Mode
-                            </span>
-                            <span className="text-[9px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded font-semibold border border-blue-500/20">Coming Soon</span>
-                          </div>
-
-                          {/* Debug Mode */}
-                          <div
-                            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground/60 opacity-50 cursor-not-allowed text-left"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <Bug size={12} className="text-rose-500/50" />
-                              Debug Mode
-                            </span>
-                            <span className="text-[9px] bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded font-semibold border border-rose-500/20">Coming Soon</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                        }
+                      }}
+                      onAfterSelect={(mode) => {
+                        if (mode === "deep_research") setDockTab("research");
+                      }}
+                    />
                   </div>
 
                   {/* Altri controlli a destra */}
-                  <div className="flex items-center gap-2 ml-auto">
-
-                    {/* Pulsante Thinking con Dropdown Opzioni */}
-                    <div ref={thinkingMenuRef} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsThinkingOpen((prev) => !prev);
-                          setIsPlusOpen(false);
-                          setIsToolsViewSubOpen(false);
-                          setIsLlmProviderOpen(false);
-                        }}
-                        className={cn(
-                          "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]",
-                          thinkingEnabled
-                            ? "border-primary/40 bg-primary/10 text-primary"
-                            : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                        )}
-                      >
-                        <Sparkles size={12} aria-hidden />
-                        <span>{getThinkingLabel()}</span>
-                        <ChevronDown size={10} className="opacity-70" aria-hidden />
-                      </button>
-
-                      {isThinkingOpen && (
-                        <div className="absolute bottom-full right-0 mb-2 z-50 w-40 rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          {/* Opzione: Disabilita */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleToggleThinking(false);
-                              setIsThinkingOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                              !thinkingEnabled
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                            )}
-                          >
-                            <span>{t("chat.thinking.disable")}</span>
-                            {!thinkingEnabled && <Check size={12} className="shrink-0 text-primary" />}
-                          </button>
-
-                          <div className="my-1 border-t border-border/45" />
-
-                          {/* Opzione: Minimo */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleToggleThinking(true);
-                              handleReasoningEffortChange("min");
-                              setIsThinkingOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                              thinkingEnabled && reasoningEffort === "min"
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                            )}
-                          >
-                            <span>{t("chat.thinking.min")}</span>
-                            {thinkingEnabled && reasoningEffort === "min" && (
-                              <Check size={12} className="shrink-0 text-primary" />
-                            )}
-                          </button>
-
-                          {/* Opzione: Medio */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleToggleThinking(true);
-                              handleReasoningEffortChange("medium");
-                              setIsThinkingOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                              thinkingEnabled && reasoningEffort === "medium"
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                            )}
-                          >
-                            <span>{t("chat.thinking.med")}</span>
-                            {thinkingEnabled && reasoningEffort === "medium" && (
-                              <Check size={12} className="shrink-0 text-primary" />
-                            )}
-                          </button>
-
-                          {/* Opzione: Massimo */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleToggleThinking(true);
-                              handleReasoningEffortChange("max");
-                              setIsThinkingOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                              thinkingEnabled && reasoningEffort === "max"
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                            )}
-                          >
-                            <span>{t("chat.thinking.max")}</span>
-                            {thinkingEnabled && reasoningEffort === "max" && (
-                              <Check size={12} className="shrink-0 text-primary" />
-                            )}
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
+                  <div className="ml-auto flex shrink-0 items-center gap-2">
                     {mcpAlertCount > 0 && (
                       <button
                         type="button"
@@ -4197,7 +4009,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             </div>
           </div>
         </div>
-      </AppShell>
       <ProjectCreateModal
         open={projectCreateOpen}
         onClose={() => setProjectCreateOpen(false)}

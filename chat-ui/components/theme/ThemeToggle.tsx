@@ -1,45 +1,23 @@
 "use client";
 
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
-import { useState, useEffect } from "react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
-
-const STORAGE_KEY = "aion-chat-theme";
-
-function readTheme(): "dark" | "light" {
-  if (typeof window === "undefined") return "dark";
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "light" || stored === "dark") return stored;
-  } catch {
-    /* ignore */
-  }
-  return document.documentElement.dataset.theme === "light" ? "light" : "dark";
-}
+import { applyChatTheme, readChatTheme, subscribeChatTheme } from "@/lib/theme/chat-theme";
 
 export function ThemeToggle({ className }: { className?: string }) {
   const t = useT();
   const [mounted, setMounted] = useState(false);
-  const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const theme = useSyncExternalStore(subscribeChatTheme, readChatTheme, () => "dark" as const);
 
   useEffect(() => {
     setMounted(true);
-    const initial = readTheme();
-    setTheme(initial);
-    // Assicurati che il DOM rifletta lo stato (evita reset da idratazione React)
-    document.documentElement.dataset.theme = initial;
+    applyChatTheme(readChatTheme());
   }, []);
 
   const toggle = () => {
-    const next = theme === "dark" ? "light" : "dark";
-    document.documentElement.dataset.theme = next;
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      /* ignore */
-    }
-    setTheme(next);
+    applyChatTheme(theme === "dark" ? "light" : "dark");
   };
 
   return (
