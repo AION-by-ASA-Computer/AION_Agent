@@ -151,7 +151,10 @@ MAX_LAST_ASSISTANT_CHARS = 4000
 
 
 def append_last_assistant_to_compaction_block(
-    summary_text: str, last_assistant_text: str, *, max_chars: int = MAX_LAST_ASSISTANT_CHARS
+    summary_text: str,
+    last_assistant_text: str,
+    *,
+    max_chars: int = MAX_LAST_ASSISTANT_CHARS,
 ) -> str:
     """Append the last pruned assistant reply so post-compaction replay keeps visible text."""
     body = (last_assistant_text or "").strip()

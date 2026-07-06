@@ -192,7 +192,6 @@ def _cleanup_orphaned_mcp_remotes() -> None:
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
-
     try:
         from src.observability.logging import setup_logging
         from src.observability.hooks_emitter import register_observability_hooks

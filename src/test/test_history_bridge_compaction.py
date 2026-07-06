@@ -83,21 +83,23 @@ def test_compaction_deletes_orphan_steps_and_attachments(monkeypatch, tmp_path):
         async with get_async_session_maker()() as session:
             step_count = (
                 await session.execute(
-                    select(func.count()).select_from(Step).where(
-                        Step.conversation_id == cid
-                    )
+                    select(func.count())
+                    .select_from(Step)
+                    .where(Step.conversation_id == cid)
                 )
             ).scalar_one()
             att_count = (
                 await session.execute(
-                    select(func.count()).select_from(Attachment).where(
-                        Attachment.conversation_id == cid
-                    )
+                    select(func.count())
+                    .select_from(Attachment)
+                    .where(Attachment.conversation_id == cid)
                 )
             ).scalar_one()
             orphan_steps = (
                 await session.execute(
-                    select(func.count()).select_from(Step).where(
+                    select(func.count())
+                    .select_from(Step)
+                    .where(
                         Step.conversation_id == cid,
                         Step.message_id.is_(None),
                     )
@@ -133,9 +135,9 @@ def test_compaction_recalculates_message_count(monkeypatch, tmp_path):
             conv = await session.get(Conversation, cid)
             msg_count = (
                 await session.execute(
-                    select(func.count()).select_from(Message).where(
-                        Message.conversation_id == cid
-                    )
+                    select(func.count())
+                    .select_from(Message)
+                    .where(Message.conversation_id == cid)
                 )
             ).scalar_one()
         assert conv is not None
@@ -158,7 +160,13 @@ def test_compaction_preserves_tail_timeline_not_inflated(monkeypatch, tmp_path):
 
         huge_timeline = json.dumps(
             [
-                {"kind": "tool", "id": f"s{idx}", "name": "mcp", "input": "", "output": "x"}
+                {
+                    "kind": "tool",
+                    "id": f"s{idx}",
+                    "name": "mcp",
+                    "input": "",
+                    "output": "x",
+                }
                 for idx in range(200)
             ]
         )
@@ -166,9 +174,7 @@ def test_compaction_preserves_tail_timeline_not_inflated(monkeypatch, tmp_path):
 
         async with get_async_session_maker()() as session:
             row = (
-                await session.execute(
-                    select(Message).where(Message.id == "t-5")
-                )
+                await session.execute(select(Message).where(Message.id == "t-5"))
             ).scalar_one()
             row.content = ""
             row.timeline_json = huge_timeline
@@ -181,16 +187,22 @@ def test_compaction_preserves_tail_timeline_not_inflated(monkeypatch, tmp_path):
 
         async with get_async_session_maker()() as session:
             kept = (
-                await session.execute(
-                    select(Message).where(
-                        Message.conversation_id == cid,
-                        Message.role == "assistant",
+                (
+                    await session.execute(
+                        select(Message).where(
+                            Message.conversation_id == cid,
+                            Message.role == "assistant",
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         for row in kept:
             if not (row.content or "").strip():
-                assert row.timeline_json is None or len(row.timeline_json or "") < 50_000
+                assert (
+                    row.timeline_json is None or len(row.timeline_json or "") < 50_000
+                )
 
     asyncio.run(run())
 
@@ -200,9 +212,7 @@ def test_compaction_summary_includes_last_assistant_text(monkeypatch, tmp_path):
         await _reset_unified_db(monkeypatch, tmp_path)
         bridge = UnifiedHistoryBridge()
         cid = "conv-compact-4"
-        await bridge.add_message(
-            cid, "user", "old", user_id="u1", message_id="u-old"
-        )
+        await bridge.add_message(cid, "user", "old", user_id="u1", message_id="u-old")
         await bridge.add_message(
             cid,
             "assistant",

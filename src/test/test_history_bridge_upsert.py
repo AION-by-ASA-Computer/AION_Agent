@@ -61,9 +61,7 @@ def test_upsert_rejects_cross_conversation_id_update(monkeypatch, tmp_path):
         engine._session_factory = None
         monkeypatch.setenv("AION_UNIFIED_DB", "1")
         monkeypatch.setenv("AION_DEFAULT_TENANT_ID", "default")
-        monkeypatch.setenv(
-            "AION_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 'aion.db'}"
-        )
+        monkeypatch.setenv("AION_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 'aion.db'}")
 
         bridge = UnifiedHistoryBridge()
         await bridge.add_message(

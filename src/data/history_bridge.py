@@ -51,10 +51,12 @@ async def fetch_message_by_id_for_conversation(
     if not mid or not cid:
         return None
     row = await session.execute(
-        select(Message).where(
+        select(Message)
+        .where(
             Message.id == mid,
             Message.conversation_id == cid,
-        ).limit(1)
+        )
+        .limit(1)
     )
     return row.scalars().first()
 
@@ -151,14 +153,18 @@ async def _sanitize_kept_assistant_timelines(
     if not kept_ids:
         return
     rows = (
-        await session.execute(
-            select(Message).where(
-                Message.conversation_id == conversation_id,
-                Message.id.in_(kept_ids),
-                Message.role == "assistant",
+        (
+            await session.execute(
+                select(Message).where(
+                    Message.conversation_id == conversation_id,
+                    Message.id.in_(kept_ids),
+                    Message.role == "assistant",
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for row in rows:
         if (row.content or "").strip():
             continue
@@ -713,11 +719,11 @@ class UnifiedHistoryBridge:
             all_ids = list(
                 (
                     await session.execute(
-                        select(Message.id).where(
-                            Message.conversation_id == session_id
-                        )
+                        select(Message.id).where(Message.conversation_id == session_id)
                     )
-                ).scalars().all()
+                )
+                .scalars()
+                .all()
             )
             pruned_ids = [mid for mid in all_ids if mid not in kept_ids]
             await _delete_messages_and_children(session, session_id, pruned_ids)
@@ -847,14 +853,14 @@ class UnifiedHistoryBridge:
                                 Message.conversation_id == session_id
                             )
                         )
-                    ).scalars().all()
+                    )
+                    .scalars()
+                    .all()
                 )
                 pruned_ids = [mid for mid in all_ids if mid not in kept_ids]
                 await _delete_messages_and_children(session, session_id, pruned_ids)
                 await _cleanup_orphan_steps_and_attachments(session, session_id)
-                await _sanitize_kept_assistant_timelines(
-                    session, session_id, kept_ids
-                )
+                await _sanitize_kept_assistant_timelines(session, session_id, kept_ids)
                 await _recount_conversation_messages(session, session_id)
                 await session.commit()
                 return
@@ -862,11 +868,11 @@ class UnifiedHistoryBridge:
             all_ids = list(
                 (
                     await session.execute(
-                        select(Message.id).where(
-                            Message.conversation_id == session_id
-                        )
+                        select(Message.id).where(Message.conversation_id == session_id)
                     )
-                ).scalars().all()
+                )
+                .scalars()
+                .all()
             )
             pruned_ids = [mid for mid in all_ids if mid not in kept_ids]
             last_assistant = await _fetch_last_significant_assistant_content(

@@ -14,7 +14,10 @@ from fastapi import APIRouter, Header, HTTPException, Query, Response
 from pydantic import AliasChoices, BaseModel, Field
 
 from src.data.engine import get_async_session_maker
-from src.data.history_bridge import fetch_message_by_id, fetch_message_by_id_for_conversation
+from src.data.history_bridge import (
+    fetch_message_by_id,
+    fetch_message_by_id_for_conversation,
+)
 from src.data.ids import new_uuid7_str
 from src.data.models import Conversation, Message, Step, Attachment
 from src.data.message_roles import (
@@ -574,9 +577,7 @@ async def save_partial_message_chat_ui(
         if not existing:
             cross = await fetch_message_by_id(session, mid)
             if cross and cross.conversation_id != conv_id:
-                raise HTTPException(
-                    409, "Message id belongs to another conversation"
-                )
+                raise HTTPException(409, "Message id belongs to another conversation")
 
         role = normalize_message_role(body.role)
         timeline_json: Optional[str] = None
