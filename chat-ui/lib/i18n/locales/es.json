@@ -72,7 +72,15 @@
     "settings": "Configuración",
     "login": "Iniciar sesión",
     "integrations": "Mis integraciones",
-    "schedules": "Automatizaciones"
+    "schedules": "Automatizaciones",
+    "profile_menu": {
+      "appearance": "Apariencia",
+      "theme_light": "Claro",
+      "theme_dark": "Oscuro",
+      "language": "Idioma",
+      "customize": "Personalizar instrucciones",
+      "logout": "Cerrar sesión"
+    }
   },
   "schedulesPage": {
     "title": "Automatizaciones",

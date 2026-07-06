@@ -72,7 +72,15 @@
     "settings": "Paramètres",
     "login": "Se connecter",
     "integrations": "Mes intégrations",
-    "schedules": "Automatisations"
+    "schedules": "Automatisations",
+    "profile_menu": {
+      "appearance": "Apparence",
+      "theme_light": "Clair",
+      "theme_dark": "Sombre",
+      "language": "Langue",
+      "customize": "Personnaliser les instructions",
+      "logout": "Se déconnecter"
+    }
   },
   "schedulesPage": {
     "title": "Automatisations",

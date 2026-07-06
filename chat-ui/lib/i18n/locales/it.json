@@ -89,7 +89,15 @@
     "bucket_yesterday": "Ieri",
     "bucket_previous_7_days": "Ultimi 7 giorni",
     "bucket_previous_30_days": "Ultimi 30 giorni",
-    "bucket_older": "Più vecchie"
+    "bucket_older": "Più vecchie",
+    "profile_menu": {
+      "appearance": "Aspetto",
+      "theme_light": "Chiaro",
+      "theme_dark": "Scuro",
+      "language": "Lingua",
+      "customize": "Personalizza istruzioni",
+      "logout": "Esci"
+    }
   },
   "schedulesPage": {
     "title": "Automazioni",

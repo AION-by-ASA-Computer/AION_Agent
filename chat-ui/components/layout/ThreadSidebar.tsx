@@ -7,7 +7,6 @@ import {
   Check,
   Clock,
   Edit3,
-  LogIn,
   MessageSquare,
   MessageSquarePlus,
   MoreHorizontal,
@@ -15,10 +14,8 @@ import {
   PanelLeftOpen,
   Plug,
   Search,
-  Settings,
   Star,
   Trash2,
-  User,
   X,
 } from "lucide-react";
 
@@ -28,6 +25,7 @@ import { BUCKET_ORDER, groupByBucket, type DateBucket } from "@/lib/date-groups"
 import type { ShellSection } from "@/lib/shell/use-conversation-threads";
 import { cn } from "@/lib/cn";
 import { ChatBrand } from "../brand/ChatBrand";
+import { SidebarProfileMenu } from "./SidebarProfileMenu";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { useT } from "@/lib/i18n/use-t";
 
@@ -37,14 +35,6 @@ function isFavorite(c: ConversationSummary) {
 
 function bucketLabelKey(bucket: DateBucket) {
   return `sidebar.bucket_${bucket}` as const;
-}
-
-function profileInitials(label: string) {
-  const cleaned = label.trim();
-  if (!cleaned) return "?";
-  const parts = cleaned.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return cleaned.slice(0, 2).toUpperCase();
 }
 
 export function ThreadSidebar({
@@ -81,6 +71,7 @@ export function ThreadSidebar({
 
   const [searchQuery, setSearchQuery] = useState("");
   const [profileLabel, setProfileLabel] = useState(userId);
+  const [profileSubtitle, setProfileSubtitle] = useState("");
 
   useEffect(() => {
     if (!token) return;
@@ -89,9 +80,10 @@ export function ThreadSidebar({
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { display_name?: string; identifier?: string } | null) => {
+      .then((data: { display_name?: string; identifier?: string; email?: string } | null) => {
         if (cancelled || !data) return;
         setProfileLabel(data.display_name || data.identifier || userId);
+        setProfileSubtitle(data.email || data.identifier || "");
       })
       .catch(() => {
         /* ignore */
@@ -196,35 +188,12 @@ export function ThreadSidebar({
 
   const profileFooter = (
     <div className="border-t border-sidebar-border/60 p-3">
-      {!isLoggedIn ? (
-        <Link
-          href="/login"
-          className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-destructive transition hover:bg-destructive/10"
-        >
-          <LogIn className="h-4 w-4 shrink-0" aria-hidden />
-          <span className="font-medium">{t("sidebar.login")}</span>
-        </Link>
-      ) : (
-        <>
-          <div className="mb-2 flex items-center gap-2.5 px-2 py-1">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-primary">
-              {profileInitials(profileLabel)}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-sm font-medium">{profileLabel}</div>
-              <div className="truncate text-xs text-muted-foreground">{t("sidebar.profile")}</div>
-            </div>
-            <User className="h-4 w-4 shrink-0 text-muted-foreground/50" aria-hidden />
-          </div>
-          <Link
-            href="/settings"
-            className="flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-sm text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
-          >
-            <Settings className="h-4 w-4 shrink-0" aria-hidden />
-            <span className="font-medium">{t("sidebar.settings")}</span>
-          </Link>
-        </>
-      )}
+      <SidebarProfileMenu
+        profileLabel={profileLabel}
+        profileSubtitle={profileSubtitle}
+        isLoggedIn={isLoggedIn}
+        variant="expanded"
+      />
     </div>
   );
 
@@ -275,25 +244,12 @@ export function ThreadSidebar({
         </nav>
 
         <div className="mt-auto flex flex-col items-center gap-2 border-t border-sidebar-border/60 pt-3">
-          {!isLoggedIn ? (
-            <Link
-              href="/login"
-              title={t("sidebar.login")}
-              aria-label={t("sidebar.login")}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-destructive transition hover:bg-destructive/10"
-            >
-              <LogIn className="h-4 w-4" aria-hidden />
-            </Link>
-          ) : (
-            <Link
-              href="/settings"
-              title={t("sidebar.settings")}
-              aria-label={t("sidebar.settings")}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
-            >
-              <Settings className="h-4 w-4" aria-hidden />
-            </Link>
-          )}
+          <SidebarProfileMenu
+            profileLabel={profileLabel}
+            profileSubtitle={profileSubtitle}
+            isLoggedIn={isLoggedIn}
+            variant="collapsed"
+          />
         </div>
       </aside>
     );

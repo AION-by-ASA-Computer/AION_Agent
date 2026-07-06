@@ -72,7 +72,15 @@
     "settings": "Einstellungen",
     "login": "Anmelden",
     "integrations": "Meine Integrationen",
-    "schedules": "Automationen"
+    "schedules": "Automationen",
+    "profile_menu": {
+      "appearance": "Erscheinungsbild",
+      "theme_light": "Hell",
+      "theme_dark": "Dunkel",
+      "language": "Sprache",
+      "customize": "Anweisungen anpassen",
+      "logout": "Abmelden"
+    }
   },
   "schedulesPage": {
     "title": "Automationen",
