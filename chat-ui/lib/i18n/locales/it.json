@@ -11,10 +11,49 @@
   },
   "settings": {
     "title": "Impostazioni Utente",
+    "subtitle": "Gestisci profilo, aspetto, sicurezza e istruzioni personalizzate.",
     "back": "Torna indietro",
     "tab": {
       "account": "Profilo & Account",
-      "usermd": "Profili"
+      "usermd": "Profili",
+      "profile": "Profilo",
+      "appearance": "Aspetto",
+      "security": "Sicurezza",
+      "instructions": "Istruzioni"
+    },
+    "profile": {
+      "title": "Profilo",
+      "desc": "Foto, colore avatar e informazioni account visibili nella barra laterale.",
+      "color_label": "Colore profilo",
+      "upload_photo": "Carica foto",
+      "remove_photo": "Rimuovi foto",
+      "avatar_too_large": "L'immagine deve essere inferiore a 256 KB.",
+      "appearance_saved": "Aspetto profilo aggiornato.",
+      "username_hint": "Identificativo di accesso. Deve essere univoco.",
+      "shortcuts_title": "Collegamenti rapidi",
+      "shortcuts_desc": "Accesso veloce alle sezioni principali dell'app."
+    },
+    "appearance": {
+      "title": "Aspetto",
+      "desc": "Tema dell'interfaccia e lingua dell'applicazione.",
+      "theme_label": "Tema",
+      "theme_desc": "Scegli tra modalità chiara o scura.",
+      "language_label": "Lingua interfaccia"
+    },
+    "security": {
+      "password_title": "Password",
+      "password_desc": "Aggiorna la password del tuo account.",
+      "current_password": "Password attuale",
+      "new_password": "Nuova password",
+      "confirm_password": "Conferma password",
+      "password_hint": "Minimo 6 caratteri.",
+      "password_min": "La nuova password deve avere almeno 6 caratteri.",
+      "password_mismatch": "La conferma non coincide con la nuova password.",
+      "password_error": "Impossibile aggiornare la password.",
+      "password_updated": "Password aggiornata con successo.",
+      "update_password": "Aggiorna password",
+      "must_change_title": "Password temporanea",
+      "must_change_desc": "Per sicurezza, aggiorna la password prima di continuare."
     },
     "section": {
       "profile": {

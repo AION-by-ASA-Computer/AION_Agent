@@ -24,23 +24,20 @@ import { LOCALE_OPTIONS, localeOption } from "@/lib/i18n/locale-options";
 import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
 import { useT } from "@/lib/i18n/use-t";
 import { useChatTheme } from "@/lib/theme/chat-theme";
-
-function profileInitials(label: string) {
-  const cleaned = label.trim();
-  if (!cleaned) return "?";
-  const parts = cleaned.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return cleaned.slice(0, 2).toUpperCase();
-}
+import { profileInitials, resolveProfileColor } from "@/lib/profile/user-appearance";
 
 export function SidebarProfileMenu({
   profileLabel,
   profileSubtitle,
+  avatarUrl,
+  profileColor,
   isLoggedIn,
   variant = "expanded",
 }: {
   profileLabel: string;
   profileSubtitle?: string;
+  avatarUrl?: string;
+  profileColor?: string;
   isLoggedIn: boolean;
   variant?: "expanded" | "collapsed";
 }) {
@@ -133,6 +130,25 @@ export function SidebarProfileMenu({
   }
 
   const currentLocale = localeOption(locale);
+  const accentColor = resolveProfileColor({ profile_color: profileColor });
+  const initials = profileInitials(profileLabel);
+
+  const avatarNode = (
+    <div
+      className={cn(
+        "flex shrink-0 items-center justify-center overflow-hidden rounded-full font-semibold text-white",
+        variant === "collapsed" ? "h-9 w-9 text-xs" : "h-8 w-8 text-xs",
+      )}
+      style={{ backgroundColor: avatarUrl ? undefined : accentColor }}
+    >
+      {avatarUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+      ) : (
+        initials
+      )}
+    </div>
+  );
 
   const popover = open ? (
     <div
@@ -281,14 +297,7 @@ export function SidebarProfileMenu({
         aria-haspopup="menu"
         title={profileLabel}
       >
-        <div
-          className={cn(
-            "flex shrink-0 items-center justify-center rounded-full bg-primary/15 font-semibold text-primary",
-            variant === "collapsed" ? "h-9 w-9 text-xs" : "h-8 w-8 text-xs",
-          )}
-        >
-          {profileInitials(profileLabel)}
-        </div>
+        {avatarNode}
         {variant === "expanded" ? (
           <>
             <div className="min-w-0 flex-1">

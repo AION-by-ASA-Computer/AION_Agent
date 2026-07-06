@@ -1,34 +1,39 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Settings,
-  User,
-  CheckCircle,
   AlertTriangle,
-  FileText,
-  HelpCircle,
-  LogOut,
-  Save,
   Check,
+  CheckCircle,
+  FileText,
+  LogOut,
+  Palette,
+  Settings,
   ShieldCheck,
-  ChevronDown,
-  Clock,
+  User,
 } from "lucide-react";
-import { useStoredUserId, useStoredToken } from "@/lib/auth/use-stored-auth";
-import { setStoredAuth } from "@/lib/auth/storage";
-import { cn } from "@/lib/cn";
-import { apiBase } from "@/lib/config";
-import { useT } from "@/lib/i18n/use-t";
-import { detectBrowserLocale, setLocale, type Locale } from "@/lib/i18n/i18n-store";
-import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
-import { ProfileOptionGrid } from "@/components/chat/ProfileOptionGrid";
-import { ShellSectionHeader } from "@/components/layout/ShellSectionHeader";
-import { useShellActions } from "@/lib/shell/shell-context";
 
-// Template di istruzioni di default se non presenti in localStorage per ciascuna lingua
+import { AppearanceSection } from "@/components/settings/AppearanceSection";
+import { ChangePasswordSection } from "@/components/settings/ChangePasswordSection";
+import { ProfileAvatarEditor } from "@/components/settings/ProfileAvatarEditor";
+import { SettingsCard, SettingsFieldRow } from "@/components/settings/SettingsCard";
+import { SettingsNav, type SettingsTab } from "@/components/settings/SettingsNav";
+import { UserMdSection } from "@/components/settings/UserMdSection";
+import { ShellSectionHeader } from "@/components/layout/ShellSectionHeader";
+import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
+import { setStoredAuth } from "@/lib/auth/storage";
+import { apiBase } from "@/lib/config";
+import { cn } from "@/lib/cn";
+import { detectBrowserLocale, setLocale, type Locale } from "@/lib/i18n/i18n-store";
+import {
+  notifyProfileAppearanceUpdated,
+  type UserAppearanceMetadata,
+} from "@/lib/profile/user-appearance";
+import { useShellActions } from "@/lib/shell/shell-context";
+import { useT } from "@/lib/i18n/use-t";
+
 const DEFAULT_USER_MD_BY_LANG: Record<string, string> = {
   it: `# Le mie preferenze ed istruzioni
 - Preferisci spiegazioni chiare e concise strutturate con elenchi puntati.
@@ -62,40 +67,93 @@ const DEFAULT_USER_MD_BY_LANG: Record<string, string> = {
 `,
 };
 
+function tabFromSearchParam(tab: string | null): SettingsTab {
+  if (tab === "user-md" || tab === "instructions") return "instructions";
+  if (tab === "appearance") return "appearance";
+  if (tab === "security") return "security";
+  return "profile";
+}
+
 export default function SettingsPage() {
   const router = useRouter();
-  const { setHeader, setDock, setDockOpen, clearChrome } = useShellActions();
   const searchParams = useSearchParams();
+  const { setHeader, setDock, setDockOpen, clearChrome } = useShellActions();
   const currentUserId = useStoredUserId();
   const currentToken = useStoredToken();
-
   const t = useT();
-  const [mounted, setMounted] = useState(false);
-  const [activeTab, setActiveTab] = useState<"account" | "user-md">("account");
 
-  // Stati per le impostazioni locali
-  const [userIdInput, setUserIdInput] = useState("");
+  const [mounted, setMounted] = useState(false);
+  const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
+
   const [userMdContent, setUserMdContent] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState<Locale | string>("en");
-  const [isLangDropdownOpen, setIsLangDropdownOpen] = useState(false);
 
-  // Stati per il profilo backend
   const [backendIdentifier, setBackendIdentifier] = useState("");
   const [backendDisplayName, setBackendDisplayName] = useState("");
   const [backendEmail, setBackendEmail] = useState("");
+  const [mustChangePassword, setMustChangePassword] = useState(false);
+  const [profileColor, setProfileColor] = useState("violet");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [savingAppearance, setSavingAppearance] = useState(false);
 
-  // Stati per la gestione profili e USER.md da backend
   const [profiles, setProfiles] = useState<Array<{ name: string; slug: string; description?: string }>>([]);
-  const [selectedProfile, setSelectedProfile] = useState<string>("");
+  const [selectedProfile, setSelectedProfile] = useState("");
   const [loadingProfiles, setLoadingProfiles] = useState(false);
   const [loadingUserMd, setLoadingUserMd] = useState(false);
   const [savingUserMd, setSavingUserMd] = useState(false);
 
-  // Stati per feedback visivo
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<"success" | "error">("success");
 
-  // Reindirizzamento se non loggati
+  const navItems = useMemo(
+    () => [
+      { id: "profile" as const, label: t("settings.tab.profile"), icon: User },
+      { id: "appearance" as const, label: t("settings.tab.appearance"), icon: Palette },
+      { id: "security" as const, label: t("settings.tab.security"), icon: ShieldCheck },
+      { id: "instructions" as const, label: t("settings.tab.instructions"), icon: FileText },
+    ],
+    [t],
+  );
+
+  const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
+    setToastMessage(msg);
+    setToastType(type);
+    window.setTimeout(() => setToastMessage(null), 3000);
+  }, []);
+
+  const applyUserData = useCallback((data: {
+    identifier?: string;
+    display_name?: string;
+    email?: string;
+    metadata?: UserAppearanceMetadata;
+    must_change_password?: boolean;
+  }) => {
+    setBackendIdentifier(data.identifier || "");
+    setBackendDisplayName(data.display_name || "");
+    setBackendEmail(data.email || "");
+    setMustChangePassword(Boolean(data.must_change_password));
+    setProfileColor(data.metadata?.profile_color || "violet");
+    setAvatarUrl(data.metadata?.avatar_url || "");
+  }, []);
+
+  const reloadUser = useCallback(async () => {
+    if (!currentToken) return;
+    const res = await fetch(`${apiBase()}/auth/me`, {
+      headers: { Authorization: `Bearer ${currentToken}` },
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    applyUserData(data);
+    if (data.metadata?.language) {
+      const lang = data.metadata.language;
+      if (["it", "en", "es", "fr", "de"].includes(lang)) {
+        setSelectedLanguage(lang);
+        setLocale(lang as Locale);
+        localStorage.setItem("aion_chat_language", lang);
+      }
+    }
+  }, [applyUserData, currentToken]);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -106,88 +164,39 @@ export default function SettingsPage() {
     }
   }, [mounted, currentToken, router]);
 
-  // Inizializzazione stati da localStorage e backend
+  useEffect(() => {
+    setActiveTab(tabFromSearchParam(searchParams.get("tab")));
+  }, [searchParams]);
+
   useEffect(() => {
     if (!mounted) return;
-    setUserIdInput(currentUserId);
 
     const storedLang = localStorage.getItem("aion_chat_language") || detectBrowserLocale();
-    if (storedLang && ["it", "en", "es", "fr", "de"].includes(storedLang)) {
+    if (["it", "en", "es", "fr", "de"].includes(storedLang)) {
       setSelectedLanguage(storedLang);
     }
 
     const storedUserMd = localStorage.getItem("aion_chat_user_instructions");
-    const defaultText = DEFAULT_USER_MD_BY_LANG[storedLang] || DEFAULT_USER_MD_BY_LANG["en"];
+    const defaultText = DEFAULT_USER_MD_BY_LANG[storedLang] || DEFAULT_USER_MD_BY_LANG.en;
     setUserMdContent(storedUserMd || defaultText);
 
-    if (currentToken) {
-      const fetchUserData = async () => {
-        try {
-          const res = await fetch(`${apiBase()}/auth/me`, {
-            headers: {
-              "Authorization": `Bearer ${currentToken}`
-            }
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.metadata?.language) {
-              const lang = data.metadata.language;
-              if (["it", "en", "es", "fr", "de"].includes(lang)) {
-                setSelectedLanguage(lang);
-                setLocale(lang as Locale);
-                localStorage.setItem("aion_chat_language", lang);
-                // Aggiorna istruzioni se sono quelle di default vecchie o vuote
-                setUserMdContent((current) => {
-                  const isDefault = Object.values(DEFAULT_USER_MD_BY_LANG).some(
-                    (val) => val.trim() === current.trim()
-                  );
-                  if (isDefault || !current.trim()) {
-                    return DEFAULT_USER_MD_BY_LANG[lang] || DEFAULT_USER_MD_BY_LANG["en"];
-                  }
-                  return current;
-                });
-              }
-            } else if (currentToken) {
-              const localLang = localStorage.getItem("aion_chat_language") || detectBrowserLocale();
-              if (["it", "en", "es", "fr", "de"].includes(localLang)) {
-                void syncLanguagePreferenceToServer(currentToken, localLang as Locale);
-              }
-            }
-            setBackendIdentifier(data.identifier || "");
-            setBackendDisplayName(data.display_name || "");
-            setBackendEmail(data.email || "");
-          }
-        } catch (err) {
-          console.error("Errore recupero preferenze:", err);
-        }
-      };
-      fetchUserData();
-    }
-  }, [currentUserId, currentToken, mounted]);
+    void reloadUser();
+  }, [mounted, reloadUser]);
 
-  useEffect(() => {
-    const tab = searchParams.get("tab");
-    if (tab === "user-md") setActiveTab("user-md");
-  }, [searchParams]);
-
-  // Recupera l'elenco dei profili all'avvio
   useEffect(() => {
     if (!mounted) return;
-
     const fetchProfilesList = async () => {
       setLoadingProfiles(true);
       try {
         const res = await fetch(`${apiBase()}/profiles`, {
-          headers: {
-            "Authorization": currentToken ? `Bearer ${currentToken}` : "",
-          },
+          headers: { Authorization: currentToken ? `Bearer ${currentToken}` : "" },
         });
         if (res.ok) {
           const data = await res.json();
           setProfiles(data);
           if (data.length > 0) {
             const storedProfile = localStorage.getItem("aion_chat_selected_profile_user_md");
-            const initialProfile = data.find((p: any) => p.slug === storedProfile) || data[0];
+            const initialProfile = data.find((p: { slug: string }) => p.slug === storedProfile) || data[0];
             setSelectedProfile(initialProfile.slug);
           }
         }
@@ -197,24 +206,17 @@ export default function SettingsPage() {
         setLoadingProfiles(false);
       }
     };
-
-    fetchProfilesList();
+    void fetchProfilesList();
   }, [mounted, currentToken]);
 
-  // Recupera USER.md quando cambia il profilo selezionato o l'utente
   useEffect(() => {
     if (!mounted || !selectedProfile || !currentUserId) return;
-
     const fetchUserMd = async () => {
       setLoadingUserMd(true);
       try {
         const res = await fetch(
           `${apiBase()}/admin/profile-memory/${encodeURIComponent(selectedProfile)}/users/${encodeURIComponent(currentUserId)}`,
-          {
-            headers: {
-              "Authorization": currentToken ? `Bearer ${currentToken}` : "",
-            },
-          }
+          { headers: { Authorization: currentToken ? `Bearer ${currentToken}` : "" } },
         );
         if (res.ok) {
           const data = await res.json();
@@ -222,103 +224,85 @@ export default function SettingsPage() {
         } else {
           setUserMdContent("");
         }
-      } catch (err) {
-        console.error("Errore recupero USER.md:", err);
+      } catch {
         setUserMdContent("");
       } finally {
         setLoadingUserMd(false);
       }
     };
-
-    fetchUserMd();
+    void fetchUserMd();
     localStorage.setItem("aion_chat_selected_profile_user_md", selectedProfile);
   }, [selectedProfile, currentUserId, currentToken, mounted]);
 
-  const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
-    setToastMessage(msg);
-    setToastType(type);
-    window.setTimeout(() => setToastMessage(null), 3000);
-  }, []);
-
-
   const handleUpdateProfileField = async (
     field: "identifier" | "display_name" | "email",
-    value: string
+    value: string,
   ) => {
     const trimmed = value.trim();
     if (field === "identifier" && !trimmed) {
       showToast(t("toast.username_empty"), "error");
       return;
     }
-
-    if (currentToken) {
-      try {
-        const res = await fetch(`${apiBase()}/auth/me`, {
-          method: "PATCH",
-          headers: {
-            "Authorization": `Bearer ${currentToken}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            [field]: trimmed || null,
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setBackendIdentifier(data.identifier || "");
-          setBackendDisplayName(data.display_name || "");
-          setBackendEmail(data.email || "");
-
-          let fieldLabel = "";
-          if (field === "identifier") fieldLabel = t("field.username");
-          else if (field === "display_name") fieldLabel = t("field.displayname");
-          else if (field === "email") fieldLabel = t("field.email");
-
-          showToast(t("toast.field_updated", { field: fieldLabel }));
-        } else {
-          const errData = await res.json();
-          const errMsg = errData.detail || t("toast.server_error");
-          showToast(errMsg, "error");
-        }
-      } catch (err) {
-        console.error("Errore salvataggio profilo:", err);
-        showToast(t("toast.conn_error"), "error");
-      }
-    } else {
+    if (!currentToken) {
       showToast(t("toast.no_token"), "error");
+      return;
     }
-  };
-
-
-  // Salva la lingua preferita
-  const handleSaveLanguage = async (lang: Locale) => {
-    setSelectedLanguage(lang);
-    setLocale(lang); // Aggiorna lo store globale
-
-    // Se l'area di testo contiene le istruzioni predefinite di una delle lingue (o è vuota),
-    // aggiorniamo l'area con la nuova lingua predefinita
-    const isDefault = Object.values(DEFAULT_USER_MD_BY_LANG).some(
-      (val) => val.trim() === userMdContent.trim()
-    );
-    if (isDefault || !userMdContent.trim()) {
-      const nextDefault = DEFAULT_USER_MD_BY_LANG[lang] || DEFAULT_USER_MD_BY_LANG["en"];
-      setUserMdContent(nextDefault);
-    }
-
-    if (currentToken) {
-      const ok = await syncLanguagePreferenceToServer(currentToken, lang);
-      if (ok) {
-        showToast(t("toast.language_saved"));
-      } else {
-        showToast(t("toast.language_server_error"), "error");
+    try {
+      const res = await fetch(`${apiBase()}/auth/me`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${currentToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ [field]: trimmed || null }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        showToast((errData as { detail?: string }).detail || t("toast.server_error"), "error");
+        return;
       }
-    } else {
-      showToast(t("toast.language_local"));
+      const data = await res.json();
+      applyUserData(data);
+      notifyProfileAppearanceUpdated();
+      const fieldLabel =
+        field === "identifier"
+          ? t("field.username")
+          : field === "display_name"
+            ? t("field.displayname")
+            : t("field.email");
+      showToast(t("toast.field_updated", { field: fieldLabel }));
+    } catch {
+      showToast(t("toast.conn_error"), "error");
     }
   };
 
-  // Salva le istruzioni USER.md sul backend per il profilo selezionato
+  const saveAppearanceMetadata = async (partial: UserAppearanceMetadata) => {
+    if (!currentToken) return;
+    setSavingAppearance(true);
+    try {
+      const res = await fetch(`${apiBase()}/auth/me`, {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${currentToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ metadata: partial }),
+      });
+      if (!res.ok) {
+        showToast(t("toast.server_error"), "error");
+        return;
+      }
+      const data = await res.json();
+      applyUserData(data);
+      notifyProfileAppearanceUpdated();
+      showToast(t("settings.profile.appearance_saved"));
+    } catch {
+      showToast(t("toast.conn_error"), "error");
+    } finally {
+      setSavingAppearance(false);
+    }
+  };
+
   const handleSaveUserMd = async () => {
     if (userMdContent.length > 1400) {
       showToast(t("toast.usermd_overlimit"), "error");
@@ -328,7 +312,6 @@ export default function SettingsPage() {
       showToast(t("toast.usermd_no_profile"), "error");
       return;
     }
-
     setSavingUserMd(true);
     try {
       const res = await fetch(
@@ -337,22 +320,19 @@ export default function SettingsPage() {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": currentToken ? `Bearer ${currentToken}` : "",
+            Authorization: currentToken ? `Bearer ${currentToken}` : "",
           },
           body: JSON.stringify({ content: userMdContent }),
-        }
+        },
       );
-
       if (res.ok) {
         localStorage.setItem("aion_chat_user_instructions", userMdContent);
         showToast(t("toast.usermd_saved"));
       } else {
         const errData = await res.json().catch(() => ({}));
-        const errMsg = errData.detail || t("toast.server_error");
-        showToast(errMsg, "error");
+        showToast((errData as { detail?: string }).detail || t("toast.server_error"), "error");
       }
-    } catch (err) {
-      console.error("Errore salvataggio USER.md:", err);
+    } catch {
       showToast(t("toast.conn_error"), "error");
     } finally {
       setSavingUserMd(false);
@@ -363,11 +343,14 @@ export default function SettingsPage() {
     setStoredAuth(null, "default");
     window.dispatchEvent(new Event("storage"));
     showToast(t("toast.logout"));
-    setUserIdInput("default");
+    router.push("/login");
   };
 
   const charCount = userMdContent.length;
   const isOverLimit = charCount > 1400;
+  const profileLabel = backendDisplayName || backendIdentifier || currentUserId;
+  const inputClass =
+    "focus-ring w-full rounded-xl border border-border/50 bg-background/50 px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary";
 
   useLayoutEffect(() => {
     setHeader(
@@ -380,9 +363,7 @@ export default function SettingsPage() {
     setDockOpen(false);
   }, [setHeader, setDock, setDockOpen, t]);
 
-  useLayoutEffect(() => {
-    return () => clearChrome();
-  }, [clearChrome]);
+  useLayoutEffect(() => () => clearChrome(), [clearChrome]);
 
   if (!mounted) {
     return (
@@ -393,385 +374,211 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto bg-background text-foreground transition-colors duration-300">
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 md:py-12">
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto bg-background text-foreground">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 md:py-10">
+        <div className="mb-6">
+          <h1 className="text-lg font-semibold tracking-tight">{t("settings.title")}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{t("settings.subtitle")}</p>
+        </div>
+
         <div className="grid gap-8 md:grid-cols-[220px_1fr]">
+          <SettingsNav
+            activeTab={activeTab}
+            onChange={setActiveTab}
+            items={navItems}
+          />
 
-          {/* Sidebar interna delle impostazioni */}
-          <nav className="flex flex-row md:flex-col gap-1 overflow-x-auto pr-5 pb-2 md:pb-0 border-b md:border-b-0 md:border-r border-border/50">
-            <button
-              onClick={() => setActiveTab("account")}
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all whitespace-nowrap md:w-full text-left",
-                activeTab === "account"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              )}
-            >
-              <User size={18} />
-              <span>{t("settings.tab.account")}</span>
-            </button>
+          <div className="min-h-[400px] space-y-6">
+            {activeTab === "profile" && currentToken ? (
+              <>
+                <SettingsCard
+                  title={t("settings.profile.title")}
+                  description={t("settings.profile.desc")}
+                  icon={<User className="h-4.5 w-4.5" aria-hidden />}
+                >
+                  <ProfileAvatarEditor
+                    label={profileLabel}
+                    profileColor={profileColor}
+                    avatarUrl={avatarUrl}
+                    saving={savingAppearance}
+                    onColorChange={(colorId) => {
+                      setProfileColor(colorId);
+                      void saveAppearanceMetadata({ profile_color: colorId, avatar_url: avatarUrl || undefined });
+                    }}
+                    onAvatarChange={(dataUrl) => {
+                      setAvatarUrl(dataUrl);
+                      void saveAppearanceMetadata({ profile_color: profileColor, avatar_url: dataUrl });
+                    }}
+                    onAvatarRemove={() => {
+                      setAvatarUrl("");
+                      void saveAppearanceMetadata({ profile_color: profileColor, avatar_url: "" });
+                    }}
+                  />
 
-            <button
-              onClick={() => setActiveTab("user-md")}
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-semibold transition-all whitespace-nowrap md:w-full text-left",
-                activeTab === "user-md"
-                  ? "bg-primary/10 text-primary"
-                  : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-              )}
-            >
-              <FileText size={18} />
-              <span>{t("settings.tab.usermd")}</span>
-            </button>
-          </nav>
-
-          {/* Area Contenuto */}
-          <div className="min-h-[400px] flex flex-col gap-6">
-
-            {/* TAB: Profilo & Account */}
-            {activeTab === "account" && (
-              <section className="space-y-6 animate-[fadeIn_0.2s_ease-out]">
-                <div className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-xl p-6 space-y-4 shadow-sm hover:border-border/80 transition-all duration-300 relative z-20">
-                  <div className="flex items-center gap-2 border-b border-border/50 pb-3">
-                    <User className="h-4.5 w-4.5 text-primary" />
-                    <h2 className="text-sm font-semibold text-foreground">{t("settings.section.profile.title")}</h2>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {t("settings.section.profile.desc")}
-                  </p>
-
-                  {/* Impostazioni Profilo Backend (solo se autenticati) */}
-                  {currentToken && (
-                    <div className="space-y-4 pt-4 border-t border-border/40">
-
-                      {/* Nome Utente */}
-                      <div className="space-y-2 max-w-md">
-                        <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground/80">{t("settings.field.username")}</label>
-                        <div className="flex gap-2.5">
-                          <input
-                            type="text"
-                            value={backendIdentifier}
-                            onChange={(e) => setBackendIdentifier(e.target.value)}
-                            placeholder={t("settings.placeholder.username")}
-                            className="flex-1 rounded-xl border border-border/50 bg-background/40 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:bg-background/60 transition-all"
-                          />
-                          <button
-                            onClick={() => handleUpdateProfileField("identifier", backendIdentifier)}
-                            className="focus-ring flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-98"
-                          >
-                            <Check size={15} aria-hidden />
-                            <span>{t("settings.btn.update")}</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Display Name */}
-                      <div className="space-y-2 max-w-md">
-                        <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground/80">{t("settings.field.displayname")}</label>
-                        <div className="flex gap-2.5">
-                          <input
-                            type="text"
-                            value={backendDisplayName}
-                            onChange={(e) => setBackendDisplayName(e.target.value)}
-                            placeholder={t("settings.placeholder.displayname")}
-                            className="flex-1 rounded-xl border border-border/50 bg-background/40 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:bg-background/60 transition-all"
-                          />
-                          <button
-                            onClick={() => handleUpdateProfileField("display_name", backendDisplayName)}
-                            className="focus-ring flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-98"
-                          >
-                            <Check size={15} aria-hidden />
-                            <span>{t("settings.btn.update")}</span>
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Email */}
-                      <div className="space-y-2 max-w-md">
-                        <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground/80">{t("settings.field.email")}</label>
-                        <div className="flex gap-2.5">
-                          <input
-                            type="email"
-                            value={backendEmail}
-                            onChange={(e) => setBackendEmail(e.target.value)}
-                            placeholder={t("settings.placeholder.email")}
-                            className="flex-1 rounded-xl border border-border/50 bg-background/40 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:bg-background/60 transition-all"
-                          />
-                          <button
-                            onClick={() => handleUpdateProfileField("email", backendEmail)}
-                            className="focus-ring flex items-center justify-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 active:scale-98"
-                          >
-                            <Check size={15} aria-hidden />
-                            <span>{t("settings.btn.update")}</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {currentToken && (
-                    <div className="pt-4 border-t border-border/40">
-                      <Link
-                        href="/schedules"
-                        className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-4 py-3 text-sm font-medium text-foreground hover:bg-muted/50 transition-colors"
-                      >
-                        <Clock size={16} aria-hidden />
-                        {t("sidebar.schedules")}
-                      </Link>
-                    </div>
-                  )}
-
-                  {/* Lingua di Riferimento */}
-                  <div className="space-y-2 max-w-md pt-4 border-t border-border/40 relative z-30">
-                    <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground/80">{t("settings.section.language.label")}</label>
-                    <div className="relative">
-                      {/* Dropdown Trigger */}
-                      <button
-                        type="button"
-                        onClick={() => setIsLangDropdownOpen(!isLangDropdownOpen)}
-                        className="flex w-full items-center justify-between gap-2.5 rounded-xl border border-border/50 bg-background/40 px-4 py-2.5 text-sm text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:bg-background/60 hover:bg-background/50 hover:border-border transition-all cursor-pointer select-none"
-                      >
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-base leading-none">
-                            {(() => {
-                              switch (selectedLanguage) {
-                                case "en": return "🇬🇧";
-                                case "es": return "🇪🇸";
-                                case "fr": return "🇫🇷";
-                                case "de": return "🇩🇪";
-                                default: return "🇮🇹";
-                              }
-                            })()}
-                          </span>
-                          <span className="font-semibold text-xs text-foreground">
-                            {(() => {
-                              switch (selectedLanguage) {
-                                case "en": return "English";
-                                case "es": return "Español";
-                                case "fr": return "Français";
-                                case "de": return "Deutsch";
-                                default: return "Italiano";
-                              }
-                            })()}
-                          </span>
-                        </div>
-                        <ChevronDown
-                          size={14}
-                          className={cn(
-                            "text-muted-foreground transition-transform duration-300",
-                            isLangDropdownOpen && "rotate-180"
-                          )}
+                  <div className="mt-6 space-y-1">
+                    <SettingsFieldRow label={t("settings.field.displayname")}>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={backendDisplayName}
+                          onChange={(e) => setBackendDisplayName(e.target.value)}
+                          placeholder={t("settings.placeholder.displayname")}
+                          className={inputClass}
                         />
-                      </button>
-
-                      {/* Dropdown Menu Overlay */}
-                      {isLangDropdownOpen && (
-                        <>
-                          <div
-                            className="fixed inset-0 z-40"
-                            onClick={() => setIsLangDropdownOpen(false)}
-                          />
-                          <div className="absolute left-0 right-0 mt-1.5 z-50 rounded-xl border border-border/60 bg-card/95 backdrop-blur-xl p-1.5 shadow-xl animate-[fadeIn_0.15s_ease-out] flex flex-col gap-0.5">
-                            {([
-                              { code: "it", name: "Italiano", desc: "Italiano", flag: "🇮🇹" },
-                              { code: "en", name: "English", desc: "Inglese", flag: "🇬🇧" },
-                              { code: "es", name: "Español", desc: "Spagnolo", flag: "🇪🇸" },
-                              { code: "fr", name: "Français", desc: "Francese", flag: "🇫🇷" },
-                              { code: "de", name: "Deutsch", desc: "Tedesco", flag: "🇩🇪" },
-                            ] as const).map((lang) => (
-                              <button
-                                key={lang.code}
-                                type="button"
-                                onClick={() => {
-                                  handleSaveLanguage(lang.code);
-                                  setIsLangDropdownOpen(false);
-                                }}
-                                className={cn(
-                                  "flex items-center justify-between w-full rounded-lg px-3 py-2 text-xs font-semibold text-left transition-all cursor-pointer hover:bg-muted/50",
-                                  selectedLanguage === lang.code
-                                    ? "bg-primary/10 text-primary"
-                                    : "text-muted-foreground hover:text-foreground"
-                                )}
-                              >
-                                <div className="flex items-center gap-2.5">
-                                  <span className="text-base leading-none">{lang.flag}</span>
-                                  <span>{lang.name}</span>
-                                </div>
-                                {selectedLanguage === lang.code && (
-                                  <Check size={14} className="text-primary" />
-                                )}
-                              </button>
-                            ))}
-                          </div>
-                        </>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1.5 leading-normal">
-                      {t("settings.section.language.desc")}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-xl p-6 space-y-4 shadow-sm hover:border-border/80 transition-all duration-300 relative z-10">
-                  <div className="flex items-center gap-2 border-b border-border/50 pb-3">
-                    <ShieldCheck className="h-4.5 w-4.5 text-primary" />
-                    <h2 className="text-sm font-semibold text-foreground">{t("settings.section.session.title")}</h2>
-                  </div>
-                  {currentToken ? (
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                      <button
-                        onClick={handleLogout}
-                        className="focus-ring flex items-center gap-1.5 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-2.5 text-xs font-semibold text-destructive hover:bg-destructive/10 hover:border-destructive/30 transition-all active:scale-98"
-                      >
-                        <LogOut size={14} aria-hidden />
-                        <span>{t("settings.btn.logout")}</span>
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground italic">{t("settings.section.session.no_token")}</p>
-                  )}
-                </div>
-              </section>
-            )}
-
-            {/* TAB: Le mie Istruzioni (USER.md) */}
-            {activeTab === "user-md" && (
-              <section className="space-y-4 animate-[fadeIn_0.2s_ease-out]">
-                <div className="rounded-2xl border border-border/50 bg-card/50 backdrop-blur-xl p-6 space-y-4 shadow-sm hover:border-border/80 transition-all duration-300">
-                  <div className="flex items-center justify-between border-b border-border/50 pb-3">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-4.5 w-4.5 text-primary" />
-                      <h2 className="text-sm font-semibold text-foreground">{t("settings.usermd.title")}</h2>
-                    </div>
-                    <span className="text-[10px] text-muted-foreground font-mono bg-muted/60 px-2.5 py-1 rounded border border-border/40">
-                      ID: {currentUserId}
-                    </span>
-                  </div>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {t("settings.usermd.desc")}
-                  </p>
-
-                  {/* Profilo — card grid */}
-                  <div className="space-y-2 pt-2 pb-1">
-                    <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground/80">
-                      {t("settings.usermd.profile_label")}
-                    </label>
-                    {loadingProfiles ? (
-                      <p className="text-xs italic text-muted-foreground">{t("settings.usermd.profile_loading")}</p>
-                    ) : (
-                      <ProfileOptionGrid
-                        profiles={profiles}
-                        value={selectedProfile}
-                        onChange={setSelectedProfile}
-                        emptyLabel={t("settings.usermd.profile_none")}
-                      />
-                    )}
-                  </div>
-
-                  <div className="space-y-2 pt-2">
-                    <div className="relative">
-                      <textarea
-                        value={userMdContent}
-                        onChange={(e) => setUserMdContent(e.target.value)}
-                        placeholder={loadingUserMd ? t("settings.usermd.loading_placeholder") : t("settings.usermd.placeholder")}
-                        disabled={loadingUserMd}
-                        className={cn(
-                          "min-h-[280px] w-full resize-y rounded-2xl border bg-background/40 px-4 py-4 font-mono text-xs leading-relaxed text-foreground outline-none transition-all",
-                          isOverLimit
-                            ? "border-destructive focus:ring-destructive focus:border-destructive bg-destructive/5"
-                            : "border-border/50 focus:border-primary focus:ring-1 focus:ring-primary focus:bg-background/60",
-                          loadingUserMd && "opacity-60 pointer-events-none"
-                        )}
-                        spellCheck={false}
-                      />
-                      {loadingUserMd && (
-                        <div className="absolute inset-0 flex items-center justify-center bg-background/10 backdrop-blur-[1px] rounded-2xl">
-                          <div className="flex items-center gap-2 bg-card/90 border border-border/40 px-4 py-2 rounded-xl shadow-lg">
-                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                            <span className="text-xs font-semibold text-foreground">{t("settings.usermd.loading_overlay")}</span>
-                          </div>
-                        </div>
-                      )}
-                      {isOverLimit && !loadingUserMd && (
-                        <div className="absolute top-3 right-3 flex items-center gap-1 text-[10px] font-bold text-destructive bg-destructive/10 px-2.5 py-1 rounded border border-destructive/20 animate-pulse">
-                          <AlertTriangle size={11} aria-hidden />
-                          <span>{t("settings.usermd.overlimit")}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1 px-1">
-                      <div className="flex items-center gap-1">
-                        <HelpCircle size={12} className="text-muted-foreground/60" aria-hidden />
-                        <span>{t("settings.usermd.markdown_hint")}</span>
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateProfileField("display_name", backendDisplayName)}
+                          className="focus-ring shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                        >
+                          <Check className="h-4 w-4" aria-hidden />
+                        </button>
                       </div>
-                      <span className={cn("font-mono", isOverLimit ? "text-destructive font-bold" : "text-muted-foreground")}>
-                        {t("settings.usermd.chars", { count: charCount })}
-                      </span>
+                    </SettingsFieldRow>
+
+                    <SettingsFieldRow
+                      label={t("settings.field.username")}
+                      hint={t("settings.profile.username_hint")}
+                    >
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={backendIdentifier}
+                          onChange={(e) => setBackendIdentifier(e.target.value)}
+                          placeholder={t("settings.placeholder.username")}
+                          className={inputClass}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateProfileField("identifier", backendIdentifier)}
+                          className="focus-ring shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                        >
+                          <Check className="h-4 w-4" aria-hidden />
+                        </button>
+                      </div>
+                    </SettingsFieldRow>
+
+                    <SettingsFieldRow label={t("settings.field.email")}>
+                      <div className="flex gap-2">
+                        <input
+                          type="email"
+                          value={backendEmail}
+                          onChange={(e) => setBackendEmail(e.target.value)}
+                          placeholder={t("settings.placeholder.email")}
+                          className={inputClass}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void handleUpdateProfileField("email", backendEmail)}
+                          className="focus-ring shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
+                        >
+                          <Check className="h-4 w-4" aria-hidden />
+                        </button>
+                      </div>
+                    </SettingsFieldRow>
+                  </div>
+                </SettingsCard>
+
+                <SettingsCard title={t("settings.profile.shortcuts_title")} description={t("settings.profile.shortcuts_desc")}>
+                  <Link
+                    href="/schedules"
+                    className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-4 py-3 text-sm font-medium transition hover:bg-muted/50"
+                  >
+                    {t("sidebar.schedules")}
+                  </Link>
+                </SettingsCard>
+              </>
+            ) : null}
+
+            {activeTab === "appearance" ? (
+              <SettingsCard
+                title={t("settings.appearance.title")}
+                description={t("settings.appearance.desc")}
+                icon={<Palette className="h-4.5 w-4.5" aria-hidden />}
+              >
+                <AppearanceSection onLanguageSaved={(msg) => showToast(msg)} />
+              </SettingsCard>
+            ) : null}
+
+            {activeTab === "security" && currentToken ? (
+              <>
+                {mustChangePassword ? (
+                  <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    <div>
+                      <p className="font-semibold">{t("settings.security.must_change_title")}</p>
+                      <p className="mt-1 text-xs opacity-90">{t("settings.security.must_change_desc")}</p>
                     </div>
                   </div>
+                ) : null}
 
-                  <div className="flex justify-end gap-2.5 pt-2">
-                    <button
-                      onClick={() => setUserMdContent(DEFAULT_USER_MD_BY_LANG[selectedLanguage] || DEFAULT_USER_MD_BY_LANG["en"])}
-                      disabled={loadingUserMd || savingUserMd}
-                      className="focus-ring border border-border bg-card/40 text-muted-foreground text-xs font-semibold py-2.5 px-4 rounded-xl hover:bg-muted hover:text-foreground active:scale-98 transition-all disabled:opacity-50"
-                    >
-                      {t("settings.usermd.btn.restore")}
-                    </button>
-                    <button
-                      onClick={handleSaveUserMd}
-                      disabled={isOverLimit || loadingUserMd || savingUserMd || !selectedProfile}
-                      className="focus-ring flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground shadow-sm transition hover:bg-primary/90 disabled:opacity-50 active:scale-98"
-                    >
-                      {savingUserMd ? (
-                        <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
-                      ) : (
-                        <Save size={14} aria-hidden />
-                      )}
-                      <span>{savingUserMd ? t("settings.usermd.btn.saving") : t("settings.usermd.btn.save")}</span>
-                    </button>
-                  </div>
-                </div>
-              </section>
-            )}
+                <SettingsCard
+                  title={t("settings.security.password_title")}
+                  description={t("settings.security.password_desc")}
+                  icon={<ShieldCheck className="h-4.5 w-4.5" aria-hidden />}
+                >
+                  <ChangePasswordSection
+                    onSuccess={(msg) => {
+                      setMustChangePassword(false);
+                      showToast(msg);
+                    }}
+                  />
+                </SettingsCard>
 
+                <SettingsCard title={t("settings.section.session.title")}>
+                  <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="focus-ring inline-flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-2.5 text-xs font-semibold text-destructive transition hover:bg-destructive/10"
+                  >
+                    <LogOut className="h-4 w-4" aria-hidden />
+                    {t("settings.btn.logout")}
+                  </button>
+                </SettingsCard>
+              </>
+            ) : null}
+
+            {activeTab === "instructions" ? (
+              <UserMdSection
+                userId={currentUserId}
+                profiles={profiles}
+                selectedProfile={selectedProfile}
+                onProfileChange={setSelectedProfile}
+                loadingProfiles={loadingProfiles}
+                userMdContent={userMdContent}
+                onUserMdChange={setUserMdContent}
+                loadingUserMd={loadingUserMd}
+                savingUserMd={savingUserMd}
+                isOverLimit={isOverLimit}
+                charCount={charCount}
+                onRestoreDefault={() =>
+                  setUserMdContent(
+                    DEFAULT_USER_MD_BY_LANG[selectedLanguage as string] || DEFAULT_USER_MD_BY_LANG.en,
+                  )
+                }
+                onSave={() => void handleSaveUserMd()}
+              />
+            ) : null}
           </div>
         </div>
       </main>
 
-      {/* Floating Toast Notification */}
-      {toastMessage && (
+      {toastMessage ? (
         <div
           className={cn(
-            "fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-xl px-4 py-3.5 text-xs font-semibold shadow-lg border backdrop-blur-md animate-[slideUp_0.25s_ease-out]",
+            "fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-xl border px-4 py-3.5 text-xs font-semibold shadow-lg backdrop-blur-md",
             toastType === "success"
-              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
-              : "bg-destructive/10 border-destructive/30 text-destructive"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              : "border-destructive/30 bg-destructive/10 text-destructive",
           )}
         >
           {toastType === "success" ? (
-            <CheckCircle className="h-4 w-4" />
+            <CheckCircle className="h-4 w-4" aria-hidden />
           ) : (
-            <AlertTriangle className="h-4 w-4" />
+            <AlertTriangle className="h-4 w-4" aria-hidden />
           )}
           <span>{toastMessage}</span>
         </div>
-      )}
-
-      {/* CSS Animazioni inline specifiche */}
-      <style jsx global>{`
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(4px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slideUp {
-          from { opacity: 0; transform: translateY(12px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-
+      ) : null}
     </div>
   );
 }

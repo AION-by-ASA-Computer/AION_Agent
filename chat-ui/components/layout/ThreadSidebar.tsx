@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -72,26 +72,45 @@ export function ThreadSidebar({
   const [searchQuery, setSearchQuery] = useState("");
   const [profileLabel, setProfileLabel] = useState(userId);
   const [profileSubtitle, setProfileSubtitle] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [profileColor, setProfileColor] = useState("violet");
 
-  useEffect(() => {
+  const loadProfile = useCallback(() => {
     if (!token) return;
-    let cancelled = false;
     void fetch(`${apiBase()}/auth/me`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data: { display_name?: string; identifier?: string; email?: string } | null) => {
-        if (cancelled || !data) return;
-        setProfileLabel(data.display_name || data.identifier || userId);
-        setProfileSubtitle(data.email || data.identifier || "");
-      })
+      .then(
+        (
+          data: {
+            display_name?: string;
+            identifier?: string;
+            email?: string;
+            metadata?: { avatar_url?: string; profile_color?: string };
+          } | null,
+        ) => {
+          if (!data) return;
+          setProfileLabel(data.display_name || data.identifier || userId);
+          setProfileSubtitle(data.email || data.identifier || "");
+          setAvatarUrl(data.metadata?.avatar_url || "");
+          setProfileColor(data.metadata?.profile_color || "violet");
+        },
+      )
       .catch(() => {
         /* ignore */
       });
-    return () => {
-      cancelled = true;
-    };
   }, [token, userId]);
+
+  useEffect(() => {
+    loadProfile();
+  }, [loadProfile]);
+
+  useEffect(() => {
+    const onProfileUpdated = () => loadProfile();
+    window.addEventListener("aion-profile-updated", onProfileUpdated);
+    return () => window.removeEventListener("aion-profile-updated", onProfileUpdated);
+  }, [loadProfile]);
 
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -191,6 +210,8 @@ export function ThreadSidebar({
       <SidebarProfileMenu
         profileLabel={profileLabel}
         profileSubtitle={profileSubtitle}
+        avatarUrl={avatarUrl}
+        profileColor={profileColor}
         isLoggedIn={isLoggedIn}
         variant="expanded"
       />
@@ -247,6 +268,8 @@ export function ThreadSidebar({
           <SidebarProfileMenu
             profileLabel={profileLabel}
             profileSubtitle={profileSubtitle}
+            avatarUrl={avatarUrl}
+            profileColor={profileColor}
             isLoggedIn={isLoggedIn}
             variant="collapsed"
           />

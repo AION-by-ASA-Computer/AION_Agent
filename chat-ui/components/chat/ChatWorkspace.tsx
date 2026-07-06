@@ -3378,7 +3378,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             </div>
           </div>
 
-          <div className="min-w-0 shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
+          <div className="relative z-20 min-w-0 shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
             <div className="mx-auto w-full min-w-0 max-w-3xl">
               {pendingFiles.length > 0 && (
                 <div className="mb-3 flex flex-wrap gap-2">
@@ -3418,7 +3418,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               <div
                 ref={composerContainerRef}
                 className={cn(
-                  "relative flex min-w-0 flex-col overflow-hidden rounded-[26px] border bg-card/45 p-2.5 shadow-md backdrop-blur-xl focus-within:ring-1",
+                  "relative flex min-w-0 flex-col overflow-visible rounded-[26px] border bg-card/45 p-2.5 shadow-md backdrop-blur-xl focus-within:ring-1",
                   agentMode === "plan"
                     ? "border-orange-500/35 shadow-[0_0_12px_rgba(249,115,22,0.08)] focus-within:ring-orange-500/30"
                     : agentMode === "deep_research"
@@ -3448,6 +3448,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     ) : null}
                   </div>
                 )}
+                <div className="min-h-0 flex-1 overflow-hidden">
                 <textarea
                   ref={composerTextareaRef}
                   value={input}
@@ -3463,9 +3464,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     }
                   }}
                   placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
-                  className="focus-ring box-border min-h-0 min-w-0 max-w-full flex-1 resize-none overflow-x-hidden overflow-y-auto break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
+                  className="focus-ring box-border h-full min-h-0 min-w-0 max-w-full w-full resize-none overflow-x-hidden overflow-y-auto break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
                   rows={1}
                 />
+                </div>
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-2 pb-1">
                   <input
                     ref={fileInputRef}

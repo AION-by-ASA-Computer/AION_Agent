@@ -11,10 +11,49 @@
   },
   "settings": {
     "title": "User Settings",
+    "subtitle": "Manage profile, appearance, security, and custom instructions.",
     "back": "Go back",
     "tab": {
       "account": "Profile & Account",
-      "usermd": "Profiles"
+      "usermd": "Profiles",
+      "profile": "Profile",
+      "appearance": "Appearance",
+      "security": "Security",
+      "instructions": "Instructions"
+    },
+    "profile": {
+      "title": "Profile",
+      "desc": "Photo, avatar color, and account details shown in the sidebar.",
+      "color_label": "Profile color",
+      "upload_photo": "Upload photo",
+      "remove_photo": "Remove photo",
+      "avatar_too_large": "Image must be smaller than 256 KB.",
+      "appearance_saved": "Profile appearance updated.",
+      "username_hint": "Login identifier. Must be unique.",
+      "shortcuts_title": "Quick links",
+      "shortcuts_desc": "Fast access to main app sections."
+    },
+    "appearance": {
+      "title": "Appearance",
+      "desc": "Interface theme and application language.",
+      "theme_label": "Theme",
+      "theme_desc": "Choose light or dark mode.",
+      "language_label": "Interface language"
+    },
+    "security": {
+      "password_title": "Password",
+      "password_desc": "Update your account password.",
+      "current_password": "Current password",
+      "new_password": "New password",
+      "confirm_password": "Confirm password",
+      "password_hint": "At least 6 characters.",
+      "password_min": "New password must be at least 6 characters.",
+      "password_mismatch": "Confirmation does not match the new password.",
+      "password_error": "Could not update password.",
+      "password_updated": "Password updated successfully.",
+      "update_password": "Update password",
+      "must_change_title": "Temporary password",
+      "must_change_desc": "For security, please update your password before continuing."
     },
     "section": {
       "profile": {
