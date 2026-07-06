@@ -307,7 +307,6 @@ def run_allowlisted(
     argv: List[str],
     *,
     timeout_sec: float = 30.0,
-    capture_output: bool = True,
 ) -> Dict[str, Any]:
     argv = list(argv)
     policy = get_policy()

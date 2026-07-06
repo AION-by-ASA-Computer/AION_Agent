@@ -1,5 +1,5 @@
 /** Client-safe admin UI path prefix (empty in local dev, `/admin` in Docker prod). */
-export function adminBasePath(): string {
+function adminBasePath(): string {
   const raw = (process.env.NEXT_PUBLIC_BASE_PATH ?? "").trim().replace(/\/$/, "");
   return raw === "/" ? "" : raw;
 }

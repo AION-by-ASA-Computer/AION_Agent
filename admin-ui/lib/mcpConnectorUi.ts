@@ -7,7 +7,7 @@ export type CredentialFieldDef = {
   required: boolean;
 };
 
-export function guessSecretFromKey(key: string): boolean {
+function guessSecretFromKey(key: string): boolean {
   return /TOKEN|SECRET|PASSWORD|PRIVATE|API_KEY|REFRESH|CREDENTIAL/i.test(key);
 }
 

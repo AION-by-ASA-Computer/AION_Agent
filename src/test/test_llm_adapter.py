@@ -1,7 +1,5 @@
 import pytest
-import os
 from haystack.utils.auth import Secret
-from haystack.components.generators.chat import OpenAIChatGenerator
 
 from src.runtime.llm_adapter import resolve_llm_endpoint
 from src.runtime.llm_lite_llm_adapter import LiteLLMChatGeneratorWrapper

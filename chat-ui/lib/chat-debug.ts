@@ -1,7 +1,7 @@
 import { AION_CHAT_STREAM_DEBUG_ENABLED } from "@/lib/dev-flags";
 
 /** Dev-only stream diagnostics (browser console). */
-export function isChatUiStreamDebug(): boolean {
+function isChatUiStreamDebug(): boolean {
   return AION_CHAT_STREAM_DEBUG_ENABLED;
 }
 

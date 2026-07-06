@@ -29,10 +29,6 @@ function writeAll(map: Record<string, MessageRating>): void {
   }
 }
 
-export function getMessageRating(messageId: string): MessageRating | null {
-  return readAll()[messageId] ?? null;
-}
-
 export function toggleMessageRating(messageId: string, rating: MessageRating): MessageRating | null {
   const map = readAll();
   if (map[messageId] === rating) {

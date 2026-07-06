@@ -2,3 +2,8 @@ packages:
   - 'admin-ui'
   - 'chat-ui'
   - 'website'
+allowBuilds:
+  '@swc/core': true
+  core-js: true
+  sharp: true
+  unrs-resolver: true

@@ -6,7 +6,7 @@ import { PlanDockPanel } from "@/components/dock/PlanDockPanel";
 import { StreamingContentPreview } from "@/components/dock/StreamingContentPreview";
 import type { PlanExecutionProgressState } from "@/hooks/use-plan-execution-progress";
 
-export type PlanPanelPhase = "drafting" | "review" | "executing" | "done" | "error";
+type PlanPanelPhase = "drafting" | "review" | "executing" | "done" | "error";
 
 type PlanPendingChunk = ChatChunk & { type: "orchestration_plan_pending" };
 

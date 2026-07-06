@@ -41,7 +41,6 @@ if OPIK_ENABLED:
     # Ritarda l'importazione di Opik finché l'ambiente non è configurato correttamente
     try:
         from opik import Opik
-        from opik.exceptions import OpikException
 
         opik_client = Opik()
         OPIK_AVAILABLE = True
