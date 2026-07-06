@@ -5,6 +5,7 @@ Usage:
     python scripts/generate-env-docs.py
     python scripts/generate-env-docs.py > docs/configuration/env-reference.md
 """
+
 from __future__ import annotations
 
 import os
@@ -66,12 +67,8 @@ def generate_markdown_table() -> str:
         "All variables use the `AION_` prefix.  "
         "Generated from `src/settings.py` by `scripts/generate-env-docs.py`.\n"
     )
-    lines.append(
-        "| Variable | Type | Default | Description |"
-    )
-    lines.append(
-        "|---|---|---|---|"
-    )
+    lines.append("| Variable | Type | Default | Description |")
+    lines.append("|---|---|---|---|")
 
     try:
         fields = AionSettings.model_fields  # pydantic v2

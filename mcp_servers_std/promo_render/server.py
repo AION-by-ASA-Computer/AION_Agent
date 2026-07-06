@@ -2,6 +2,7 @@
 MCP promo_render: React/HTML promotional canvases → PNG (AION bento red).
 Requires AION_CHAT_SESSION_ID. Uses Playwright headless Chromium.
 """
+
 from __future__ import annotations
 
 import json

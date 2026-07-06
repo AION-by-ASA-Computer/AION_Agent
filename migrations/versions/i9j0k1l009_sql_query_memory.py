@@ -4,6 +4,7 @@ Revision ID: i9j0k1l009
 Revises: h8i9j0k1l008
 Create Date: 2026-05-28
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -25,9 +26,24 @@ def upgrade() -> None:
         op.create_table(
             "tenant_query_memory_settings",
             sa.Column("tenant_id", sa.String(length=64), nullable=False),
-            sa.Column("sql_default_scope", sa.String(length=16), nullable=False, server_default="per_user"),
-            sa.Column("sql_auto_learn", sa.Boolean(), nullable=False, server_default=sa.text("1")),
-            sa.Column("sql_search_before_run", sa.Boolean(), nullable=False, server_default=sa.text("1")),
+            sa.Column(
+                "sql_default_scope",
+                sa.String(length=16),
+                nullable=False,
+                server_default="per_user",
+            ),
+            sa.Column(
+                "sql_auto_learn",
+                sa.Boolean(),
+                nullable=False,
+                server_default=sa.text("1"),
+            ),
+            sa.Column(
+                "sql_search_before_run",
+                sa.Boolean(),
+                nullable=False,
+                server_default=sa.text("1"),
+            ),
             sa.Column(
                 "updated_at",
                 sa.DateTime(timezone=True),
@@ -41,13 +57,28 @@ def upgrade() -> None:
         op.create_table(
             "sql_query_projects",
             sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-            sa.Column("tenant_id", sa.String(length=64), nullable=False, server_default="default"),
+            sa.Column(
+                "tenant_id",
+                sa.String(length=64),
+                nullable=False,
+                server_default="default",
+            ),
             sa.Column("slug", sa.String(length=128), nullable=False),
             sa.Column("display_name", sa.String(length=256), nullable=False),
             sa.Column("description", sa.Text(), nullable=True),
-            sa.Column("datasource_key", sa.String(length=128), nullable=False, server_default="default"),
+            sa.Column(
+                "datasource_key",
+                sa.String(length=128),
+                nullable=False,
+                server_default="default",
+            ),
             sa.Column("profile_slug", sa.String(length=256), nullable=True),
-            sa.Column("scope_mode", sa.String(length=16), nullable=False, server_default="inherit"),
+            sa.Column(
+                "scope_mode",
+                sa.String(length=16),
+                nullable=False,
+                server_default="inherit",
+            ),
             sa.Column("created_by", sa.String(length=256), nullable=True),
             sa.Column(
                 "created_at",
@@ -56,16 +87,28 @@ def upgrade() -> None:
                 nullable=False,
             ),
             sa.PrimaryKeyConstraint("id"),
-            sa.UniqueConstraint("tenant_id", "slug", name="uq_sql_query_project_tenant_slug"),
+            sa.UniqueConstraint(
+                "tenant_id", "slug", name="uq_sql_query_project_tenant_slug"
+            ),
         )
-        op.create_index("ix_sql_query_projects_tenant", "sql_query_projects", ["tenant_id"], unique=False)
+        op.create_index(
+            "ix_sql_query_projects_tenant",
+            "sql_query_projects",
+            ["tenant_id"],
+            unique=False,
+        )
 
     if "cached_sql_queries" not in names:
         op.create_table(
             "cached_sql_queries",
             sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
             sa.Column("project_id", sa.Integer(), nullable=False),
-            sa.Column("tenant_id", sa.String(length=64), nullable=False, server_default="default"),
+            sa.Column(
+                "tenant_id",
+                sa.String(length=64),
+                nullable=False,
+                server_default="default",
+            ),
             sa.Column("user_id", sa.String(length=256), nullable=True),
             sa.Column("user_scope_key", sa.String(length=256), nullable=False),
             sa.Column("user_request", sa.Text(), nullable=False),
@@ -76,8 +119,12 @@ def upgrade() -> None:
             sa.Column("tables_used_json", sa.Text(), nullable=True),
             sa.Column("metadata_json", sa.Text(), nullable=True),
             sa.Column("is_verified", sa.Integer(), nullable=False, server_default="0"),
-            sa.Column("success_count", sa.Integer(), nullable=False, server_default="0"),
-            sa.Column("failure_count", sa.Integer(), nullable=False, server_default="0"),
+            sa.Column(
+                "success_count", sa.Integer(), nullable=False, server_default="0"
+            ),
+            sa.Column(
+                "failure_count", sa.Integer(), nullable=False, server_default="0"
+            ),
             sa.Column("last_used_at", sa.DateTime(timezone=True), nullable=True),
             sa.Column(
                 "created_at",
@@ -91,7 +138,9 @@ def upgrade() -> None:
                 server_default=sa.text("(CURRENT_TIMESTAMP)"),
                 nullable=False,
             ),
-            sa.ForeignKeyConstraint(["project_id"], ["sql_query_projects.id"], ondelete="CASCADE"),
+            sa.ForeignKeyConstraint(
+                ["project_id"], ["sql_query_projects.id"], ondelete="CASCADE"
+            ),
             sa.PrimaryKeyConstraint("id"),
             sa.UniqueConstraint(
                 "project_id",
@@ -100,7 +149,12 @@ def upgrade() -> None:
                 name="uq_cached_sql_project_scope_fp",
             ),
         )
-        op.create_index("ix_cached_sql_queries_project", "cached_sql_queries", ["project_id"], unique=False)
+        op.create_index(
+            "ix_cached_sql_queries_project",
+            "cached_sql_queries",
+            ["project_id"],
+            unique=False,
+        )
         op.create_index(
             "ix_cached_sql_queries_tenant_user",
             "cached_sql_queries",

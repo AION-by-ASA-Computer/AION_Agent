@@ -4,6 +4,7 @@
 To move Alibr data out of `default` / legacy wing `alibr`, use
 `scripts/migrate_alibr_project_memory.py` instead.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -51,7 +52,8 @@ async def _run(args: argparse.Namespace) -> int:
         legacy = [
             w
             for w in wings
-            if w == "alibr" or (not w.startswith("wing_proj_") and not w.startswith("wing_user_"))
+            if w == "alibr"
+            or (not w.startswith("wing_proj_") and not w.startswith("wing_user_"))
         ]
         if legacy and args.list_wings:
             print("\nLegacy / non-project wings (consider --prune-legacy):")
@@ -60,9 +62,7 @@ async def _run(args: argparse.Namespace) -> int:
         if args.prune_legacy:
             from src.memory.navigation_memory_service import prune_legacy_wings
 
-            deleted, skipped = await prune_legacy_wings(
-                session, dry_run=args.dry_run
-            )
+            deleted, skipped = await prune_legacy_wings(session, dry_run=args.dry_run)
             mode = "dry-run" if args.dry_run else "applied"
             print(f"\nprune_legacy_wings ({mode}): delete={deleted} skipped={skipped}")
 
@@ -77,7 +77,9 @@ async def _run(args: argparse.Namespace) -> int:
         )
         all_rows.extend(rows)
 
-    generic = [r for r in all_rows if _is_generic(r.get("content") or r.get("preview") or "")]
+    generic = [
+        r for r in all_rows if _is_generic(r.get("content") or r.get("preview") or "")
+    ]
     by_room = Counter((r.get("room") or "?") for r in all_rows)
 
     print(f"\nDrawers listed: {len(all_rows)}")
@@ -100,18 +102,26 @@ async def _run(args: argparse.Namespace) -> int:
             previews.setdefault(key, []).append(r.get("drawer_id"))
         dupes = {k: v for k, v in previews.items() if len(v) > 1}
         if dupes:
-            print(f"\nPossible duplicate groups: {len(dupes)} (run mempalace_check_duplicate / delete)")
+            print(
+                f"\nPossible duplicate groups: {len(dupes)} (run mempalace_check_duplicate / delete)"
+            )
 
     return 0
 
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Audit MemPalace drawers for a project")
-    ap.add_argument("--project", "-p", default="aion_am", help="SQL QueryMemory project slug")
-    ap.add_argument("--session", "-s", help="Chat session id for MCP pool (default audit-cli)")
+    ap.add_argument(
+        "--project", "-p", default="aion_am", help="SQL QueryMemory project slug"
+    )
+    ap.add_argument(
+        "--session", "-s", help="Chat session id for MCP pool (default audit-cli)"
+    )
     ap.add_argument("--room", help="Filter single room")
     ap.add_argument("--limit", type=int, default=200)
-    ap.add_argument("--list-wings", action="store_true", help="List all wings and legacy hints")
+    ap.add_argument(
+        "--list-wings", action="store_true", help="List all wings and legacy hints"
+    )
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--show", type=int, default=15, help="Max generic rows to print")
     ap.add_argument("--dedupe-hint", action="store_true")

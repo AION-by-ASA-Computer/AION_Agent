@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Restore from aion_backup_*.tar.gz (dry-run lists members)."""
+
 from __future__ import annotations
 
 import argparse

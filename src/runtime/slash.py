@@ -89,7 +89,7 @@ async def _slash_compact(ctx: SlashContext) -> SlashResult:
         handled=True,
         message=(
             "Context compaction scheduled for the next message in this chat "
-            "(richiede AION_CONTEXT_COMPRESS_ENABLED=1)."
+            "(requires AION_CONTEXT_COMPRESS_ENABLED=1)."
         ),
     )
 

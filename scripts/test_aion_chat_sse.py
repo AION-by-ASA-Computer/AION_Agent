@@ -8,6 +8,7 @@ Uso (API su localhost:8001):
 
 Richiede: httpx (presente in requirements.txt del progetto).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -18,11 +19,27 @@ import uuid
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Test SSE POST /chat timing")
-    p.add_argument("base_url", nargs="?", default="http://127.0.0.1:8001", help="Base API senza trailing slash")
-    p.add_argument("profile", nargs="?", default="Generic Assistant", help="Nome profilo YAML")
-    p.add_argument("--message", default="Say hello in one short sentence.", help="Messaggio utente")
-    p.add_argument("--user-id", default="default", dest="user_id", help="Header X-AION-User-Id")
-    p.add_argument("--max-bytes", type=int, default=8000, help="Massimo byte da leggere dallo stream poi esci")
+    p.add_argument(
+        "base_url",
+        nargs="?",
+        default="http://127.0.0.1:8001",
+        help="Base API senza trailing slash",
+    )
+    p.add_argument(
+        "profile", nargs="?", default="Generic Assistant", help="Nome profilo YAML"
+    )
+    p.add_argument(
+        "--message", default="Say hello in one short sentence.", help="Messaggio utente"
+    )
+    p.add_argument(
+        "--user-id", default="default", dest="user_id", help="Header X-AION-User-Id"
+    )
+    p.add_argument(
+        "--max-bytes",
+        type=int,
+        default=8000,
+        help="Massimo byte da leggere dallo stream poi esci",
+    )
     args = p.parse_args()
 
     try:
@@ -63,7 +80,9 @@ def main() -> int:
         with httpx.Client(timeout=timeout) as client:
             with client.stream("POST", url, json=payload, headers=headers) as r:
                 first_headers_at = time.perf_counter()
-                print(f"HTTP status={r.status_code} (+{(first_headers_at - t0) * 1000:.1f} ms from start)")
+                print(
+                    f"HTTP status={r.status_code} (+{(first_headers_at - t0) * 1000:.1f} ms from start)"
+                )
                 if r.status_code != 200:
                     body = r.read()
                     print(body.decode(errors="replace")[:2000])
@@ -76,7 +95,9 @@ def main() -> int:
                             f"First body chunk (+{(first_body_at - t0) * 1000:.1f} ms from start, "
                             f"+{(first_body_at - first_headers_at) * 1000:.1f} ms after headers)"
                         )
-                        preview = chunk[:240].decode(errors="replace").replace("\r", "\\r")
+                        preview = (
+                            chunk[:240].decode(errors="replace").replace("\r", "\\r")
+                        )
                         print(f"Raw preview: {preview!r}")
                     total += len(chunk)
                     if total >= args.max_bytes:
@@ -84,11 +105,20 @@ def main() -> int:
                         break
 
     except httpx.ConnectError as e:
-        print(f"CONNECT FAILED after {(time.perf_counter() - t0) * 1000:.1f} ms: {e}", file=sys.stderr)
-        print("Verifica che l'API sia in ascolto e l'URL sia raggiungibile (es. http://127.0.0.1:8001).", file=sys.stderr)
+        print(
+            f"CONNECT FAILED after {(time.perf_counter() - t0) * 1000:.1f} ms: {e}",
+            file=sys.stderr,
+        )
+        print(
+            "Verifica che l'API sia in ascolto e l'URL sia raggiungibile (es. http://127.0.0.1:8001).",
+            file=sys.stderr,
+        )
         return 1
     except httpx.ReadTimeout:
-        print(f"READ TIMEOUT after {(time.perf_counter() - t0) * 1000:.1f} ms", file=sys.stderr)
+        print(
+            f"READ TIMEOUT after {(time.perf_counter() - t0) * 1000:.1f} ms",
+            file=sys.stderr,
+        )
         return 1
 
     elapsed = time.perf_counter() - t0

@@ -4,6 +4,7 @@ Revision ID: j0k1l2m010
 Revises: i9j0k1l009
 Create Date: 2026-05-28
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -26,7 +27,9 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("project_id", sa.Integer(), nullable=False),
         sa.Column("user_identifier", sa.String(length=256), nullable=False),
-        sa.Column("role", sa.String(length=16), nullable=False, server_default="member"),
+        sa.Column(
+            "role", sa.String(length=16), nullable=False, server_default="member"
+        ),
         sa.Column("invited_by", sa.String(length=256), nullable=True),
         sa.Column(
             "created_at",
@@ -34,7 +37,9 @@ def upgrade() -> None:
             server_default=sa.text("(CURRENT_TIMESTAMP)"),
             nullable=False,
         ),
-        sa.ForeignKeyConstraint(["project_id"], ["sql_query_projects.id"], ondelete="CASCADE"),
+        sa.ForeignKeyConstraint(
+            ["project_id"], ["sql_query_projects.id"], ondelete="CASCADE"
+        ),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
             "project_id",
@@ -51,5 +56,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_index("ix_sql_query_project_members_user", table_name="sql_query_project_members")
+    op.drop_index(
+        "ix_sql_query_project_members_user", table_name="sql_query_project_members"
+    )
     op.drop_table("sql_query_project_members")

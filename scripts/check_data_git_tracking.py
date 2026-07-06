@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fail if runtime files under data/ are tracked by git (except whitelist)."""
+
 from __future__ import annotations
 
 import subprocess
@@ -41,7 +42,9 @@ def main() -> int:
     if not bad:
         print("OK: no disallowed tracked files under data/")
         return 0
-    print("ERROR: runtime data must not be tracked in git (whitelist: eval_datasets, plugins):")
+    print(
+        "ERROR: runtime data must not be tracked in git (whitelist: eval_datasets, plugins):"
+    )
     for p in bad:
         print(f"  - {p}")
     print("\nFix: git rm --cached <path>  and ensure .gitignore covers data/*")

@@ -75,7 +75,9 @@ async def _bound_sql_project(project: str = "") -> str:
 
 
 @mcp.tool()
-async def search_known_query(request: str, namespace: str = "default", verified_only: bool = False) -> str:
+async def search_known_query(
+    request: str, namespace: str = "default", verified_only: bool = False
+) -> str:
     """
     [PROMQL CACHE ONLY] Search the validated PromQL query cache.
     This tool is EXCLUSIVELY for Prometheus/PromQL queries —
@@ -86,20 +88,25 @@ async def search_known_query(request: str, namespace: str = "default", verified_
     Compare `request` (natural language) with previously saved PromQL queries
     via cosine similarity on embeddings. Returns matches sorted by relevance.
     """
-    results = await memory.search(request, limit=5, namespace=namespace, verified_only=verified_only)
+    results = await memory.search(
+        request, limit=5, namespace=namespace, verified_only=verified_only
+    )
     if not results:
         return "No similar PromQL query found in cache. Proceed with generating a new PromQL query."
-        
+
     output = "PromQL queries found in cache (sorted by relevance). Check whether any match the request:\n\n"
     for r in results:
-        status = "✅ Verified" if r['is_verified'] else "⏳ Suggested"
+        status = "✅ Verified" if r["is_verified"] else "⏳ Suggested"
         output += f"- ID: {r['id']} [{status}] (Score: {r['score']:.2f})\n"
-        output += f"  Request: \"{r['user_request']}\"\n"
+        output += f'  Request: "{r["user_request"]}"\n'
         output += f"  Query PromQL: {r['promql_query']}\n\n"
     return output
 
+
 @mcp.tool()
-async def save_successful_query(request: str, query: str, namespace: str = "default", is_verified: bool = False) -> str:
+async def save_successful_query(
+    request: str, query: str, namespace: str = "default", is_verified: bool = False
+) -> str:
     """
     [PROMQL CACHE ONLY] Save a verified PromQL query to the cache for future use.
     This tool is EXCLUSIVELY for Prometheus/PromQL queries —
@@ -107,8 +114,15 @@ async def save_successful_query(request: str, query: str, namespace: str = "defa
     To persist facts and preferences, use `mempalace_save` on the mempalace server.
     Use is_verified=True only if the PromQL query already produced correct results.
     """
-    success = await memory.add(request, query, namespace=namespace, is_verified=is_verified)
-    return f"Saved successfully: '{request}' -> '{query}'" if success else "Error while saving to memory."
+    success = await memory.add(
+        request, query, namespace=namespace, is_verified=is_verified
+    )
+    return (
+        f"Saved successfully: '{request}' -> '{query}'"
+        if success
+        else "Error while saving to memory."
+    )
+
 
 @mcp.tool()
 async def mark_query_as_successful(id: int) -> str:
@@ -120,11 +134,13 @@ async def mark_query_as_successful(id: int) -> str:
     await memory.increment_success(id)
     return f"Success recorded for query ID {id}."
 
+
 @mcp.tool()
 async def delete_memory_entry(id: int) -> str:
     """Permanently delete a memory entry (requires ID)."""
     success = await memory.delete_entry(id)
     return f"Entry {id} deleted." if success else "Entry not found."
+
 
 @mcp.tool()
 def session_search(
@@ -165,7 +181,8 @@ def session_search(
                 "timestamp": r.get("timestamp"),
                 "profile": r.get("profile_name"),
                 "turn_context": "\n".join(
-                    f"{m.get('role', '?')}: {(m.get('content') or '')[:500]}" for m in ctx
+                    f"{m.get('role', '?')}: {(m.get('content') or '')[:500]}"
+                    for m in ctx
                 ),
             }
         )
@@ -175,9 +192,7 @@ def session_search(
     if not summarize:
         out = [f"Found {len(matches)} conversations:"]
         for m in matches:
-            out.append(
-                f"\n### Session {str(m['session_id'])[:8]} ({m['timestamp']})"
-            )
+            out.append(f"\n### Session {str(m['session_id'])[:8]} ({m['timestamp']})")
             out.append(m["turn_context"])
         return "\n".join(out)
 
@@ -193,7 +208,10 @@ def session_search(
             f"{m['turn_context']}\n"
         )
     try:
-        return complete_text_sync(system, user_prompt, max_tokens=800, timeout=60.0) or user_prompt[:4000]
+        return (
+            complete_text_sync(system, user_prompt, max_tokens=800, timeout=60.0)
+            or user_prompt[:4000]
+        )
     except Exception as e:
         return f"[summarization failed: {e}]\n\n" + "\n---\n".join(
             m["turn_context"] for m in matches
@@ -201,7 +219,12 @@ def session_search(
 
 
 @mcp.tool()
-async def update_memory_entry(id: int, user_request: str = None, promql_query: str = None, is_verified: bool = None) -> str:
+async def update_memory_entry(
+    id: int,
+    user_request: str = None,
+    promql_query: str = None,
+    is_verified: bool = None,
+) -> str:
     """Update an existing PromQL entry in memory."""
     success = await memory.update_entry(id, user_request, promql_query, is_verified)
     return f"Entry {id} updated." if success else "Update error or entry not found."
@@ -280,7 +303,11 @@ async def save_successful_sql(
         is_verified=is_verified,
         tables_used=tables_used,
     )
-    return f"SQL query saved (id={eid}) in project '{proj}'." if eid >= 0 else "Save failed."
+    return (
+        f"SQL query saved (id={eid}) in project '{proj}'."
+        if eid >= 0
+        else "Save failed."
+    )
 
 
 @mcp.tool()
@@ -309,7 +336,9 @@ async def list_sql_projects() -> str:
         return "SQL QueryMemory disabled (AION_SQL_QM_ENABLED=0)."
     from src.runtime.sql_query_project_scope import block_project_list_tool
 
-    blocked = block_project_list_tool("list_sql_projects", os.getenv("AION_CHAT_SESSION_ID"))
+    blocked = block_project_list_tool(
+        "list_sql_projects", os.getenv("AION_CHAT_SESSION_ID")
+    )
     if blocked:
         return blocked
     tenant, user, profile = _mcp_sql_context()
@@ -425,7 +454,7 @@ if __name__ == "__main__":
                 await mcp._mcp_server.run(
                     read_stream,
                     write_stream,
-                    mcp._mcp_server.create_initialization_options()
+                    mcp._mcp_server.create_initialization_options(),
                 )
         except Exception as e:
             with open("data/mcp_debug.log", "a") as f:

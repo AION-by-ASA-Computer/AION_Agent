@@ -4,6 +4,7 @@ Revision ID: 8f9132ac41a1
 Revises: c31b8f5d1f42
 Create Date: 2026-05-05
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -26,4 +27,3 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_column("execution_plans", "todos")
-

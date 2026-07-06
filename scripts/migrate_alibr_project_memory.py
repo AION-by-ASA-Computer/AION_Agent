@@ -10,6 +10,7 @@ for shared cross-ERP navigation (not Alibr table paths).
 
 Requires MCP mempalace running (same as audit script). Use --dry-run first.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -111,10 +112,16 @@ async def migrate_drawer(
     """Return action label: moved | skipped_not_alibr | skipped_dup | error."""
     did = drawer.get("drawer_id") or drawer.get("id")
     room = (drawer.get("room") or "discoveries").strip().lower()
-    content = (drawer.get("content") or drawer.get("preview") or drawer.get("text") or "").strip()
+    content = (
+        drawer.get("content") or drawer.get("preview") or drawer.get("text") or ""
+    ).strip()
     if len(content) < 10:
         return "skipped_empty"
-    if not force and source_wing == project_wing("default") and not looks_alibr_related(content):
+    if (
+        not force
+        and source_wing == project_wing("default")
+        and not looks_alibr_related(content)
+    ):
         return "skipped_not_alibr"
     if await _check_duplicate(session_id, target_wing, content):
         if did and not dry_run:
@@ -153,7 +160,9 @@ async def migrate_mempalace_wings(
             drawers = await list_drawers_for_wing(session_id, wing=source, limit=500)
         if not drawers:
             continue
-        print(f"\n=== Source wing `{source}` ({len(drawers)} drawers) → `{target_wing}` ===")
+        print(
+            f"\n=== Source wing `{source}` ({len(drawers)} drawers) → `{target_wing}` ==="
+        )
         force = source in _LEGACY_WING_NAMES or (
             source == project_wing("default") and force_all_from_default
         )
@@ -189,29 +198,43 @@ async def migrate_sql_query_memory(
     moved = skipped = 0
     async with maker() as session:
         default_row = (
-            await session.execute(
-                select(SqlQueryProject).where(
-                    SqlQueryProject.tenant_id == tid,
-                    SqlQueryProject.slug == "default",
+            (
+                await session.execute(
+                    select(SqlQueryProject).where(
+                        SqlQueryProject.tenant_id == tid,
+                        SqlQueryProject.slug == "default",
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         target_row = (
-            await session.execute(
-                select(SqlQueryProject).where(
-                    SqlQueryProject.tenant_id == tid,
-                    SqlQueryProject.slug == target_slug,
+            (
+                await session.execute(
+                    select(SqlQueryProject).where(
+                        SqlQueryProject.tenant_id == tid,
+                        SqlQueryProject.slug == target_slug,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if not default_row or not target_row:
             print("SQL QM: missing default or target project row")
             return 0, 0
         rows = (
-            await session.execute(
-                select(CachedSqlQuery).where(CachedSqlQuery.project_id == default_row.id)
+            (
+                await session.execute(
+                    select(CachedSqlQuery).where(
+                        CachedSqlQuery.project_id == default_row.id
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for row in rows:
             blob = f"{row.user_request}\n{row.sql_text}"
             if not force_all_from_default and not looks_alibr_related(blob):
@@ -281,7 +304,9 @@ async def _run(args: argparse.Namespace) -> int:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--session", "-s", help="Chat session id for MCP pool")
-    ap.add_argument("--target", default="alibr", help="Target SQL QM / MemPalace project slug")
+    ap.add_argument(
+        "--target", default="alibr", help="Target SQL QM / MemPalace project slug"
+    )
     ap.add_argument("--tenant", default=None, help="Tenant id (default from env)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument(

@@ -16,9 +16,9 @@ prom_api_url = config.get("prometheus.api_url")
 _prom_tools = None
 if prom_api_url:
     _prom_tools = PrometheusTools(
-        api_url=prom_api_url,
-        timeout=config.get("prometheus.timeout", 10)
+        api_url=prom_api_url, timeout=config.get("prometheus.timeout", 10)
     )
+
 
 @mcp.tool()
 def render_chart(
@@ -33,7 +33,7 @@ def render_chart(
 ) -> dict:
     """
     Create a chart for the current session. Displays data interactively in chat-ui (Recharts).
-    
+
     Parameters:
     - query: Descriptive chart title or PromQL query (when querying Prometheus).
     - data: List or JSON string of dicts/records for arbitrary data (es. distribuzioni, statistiche).
@@ -66,7 +66,9 @@ def render_chart(
             try:
                 parsed_series_keys = json.loads(series_keys)
             except json.JSONDecodeError as e:
-                return {"error": f"Invalid JSON string passed to 'series_keys': {str(e)}"}
+                return {
+                    "error": f"Invalid JSON string passed to 'series_keys': {str(e)}"
+                }
         else:
             parsed_series_keys = series_keys
 
@@ -116,6 +118,7 @@ def render_chart(
         "error": "Incomplete instruction: 'data' not provided and Prometheus server not configured."
     }
 
+
 if __name__ == "__main__":
     import asyncio
     import traceback
@@ -127,7 +130,7 @@ if __name__ == "__main__":
                 await mcp._mcp_server.run(
                     read_stream,
                     write_stream,
-                    mcp._mcp_server.create_initialization_options()
+                    mcp._mcp_server.create_initialization_options(),
                 )
         except Exception as e:
             with open("data/mcp_debug.log", "a") as f:

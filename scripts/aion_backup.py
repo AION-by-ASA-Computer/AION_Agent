@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tar essential config + DB (see plan §8.3)."""
+
 from __future__ import annotations
 
 import argparse

@@ -19,6 +19,7 @@ Uso:
 
 Exit code 1 se mancano chiavi.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -120,6 +121,11 @@ def main() -> int:
         help="Non verificare che i default di upgrade_core siano righe attive in .env.example",
     )
     ap.add_argument("-v", "--verbose", action="store_true")
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Elenca anche chiavi in example non trovate in src",
+    )
     args = ap.parse_args()
 
     active, commented_only, documented = _parse_example_keys(EXAMPLE)
