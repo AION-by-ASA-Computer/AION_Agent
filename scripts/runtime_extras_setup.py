@@ -2,6 +2,7 @@
 Optional runtime setup: filesystem exec policy templates + promo Playwright (MCP PNG).
 Used by setup_core.py and upgrade_core.py.
 """
+
 from __future__ import annotations
 
 import shutil
@@ -71,7 +72,9 @@ def ensure_fs_policy_dev_active(env_path: Path, *, dry_run: bool, report) -> int
         return 0
     if not dry_run:
         shutil.copy2(src, dst)
-    report.log_ok(f"FS policy dev: {'would activate' if dry_run else 'activated'} {rel_policy}")
+    report.log_ok(
+        f"FS policy dev: {'would activate' if dry_run else 'activated'} {rel_policy}"
+    )
 
     if not env_path.is_file():
         report.log_warn("FS policy dev: .env missing, skip AION_FS_POLICY_PATH")
@@ -83,7 +86,9 @@ def ensure_fs_policy_dev_active(env_path: Path, *, dry_run: bool, report) -> int
         report.log_ok("FS policy dev: AION_FS_POLICY_PATH already in .env")
         return 0
     if dry_run:
-        report.log_ok("FS policy dev: would append AION_FS_POLICY_PATH to .env (dry-run)")
+        report.log_ok(
+            "FS policy dev: would append AION_FS_POLICY_PATH to .env (dry-run)"
+        )
         return 0
     block = (
         "\n# --- Filesystem exec policy (dev — append da setup/upgrade) ---\n"
@@ -144,7 +149,9 @@ def ensure_fs_policy_wren_allowlist(env_path: Path, *, dry_run: bool, report) ->
     else:
         new_text = text.rstrip() + "\n" + _WREN_ALLOWLIST_BLOCK + "\n"
     if dry_run:
-        report.log_ok(f"FS policy wren: would patch {policy.relative_to(ROOT)} (dry-run)")
+        report.log_ok(
+            f"FS policy wren: would patch {policy.relative_to(ROOT)} (dry-run)"
+        )
         return 0
     try:
         policy.write_text(new_text, encoding="utf-8")
@@ -167,7 +174,9 @@ def ensure_promo_env_keys(env_path: Path, *, dry_run: bool, report) -> int:
         report.log_ok("Promo env defaults: keys already present")
         return 0
     if dry_run:
-        report.log_ok(f"Promo env defaults: would append {len(missing)} key(s) (dry-run)")
+        report.log_ok(
+            f"Promo env defaults: would append {len(missing)} key(s) (dry-run)"
+        )
         return 0
     block = (
         "\n# --- Promo render MCP (append da setup/upgrade) ---\n"
@@ -233,7 +242,9 @@ def run_runtime_extras(
         if rc != 0:
             return rc
     if install_playwright:
-        rc = setup_promo_playwright(dry_run=dry_run, report=report, skip=skip_playwright)
+        rc = setup_promo_playwright(
+            dry_run=dry_run, report=report, skip=skip_playwright
+        )
         if rc != 0:
             return rc
     return 0

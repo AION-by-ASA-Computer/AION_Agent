@@ -11,6 +11,7 @@ mcp_servers_std/skills_hub (profile allowlist su skill_view), eseguire:
 
 e riavviare il backend (ricicla pool stdio). Upgrade/setup chiamano sync con --force quando possibile.
 """
+
 import argparse
 import json
 import shutil
@@ -23,7 +24,9 @@ _SKIP_DIR_NAMES = frozenset({".git", "__pycache__", ".pytest_cache", "node_modul
 def _read_version(root: Path) -> str:
     """Legge la versione dal file centralizzato version.json nella root del repo."""
     try:
-        return json.loads((root / "version.json").read_text(encoding="utf-8")).get("version", "unknown")
+        return json.loads((root / "version.json").read_text(encoding="utf-8")).get(
+            "version", "unknown"
+        )
     except Exception:
         return "unknown"
 
@@ -42,7 +45,9 @@ def sync_mcp_servers(force: bool = False) -> None:
     print(f"\n🔄  AION Sync MCP Servers  —  {_ver}\n")
     print(f"    source : {src_dir}")
     print(f"    target : {dst_dir}")
-    print(f"    mode   : {'FORCE (overwrite existing)' if force else 'safe (skip existing)'}\n")
+    print(
+        f"    mode   : {'FORCE (overwrite existing)' if force else 'safe (skip existing)'}\n"
+    )
 
     if not src_dir.exists():
         print(f"ERRORE: Directory sorgente {src_dir} non trovata.")
@@ -94,7 +99,9 @@ def sync_mcp_servers(force: bool = False) -> None:
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(description="Sincronizza mcp_servers_std/ -> mcp_servers/ per AION Agent")
+    ap = argparse.ArgumentParser(
+        description="Sincronizza mcp_servers_std/ -> mcp_servers/ per AION Agent"
+    )
     ap.add_argument(
         "--force",
         action="store_true",

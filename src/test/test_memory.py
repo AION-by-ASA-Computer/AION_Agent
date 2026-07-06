@@ -1,9 +1,10 @@
 import sys
 import os
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from query_memory import memory
+import src.aion_env  # noqa: F401
+from src.query_memory import memory
 import time
 
 

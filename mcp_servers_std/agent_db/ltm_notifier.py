@@ -16,10 +16,12 @@ logger = logging.getLogger("aion.agent_db.ltm_notifier")
 def sanitize_drawer_room(key: str) -> str:
     s = re.sub(r"[^a-z0-9_\-]+", "_", (key or "").lower())
     s = re.sub(r"_+", "_", s).strip("_")
-    return (s[:80] or "drawer")
+    return s[:80] or "drawer"
 
 
-def post_structured_drawer_sync(content: str, key: str, wing: str = "structured_data") -> None:
+def post_structured_drawer_sync(
+    content: str, key: str, wing: str = "structured_data"
+) -> None:
     """
     POST to FastAPI internal route if AION_AGENT_DB_LTM_SYNC_URL and
     AION_AGENT_DB_INTERNAL_SECRET are set.
@@ -44,7 +46,9 @@ def post_structured_drawer_sync(content: str, key: str, wing: str = "structured_
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=float(os.getenv("AION_AGENT_DB_LTM_HTTP_TIMEOUT", "8"))) as resp:
+        with urllib.request.urlopen(
+            req, timeout=float(os.getenv("AION_AGENT_DB_LTM_HTTP_TIMEOUT", "8"))
+        ) as resp:
             _ = resp.read()
     except urllib.error.HTTPError as e:
         logger.warning("LTM sync HTTP %s: %s", e.code, e.reason)

@@ -4,6 +4,7 @@ Migrate chat_memory.db rows into unified aion.db (messages + conversations).
   python scripts/migrate_to_aion_db.py --dry-run
   python scripts/migrate_to_aion_db.py
 """
+
 from __future__ import annotations
 
 import argparse

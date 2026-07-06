@@ -9,6 +9,7 @@ altrimenti lo script ``setup_aion_env.py`` non la includerà nel .env generato.
 
 Exit code 1 se mancano chiavi.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -46,7 +47,12 @@ def _keys_used_in_src() -> set[str]:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("-v", "--verbose", action="store_true", help="Elenca anche chiavi in example non trovate in src")
+    ap.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Elenca anche chiavi in example non trovate in src",
+    )
     args = ap.parse_args()
 
     managed = _managed_keys()
@@ -57,13 +63,19 @@ def main() -> int:
     print(f"managed keys (.env.example righe attive): {len(managed)}")
     print(f"AION_* getenv in src/:                  {len(used)}")
     if missing:
-        print(f"\nERRORE: {len(missing)} chiavi usate in src ma assenti da .env.example (attive):\n")
+        print(
+            f"\nERRORE: {len(missing)} chiavi usate in src ma assenti da .env.example (attive):\n"
+        )
         for k in missing:
             print(f"  {k}")
         return 1
-    print("OK: tutte le chiavi AION_* lette via getenv/environ.get in src sono in .env.example.")
+    print(
+        "OK: tutte le chiavi AION_* lette via getenv/environ.get in src sono in .env.example."
+    )
     if args.verbose and extra:
-        print(f"\nInfo: {len(extra)} chiavi solo in example (non trovate da questo scan), es.:\n")
+        print(
+            f"\nInfo: {len(extra)} chiavi solo in example (non trovate da questo scan), es.:\n"
+        )
         for k in extra[:40]:
             print(f"  {k}")
         if len(extra) > 40:

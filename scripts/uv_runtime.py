@@ -1,4 +1,5 @@
 """Shared uv-based venv + requirements install (used by setup/upgrade scripts)."""
+
 from __future__ import annotations
 
 import os
@@ -45,7 +46,9 @@ def ensure_venv(base_python: str, *, dry_run: bool = False) -> str:
         return str(py)
 
     if not py.exists():
-        rc = subprocess.run([base_python, "-m", "venv", str(VENV_DIR)], cwd=str(ROOT)).returncode
+        rc = subprocess.run(
+            [base_python, "-m", "venv", str(VENV_DIR)], cwd=str(ROOT)
+        ).returncode
         if rc != 0:
             raise SystemExit(rc)
     py_exec = str(py)

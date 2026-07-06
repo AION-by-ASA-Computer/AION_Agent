@@ -6,6 +6,7 @@ Called from setup_core.py and upgrade_core.py:
   2. sync_config.py -> config/
   3. sync_mcp_servers.py (--force optional)
 """
+
 from __future__ import annotations
 
 import argparse
@@ -66,7 +67,9 @@ def main() -> int:
     ap.add_argument("--force-mcp-sync", action="store_true")
     args = ap.parse_args()
     py = sys.executable
-    return ensure_skill_packages(py, dry_run=args.dry_run, force_mcp_sync=args.force_mcp_sync)
+    return ensure_skill_packages(
+        py, dry_run=args.dry_run, force_mcp_sync=args.force_mcp_sync
+    )
 
 
 if __name__ == "__main__":

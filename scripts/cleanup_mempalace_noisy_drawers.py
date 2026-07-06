@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Remove generic auto-learn MemPalace drawers (Italian template noise)."""
+
 from __future__ import annotations
 
 import argparse
@@ -47,14 +48,18 @@ def _is_noisy(content: str) -> bool:
 
 
 async def main() -> int:
-    parser = argparse.ArgumentParser(description="Delete noisy MemPalace navigation drawers")
+    parser = argparse.ArgumentParser(
+        description="Delete noisy MemPalace navigation drawers"
+    )
     parser.add_argument("--wing", required=True, help="e.g. wing_proj_aion_am")
     parser.add_argument("--session-id", default="cleanup-script")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     drawers = await _list_drawers(args.session_id, args.wing)
-    noisy = [d for d in drawers if _is_noisy(str(d.get("content") or d.get("text") or ""))]
+    noisy = [
+        d for d in drawers if _is_noisy(str(d.get("content") or d.get("text") or ""))
+    ]
     print(f"wing={args.wing} total={len(drawers)} noisy={len(noisy)}")
     for d in noisy:
         preview = str(d.get("content") or d.get("text") or "")[:120]

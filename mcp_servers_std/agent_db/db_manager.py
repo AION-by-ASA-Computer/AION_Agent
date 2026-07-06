@@ -5,6 +5,7 @@ from typing import Optional, List, Dict, Any
 from .safety import validate_name
 from .type_mapper import map_aion_to_sqlite
 
+
 class AgentDBManager:
     def __init__(self, root_dir: str = "data/agent_dbs"):
         self.root_dir = os.path.abspath(root_dir)
@@ -17,7 +18,9 @@ class AgentDBManager:
             os.makedirs(tenant_dir, exist_ok=True)
         return os.path.join(tenant_dir, f"{user_id}.db")
 
-    def get_connection(self, tenant_id: str, user_id: str, readonly: bool = False) -> sqlite3.Connection:
+    def get_connection(
+        self, tenant_id: str, user_id: str, readonly: bool = False
+    ) -> sqlite3.Connection:
         db_path = self.get_db_path(tenant_id, user_id)
         if readonly:
             if not os.path.exists(db_path):
@@ -28,14 +31,14 @@ class AgentDBManager:
             conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         else:
             conn = sqlite3.connect(db_path)
-        
+
         conn.row_factory = sqlite3.Row
         return conn
 
     def initialize_system_tables(self, conn: sqlite3.Connection):
         """Initializes AION system tables in the user DB."""
         cursor = conn.cursor()
-        
+
         # Registry
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS _aion_schema_registry (
@@ -98,7 +101,7 @@ class AgentDBManager:
             UNIQUE(schema_name, view_name)
         );
         """)
-        
+
         conn.commit()
 
     def get_physical_table_name(self, schema_name: str, table_name: str) -> str:
