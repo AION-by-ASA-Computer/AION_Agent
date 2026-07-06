@@ -1,10 +1,18 @@
 import json
 import logging
+import os
 
 logger = logging.getLogger("aion.json_recovery")
 
 # Stats for monitoring
 _STATS = {"attempts": 0, "recovered": 0, "failed": 0}
+
+_ALLOW_EMPTY = os.getenv("AION_JSON_RECOVERY_ALLOW_EMPTY", "0").lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 
 
 def try_recover_json(raw: str) -> dict | None:
@@ -21,16 +29,44 @@ def try_recover_json(raw: str) -> dict | None:
     except json.JSONDecodeError:
         pass
 
-    # Strategy 1.5: common truncations/empty objects (e.g. '{' or missing closing brace)
+    # Strategy 1.5: json_repair for partial/truncated tool JSON (common on vLLM)
     stripped = raw.strip()
-    if stripped == "{":
-        _STATS["recovered"] += 1
-        logger.info("JSON recovered: simple open brace '{' -> '{}'")
-        return {}
-    if stripped == "":
-        _STATS["recovered"] += 1
-        logger.info("JSON recovered: empty string -> '{}'")
-        return {}
+    if stripped.startswith("{"):
+        try:
+            import json_repair
+
+            result = json_repair.loads(stripped)
+            if isinstance(result, dict) and result:
+                _STATS["recovered"] += 1
+                logger.info(
+                    "JSON recovered via json_repair (len=%d)",
+                    len(stripped),
+                )
+                return result
+        except Exception:
+            pass
+
+    # Strategy 1.6: common truncations/empty objects (e.g. '{' or missing closing brace)
+    if not _ALLOW_EMPTY:
+        if stripped == "{":
+            # Surface via tool settlement (missing_arguments) instead of Haystack silent skip.
+            _STATS["recovered"] += 1
+            logger.warning(
+                "JSON truncated to '{' only — returning {} for tool settlement"
+            )
+            return {}
+        if stripped == "":
+            _STATS["failed"] += 1
+            return None
+    else:
+        if stripped == "{":
+            _STATS["recovered"] += 1
+            logger.info("JSON recovered: simple open brace '{' -> '{}'")
+            return {}
+        if stripped == "":
+            _STATS["recovered"] += 1
+            logger.info("JSON recovered: empty string -> '{}'")
+            return {}
     if stripped.startswith("{") and not stripped.endswith("}"):
         try:
             result = json.loads(stripped + "}")

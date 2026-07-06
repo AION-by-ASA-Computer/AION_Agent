@@ -369,8 +369,8 @@ class SessionSandboxExecutor:
                 "Error: assegna l'output finale alla variabile 'result'.\n"
                 "Stdout:\n"
                 + redirected.getvalue()
-                + "\nHint: for libraries not on the whitelist (es. docx, reportlab) usa "
-                "il formato `<aion_artifact>` per generare il file .py, poi eseguilo con `sandbox_run_python_file`."
+                + "\nHint: for libraries not on the whitelist (es. docx, reportlab) use "
+                "sandbox_write_workspace_file to create workspace/*.py, then sandbox_run_python_file."
             )
         out = redirected.getvalue()
         res = local_vars["result"]
@@ -393,7 +393,7 @@ class SessionSandboxExecutor:
         if not rel.startswith("workspace/"):
             return (
                 "Error: only run scripts under workspace/, es. workspace/convert.py "
-                "(prima emetti il codice usando `<aion_artifact>` nel testo)."
+                "(first create the file with sandbox_write_workspace_file)."
             )
         if not rel.lower().endswith(".py"):
             if rel.lower().endswith((".js", ".mjs", ".cjs")):

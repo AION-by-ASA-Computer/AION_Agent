@@ -1,0 +1,1 @@
+Load the full markdown body of a skill by slug from skills_hub. Call after skill_search when a skill applies.

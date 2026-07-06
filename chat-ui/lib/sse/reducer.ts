@@ -1,5 +1,10 @@
 import type { ChatChunk, TurnSegment, TurnState } from "./types";
 import { feedPlanAwareDisplay, stripPlanBlocksForChatDisplay } from "./planDisplay";
+import {
+  generatingTitleForFileTool,
+  isFilePreviewTool,
+  isScriptLikeTitle,
+} from "./filePreviewTools";
 import { initialTurnState } from "./types";
 
 /** Legacy <plan> token stripping — off when tool-first Plan Mode is default. */
@@ -228,6 +233,26 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
         if (!next.toolOrder.includes(id)) next.toolOrder.push(id);
         next.activeToolKeyByName[name] = id;
       }
+      if (isFilePreviewTool(name)) {
+        const title = generatingTitleForFileTool(name, ev.input);
+        const inputObj =
+          ev.input && typeof ev.input === "object"
+            ? (ev.input as Record<string, unknown>)
+            : {};
+        const hasPreviewPayload =
+          Boolean(String(inputObj.relative_path ?? "").trim()) ||
+          Boolean(String(inputObj.content ?? "").trim()) ||
+          Boolean(String(inputObj.new_string ?? "").trim()) ||
+          Boolean(String(inputObj.patch_text ?? "").trim());
+        if (hasPreviewPayload) {
+          next.segments = upsertGeneratingSegment(
+            next.segments,
+            `live_generating_tool_${name}`,
+            "artifact",
+            title,
+          );
+        }
+      }
     } else if (et === "tool_start") {
       const id =
         typeof ev.id === "string" && ev.id ? ev.id : `${name}:${next.toolOrder.length}`;
@@ -244,6 +269,26 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
       if (!next.toolOrder.includes(id)) next.toolOrder.push(id);
       next.activeToolKeyByName[name] = id;
       if (typeof ev.id === "string" && ev.id) next.activeToolKeyById[ev.id] = id;
+      if (isFilePreviewTool(name)) {
+        const title = generatingTitleForFileTool(name, ev.input);
+        const inputObj =
+          ev.input && typeof ev.input === "object"
+            ? (ev.input as Record<string, unknown>)
+            : {};
+        const hasPreviewPayload =
+          Boolean(String(inputObj.relative_path ?? "").trim()) ||
+          Boolean(String(inputObj.content ?? "").trim()) ||
+          Boolean(String(inputObj.new_string ?? "").trim()) ||
+          Boolean(String(inputObj.patch_text ?? "").trim());
+        if (hasPreviewPayload) {
+          next.segments = upsertGeneratingSegment(
+            next.segments,
+            `live_generating_tool_${name}`,
+            "artifact",
+            title,
+          );
+        }
+      }
     } else if (et === "tool_end") {
       const id = resolveToolId(next, ev, name);
       const cur = next.toolSteps[id] || { id, name, input: ev.input ?? {} };
@@ -333,15 +378,21 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
     };
     if (isPlan) {
       next.segments = upsertGeneratingSegment(next.segments, LIVE_GENERATING_PLAN_ID, "plan");
-    } else {
-      next.segments = upsertGeneratingSegment(
-        next.segments,
-        generatingIdForArtifact(id),
-        "artifact",
-        title,
-      );
     }
     if (!isPlan) {
+      const pending = art.pending === true || art.source === "tool";
+      if (pending) {
+        for (const toolName of [
+          "sandbox_write_workspace_file",
+          "sandbox_edit_workspace_file",
+          "sandbox_apply_patch",
+        ]) {
+          next.segments = removeGeneratingSegment(
+            next.segments,
+            `live_generating_tool_${toolName}`,
+          );
+        }
+      }
       const aSeg: Extract<TurnSegment, { kind: "artifact" }> = {
         kind: "artifact",
         id,

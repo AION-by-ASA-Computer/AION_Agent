@@ -16,6 +16,7 @@ import { ReasoningDisclosure } from "@/components/chat/ReasoningDisclosure";
 import { ShimmerText } from "@/components/chat/ShimmerText";
 import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
 import { artifactLanguage } from "@/lib/artifacts";
+import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 import { sessionDownloadUrl } from "@/lib/api/aion";
 import { MermaidBlock } from "@/components/chat/MermaidBlock";
 
@@ -55,12 +56,17 @@ export function TurnTimeline({
         const isLast = idx === segments.length - 1;
         if (seg.kind === "generating") {
           const Icon = seg.target === "plan" ? ListTodo : FileText;
+          const scriptLike = isScriptLikeTitle(seg.title);
           const label =
             seg.target === "plan"
               ? t("chat.generating.plan")
-              : seg.title?.trim()
-                ? t("chat.generating.document_named", { title: seg.title })
-                : t("chat.generating.document");
+              : scriptLike && seg.title?.trim()
+                ? t("chat.generating.script_named", { title: seg.title })
+                : scriptLike
+                  ? t("chat.generating.script")
+                  : seg.title?.trim()
+                    ? t("chat.generating.document_named", { title: seg.title })
+                    : t("chat.generating.document");
           return (
             <StatusProgressCard
               key={seg.id}
@@ -177,6 +183,8 @@ export function TurnTimeline({
             )
             : false;
           if (planCheck) return null;
+          const artifactStreaming =
+            streaming && isLast && !seg.savedPath;
           return (
             <CodeArtifactBlock
               key={seg.id}
@@ -192,6 +200,7 @@ export function TurnTimeline({
               }
               execution={seg.execution}
               defaultOpen={!planCheck && !seg.savedPath}
+              streaming={artifactStreaming}
             />
           );
         }
