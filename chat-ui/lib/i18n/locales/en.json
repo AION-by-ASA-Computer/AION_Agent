@@ -73,6 +73,8 @@
     "login": "Sign in",
     "integrations": "Integrations",
     "schedules": "Automations",
+    "chat": "Chat",
+    "profile": "Profile",
     "search_placeholder": "Search conversations…",
     "favorites": "Favorites",
     "add_favorite": "Add to favorites",

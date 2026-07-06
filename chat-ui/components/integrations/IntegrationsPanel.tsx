@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { Plug } from "lucide-react";
 
 import { CredentialConfigDialog } from "@/components/integrations/CredentialConfigDialog";
@@ -8,10 +8,11 @@ import { IntegrationCard } from "@/components/integrations/IntegrationCard";
 import { IntegrationStatsBar } from "@/components/integrations/IntegrationStatsBar";
 import { IntegrationsEmptyState } from "@/components/integrations/IntegrationsEmptyState";
 import type { Integration } from "@/components/integrations/types";
-import { SecondaryPageLayout } from "@/components/layout/SecondaryPageLayout";
+import { ShellSectionHeader } from "@/components/layout/ShellSectionHeader";
 import { apiBase } from "@/lib/config";
 import { jsonHeaders } from "@/lib/api/aion";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
+import { useShellActions } from "@/lib/shell/shell-context";
 import { useT } from "@/lib/i18n/use-t";
 
 function isIntegrationConnected(integration: Integration) {
@@ -21,8 +22,9 @@ function isIntegrationConnected(integration: Integration) {
   return integration.is_configured || (integration.has_oauth && hasOAuthToken);
 }
 
-export default function MyIntegrationsPage() {
+export function IntegrationsPanel() {
   const t = useT();
+  const { setHeader, setDock, setDockOpen, clearChrome } = useShellActions();
   const userId = useStoredUserId();
   const token = useStoredToken();
   const [integrations, setIntegrations] = useState<Integration[]>([]);
@@ -60,6 +62,22 @@ export default function MyIntegrationsPage() {
       setLoading(false);
     }
   }, [userId, token]);
+
+  useLayoutEffect(() => {
+    setHeader(
+      <ShellSectionHeader
+        title={t("integrationsPage.title")}
+        subtitle={t("integrationsPage.subtitle")}
+        icon={<Plug className="h-5 w-5" aria-hidden />}
+      />,
+    );
+    setDock(null);
+    setDockOpen(false);
+  }, [setHeader, setDock, setDockOpen, t]);
+
+  useLayoutEffect(() => {
+    return () => clearChrome();
+  }, [clearChrome]);
 
   async function togglePreference(slug: string, active: boolean) {
     const res = await fetch(`${apiBase()}/v1/integrations/${encodeURIComponent(slug)}/preference`, {
@@ -174,94 +192,91 @@ export default function MyIntegrationsPage() {
 
   if (loading) {
     return (
-      <div className="mx-auto max-w-3xl p-8 text-muted-foreground">
+      <div className="flex flex-1 items-center justify-center p-8 text-muted-foreground">
         {t("integrationsPage.loading")}
       </div>
     );
   }
 
   return (
-    <SecondaryPageLayout
-      title={t("integrationsPage.title")}
-      subtitle={t("integrationsPage.subtitle")}
-      backLabel={t("integrationsPage.back_chat")}
-      headerIcon={<Plug className="h-5 w-5" aria-hidden />}
-    >
-      {!featureEnabled ? (
-        <div className="mb-4 rounded-2xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
-          {featureHint || t("integrationsPage.feature_disabled")}
-        </div>
-      ) : null}
-
-      {fetchError ? (
-        <div className="mb-4 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {fetchError}
-        </div>
-      ) : null}
-
-      <IntegrationStatsBar
-        total={integrations.length}
-        configured={configured.length}
-        pending={notConfigured.length}
-      />
-
-      {configured.length > 0 ? (
-        <section className="mb-8">
-          <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-            {t("integrationsPage.section_configured")}
-          </h2>
-          <div className="space-y-3">
-            {configured.map((intg) => (
-              <IntegrationCard
-                key={intg.server_slug}
-                integration={intg}
-                onConfigure={() => setConfiguringSlug(intg.server_slug)}
-                connectLabel={t("integrationsPage.edit")}
-                orgManagedLabel={t("integrationsPage.org_managed")}
-                perUserHint={t("integrationsPage.per_user_hint")}
-                onTogglePreference={(slug, active) => void togglePreference(slug, active)}
-                onDisconnectOAuth={disconnectOAuth}
-              />
-            ))}
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
+        {!featureEnabled ? (
+          <div className="mb-4 rounded-2xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-200">
+            {featureHint || t("integrationsPage.feature_disabled")}
           </div>
-        </section>
-      ) : null}
+        ) : null}
 
-      {notConfigured.length > 0 ? (
-        <section className="mb-8">
-          <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-            {t("integrationsPage.section_pending")}
-          </h2>
-          <div className="space-y-3">
-            {notConfigured.map((intg) => (
-              <IntegrationCard
-                key={intg.server_slug}
-                integration={intg}
-                onConfigure={() => setConfiguringSlug(intg.server_slug)}
-                connectLabel={t("integrationsPage.connect")}
-                orgManagedLabel={t("integrationsPage.org_managed")}
-                perUserHint={t("integrationsPage.per_user_hint")}
-                onTogglePreference={(slug, active) => void togglePreference(slug, active)}
-                onDisconnectOAuth={disconnectOAuth}
-              />
-            ))}
+        {fetchError ? (
+          <div className="mb-4 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {fetchError}
           </div>
-        </section>
-      ) : null}
+        ) : null}
 
-      {integrations.length === 0 && !fetchError ? <IntegrationsEmptyState /> : null}
-
-      {configuringIntegration && userId ? (
-        <CredentialConfigDialog
-          integration={configuringIntegration}
-          userId={userId}
-          token={token}
-          onClose={() => {
-            setConfiguringSlug(null);
-            void load();
-          }}
+        <IntegrationStatsBar
+          total={integrations.length}
+          configured={configured.length}
+          pending={notConfigured.length}
         />
-      ) : null}
-    </SecondaryPageLayout>
+
+        {configured.length > 0 ? (
+          <section className="mb-8">
+            <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              {t("integrationsPage.section_configured")}
+            </h2>
+            <div className="space-y-3">
+              {configured.map((intg) => (
+                <IntegrationCard
+                  key={intg.server_slug}
+                  integration={intg}
+                  onConfigure={() => setConfiguringSlug(intg.server_slug)}
+                  connectLabel={t("integrationsPage.edit")}
+                  orgManagedLabel={t("integrationsPage.org_managed")}
+                  perUserHint={t("integrationsPage.per_user_hint")}
+                  onTogglePreference={(slug, active) => void togglePreference(slug, active)}
+                  onDisconnectOAuth={disconnectOAuth}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {notConfigured.length > 0 ? (
+          <section className="mb-8">
+            <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              {t("integrationsPage.section_pending")}
+            </h2>
+            <div className="space-y-3">
+              {notConfigured.map((intg) => (
+                <IntegrationCard
+                  key={intg.server_slug}
+                  integration={intg}
+                  onConfigure={() => setConfiguringSlug(intg.server_slug)}
+                  connectLabel={t("integrationsPage.connect")}
+                  orgManagedLabel={t("integrationsPage.org_managed")}
+                  perUserHint={t("integrationsPage.per_user_hint")}
+                  onTogglePreference={(slug, active) => void togglePreference(slug, active)}
+                  onDisconnectOAuth={disconnectOAuth}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {integrations.length === 0 && !fetchError ? <IntegrationsEmptyState /> : null}
+
+        {configuringIntegration && userId ? (
+          <CredentialConfigDialog
+            integration={configuringIntegration}
+            userId={userId}
+            token={token}
+            onClose={() => {
+              setConfiguringSlug(null);
+              void load();
+            }}
+          />
+        ) : null}
+      </div>
+    </div>
   );
 }

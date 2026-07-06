@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, memo } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
@@ -29,7 +29,6 @@ import {
   drainSessionEventsLoop,
   fetchProfiles,
   fetchSessionCharts,
-  listChatUiConversations,
   listSessionFilesSubdir,
   type SessionFileRow,
   openSessionEventsStream,
@@ -45,7 +44,6 @@ import {
   updateConversationMetadata,
   updateConversationProfile,
   updateConversationTitle,
-  deleteConversation,
   patchMessageTimeline,
   saveAssistantMessage,
   saveChatMessage,
@@ -54,7 +52,6 @@ import {
   type ChatHistoryArtifact,
   type ChatHistoryMessage,
   type ChatHistoryStep,
-  type ConversationSummary,
   type ProfileRow,
   type SessionChart,
 } from "@/lib/api/aion";
@@ -84,9 +81,8 @@ import {
 } from "@/lib/use-conversation-transcript";
 import type { ChatChunk, TurnSegment, TurnState, WebSourceCard } from "@/lib/sse/types";
 
-import { AppShell } from "@/components/layout/AppShell";
 import { ChatHeader } from "@/components/layout/ChatHeader";
-import { ThreadSidebar } from "@/components/layout/ThreadSidebar";
+import { useShellActions, useSidebarOpen } from "@/lib/shell/shell-context";
 import { cn } from "@/lib/cn";
 import { DeepResearchPanel } from "@/components/research/DeepResearchPanel";
 import { PlanExecutionChatBanner } from "@/components/plan/PlanExecutionChatBanner";
@@ -128,7 +124,6 @@ import {
   toggleMessageRating,
   type MessageRating,
 } from "@/lib/message-feedback";
-import { useIsLgUp } from "@/lib/hooks/use-breakpoint";
 import { SessionCharts } from "@/components/chat/SessionCharts";
 
 import type { DockTab } from "@/lib/layout/dock-tab";
@@ -364,6 +359,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const COMPOSER_MIN_HEIGHT = 110;
   const userId = useStoredUserId();
   const token = useStoredToken();
+  const shellActions = useShellActions();
+  const sidebarOpen = useSidebarOpen();
   const [conversationId, setConversationId] = useState(initialConversationId);
 
   const [dockTab, setDockTab] = useState<DockTab>("none");
@@ -539,22 +536,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   useEffect(() => {
     setConversationId(initialConversationId);
   }, [initialConversationId]);
-
-  const handleSelectConversation = useCallback(
-    (newId: string) => {
-      setConversationId(newId);
-      window.history.pushState(null, "", `/c/${newId}`);
-      if (typeof window !== "undefined" && !window.matchMedia("(min-width: 1024px)").matches) {
-        setSidebarOpen(false);
-        try {
-          localStorage.setItem("aion-chat-sidebar-open", "0");
-        } catch {
-          /* ignore */
-        }
-      }
-    },
-    [],
-  );
 
   useEffect(() => {
     const onPopState = () => {
@@ -994,7 +975,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     };
   }, [closePlusSubMenus]);
 
-  const [threads, setThreads] = useState<ConversationSummary[]>([]);
   const [turnVisual, setTurnVisual] = useState<TurnState | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [streamRecovery, setStreamRecovery] = useState(false);
@@ -1074,34 +1054,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       }
     }
   }, [turnVisual, adoptResearchSession]);
-
-  const isLgUp = useIsLgUp();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem("aion-chat-sidebar-open");
-      if (v === "1") setSidebarOpen(true);
-      else if (v === "0") setSidebarOpen(false);
-      else if (typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches) {
-        setSidebarOpen(true);
-      }
-    } catch {
-      /* ignore */
-    }
-  }, []);
-
-  const toggleSidebar = useCallback(() => {
-    setSidebarOpen((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem("aion-chat-sidebar-open", next ? "1" : "0");
-      } catch {
-        /* ignore */
-      }
-      return next;
-    });
-  }, []);
 
   const {
     planChunk,
@@ -1362,10 +1314,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const effectiveEffort = thinkingEnabled ? reasoningEffort : "min";
 
-  const refreshThreads = useCallback(async () => {
-    const data = await listChatUiConversations(userId, token);
-    setThreads(data);
-  }, [userId, token]);
+  const refreshThreads = shellActions.refreshThreads;
 
   const handleTitleChange = useCallback(async (newTitle: string) => {
     if (!conversationId) return;
@@ -1377,43 +1326,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       console.error("Error saving conversation title to DB:", err);
     }
   }, [conversationId, userId, token, refreshThreads]);
-
-  const handleDeleteConversation = useCallback(async (idToDelete: string) => {
-    try {
-      await deleteConversation(idToDelete, userId, token);
-      await refreshThreads();
-      if (conversationId === idToDelete) {
-        const nextId = crypto.randomUUID();
-        setConversationId(nextId);
-        window.history.pushState(null, "", `/c/${nextId}`);
-      }
-    } catch (err) {
-      console.error("Error deleting conversation:", err);
-    }
-  }, [conversationId, userId, token, refreshThreads]);
-
-  const handleRenameConversation = useCallback(async (idToRename: string, newTitle: string) => {
-    try {
-      await updateConversationTitle(idToRename, newTitle, userId, token);
-      if (conversationId === idToRename) {
-        setConversationTitle(newTitle);
-      }
-      await refreshThreads();
-    } catch (err) {
-      console.error("Error renaming conversation:", err);
-    }
-  }, [conversationId, userId, token, refreshThreads]);
-
-  const handleToggleFavorite = useCallback(async (idToToggle: string, isFav: boolean) => {
-    try {
-      await updateConversationMetadata(idToToggle, { favorite: !isFav }, userId, token);
-      await refreshThreads();
-    } catch (err) {
-      console.error("Error toggling favorite:", err);
-    }
-  }, [userId, token, refreshThreads]);
-
-
 
   const adoptPlanExecution = useCallback(
     (
@@ -2799,14 +2711,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   );
 
   const closeDock = useCallback(() => setDockTab("none"), []);
-  const closeSidebar = useCallback(() => {
-    setSidebarOpen(false);
-    try {
-      localStorage.setItem("aion-chat-sidebar-open", "0");
-    } catch {
-      /* ignore */
-    }
-  }, []);
 
   const dockBody = (
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -2973,54 +2877,80 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     ? t("chat.agent_status.thinking")
     : t("chat.agent_status.working");
 
+  const {
+    setHeader,
+    setDock,
+    setDockOpen,
+    clearChrome,
+    setDockCloseHandler,
+    toggleSidebar,
+  } = shellActions;
+
+  useLayoutEffect(() => {
+    setDockCloseHandler(closeDock);
+    return () => setDockCloseHandler(null);
+  }, [setDockCloseHandler, closeDock]);
+
+  useLayoutEffect(() => {
+    setHeader(
+      <ChatHeader
+        conversationId={conversationId}
+        profiles={profiles}
+        profile={activeProfileName}
+        onProfileChange={handleProfileChange}
+        agentMode={agentMode}
+        onAgentModeChange={handleAgentModeChange}
+        dockTab={dockTab}
+        onToggleDock={toggleDock}
+        isSidebarOpen={sidebarOpen}
+        onToggleSidebar={toggleSidebar}
+        title={conversationTitle}
+        onTitleChange={handleTitleChange}
+        llmProviders={llmProviders}
+        selectedProvider={selectedProvider}
+        providersLoading={providersLoading}
+        onProviderChange={setSelectedProvider}
+      />,
+    );
+  }, [
+    setHeader,
+    sidebarOpen,
+    toggleSidebar,
+    conversationId,
+    profiles,
+    activeProfileName,
+    handleProfileChange,
+    agentMode,
+    handleAgentModeChange,
+    dockTab,
+    toggleDock,
+    conversationTitle,
+    handleTitleChange,
+    llmProviders,
+    selectedProvider,
+    providersLoading,
+  ]);
+
+  useLayoutEffect(() => {
+    setDockOpen(dockTab !== "none");
+    if (dockTab === "none") {
+      setDock(null);
+      return;
+    }
+    setDock(
+      <>
+        {dockTabs}
+        {dockBody}
+      </>,
+    );
+  });
+
+  useLayoutEffect(() => {
+    return () => clearChrome();
+  }, [clearChrome]);
+
   return (
     <>
-      <AppShell
-        sidebar={
-          <ThreadSidebar
-            currentId={conversationId}
-            userId={userId}
-            items={threads}
-            onRefresh={refreshThreads}
-            onSelectConversation={handleSelectConversation}
-            onDeleteConversation={handleDeleteConversation}
-            onRenameConversation={handleRenameConversation}
-            onToggleFavorite={handleToggleFavorite}
-            isCollapsed={!sidebarOpen && isLgUp}
-            onToggleCollapse={toggleSidebar}
-          />
-        }
-        header={
-          <ChatHeader
-            conversationId={conversationId}
-            profiles={profiles}
-            profile={activeProfileName}
-            onProfileChange={handleProfileChange}
-            agentMode={agentMode}
-            onAgentModeChange={handleAgentModeChange}
-            dockTab={dockTab}
-            onToggleDock={toggleDock}
-            isSidebarOpen={sidebarOpen}
-            onToggleSidebar={toggleSidebar}
-            title={conversationTitle}
-            onTitleChange={handleTitleChange}
-            llmProviders={llmProviders}
-            selectedProvider={selectedProvider}
-            providersLoading={providersLoading}
-            onProviderChange={setSelectedProvider}
-          />
-        }
-        dock={
-          <>
-            {dockTabs}
-            {dockBody}
-          </>
-        }
-        isDockOpen={dockTab !== "none"}
-        isSidebarOpen={sidebarOpen}
-        onCloseDock={closeDock}
-        onCloseSidebar={closeSidebar}
-      >
         <div id="chat-pane" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
           <div
             ref={messagesContainerRef}
@@ -4077,7 +4007,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             </div>
           </div>
         </div>
-      </AppShell>
       <ProjectCreateModal
         open={projectCreateOpen}
         onClose={() => setProjectCreateOpen(false)}

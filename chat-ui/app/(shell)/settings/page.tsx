@@ -1,10 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  ArrowLeft,
   Settings,
   User,
   CheckCircle,
@@ -26,6 +25,8 @@ import { useT } from "@/lib/i18n/use-t";
 import { detectBrowserLocale, setLocale, type Locale } from "@/lib/i18n/i18n-store";
 import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
 import { ProfileOptionGrid } from "@/components/chat/ProfileOptionGrid";
+import { ShellSectionHeader } from "@/components/layout/ShellSectionHeader";
+import { useShellActions } from "@/lib/shell/shell-context";
 
 // Template di istruzioni di default se non presenti in localStorage per ciascuna lingua
 const DEFAULT_USER_MD_BY_LANG: Record<string, string> = {
@@ -63,6 +64,7 @@ const DEFAULT_USER_MD_BY_LANG: Record<string, string> = {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { setHeader, setDock, setDockOpen, clearChrome } = useShellActions();
   const searchParams = useSearchParams();
   const currentUserId = useStoredUserId();
   const currentToken = useStoredToken();
@@ -367,6 +369,21 @@ export default function SettingsPage() {
   const charCount = userMdContent.length;
   const isOverLimit = charCount > 1400;
 
+  useLayoutEffect(() => {
+    setHeader(
+      <ShellSectionHeader
+        title={t("settings.title")}
+        icon={<Settings className="h-5 w-5" aria-hidden />}
+      />,
+    );
+    setDock(null);
+    setDockOpen(false);
+  }, [setHeader, setDock, setDockOpen, t]);
+
+  useLayoutEffect(() => {
+    return () => clearChrome();
+  }, [clearChrome]);
+
   if (!mounted) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
@@ -376,30 +393,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="flex min-h-screen w-full flex-col bg-background text-foreground transition-colors duration-300">
-
-      {/* Header Premium con sfocatura glassmorphism */}
-      <header className="sticky top-0 z-40 w-full border-b border-border bg-card/70 px-4 py-3 backdrop-blur-md">
-        <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.back()}
-              className="focus-ring flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-muted/40 text-muted-foreground transition-all hover:bg-muted hover:text-foreground active:scale-95"
-              title={t("settings.back")}
-            >
-              <ArrowLeft size={15} />
-            </button>
-            <div className="flex items-center gap-2">
-              <Settings className="h-4.5 w-4.5 text-primary " />
-              <h1 className="text-sm font-semibold tracking-tight text-foreground select-none">
-                {t("settings.title")}
-              </h1>
-            </div>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Container */}
+    <div className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto bg-background text-foreground transition-colors duration-300">
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 md:py-12">
         <div className="grid gap-8 md:grid-cols-[220px_1fr]">
 
