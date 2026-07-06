@@ -8,7 +8,7 @@ import { MermaidBlock } from "@/components/chat/MermaidBlock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -19,8 +19,6 @@ import Link from "next/link";
 import { AgentModeSelectChip } from "@/components/chat/AgentModeSelectChip";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ComposerOptionRow } from "@/components/chat/ComposerOptionRow";
-import { ModelSelectChip } from "@/components/chat/ModelSelectChip";
-import { WebSearchChip } from "@/components/chat/WebSearchChip";
 import { mergeAttachmentRefs } from "@/lib/attachments";
 import { artifactLanguage } from "@/lib/artifacts";
 import {
@@ -908,11 +906,16 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   // Stati e logica per i nuovi menù popover "+", "Profilo", "Thinking" e "Agent Mode"
   const [isPlusOpen, setIsPlusOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isThinkingOpen, setIsThinkingOpen] = useState(false);
   const [isAgentModeOpen, setIsAgentModeOpen] = useState(false);
-  const [isWebSearchOpen, setIsWebSearchOpen] = useState(false);
-  const [isLlmProviderOpen, setIsLlmProviderOpen] = useState(false);
   const [isToolsViewSubOpen, setIsToolsViewSubOpen] = useState(false);
+  const [isWebSearchSubOpen, setIsWebSearchSubOpen] = useState(false);
+  const [isThinkingSubOpen, setIsThinkingSubOpen] = useState(false);
+
+  const closePlusSubMenus = useCallback(() => {
+    setIsToolsViewSubOpen(false);
+    setIsWebSearchSubOpen(false);
+    setIsThinkingSubOpen(false);
+  }, []);
 
   const [toolsView, setToolsView] = useState<"hidden" | "partial" | "full">(() => {
     if (typeof window !== "undefined") {
@@ -975,15 +978,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
-  const thinkingMenuRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (plusMenuRef.current && !plusMenuRef.current.contains(event.target as Node)) {
         setIsPlusOpen(false);
-        setIsToolsViewSubOpen(false);
-      }
-      if (thinkingMenuRef.current && !thinkingMenuRef.current.contains(event.target as Node)) {
-        setIsThinkingOpen(false);
+        closePlusSubMenus();
       }
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setIsProfileOpen(false);
@@ -993,21 +992,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, []);
-
-  const getThinkingLabel = useCallback(() => {
-    if (!thinkingEnabled) return t("chat.thinking.off");
-    switch (reasoningEffort) {
-      case "min":
-        return t("chat.thinking.min");
-      case "medium":
-        return t("chat.thinking.med");
-      case "max":
-        return t("chat.thinking.max");
-      default:
-        return t("chat.thinking.label");
-    }
-  }, [thinkingEnabled, reasoningEffort, t]);
+  }, [closePlusSubMenus]);
 
   const [threads, setThreads] = useState<ConversationSummary[]>([]);
   const [turnVisual, setTurnVisual] = useState<TurnState | null>(null);
@@ -3019,6 +3004,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             onToggleSidebar={toggleSidebar}
             title={conversationTitle}
             onTitleChange={handleTitleChange}
+            llmProviders={llmProviders}
+            selectedProvider={selectedProvider}
+            providersLoading={providersLoading}
+            onProviderChange={setSelectedProvider}
           />
         }
         dock={
@@ -3032,7 +3021,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         onCloseDock={closeDock}
         onCloseSidebar={closeSidebar}
       >
-        <div id="chat-pane" className="relative flex min-h-0 flex-1 flex-col">
+        <div id="chat-pane" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
           <div
             ref={messagesContainerRef}
             className={cn(
@@ -3459,8 +3448,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             </div>
           </div>
 
-          <div className="shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
-            <div className="mx-auto w-full max-w-3xl">
+          <div className="min-w-0 shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
+            <div className="mx-auto w-full min-w-0 max-w-3xl">
               {pendingFiles.length > 0 && (
                 <div className="mb-3 flex flex-wrap gap-2">
                   {pendingFiles.map((f) => (
@@ -3499,7 +3488,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               <div
                 ref={composerContainerRef}
                 className={cn(
-                  "relative flex flex-col rounded-[26px] border bg-card/45 p-2.5 shadow-md backdrop-blur-xl focus-within:ring-1",
+                  "relative flex min-w-0 flex-col overflow-hidden rounded-[26px] border bg-card/45 p-2.5 shadow-md backdrop-blur-xl focus-within:ring-1",
                   agentMode === "plan"
                     ? "border-orange-500/35 shadow-[0_0_12px_rgba(249,115,22,0.08)] focus-within:ring-orange-500/30"
                     : agentMode === "deep_research"
@@ -3544,10 +3533,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     }
                   }}
                   placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
-                  className="focus-ring min-h-0 flex-1 w-full resize-none rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground/75 focus-visible:ring-0"
+                  className="focus-ring box-border min-h-0 min-w-0 max-w-full flex-1 resize-none overflow-x-hidden overflow-y-auto break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
                   rows={1}
                 />
-                <div className="mt-1 flex items-center justify-between px-2 pb-1">
+                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-2 pb-1">
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -3565,20 +3554,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     }}
                   />
                   {/* Pulsante "+" con Menu di Allega File */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <div ref={plusMenuRef} className="relative">
                       <button
                         type="button"
                         onClick={() => {
                           setIsPlusOpen((prev) => !prev);
-                          setIsToolsViewSubOpen(false);
-                          setIsThinkingOpen(false);
+                          closePlusSubMenus();
                           setIsProfileOpen(false);
                           setIsAgentModeOpen(false);
                         }}
                         className={cn(
                           "focus-ring inline-flex size-7 items-center justify-center rounded-full border transition-all duration-200 active:scale-95",
-                          isPlusOpen
+                          isPlusOpen || !webSearchEnabled || thinkingEnabled
                             ? "border-primary bg-primary/10 text-primary"
                             : "border-border bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                         )}
@@ -3603,10 +3591,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                             onClick={() => {
                               fileInputRef.current?.click();
                               setIsPlusOpen(false);
-                              setIsToolsViewSubOpen(false);
+                              closePlusSubMenus();
                             }}
                             onMouseEnter={() => {
-                              setIsToolsViewSubOpen(false);
+                              closePlusSubMenus();
                             }}
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors text-left"
                           >
@@ -3620,9 +3608,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               type="button"
                               onClick={() => {
                                 setIsToolsViewSubOpen((prev) => !prev);
+                                setIsWebSearchSubOpen(false);
+                                setIsThinkingSubOpen(false);
                               }}
                               onMouseEnter={() => {
                                 setIsToolsViewSubOpen(true);
+                                setIsWebSearchSubOpen(false);
+                                setIsThinkingSubOpen(false);
                               }}
                               className={cn(
                                 "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
@@ -3655,7 +3647,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                       onClick={() => {
                                         handleToolsViewChange("hidden");
                                         setIsPlusOpen(false);
-                                        setIsToolsViewSubOpen(false);
+                                        closePlusSubMenus();
                                       }}
                                       className={cn(
                                         "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
@@ -3674,7 +3666,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                       onClick={() => {
                                         handleToolsViewChange("partial");
                                         setIsPlusOpen(false);
-                                        setIsToolsViewSubOpen(false);
+                                        closePlusSubMenus();
                                       }}
                                       className={cn(
                                         "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
@@ -3693,7 +3685,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                       onClick={() => {
                                         handleToolsViewChange("full");
                                         setIsPlusOpen(false);
-                                        setIsToolsViewSubOpen(false);
+                                        closePlusSubMenus();
                                       }}
                                       className={cn(
                                         "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
@@ -3710,6 +3702,217 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               </div>
                             )}
                           </div>
+
+                          {/* Opzione: Web search > */}
+                          <div className="relative" onMouseLeave={() => setIsWebSearchSubOpen(false)}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsWebSearchSubOpen((prev) => !prev);
+                                setIsToolsViewSubOpen(false);
+                                setIsThinkingSubOpen(false);
+                              }}
+                              onMouseEnter={() => {
+                                setIsWebSearchSubOpen(true);
+                                setIsToolsViewSubOpen(false);
+                                setIsThinkingSubOpen(false);
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                isWebSearchSubOpen
+                                  ? "bg-muted/60 text-foreground"
+                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                              )}
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                {webSearchEnabled ? (
+                                  <Globe size={12} className="shrink-0" aria-hidden />
+                                ) : (
+                                  <GlobeLock size={12} className="shrink-0" aria-hidden />
+                                )}
+                                <span className="truncate">{t("chat.web_search.global")}</span>
+                              </div>
+                              <ChevronRight size={12} className="shrink-0" aria-hidden />
+                            </button>
+
+                            {isWebSearchSubOpen ? (
+                              <div className="absolute bottom-full left-0 z-50 pb-1.5 w-44 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                                <div
+                                  onMouseEnter={() => setIsWebSearchSubOpen(true)}
+                                  className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
+                                >
+                                  <div className="border-b border-border/45 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                                    {t("chat.web_search.global")}
+                                  </div>
+                                  <div className="space-y-0.5 p-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        persistWebSearchEnabled(false);
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        !webSearchEnabled
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.web_search.off_short")}</span>
+                                      {!webSearchEnabled ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        persistWebSearchEnabled(true);
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        webSearchEnabled
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.web_search.on_short")}</span>
+                                      {webSearchEnabled ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          {/* Opzione: Thinking > */}
+                          <div className="relative" onMouseLeave={() => setIsThinkingSubOpen(false)}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsThinkingSubOpen((prev) => !prev);
+                                setIsToolsViewSubOpen(false);
+                                setIsWebSearchSubOpen(false);
+                              }}
+                              onMouseEnter={() => {
+                                setIsThinkingSubOpen(true);
+                                setIsToolsViewSubOpen(false);
+                                setIsWebSearchSubOpen(false);
+                              }}
+                              className={cn(
+                                "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                isThinkingSubOpen || thinkingEnabled
+                                  ? "bg-muted/60 text-foreground"
+                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                              )}
+                            >
+                              <div className="flex min-w-0 items-center gap-2">
+                                <Sparkles size={12} className="shrink-0" aria-hidden />
+                                <span className="truncate">{t("chat.thinking.label")}</span>
+                              </div>
+                              <ChevronRight size={12} className="shrink-0" aria-hidden />
+                            </button>
+
+                            {isThinkingSubOpen ? (
+                              <div className="absolute bottom-full left-0 z-50 pb-1.5 w-44 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                                <div
+                                  onMouseEnter={() => setIsThinkingSubOpen(true)}
+                                  className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
+                                >
+                                  <div className="border-b border-border/45 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                                    {t("chat.thinking.label")}
+                                  </div>
+                                  <div className="space-y-0.5 p-0.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToggleThinking(false);
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        !thinkingEnabled
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.thinking.disable")}</span>
+                                      {!thinkingEnabled ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToggleThinking(true);
+                                        handleReasoningEffortChange("min");
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        thinkingEnabled && reasoningEffort === "min"
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.thinking.min")}</span>
+                                      {thinkingEnabled && reasoningEffort === "min" ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToggleThinking(true);
+                                        handleReasoningEffortChange("medium");
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        thinkingEnabled && reasoningEffort === "medium"
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.thinking.med")}</span>
+                                      {thinkingEnabled && reasoningEffort === "medium" ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        handleToggleThinking(true);
+                                        handleReasoningEffortChange("max");
+                                        setIsPlusOpen(false);
+                                        closePlusSubMenus();
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                        thinkingEnabled && reasoningEffort === "max"
+                                          ? "bg-primary/10 text-primary"
+                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                      )}
+                                    >
+                                      <span>{t("chat.thinking.max")}</span>
+                                      {thinkingEnabled && reasoningEffort === "max" ? (
+                                        <Check size={12} className="shrink-0 text-primary" />
+                                      ) : null}
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            ) : null}
+                          </div>
+
+                          <div className="my-1 border-t border-border/45" />
                           <button
                             type="button"
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors text-left border border-transparent hover:border-primary/20"
@@ -3719,7 +3922,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               setWebRestrictInputError(null);
                               setWebRestrictModalOpen(true);
                               setIsPlusOpen(false);
-                              setIsToolsViewSubOpen(false);
+                              closePlusSubMenus();
                             }}
                           >
                             <Settings size={12} className="shrink-0" aria-hidden />
@@ -3729,43 +3932,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       )}
                     </div>
 
-                    {/* Modello LLM — chip dedicato (stile Promptly) */}
-                    <ModelSelectChip
-                      providers={llmProviders}
-                      selectedSlug={selectedProvider}
-                      loading={providersLoading}
-                      open={isLlmProviderOpen}
-                      onOpenChange={(open) => {
-                        setIsLlmProviderOpen(open);
-                        if (open) {
-                          setIsPlusOpen(false);
-                          setIsProfileOpen(false);
-                          setIsThinkingOpen(false);
-                          setIsAgentModeOpen(false);
-                          setIsWebSearchOpen(false);
-                          setIsToolsViewSubOpen(false);
-                        }
-                      }}
-                      onSelect={setSelectedProvider}
-                    />
-
-                    <WebSearchChip
-                      enabled={webSearchEnabled}
-                      onChange={persistWebSearchEnabled}
-                      open={isWebSearchOpen}
-                      onOpenChange={(open) => {
-                        setIsWebSearchOpen(open);
-                        if (open) {
-                          setIsPlusOpen(false);
-                          setIsProfileOpen(false);
-                          setIsThinkingOpen(false);
-                          setIsAgentModeOpen(false);
-                          setIsLlmProviderOpen(false);
-                          setIsToolsViewSubOpen(false);
-                        }
-                      }}
-                    />
-
                     {/* Pulsante Profilo con Dropdown Opzioni */}
                     <div ref={profileMenuRef} className="relative">
                       <button
@@ -3773,21 +3939,20 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         onClick={() => {
                           setIsProfileOpen((prev) => !prev);
                           setIsPlusOpen(false);
-                          setIsThinkingOpen(false);
-                          setIsToolsViewSubOpen(false);
+                          closePlusSubMenus();
                           setIsAgentModeOpen(false);
-                          setIsWebSearchOpen(false);
-                          setIsLlmProviderOpen(false);
                         }}
                         className={cn(
-                          "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                          "focus-ring inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
                           isProfileOpen
                             ? "border-primary/45 bg-primary/10 text-primary"
                             : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                         )}
                       >
                         <User size={12} className="shrink-0" aria-hidden />
-                        <span>{activeProfileName || t("chat.profile.label")}</span>
+                        <span className="max-w-[6.5rem] truncate sm:max-w-[9rem]">
+                          {activeProfileName || t("chat.profile.label")}
+                        </span>
                         <ChevronDown size={10} className="opacity-70" aria-hidden />
                       </button>
 
@@ -3855,11 +4020,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         setIsAgentModeOpen(open);
                         if (open) {
                           setIsPlusOpen(false);
-                          setIsToolsViewSubOpen(false);
-                          setIsThinkingOpen(false);
+                          closePlusSubMenus();
                           setIsProfileOpen(false);
-                          setIsLlmProviderOpen(false);
-                          setIsWebSearchOpen(false);
                         }
                       }}
                       onAfterSelect={(mode) => {
@@ -3869,81 +4031,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   </div>
 
                   {/* Altri controlli a destra */}
-                  <div className="flex items-center gap-2 ml-auto">
-
-                    {/* Pulsante Thinking con Dropdown Opzioni */}
-                    <div ref={thinkingMenuRef} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsThinkingOpen((prev) => !prev);
-                          setIsPlusOpen(false);
-                          setIsToolsViewSubOpen(false);
-                          setIsLlmProviderOpen(false);
-                        }}
-                        className={cn(
-                          "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-medium transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]",
-                          thinkingEnabled
-                            ? "border-primary/40 bg-primary/10 text-primary"
-                            : "border-border bg-muted/30 text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                        )}
-                      >
-                        <Sparkles size={12} aria-hidden />
-                        <span>{getThinkingLabel()}</span>
-                        <ChevronDown size={10} className="opacity-70" aria-hidden />
-                      </button>
-
-                      {isThinkingOpen && (
-                        <div className="absolute bottom-full right-0 mb-2 z-50 w-[min(100vw-2rem,15rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                            {t("chat.thinking.label")}
-                          </div>
-                          <div className="p-0.5">
-                            <ComposerOptionRow
-                              label={t("chat.thinking.disable")}
-                              description={t("chat.thinking.disable_desc")}
-                              selected={!thinkingEnabled}
-                              onClick={() => {
-                                handleToggleThinking(false);
-                                setIsThinkingOpen(false);
-                              }}
-                            />
-                            <div className="my-1 border-t border-border/45" />
-                            <ComposerOptionRow
-                              label={t("chat.thinking.min")}
-                              description={t("chat.thinking.min_desc")}
-                              selected={thinkingEnabled && reasoningEffort === "min"}
-                              onClick={() => {
-                                handleToggleThinking(true);
-                                handleReasoningEffortChange("min");
-                                setIsThinkingOpen(false);
-                              }}
-                            />
-                            <ComposerOptionRow
-                              label={t("chat.thinking.med")}
-                              description={t("chat.thinking.med_desc")}
-                              selected={thinkingEnabled && reasoningEffort === "medium"}
-                              onClick={() => {
-                                handleToggleThinking(true);
-                                handleReasoningEffortChange("medium");
-                                setIsThinkingOpen(false);
-                              }}
-                            />
-                            <ComposerOptionRow
-                              label={t("chat.thinking.max")}
-                              description={t("chat.thinking.max_desc")}
-                              selected={thinkingEnabled && reasoningEffort === "max"}
-                              onClick={() => {
-                                handleToggleThinking(true);
-                                handleReasoningEffortChange("max");
-                                setIsThinkingOpen(false);
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
+                  <div className="ml-auto flex shrink-0 items-center gap-2">
                     {mcpAlertCount > 0 && (
                       <button
                         type="button"

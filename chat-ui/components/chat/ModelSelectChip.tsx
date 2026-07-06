@@ -21,6 +21,7 @@ export function ModelSelectChip({
   open,
   onOpenChange,
   onSelect,
+  placement = "above",
 }: {
   providers: LlmProviderOption[];
   selectedSlug: string | null;
@@ -28,6 +29,8 @@ export function ModelSelectChip({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect: (slug: string | null) => void;
+  /** Dropdown opens above the chip (composer) or below (header). */
+  placement?: "above" | "below";
 }) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
@@ -69,7 +72,14 @@ export function ModelSelectChip({
       </button>
 
       {open ? (
-        <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
+        <div
+          className={cn(
+            "absolute left-0 z-50 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 duration-150",
+            placement === "below"
+              ? "top-full mt-2 slide-in-from-top-2"
+              : "bottom-full mb-2 slide-in-from-bottom-2",
+          )}
+        >
           <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
             {t("chat.model.select")}
           </div>

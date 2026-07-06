@@ -72,10 +72,10 @@
     "settings": "Einstellungen",
     "login": "Anmelden",
     "integrations": "Meine Integrationen",
-    "schedules": "Geplante Jobs"
+    "schedules": "Automationen"
   },
   "schedulesPage": {
-    "title": "Geplante Jobs",
+    "title": "Automationen",
     "subtitle": "Wiederkehrende Prompts, die der Agent automatisch ausführt.",
     "back_chat": "← Chat",
     "loading": "Laden…",

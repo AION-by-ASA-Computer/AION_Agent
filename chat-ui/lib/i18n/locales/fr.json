@@ -72,10 +72,10 @@
     "settings": "Paramètres",
     "login": "Se connecter",
     "integrations": "Mes intégrations",
-    "schedules": "Tâches planifiées"
+    "schedules": "Automatisations"
   },
   "schedulesPage": {
-    "title": "Tâches planifiées",
+    "title": "Automatisations",
     "subtitle": "Invites récurrentes exécutées automatiquement par l'agent.",
     "back_chat": "← Chat",
     "loading": "Chargement…",

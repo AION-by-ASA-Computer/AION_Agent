@@ -72,10 +72,10 @@
     "settings": "Configuración",
     "login": "Iniciar sesión",
     "integrations": "Mis integraciones",
-    "schedules": "Tareas programadas"
+    "schedules": "Automatizaciones"
   },
   "schedulesPage": {
-    "title": "Tareas programadas",
+    "title": "Automatizaciones",
     "subtitle": "Prompts recurrentes ejecutados automáticamente por el agente.",
     "back_chat": "← Chat",
     "loading": "Cargando…",
