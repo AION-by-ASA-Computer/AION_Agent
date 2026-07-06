@@ -49,3 +49,40 @@ def test_upsert_preserves_nonempty_content_and_timeline(monkeypatch, tmp_path):
             assert "Hello from stream" in (row.timeline_json or "")
 
     asyncio.run(run())
+
+
+def test_upsert_rejects_cross_conversation_id_update(monkeypatch, tmp_path):
+    async def run():
+        import src.data.engine as engine
+
+        if engine._engine is not None:
+            await engine._engine.dispose()
+        engine._engine = None
+        engine._session_factory = None
+        monkeypatch.setenv("AION_UNIFIED_DB", "1")
+        monkeypatch.setenv("AION_DEFAULT_TENANT_ID", "default")
+        monkeypatch.setenv("AION_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 'aion.db'}")
+
+        bridge = UnifiedHistoryBridge()
+        await bridge.add_message(
+            "conv-a", "assistant", "in A", user_id="u1", message_id="shared-id"
+        )
+        ok = await bridge.upsert_message_content(
+            "conv-b",
+            "shared-id",
+            "assistant",
+            "overwrite from B",
+            user_id="u1",
+        )
+        assert ok is False
+
+        from src.data.engine import get_async_session_maker
+        from src.data.history_bridge import fetch_message_by_id
+
+        async with get_async_session_maker()() as session:
+            row = await fetch_message_by_id(session, "shared-id")
+            assert row is not None
+            assert row.conversation_id == "conv-a"
+            assert row.content == "in A"
+
+    asyncio.run(run())

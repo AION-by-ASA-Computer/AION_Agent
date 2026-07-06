@@ -11,7 +11,13 @@ export type TranscriptStreamingState = {
   streamingConversationIdRef: MutableRefObject<string | null>;
 };
 
-/** True only when the active stream belongs to this conversation (blocks merge for that id only). */
+export type HistoryApplyMode = "replace" | "merge";
+
+/**
+ * Transcript contract (client):
+ * - Sidebar load / recovery finish → replace transcript (no cross-conversation merge).
+ * - Post-stream / recovery poll / plan execution → merge only for the active conversation.
+ */
 export function shouldSkipHistoryMerge(
   targetConversationId: string,
   streaming: TranscriptStreamingState,
@@ -28,7 +34,7 @@ export function applyHistoryToMessages<T extends MergeableChatMessage>(
   result: ConversationHistoryResult,
   targetConversationId: string,
   streaming: TranscriptStreamingState,
-  opts?: { loadEpoch?: number; source?: string },
+  opts?: { loadEpoch?: number; source?: string; mode?: HistoryApplyMode },
 ): { next: T[]; error: string | null } {
   logHistoryFetch(targetConversationId, {
     ok: result.ok,
@@ -54,7 +60,15 @@ export function applyHistoryToMessages<T extends MergeableChatMessage>(
     return { next: prev, error: null };
   }
 
-  return { next: mergeChatHistory(prev, mapped), error: null };
+  const mode = opts?.mode ?? "merge";
+  if (mode === "replace") {
+    return { next: mapped, error: null };
+  }
+
+  return {
+    next: mergeChatHistory(prev, mapped, targetConversationId),
+    error: null,
+  };
 }
 
 /** Epoch + streaming conversation tracking for transcript loads. */

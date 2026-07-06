@@ -1,6 +1,13 @@
 """
 Unified DB implementation of chat history (session_id == conversation.id).
 Enabled when AION_UNIFIED_DB is on (default 1; migrate with `python scripts/migrate_to_aion_db.py` or fresh bootstrap).
+
+Transcript contract (write → store → read):
+- Turn IDs (user_message_id, assistant_message_id) are fixed at turn_started and immutable.
+- Server pipeline + TurnPersistence are the authoritative writers for assistant/steps/attachments.
+- Every step/attachment must bind to assistant_message_id for the turn.
+- Compaction deletes messages and their child steps/attachments atomically, then recounts.
+- GET /chat-ui/.../messages is read-only (no orphan attach, no dedup, no DB backfill).
 """
 
 from __future__ import annotations
@@ -11,7 +18,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 from haystack.dataclasses import ChatMessage
-from sqlalchemy import func, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +40,138 @@ async def fetch_message_by_id(
         return None
     row = await session.execute(select(Message).where(Message.id == mid).limit(1))
     return row.scalars().first()
+
+
+async def fetch_message_by_id_for_conversation(
+    session: AsyncSession, message_id: str, conversation_id: str
+) -> Optional[Message]:
+    """Lookup message scoped to a conversation (prevents cross-conversation upsert)."""
+    mid = (message_id or "").strip()
+    cid = (conversation_id or "").strip()
+    if not mid or not cid:
+        return None
+    row = await session.execute(
+        select(Message)
+        .where(
+            Message.id == mid,
+            Message.conversation_id == cid,
+        )
+        .limit(1)
+    )
+    return row.scalars().first()
+
+
+async def _delete_messages_and_children(
+    session: AsyncSession,
+    conversation_id: str,
+    message_ids: List[str],
+) -> None:
+    """Delete messages and their bound steps/attachments (compaction / prune)."""
+    if not message_ids:
+        return
+    await session.execute(delete(Step).where(Step.message_id.in_(message_ids)))
+    await session.execute(
+        delete(Attachment).where(Attachment.message_id.in_(message_ids))
+    )
+    await session.execute(delete(Message).where(Message.id.in_(message_ids)))
+
+
+async def _cleanup_orphan_steps_and_attachments(
+    session: AsyncSession, conversation_id: str
+) -> None:
+    """Remove steps/attachments with no message_id in this conversation."""
+    await session.execute(
+        delete(Step).where(
+            Step.conversation_id == conversation_id,
+            Step.message_id.is_(None),
+        )
+    )
+    await session.execute(
+        delete(Attachment).where(
+            Attachment.conversation_id == conversation_id,
+            Attachment.message_id.is_(None),
+        )
+    )
+
+
+async def _recount_conversation_messages(
+    session: AsyncSession, conversation_id: str
+) -> int:
+    count = int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(Message)
+                .where(Message.conversation_id == conversation_id)
+            )
+        ).scalar_one()
+        or 0
+    )
+    await session.execute(
+        update(Conversation)
+        .where(Conversation.id == conversation_id)
+        .values(message_count=count, updated_at=datetime.now(timezone.utc))
+    )
+    return count
+
+
+async def _fetch_last_significant_assistant_content(
+    session: AsyncSession,
+    conversation_id: str,
+    pruned_ids: List[str],
+    *,
+    max_chars: int = 4000,
+) -> str:
+    if not pruned_ids:
+        return ""
+    rows = (
+        await session.execute(
+            select(Message.content, Message.role, Message.seq)
+            .where(
+                Message.conversation_id == conversation_id,
+                Message.id.in_(pruned_ids),
+                Message.role == "assistant",
+            )
+            .order_by(Message.seq.desc())
+        )
+    ).all()
+    for content, _role, _seq in rows:
+        body = (content or "").strip()
+        if body:
+            return body[:max_chars]
+    return ""
+
+
+async def _sanitize_kept_assistant_timelines(
+    session: AsyncSession,
+    conversation_id: str,
+    kept_ids: List[str],
+    *,
+    timeline_size_threshold: int = 50_000,
+) -> None:
+    """Clear inflated timeline_json on kept assistants with no visible text."""
+    if not kept_ids:
+        return
+    rows = (
+        (
+            await session.execute(
+                select(Message).where(
+                    Message.conversation_id == conversation_id,
+                    Message.id.in_(kept_ids),
+                    Message.role == "assistant",
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    for row in rows:
+        if (row.content or "").strip():
+            continue
+        tl = row.timeline_json or ""
+        if len(tl) > timeline_size_threshold:
+            row.timeline_json = None
+            session.add(row)
 
 
 def _approx_tokens(t: str) -> int:
@@ -263,7 +402,21 @@ class UnifiedHistoryBridge:
                 await session.commit()
                 return False
 
-            existing = await fetch_message_by_id(session, mid)
+            existing = await fetch_message_by_id_for_conversation(
+                session, mid, session_id
+            )
+            if not existing:
+                cross = await fetch_message_by_id(session, mid)
+                if cross and cross.conversation_id != session_id:
+                    logger.error(
+                        "upsert_message_content: message %s belongs to conversation %s, "
+                        "rejecting update for %s",
+                        mid,
+                        cross.conversation_id,
+                        session_id,
+                    )
+                    return False
+
             if existing:
                 return await _update_existing(existing)
 
@@ -297,8 +450,19 @@ class UnifiedHistoryBridge:
                 await session.execute(sql, params)
             except IntegrityError:
                 await session.rollback()
-                existing = await fetch_message_by_id(session, mid)
+                existing = await fetch_message_by_id_for_conversation(
+                    session, mid, session_id
+                )
                 if not existing:
+                    cross = await fetch_message_by_id(session, mid)
+                    if cross and cross.conversation_id != session_id:
+                        logger.error(
+                            "upsert_message_content race: message %s belongs to %s, not %s",
+                            mid,
+                            cross.conversation_id,
+                            session_id,
+                        )
+                        return False
                     raise
                 return await _update_existing(existing)
 
@@ -534,24 +698,37 @@ class UnifiedHistoryBridge:
     ) -> None:
         async with get_async_session_maker()() as session:
             await self._ensure()
-            await session.execute(
-                text(
-                    """
-                    DELETE FROM messages WHERE conversation_id = :cid
-                    AND id NOT IN (
-                        SELECT id FROM (
-                            SELECT id FROM messages WHERE conversation_id = :cid2
-                            ORDER BY seq DESC LIMIT :k
-                        )
+            kept_rows = list(
+                (
+                    await session.execute(
+                        text(
+                            """
+                            SELECT id FROM messages
+                            WHERE conversation_id = :cid
+                            ORDER BY seq DESC
+                            LIMIT :k
+                            """
+                        ),
+                        {"cid": session_id, "k": keep_last_n},
                     )
-                    """
-                ),
-                {
-                    "cid": session_id,
-                    "cid2": session_id,
-                    "k": keep_last_n,
-                },
+                ).all()
             )
+            kept_ids = [r[0] for r in kept_rows]
+            if not kept_ids:
+                return
+            all_ids = list(
+                (
+                    await session.execute(
+                        select(Message.id).where(Message.conversation_id == session_id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            pruned_ids = [mid for mid in all_ids if mid not in kept_ids]
+            await _delete_messages_and_children(session, session_id, pruned_ids)
+            await _cleanup_orphan_steps_and_attachments(session, session_id)
+            await _recount_conversation_messages(session, session_id)
             await session.commit()
 
     async def fetch_messages_for_compaction(
@@ -630,6 +807,8 @@ class UnifiedHistoryBridge:
         from src.memory.context_compressor import (
             COMPACTION_MARKER,
             CONTEXT_SUMMARY_MARKER,
+            append_last_assistant_to_compaction_block,
+            format_compaction_block,
         )
 
         summary_content = (summary_content or "").strip()
@@ -639,8 +818,6 @@ class UnifiedHistoryBridge:
             COMPACTION_MARKER not in summary_content
             and CONTEXT_SUMMARY_MARKER not in summary_content
         ):
-            from src.memory.context_compressor import format_compaction_block
-
             summary_content = format_compaction_block(
                 summary_content, source_messages=0
             )
@@ -669,38 +846,50 @@ class UnifiedHistoryBridge:
                 or CONTEXT_SUMMARY_MARKER in (r[2] or "")
                 for r in kept_rows
             ):
-                await session.execute(
-                    text(
-                        """
-                        DELETE FROM messages WHERE conversation_id = :cid
-                        AND id NOT IN (
-                            SELECT id FROM (
-                                SELECT id FROM messages WHERE conversation_id = :cid2
-                                ORDER BY seq DESC LIMIT :k
+                all_ids = list(
+                    (
+                        await session.execute(
+                            select(Message.id).where(
+                                Message.conversation_id == session_id
                             )
                         )
-                        """
-                    ),
-                    {"cid": session_id, "cid2": session_id, "k": keep_last_n},
+                    )
+                    .scalars()
+                    .all()
                 )
+                pruned_ids = [mid for mid in all_ids if mid not in kept_ids]
+                await _delete_messages_and_children(session, session_id, pruned_ids)
+                await _cleanup_orphan_steps_and_attachments(session, session_id)
+                await _sanitize_kept_assistant_timelines(session, session_id, kept_ids)
+                await _recount_conversation_messages(session, session_id)
                 await session.commit()
                 return
+
+            all_ids = list(
+                (
+                    await session.execute(
+                        select(Message.id).where(Message.conversation_id == session_id)
+                    )
+                )
+                .scalars()
+                .all()
+            )
+            pruned_ids = [mid for mid in all_ids if mid not in kept_ids]
+            last_assistant = await _fetch_last_significant_assistant_content(
+                session, session_id, pruned_ids
+            )
+            if last_assistant:
+                summary_content = append_last_assistant_to_compaction_block(
+                    summary_content, last_assistant
+                )
+
             min_seq = min(int(r[1]) for r in kept_rows)
             summary_seq = max(0, min_seq - 1)
-            await session.execute(
-                text(
-                    """
-                    DELETE FROM messages WHERE conversation_id = :cid
-                    AND id NOT IN (
-                        SELECT id FROM (
-                            SELECT id FROM messages WHERE conversation_id = :cid2
-                            ORDER BY seq DESC LIMIT :k
-                        )
-                    )
-                    """
-                ),
-                {"cid": session_id, "cid2": session_id, "k": keep_last_n},
-            )
+
+            await _delete_messages_and_children(session, session_id, pruned_ids)
+            await _cleanup_orphan_steps_and_attachments(session, session_id)
+            await _sanitize_kept_assistant_timelines(session, session_id, kept_ids)
+
             await session.execute(
                 text(
                     """
@@ -725,6 +914,7 @@ class UnifiedHistoryBridge:
                     "pname": profile_name,
                 },
             )
+            await _recount_conversation_messages(session, session_id)
             await session.commit()
 
     async def clear(self, session_id: str, profile_name: Optional[str] = None) -> None:
@@ -804,6 +994,13 @@ class UnifiedHistoryBridge:
         step_id: Optional[str] = None,
         metadata_json: Optional[str] = None,
     ) -> None:
+        if not (message_id or "").strip():
+            logger.warning(
+                "add_step skipped: message_id required (session=%s name=%s)",
+                session_id,
+                name,
+            )
+            return
         async with get_async_session_maker()() as session:
             await self._ensure()
             from .ids import new_uuid7_str

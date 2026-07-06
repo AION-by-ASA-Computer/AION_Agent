@@ -45,7 +45,6 @@ import {
   patchMessageTimeline,
   saveAssistantMessage,
   saveChatMessage,
-  saveMessageSteps,
   fetchKhubFileContent,
   fetchPromptSnapshots,
   type ChatHistoryArtifact,
@@ -54,7 +53,6 @@ import {
   type ConversationSummary,
   type ProfileRow,
   type SessionChart,
-  type PartialStep,
 } from "@/lib/api/aion";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
 import { useT } from "@/lib/i18n/use-t";
@@ -1486,6 +1484,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       }
       const aid = crypto.randomUUID();
       setMessages((m) => [...m, { id: aid, role: "assistant", content: text }]);
+      // Documented exception: plan final summary is not persisted by the standard turn pipeline.
       void saveAssistantMessage(conversationId, aid, text, undefined, userId, token).catch((err) =>
         console.error("[aion-chat-ui] save plan summary:", err),
       );
@@ -1526,7 +1525,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             result,
             conversationId,
             transcriptStreaming,
-            { source: "plan-execution" },
+            { source: "plan-execution", mode: "merge" },
           );
           if (error) setHistoryError(error);
           return next;
@@ -1792,7 +1791,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               assistantMessageId: asst,
               userMessageId: uid,
             });
-            // Sync local IDs with server-confirmed IDs so saveAssistantMessage
+            // Sync local IDs with server-confirmed IDs from turn_started
             // and the final setMessages call use the correct IDs, preventing
             // duplicate messages on reload.
             if (uid !== uidMsg) {
@@ -1972,42 +1971,27 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
         {
           const persistedSegments = segmentsForPersist(state.segments);
-          setMessages((m) => [
-            ...m,
-            {
-              id: aid,
-              role: "assistant",
-              content: assistantText,
-              reasoning: state.reasoning.trim() || undefined,
-              steps: completedSteps.length ? completedSteps : undefined,
-              artifacts: completedArtifacts.length ? completedArtifacts : undefined,
-              segments: persistedSegments.length ? persistedSegments : undefined,
-              reasoningUnavailable,
-              webSources: state.webSourceCards.length ? state.webSourceCards : undefined,
-            },
-          ]);
-          void saveAssistantMessage(
-            conversationId,
-            aid,
-            assistantText,
-            state.reasoning.trim() || undefined,
-            userId,
-            token,
-            persistedSegments.length ? persistedSegments : undefined,
-          ).catch((err) => console.error("[aion-chat-ui] save assistant:", err));
-
-          if (completedSteps.length) {
-            const partialSteps: PartialStep[] = completedSteps.map((s) => ({
-              name: s.name,
-              type: s.type,
-              input: s.input,
-              output: s.output,
-              is_error: s.is_error,
-            }));
-            void saveMessageSteps(conversationId, aid, partialSteps, userId, token).catch((err) =>
-              console.error("[aion-chat-ui] save assistant steps:", err),
-            );
+          if (activeConversationRef.current === conversationId) {
+            setMessages((m) => [
+              ...m,
+              {
+                id: aid,
+                role: "assistant",
+                content: assistantText,
+                reasoning: state.reasoning.trim() || undefined,
+                steps: completedSteps.length ? completedSteps : undefined,
+                artifacts: completedArtifacts.length ? completedArtifacts : undefined,
+                segments: persistedSegments.length ? persistedSegments : undefined,
+                reasoningUnavailable,
+                webSources: state.webSourceCards.length ? state.webSourceCards : undefined,
+              },
+            ]);
           }
+        }
+
+        if (activeConversationRef.current !== conversationId) {
+          await refreshThreads();
+          return;
         }
 
         const ch = await fetchSessionCharts(conversationId, userId, token);
@@ -2026,7 +2010,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         setPostTurnFiles(newLinks);
         refreshMcpAlerts({ probe: false });
         try {
+          if (activeConversationRef.current !== conversationId) return;
           const result = await fetchConversationHistory(conversationId, userId, token);
+          if (activeConversationRef.current !== conversationId) return;
           const mapped = result.messages.map(historyMessageFromApi);
           setMessages((prev) => {
             const { next, error } = applyHistoryToMessages(
@@ -2035,7 +2021,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               result,
               conversationId,
               transcriptStreaming,
-              { source: "post-stream" },
+              { source: "post-stream", mode: "merge" },
             );
             if (error) setHistoryError(error);
             return next;
@@ -2046,6 +2032,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             activeConversationRef.current === conversationId
           ) {
             const retry = await fetchConversationHistory(conversationId, userId, token);
+            if (activeConversationRef.current !== conversationId) return;
             if (retry.ok && retry.messages.length > 0) {
               const retryMapped = retry.messages.map(historyMessageFromApi);
               setMessages((prev) =>
@@ -2055,7 +2042,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   retry,
                   conversationId,
                   transcriptStreaming,
-                  { source: "post-stream-retry" },
+                  { source: "post-stream-retry", mode: "merge" },
                 ).next,
               );
             }
@@ -2069,14 +2056,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           (e instanceof DOMException && e.name === "AbortError") ||
           (e instanceof Error && e.name === "AbortError");
         if (aborted) {
-          // ── Salva la risposta parziale su DB se c'è del testo ──────────────
           const partialText = (state.assistantContent ?? "").trim();
-          if (partialText) {
+          if (partialText && activeConversationRef.current === conversationId) {
             const partialReasoning = state.reasoning?.trim() || undefined;
             const STOP_BADGE = `\n\n---\n*⚠️ ${t("chat.interrupted")}*`;
             const contentToSave = partialText + STOP_BADGE;
 
-            // 1. Aggiunge subito il messaggio alla UI
             const completedSteps = turnSteps(state);
             const completedArtifacts = turnArtifacts(state);
             const partialSegments = segmentsForPersist(state.segments);
@@ -2092,39 +2077,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 segments: partialSegments.length ? partialSegments : undefined,
               },
             ]);
-
-            // 2. Persiste il messaggio su DB (fire & forget)
-            void saveAssistantMessage(
-              conversationId,
-              aid,
-              contentToSave,
-              partialReasoning,
-              userId,
-              token,
-              partialSegments.length ? partialSegments : undefined,
-            ).catch((err) =>
-              console.error("[aion-chat-ui] failed to save partial message:", err)
-            );
-
-            // 3. Persiste gli step parziali su DB (fire & forget)
-            if (completedSteps.length) {
-              const partialSteps: PartialStep[] = completedSteps.map((s) => ({
-                name: s.name,
-                type: s.type,
-                input: s.input,
-                output: s.output,
-                is_error: s.is_error,
-              }));
-              void saveMessageSteps(
-                conversationId,
-                aid,
-                partialSteps,
-                userId,
-                token,
-              ).catch((err) =>
-                console.error("[aion-chat-ui] failed to save partial steps:", err)
-              );
-            }
 
             void refreshThreads();
           }
@@ -2376,7 +2328,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             result,
             cid,
             transcriptStreaming,
-            { loadEpoch, source: "sidebar-load" },
+            { loadEpoch, source: "sidebar-load", mode: "replace" },
           );
           if (error && activeConversationRef.current === cid) {
             setHistoryError(error);
@@ -2541,7 +2493,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               result,
               conversationId,
               transcriptStreaming,
-              { source: "recovery-finish" },
+              { source: "recovery-finish", mode: "replace" },
             );
             if (error) setHistoryError(error);
             return next;
@@ -2594,7 +2546,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             result,
             conversationId,
             transcriptStreaming,
-            { source: "recovery-poll" },
+            { source: "recovery-poll", mode: "merge" },
           );
           if (error) setHistoryError(error);
           return next;
