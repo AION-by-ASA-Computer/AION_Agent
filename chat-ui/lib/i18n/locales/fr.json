@@ -72,10 +72,18 @@
     "settings": "Paramètres",
     "login": "Se connecter",
     "integrations": "Mes intégrations",
-    "schedules": "Tâches planifiées"
+    "schedules": "Automatisations",
+    "profile_menu": {
+      "appearance": "Apparence",
+      "theme_light": "Clair",
+      "theme_dark": "Sombre",
+      "language": "Langue",
+      "customize": "Personnaliser les instructions",
+      "logout": "Se déconnecter"
+    }
   },
   "schedulesPage": {
-    "title": "Tâches planifiées",
+    "title": "Automatisations",
     "subtitle": "Invites récurrentes exécutées automatiquement par l'agent.",
     "back_chat": "← Chat",
     "loading": "Chargement…",

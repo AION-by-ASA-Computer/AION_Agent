@@ -290,6 +290,7 @@ export type ConversationSummary = {
   title?: string | null;
   message_count?: number;
   metadata?: Record<string, any>;
+  updated_at?: string | null;
 };
 
 export async function listChatUiConversations(userId: string, token?: string | null): Promise<ConversationSummary[]> {

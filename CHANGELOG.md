@@ -5,6 +5,25 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.1.0...v1.2.0) (2026-07-06)
+
+
+### Features
+
+* **chat:** add empty state component and enhance user prompts ([be9c0b5](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/be9c0b5b012f1871f1f3329a6485eb7e86b1e857))
+* enhance ThreadSidebar and ThemeToggle components with profile menu and theme management ([3b4092b](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/3b4092bf01d93c2233799f7860c17fe6daabbaf2))
+* **integrations:** enhance integrations page and improve error handling ([7e45f55](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7e45f55186e961f2f393c82383344cf9fe12f742))
+* remove unused pages and components to streamline the application ([7c06883](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7c06883c4fad43c69f3c4e3085031809fe942391))
+* **schedules:** enhance schedules page with new ([158e7da](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/158e7daae5e49fd3a2773e2d8c959c28144736bd))
+* **settings:** enhance user settings page with profile management and appearance options ([3e487c1](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/3e487c16f7bd0ebf815bc4302ef37d0cfcb4b5d4))
+* ui improvements and minor fixes. Added settings and removed single pages in chat-ui ([40ac070](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/40ac070f5cc59baaf56274c12065a4395a09c98e))
+
+
+### Bug Fixes
+
+* **chat:** transactional compaction and read-only history replay ([5c12864](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/5c12864f620c4ae606db337c46a12f6a3d2b4d1d))
+* **chat:** transactional compaction and read-only history replay ([b553f28](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/b553f2800b205afd4f023e858358c27759272ea3))
+
 ## [1.1.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.0.0...v1.1.0) (2026-07-03)
 
 
