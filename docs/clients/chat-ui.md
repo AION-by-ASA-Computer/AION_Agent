@@ -71,7 +71,8 @@ Path: `/integrations`. Panel for personal credentials on servers with `credentia
 | Stream token / reasoning / error | Yes (`lib/sse/`) |
 | Interleaved timeline (reasoning → tool → text in SSE order) | Yes (`TurnTimeline`, `segments` in `reducer.ts`) |
 | Tool steps tool_event (id `tc_*`, running + parameters in full view) | Yes |
-| Artifact start/content/end | Base reducer |
+| Artifact start/content/end | Yes — from sandbox write/edit/patch `tool_start` (file preview bridge), not only legacy stream XML |
+| File generation shimmer (`StatusProgressCard`) | Yes — on `tool_start` for `sandbox_write_*` / `edit` / `apply_patch` when preview payload present (`lib/sse/filePreviewTools.ts`, `reducer.ts`) |
 | `orchestration_plan_pending` + Plan dock | Yes (`TaskPlanManagerV4.jsx`) |
 | `presentation_preview` | Yes |
 | `/db` → Agent DB iframe | Partial (component + BFF exist but trigger commented out in ChatWorkspace) |
@@ -92,6 +93,17 @@ Path: `/integrations`. Panel for personal credentials on servers with `credentia
 - In **`full`**, each step shows **Parameters** (JSON input at `tool_start`) and **Response** (output at `tool_end`).
 - During MCP execution the card remains visible with **Running** badge and spinner (not just at tool end).
 - The reducer keeps `segments[]` in SSE arrival order; no longer the fixed layout reasoning-at-the-top / tool-below.
+
+### File preview and artifact dock (tool-first)
+
+When the agent calls `sandbox_write_workspace_file`, `sandbox_edit_workspace_file`, or `sandbox_apply_patch`, the backend may emit early `artifact_*` SSE events bridged from `tool_start` (see [Agent pipeline](../api-and-runtime/agent-pipeline.md#tool-first-file-delivery-opencode-style)). The chat-ui:
+
+- Recognizes file-preview tools via `chat-ui/lib/sse/filePreviewTools.ts`.
+- Shows **StatusProgressCard** (“Generating document…”) when `hasPreviewPayload` is set on the tool step.
+- Opens **StreamingContentPreview** in the dock with streamed file body when available.
+- Uses `generatingTitleForFileTool()` for the filename label (from `relative_path` in tool args).
+
+During long reasoning **before** `tool_start`, only the reasoning block is visible (no shimmer until the tool call is parsed and emitted).
 
 ## Persisted timeline (history / saving)
 

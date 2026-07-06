@@ -231,7 +231,9 @@
     "generating": {
       "plan": "Generating plan…",
       "document": "Generating document…",
-      "document_named": "Generating {{title}}…"
+      "document_named": "Generating {{title}}…",
+      "script": "Generating script…",
+      "script_named": "Generating {{title}}…"
     },
     "tools": {
       "attach_file": "Attach File",

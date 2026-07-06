@@ -343,6 +343,10 @@ Opik wrappers are applied at runtime in:
 | `OPIK_PROJECT_NAME` | `AION-Agent` | Opik project name |
 | `OPIK_URL_OVERRIDE` | `http://localhost:5173/api` | API endpoint of the self-hosted Opik instance |
 
+### Per-step LLM call audit (local JSON)
+
+Separate from Opik/OTel: when `AION_LLM_CALL_AUDIT=1`, `src/runtime/llm_call_audit.py` writes full request/response payloads for each agent LLM step to `data/diagnostics/llm_calls/` (override with `AION_LLM_CALL_AUDIT_DIR`). CLI: `python scripts/audit_llm_calls.py`. Intended for dev/staging regression on tool-call JSON and vLLM thinking behavior — not a replacement for production trace export.
+
 ## Code Reference Files
 
 | File | Responsibility |

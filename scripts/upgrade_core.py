@@ -188,6 +188,34 @@ def _rewrite_env_key(env_path: Path, key: str, value: str) -> bool:
     return True
 
 
+def _remove_env_key(env_path: Path, key: str) -> bool:
+    """Drop KEY=... from .env (deprecated keys)."""
+    if not env_path.is_file():
+        return False
+    entries = _parse_env_simple(env_path)
+    out_lines: list[str] = []
+    seen: set[str] = set()
+    removed = False
+    for k, _, raw in entries:
+        if not k:
+            out_lines.append(raw)
+            continue
+        if k in seen:
+            continue
+        seen.add(k)
+        if k == key:
+            removed = True
+            continue
+        out_lines.append(raw)
+    if not removed:
+        return True
+    try:
+        env_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
 def _migrate_env_legacy_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
     """Migra le chiavi legacy del .env ai nomi moderni (AION_CHAT_*).
 
@@ -549,9 +577,24 @@ _PLAN_MODE_ENV_DEFAULTS: dict[str, str] = {
     "AION_PLAN_MODE_TOOL_FIRST": "1",
     "AION_PLAN_TEXT_PARSER": "0",
     "AION_PLAN_FINALIZER_TIMEOUT_SEC": "20",
-    "AION_ARTIFACT_STRATEGY": "tool",
     "AION_ORCHESTRATION_SECRET_AUTH": "1",
 }
+
+# Tool-first runtime (prompt fragments, file preview, doom loop, vLLM tool args, LLM audit).
+_TOOL_RUNTIME_ENV_DEFAULTS: dict[str, str] = {
+    "AION_MODEL_PROMPT_FRAGMENTS": "1",
+    "AION_ARTIFACT_STREAM_LEGACY": "0",
+    "AION_STREAM_LOOP_V2": "1",
+    "AION_MODEL_TOOL_POLICY": "1",
+    "AION_DOOM_LOOP_THRESHOLD": "3",
+    "AION_DOOM_LOOP_ACTION": "reminder",
+    "AION_JSON_RECOVERY_ALLOW_EMPTY": "0",
+    "AION_VLLM_TOOLS_STRICT": "0",
+    "AION_VLLM_TOOL_ARG_TOKEN_FLOOR": "8192",
+    "AION_LLM_CALL_AUDIT": "0",
+}
+
+_DEPRECATED_ENV_REMOVE: tuple[str, ...] = ("AION_ARTIFACT_STRATEGY",)
 
 _DEEP_RESEARCH_ENV_DEFAULTS: dict[str, str] = {
     "AION_DEEP_RESEARCH_ENABLED": "1",
@@ -959,6 +1002,52 @@ def _ensure_cron_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> i
     return 0
 
 
+def _remove_deprecated_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> None:
+    """Drop env keys removed from the product (no rename target)."""
+    if not env_path.is_file():
+        return
+    entries = _parse_env_simple(env_path)
+    present = {k for k, _, _ in entries if k}
+    for dep in _DEPRECATED_ENV_REMOVE:
+        if dep not in present:
+            continue
+        if dry_run:
+            report.log_ok(f"Deprecated env: would remove {dep}")
+        elif _remove_env_key(env_path, dep):
+            report.log_ok(f"Deprecated env: removed {dep}")
+        else:
+            report.log_fail(f"Deprecated env: failed to remove {dep} from .env")
+
+
+def _ensure_tool_runtime_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+    """Tool-first delivery, vLLM tool-arg floor, doom loop, LLM call audit defaults."""
+    if not env_path.is_file():
+        report.log_ok("Tool runtime env defaults: .env assente, skip")
+        return 0
+    _remove_deprecated_env_keys(env_path, dry_run=dry_run, report=report)
+    entries = _parse_env_simple(env_path)
+    keys_file = {k for k, _, _ in entries if k}
+    missing = [(k, v) for k, v in _TOOL_RUNTIME_ENV_DEFAULTS.items() if k not in keys_file]
+    if not missing:
+        report.log_ok("Tool runtime env defaults: chiavi già presenti")
+        return 0
+    if dry_run:
+        report.log_ok(f"Tool runtime env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        return 0
+    block = (
+        "\n# --- Tool-first runtime (append da upgrade-aion): file tools, vLLM, doom loop, LLM audit ---\n"
+        + "\n".join(f"{k}={v}" for k, v in missing)
+        + "\n"
+    )
+    try:
+        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+    except Exception as e:
+        report.log_fail(f"Tool runtime env defaults: scrittura fallita: {e}")
+        return 3
+    report.log_ok(f"Tool runtime env defaults: aggiunte {len(missing)} chiavi")
+    return 0
+
+
 def _ensure_plan_mode_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
     if not env_path.is_file():
         report.log_ok("Plan mode env defaults: .env assente, skip")
@@ -966,21 +1055,6 @@ def _ensure_plan_mode_env_keys(env_path: Path, *, dry_run: bool, report: Report)
     entries = _parse_env_simple(env_path)
     keys_file = {k for k, _, _ in entries if k}
     missing = [(k, v) for k, v in _PLAN_MODE_ENV_DEFAULTS.items() if k not in keys_file]
-    for k, v, _ in entries:
-        if k == "AION_ARTIFACT_STRATEGY" and (v or "").strip().lower() in (
-            "plan",
-            "markdown",
-        ):
-            if dry_run:
-                report.log_ok(
-                    "Plan mode: would set AION_ARTIFACT_STRATEGY=xml (was legacy)"
-                )
-            elif _rewrite_env_key(env_path, "AION_ARTIFACT_STRATEGY", "xml"):
-                report.log_ok("Plan mode: upgraded AION_ARTIFACT_STRATEGY to xml")
-            else:
-                report.log_fail(
-                    "Plan mode: failed to rewrite AION_ARTIFACT_STRATEGY in .env"
-                )
     if not missing:
         report.log_ok("Plan mode env defaults: chiavi già presenti")
         return 0

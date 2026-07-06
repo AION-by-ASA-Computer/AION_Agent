@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from src.runtime.mcp_tool_args import (
+    default_write_relative_path,
     normalize_workspace_relative_path,
     prepare_mcp_tool_arguments,
 )
@@ -69,6 +70,18 @@ def test_edit_all_required_ok():
     )
     assert err is None
     assert args["relative_path"] == "workspace/a.py"
+
+
+def test_write_content_only_infers_docx_script_path():
+    body = "const { Document } = require('docx');\n"
+    assert default_write_relative_path(body) == "workspace/create_doc.js"
+    args, err = prepare_mcp_tool_arguments(
+        "sandbox_write_workspace_file",
+        {"content": body},
+    )
+    assert err is None
+    assert args["relative_path"] == "workspace/create_doc.js"
+    assert args["content"] == body
 
 
 def test_trace_context_preserved():

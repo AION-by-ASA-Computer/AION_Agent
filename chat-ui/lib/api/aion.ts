@@ -557,6 +557,9 @@ export async function saveChatMessage(
   }
 }
 
+/**
+ * @deprecated Server persists assistant messages via TurnPersistence. Kept for plan-summary exception.
+ */
 export async function saveAssistantMessage(
   conversationId: string,
   messageId: string,
@@ -610,6 +613,9 @@ export async function patchMessageTimeline(
   }
 }
 
+/**
+ * @deprecated Server persists tool steps via TurnPersistence. Admin/debug only.
+ */
 export async function saveMessageSteps(
   conversationId: string,
   messageId: string,

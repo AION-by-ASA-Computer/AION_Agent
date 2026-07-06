@@ -146,6 +146,26 @@ def format_compaction_block(summary_text: str, *, source_messages: int = 0) -> s
     return f"{head}\n{summary_text.strip()}"
 
 
+LAST_ASSISTANT_SECTION = "## Ultima risposta assistant"
+MAX_LAST_ASSISTANT_CHARS = 4000
+
+
+def append_last_assistant_to_compaction_block(
+    summary_text: str,
+    last_assistant_text: str,
+    *,
+    max_chars: int = MAX_LAST_ASSISTANT_CHARS,
+) -> str:
+    """Append the last pruned assistant reply so post-compaction replay keeps visible text."""
+    body = (last_assistant_text or "").strip()
+    if not body:
+        return summary_text
+    if LAST_ASSISTANT_SECTION in summary_text:
+        return summary_text
+    clipped = body[:max_chars]
+    return f"{summary_text.rstrip()}\n\n{LAST_ASSISTANT_SECTION}\n{clipped}"
+
+
 def compaction_summary_prompt(lang: str | None = None) -> str:
     from src.runtime.user_language import default_ui_language, normalize_ui_language
 
@@ -218,6 +238,9 @@ class ContextCompressor:
         return sum(count_tokens(chat_message_text(m)) for m in messages)
 
     def compress_trigger_tokens(self) -> int:
+        logger.warning(
+            f"CALCULATING TRIGGER TOKENS: {self.window_size} * {self.threshold} = {self.window_size * self.threshold}"
+        )
         return max(1024, int(self.window_size * self.threshold))
 
     def max_prompt_tokens(self) -> int:

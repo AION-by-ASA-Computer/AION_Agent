@@ -231,7 +231,9 @@
     "generating": {
       "plan": "Generando piano…",
       "document": "Generando documento…",
-      "document_named": "Generando {{title}}…"
+      "document_named": "Generando {{title}}…",
+      "script": "Generando script…",
+      "script_named": "Generando {{title}}…"
     },
     "tools": {
       "attach_file": "Allega File",

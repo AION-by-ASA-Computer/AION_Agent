@@ -6,7 +6,10 @@ Evita ValidationError opachi quando il modello omette parametri obbligatori.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Dict, Optional, Tuple
+
+logger = logging.getLogger("aion.mcp_tool_args")
 
 _RESERVED_KEYS = frozenset({"_trace_context"})
 
@@ -35,6 +38,9 @@ _ARG_ALIASES: Dict[str, Dict[str, tuple[str, ...]]] = {
     "sandbox_install_npm_packages": {
         "packages": ("package", "package_names", "deps"),
     },
+    "sandbox_apply_patch": {
+        "patch_text": ("patch", "patchText", "diff", "content"),
+    },
     "save_successful_sql": {
         "sql": ("query", "statement", "q", "text"),
         "project": ("namespace", "drawer", "slug"),
@@ -50,7 +56,11 @@ _ARG_ALIASES: Dict[str, Dict[str, tuple[str, ...]]] = {
 _REQUIRED: Dict[str, tuple[str, ...]] = {
     "sandbox_edit_workspace_file": ("relative_path", "old_string", "new_string"),
     "sandbox_write_workspace_file": ("relative_path", "content"),
+    "sandbox_apply_patch": ("patch_text",),
     "sandbox_install_npm_packages": ("packages",),
+    "sandbox_run_python_file": ("relative_path",),
+    "sandbox_run_node_file": ("relative_path",),
+    "sandbox_read_text_file": ("relative_path",),
 }
 
 
@@ -101,12 +111,38 @@ _WORKSPACE_PATH_TOOLS = frozenset(
         "sandbox_read_text_file",
         "sandbox_run_python_file",
         "sandbox_run_node_file",
+        "sandbox_apply_patch",
     }
 )
 
 
+def _required_keys(tool_name: str) -> tuple[str, ...]:
+    base = (tool_name or "").split("-")[-1].strip().lower()
+    return _REQUIRED.get(tool_name) or _REQUIRED.get(base) or ()
+
+
+def tool_has_required_fields(tool_name: str) -> bool:
+    return bool(_required_keys(tool_name))
+
+
+def missing_required_fields(tool_name: str, args: Dict[str, Any]) -> list[str]:
+    return _missing_required(tool_name, args)
+
+
+def default_write_relative_path(content: str) -> str:
+    """Infer workspace path when vLLM/Qwen omits relative_path but sends content."""
+    c = (content or "").lstrip()
+    if "require('docx')" in c or 'require("docx")' in c or "from 'docx'" in c:
+        return "workspace/create_doc.js"
+    if c.startswith("#!/usr/bin/env node") or "require(" in c[:500]:
+        return "workspace/script.js"
+    if c.startswith("import ") or "def " in c[:200]:
+        return "workspace/script.py"
+    return "workspace/file.txt"
+
+
 def _missing_required(tool_name: str, args: Dict[str, Any]) -> list[str]:
-    required = _REQUIRED.get(tool_name)
+    required = _required_keys(tool_name)
     if not required:
         return []
     missing: list[str] = []
@@ -126,9 +162,13 @@ def _preflight_error(tool_name: str, args: Dict[str, Any], missing: list[str]) -
             "Opzionale: replace_all=true."
         ),
         "sandbox_write_workspace_file": (
-            "For NEW HTML/CSS pages prefer markdown artifact protocol (```html with "
-            "# artifact_id / # filename metadata) — not this tool. "
-            "If you must write: relative_path='workspace/script.py' (workspace/ prefix required)."
+            "Example: relative_path='workspace/script.js', content='full file body'. "
+            "Prefer sandbox_edit_workspace_file when the file already exists. "
+            "If arguments were empty, vLLM/Qwen may have truncated tool JSON to '{' only — "
+            "retry with a MINIMAL script (<60 lines) or lower reasoning effort."
+        ),
+        "sandbox_apply_patch": (
+            "Example: patch_text with *** Begin Patch ... *** End Patch envelope."
         ),
     }
     return json.dumps(
@@ -196,6 +236,17 @@ def prepare_mcp_tool_arguments(
                 except Exception:
                     pass
 
+    base_tool = (tool_name or "").split("-")[-1].strip().lower()
+    if base_tool == "sandbox_write_workspace_file" and _has_value(args.get("content")):
+        if not _has_value(args.get("relative_path")):
+            inferred = default_write_relative_path(str(args.get("content") or ""))
+            args["relative_path"] = inferred
+            logger.warning(
+                "write_tool_inferred_relative_path path=%s content_len=%d",
+                inferred,
+                len(str(args.get("content") or "")),
+            )
+
     if tool_name in _WORKSPACE_PATH_TOOLS and _has_value(args.get("relative_path")):
         before = str(args["relative_path"])
         args["relative_path"] = normalize_workspace_relative_path(before)
@@ -207,3 +258,87 @@ def prepare_mcp_tool_arguments(
         if k in raw:
             args[k] = raw[k]
     return args, None
+
+
+_RUN_FILE_TOOLS = frozenset({"sandbox_run_node_file", "sandbox_run_python_file"})
+_RUN_FILE_EXT = {
+    "sandbox_run_node_file": ".js",
+    "sandbox_run_python_file": ".py",
+}
+
+
+def preflight_run_file_tool(
+    tool_name: str, args: Dict[str, Any], session_id: str
+) -> Optional[str]:
+    """OpenCode-style gate: script must exist, be non-empty, and have a valid extension."""
+    base = (tool_name or "").split("-")[-1].strip().lower()
+    if base not in _RUN_FILE_TOOLS:
+        return None
+    rel = str(args.get("relative_path") or "").strip()
+    if not rel:
+        return None
+    expected_ext = _RUN_FILE_EXT[base]
+    if not rel.lower().endswith(expected_ext):
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "invalid_extension",
+                "tool": tool_name,
+                "message": (
+                    f"{tool_name} requires a {expected_ext} file under workspace/. "
+                    "Create the script with sandbox_write_workspace_file first."
+                ),
+            },
+            ensure_ascii=False,
+        )
+    sid = (session_id or "").strip()
+    if not sid or sid == "default":
+        return None
+    try:
+        from src.session_workspace import safe_resolve
+
+        path = safe_resolve(sid, rel, must_exist=True)
+    except Exception as exc:
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "file_not_found",
+                "tool": tool_name,
+                "relative_path": rel,
+                "message": (
+                    f"File not found: {rel}. "
+                    "Use sandbox_write_workspace_file to create it before running."
+                ),
+                "detail": str(exc)[:200],
+            },
+            ensure_ascii=False,
+        )
+    try:
+        if not path.is_file():
+            raise FileNotFoundError(rel)
+        size = path.stat().st_size
+    except OSError as exc:
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "file_not_readable",
+                "tool": tool_name,
+                "message": f"Cannot read {rel}: {exc}",
+            },
+            ensure_ascii=False,
+        )
+    if size <= 0:
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "empty_file",
+                "tool": tool_name,
+                "relative_path": rel,
+                "message": (
+                    f"{rel} is empty. Write complete script content with "
+                    "sandbox_write_workspace_file, then retry."
+                ),
+            },
+            ensure_ascii=False,
+        )
+    return None
