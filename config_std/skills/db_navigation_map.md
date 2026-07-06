@@ -7,7 +7,7 @@ version: 4
 
 # Database Navigation Map (Alibr Production & Logistics ERP)
 
-> **Operational source of truth:** MemPalace wing `wing_proj_alibr` (progetto SQL QM **`alibr`**, non `default`). Seed: `python scripts/bootstrap_db_navigation_mempalace.py --project alibr`. In chat-ui seleziona progetto **Alibr** prima delle query. Skill readonly — preferisci `mempalace_search` sul progetto attivo.
+> **Operational source of truth:** MemPalace wing `wing_proj_alibr` (SQL QM project **`alibr`**, not `default`). Seed: `python scripts/bootstrap_db_navigation_mempalace.py --project alibr`. In chat-ui select project **Alibr** before queries. Read-only skill — prefer `mempalace_search` on the active project.
 
 This skill provides the essential logical structure, entry points, and physical and logical connection keys (`JOIN`s) of the database. Use it as a fallback reference to formulate coherent, performant, and error-free SQL queries.
 

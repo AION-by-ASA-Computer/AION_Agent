@@ -51,10 +51,6 @@ class AionSettings(BaseSettings):
     plan_text_parser: bool = Field(
         False, description="Enable plan-tag text parser for XML-based plan output."
     )
-    artifact_strategy: str = Field(
-        "tool",
-        description="Artifact parsing strategy: tool | markdown | xml.",
-    )
     stream_loop_v2: bool = Field(
         False,
         description="Enable v2 streaming loop with improved back-pressure handling.",

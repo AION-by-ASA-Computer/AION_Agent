@@ -84,7 +84,7 @@ def build_plan_execution_reminder(
         "3. Markdown deliverable SSOT: "
         f"`{deliverable}`.\n"
         "   - If the file does NOT exist yet: create it ONCE (fenced artifact with "
-        "`# artifact_id`, `# title`, `# filename` OR one `sandbox_write_workspace_file`).\n"
+        "`# artifact_id`, `# title`, `# filename` OR `<aion_artifact>` in message text).\n"
         "   - If the file ALREADY exists: use ONLY `sandbox_edit_workspace_file` "
         "(surgical edits). Never rewrite the full document.\n"
         "4. Do NOT paste the full document body in chat — edits go to the file only.\n"

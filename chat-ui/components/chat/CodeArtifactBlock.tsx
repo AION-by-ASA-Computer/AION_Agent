@@ -28,6 +28,7 @@ export function CodeArtifactBlock({
   savedPath,
   execution,
   defaultOpen = false,
+  streaming = false,
   className,
 }: {
   id?: string;
@@ -38,6 +39,8 @@ export function CodeArtifactBlock({
   savedPath?: string;
   execution?: string;
   defaultOpen?: boolean;
+  /** Live stream in progress — skip expensive syntax highlighting. */
+  streaming?: boolean;
   className?: string;
 }) {
   const [displayedCode, setDisplayedCode] = useState(code);
@@ -104,7 +107,11 @@ export function CodeArtifactBlock({
   const [highlight, setHighlight] = useState<{ key: string; html: string } | null>(null);
   const [copied, setCopied] = useState(false);
   const lang = useMemo(() => normalizeLanguage(language), [language]);
-  const shouldHighlight = displayedCode.trim().length > 0 && displayedCode.length <= MAX_HIGHLIGHT_CHARS && !isPlaceholder;
+  const shouldHighlight =
+    !streaming &&
+    displayedCode.trim().length > 0 &&
+    displayedCode.length <= MAX_HIGHLIGHT_CHARS &&
+    !isPlaceholder;
   const highlightKey = `${lang}:${displayedCode}`;
   const html = highlight?.key === highlightKey ? highlight.html : "";
 

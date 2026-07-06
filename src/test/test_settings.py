@@ -72,17 +72,6 @@ def test_context_compress_enabled_false(monkeypatch):
     assert s.context_compress_enabled is False
 
 
-def test_artifact_strategy_default(monkeypatch):
-    # Explicitly set to the documented default so the live .env doesn't interfere.
-    s = _fresh(monkeypatch, AION_ARTIFACT_STRATEGY="tool")
-    assert s.artifact_strategy == "tool"
-
-
-def test_artifact_strategy_override(monkeypatch):
-    s = _fresh(monkeypatch, AION_ARTIFACT_STRATEGY="markdown")
-    assert s.artifact_strategy == "markdown"
-
-
 def test_stream_loop_v2_default(monkeypatch):
     monkeypatch.delenv("AION_STREAM_LOOP_V2", raising=False)
     s = _fresh(monkeypatch)

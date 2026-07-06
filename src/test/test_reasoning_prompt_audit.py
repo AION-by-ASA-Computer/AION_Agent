@@ -13,7 +13,6 @@ from src.runtime.reasoning_effort import merge_generation_kwargs
 def prompt_env(monkeypatch):
     monkeypatch.setenv("AION_SKILL_SYSTEM_PROMPT_MODE", "index")
     monkeypatch.setenv("AION_SOUL_MEMORY_USER_SPLIT", "0")
-    monkeypatch.setenv("AION_ARTIFACT_STRATEGY", "markdown")
 
 
 def test_core_protocol_always_inlined_even_when_critical_skills_empty():

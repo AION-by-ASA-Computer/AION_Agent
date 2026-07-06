@@ -171,9 +171,9 @@ mcp_servers: []
     assert "sandbox_read_text_file" in tool_names
     assert "web_search" in tool_names
 
-    # In Normal Mode tutti i tool devono essere disponibili
+    # Normal mode: write tool always removed; run tools stay
     captured_tools.clear()
     await get_agent(profile_name="generic_assistant", agent_mode="normal")
     normal_tool_names = {t.name for t in captured_tools}
-    assert "sandbox_write_workspace_file" in normal_tool_names
+    assert "sandbox_write_workspace_file" not in normal_tool_names
     assert "sandbox_run_python_file" in normal_tool_names

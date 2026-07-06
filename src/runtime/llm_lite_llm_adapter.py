@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import logging
+import time
 from typing import Any, Callable, Dict, List, Optional
 
 from haystack import component
@@ -171,7 +172,32 @@ class LiteLLMChatGeneratorWrapper:
                 k: v for k, v in run_params.items() if k in run_sig.parameters
             }
 
-        return self.generator.run(**filtered_run_params)
+        from src.runtime.llm_call_audit import llm_call_audit_enabled, record_llm_call
+
+        t0 = time.time() if llm_call_audit_enabled() else 0.0
+        try:
+            result = self.generator.run(**filtered_run_params)
+        except Exception as exc:
+            if llm_call_audit_enabled():
+                record_llm_call(
+                    self,
+                    messages=messages,
+                    tools=tools,
+                    generation_kwargs=generation_kwargs,
+                    error=f"{type(exc).__name__}: {exc}",
+                    duration_ms=int((time.time() - t0) * 1000),
+                )
+            raise
+        if llm_call_audit_enabled():
+            record_llm_call(
+                self,
+                messages=messages,
+                tools=tools,
+                generation_kwargs=generation_kwargs,
+                result=result,
+                duration_ms=int((time.time() - t0) * 1000),
+            )
+        return result
 
     @component.output_types(replies=List[ChatMessage])
     async def run_async(
@@ -190,20 +216,24 @@ class LiteLLMChatGeneratorWrapper:
         }
         run_params.update(kwargs)
 
-        if hasattr(self.generator, "run_async"):
-            run_sig = inspect.signature(self.generator.run_async)
-            has_run_kwargs = any(
-                p.kind == inspect.Parameter.VAR_KEYWORD
-                for p in run_sig.parameters.values()
-            )
-            if has_run_kwargs:
-                filtered_run_params = run_params
-            else:
-                filtered_run_params = {
-                    k: v for k, v in run_params.items() if k in run_sig.parameters
-                }
-            return await self.generator.run_async(**filtered_run_params)
-        else:
+        from src.runtime.llm_call_audit import llm_call_audit_enabled, record_llm_call
+
+        t0 = time.time() if llm_call_audit_enabled() else 0.0
+
+        async def _invoke():
+            if hasattr(self.generator, "run_async"):
+                run_sig = inspect.signature(self.generator.run_async)
+                has_run_kwargs = any(
+                    p.kind == inspect.Parameter.VAR_KEYWORD
+                    for p in run_sig.parameters.values()
+                )
+                if has_run_kwargs:
+                    filtered_run_params = run_params
+                else:
+                    filtered_run_params = {
+                        k: v for k, v in run_params.items() if k in run_sig.parameters
+                    }
+                return await self.generator.run_async(**filtered_run_params)
             import asyncio
 
             run_sig = inspect.signature(self.generator.run)
@@ -218,6 +248,30 @@ class LiteLLMChatGeneratorWrapper:
                     k: v for k, v in run_params.items() if k in run_sig.parameters
                 }
             return await asyncio.to_thread(self.generator.run, **filtered_run_params)
+
+        try:
+            result = await _invoke()
+        except Exception as exc:
+            if llm_call_audit_enabled():
+                record_llm_call(
+                    self,
+                    messages=messages,
+                    tools=tools,
+                    generation_kwargs=generation_kwargs,
+                    error=f"{type(exc).__name__}: {exc}",
+                    duration_ms=int((time.time() - t0) * 1000),
+                )
+            raise
+        if llm_call_audit_enabled():
+            record_llm_call(
+                self,
+                messages=messages,
+                tools=tools,
+                generation_kwargs=generation_kwargs,
+                result=result,
+                duration_ms=int((time.time() - t0) * 1000),
+            )
+        return result
 
     def to_dict(self) -> Dict[str, Any]:
         from haystack.core.component.serialization import default_to_dict

@@ -64,8 +64,9 @@ def build_ui_language_prompt_section(lang: str) -> str:
     return (
         f"\n\n## Response language\n"
         f"The user set their chat UI language to {name} ({code}). "
-        f"Always reply in {name}, including explanations, summaries, and reasoning, "
-        f"unless the user explicitly asks for another language in this conversation."
+        f"Always reply to the user in {name} (chat prose, summaries, explanations).\n"
+        f"**Exception — internal thinking/reasoning blocks must stay in English** "
+        f"(short checklist per core_protocol). Do not write thinking in {name}."
     )
 
 

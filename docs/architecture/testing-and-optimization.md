@@ -64,3 +64,27 @@ For tasks that require "deep reflection":
    ```
 2. **Monitoring**: You will see the agent try multiple times to refine the response until it deems it optimal or runs out of budget.
 3. **Configuration**: Adjust `AION_TTC_MAX_ATTEMPTS` in `.env` to increase or decrease the "patience" of the agent.
+
+## 5. Environment template coverage
+
+Before opening a PR that touches `src/settings.py`, `upgrade_core.py`, or runtime env reads:
+
+```bash
+python scripts/check_env_example_coverage.py
+```
+
+The script verifies that every `AION_*` key used in `src/` and defaults injected by `scripts/upgrade_core.py` appear in `.env.example` (active line or `# commented` default). Use `--strict` to require active lines only.
+
+After pulling this branch, run `./scripts/upgrade-aion.sh` (or `--docker`) to inject tool-first runtime keys (`AION_STREAM_LOOP_V2`, `AION_MODEL_TOOL_POLICY`, …) and remove deprecated `AION_ARTIFACT_STRATEGY`.
+
+## 6. LLM call audit (agent-step debugging)
+
+With `AION_LLM_CALL_AUDIT=1`, each LiteLLM/vLLM request and response for an agent step is written under `data/diagnostics/llm_calls/<session_id>/step_NNN_<id>.json` with an `index.jsonl` manifest.
+
+```bash
+python scripts/audit_llm_calls.py list
+python scripts/audit_llm_calls.py show --session <id> --step 3
+python scripts/audit_llm_calls.py analyze
+```
+
+Useful for diagnosing truncated tool-call JSON, thinking-budget leaks on vLLM Qwen3, and prompt snapshot comparison alongside `AION_PROMPT_DEBUG=1`.
