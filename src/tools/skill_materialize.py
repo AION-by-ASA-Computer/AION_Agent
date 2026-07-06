@@ -151,6 +151,16 @@ def materialize_skill_scripts(
     )
 
 
+def record_skill_viewed(session_id: str, slug: str) -> None:
+    """Record that a skill was viewed in this session (even if no scripts materialized)."""
+    try:
+        mp = _marker_path(session_id, slug)
+        if not mp.is_file():
+            _save_marker(session_id, slug, {"slug": slug, "viewed_only": True})
+    except Exception as e:
+        logger.warning("record_skill_viewed failed for %s: %s", slug, e)
+
+
 def _sentinel_paths_for_slug(slug: str, scripts_dst: Path) -> List[str]:
     """Paths relative to session root that exist after copy."""
     session = scripts_dst.parent

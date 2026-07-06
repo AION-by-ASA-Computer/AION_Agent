@@ -197,6 +197,17 @@ async def build_turn_context(
         exclude_message_ids=[user_message_id] if user_message_id else None,
     )
 
+    if not stm_window and pipeline.session_id:
+        try:
+            from src.session_workspace import session_root
+            import shutil
+
+            assets_dir = session_root(pipeline.session_id) / ".aion_skill_assets"
+            if assets_dir.is_dir():
+                shutil.rmtree(assets_dir, ignore_errors=True)
+        except Exception:
+            pass
+
     # ------------------------------------------------------------------
     # 4. Attachment block (for message assembly later)
     # ------------------------------------------------------------------
@@ -232,9 +243,22 @@ async def build_turn_context(
                     user_input,
                 )
         elif should_inject_skill_discovery_nudge(
-            user_input, profile_has_skills_hub=has_hub, agent_mode=mode
+            user_input,
+            profile_has_skills_hub=has_hub,
+            agent_mode=mode,
+            session_id=pipeline.session_id,
         ):
-            user_input = build_skill_discovery_nudge(user_input) + user_input
+            user_input = (
+                build_skill_discovery_nudge(
+                    user_input,
+                    session_id=pipeline.session_id,
+                    profile_skills=prof.skills if prof else None,
+                    critical_skills=prof._resolved_critical_skill_names()
+                    if prof
+                    else None,
+                )
+                + user_input
+            )
             track_prepend_layer(
                 _prompt_inject_layers,
                 "skill_discovery_nudge",

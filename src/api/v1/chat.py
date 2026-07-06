@@ -55,6 +55,7 @@ class ChatStreamBody(BaseModel):
     )
     message: str
     attachments: Optional[List[AttachmentRef]] = None
+    turn_attachments: Optional[List[AttachmentRef]] = None
     profile: str = Field(
         default="aion_std",
         validation_alias=AliasChoices("profile", "profile_slug", "profile_name"),
@@ -425,6 +426,10 @@ async def chat_stream(
     if body.attachments:
         att = [a.model_dump() for a in body.attachments]
 
+    turn_att = None
+    if body.turn_attachments:
+        turn_att = [a.model_dump() for a in body.turn_attachments]
+
     async def gen():
         yield {"comment": "aion-open"}
         if _project_access_err:
@@ -453,6 +458,7 @@ async def chat_stream(
             async for chunk in pipeline.run_stream(
                 body.message,
                 attachments=att,
+                turn_attachments=turn_att,
                 reasoning_effort=resolved_effort,
                 user_message_id=body.user_message_id,
                 assistant_message_id=body.assistant_message_id,

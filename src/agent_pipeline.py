@@ -643,6 +643,9 @@ class AgentPipeline:
                 lines.append(
                     "IMPORTANT: A new document has been uploaded in this prompt. "
                     "You MUST read, analyze, and consider this document to answer the current request."
+                    "Always use OCR tools to read the document."
+                    "If OCR tools are not available, try to read the document anyway using any "
+                    "available tool."
                 )
 
             if old_files:
