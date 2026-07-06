@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   Settings,
@@ -25,6 +25,7 @@ import { apiBase } from "@/lib/config";
 import { useT } from "@/lib/i18n/use-t";
 import { detectBrowserLocale, setLocale, type Locale } from "@/lib/i18n/i18n-store";
 import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
+import { ProfileOptionGrid } from "@/components/chat/ProfileOptionGrid";
 
 // Template di istruzioni di default se non presenti in localStorage per ciascuna lingua
 const DEFAULT_USER_MD_BY_LANG: Record<string, string> = {
@@ -62,6 +63,7 @@ const DEFAULT_USER_MD_BY_LANG: Record<string, string> = {
 
 export default function SettingsPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const currentUserId = useStoredUserId();
   const currentToken = useStoredToken();
 
@@ -160,6 +162,11 @@ export default function SettingsPage() {
       fetchUserData();
     }
   }, [currentUserId, currentToken, mounted]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "user-md") setActiveTab("user-md");
+  }, [searchParams]);
 
   // Recupera l'elenco dei profili all'avvio
   useEffect(() => {
@@ -651,34 +658,20 @@ export default function SettingsPage() {
                     {t("settings.usermd.desc")}
                   </p>
 
-                  {/* Profilo Select */}
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2 pb-1">
-                    <div className="space-y-1.5 max-w-xs">
-                      <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground/80">{t("settings.usermd.profile_label")}</label>
-                      <div className="relative">
-                        <select
-                          value={selectedProfile}
-                          onChange={(e) => setSelectedProfile(e.target.value)}
-                          disabled={loadingProfiles}
-                          className="w-full appearance-none rounded-xl border border-border/50 bg-background/40 px-4 py-2.5 pr-10 text-xs font-semibold text-foreground outline-none focus:border-primary focus:ring-1 focus:ring-primary focus:bg-background/60 transition-all cursor-pointer"
-                        >
-                          {loadingProfiles && <option value="">{t("settings.usermd.profile_loading")}</option>}
-                          {!loadingProfiles && profiles.length === 0 && <option value="">{t("settings.usermd.profile_none")}</option>}
-                          {profiles.map((p) => (
-                            <option key={p.slug} value={p.slug} className="bg-card text-foreground">
-                              {p.name}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-3.5 flex items-center text-muted-foreground/80">
-                          <ChevronDown size={14} />
-                        </div>
-                      </div>
-                    </div>
-                    {selectedProfile && (
-                      <p className="text-[10.5px] text-muted-foreground/80 leading-normal italic sm:max-w-md">
-                        {profiles.find(p => p.slug === selectedProfile)?.description || t("settings.usermd.profile_nodesc")}
-                      </p>
+                  {/* Profilo — card grid */}
+                  <div className="space-y-2 pt-2 pb-1">
+                    <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground/80">
+                      {t("settings.usermd.profile_label")}
+                    </label>
+                    {loadingProfiles ? (
+                      <p className="text-xs italic text-muted-foreground">{t("settings.usermd.profile_loading")}</p>
+                    ) : (
+                      <ProfileOptionGrid
+                        profiles={profiles}
+                        value={selectedProfile}
+                        onChange={setSelectedProfile}
+                        emptyLabel={t("settings.usermd.profile_none")}
+                      />
                     )}
                   </div>
 

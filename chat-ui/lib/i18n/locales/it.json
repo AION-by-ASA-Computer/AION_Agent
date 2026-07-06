@@ -118,6 +118,37 @@
     "load_error": "Impossibile caricare i job",
     "save_error": "Impossibile salvare il job",
     "feature_disabled": "I job pianificati sono disabilitati sul server (imposta AION_CRON_ENABLED=1 nel .env del backend e riavvia l'API).",
+    "prompt_templates": "Modelli rapidi",
+    "profile_none": "Nessun profilo disponibile",
+    "session_fixed_desc": "Riutilizza la stessa conversazione — l'agente ricorda le esecuzioni precedenti.",
+    "session_new_desc": "Nuova chat ogni volta — ideale per report isolati.",
+    "stats": {
+      "total": "Totale",
+      "active": "Attivi",
+      "paused": "In pausa"
+    },
+    "templates": {
+      "briefing": {
+        "name": "Briefing mattutino",
+        "desc": "Riepilogo giornaliero di priorità e calendario",
+        "prompt": "Dammi un briefing mattutino conciso: priorità principali, scadenze di oggi e un blocco di focus suggerito."
+      },
+      "inbox": {
+        "name": "Digest inbox",
+        "desc": "Recap settimanale dei thread aperti",
+        "prompt": "Riassumi cosa devo seguire questa settimana. Raggruppa per urgenza e suggerisci le prossime azioni."
+      },
+      "weekly": {
+        "name": "Review settimanale",
+        "desc": "Retrospettiva del venerdì e piano per la prossima settimana",
+        "prompt": "Esegui la mia review settimanale: successi, blocchi, lezioni apprese e tre obiettivi per la prossima settimana."
+      },
+      "research": {
+        "name": "Pulse ricerca",
+        "desc": "Monitora un argomento con fonti aggiornate",
+        "prompt": "Cerca gli ultimi sviluppi su [argomento]. Cita le fonti e evidenzia cosa è cambiato rispetto alla scorsa settimana."
+      }
+    },
     "cron": {
       "mode_simple": "Semplice",
       "mode_advanced": "Avanzato",
@@ -250,7 +281,22 @@
       "label": "Profilo",
       "select": "Seleziona Profilo",
       "none": "Nessun profilo",
-      "active_hint": "Tool, skill e sorgenti memoria per questa chat."
+      "active_hint": "Tool, skill e sorgenti memoria per questa chat.",
+      "customize": "Personalizza profilo e istruzioni"
+    },
+    "agent_mode": {
+      "select": "Modalità agente",
+      "soon": "Presto",
+      "normal": "Normale",
+      "normal_desc": "Chat bilanciata — tool e memoria come configurati.",
+      "plan": "Pianifica",
+      "plan_desc": "Scompone il lavoro in passi prima di eseguire.",
+      "deep_research": "Ricerca approfondita",
+      "deep_research_desc": "Ricerche più lunghe con il pannello dedicato.",
+      "ask": "Chiedi",
+      "ask_desc": "Risposte in sola lettura senza effetti collaterali dei tool.",
+      "debug": "Debug",
+      "debug_desc": "Tracce verbose per la diagnostica."
     },
     "model": {
       "label": "Modello",
@@ -332,6 +378,10 @@
       "restricted": "Controllata · {{count}} host",
       "global": "Ricerca web globale",
       "global_desc": "Connessione Internet attiva per ottenere risposte aggiornate dalle fonti web.",
+      "on_short": "Web on",
+      "off_short": "Web off",
+      "on_desc": "Cerca sul web quando serve informazione aggiornata.",
+      "off_desc": "Risposte solo da contesto locale e file allegati.",
       "toggle_aria": "Attiva o disattiva la ricerca web",
       "advanced": "Ricerca Avanzata (Fonti Specifiche)",
       "modal_title": "Ricerca Web Avanzata",

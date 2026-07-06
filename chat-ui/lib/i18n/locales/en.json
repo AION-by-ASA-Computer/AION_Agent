@@ -118,6 +118,37 @@
     "load_error": "Could not load scheduled jobs",
     "save_error": "Could not save job",
     "feature_disabled": "Scheduled jobs are disabled on the server (set AION_CRON_ENABLED=1 in backend .env and restart the API).",
+    "prompt_templates": "Quick templates",
+    "profile_none": "No profiles available",
+    "session_fixed_desc": "Reuse one thread so the agent remembers prior runs.",
+    "session_new_desc": "Start fresh each time — best for isolated reports.",
+    "stats": {
+      "total": "Total",
+      "active": "Active",
+      "paused": "Paused"
+    },
+    "templates": {
+      "briefing": {
+        "name": "Morning briefing",
+        "desc": "Daily summary of priorities and calendar",
+        "prompt": "Give me a concise morning briefing: top priorities, anything due today, and one suggested focus block."
+      },
+      "inbox": {
+        "name": "Inbox digest",
+        "desc": "Weekly recap of open threads",
+        "prompt": "Summarize what I should follow up on this week. Group by urgency and suggest next actions."
+      },
+      "weekly": {
+        "name": "Weekly review",
+        "desc": "Friday retrospective and next-week plan",
+        "prompt": "Run my weekly review: wins, blockers, lessons learned, and three goals for next week."
+      },
+      "research": {
+        "name": "Research pulse",
+        "desc": "Track a topic with fresh sources",
+        "prompt": "Research the latest developments on [topic]. Cite sources and highlight what changed since last week."
+      }
+    },
     "cron": {
       "mode_simple": "Simple",
       "mode_advanced": "Advanced",
@@ -250,7 +281,22 @@
       "label": "Profile",
       "select": "Select Profile",
       "none": "No profile",
-      "active_hint": "Tools, skills, and memory sources for this chat."
+      "active_hint": "Tools, skills, and memory sources for this chat.",
+      "customize": "Customize profile & instructions"
+    },
+    "agent_mode": {
+      "select": "Agent mode",
+      "soon": "Soon",
+      "normal": "Normal",
+      "normal_desc": "Balanced chat — tools and memory as configured.",
+      "plan": "Plan",
+      "plan_desc": "Break work into steps before executing.",
+      "deep_research": "Deep research",
+      "deep_research_desc": "Longer research runs with the research panel.",
+      "ask": "Ask",
+      "ask_desc": "Read-only answers without tool side effects.",
+      "debug": "Debug",
+      "debug_desc": "Verbose traces for troubleshooting."
     },
     "model": {
       "label": "Model",
@@ -332,6 +378,10 @@
       "restricted": "Restricted · {{count}} hosts",
       "global": "Global web search",
       "global_desc": "Active Internet connection to obtain updated answers from web sources.",
+      "on_short": "Web on",
+      "off_short": "Web off",
+      "on_desc": "Search the web when the model needs fresh information.",
+      "off_desc": "Answers use only local context and attached files.",
       "toggle_aria": "Enable or disable web search",
       "advanced": "Advanced Search (Specific Sources)",
       "modal_title": "Advanced Web Search",

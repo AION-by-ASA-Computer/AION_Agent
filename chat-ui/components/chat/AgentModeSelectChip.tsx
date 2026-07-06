@@ -53,11 +53,13 @@ export function AgentModeSelectChip({
   onChange,
   open,
   onOpenChange,
+  onAfterSelect,
 }: {
   mode: AgentMode;
   onChange: (mode: AgentMode) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onAfterSelect?: (mode: AgentMode) => void;
 }) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
@@ -118,6 +120,7 @@ export function AgentModeSelectChip({
                   onClick={() => {
                     if (m.soon) return;
                     onChange(key);
+                    onAfterSelect?.(key);
                     onOpenChange(false);
                   }}
                 />

@@ -15,9 +15,12 @@ import {
   AION_PROMPT_DEBUG_UI_ENABLED,
 } from "@/lib/dev-flags";
 import { ShimmerText } from "@/components/chat/ShimmerText";
+import Link from "next/link";
+import { AgentModeSelectChip } from "@/components/chat/AgentModeSelectChip";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ComposerOptionRow } from "@/components/chat/ComposerOptionRow";
 import { ModelSelectChip } from "@/components/chat/ModelSelectChip";
+import { WebSearchChip } from "@/components/chat/WebSearchChip";
 import { mergeAttachmentRefs } from "@/lib/attachments";
 import { artifactLanguage } from "@/lib/artifacts";
 import {
@@ -907,6 +910,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isThinkingOpen, setIsThinkingOpen] = useState(false);
   const [isAgentModeOpen, setIsAgentModeOpen] = useState(false);
+  const [isWebSearchOpen, setIsWebSearchOpen] = useState(false);
   const [isLlmProviderOpen, setIsLlmProviderOpen] = useState(false);
   const [isToolsViewSubOpen, setIsToolsViewSubOpen] = useState(false);
 
@@ -972,8 +976,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const plusMenuRef = useRef<HTMLDivElement>(null);
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const thinkingMenuRef = useRef<HTMLDivElement>(null);
-  const agentModeMenuRef = useRef<HTMLDivElement>(null);
-
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (plusMenuRef.current && !plusMenuRef.current.contains(event.target as Node)) {
@@ -985,9 +987,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       }
       if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
         setIsProfileOpen(false);
-      }
-      if (agentModeMenuRef.current && !agentModeMenuRef.current.contains(event.target as Node)) {
-        setIsAgentModeOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -3711,49 +3710,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               </div>
                             )}
                           </div>
-                          <div className="my-1.5 border-t border-border/50 pt-1.5">
-                            <div className="rounded-xl bg-card/40 p-2 border border-border/50 shadow-sm backdrop-blur-sm transition-colors hover:bg-card/60">
-                              <div className="flex items-start gap-3">
-                                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className={cn(
-                                      "flex size-6 shrink-0 items-center justify-center rounded-lg transition-colors",
-                                      webSearchEnabled ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
-                                    )}>
-                                      <Globe size={13} aria-hidden />
-                                    </span>
-                                    <span className="text-[12px] font-semibold leading-none text-foreground">{t("chat.web_search.global")}</span>
-                                  </div>
-                                  <p className="pl-8 text-[10px] leading-[1.3] text-muted-foreground">
-                                    {t("chat.web_search.global_desc")}
-                                  </p>
-                                </div>
-                                <button
-                                  type="button"
-                                  role="switch"
-                                  aria-checked={webSearchEnabled}
-                                  aria-label={t("chat.web_search.toggle_aria")}
-                                  className={cn(
-                                    "relative mt-1 h-6 w-10 shrink-0 rounded-full border-2 border-transparent transition-colors focus-ring",
-                                    webSearchEnabled
-                                      ? "bg-primary shadow-inner shadow-primary/20"
-                                      : "bg-muted/80 ring-1 ring-border/80",
-                                  )}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    persistWebSearchEnabled(!webSearchEnabled);
-                                  }}
-                                >
-                                  <span
-                                    className={cn(
-                                      "pointer-events-none absolute top-1/2 size-[0.875rem] -translate-y-1/2 rounded-full bg-background shadow-sm ring-1 ring-black/5 transition-[left] duration-200",
-                                      webSearchEnabled ? "left-[calc(100%-1rem)]" : "left-0.5",
-                                    )}
-                                  />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
                           <button
                             type="button"
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors text-left border border-transparent hover:border-primary/20"
@@ -3786,10 +3742,28 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           setIsProfileOpen(false);
                           setIsThinkingOpen(false);
                           setIsAgentModeOpen(false);
+                          setIsWebSearchOpen(false);
                           setIsToolsViewSubOpen(false);
                         }
                       }}
                       onSelect={setSelectedProvider}
+                    />
+
+                    <WebSearchChip
+                      enabled={webSearchEnabled}
+                      onChange={persistWebSearchEnabled}
+                      open={isWebSearchOpen}
+                      onOpenChange={(open) => {
+                        setIsWebSearchOpen(open);
+                        if (open) {
+                          setIsPlusOpen(false);
+                          setIsProfileOpen(false);
+                          setIsThinkingOpen(false);
+                          setIsAgentModeOpen(false);
+                          setIsLlmProviderOpen(false);
+                          setIsToolsViewSubOpen(false);
+                        }
+                      }}
                     />
 
                     {/* Pulsante Profilo con Dropdown Opzioni */}
@@ -3802,6 +3776,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           setIsThinkingOpen(false);
                           setIsToolsViewSubOpen(false);
                           setIsAgentModeOpen(false);
+                          setIsWebSearchOpen(false);
                           setIsLlmProviderOpen(false);
                         }}
                         className={cn(
@@ -3847,6 +3822,16 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               </div>
                             ) : null}
                           </div>
+                          <div className="border-t border-border/45 p-1">
+                            <Link
+                              href="/settings?tab=user-md"
+                              className="focus-ring flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted/55 hover:text-foreground"
+                              onClick={() => setIsProfileOpen(false)}
+                            >
+                              <Settings size={12} className="shrink-0" aria-hidden />
+                              <span>{t("chat.profile.customize")}</span>
+                            </Link>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -3862,156 +3847,25 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       />
                     )}
 
-                    {/* Pulsante Agent Mode con Dropdown Opzioni */}
-                    <div ref={agentModeMenuRef} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsAgentModeOpen((prev) => !prev);
+                    <AgentModeSelectChip
+                      mode={agentMode}
+                      onChange={handleAgentModeChange}
+                      open={isAgentModeOpen}
+                      onOpenChange={(open) => {
+                        setIsAgentModeOpen(open);
+                        if (open) {
                           setIsPlusOpen(false);
                           setIsToolsViewSubOpen(false);
                           setIsThinkingOpen(false);
                           setIsProfileOpen(false);
                           setIsLlmProviderOpen(false);
-                        }}
-                        className={cn(
-                          "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
-                          isAgentModeOpen
-                            ? "border-primary/45 bg-primary/10 text-primary"
-                            : agentMode === "plan"
-                              ? "border-orange-500/40 bg-orange-500/10 text-orange-400"
-                              : agentMode === "deep_research"
-                                ? "border-violet-500/40 bg-violet-500/10 text-violet-400"
-                                : agentMode === "ask"
-                                  ? "border-blue-500/40 bg-blue-500/10 text-blue-400"
-                                  : agentMode === "debug"
-                                    ? "border-rose-500/40 bg-rose-500/10 text-rose-350"
-                                    : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-                        )}
-                      >
-                        {agentMode === "plan" ? (
-                          <Sparkles size={12} className="text-orange-450" aria-hidden />
-                        ) : agentMode === "deep_research" ? (
-                          <BookOpen size={12} className="text-violet-450" aria-hidden />
-                        ) : agentMode === "ask" ? (
-                          <HelpCircle size={12} className="text-blue-400" aria-hidden />
-                        ) : agentMode === "debug" ? (
-                          <Bug size={12} className="text-rose-450" aria-hidden />
-                        ) : (
-                          <MessageSquare size={12} aria-hidden />
-                        )}
-                        <span>
-                          {agentMode === "plan"
-                            ? "Plan Mode"
-                            : agentMode === "deep_research"
-                              ? "Deep Research"
-                              : agentMode === "ask"
-                                ? "Ask Mode"
-                                : agentMode === "debug"
-                                  ? "Debug Mode"
-                                  : "Normal Mode"}
-                        </span>
-                        <ChevronDown size={10} className="opacity-70" aria-hidden />
-                      </button>
-
-                      {isAgentModeOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 z-50 w-44 rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          {/* Normal Mode */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleAgentModeChange("normal");
-                              setIsAgentModeOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors text-left",
-                              agentMode === "normal"
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                            )}
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <MessageSquare size={12} />
-                              Normal Mode
-                            </span>
-                            {agentMode === "normal" && <Check size={12} className="shrink-0 text-primary" />}
-                          </button>
-
-                          {/* Plan Mode */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleAgentModeChange("plan");
-                              setIsAgentModeOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors text-left",
-                              agentMode === "plan"
-                                ? "bg-orange-500/10 text-orange-400"
-                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                            )}
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <Sparkles
-                                size={12}
-                                className={agentMode === "plan" ? "text-orange-450" : "text-orange-400/80"}
-                              />
-                              Plan Mode
-                            </span>
-                            {agentMode === "plan" && <Check size={12} className="shrink-0 text-orange-455" />}
-                          </button>
-
-                          {/* Deep Research Mode */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleAgentModeChange("deep_research");
-                              setIsAgentModeOpen(false);
-                              setDockTab("research");
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors text-left",
-                              agentMode === "deep_research"
-                                ? "bg-violet-500/10 text-violet-400"
-                                : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                            )}
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <BookOpen
-                                size={12}
-                                className={agentMode === "deep_research" ? "text-violet-455" : "text-violet-400/80"}
-                              />
-                              Deep Research
-                            </span>
-                            {agentMode === "deep_research" && (
-                              <Check size={12} className="shrink-0 text-violet-400" />
-                            )}
-                          </button>
-
-                          {/* Ask Mode */}
-                          <div
-                            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground/60 opacity-50 cursor-not-allowed text-left"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <HelpCircle size={12} className="text-blue-500/50" />
-                              Ask Mode
-                            </span>
-                            <span className="text-[9px] bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded font-semibold border border-blue-500/20">Coming Soon</span>
-                          </div>
-
-                          {/* Debug Mode */}
-                          <div
-                            className="flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold text-muted-foreground/60 opacity-50 cursor-not-allowed text-left"
-                          >
-                            <span className="flex items-center gap-1.5">
-                              <Bug size={12} className="text-rose-500/50" />
-                              Debug Mode
-                            </span>
-                            <span className="text-[9px] bg-rose-500/10 text-rose-400 px-1.5 py-0.5 rounded font-semibold border border-rose-500/20">Coming Soon</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
+                          setIsWebSearchOpen(false);
+                        }
+                      }}
+                      onAfterSelect={(mode) => {
+                        if (mode === "deep_research") setDockTab("research");
+                      }}
+                    />
                   </div>
 
                   {/* Altri controlli a destra */}
