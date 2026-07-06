@@ -217,7 +217,11 @@
       "min": "Thinking: Minimal",
       "med": "Thinking: Medium",
       "max": "Thinking: Maximum",
-      "disable": "Disable"
+      "disable": "Disable",
+      "disable_desc": "Skip extended reasoning for the fastest replies.",
+      "min_desc": "Light reasoning — good for everyday questions.",
+      "med_desc": "Balanced depth before answering.",
+      "max_desc": "Deepest reasoning for hard problems; slower replies."
     },
     "stream_recovery": "The agent is still working on this chat on the server. Refreshing automatically…",
     "agent_status": {
@@ -245,12 +249,26 @@
     "profile": {
       "label": "Profile",
       "select": "Select Profile",
-      "none": "No profile"
+      "none": "No profile",
+      "active_hint": "Tools, skills, and memory sources for this chat."
     },
     "model": {
       "label": "Model",
       "select": "Select Model",
-      "switch": "Switch Model"
+      "switch": "Switch Model",
+      "default_hint": "Default model for this server."
+    },
+    "empty": {
+      "title": "What can I help you with?",
+      "subtitle": "Ask anything, attach a file, or turn on web search. Answers stream in as they're written.",
+      "subtitle_profile": "You're on the {{profile}} profile. Ask anything, attach files, or enable web search — replies stream live.",
+      "hint_attach": "Drag files here or use + to attach",
+      "suggestions": {
+        "explain": "Explain a hard concept simply",
+        "plan": "Draft a project kickoff plan",
+        "attach": "Summarize a document I'll attach",
+        "research": "Research a topic with sources"
+      }
     },
     "sql_project": {
       "hint": "Active SQL / navigation project (click to open panel). New messages use this project."

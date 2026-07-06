@@ -15,6 +15,9 @@ import {
   AION_PROMPT_DEBUG_UI_ENABLED,
 } from "@/lib/dev-flags";
 import { ShimmerText } from "@/components/chat/ShimmerText";
+import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
+import { ComposerOptionRow } from "@/components/chat/ComposerOptionRow";
+import { ModelSelectChip } from "@/components/chat/ModelSelectChip";
 import { mergeAttachmentRefs } from "@/lib/attachments";
 import { artifactLanguage } from "@/lib/artifacts";
 import {
@@ -970,7 +973,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const profileMenuRef = useRef<HTMLDivElement>(null);
   const thinkingMenuRef = useRef<HTMLDivElement>(null);
   const agentModeMenuRef = useRef<HTMLDivElement>(null);
-  const llmProviderMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -986,9 +988,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       }
       if (agentModeMenuRef.current && !agentModeMenuRef.current.contains(event.target as Node)) {
         setIsAgentModeOpen(false);
-      }
-      if (llmProviderMenuRef.current && !llmProviderMenuRef.current.contains(event.target as Node)) {
-        setIsLlmProviderOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -1209,6 +1208,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
   const [composerResizing, setComposerResizing] = useState(false);
   const composerContainerRef = useRef<HTMLDivElement | null>(null);
+  const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composerHeightRef = useRef(COMPOSER_MIN_HEIGHT);
   const composerPendingHeightRef = useRef(COMPOSER_MIN_HEIGHT);
   const composerRafRef = useRef<number | null>(null);
@@ -1644,6 +1644,31 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       allPlanExecutionMessageIds(planExecutionProgress?.tasks).has(recoveryAssistantId)
     ),
   );
+
+  const showEmptyState = useMemo(
+    () =>
+      chatView.kind === "main" &&
+      mainFeedMessages.length === 0 &&
+      !streaming &&
+      !streamRecovery &&
+      !showMainTurnVisual &&
+      !historyError,
+    [
+      chatView.kind,
+      mainFeedMessages.length,
+      streaming,
+      streamRecovery,
+      showMainTurnVisual,
+      historyError,
+    ],
+  );
+
+  const handleEmptySuggestion = useCallback((text: string) => {
+    setInput(text);
+    requestAnimationFrame(() => {
+      composerTextareaRef.current?.focus();
+    });
+  }, []);
 
   const handleCancelPlanExecution = useCallback(async () => {
     const rid = (planExecAdoptRunId || "").trim();
@@ -3011,7 +3036,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         <div id="chat-pane" className="relative flex min-h-0 flex-1 flex-col">
           <div
             ref={messagesContainerRef}
-            className="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-8"
+            className={cn(
+              "flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-8",
+              showEmptyState && "flex flex-col justify-center",
+            )}
             aria-busy={streaming}
             aria-live="polite"
           >
@@ -3068,6 +3096,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     </button>
                   </div>
                 </div>
+              ) : null}
+              {showEmptyState ? (
+                <ChatEmptyState
+                  profileName={activeProfileName}
+                  onSuggestion={handleEmptySuggestion}
+                />
               ) : null}
               {chatView.kind === "task" && openPlanTask && planExecutionProgress ? (
                 <TaskChatView
@@ -3144,7 +3178,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   onOpenAllTasks={() => setDockTab("plan")}
                 />
               ) : null}
-              {chatView.kind === "main"
+              {chatView.kind === "main" && !showEmptyState
                 ? mainFeedMessages.map((m, msgIdx) => {
                   const isLastUser = m.role === "user" && m.id === lastUserMessageId;
                   const prevMsg = msgIdx > 0 ? mainFeedMessages[msgIdx - 1] : null;
@@ -3497,6 +3531,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   </div>
                 )}
                 <textarea
+                  ref={composerTextareaRef}
                   value={input}
                   disabled={streaming || isProjectRequiredButMissing}
                   onChange={(e) => setInput(e.target.value)}
@@ -3579,82 +3614,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                             <Paperclip size={12} className="shrink-0" aria-hidden />
                             <span>{t("chat.tools.attach_file")}</span>
                           </button>
-
-                          {/* Opzione: Selezione Modello LLM */}
-                          {llmProviders && llmProviders.length > 0 && (
-                            <div ref={llmProviderMenuRef} className="relative" onMouseLeave={() => setIsLlmProviderOpen(false)}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIsLlmProviderOpen((prev) => !prev);
-                                }}
-                                onMouseEnter={() => {
-                                  setIsLlmProviderOpen(true);
-                                }}
-                                className={cn(
-                                  "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                  isLlmProviderOpen || selectedProvider
-                                    ? "bg-muted/60 text-foreground"
-                                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                )}
-                              >
-                                <div className="flex items-center gap-2">
-                                  <Sparkles size={12} className={selectedProvider ? "text-primary" : "text-muted-foreground"} aria-hidden />
-                                  <span>{selectedProvider ? (llmProviders.find((p) => p.slug === selectedProvider)?.display_name || selectedProvider) : t("chat.model.label")}</span>
-                                </div>
-                                <ChevronRight size={12} className="shrink-0" aria-hidden />
-                              </button>
-
-                              {/* Sottomenu Selezione Modello */}
-                              {isLlmProviderOpen && (
-                                <div className="absolute bottom-full left-0 z-50 pb-1.5 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
-                                  <div
-                                    onMouseEnter={() => setIsLlmProviderOpen(true)}
-                                    className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
-                                  >
-                                    <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
-                                      {selectedProvider ? t("chat.model.switch") : t("chat.model.select")}
-                                    </div>
-                                    <div className="space-y-0.5">
-                                      {providersLoading ? (
-                                        <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
-                                          <div className="w-3 h-3 border-2 border-border border-t-primary rounded-full animate-spin" />
-                                          {t("integrationsPage.loading")}
-                                        </div>
-                                      ) : (
-                                        <>
-                                          {llmProviders.map((provider) => (
-                                            <button
-                                              key={provider.slug}
-                                              type="button"
-                                              onClick={() => {
-                                                setSelectedProvider(provider.slug === selectedProvider ? null : provider.slug);
-                                                setIsPlusOpen(false);
-                                                setIsLlmProviderOpen(false);
-                                              }}
-                                              className={cn(
-                                                "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                                provider.slug === selectedProvider
-                                                  ? "bg-primary/10 text-primary"
-                                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                              )}
-                                            >
-                                              <span className="truncate pr-2">{provider.display_name}</span>
-                                            </button>
-                                          ))}
-                                          {llmProviders.length === 0 && (
-                                            <div className="px-2 py-1.5 text-xs text-muted-foreground italic">
-                                              No models available
-                                            </div>
-                                          )}
-                                        </>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </div>
-                          )}
 
                           {/* Opzione: Vista Tools > */}
                           <div className="relative" onMouseLeave={() => setIsToolsViewSubOpen(false)}>
@@ -3814,6 +3773,25 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       )}
                     </div>
 
+                    {/* Modello LLM — chip dedicato (stile Promptly) */}
+                    <ModelSelectChip
+                      providers={llmProviders}
+                      selectedSlug={selectedProvider}
+                      loading={providersLoading}
+                      open={isLlmProviderOpen}
+                      onOpenChange={(open) => {
+                        setIsLlmProviderOpen(open);
+                        if (open) {
+                          setIsPlusOpen(false);
+                          setIsProfileOpen(false);
+                          setIsThinkingOpen(false);
+                          setIsAgentModeOpen(false);
+                          setIsToolsViewSubOpen(false);
+                        }
+                      }}
+                      onSelect={setSelectedProvider}
+                    />
+
                     {/* Pulsante Profilo con Dropdown Opzioni */}
                     <div ref={profileMenuRef} className="relative">
                       <button
@@ -3839,38 +3817,35 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       </button>
 
                       {isProfileOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 z-50 w-48 rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/45 mb-1 select-none">
+                        <div className="absolute bottom-full left-0 mb-2 z-50 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
+                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                             {t("chat.profile.select")}
                           </div>
-                          <div className="max-h-48 overflow-y-auto space-y-0.5">
+                          <p className="px-2.5 py-1 text-[10px] leading-snug text-muted-foreground">
+                            {t("chat.profile.active_hint")}
+                          </p>
+                          <div className="max-h-52 overflow-y-auto p-0.5">
                             {profiles.map((p) => {
+                              const slug = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
                               const isSelected = p.slug === profile || p.name === profile;
                               return (
-                                <button
+                                <ComposerOptionRow
                                   key={p.name}
-                                  type="button"
+                                  label={p.name}
+                                  description={p.description}
+                                  selected={isSelected}
                                   onClick={() => {
-                                    handleProfileChange(p.slug || p.name.replace(/\s+/g, "_").toLowerCase());
+                                    handleProfileChange(slug);
                                     setIsProfileOpen(false);
                                   }}
-                                  className={cn(
-                                    "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors text-left",
-                                    isSelected
-                                      ? "bg-primary/10 text-primary"
-                                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-                                  )}
-                                >
-                                  <span className="truncate">{p.name}</span>
-                                  {isSelected && <Check size={12} className="shrink-0 text-primary" />}
-                                </button>
+                                />
                               );
                             })}
-                            {profiles.length === 0 && (
-                              <div className="px-2 py-1.5 text-xs text-muted-foreground italic">
+                            {profiles.length === 0 ? (
+                              <div className="px-2.5 py-2 text-xs italic text-muted-foreground">
                                 {t("chat.profile.none")}
                               </div>
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       )}
@@ -4065,89 +4040,52 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       </button>
 
                       {isThinkingOpen && (
-                        <div className="absolute bottom-full right-0 mb-2 z-50 w-40 rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          {/* Opzione: Disabilita */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleToggleThinking(false);
-                              setIsThinkingOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                              !thinkingEnabled
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                            )}
-                          >
-                            <span>{t("chat.thinking.disable")}</span>
-                            {!thinkingEnabled && <Check size={12} className="shrink-0 text-primary" />}
-                          </button>
-
-                          <div className="my-1 border-t border-border/45" />
-
-                          {/* Opzione: Minimo */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleToggleThinking(true);
-                              handleReasoningEffortChange("min");
-                              setIsThinkingOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                              thinkingEnabled && reasoningEffort === "min"
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                            )}
-                          >
-                            <span>{t("chat.thinking.min")}</span>
-                            {thinkingEnabled && reasoningEffort === "min" && (
-                              <Check size={12} className="shrink-0 text-primary" />
-                            )}
-                          </button>
-
-                          {/* Opzione: Medio */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleToggleThinking(true);
-                              handleReasoningEffortChange("medium");
-                              setIsThinkingOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                              thinkingEnabled && reasoningEffort === "medium"
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                            )}
-                          >
-                            <span>{t("chat.thinking.med")}</span>
-                            {thinkingEnabled && reasoningEffort === "medium" && (
-                              <Check size={12} className="shrink-0 text-primary" />
-                            )}
-                          </button>
-
-                          {/* Opzione: Massimo */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              handleToggleThinking(true);
-                              handleReasoningEffortChange("max");
-                              setIsThinkingOpen(false);
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                              thinkingEnabled && reasoningEffort === "max"
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                            )}
-                          >
-                            <span>{t("chat.thinking.max")}</span>
-                            {thinkingEnabled && reasoningEffort === "max" && (
-                              <Check size={12} className="shrink-0 text-primary" />
-                            )}
-                          </button>
+                        <div className="absolute bottom-full right-0 mb-2 z-50 w-[min(100vw-2rem,15rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
+                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                            {t("chat.thinking.label")}
+                          </div>
+                          <div className="p-0.5">
+                            <ComposerOptionRow
+                              label={t("chat.thinking.disable")}
+                              description={t("chat.thinking.disable_desc")}
+                              selected={!thinkingEnabled}
+                              onClick={() => {
+                                handleToggleThinking(false);
+                                setIsThinkingOpen(false);
+                              }}
+                            />
+                            <div className="my-1 border-t border-border/45" />
+                            <ComposerOptionRow
+                              label={t("chat.thinking.min")}
+                              description={t("chat.thinking.min_desc")}
+                              selected={thinkingEnabled && reasoningEffort === "min"}
+                              onClick={() => {
+                                handleToggleThinking(true);
+                                handleReasoningEffortChange("min");
+                                setIsThinkingOpen(false);
+                              }}
+                            />
+                            <ComposerOptionRow
+                              label={t("chat.thinking.med")}
+                              description={t("chat.thinking.med_desc")}
+                              selected={thinkingEnabled && reasoningEffort === "medium"}
+                              onClick={() => {
+                                handleToggleThinking(true);
+                                handleReasoningEffortChange("medium");
+                                setIsThinkingOpen(false);
+                              }}
+                            />
+                            <ComposerOptionRow
+                              label={t("chat.thinking.max")}
+                              description={t("chat.thinking.max_desc")}
+                              selected={thinkingEnabled && reasoningEffort === "max"}
+                              onClick={() => {
+                                handleToggleThinking(true);
+                                handleReasoningEffortChange("max");
+                                setIsThinkingOpen(false);
+                              }}
+                            />
+                          </div>
                         </div>
                       )}
                     </div>

@@ -217,7 +217,11 @@
       "min": "Thinking: Minimo",
       "med": "Thinking: Medio",
       "max": "Thinking: Massimo",
-      "disable": "Disabilita"
+      "disable": "Disabilita",
+      "disable_desc": "Nessun ragionamento esteso — risposte più rapide.",
+      "min_desc": "Ragionamento leggero per domande quotidiane.",
+      "med_desc": "Profondità bilanciata prima di rispondere.",
+      "max_desc": "Massima profondità per problemi complessi; risposte più lente."
     },
     "stream_recovery": "L'agente sta ancora elaborando questa chat sul server. Aggiornamento automatico…",
     "agent_status": {
@@ -245,12 +249,26 @@
     "profile": {
       "label": "Profilo",
       "select": "Seleziona Profilo",
-      "none": "Nessun profilo"
+      "none": "Nessun profilo",
+      "active_hint": "Tool, skill e sorgenti memoria per questa chat."
     },
     "model": {
       "label": "Modello",
       "select": "Seleziona modello",
-      "switch": "Cambia modello"
+      "switch": "Cambia modello",
+      "default_hint": "Modello predefinito del server."
+    },
+    "empty": {
+      "title": "Come posso aiutarti?",
+      "subtitle": "Chiedi qualsiasi cosa, allega un file o attiva la ricerca web. Le risposte arrivano in streaming mentre vengono scritte.",
+      "subtitle_profile": "Profilo {{profile}} attivo. Chiedi qualsiasi cosa, allega file o attiva la ricerca web — le risposte arrivano in streaming.",
+      "hint_attach": "Trascina file qui o usa + per allegare",
+      "suggestions": {
+        "explain": "Spiega un concetto difficile in modo semplice",
+        "plan": "Bozza un piano di avvio progetto",
+        "attach": "Riassumi un documento che allego",
+        "research": "Approfondisci un argomento con fonti"
+      }
     },
     "sql_project": {
       "hint": "Progetto SQL / navigazione attivo (clic per aprire il pannello). I nuovi messaggi usano questo progetto."
