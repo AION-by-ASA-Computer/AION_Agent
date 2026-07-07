@@ -367,7 +367,9 @@
       "hide": "Hide",
       "partial": "Partial",
       "full": "Full",
-      "plus_tooltip": "Add file or change tools view"
+      "plus_tooltip": "Add file or change tools view",
+      "drag_drop_title": "Drop files here",
+      "drag_drop_desc": "Drag & drop documents to attach them to this conversation"
     },
     "profile": {
       "label": "Profile",

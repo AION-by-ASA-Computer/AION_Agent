@@ -176,6 +176,7 @@ def _find_marketplace_item(item_id: str) -> Optional[Dict[str, Any]]:
 
 
 class ProfileUpdate(BaseModel):
+    slug: Optional[str] = None
     name: str
     description: str
     instructions: str

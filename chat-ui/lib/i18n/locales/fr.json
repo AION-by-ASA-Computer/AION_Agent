@@ -233,7 +233,9 @@
       "hide": "Masquer",
       "partial": "Partielle",
       "full": "Complète",
-      "plus_tooltip": "Ajouter un fichier ou modifier la vue des outils"
+      "plus_tooltip": "Ajouter un fichier ou modifier la vue des outils",
+      "drag_drop_title": "Déposer les fichiers ici",
+      "drag_drop_desc": "Glissez-déposez des documents pour les joindre à cette conversation"
     },
     "profile": {
       "label": "Profil",

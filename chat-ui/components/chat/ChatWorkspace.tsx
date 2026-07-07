@@ -19,6 +19,7 @@ import Link from "next/link";
 import { AgentModeSelectChip } from "@/components/chat/AgentModeSelectChip";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { ComposerOptionRow } from "@/components/chat/ComposerOptionRow";
+import { ChatDragDrop } from "@/components/chat/ChatDragDrop";
 import { mergeAttachmentRefs } from "@/lib/attachments";
 import { artifactLanguage } from "@/lib/artifacts";
 import {
@@ -1150,6 +1151,16 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const composerRafRef = useRef<number | null>(null);
   const composerResizeStartRef = useRef({ y: 0, height: COMPOSER_MIN_HEIGHT });
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+
+  const handleFilesDropped = useCallback((files: File[]) => {
+    setPendingFiles((prev) => {
+      const filtered = files.filter(
+        (sf) => !prev.some((pf) => pf.name === sf.name && pf.size === sf.size)
+      );
+      return [...prev, ...filtered];
+    });
+  }, []);
+
   const [streamEpoch, setStreamEpoch] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
   const internalBusyRef = useRef(false);
@@ -2951,6 +2962,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   return (
     <>
+      <ChatDragDrop onFilesDropped={handleFilesDropped}>
         <div id="chat-pane" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
           <div
             ref={messagesContainerRef}
@@ -4009,6 +4021,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             </div>
           </div>
         </div>
+      </ChatDragDrop>
       <ProjectCreateModal
         open={projectCreateOpen}
         onClose={() => setProjectCreateOpen(false)}

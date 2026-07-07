@@ -233,7 +233,9 @@
       "hide": "Ausblenden",
       "partial": "Teilweise",
       "full": "Vollständig",
-      "plus_tooltip": "Datei hinzufügen oder Tools-Ansicht ändern"
+      "plus_tooltip": "Datei hinzufügen oder Tools-Ansicht ändern",
+      "drag_drop_title": "Dateien hier ablegen",
+      "drag_drop_desc": "Dateien per Drag & Drop ziehen, um sie an diese Konversation anzuhängen"
     },
     "profile": {
       "label": "Profil",
