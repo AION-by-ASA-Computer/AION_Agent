@@ -46,7 +46,7 @@ export function ProjectMemoryChip({
       title={t("memory_dock.open_panel")}
       onClick={onOpenPanel}
       className={cn(
-        "focus-ring ml-2 inline-flex h-7 max-w-[10rem] items-center gap-1 rounded-full border border-primary/25 bg-primary/8 px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15",
+        "focus-ring inline-flex h-7 max-w-[9rem] shrink items-center gap-1 rounded-full border border-primary/25 bg-primary/8 px-2.5 text-[11px] font-medium text-primary transition-colors hover:bg-primary/15 sm:max-w-[10rem]",
         className
       )}
     >

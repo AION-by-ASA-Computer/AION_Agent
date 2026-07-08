@@ -151,6 +151,7 @@ async def list_conversations_chat_ui(
                 "title": r.title,
                 "message_count": r.message_count,
                 "metadata": meta,
+                "updated_at": r.updated_at.isoformat() if r.updated_at else None,
             }
         )
         if len(data) >= limit:

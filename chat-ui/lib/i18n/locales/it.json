@@ -11,10 +11,49 @@
   },
   "settings": {
     "title": "Impostazioni Utente",
+    "subtitle": "Gestisci profilo, aspetto, sicurezza e istruzioni personalizzate.",
     "back": "Torna indietro",
     "tab": {
       "account": "Profilo & Account",
-      "usermd": "Profili"
+      "usermd": "Profili",
+      "profile": "Profilo",
+      "appearance": "Aspetto",
+      "security": "Sicurezza",
+      "instructions": "Istruzioni"
+    },
+    "profile": {
+      "title": "Profilo",
+      "desc": "Foto, colore avatar e informazioni account visibili nella barra laterale.",
+      "color_label": "Colore profilo",
+      "upload_photo": "Carica foto",
+      "remove_photo": "Rimuovi foto",
+      "avatar_too_large": "L'immagine deve essere inferiore a 256 KB.",
+      "appearance_saved": "Aspetto profilo aggiornato.",
+      "username_hint": "Identificativo di accesso. Deve essere univoco.",
+      "shortcuts_title": "Collegamenti rapidi",
+      "shortcuts_desc": "Accesso veloce alle sezioni principali dell'app."
+    },
+    "appearance": {
+      "title": "Aspetto",
+      "desc": "Tema dell'interfaccia e lingua dell'applicazione.",
+      "theme_label": "Tema",
+      "theme_desc": "Scegli tra modalità chiara o scura.",
+      "language_label": "Lingua interfaccia"
+    },
+    "security": {
+      "password_title": "Password",
+      "password_desc": "Aggiorna la password del tuo account.",
+      "current_password": "Password attuale",
+      "new_password": "Nuova password",
+      "confirm_password": "Conferma password",
+      "password_hint": "Minimo 6 caratteri.",
+      "password_min": "La nuova password deve avere almeno 6 caratteri.",
+      "password_mismatch": "La conferma non coincide con la nuova password.",
+      "password_error": "Impossibile aggiornare la password.",
+      "password_updated": "Password aggiornata con successo.",
+      "update_password": "Aggiorna password",
+      "must_change_title": "Password temporanea",
+      "must_change_desc": "Per sicurezza, aggiorna la password prima di continuare."
     },
     "section": {
       "profile": {
@@ -71,24 +110,49 @@
     "delete_confirm": "Cancella chat?",
     "settings": "Impostazioni",
     "login": "Accedi",
-    "integrations": "Le mie integrazioni",
-    "schedules": "Job pianificati"
+    "integrations": "Integrazioni",
+    "schedules": "Automazioni",
+    "chat": "Chat",
+    "profile": "Profilo",
+    "search_placeholder": "Cerca conversazioni…",
+    "favorites": "Preferiti",
+    "add_favorite": "Aggiungi ai preferiti",
+    "remove_favorite": "Rimuovi dai preferiti",
+    "rename": "Rinomina",
+    "delete": "Elimina",
+    "chat_options": "Opzioni chat",
+    "collapse": "Comprimi barra laterale",
+    "expand": "Espandi barra laterale",
+    "theme": "Tema",
+    "bucket_today": "Oggi",
+    "bucket_yesterday": "Ieri",
+    "bucket_previous_7_days": "Ultimi 7 giorni",
+    "bucket_previous_30_days": "Ultimi 30 giorni",
+    "bucket_older": "Più vecchie",
+    "profile_menu": {
+      "appearance": "Aspetto",
+      "theme_light": "Chiaro",
+      "theme_dark": "Scuro",
+      "language": "Lingua",
+      "customize": "Personalizza istruzioni",
+      "logout": "Esci"
+    }
   },
   "schedulesPage": {
-    "title": "Job pianificati",
+    "title": "Automazioni",
     "subtitle": "Prompt ricorrenti eseguiti automaticamente dall'agente.",
     "back_chat": "← Chat",
     "loading": "Caricamento…",
-    "empty": "Nessun job pianificato.",
-    "empty_hint": "Crea un job per far eseguire un prompt a orari fissi — ogni giorno, settimana o intervallo personalizzato.",
-    "new": "Nuovo job",
+    "empty": "Nessuna automazione.",
+    "empty_hint": "Crea un'automazione per far eseguire un prompt a orari fissi — ogni giorno, settimana o intervallo personalizzato.",
+    "new": "Nuova automazione",
     "create": "Crea",
     "save": "Salva modifiche",
     "saving": "Salvataggio…",
     "cancel": "Annulla",
     "edit": "Modifica",
-    "create_title": "Nuovo job pianificato",
-    "edit_title": "Modifica job",
+    "create_title": "Nuova automazione",
+    "edit_title": "Modifica automazione",
     "dialog_subtitle": "Scegli quando eseguire e cosa deve fare l'agente.",
     "schedule_label": "Quando eseguire?",
     "session_legend": "Conversazione",
@@ -111,15 +175,46 @@
     "pause": "Pausa",
     "resume": "Riprendi",
     "delete": "Elimina",
-    "delete_confirm": "Eliminare questo job?",
+    "delete_confirm": "Eliminare questa automazione?",
     "open_session": "Apri sessione fissa",
     "recent_runs": "Esecuzioni recenti",
     "runs_loading": "Caricamento esecuzioni…",
     "runs_empty": "Nessuna esecuzione ancora.",
     "open_run_chat": "Apri chat",
-    "load_error": "Impossibile caricare i job",
-    "save_error": "Impossibile salvare il job",
-    "feature_disabled": "I job pianificati sono disabilitati sul server (imposta AION_CRON_ENABLED=1 nel .env del backend e riavvia l'API).",
+    "load_error": "Impossibile caricare le automazioni",
+    "save_error": "Impossibile salvare l'automazione",
+    "feature_disabled": "Le automazioni sono disabilitate sul server (imposta AION_CRON_ENABLED=1 nel .env del backend e riavvia l'API).",
+    "prompt_templates": "Modelli rapidi",
+    "profile_none": "Nessun profilo disponibile",
+    "session_fixed_desc": "Riutilizza la stessa conversazione — l'agente ricorda le esecuzioni precedenti.",
+    "session_new_desc": "Nuova chat ogni volta — ideale per report isolati.",
+    "stats": {
+      "total": "Totale",
+      "active": "Attivi",
+      "paused": "In pausa"
+    },
+    "templates": {
+      "briefing": {
+        "name": "Briefing mattutino",
+        "desc": "Riepilogo giornaliero di priorità e calendario",
+        "prompt": "Dammi un briefing mattutino conciso: priorità principali, scadenze di oggi e un blocco di focus suggerito."
+      },
+      "inbox": {
+        "name": "Digest inbox",
+        "desc": "Recap settimanale dei thread aperti",
+        "prompt": "Riassumi cosa devo seguire questa settimana. Raggruppa per urgenza e suggerisci le prossime azioni."
+      },
+      "weekly": {
+        "name": "Review settimanale",
+        "desc": "Retrospettiva del venerdì e piano per la prossima settimana",
+        "prompt": "Esegui la mia review settimanale: successi, blocchi, lezioni apprese e tre obiettivi per la prossima settimana."
+      },
+      "research": {
+        "name": "Pulse ricerca",
+        "desc": "Monitora un argomento con fonti aggiornate",
+        "prompt": "Cerca gli ultimi sviluppi su [argomento]. Cita le fonti e evidenzia cosa è cambiato rispetto alla scorsa settimana."
+      }
+    },
     "cron": {
       "mode_simple": "Semplice",
       "mode_advanced": "Avanzato",
@@ -167,10 +262,13 @@
     "subtitle": "Collega i tuoi account ai servizi MCP abilitati dall'amministratore. I valori sono cifrati sul server.",
     "loading": "Caricamento…",
     "empty": "Nessuna integrazione disponibile. Chiedi all'amministratore di abilitare i server MCP.",
+    "empty_hint": "Le integrazioni collegano i tuoi account ai servizi MCP abilitati dall'amministratore.",
     "section_configured": "Configurate",
     "section_pending": "Da configurare",
     "badge_configured": "configurate",
     "badge_pending": "da configurare",
+    "badge_connected": "connessa",
+    "badge_pending_short": "da configurare",
     "connect": "Connetti",
     "edit": "Modifica",
     "cancel": "Annulla",
@@ -195,7 +293,32 @@
     "add_credential": "Aggiungi campo credenziale",
     "custom_field": "extra",
     "new_field_label": "Nuovo campo",
-    "field_label": "Etichetta"
+    "field_label": "Etichetta",
+    "stats": {
+      "total": "Totale",
+      "configured": "Configurate",
+      "pending": "Da configurare"
+    },
+    "oauth_connected": "OAuth connesso",
+    "oauth_required": "OAuth richiesto",
+    "credential_expired": "scaduta",
+    "toggle_active": "Attiva",
+    "disconnect": "Disconnetti",
+    "disconnect_error": "Errore disconnessione OAuth",
+    "oauth_title": "Autenticazione OAuth2",
+    "oauth_intro": "Connetti questa integrazione accedendo in modo sicuro con il tuo account.",
+    "oauth_reconnect": "Riconnetti account",
+    "oauth_login_google": "Accedi con Google",
+    "oauth_login_github": "Accedi con GitHub",
+    "oauth_login_microsoft": "Accedi con Microsoft",
+    "oauth_login_auth0": "Accedi con Auth0",
+    "oauth_login_generic": "Accedi con {{provider}}",
+    "oauth_start_error": "Errore avvio OAuth",
+    "oauth_network_error": "Errore di rete durante l'avvio OAuth.",
+    "oauth_unknown_error": "Errore sconosciuto",
+    "oauth_callback_missing_slug": "Errore callback OAuth: identificativo integrazione mancante.",
+    "oauth_callback_state_mismatch": "Controllo di sicurezza OAuth fallito: state non corrispondente.",
+    "oauth_exchange_error": "Errore scambio token OAuth"
   },
   "header": {
     "toggle_sidebar": {
@@ -219,7 +342,11 @@
       "min": "Thinking: Minimo",
       "med": "Thinking: Medio",
       "max": "Thinking: Massimo",
-      "disable": "Disabilita"
+      "disable": "Disabilita",
+      "disable_desc": "Nessun ragionamento esteso — risposte più rapide.",
+      "min_desc": "Ragionamento leggero per domande quotidiane.",
+      "med_desc": "Profondità bilanciata prima di rispondere.",
+      "max_desc": "Massima profondità per problemi complessi; risposte più lente."
     },
     "stream_recovery": "L'agente sta ancora elaborando questa chat sul server. Aggiornamento automatico…",
     "agent_status": {
@@ -247,12 +374,41 @@
     "profile": {
       "label": "Profilo",
       "select": "Seleziona Profilo",
-      "none": "Nessun profilo"
+      "none": "Nessun profilo",
+      "active_hint": "Tool, skill e sorgenti memoria per questa chat.",
+      "customize": "Personalizza profilo e istruzioni"
+    },
+    "agent_mode": {
+      "select": "Modalità agente",
+      "soon": "Presto",
+      "normal": "Normale",
+      "normal_desc": "Chat bilanciata — tool e memoria come configurati.",
+      "plan": "Pianifica",
+      "plan_desc": "Scompone il lavoro in passi prima di eseguire.",
+      "deep_research": "Ricerca approfondita",
+      "deep_research_desc": "Ricerche più lunghe con il pannello dedicato.",
+      "ask": "Chiedi",
+      "ask_desc": "Risposte in sola lettura senza effetti collaterali dei tool.",
+      "debug": "Debug",
+      "debug_desc": "Tracce verbose per la diagnostica."
     },
     "model": {
       "label": "Modello",
       "select": "Seleziona modello",
-      "switch": "Cambia modello"
+      "switch": "Cambia modello",
+      "default_hint": "Modello predefinito del server."
+    },
+    "empty": {
+      "title": "Come posso aiutarti?",
+      "subtitle": "Chiedi qualsiasi cosa, allega un file o attiva la ricerca web. Le risposte arrivano in streaming mentre vengono scritte.",
+      "subtitle_profile": "Profilo {{profile}} attivo. Chiedi qualsiasi cosa, allega file o attiva la ricerca web — le risposte arrivano in streaming.",
+      "hint_attach": "Trascina file qui o usa + per allegare",
+      "suggestions": {
+        "explain": "Spiega un concetto difficile in modo semplice",
+        "plan": "Bozza un piano di avvio progetto",
+        "attach": "Riassumi un documento che allego",
+        "research": "Approfondisci un argomento con fonti"
+      }
     },
     "sql_project": {
       "hint": "Progetto SQL / navigazione attivo (clic per aprire il pannello). I nuovi messaggi usano questo progetto."
@@ -316,6 +472,10 @@
       "restricted": "Controllata · {{count}} host",
       "global": "Ricerca web globale",
       "global_desc": "Connessione Internet attiva per ottenere risposte aggiornate dalle fonti web.",
+      "on_short": "Web on",
+      "off_short": "Web off",
+      "on_desc": "Cerca sul web quando serve informazione aggiornata.",
+      "off_desc": "Risposte solo da contesto locale e file allegati.",
       "toggle_aria": "Attiva o disattiva la ricerca web",
       "advanced": "Ricerca Avanzata (Fonti Specifiche)",
       "modal_title": "Ricerca Web Avanzata",
