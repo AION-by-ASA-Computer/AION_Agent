@@ -9,7 +9,7 @@ from src.runtime.redis_client import (
 )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_stream_active_roundtrip(monkeypatch):
     store: dict[str, str] = {}
 

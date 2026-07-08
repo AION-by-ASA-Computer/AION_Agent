@@ -41,6 +41,7 @@ import {
   listSessionUploads,
   fetchConversationHistory,
   fetchStreamStatus,
+  getChatStreamReconnect,
   fetchConversationDetails,
   updateConversationMetadata,
   updateConversationProfile,
@@ -2380,31 +2381,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     if (streamingRef.current && !streamRecoveryRef.current) return;
 
     let cancelled = false;
-    let timer: ReturnType<typeof setInterval> | null = null;
-    const pollIntervalMs = planExecAdoptRunId ? 750 : 2000;
-
-    const syncTurnFromHistory = (
-      hist: ChatHistoryMessage[],
-      assistantMessageId?: string,
-    ) => {
-      const apiMsg = assistantMessageId
-        ? hist.find((m) => m.id === assistantMessageId)
-        : [...hist].reverse().find((m) => m.role === "assistant");
-      if (!apiMsg || apiMsg.role !== "assistant") {
-        setTurnVisual((prev) => prev ?? newTurn());
-        return;
-      }
-      const mapped = historyMessageFromApi(apiMsg);
-      setTurnVisual(
-        turnStateFromHistoryMessage({
-          reasoning: mapped.reasoning,
-          content: mapped.content,
-          steps: mapped.steps,
-          artifacts: mapped.artifacts,
-          timeline: mapped.segments,
-        }),
-      );
-    };
 
     const finishRecovery = async () => {
       streamRecoveryRef.current = false;
@@ -2437,57 +2413,51 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       }
     };
 
-    const poll = async () => {
-      if (cancelled) return;
-      if (streamingRef.current && !streamRecoveryRef.current) return;
-      const status = await fetchStreamStatus(conversationId, userId, token);
-      if (cancelled) return;
-
-      if (!status.active) {
-        if (streamRecoveryRef.current) await finishRecovery();
-        return;
-      }
-
-      const localMarker = readActiveStreamMarker(conversationId);
-      const redisGraceMs = planExecAdoptRunId ? 0 : 4000;
-      if (
-        !planExecAdoptRunId &&
-        !localMarker &&
-        !streamRecoveryRef.current &&
-        Date.now() - streamFinishedAtRef.current < redisGraceMs
-      ) {
-        return;
-      }
-
+    const runSseRecovery = async () => {
       streamRecoveryRef.current = true;
       setStreamRecovery(true);
-      setRecoveryAssistantId(status.assistant_message_id ?? null);
       streamingRef.current = true;
       setStreaming(true);
 
-      try {
-        const result = await fetchConversationHistory(conversationId, userId, token, undefined, {
-          includePlanInternal: !!planExecAdoptRunId,
-        });
-        if (cancelled || activeConversationRef.current !== conversationId) return;
-        const mapped = result.messages.map(historyMessageFromApi);
-        setMessages((prev) => {
-          const { next, error } = applyHistoryToMessages(
-            prev,
-            mapped,
-            result,
-            conversationId,
-            transcriptStreaming,
-            { source: "recovery-poll", mode: "merge" },
-          );
-          if (error) setHistoryError(error);
-          return next;
-        });
-        if (result.ok) {
-          syncTurnFromHistory(result.messages, status.assistant_message_id);
+      while (!cancelled && activeConversationRef.current === conversationId) {
+        let state = newTurn();
+        setTurnVisual(state);
+
+        try {
+          const sseStream = await getChatStreamReconnect(conversationId, userId, token);
+          if (cancelled || activeConversationRef.current !== conversationId) break;
+
+          if (sseStream) {
+            await consumeChatStream(sseStream, (chunk) => {
+              if (cancelled || activeConversationRef.current !== conversationId) return;
+              if (chunk.type === "turn_started") {
+                const uid = String(chunk.user_message_id || "");
+                const asst = String(chunk.assistant_message_id || "");
+                setRecoveryAssistantId(asst || null);
+                writeActiveStreamMarker(conversationId, {
+                  assistantMessageId: asst,
+                  userMessageId: uid,
+                });
+                return;
+              }
+              state = reduceChunk(state, chunk);
+              setTurnVisual({ ...state });
+            });
+          }
+        } catch (err) {
+          console.error("[aion-chat-ui] SSE reconnect stream error:", err);
         }
-      } catch {
-        /* ignore transient errors */
+
+        if (cancelled || activeConversationRef.current !== conversationId) break;
+        const status = await fetchStreamStatus(conversationId, userId, token);
+        if (!status.active) {
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      }
+
+      if (!cancelled && activeConversationRef.current === conversationId) {
+        await finishRecovery();
       }
     };
 
@@ -2496,8 +2466,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       const status = await fetchStreamStatus(conversationId, userId, token);
       if (cancelled || (streamingRef.current && !streamRecoveryRef.current)) return;
       if (status.active || marker || planExecAdoptRunId) {
-        await poll();
-        timer = setInterval(() => void poll(), pollIntervalMs);
+        await runSseRecovery();
       } else if (marker) {
         clearActiveStreamMarker(conversationId);
       }
@@ -2506,15 +2475,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     void maybeStart();
 
     const onVis = () => {
-      if (document.visibilityState === "visible" && streamRecoveryRef.current) {
-        void poll();
+      if (document.visibilityState === "visible" && !streamingRef.current) {
+        void maybeStart();
       }
     };
     document.addEventListener("visibilitychange", onVis);
 
     return () => {
       cancelled = true;
-      if (timer) clearInterval(timer);
       document.removeEventListener("visibilitychange", onVis);
     };
   }, [conversationId, userId, token, refreshThreads, planExecAdoptRunId]);

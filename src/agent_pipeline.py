@@ -1130,6 +1130,7 @@ class AgentPipeline:
         plan_execution_task_id: Optional[str] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         logger.info(">>> [0] ENTERING run_stream for session %s", self.session_id)
+        cancel_checker_task: Optional[asyncio.Task] = None
         from src.runtime.web_search_context import (
             WebSearchRequestContext,
             reset_web_search_request_context,
@@ -1754,6 +1755,21 @@ class AgentPipeline:
                     async_runner=_run_agent_async,
                 )
             )
+            async def _cancel_checker() -> None:
+                try:
+                    while not agent_task.done():
+                        await asyncio.sleep(0.5)
+                        if await redis_consume_stream_cancel(self.session_id):
+                            logger.info("Cancel requested for session %s, setting stop_event", self.session_id)
+                            stop_event.set()
+                            await queue.put({"type": "error", "content": "Session cancelled by user"})
+                            break
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    logger.warning("Error in cancel checker task: %s", e)
+
+            cancel_checker_task = asyncio.create_task(_cancel_checker())
             keepalive_task: Optional[asyncio.Task] = None
             keepalive_sec = float(os.getenv("AION_SSE_KEEPALIVE_SEC", "15"))
             if keepalive_sec > 0:
@@ -3565,6 +3581,8 @@ class AgentPipeline:
             )
             yield {"type": "error", "content": str(e)}
         finally:
+            if 'cancel_checker_task' in locals() and cancel_checker_task and not cancel_checker_task.done():
+                cancel_checker_task.cancel()
             await redis_clear_stream_active(self.session_id)
             reset_web_search_request_context(_web_tok)
             if span:

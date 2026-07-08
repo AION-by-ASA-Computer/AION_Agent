@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional, Set
 
 MessageSource = Literal["user_input", "internal_trigger", "scheduled_trigger"]
 
@@ -26,6 +26,91 @@ router = APIRouter()
 
 _prepare_tasks: Dict[str, asyncio.Task] = {}
 _prepare_snapshots: Dict[str, Dict[str, Any]] = {}
+
+class BackgroundChatRun:
+    def __init__(self, conversation_id: str):
+        self.conversation_id = conversation_id
+        self.task: Optional[asyncio.Task] = None
+        self.queues: Set[asyncio.Queue] = set()
+        self.history: List[Dict[str, Any]] = []
+        self.is_done = False
+        self.error: Optional[str] = None
+
+_background_runs: Dict[str, BackgroundChatRun] = {}
+
+
+async def _run_pipeline_in_background(
+    conversation_id: str,
+    body: ChatStreamBody,
+    uid: str,
+    resolved_agent_mode: str,
+    sql_project_resolved: Optional[str],
+    att: Optional[list],
+):
+    run = _background_runs.get(conversation_id)
+    if not run:
+        return
+
+    try:
+        agent_instance, profile_name = await get_agent(
+            body.profile,
+            session_id=conversation_id,
+            user_id=uid,
+            agent_mode=resolved_agent_mode,
+            message_source=body.message_source,
+            llm_provider_name=body.llm_provider_name,
+        )
+        pipeline = AgentPipeline(
+            agent=agent_instance,
+            session_id=conversation_id,
+            profile_name=profile_name,
+            user_id=uid,
+            agent_mode=resolved_agent_mode,
+        )
+        if body.thinking_enabled is False:
+            resolved_effort = "min"
+        else:
+            resolved_effort = effective_reasoning_effort(body.reasoning_effort)
+
+        async for chunk in pipeline.run_stream(
+            body.message,
+            attachments=att,
+            reasoning_effort=resolved_effort,
+            user_message_id=body.user_message_id,
+            assistant_message_id=body.assistant_message_id,
+            message_source=body.message_source,
+            web_search_enabled=body.web_search_enabled,
+            web_search_restrict_hosts=normalize_web_search_restrict_hosts(
+                body.web_search_restrict_hosts
+            ),
+            sql_query_project=sql_project_resolved,
+        ):
+            event_data = {"event": "message", "data": json.dumps(chunk)}
+            run.history.append(event_data)
+            for q in list(run.queues):
+                await q.put(event_data)
+
+    except Exception as e:
+        logger.error("Error in background pipeline run for session %s: %s", conversation_id, e)
+        from src.agent_profile import ProfileNotFoundError
+        if isinstance(e, ProfileNotFoundError):
+            payload = {
+                "error": str(e),
+                "code": "profile_not_found",
+                "available_slugs": e.available_slugs,
+            }
+        else:
+            payload = {"error": str(e)}
+        error_event = {"event": "error", "data": json.dumps(payload)}
+        run.error = str(e)
+        run.history.append(error_event)
+        for q in list(run.queues):
+            await q.put(error_event)
+    finally:
+        run.is_done = True
+        for q in list(run.queues):
+            await q.put(None)
+        _background_runs.pop(conversation_id, None)
 
 
 def _prepare_dedupe_key(conversation_id: str, profile: str, user_id: str) -> str:
@@ -425,58 +510,84 @@ async def chat_stream(
     if body.attachments:
         att = [a.model_dump() for a in body.attachments]
 
+    # Check if a background run is already active
+    run = _background_runs.get(body.conversation_id) if not _project_access_err else None
+    if not run and not _project_access_err:
+        run = BackgroundChatRun(body.conversation_id)
+        _background_runs[body.conversation_id] = run
+        run.task = asyncio.create_task(
+            _run_pipeline_in_background(
+                conversation_id=body.conversation_id,
+                body=body,
+                uid=uid,
+                resolved_agent_mode=resolved_agent_mode,
+                sql_project_resolved=sql_project_resolved,
+                att=att,
+            ),
+            name=f"chat-run-{body.conversation_id[:8]}"
+        )
+
+    q = asyncio.Queue()
+    if run:
+        for chunk in run.history:
+            q.put_nowait(chunk)
+        run.queues.add(q)
+
     async def gen():
         yield {"comment": "aion-open"}
         if _project_access_err:
             yield {"event": "error", "data": json.dumps({"error": _project_access_err})}
             return
         try:
-            agent_instance, profile_name = await get_agent(
-                body.profile,
-                session_id=body.conversation_id,
-                user_id=uid,
-                agent_mode=resolved_agent_mode,
-                message_source=body.message_source,
-                llm_provider_name=body.llm_provider_name,
-            )
-            pipeline = AgentPipeline(
-                agent=agent_instance,
-                session_id=body.conversation_id,
-                profile_name=profile_name,
-                user_id=uid,
-                agent_mode=resolved_agent_mode,
-            )
-            if body.thinking_enabled is False:
-                resolved_effort = "min"
-            else:
-                resolved_effort = effective_reasoning_effort(body.reasoning_effort)
-            async for chunk in pipeline.run_stream(
-                body.message,
-                attachments=att,
-                reasoning_effort=resolved_effort,
-                user_message_id=body.user_message_id,
-                assistant_message_id=body.assistant_message_id,
-                message_source=body.message_source,
-                web_search_enabled=body.web_search_enabled,
-                web_search_restrict_hosts=normalize_web_search_restrict_hosts(
-                    body.web_search_restrict_hosts
-                ),
-                sql_query_project=sql_project_resolved,
-            ):
-                yield {"event": "message", "data": json.dumps(chunk)}
-        except Exception as e:
-            from src.agent_profile import ProfileNotFoundError
+            while True:
+                chunk = await q.get()
+                if chunk is None:
+                    break
+                yield chunk
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if run and body.conversation_id in _background_runs:
+                _background_runs[body.conversation_id].queues.discard(q)
 
-            logger.error("v1 chat stream: %s", e)
-            if isinstance(e, ProfileNotFoundError):
-                payload = {
-                    "error": str(e),
-                    "code": "profile_not_found",
-                    "available_slugs": e.available_slugs,
-                }
-            else:
-                payload = {"error": str(e)}
-            yield {"event": "error", "data": json.dumps(payload)}
+    return EventSourceResponse(
+        gen(),
+        ping=15,
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.get("/chat/stream/reconnect/{conversation_id}")
+async def chat_stream_reconnect(
+    conversation_id: str,
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
+):
+    run = _background_runs.get(conversation_id)
+    if not run:
+        async def empty_gen():
+            yield {"comment": "aion-not-active"}
+        return EventSourceResponse(empty_gen())
+
+    q = asyncio.Queue()
+    for chunk in run.history:
+        q.put_nowait(chunk)
+
+    run.queues.add(q)
+
+    async def gen():
+        yield {"comment": "aion-open"}
+        try:
+            while True:
+                chunk = await q.get()
+                if chunk is None:
+                    break
+                yield chunk
+        except asyncio.CancelledError:
+            pass
+        finally:
+            if conversation_id in _background_runs:
+                _background_runs[conversation_id].queues.discard(q)
 
     return EventSourceResponse(
         gen(),
