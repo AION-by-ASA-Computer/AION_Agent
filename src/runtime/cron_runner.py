@@ -162,6 +162,7 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
             profile_name=profile,
         )
         from src.api.v1.chat import _background_runs, BackgroundChatRun
+
         run = BackgroundChatRun(conversation_id)
         _background_runs[conversation_id] = run
         # ---------------------------------------------------------

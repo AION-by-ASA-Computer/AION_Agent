@@ -50,7 +50,7 @@ def test_realistic_flow():
             results_after = await memory.search(request_unique, limit=1)
             if results_after:
                 print("CACHE HIT! The query was successfully recalled.")
-                assert results_after[0]['promql_query'] == expected_query
+                assert results_after[0]["promql_query"] == expected_query
             else:
                 print("ERROR: Could not find query immediately after saving!")
                 exit(1)

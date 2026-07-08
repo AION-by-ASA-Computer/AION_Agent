@@ -1755,14 +1755,23 @@ class AgentPipeline:
                     async_runner=_run_agent_async,
                 )
             )
+
             async def _cancel_checker() -> None:
                 try:
                     while not agent_task.done():
                         await asyncio.sleep(0.5)
                         if await redis_consume_stream_cancel(self.session_id):
-                            logger.info("Cancel requested for session %s, setting stop_event", self.session_id)
+                            logger.info(
+                                "Cancel requested for session %s, setting stop_event",
+                                self.session_id,
+                            )
                             stop_event.set()
-                            await queue.put({"type": "error", "content": "Session cancelled by user"})
+                            await queue.put(
+                                {
+                                    "type": "error",
+                                    "content": "Session cancelled by user",
+                                }
+                            )
                             break
                 except asyncio.CancelledError:
                     pass
@@ -3581,7 +3590,11 @@ class AgentPipeline:
             )
             yield {"type": "error", "content": str(e)}
         finally:
-            if 'cancel_checker_task' in locals() and cancel_checker_task and not cancel_checker_task.done():
+            if (
+                "cancel_checker_task" in locals()
+                and cancel_checker_task
+                and not cancel_checker_task.done()
+            ):
                 cancel_checker_task.cancel()
             await redis_clear_stream_active(self.session_id)
             reset_web_search_request_context(_web_tok)

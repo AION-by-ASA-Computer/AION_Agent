@@ -87,8 +87,7 @@ class SkillRegistry:
             if f.parent == d:
                 pkg_dir = d / f.stem
                 if pkg_dir.is_dir() and (
-                    (pkg_dir / "SKILL.md").is_file()
-                    or (pkg_dir / "skill.md").is_file()
+                    (pkg_dir / "SKILL.md").is_file() or (pkg_dir / "skill.md").is_file()
                 ):
                     continue
 

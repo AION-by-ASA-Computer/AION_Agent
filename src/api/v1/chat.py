@@ -27,6 +27,7 @@ router = APIRouter()
 _prepare_tasks: Dict[str, asyncio.Task] = {}
 _prepare_snapshots: Dict[str, Dict[str, Any]] = {}
 
+
 class BackgroundChatRun:
     def __init__(self, conversation_id: str):
         self.conversation_id = conversation_id
@@ -35,6 +36,7 @@ class BackgroundChatRun:
         self.history: List[Dict[str, Any]] = []
         self.is_done = False
         self.error: Optional[str] = None
+
 
 _background_runs: Dict[str, BackgroundChatRun] = {}
 
@@ -91,8 +93,11 @@ async def _run_pipeline_in_background(
                 await q.put(event_data)
 
     except Exception as e:
-        logger.error("Error in background pipeline run for session %s: %s", conversation_id, e)
+        logger.error(
+            "Error in background pipeline run for session %s: %s", conversation_id, e
+        )
         from src.agent_profile import ProfileNotFoundError
+
         if isinstance(e, ProfileNotFoundError):
             payload = {
                 "error": str(e),
@@ -511,7 +516,9 @@ async def chat_stream(
         att = [a.model_dump() for a in body.attachments]
 
     # Check if a background run is already active
-    run = _background_runs.get(body.conversation_id) if not _project_access_err else None
+    run = (
+        _background_runs.get(body.conversation_id) if not _project_access_err else None
+    )
     if not run and not _project_access_err:
         run = BackgroundChatRun(body.conversation_id)
         _background_runs[body.conversation_id] = run
@@ -524,7 +531,7 @@ async def chat_stream(
                 sql_project_resolved=sql_project_resolved,
                 att=att,
             ),
-            name=f"chat-run-{body.conversation_id[:8]}"
+            name=f"chat-run-{body.conversation_id[:8]}",
         )
 
     q = asyncio.Queue()
@@ -565,8 +572,10 @@ async def chat_stream_reconnect(
 ):
     run = _background_runs.get(conversation_id)
     if not run:
+
         async def empty_gen():
             yield {"comment": "aion-not-active"}
+
         return EventSourceResponse(empty_gen())
 
     q = asyncio.Queue()
