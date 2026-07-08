@@ -328,10 +328,10 @@ export default function MemoryPage() {
               <Shield className="h-3.5 w-3.5" /> Security Administration
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight text-white md:text-4xl">
-              SQL Projects & Members
+              Memory Projects & Members
             </h1>
             <p className="max-w-2xl text-sm leading-relaxed text-gray-400">
-              Manage the isolation of SQL query contexts (projects) and define the users authorized to access and manage each SQL query memory scope.
+              Manage the isolation of memory query contexts (projects).
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -753,8 +753,8 @@ export default function MemoryPage() {
                   <FolderPlus className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">New Project SQL Query</h3>
-                  <p className="text-xs text-gray-400">Create a new query caching isolation</p>
+                  <h3 className="text-lg font-bold text-white">New Project</h3>
+                  <p className="text-xs text-gray-400">Create a new Memory Project</p>
                 </div>
               </div>
               <button

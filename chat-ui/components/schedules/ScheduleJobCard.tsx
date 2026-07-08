@@ -8,6 +8,28 @@ import type { ScheduledJobRow } from "@/lib/api/aion";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 
+/**
+ * Format a UTC ISO string (next_run_at from the backend) in the job's own
+ * timezone so the displayed time matches the cron schedule the user set.
+ */
+function formatNextRunAt(isoUtc: string, tz?: string | null): string {
+  const d = new Date(isoUtc);
+  if (isNaN(d.getTime())) return isoUtc;
+  try {
+    return d.toLocaleString(undefined, {
+      timeZone: tz || undefined,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  } catch {
+    return d.toLocaleString();
+  }
+}
+
 export function ScheduleJobCard({
   job,
   onEdit,
@@ -71,7 +93,7 @@ export function ScheduleJobCard({
               {job.timezone ? <span>{job.timezone}</span> : null}
               {job.next_run_at && job.enabled ? (
                 <span>
-                  {t("schedulesPage.next")}: {new Date(job.next_run_at).toLocaleString()}
+                  {t("schedulesPage.next")}: {formatNextRunAt(job.next_run_at, job.timezone)}
                 </span>
               ) : null}
             </div>

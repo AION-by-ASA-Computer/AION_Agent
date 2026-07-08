@@ -104,6 +104,8 @@
     "field_prompt": "Prompt bei jedem Lauf",
     "field_timezone": "Zeitzone",
     "field_profile": "Agentenprofil",
+    "field_sql_project": "QueryMemory-Projekt",
+    "field_sql_project_hint": "Erforderlich für Profile mit Speicher (die Standard-Schublade ist gesperrt). Wählen Sie ein dediziertes Projekt.",
     "form_required": "Name und Prompt sind erforderlich.",
     "session_fixed": "Gleiche Unterhaltung (Kontext bleibt)",
     "session_new": "Neue Unterhaltung pro Lauf",

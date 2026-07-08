@@ -16,6 +16,7 @@ class ScheduledJobCreate(BaseModel):
     profile_slug: str = "generic_assistant"
     session_mode: SessionMode = "fixed"
     session_id: Optional[str] = None
+    sql_query_project: Optional[str] = None
     timezone: Optional[str] = None
     description: Optional[str] = None
     enabled: bool = True
@@ -29,6 +30,7 @@ class ScheduledJobUpdate(BaseModel):
     profile_slug: Optional[str] = None
     session_mode: Optional[SessionMode] = None
     session_id: Optional[str] = None
+    sql_query_project: Optional[str] = None
     timezone: Optional[str] = None
     description: Optional[str] = None
     enabled: Optional[bool] = None
@@ -47,6 +49,7 @@ class ScheduledJobOut(BaseModel):
     prompt: str
     session_mode: str
     session_id: Optional[str] = None
+    sql_query_project: Optional[str] = None
     enabled: bool
     agent_mode: str
     metadata: Dict[str, Any] = Field(default_factory=dict)

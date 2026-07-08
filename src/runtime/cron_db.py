@@ -47,6 +47,7 @@ def _job_to_dict(
         "prompt": row.prompt,
         "session_mode": row.session_mode,
         "session_id": row.session_id,
+        "sql_query_project": row.sql_query_project,
         "enabled": bool(row.enabled),
         "agent_mode": row.agent_mode,
         "metadata": meta,
@@ -93,6 +94,7 @@ async def create_job(
     profile_slug: str,
     session_mode: str = "fixed",
     session_id: Optional[str] = None,
+    sql_query_project: Optional[str] = None,
     timezone: Optional[str] = None,
     description: Optional[str] = None,
     enabled: bool = True,
@@ -119,6 +121,7 @@ async def create_job(
         prompt=(prompt or "").strip(),
         session_mode=smode,
         session_id=(session_id or "").strip() or None,
+        sql_query_project=(sql_query_project or "").strip() or None,
         enabled=bool(enabled),
         agent_mode=(agent_mode or "normal").strip().lower() or "normal",
         metadata_json=json.dumps(metadata, ensure_ascii=False) if metadata else None,
@@ -223,6 +226,9 @@ async def update_job(
         if "session_id" in patch:
             sid = patch["session_id"]
             row.session_id = str(sid).strip() if sid else None
+        if "sql_query_project" in patch:
+            sqp = patch["sql_query_project"]
+            row.sql_query_project = str(sqp).strip() if sqp else None
         if "enabled" in patch and patch["enabled"] is not None:
             row.enabled = bool(patch["enabled"])
         if "agent_mode" in patch and patch["agent_mode"] is not None:
