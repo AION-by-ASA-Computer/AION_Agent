@@ -565,6 +565,7 @@ class ScheduledJob(Base):
         String(16), nullable=False, default="fixed"
     )
     session_id: Mapped[Optional[str]] = mapped_column(String(128))
+    sql_query_project: Mapped[Optional[str]] = mapped_column(String(128))
     enabled: Mapped[bool] = mapped_column(
         Boolean, default=True, nullable=False, index=True
     )

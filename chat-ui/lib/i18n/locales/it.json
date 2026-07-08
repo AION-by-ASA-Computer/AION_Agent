@@ -160,6 +160,8 @@
     "field_prompt": "Prompt inviato a ogni esecuzione",
     "field_timezone": "Fuso orario",
     "field_profile": "Profilo agente",
+    "field_sql_project": "Progetto QueryMemory",
+    "field_sql_project_hint": "Obbligatorio per i profili con memoria (il cassetto default è bloccato). Seleziona un progetto dedicato.",
     "form_required": "Nome e prompt sono obbligatori.",
     "session_fixed": "Stessa conversazione a ogni run (contesto conservato)",
     "session_new": "Nuova conversazione a ogni run",
