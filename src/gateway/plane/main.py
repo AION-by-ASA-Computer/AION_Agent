@@ -1,11 +1,14 @@
-import os
-import logging
-from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Union
-from fastapi import FastAPI, Request, Response, HTTPException
-from fastapi.responses import JSONResponse
-import httpx
 import json
+import logging
+import os
+from contextlib import asynccontextmanager
+from typing import Any, Dict, List, Optional
+from uuid import UUID
+
+import httpx
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # Ensure AION environment and path overrides are initialized first
 import src.aion_env  # noqa: F401
@@ -47,11 +50,6 @@ app = FastAPI(
     version="1.0.0",
     lifespan=lifespan,
 )
-
-
-from pydantic import BaseModel, Field, model_validator, ConfigDict
-from typing import Optional, Any, Dict, List
-from uuid import UUID
 
 
 class PlaneProjectResponse(BaseModel):
