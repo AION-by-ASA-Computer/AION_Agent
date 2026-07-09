@@ -126,6 +126,10 @@ def _progress_label(event: dict) -> str:
         if msg:
             return msg
         return "Writing final report…"
+    if phase in ("done", "completed"):
+        return "Completato"
+    if phase == "cancelled":
+        return "Annullato"
     if phase == "warning":
         return f"Warning: {event.get('message') or 'step failed, continuing…'}"
     if phase == "error":
@@ -254,6 +258,8 @@ class ResearchHandler:
                 )
                 entry["result"] = result
                 entry["status"] = "done"
+                entry["completed_at"] = time.time()
+                on_progress({"phase": "done"})
                 self._save_result(session_id, entry)
                 _trace(
                     f"completed session={session_id} owner={entry.get('owner')!r} "
@@ -268,6 +274,7 @@ class ResearchHandler:
             except asyncio.TimeoutError:
                 logger.error("Research hard timeout for session %s", session_id)
                 researcher = entry.get("researcher")
+                entry["completed_at"] = time.time()
                 if researcher and getattr(researcher, "evolving_report", ""):
                     entry["result"] = researcher.evolving_report
                     entry["status"] = "done"
@@ -280,11 +287,22 @@ class ResearchHandler:
                 )
             except asyncio.CancelledError:
                 entry["status"] = "cancelled"
+                entry["completed_at"] = time.time()
+                try:
+                    on_progress({"phase": "cancelled"})
+                except Exception:
+                    pass
+                self._save_result(session_id, entry)
                 raise
             except Exception as e:
                 logger.error("Background research failed: %s", e, exc_info=True)
                 entry["result"] = str(e)
                 entry["status"] = "error"
+                entry["completed_at"] = time.time()
+                try:
+                    on_progress({"phase": "error", "message": f"Error: {e}"})
+                except Exception:
+                    pass
                 self._save_result(session_id, entry)
                 _trace(
                     f"failed session={session_id} owner={entry.get('owner')!r} "
@@ -332,6 +350,18 @@ class ResearchHandler:
             progress_callback({"phase": "probing", "max_rounds": max_rounds})
         await probe_model()
 
+        # Load user language preference
+        user_lang = None
+        owner = task_entry.get("owner")
+        if owner:
+            from src.runtime.user_language import load_user_ui_language
+
+            user_lang = await load_user_ui_language(owner)
+        if not user_lang:
+            from src.runtime.user_language import default_ui_language
+
+            user_lang = default_ui_language()
+
         from src.runtime.native_tools.web_providers import web_search_availability
 
         ws = web_search_availability()
@@ -375,6 +405,7 @@ class ResearchHandler:
             extraction_concurrency=ext_conc,
             progress_callback=progress_callback,
             category=category,
+            language=user_lang,
         )
         task_entry["researcher"] = researcher
 
@@ -401,6 +432,7 @@ class ResearchHandler:
                 "activities": list(entry.get("activities") or []),
                 "query": entry.get("query", ""),
                 "started_at": entry.get("started_at", 0),
+                "completed_at": entry.get("completed_at", 0),
                 "chat_session_id": entry.get("chat_session_id") or "",
             }
             if avg is not None:
@@ -422,6 +454,7 @@ class ResearchHandler:
                     "activities": list(data.get("activities") or []),
                     "query": data.get("query", ""),
                     "started_at": data.get("started_at", 0),
+                    "completed_at": data.get("completed_at", 0),
                     "chat_session_id": data.get("chat_session_id") or "",
                 }
             except Exception:
@@ -480,6 +513,7 @@ class ResearchHandler:
             "progress": entry.get("progress") or {},
             "activities": list(entry.get("activities") or []),
             "started_at": entry.get("started_at", 0),
+            "completed_at": entry.get("completed_at", 0),
             "chat_session_id": entry.get("chat_session_id") or "",
         }
 
@@ -556,6 +590,7 @@ class ResearchHandler:
         if future and not future.done():
             future.cancel()
         entry["status"] = "cancelled"
+        entry["completed_at"] = time.time()
         return True
 
     def get_result(self, session_id: str) -> Optional[str]:

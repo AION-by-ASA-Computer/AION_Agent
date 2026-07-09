@@ -238,7 +238,10 @@ async def research_stream(
             st = status.get("status", "")
             progress = status.get("progress") or {}
             activities = status.get("activities") or []
+            completed_at = status.get("completed_at")
             payload = {**progress, "status": st, "activities": activities}
+            if completed_at:
+                payload["completed_at"] = completed_at
             if payload != last_progress:
                 last_progress = payload
                 yield f"data: {json.dumps(payload)}\n\n"
@@ -249,6 +252,8 @@ async def research_stream(
                     **progress,
                     "activities": activities,
                 }
+                if completed_at:
+                    final["completed_at"] = completed_at
                 task = handler._active_tasks.get(session_id, {})
                 if st == "error" and task.get("result"):
                     final["error"] = str(task["result"])[:500]

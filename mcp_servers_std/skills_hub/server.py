@@ -224,9 +224,17 @@ def skill_view(name: str, materialize: bool = True) -> str:
         record_skill_view(slug, uid)
     except Exception:
         pass
+
+    sid = (os.getenv("AION_CHAT_SESSION_ID") or "").strip()
+    if sid:
+        try:
+            from src.tools.skill_materialize import record_skill_viewed
+            record_skill_viewed(sid, slug)
+        except Exception as e:
+            logger.warning("Failed to record skill viewed for %s: %s", slug, e)
+
     if not materialize:
         return body
-    sid = (os.getenv("AION_CHAT_SESSION_ID") or "").strip()
     if not sid:
         return (
             body
