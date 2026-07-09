@@ -25,7 +25,7 @@ jobs:
           submodules: false
 
       - name: Lint GitHub Actions workflows
-        uses: rhysd/actionlint@03d0035246f3e81f36aed592ffb4bebf33a03106 # v1.7.7
+        uses: rhysd/actionlint@914e7df21a07ef503a81201c76d2b11c789d3fca # v1.7.12
 
   typos:
     name: Typos Check
@@ -38,7 +38,7 @@ jobs:
           submodules: false
 
       - name: Check spelling
-        uses: crate-ci/typos@3e8e1dbf18c56a9ed625484ca941497c73e7da2c # v1.47.2
+        uses: crate-ci/typos@37bb98842b0d8c4ffebdb75301a13db0267cef89 # v1.47.2
         with:
           files: |
             ./README.md
