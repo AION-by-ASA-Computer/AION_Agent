@@ -174,7 +174,13 @@ class AgentProfile:
             base = frozenset(self.critical_skills)
         return ALWAYS_CRITICAL_SKILL_NAMES | base
 
-    def generate_system_prompt(self, user_id: str = "default") -> str:
+    def generate_system_prompt(
+        self,
+        user_id: str = "default",
+        *,
+        provider: str = "",
+        model_id: str = "",
+    ) -> str:
         """System prompt: istruzioni + skill (index o full legacy) + opz. MEMORY/USER."""
         from datetime import datetime
 
@@ -204,6 +210,17 @@ class AgentProfile:
         parts = [f"# Role: {self.name}", instructions]
 
         try:
+            from .runtime.system_prompt import assemble_model_prompt_section
+
+            model_extra = assemble_model_prompt_section(
+                provider=provider, model_id=model_id
+            )
+            if model_extra:
+                parts.append(model_extra)
+        except Exception:
+            pass
+
+        try:
             from .mcp_manager import mcp_manager
             from .runtime.mcp_tooling_prompt import build_mcp_tooling_prompt_section
 
@@ -215,12 +232,10 @@ class AgentProfile:
         except Exception:
             pass
 
-        strategy = os.getenv("AION_ARTIFACT_STRATEGY", "markdown").lower()
-
         if mode == "full":
             parts.append("\n## Skills and rules")
             for skill_name in self.skills:
-                actual_name = resolve_skill_alias(skill_name, strategy)
+                actual_name = resolve_skill_alias(skill_name)
 
                 body = skill_registry.get_skill_full(actual_name)
                 if body:
@@ -232,7 +247,7 @@ class AgentProfile:
             inlined_critical: set[str] = set()
             for skill_name in self.skills:
                 if skill_name in critical_skills:
-                    actual_name = resolve_skill_alias(skill_name, strategy)
+                    actual_name = resolve_skill_alias(skill_name)
 
                     body = skill_registry.get_skill_full(actual_name)
                     if body:
@@ -269,6 +284,14 @@ class AgentProfile:
                     parts.append(
                         f"- **`{s['name']}`** ({tags}): {s.get('description', '')}"
                     )
+                try:
+                    from .runtime.system_prompt import build_skills_catalog_xml
+
+                    catalog = build_skills_catalog_xml(allowed_names=other_skills)
+                    if catalog:
+                        parts.append(catalog)
+                except Exception:
+                    pass
 
         if os.getenv("AION_SOUL_MEMORY_USER_SPLIT", "0").lower() in (
             "1",

@@ -2,6 +2,7 @@
 
 import { Copy, PanelLeft, PanelRight } from "lucide-react";
 import { useCallback, useState, useRef, useEffect } from "react";
+import { ModelSelectChip, type LlmProviderOption } from "@/components/chat/ModelSelectChip";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
@@ -17,6 +18,10 @@ export function ChatHeader({
   onToggleSidebar,
   title,
   onTitleChange,
+  llmProviders,
+  selectedProvider,
+  providersLoading,
+  onProviderChange,
 }: {
   conversationId: string;
   profiles?: unknown[];
@@ -30,10 +35,15 @@ export function ChatHeader({
   onToggleSidebar?: () => void;
   title: string | null;
   onTitleChange?: (newTitle: string) => void;
+  llmProviders?: LlmProviderOption[];
+  selectedProvider?: string | null;
+  providersLoading?: boolean;
+  onProviderChange?: (slug: string | null) => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(title || "");
+  const [isModelOpen, setIsModelOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const t = useT();
 
@@ -138,7 +148,17 @@ export function ChatHeader({
       </div>
 
       <div className="flex min-w-0 flex-wrap items-center justify-center gap-2.5">
-        {/* Center section reserved for future use */}
+        {llmProviders && onProviderChange ? (
+          <ModelSelectChip
+            providers={llmProviders}
+            selectedSlug={selectedProvider ?? null}
+            loading={providersLoading}
+            open={isModelOpen}
+            onOpenChange={setIsModelOpen}
+            onSelect={onProviderChange}
+            placement="below"
+          />
+        ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">

@@ -31,6 +31,8 @@ def test_should_not_inject_in_plan_mode():
 def test_build_nudge_mentions_skill_view():
     text = build_skill_discovery_nudge("corso ML in docx")
     assert "skill_view" in text
+    assert "aion_artifact" in text
+    assert "chat reply" in text
 
 
 def test_plan_mode_hint_defers_skill_view_and_web_search():

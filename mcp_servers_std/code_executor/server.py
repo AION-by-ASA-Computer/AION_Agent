@@ -12,6 +12,7 @@ mcp = FastMCP("AION Code Executor")
 
 _executor = CodeExecutor()
 
+
 @mcp.tool()
 def execute_code(code: str) -> str:
     """
@@ -19,6 +20,7 @@ def execute_code(code: str) -> str:
     Esempio: 'import numpy as np; result = np.mean([1, 2, 3])'
     """
     return _executor.execute(code)
+
 
 if __name__ == "__main__":
     import asyncio
@@ -31,7 +33,7 @@ if __name__ == "__main__":
                 await mcp._mcp_server.run(
                     read_stream,
                     write_stream,
-                    mcp._mcp_server.create_initialization_options()
+                    mcp._mcp_server.create_initialization_options(),
                 )
         except Exception as e:
             with open("data/mcp_debug.log", "a") as f:

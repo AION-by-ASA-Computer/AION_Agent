@@ -290,6 +290,7 @@ export type ConversationSummary = {
   title?: string | null;
   message_count?: number;
   metadata?: Record<string, any>;
+  updated_at?: string | null;
 };
 
 export async function listChatUiConversations(userId: string, token?: string | null): Promise<ConversationSummary[]> {
@@ -557,6 +558,9 @@ export async function saveChatMessage(
   }
 }
 
+/**
+ * @deprecated Server persists assistant messages via TurnPersistence. Kept for plan-summary exception.
+ */
 export async function saveAssistantMessage(
   conversationId: string,
   messageId: string,
@@ -610,6 +614,9 @@ export async function patchMessageTimeline(
   }
 }
 
+/**
+ * @deprecated Server persists tool steps via TurnPersistence. Admin/debug only.
+ */
 export async function saveMessageSteps(
   conversationId: string,
   messageId: string,
@@ -643,6 +650,7 @@ export type ScheduledJobRow = {
   prompt: string;
   session_mode: string;
   session_id?: string | null;
+  sql_query_project?: string | null;
   enabled: boolean;
   next_run_at?: string | null;
   last_run?: { status?: string; started_at?: string } | null;
@@ -704,6 +712,7 @@ export async function createCronJob(
     prompt: string;
     profile_slug?: string;
     session_mode?: string;
+    sql_query_project?: string | null;
     timezone?: string;
     enabled?: boolean;
   },

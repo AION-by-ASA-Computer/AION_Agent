@@ -45,7 +45,6 @@ from .memory.context_compressor import (
     estimate_full_prompt_tokens,
     format_compaction_block,
     get_default_compressor,
-    is_context_length_error,
     log_context_budget,
     model_context_window,
     reserve_output_tokens,
@@ -55,8 +54,6 @@ from .runtime.hooks import HookContext, hook_registry
 from .runtime.reasoning_effort import generation_kwargs_for_agent
 from .runtime.artifact_parser import (
     XMLArtifactStreamParser,
-    MarkdownArtifactStreamParser,
-    NoOpArtifactParser,
     PlanTagInterceptorParser,
     ArtifactEvent,
 )
@@ -69,6 +66,7 @@ logger.setLevel(logging.INFO)
 
 # Haystack Agent su errore serializza gli input del chat_generator: niente closure annidate.
 from .runtime.context import clear_context, get_context, set_context
+from .runtime.litellm_errors import litellm_error_to_sse
 from .runtime.turn_compaction import (
     clear_turn_runtime,
     maybe_compact_after_reasoning,
@@ -276,6 +274,19 @@ def _handle_haystack_stream_chunk(chunk: Any, *, from_async: bool) -> None:
 
     if fr == "length":
         logger.warning("Agent response truncated by model (finish_reason=length).")
+        _emit_agent_stream_event(
+            ctx,
+            {
+                "type": "turn_status",
+                "phase": "output_truncated",
+                "message": (
+                    "LLM output was truncated (max_tokens). "
+                    "Use smaller sandbox_apply_patch hunks or sandbox_write_workspace_file "
+                    "with a shorter file, then continue in the next step."
+                ),
+            },
+            from_async=from_async,
+        )
 
     if reasoning:
         sid = ctx.get("session_id")
@@ -1520,15 +1531,7 @@ class AgentPipeline:
                 plan_text_parser_enabled,
             )
 
-            from .settings import get_settings as _gs
-
-            strategy = _gs().artifact_strategy.lower()
-            if strategy == "tool":
-                base_parser = NoOpArtifactParser()
-            elif strategy == "markdown":
-                base_parser = MarkdownArtifactStreamParser()
-            else:
-                base_parser = XMLArtifactStreamParser()
+            base_parser = XMLArtifactStreamParser()
             _use_plan_text_parser = plan_text_parser_enabled() or (
                 effective_agent_mode == "plan" and not plan_mode_tool_first()
             )
@@ -1657,12 +1660,13 @@ class AgentPipeline:
                     if not stop_event.is_set():
                         logger.error("Agent.run_async failed: %s", e)
                         logger.error(traceback.format_exc())
-                        if is_context_length_error(e):
-                            queue.put_nowait(
-                                {"type": "context_length_error", "content": str(e)}
-                            )
-                        else:
-                            queue.put_nowait({"type": "error", "content": str(e)})
+                        payload = litellm_error_to_sse(e)
+                        logger.info(
+                            "LLM error classified: code=%s exc_type=%s",
+                            payload.get("code"),
+                            payload.get("exc_type"),
+                        )
+                        queue.put_nowait(payload)
                 finally:
                     clear_turn_runtime()
                     clear_context()
@@ -1729,15 +1733,13 @@ class AgentPipeline:
                     if not stop_event.is_set():
                         logger.error("Agent.run crashed in thread: %s", e)
                         logger.error(traceback.format_exc())
-                        if is_context_length_error(e):
-                            loop.call_soon_threadsafe(
-                                queue.put_nowait,
-                                {"type": "context_length_error", "content": str(e)},
-                            )
-                        else:
-                            loop.call_soon_threadsafe(
-                                queue.put_nowait, {"type": "error", "content": str(e)}
-                            )
+                        payload = litellm_error_to_sse(e)
+                        logger.info(
+                            "LLM error classified: code=%s exc_type=%s",
+                            payload.get("code"),
+                            payload.get("exc_type"),
+                        )
+                        loop.call_soon_threadsafe(queue.put_nowait, payload)
                 finally:
                     clear_turn_runtime()
                     clear_context()
@@ -1957,7 +1959,11 @@ class AgentPipeline:
                     assistant_message_persisted = (
                         turn_persist.assistant_message_persisted
                     )
-                    _llm_steps_done = _stream_loop._llm_steps_done
+                    _llm_steps_done = getattr(
+                        _stream_loop,
+                        "_llm_steps_done",
+                        getattr(_stream_loop, "llm_calls", 0),
+                    )
                 else:
                     async with asyncio.timeout(turn_guards.turn_timeout):
                         while True:
@@ -2466,11 +2472,22 @@ class AgentPipeline:
                                             args.get("relative_path")
                                             or "workspace/file.txt"
                                         )
-                                        ct = str(args.get("content") or "")
+                                        from src.runtime.file_tool_preview import (
+                                            build_file_tool_preview_events,
+                                        )
+
+                                        preview_events, preview_meta = (
+                                            build_file_tool_preview_events(
+                                                str(evt.get("name") or ""), args
+                                            )
+                                        )
                                         pending_write_artifacts[rp] = {
-                                            "content": ct,
+                                            "content": str(args.get("content") or ""),
                                             "mode": "write",
+                                            **preview_meta,
                                         }
+                                        for preview_evt in preview_events:
+                                            yield _track_sse(preview_evt)
                                     elif (
                                         evt.get("name") == "sandbox_edit_workspace_file"
                                     ):
@@ -2639,32 +2656,40 @@ class AgentPipeline:
                                         saved_path, {"content": "", "mode": "write"}
                                     )
                                     ct = data.get("content") or ""
-                                    aid = saved_path.replace("/", "_").replace(".", "_")
+                                    aid = str(
+                                        data.get("artifact_id")
+                                        or saved_path.replace("/", "_").replace(
+                                            ".", "_"
+                                        )
+                                    )
                                     a_type = (
                                         "html"
                                         if saved_path.endswith(".html")
                                         else "python"
                                         if saved_path.endswith(".py")
+                                        else "javascript"
+                                        if saved_path.endswith(".js")
                                         else "text"
                                     )
-                                    yield _track_sse(
-                                        {
-                                            "type": "artifact_start",
-                                            "artifact": {
-                                                "identifier": aid,
-                                                "type": a_type,
-                                                "title": f"📄 Artifact: {saved_path}",
-                                                "auto_execute": False,
-                                            },
-                                        }
-                                    )
-                                    yield _track_sse(
-                                        {
-                                            "type": "artifact_content",
-                                            "content": ct,
-                                            "artifact_id": aid,
-                                        }
-                                    )
+                                    if not data.get("preview_emitted"):
+                                        yield _track_sse(
+                                            {
+                                                "type": "artifact_start",
+                                                "artifact": {
+                                                    "identifier": aid,
+                                                    "type": a_type,
+                                                    "title": f"📄 Artifact: {saved_path}",
+                                                    "auto_execute": False,
+                                                },
+                                            }
+                                        )
+                                        yield _track_sse(
+                                            {
+                                                "type": "artifact_content",
+                                                "content": ct,
+                                                "artifact_id": aid,
+                                            }
+                                        )
                                     yield _track_sse(
                                         {
                                             "type": "artifact_end",

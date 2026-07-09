@@ -305,6 +305,7 @@ def _aion_mcp_tool_run(
 
     from .runtime.mcp_tool_args import prepare_mcp_tool_arguments
     from .runtime.mcp_tool_result import classify_tool_result_text
+    from .runtime.tool_settlement import settle_tool_call
 
     prepared, preflight_err = prepare_mcp_tool_arguments(tool_name, kwargs)
     tool_input = prepared if preflight_err is None else kwargs
@@ -350,6 +351,10 @@ def _aion_mcp_tool_run(
         )
         return maybe_compact_after_tool(tool_name=tool_name, result=body)
 
+    settlement_err = settle_tool_call(tool_name, kwargs)
+    if settlement_err:
+        return _emit_tool_outcome(is_error=True, body=settlement_err)
+
     list_block = block_project_list_tool(tool_name, session_id)
     if list_block:
         return _emit_tool_outcome(is_error=True, body=list_block)
@@ -368,6 +373,12 @@ def _aion_mcp_tool_run(
     if preflight_err:
         _, normalized = classify_tool_result_text(preflight_err, tool_name)
         return _emit_tool_outcome(is_error=True, body=normalized or preflight_err)
+
+    from .runtime.mcp_tool_args import preflight_run_file_tool
+
+    run_preflight = preflight_run_file_tool(tool_name, prepared, session_id)
+    if run_preflight:
+        return _emit_tool_outcome(is_error=True, body=run_preflight)
 
     from .runtime.skill_profile_gate import block_skills_hub_tool_if_needed
 
@@ -730,6 +741,13 @@ _AGENT_CACHE_ENABLED = os.getenv("AION_AGENT_CACHE", "1").lower() in (
 )
 
 
+def clear_agent_cache() -> None:
+    """Drop cached agents (e.g. after LLM provider or token limit changes)."""
+    _AGENT_CACHE.clear()
+    _AGENT_BUILD_INFLIGHT.clear()
+    logger.info("Agent cache cleared")
+
+
 def _build_chat_generation_kwargs() -> Tuple[Dict[str, Any], str]:
     """
     Haystack/OpenAI SDK: vLLM vendor fields go in ``extra_body`` (not all builds accept
@@ -798,6 +816,10 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
     from .runtime.native_tools import load_native_tools
 
     all_tools.extend(load_native_tools(profile, session_id, user_id))
+
+    from .runtime.settlement_tool_registry import build_settlement_tools
+
+    all_tools.extend(build_settlement_tools())
 
     from .data.engine import get_async_session_maker
     from .data.models import McpServerConfig
@@ -922,7 +944,7 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
     return all_tools
 
 
-def _skills_content_hash(skill_names: list, strategy: str) -> str:
+def _skills_content_hash(skill_names: list) -> str:
     """Hash contenuto skill per invalidare _AGENT_CACHE quando cambiano i file .md."""
     import hashlib
 
@@ -930,7 +952,7 @@ def _skills_content_hash(skill_names: list, strategy: str) -> str:
 
     pieces = []
     for name in sorted(skill_names or []):
-        actual = resolve_skill_alias(name, strategy)
+        actual = resolve_skill_alias(name)
         body = skill_registry.get_skill_full(actual) or ""
         pieces.append(f"{actual}:{hashlib.md5(body.encode()).hexdigest()[:8]}")
     return hashlib.md5("|".join(pieces).encode()).hexdigest()[:16]
@@ -1018,8 +1040,7 @@ async def get_agent(
         + "|ntr:"
         + native_registry_content_hash()
     )
-    strategy = os.getenv("AION_ARTIFACT_STRATEGY", "markdown").lower()
-    skills_hash = _skills_content_hash(profile.skills or [], strategy)
+    skills_hash = _skills_content_hash(profile.skills or [])
     skill_prompt_mode = os.getenv("AION_SKILL_SYSTEM_PROMPT_MODE", "index").lower()
     critical_sig = ",".join(sorted(profile._resolved_critical_skill_names()))
 
@@ -1087,7 +1108,6 @@ async def get_agent(
             resolved_agent_mode=resolved_agent_mode,
             user_lang=user_lang,
             gen_kw=gen_kw,
-            strategy=strategy,
             skill_prompt_mode=skill_prompt_mode,
             llm_provider_name=llm_provider_name,
         )
@@ -1114,7 +1134,6 @@ async def _finish_get_agent_build(
     resolved_agent_mode: str,
     user_lang: Optional[str],
     gen_kw: Dict[str, Any],
-    strategy: str,
     skill_prompt_mode: str,
     llm_provider_name: Optional[str] = None,
 ) -> Tuple[Any, str]:
@@ -1225,6 +1244,26 @@ async def _finish_get_agent_build(
             )
         tools = filtered_tools
 
+    from src.runtime.artifact_tool_policy import stream_artifact_tools_blocked
+
+    _artifact_blocked = stream_artifact_tools_blocked()
+    if _artifact_blocked:
+        kept: list = []
+        removed_artifact: list[str] = []
+        for t in tools:
+            name = getattr(t, "name", None) or ""
+            base = name.split("-")[-1].strip().lower()
+            if name in _artifact_blocked or base in _artifact_blocked:
+                removed_artifact.append(name)
+            else:
+                kept.append(t)
+        if removed_artifact:
+            logger.info(
+                "Artifact protocol: removed write tool(s): %s",
+                ", ".join(sorted(removed_artifact)),
+            )
+        tools = kept
+
     # 1. Resolve LLM Configuration from Environment
     from src.runtime.llm_adapter import (
         normalize_litellm_provider,
@@ -1251,8 +1290,24 @@ async def _finish_get_agent_build(
 
     tools_strict_raw = os.getenv("AION_TOOLS_STRICT", "1").strip().lower()
     tools_strict = tools_strict_raw in ("1", "true", "yes", "on")
+    # Local vLLM/OpenAI-compatible servers often emit truncated tool JSON with strict mode.
+    _llm_url_l = (llm_url or "").lower()
+    if tools_strict and any(
+        x in _llm_url_l for x in ("localhost", "127.0.0.1", "192.168.", "10.", "172.")
+    ):
+        if os.getenv("AION_VLLM_TOOLS_STRICT", "0").strip().lower() not in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            tools_strict = False
+            logger.info(
+                "tools_strict disabled for local LLM endpoint (set AION_VLLM_TOOLS_STRICT=1 to force)"
+            )
 
     provider_loaded = False
+    row = None
     # Se llm_provider_name è specificato, carica il provider dal database
     if llm_provider_name:
         logger.info("Caricamento provider LLM dal database: %s", llm_provider_name)
@@ -1337,6 +1392,41 @@ async def _finish_get_agent_build(
                             max_tokens = budget + 2048
                         provider_gen_kw["max_tokens"] = max_tokens
 
+                if row.max_chat_tokens is not None:
+                    if provider_gen_kw is None:
+                        provider_gen_kw = {}
+                    max_out = row.max_chat_tokens
+                    if row.thinking_token_budget and row.provider in (
+                        "anthropic",
+                        "google",
+                    ):
+                        budget = row.thinking_token_budget
+                        if max_out <= budget:
+                            max_out = budget + 2048
+                    elif row.thinking_token_budget and row.provider in (
+                        "openai",
+                        "azure",
+                    ):
+                        # vLLM/Qwen: tool-call JSON (write/edit) needs a large completion budget
+                        # separate from thinking_token_budget; DB max_chat_tokens is often too low.
+                        try:
+                            floor = int(
+                                os.getenv("AION_VLLM_TOOL_ARG_TOKEN_FLOOR", "8192")
+                            )
+                        except ValueError:
+                            floor = 8192
+                        if max_out < floor:
+                            max_out = floor
+                            logger.info(
+                                "max_tokens raised %d -> %d for vLLM provider %s "
+                                "(thinking_token_budget=%s; tool-arg floor)",
+                                row.max_chat_tokens,
+                                max_out,
+                                row.slug,
+                                row.thinking_token_budget,
+                            )
+                    provider_gen_kw["max_tokens"] = max_out
+
                 chat_generator = LiteLLMChatGeneratorWrapper(
                     api_base_url=provider_api_base,
                     model=provider_model,
@@ -1383,7 +1473,16 @@ async def _finish_get_agent_build(
         )
 
     # 3. Inizializza l'Agente Haystack (skill: index o full via AION_SKILL_SYSTEM_PROMPT_MODE)
-    system_prompt = profile.generate_system_prompt(user_id=user_id)
+    _prompt_provider = ""
+    _prompt_model = llm_model
+    if provider_loaded and row is not None:
+        _prompt_provider = str(getattr(row, "provider", "") or "")
+        _prompt_model = str(getattr(row, "model_name", "") or llm_model)
+    system_prompt = profile.generate_system_prompt(
+        user_id=user_id,
+        provider=_prompt_provider,
+        model_id=_prompt_model,
+    )
     if user_lang:
         from src.runtime.user_language import build_ui_language_prompt_section
 
@@ -1588,6 +1687,19 @@ async def _finish_get_agent_build(
             chat_generator.run_async = telemetry_wrapped_run_async
     except Exception as telemetry_err:
         logger.warning("Failed to apply LLM call telemetry wrappers: %s", telemetry_err)
+
+    from src.runtime.model_tool_policy import filter_tools_for_model
+
+    _policy_provider = "openai"
+    _policy_model = llm_model
+    if provider_loaded:
+        _policy_provider = litellm_provider
+        _policy_model = row.model_name
+    elif "/" in (llm_model or ""):
+        _policy_provider, _policy_model = (llm_model or "").split("/", 1)
+    tools = filter_tools_for_model(
+        tools, provider=_policy_provider, model_id=_policy_model
+    )
 
     agent = create_aion_agent(
         chat_generator=chat_generator,

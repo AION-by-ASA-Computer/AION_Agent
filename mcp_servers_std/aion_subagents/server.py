@@ -1,4 +1,5 @@
 """MCP: delegate work to configured subagents (isolated sessions)."""
+
 from __future__ import annotations
 
 import os

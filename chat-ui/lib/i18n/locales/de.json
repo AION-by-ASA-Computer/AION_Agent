@@ -72,10 +72,18 @@
     "settings": "Einstellungen",
     "login": "Anmelden",
     "integrations": "Meine Integrationen",
-    "schedules": "Geplante Jobs"
+    "schedules": "Automationen",
+    "profile_menu": {
+      "appearance": "Erscheinungsbild",
+      "theme_light": "Hell",
+      "theme_dark": "Dunkel",
+      "language": "Sprache",
+      "customize": "Anweisungen anpassen",
+      "logout": "Abmelden"
+    }
   },
   "schedulesPage": {
-    "title": "Geplante Jobs",
+    "title": "Automationen",
     "subtitle": "Wiederkehrende Prompts, die der Agent automatisch ausführt.",
     "back_chat": "← Chat",
     "loading": "Laden…",
@@ -96,6 +104,8 @@
     "field_prompt": "Prompt bei jedem Lauf",
     "field_timezone": "Zeitzone",
     "field_profile": "Agentenprofil",
+    "field_sql_project": "QueryMemory-Projekt",
+    "field_sql_project_hint": "Erforderlich für Profile mit Speicher (die Standard-Schublade ist gesperrt). Wählen Sie ein dediziertes Projekt.",
     "form_required": "Name und Prompt sind erforderlich.",
     "session_fixed": "Gleiche Unterhaltung (Kontext bleibt)",
     "session_new": "Neue Unterhaltung pro Lauf",

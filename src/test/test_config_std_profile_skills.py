@@ -13,15 +13,8 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
-def _artifact_variant_loaded(reg: SkillRegistry) -> bool:
-    return any(
-        reg.get_skill_full(n)
-        for n in (
-            "artifact_protocol_xml",
-            "artifact_protocol_markdown",
-            "artifact_protocol_tool",
-        )
-    )
+def _artifact_skill_loaded(reg: SkillRegistry) -> bool:
+    return bool(reg.get_skill_full("artifact_protocol"))
 
 
 def test_config_std_profile_skills_resolve():
@@ -33,8 +26,8 @@ def test_config_std_profile_skills_resolve():
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
         for skill in data.get("skills") or []:
             if skill == "artifact_protocol":
-                assert _artifact_variant_loaded(reg), (
-                    "artifact_protocol requires at least one artifact_protocol_* skill"
+                assert _artifact_skill_loaded(reg), (
+                    "artifact_protocol skill file must exist in config_std/skills"
                 )
                 continue
             assert reg.get_skill_full(skill), (

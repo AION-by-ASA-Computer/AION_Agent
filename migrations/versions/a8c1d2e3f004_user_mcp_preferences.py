@@ -4,6 +4,7 @@ Revision ID: a8c1d2e3f004
 Revises: f7a8b9c0d001
 Create Date: 2026-05-19
 """
+
 from typing import Sequence, Union
 
 from alembic import op
@@ -29,18 +30,31 @@ def upgrade() -> None:
         if "user_may_disable" not in cols:
             op.add_column(
                 "mcp_server_configs",
-                sa.Column("user_may_disable", sa.Boolean(), nullable=False, server_default=sa.true()),
+                sa.Column(
+                    "user_may_disable",
+                    sa.Boolean(),
+                    nullable=False,
+                    server_default=sa.true(),
+                ),
             )
     if "user_mcp_preferences" not in tables:
         op.create_table(
             "user_mcp_preferences",
             sa.Column("id", sa.String(64), primary_key=True),
             sa.Column("user_id", sa.String(256), nullable=False, index=True),
-            sa.Column("tenant_id", sa.String(64), nullable=False, server_default="default"),
+            sa.Column(
+                "tenant_id", sa.String(64), nullable=False, server_default="default"
+            ),
             sa.Column("server_slug", sa.String(128), nullable=False),
-            sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.true()),
-            sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-            sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+            sa.Column(
+                "is_active", sa.Boolean(), nullable=False, server_default=sa.true()
+            ),
+            sa.Column(
+                "created_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+            ),
+            sa.Column(
+                "updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()
+            ),
             sa.UniqueConstraint(
                 "user_id",
                 "tenant_id",

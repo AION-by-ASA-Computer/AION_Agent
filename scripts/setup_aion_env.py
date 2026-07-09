@@ -8,7 +8,7 @@ Setup guidato per ``.env`` (AION Agent): modalità **semplice** o **avanzata**.
   python scripts/setup_aion_env.py --advanced
   python scripts/setup_aion_env.py --dry-run    # anteprima senza scrivere file
   python scripts/setup_aion_env.py --import-state FILE -y   # merge da script
-  python scripts/check_env_example_coverage.py              # audit .env.example vs src
+  python scripts/check_env_example_coverage.py              # audit .env.example vs src + settings + upgrade
 
 Quando il login chat e' abilitato (``AION_CHAT_PASSWORD_AUTH``), dopo la scrittura del
 ``.env`` viene eseguito il bootstrap del DB + creazione utente (interattivo senza ``-y``;
@@ -17,7 +17,9 @@ con ``-y`` usare ``AION_SETUP_CHAT_*`` nel file importato).
 Le chiavi gestite sono quelle presenti in ``.env.example``; le altre chiavi in un ``.env``
 esistente vengono preservate in coda sotto un blocco commentato.
 ``./scripts/upgrade-aion.sh`` (``upgrade_core._ensure_*_env_keys``) appende in ``.env`` le chiavi
-mancanti (web search, context compress, SQL QueryMemory ``AION_SQL_QM_*``,
+mancanti (web search, context compress, tool-first runtime ``AION_MODEL_PROMPT_FRAGMENTS`` /
+``AION_ARTIFACT_STREAM_LEGACY`` / ``AION_STREAM_LOOP_V2`` / doom loop / vLLM tool args /
+``AION_LLM_CALL_AUDIT``, SQL QueryMemory ``AION_SQL_QM_*``,
 MemPalace navigazione ``AION_MEMPALACE_NAV_*``, allowlist ``skill_view`` ``AION_SKILL_VIEW_ENFORCE_PROFILE``, …).
 ``setup_core.py`` / ``upgrade_core.py`` applicano anche ``patch_sql_query_memory_config.py`` e
 ``patch_mempalace_navigation_config.py`` (profilo Postgres, skill, wing ``wing_proj_{project}``).
@@ -27,6 +29,7 @@ Il client principale e' ``chat-ui/`` (Next.js). I flag legacy ``AION_CHAINLIT_*`
 / ``CHAINLIT_AUTH_SECRET`` sono ancora migrati automaticamente in ``AION_CHAT_*``
 (fallback in ``src/api/auth_login.py``).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -52,21 +55,27 @@ def _read_version() -> str:
     """Legge la versione dal file centralizzato version.json nella root del repo."""
     try:
         import json
+
         version_file = _REPO_ROOT / "version.json"
-        return json.loads(version_file.read_text(encoding="utf-8")).get("version", "unknown")
+        return json.loads(version_file.read_text(encoding="utf-8")).get(
+            "version", "unknown"
+        )
     except Exception:
         return "unknown"
+
 
 # Chiavi legacy lette dal codice come fallback ma NON scritte nei nuovi .env
 # (la migrazione viene fatta da scripts/upgrade_core.py).
 # Mantenute in .env.example come righe attive per soddisfare il check di
 # copertura (scripts/check_env_example_coverage.py).
-_DEPRECATED_KEYS: frozenset = frozenset({
-    "AION_CHAINLIT_PASSWORD_AUTH",   # → AION_CHAT_PASSWORD_AUTH
-    "CHAINLIT_AUTH_SECRET",          # → AION_CHAT_AUTH_SECRET
-    "AION_SETUP_CHAINLIT_IDENTIFIER",# → AION_SETUP_CHAT_IDENTIFIER
-    "AION_SETUP_CHAINLIT_PASSWORD",  # → AION_SETUP_CHAT_PASSWORD
-})
+_DEPRECATED_KEYS: frozenset = frozenset(
+    {
+        "AION_CHAINLIT_PASSWORD_AUTH",  # → AION_CHAT_PASSWORD_AUTH
+        "CHAINLIT_AUTH_SECRET",  # → AION_CHAT_AUTH_SECRET
+        "AION_SETUP_CHAINLIT_IDENTIFIER",  # → AION_SETUP_CHAT_IDENTIFIER
+        "AION_SETUP_CHAINLIT_PASSWORD",  # → AION_SETUP_CHAT_PASSWORD
+    }
+)
 
 # Mapping autoritativo old -> new (consumato anche da upgrade_core.py)
 LEGACY_RENAME: Dict[str, str] = {
@@ -88,7 +97,7 @@ def _parse_env_file(path: Path) -> Dict[str, str]:
             content = path.read_text(encoding="latin-1")
         except Exception:
             return out
-            
+
     for raw in content.splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -138,7 +147,9 @@ def _format_env_value(v: str) -> str:
     return v
 
 
-def _prompt_str(label: str, default: str, *, secret: bool = False, help_text: str = "") -> str:
+def _prompt_str(
+    label: str, default: str, *, secret: bool = False, help_text: str = ""
+) -> str:
     hint = f" [{default}]" if default and not secret else ""
     if help_text:
         print(f"  ({help_text})")
@@ -238,7 +249,9 @@ def _build_write_blocks(managed: Dict[str, str], preserved: Dict[str, str]) -> s
     return "\n".join(lines)
 
 
-def _write_env(env_path: Path, managed: Dict[str, str], dry_run: bool) -> Tuple[str, Optional[Path]]:
+def _write_env(
+    env_path: Path, managed: Dict[str, str], dry_run: bool
+) -> Tuple[str, Optional[Path]]:
     # writable = managed - deprecated: gli alias legacy non vengono ripopolati
     # nei nuovi .env (il codice li legge come fallback finché esistono nel .env
     # dell'utente; upgrade_core.py li migra automaticamente).
@@ -246,7 +259,8 @@ def _write_env(env_path: Path, managed: Dict[str, str], dry_run: bool) -> Tuple[
     managed_out = {k: managed[k] for k in writable_keys if k in managed}
     old = _parse_env_file(env_path)
     preserved = {
-        k: v for k, v in old.items()
+        k: v
+        for k, v in old.items()
         if k not in managed_out and k not in _DEPRECATED_KEYS
     }
     body = _build_write_blocks(managed_out, preserved)
@@ -254,7 +268,7 @@ def _write_env(env_path: Path, managed: Dict[str, str], dry_run: bool) -> Tuple[
         return body, None
     bak = _backup_env(env_path)
     try:
-        # Usa newline='\n' per evitare \r\n su Windows se non desiderato, 
+        # Usa newline='\n' per evitare \r\n su Windows se non desiderato,
         # o lascia gestire a Python (newline=None) per compatibilità nativa.
         # Qui forziamo '\n' per coerenza cross-platform.
         with env_path.open("w", encoding="utf-8", newline="\n") as f:
@@ -323,7 +337,12 @@ def _apply_docker_defaults(state: Dict[str, str]) -> None:
     for k, v in _DOCKER_DEFAULTS.items():
         current = state.get(k, "")
         # Sovrascrivi se vuoto o se contiene 'localhost'/'127.0.0.1' (sicuro reset)
-        if not current or "localhost" in current or "127.0.0.1" in current or current == "data":
+        if (
+            not current
+            or "localhost" in current
+            or "127.0.0.1" in current
+            or current == "data"
+        ):
             state[k] = v
 
 
@@ -335,7 +354,9 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
         ["local", "docker"],
         state.get("AION_DEPLOY_TARGET", "local"),
     )
-    state["AION_DEPLOY_TARGET"] = target  # var interna: NON scritta nel .env (non e' in .env.example)
+    state["AION_DEPLOY_TARGET"] = (
+        target  # var interna: NON scritta nel .env (non e' in .env.example)
+    )
     if target == "docker":
         _apply_docker_defaults(state)
         print(
@@ -356,14 +377,18 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
         state.get("AION_API_URL", ""),
         help_text="Endpoint chat Haystack — non l’URL del backend FastAPI AION",
     )
-    state["AION_MODEL"] = _prompt_str("Nome modello (AION_MODEL)", state.get("AION_MODEL", ""))
+    state["AION_MODEL"] = _prompt_str(
+        "Nome modello (AION_MODEL)", state.get("AION_MODEL", "")
+    )
     state["AION_LLM_API_KEY"] = _prompt_str(
         "Token / API key verso il LLM (AION_LLM_API_KEY)",
         state.get("AION_LLM_API_KEY", "placeholder-token"),
         secret=True,
     )
 
-    port = _prompt_str("Porta API FastAPI (AION_API_PORT)", state.get("AION_API_PORT", "8001"))
+    port = _prompt_str(
+        "Porta API FastAPI (AION_API_PORT)", state.get("AION_API_PORT", "8001")
+    )
     state["AION_API_PORT"] = port
     base = f"http://localhost:{port}"
     state["AION_FASTAPI_URL"] = _prompt_str(
@@ -386,7 +411,9 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
         state["AION_CHAT_PASSWORD_AUTH"] = "1"
         if not state.get("AION_CHAT_AUTH_SECRET"):
             state["AION_CHAT_AUTH_SECRET"] = _chat_auth_secret()
-            print(f"  → AION_CHAT_AUTH_SECRET impostato ({len(state['AION_CHAT_AUTH_SECRET'])} caratteri).")
+            print(
+                f"  → AION_CHAT_AUTH_SECRET impostato ({len(state['AION_CHAT_AUTH_SECRET'])} caratteri)."
+            )
         elif _prompt_yesno("Rigenerare AION_CHAT_AUTH_SECRET?", False):
             state["AION_CHAT_AUTH_SECRET"] = _chat_auth_secret()
         print(
@@ -418,7 +445,10 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
     )
 
     print("\n=== Memoria (LTM MemPalace) ===\n")
-    if _prompt_yesno("Abilitare retrieval ed estrazione LTM (AION_LTM_RETRIEVAL / AION_LTM_EXTRACT)?", state.get("AION_LTM_RETRIEVAL", "1") == "1"):
+    if _prompt_yesno(
+        "Abilitare retrieval ed estrazione LTM (AION_LTM_RETRIEVAL / AION_LTM_EXTRACT)?",
+        state.get("AION_LTM_RETRIEVAL", "1") == "1",
+    ):
         state["AION_LTM_RETRIEVAL"] = "1"
         state["AION_LTM_EXTRACT"] = "1"
     else:
@@ -442,7 +472,11 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
     if provider == "google":
         if not default_model or default_model == "qwen3-embedding":
             default_model = "models/gemini-embedding-001"
-        if not default_url or "embedding/v1" in default_url or "localhost" in default_url:
+        if (
+            not default_url
+            or "embedding/v1" in default_url
+            or "localhost" in default_url
+        ):
             default_url = f"https://generativelanguage.googleapis.com/v1beta/{default_model}:embedContent"
     else:
         if not default_model or "gemini" in default_model:
@@ -469,7 +503,9 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
 
 def run_simple(state: Dict[str, str]) -> Dict[str, str]:
     print("\n=== Setup semplice ===\n")
-    print("Impostazioni principali; il resto resta come in .env.example o nel .env attuale.\n")
+    print(
+        "Impostazioni principali; il resto resta come in .env.example o nel .env attuale.\n"
+    )
     return _wizard_core(state)
 
 
@@ -479,50 +515,89 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
     state = _wizard_core(state)
 
     print("\n--- Rete e timeout API ---\n")
-    state["AION_API_HOST"] = _prompt_str("Host bind API (AION_API_HOST)", state.get("AION_API_HOST", "0.0.0.0"))
-    state["AION_LLM_TIMEOUT"] = _prompt_str("Timeout richieste LLM (secondi)", state.get("AION_LLM_TIMEOUT", "120"))
-    state["AION_CHAT_MAX_TOKENS"] = _prompt_str("Max token risposta chat", state.get("AION_CHAT_MAX_TOKENS", "8192"))
+    state["AION_API_HOST"] = _prompt_str(
+        "Host bind API (AION_API_HOST)", state.get("AION_API_HOST", "0.0.0.0")
+    )
+    state["AION_LLM_TIMEOUT"] = _prompt_str(
+        "Timeout richieste LLM (secondi)", state.get("AION_LLM_TIMEOUT", "120")
+    )
+    state["AION_CHAT_MAX_TOKENS"] = _prompt_str(
+        "Max token risposta chat", state.get("AION_CHAT_MAX_TOKENS", "8192")
+    )
     state["AION_AGENT_TURN_TIMEOUT"] = _prompt_str(
-        "Timeout massimo turno agente (secondi)", state.get("AION_AGENT_TURN_TIMEOUT", "600")
+        "Timeout massimo turno agente (secondi)",
+        state.get("AION_AGENT_TURN_TIMEOUT", "600"),
     )
 
     print("\n--- Thinking token budget (vLLM Qwen3) ---\n")
-    if _prompt_yesno("Impostare AION_THINKING_TOKEN_BUDGET (extra_body thinking)?", bool(state.get("AION_THINKING_TOKEN_BUDGET", "").strip())):
-        state["AION_THINKING_TOKEN_BUDGET"] = _prompt_str("Budget intero (globale)", state.get("AION_THINKING_TOKEN_BUDGET", "2048"))
+    if _prompt_yesno(
+        "Impostare AION_THINKING_TOKEN_BUDGET (extra_body thinking)?",
+        bool(state.get("AION_THINKING_TOKEN_BUDGET", "").strip()),
+    ):
+        state["AION_THINKING_TOKEN_BUDGET"] = _prompt_str(
+            "Budget intero (globale)", state.get("AION_THINKING_TOKEN_BUDGET", "2048")
+        )
     else:
         state["AION_THINKING_TOKEN_BUDGET"] = ""
 
-    if _prompt_yesno("Configurare budget specifici per effort (medium/max)?", bool(state.get("AION_THINKING_TOKEN_BUDGET_MEDIUM", "") or state.get("AION_THINKING_TOKEN_BUDGET_MAX", ""))):
-        state["AION_THINKING_TOKEN_BUDGET_MEDIUM"] = _prompt_str("Budget per effort medium (token)", state.get("AION_THINKING_TOKEN_BUDGET_MEDIUM", "1024"))
-        state["AION_THINKING_TOKEN_BUDGET_MAX"] = _prompt_str("Budget per effort max (token)", state.get("AION_THINKING_TOKEN_BUDGET_MAX", "2048"))
+    if _prompt_yesno(
+        "Configurare budget specifici per effort (medium/max)?",
+        bool(
+            state.get("AION_THINKING_TOKEN_BUDGET_MEDIUM", "")
+            or state.get("AION_THINKING_TOKEN_BUDGET_MAX", "")
+        ),
+    ):
+        state["AION_THINKING_TOKEN_BUDGET_MEDIUM"] = _prompt_str(
+            "Budget per effort medium (token)",
+            state.get("AION_THINKING_TOKEN_BUDGET_MEDIUM", "1024"),
+        )
+        state["AION_THINKING_TOKEN_BUDGET_MAX"] = _prompt_str(
+            "Budget per effort max (token)",
+            state.get("AION_THINKING_TOKEN_BUDGET_MAX", "2048"),
+        )
     else:
         state["AION_THINKING_TOKEN_BUDGET_MEDIUM"] = ""
         state["AION_THINKING_TOKEN_BUDGET_MAX"] = ""
 
     print("\n--- STM ---\n")
-    state["AION_STM_MAX_TURNS"] = _prompt_str("Max turni STM", state.get("AION_STM_MAX_TURNS", "10"))
+    state["AION_STM_MAX_TURNS"] = _prompt_str(
+        "Max turni STM", state.get("AION_STM_MAX_TURNS", "10")
+    )
     state["AION_STM_CONSOLIDATE_EVERY"] = _prompt_str(
-        "Consolidazione LTM ogni N messaggi utente", state.get("AION_STM_CONSOLIDATE_EVERY", "10")
+        "Consolidazione LTM ogni N messaggi utente",
+        state.get("AION_STM_CONSOLIDATE_EVERY", "10"),
     )
 
     print("\n--- LTM (dettaglio) ---\n")
-    state["AION_LTM_AGENT_NAME"] = _prompt_str("Nome agente LTM", state.get("AION_LTM_AGENT_NAME", "AION"))
+    state["AION_LTM_AGENT_NAME"] = _prompt_str(
+        "Nome agente LTM", state.get("AION_LTM_AGENT_NAME", "AION")
+    )
     state["AION_LTM_CONTEXT_MAX_CHARS"] = _prompt_str(
         "Max caratteri contesto LTM", state.get("AION_LTM_CONTEXT_MAX_CHARS", "12000")
     )
 
     print("\n--- OCR MCP ---\n")
-    state["AION_OCR_BASE_URL"] = _prompt_str("AION_OCR_BASE_URL", state.get("AION_OCR_BASE_URL", ""))
-    state["AION_OCR_API_KEY"] = _prompt_str("AION_OCR_API_KEY", state.get("AION_OCR_API_KEY", "EMPTY"), secret=True)
+    state["AION_OCR_BASE_URL"] = _prompt_str(
+        "AION_OCR_BASE_URL", state.get("AION_OCR_BASE_URL", "")
+    )
+    state["AION_OCR_API_KEY"] = _prompt_str(
+        "AION_OCR_API_KEY", state.get("AION_OCR_API_KEY", "EMPTY"), secret=True
+    )
 
     print("\n--- Ricerca web (tool nativi, opzionale) ---\n")
     if _prompt_yesno("Configurare ricerca web (Tavily / Brave / SearXNG)?", False):
         state["AION_NATIVE_TOOL_REGISTRY_PATH"] = _prompt_str(
             "Registry tool nativi (AION_NATIVE_TOOL_REGISTRY_PATH)",
-            state.get("AION_NATIVE_TOOL_REGISTRY_PATH", "config/native_tool_registry.yaml"),
+            state.get(
+                "AION_NATIVE_TOOL_REGISTRY_PATH", "config/native_tool_registry.yaml"
+            ),
         )
         state["AION_WEB_SEARCH_TAVILY_ENABLED"] = (
-            "1" if _prompt_yesno("Abilitare Tavily (AION_WEB_SEARCH_TAVILY_ENABLED)?", False) else "0"
+            "1"
+            if _prompt_yesno(
+                "Abilitare Tavily (AION_WEB_SEARCH_TAVILY_ENABLED)?", False
+            )
+            else "0"
         )
         if state["AION_WEB_SEARCH_TAVILY_ENABLED"] == "1":
             state["AION_TAVILY_API_KEY"] = _prompt_str(
@@ -533,21 +608,25 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
         )
         if state["AION_WEB_SEARCH_BRAVE_ENABLED"] == "1":
             state["AION_BRAVE_SEARCH_API_KEY"] = _prompt_str(
-                "AION_BRAVE_SEARCH_API_KEY", state.get("AION_BRAVE_SEARCH_API_KEY", ""), secret=True
+                "AION_BRAVE_SEARCH_API_KEY",
+                state.get("AION_BRAVE_SEARCH_API_KEY", ""),
+                secret=True,
             )
         state["AION_WEB_SEARCH_SEARXNG_ENABLED"] = (
             "1" if _prompt_yesno("Abilitare SearXNG (istanza propria)?", False) else "0"
         )
         if state["AION_WEB_SEARCH_SEARXNG_ENABLED"] == "1":
             state["AION_SEARXNG_BASE_URL"] = _prompt_str(
-                "AION_SEARXNG_BASE_URL (senza slash finale)", state.get("AION_SEARXNG_BASE_URL", "")
+                "AION_SEARXNG_BASE_URL (senza slash finale)",
+                state.get("AION_SEARXNG_BASE_URL", ""),
             )
         state["AION_WEB_SEARCH_DEFAULT_PROVIDER"] = _prompt_str(
             "Provider default (tavily|brave|searxng)",
             state.get("AION_WEB_SEARCH_DEFAULT_PROVIDER", "tavily"),
         )
         state["AION_WEB_SEARCH_FALLBACK_ORDER"] = _prompt_str(
-            "Fallback CSV (es. brave,searxng)", state.get("AION_WEB_SEARCH_FALLBACK_ORDER", "brave,searxng")
+            "Fallback CSV (es. brave,searxng)",
+            state.get("AION_WEB_SEARCH_FALLBACK_ORDER", "brave,searxng"),
         )
         state["AION_WEB_SEARCH_MAX_RESULTS"] = _prompt_str(
             "Max risultati web_search (1–20, AION_WEB_SEARCH_MAX_RESULTS)",
@@ -557,7 +636,9 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
             "Timeout ricerca web in secondi (AION_WEB_SEARCH_TIMEOUT_SEC)",
             state.get("AION_WEB_SEARCH_TIMEOUT_SEC", "30"),
         )
-        print("\n  Allowlist organizzativa e governance (docs/configuration/web-search-and-fetch.md)\n")
+        print(
+            "\n  Allowlist organizzativa e governance (docs/configuration/web-search-and-fetch.md)\n"
+        )
         state["AION_WEB_SEARCH_ALLOWED_HOSTS"] = _prompt_str(
             "CSV host soffitto organizzazione (vuoto = off, AION_WEB_SEARCH_ALLOWED_HOSTS)",
             state.get("AION_WEB_SEARCH_ALLOWED_HOSTS", ""),
@@ -579,36 +660,60 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
             )
             else "0"
         )
-        if _prompt_yesno("Impostare regex opzionale su URL per web_fetch_page (AION_WEB_FETCH_ALLOWLIST_REGEX)?", bool(state.get("AION_WEB_FETCH_ALLOWLIST_REGEX", "").strip())):
+        if _prompt_yesno(
+            "Impostare regex opzionale su URL per web_fetch_page (AION_WEB_FETCH_ALLOWLIST_REGEX)?",
+            bool(state.get("AION_WEB_FETCH_ALLOWLIST_REGEX", "").strip()),
+        ):
             state["AION_WEB_FETCH_ALLOWLIST_REGEX"] = _prompt_str(
                 "Regex su URL completo", state.get("AION_WEB_FETCH_ALLOWLIST_REGEX", "")
             )
         else:
-            state["AION_WEB_FETCH_ALLOWLIST_REGEX"] = state.get("AION_WEB_FETCH_ALLOWLIST_REGEX", "")
+            state["AION_WEB_FETCH_ALLOWLIST_REGEX"] = state.get(
+                "AION_WEB_FETCH_ALLOWLIST_REGEX", ""
+            )
 
     print("\n--- MCP ---\n")
-    state["AION_MCP_POOL"] = "1" if _prompt_yesno("Pool stdio MCP persistente (AION_MCP_POOL)?", state.get("AION_MCP_POOL", "1") == "1") else "0"
-    state["AION_MCP_USER_POOL"] = "1" if _prompt_yesno(
-        "Pool MCP condiviso per utente tra chat (AION_MCP_USER_POOL)?",
-        state.get("AION_MCP_USER_POOL", "1") == "1",
-    ) else "0"
-    state["AION_MCP_STARTUP_WARM"] = "1" if _prompt_yesno(
-        "Pre-avvio MCP al boot API (AION_MCP_STARTUP_WARM)?",
-        state.get("AION_MCP_STARTUP_WARM", "1") == "1",
-    ) else "0"
+    state["AION_MCP_POOL"] = (
+        "1"
+        if _prompt_yesno(
+            "Pool stdio MCP persistente (AION_MCP_POOL)?",
+            state.get("AION_MCP_POOL", "1") == "1",
+        )
+        else "0"
+    )
+    state["AION_MCP_USER_POOL"] = (
+        "1"
+        if _prompt_yesno(
+            "Pool MCP condiviso per utente tra chat (AION_MCP_USER_POOL)?",
+            state.get("AION_MCP_USER_POOL", "1") == "1",
+        )
+        else "0"
+    )
+    state["AION_MCP_STARTUP_WARM"] = (
+        "1"
+        if _prompt_yesno(
+            "Pre-avvio MCP al boot API (AION_MCP_STARTUP_WARM)?",
+            state.get("AION_MCP_STARTUP_WARM", "1") == "1",
+        )
+        else "0"
+    )
     if state.get("AION_MCP_STARTUP_WARM") == "1":
         state["AION_MCP_STARTUP_WARM_PROFILES"] = _prompt_str(
             "Profili per warm boot (CSV slug, o * per tutti)",
             state.get("AION_MCP_STARTUP_WARM_PROFILES", "aion_std,generic_assistant"),
         )
     state["AION_MCP_REGISTRY_PATH"] = _prompt_str(
-        "Registry MCP (AION_MCP_REGISTRY_PATH)", state.get("AION_MCP_REGISTRY_PATH", "config/mcp_registry.yaml")
+        "Registry MCP (AION_MCP_REGISTRY_PATH)",
+        state.get("AION_MCP_REGISTRY_PATH", "config/mcp_registry.yaml"),
     )
 
-
-    if _prompt_yesno("Definire overlay AION_MCP_REGISTRY_LOCAL_PATH?", bool(state.get("AION_MCP_REGISTRY_LOCAL_PATH", "").strip())):
+    if _prompt_yesno(
+        "Definire overlay AION_MCP_REGISTRY_LOCAL_PATH?",
+        bool(state.get("AION_MCP_REGISTRY_LOCAL_PATH", "").strip()),
+    ):
         state["AION_MCP_REGISTRY_LOCAL_PATH"] = _prompt_str(
-            "Percorso file locale", state.get("AION_MCP_REGISTRY_LOCAL_PATH", "config/mcp_registry.local.yaml")
+            "Percorso file locale",
+            state.get("AION_MCP_REGISTRY_LOCAL_PATH", "config/mcp_registry.local.yaml"),
         )
     else:
         state["AION_MCP_REGISTRY_LOCAL_PATH"] = ""
@@ -618,14 +723,24 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
         "  Isolamento credenziali e HOME per utente in deployment multi-tenant.\n"
         "  Documentazione: docs/mcp/user-isolation-and-credentials.md\n"
     )
-    if _prompt_yesno("Abilitare store credenziali per-utente (AION_MCP_USER_CREDENTIALS)?", state.get("AION_MCP_USER_CREDENTIALS", "0") == "1"):
+    if _prompt_yesno(
+        "Abilitare store credenziali per-utente (AION_MCP_USER_CREDENTIALS)?",
+        state.get("AION_MCP_USER_CREDENTIALS", "0") == "1",
+    ):
         state["AION_MCP_USER_CREDENTIALS"] = "1"
         if not state.get("AION_CREDENTIAL_ENCRYPTION_KEY", "").strip():
             import secrets as _sec
+
             state["AION_CREDENTIAL_ENCRYPTION_KEY"] = _sec.token_hex(32)
-            print(f"  → AION_CREDENTIAL_ENCRYPTION_KEY generata (64 caratteri hex). Conservare in un vault aziendale.")
-        elif _prompt_yesno("Rigenerare AION_CREDENTIAL_ENCRYPTION_KEY? (ATTENZIONE: invalida credenziali esistenti)", False):
+            print(
+                f"  → AION_CREDENTIAL_ENCRYPTION_KEY generata (64 caratteri hex). Conservare in un vault aziendale."
+            )
+        elif _prompt_yesno(
+            "Rigenerare AION_CREDENTIAL_ENCRYPTION_KEY? (ATTENZIONE: invalida credenziali esistenti)",
+            False,
+        ):
             import secrets as _sec
+
             state["AION_CREDENTIAL_ENCRYPTION_KEY"] = _sec.token_hex(32)
             print(f"  → Nuova AION_CREDENTIAL_ENCRYPTION_KEY generata.")
         print(
@@ -634,14 +749,19 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
         )
     else:
         state["AION_MCP_USER_CREDENTIALS"] = "0"
-    state["AION_MCP_USER_HOME_ISOLATION"] = "1" if _prompt_yesno(
-        "Abilitare isolamento HOME/XDG per processo MCP (AION_MCP_USER_HOME_ISOLATION)?",
-        state.get("AION_MCP_USER_HOME_ISOLATION", "1") == "1",
-    ) else "0"
+    state["AION_MCP_USER_HOME_ISOLATION"] = (
+        "1"
+        if _prompt_yesno(
+            "Abilitare isolamento HOME/XDG per processo MCP (AION_MCP_USER_HOME_ISOLATION)?",
+            state.get("AION_MCP_USER_HOME_ISOLATION", "1") == "1",
+        )
+        else "0"
+    )
 
     print("\n--- Agent DB (MCP agent_db) ---\n")
     state["AION_AGENT_DB_ROOT"] = _prompt_str(
-        "Directory SQLite Agent DB (AION_AGENT_DB_ROOT)", state.get("AION_AGENT_DB_ROOT", "data/agent_dbs")
+        "Directory SQLite Agent DB (AION_AGENT_DB_ROOT)",
+        state.get("AION_AGENT_DB_ROOT", "data/agent_dbs"),
     )
     state["AION_AGENT_DB_LTM_SYNC_THRESHOLD"] = _prompt_str(
         "Soglia righe insert per sync LTM (AION_AGENT_DB_LTM_SYNC_THRESHOLD)",
@@ -701,10 +821,20 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
     )
 
     print("\n--- DB unificato / Redis ---\n")
-    state["AION_DB_URL"] = _prompt_str("AION_DB_URL", state.get("AION_DB_URL", "sqlite+aiosqlite:///data/aion.db"))
-    state["AION_UNIFIED_DB"] = "1" if _prompt_yesno("AION_UNIFIED_DB?", state.get("AION_UNIFIED_DB", "1") == "1") else "0"
-    if _prompt_yesno("Impostare AION_REDIS_URL?", bool(state.get("AION_REDIS_URL", "").strip())):
-        state["AION_REDIS_URL"] = _prompt_str("AION_REDIS_URL", state.get("AION_REDIS_URL", "redis://127.0.0.1:6379/0"))
+    state["AION_DB_URL"] = _prompt_str(
+        "AION_DB_URL", state.get("AION_DB_URL", "sqlite+aiosqlite:///data/aion.db")
+    )
+    state["AION_UNIFIED_DB"] = (
+        "1"
+        if _prompt_yesno("AION_UNIFIED_DB?", state.get("AION_UNIFIED_DB", "1") == "1")
+        else "0"
+    )
+    if _prompt_yesno(
+        "Impostare AION_REDIS_URL?", bool(state.get("AION_REDIS_URL", "").strip())
+    ):
+        state["AION_REDIS_URL"] = _prompt_str(
+            "AION_REDIS_URL", state.get("AION_REDIS_URL", "redis://127.0.0.1:6379/0")
+        )
         state["AION_REDIS_FALLBACK_LOCAL"] = state.get("AION_REDIS_FALLBACK_LOCAL", "1")
     else:
         state["AION_REDIS_URL"] = ""
@@ -713,25 +843,60 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
     state["AION_STORAGE_BACKEND"] = _prompt_choice(
         "Backend storage (AION_STORAGE_BACKEND):",
         ["local", "s3"],
-        state.get("AION_STORAGE_BACKEND", "local")
+        state.get("AION_STORAGE_BACKEND", "local"),
     )
     if state["AION_STORAGE_BACKEND"] == "s3":
-        state["AION_STORAGE_S3_BUCKET"] = _prompt_str("S3 Bucket", state.get("AION_STORAGE_S3_BUCKET", "aion-sessions"))
-        state["AION_STORAGE_S3_REGION"] = _prompt_str("S3 Region", state.get("AION_STORAGE_S3_REGION", "us-east-1"))
-        state["AION_STORAGE_S3_ENDPOINT_URL"] = _prompt_str("S3 Endpoint URL (vuoto per AWS)", state.get("AION_STORAGE_S3_ENDPOINT_URL", ""))
-        state["AWS_ACCESS_KEY_ID"] = _prompt_str("AWS Access Key ID", state.get("AWS_ACCESS_KEY_ID", ""), secret=True)
-        state["AWS_SECRET_ACCESS_KEY"] = _prompt_str("AWS Secret Access Key", state.get("AWS_SECRET_ACCESS_KEY", ""), secret=True)
+        state["AION_STORAGE_S3_BUCKET"] = _prompt_str(
+            "S3 Bucket", state.get("AION_STORAGE_S3_BUCKET", "aion-sessions")
+        )
+        state["AION_STORAGE_S3_REGION"] = _prompt_str(
+            "S3 Region", state.get("AION_STORAGE_S3_REGION", "us-east-1")
+        )
+        state["AION_STORAGE_S3_ENDPOINT_URL"] = _prompt_str(
+            "S3 Endpoint URL (vuoto per AWS)",
+            state.get("AION_STORAGE_S3_ENDPOINT_URL", ""),
+        )
+        state["AWS_ACCESS_KEY_ID"] = _prompt_str(
+            "AWS Access Key ID", state.get("AWS_ACCESS_KEY_ID", ""), secret=True
+        )
+        state["AWS_SECRET_ACCESS_KEY"] = _prompt_str(
+            "AWS Secret Access Key", state.get("AWS_SECRET_ACCESS_KEY", ""), secret=True
+        )
     else:
-        state["AION_STORAGE_LOCAL_ROOT"] = _prompt_str("Cartella locale (AION_STORAGE_LOCAL_ROOT)", state.get("AION_STORAGE_LOCAL_ROOT", "data"))
+        state["AION_STORAGE_LOCAL_ROOT"] = _prompt_str(
+            "Cartella locale (AION_STORAGE_LOCAL_ROOT)",
+            state.get("AION_STORAGE_LOCAL_ROOT", "data"),
+        )
 
     print("\n--- Sicurezza e plugin ---\n")
-    state["AION_PII_REDACT"] = "1" if _prompt_yesno("AION_PII_REDACT?", state.get("AION_PII_REDACT", "1") == "1") else "0"
-    state["AION_PLUGINS_ENABLED"] = "1" if _prompt_yesno("AION_PLUGINS_ENABLED?", state.get("AION_PLUGINS_ENABLED", "1") == "1") else "0"
-    state["AION_APPROVAL_ENABLED"] = "1" if _prompt_yesno("AION_APPROVAL_ENABLED?", state.get("AION_APPROVAL_ENABLED", "1") == "1") else "0"
+    state["AION_PII_REDACT"] = (
+        "1"
+        if _prompt_yesno("AION_PII_REDACT?", state.get("AION_PII_REDACT", "1") == "1")
+        else "0"
+    )
+    state["AION_PLUGINS_ENABLED"] = (
+        "1"
+        if _prompt_yesno(
+            "AION_PLUGINS_ENABLED?", state.get("AION_PLUGINS_ENABLED", "1") == "1"
+        )
+        else "0"
+    )
+    state["AION_APPROVAL_ENABLED"] = (
+        "1"
+        if _prompt_yesno(
+            "AION_APPROVAL_ENABLED?", state.get("AION_APPROVAL_ENABLED", "1") == "1"
+        )
+        else "0"
+    )
 
     print("\n--- Context compressor ---\n")
     state["AION_CONTEXT_COMPRESS_ENABLED"] = (
-        "1" if _prompt_yesno("AION_CONTEXT_COMPRESS_ENABLED?", state.get("AION_CONTEXT_COMPRESS_ENABLED", "1") == "1") else "0"
+        "1"
+        if _prompt_yesno(
+            "AION_CONTEXT_COMPRESS_ENABLED?",
+            state.get("AION_CONTEXT_COMPRESS_ENABLED", "1") == "1",
+        )
+        else "0"
     )
     state["AION_CONTEXT_COMPRESS_THRESHOLD"] = _prompt_str(
         "Soglia (0–1)", state.get("AION_CONTEXT_COMPRESS_THRESHOLD", "0.5")
@@ -741,7 +906,8 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
     )
     state["AION_CONTEXT_COMPRESS_MODEL_WINDOW"] = state["AION_MODEL_MAX_CONTEXT"]
     state["AION_CONTEXT_COMPRESS_KEEP_LAST"] = _prompt_str(
-        "Messaggi recenti da non comprimere", state.get("AION_CONTEXT_COMPRESS_KEEP_LAST", "6")
+        "Messaggi recenti da non comprimere",
+        state.get("AION_CONTEXT_COMPRESS_KEEP_LAST", "6"),
     )
     state["AION_CONTEXT_COMPRESS_RESERVE_OUTPUT"] = (
         "1"
@@ -754,32 +920,51 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
 
     print("\n--- Learning (skill distill, patch, nudge) ---\n")
     state["AION_SKILL_DISTILL_ENABLED"] = (
-        "1" if _prompt_yesno("Abilitare AION_SKILL_DISTILL_ENABLED?", state.get("AION_SKILL_DISTILL_ENABLED", "0") == "1") else "0"
+        "1"
+        if _prompt_yesno(
+            "Abilitare AION_SKILL_DISTILL_ENABLED?",
+            state.get("AION_SKILL_DISTILL_ENABLED", "0") == "1",
+        )
+        else "0"
     )
-    print("  NOTA: L'abilitazione alla scrittura/cancellazione dinamica di skill (AION_SKILL_WRITE_ENABLED)")
-    print("        è gestita direttamente a livello di registry MCP in config/mcp_registry.yaml")
+    print(
+        "  NOTA: L'abilitazione alla scrittura/cancellazione dinamica di skill (AION_SKILL_WRITE_ENABLED)"
+    )
+    print(
+        "        è gestita direttamente a livello di registry MCP in config/mcp_registry.yaml"
+    )
     print("        sotto la voce 'skills_hub'.")
     state["AION_SKILL_PATCH_ENABLED"] = (
-        "1" if _prompt_yesno("Abilitare AION_SKILL_PATCH_ENABLED?", state.get("AION_SKILL_PATCH_ENABLED", "0") == "1") else "0"
+        "1"
+        if _prompt_yesno(
+            "Abilitare AION_SKILL_PATCH_ENABLED?",
+            state.get("AION_SKILL_PATCH_ENABLED", "0") == "1",
+        )
+        else "0"
     )
     state["AION_NUDGE_ENABLED"] = (
-        "1" if _prompt_yesno("Abilitare AION_NUDGE_ENABLED?", state.get("AION_NUDGE_ENABLED", "0") == "1") else "0"
-    )
-
-    print("\n--- Strategia di generazione Artifact ---\n")
-    state["AION_ARTIFACT_STRATEGY"] = _prompt_choice(
-        "Formato artifact (AION_ARTIFACT_STRATEGY):",
-        ["xml", "markdown", "tool"],
-        state.get("AION_ARTIFACT_STRATEGY", "markdown"),
+        "1"
+        if _prompt_yesno(
+            "Abilitare AION_NUDGE_ENABLED?", state.get("AION_NUDGE_ENABLED", "0") == "1"
+        )
+        else "0"
     )
 
     print("\n--- Opzionale: API key bootstrap /v1 ---\n")
-    if _prompt_yesno("Impostare AION_API_KEY_BOOTSTRAP (solo dev)?", bool(state.get("AION_API_KEY_BOOTSTRAP", "").strip())):
-        if _prompt_yesno("Generare valore casuale?", not bool(state.get("AION_API_KEY_BOOTSTRAP", "").strip())):
+    if _prompt_yesno(
+        "Impostare AION_API_KEY_BOOTSTRAP (solo dev)?",
+        bool(state.get("AION_API_KEY_BOOTSTRAP", "").strip()),
+    ):
+        if _prompt_yesno(
+            "Generare valore casuale?",
+            not bool(state.get("AION_API_KEY_BOOTSTRAP", "").strip()),
+        ):
             state["AION_API_KEY_BOOTSTRAP"] = f"aion_dev_{secrets.token_urlsafe(24)}"
             print("  → Salvata in .env; non committare.")
         else:
-            state["AION_API_KEY_BOOTSTRAP"] = _prompt_str("Valore", state.get("AION_API_KEY_BOOTSTRAP", ""), secret=True)
+            state["AION_API_KEY_BOOTSTRAP"] = _prompt_str(
+                "Valore", state.get("AION_API_KEY_BOOTSTRAP", ""), secret=True
+            )
     else:
         state["AION_API_KEY_BOOTSTRAP"] = ""
 
@@ -815,8 +1000,12 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
     else:
         state["AION_OTEL_ENABLED"] = "0"
     state["AION_METRICS_ENABLED"] = (
-        "1" if _prompt_yesno("Esporre /metrics Prometheus (AION_METRICS_ENABLED)?",
-                             state.get("AION_METRICS_ENABLED", "1") == "1") else "0"
+        "1"
+        if _prompt_yesno(
+            "Esporre /metrics Prometheus (AION_METRICS_ENABLED)?",
+            state.get("AION_METRICS_ENABLED", "1") == "1",
+        )
+        else "0"
     )
 
     print("\n--- Docker deploy (opzionale; solo se userai docker-compose.yml) ---\n")
@@ -857,12 +1046,18 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
         else:
             state["CADDY_HTTP_PORT"] = "80"
             state["CADDY_HTTPS_PORT"] = "443"
-        if _prompt_yesno("Impostare password Redis (REDIS_PASSWORD)?",
-                         bool(state.get("REDIS_PASSWORD", "").strip())):
-            if _prompt_yesno("Generare valore casuale?",
-                             not bool(state.get("REDIS_PASSWORD", "").strip())):
+        if _prompt_yesno(
+            "Impostare password Redis (REDIS_PASSWORD)?",
+            bool(state.get("REDIS_PASSWORD", "").strip()),
+        ):
+            if _prompt_yesno(
+                "Generare valore casuale?",
+                not bool(state.get("REDIS_PASSWORD", "").strip()),
+            ):
                 state["REDIS_PASSWORD"] = secrets.token_urlsafe(24)
-                print(f"  → REDIS_PASSWORD impostata ({len(state['REDIS_PASSWORD'])} caratteri).")
+                print(
+                    f"  → REDIS_PASSWORD impostata ({len(state['REDIS_PASSWORD'])} caratteri)."
+                )
             else:
                 state["REDIS_PASSWORD"] = _prompt_str(
                     "Valore", state.get("REDIS_PASSWORD", ""), secret=True
@@ -894,12 +1089,19 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
         state.setdefault("UV_VERSION", "latest")
 
         # Override compose-friendly per AION_REDIS_URL/AION_DATA_DIR se ancora ai default localhost
-        if state.get("AION_REDIS_URL", "").strip().startswith(("redis://localhost", "redis://127.0.0.1")):
+        if (
+            state.get("AION_REDIS_URL", "")
+            .strip()
+            .startswith(("redis://localhost", "redis://127.0.0.1"))
+        ):
             if _prompt_yesno(
-                "Aggiornare AION_REDIS_URL a redis://redis:6379/0 (service DNS Docker)?", True
+                "Aggiornare AION_REDIS_URL a redis://redis:6379/0 (service DNS Docker)?",
+                True,
             ):
                 if state["REDIS_PASSWORD"]:
-                    state["AION_REDIS_URL"] = f"redis://:{state['REDIS_PASSWORD']}@redis:6379/0"
+                    state["AION_REDIS_URL"] = (
+                        f"redis://:{state['REDIS_PASSWORD']}@redis:6379/0"
+                    )
                 else:
                     state["AION_REDIS_URL"] = "redis://redis:6379/0"
         if not state.get("AION_DATA_DIR") or state.get("AION_DATA_DIR") == "data":
@@ -998,7 +1200,9 @@ async def _bootstrap_chat_user_coroutine(
     from src.data.user_password import UserAlreadyExistsError, create_password_user
     from src.runtime.timeline_backfill import backfill_message_timelines
 
-    tenant_id = (merged_env.get("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
+    tenant_id = (
+        merged_env.get("AION_DEFAULT_TENANT_ID") or "default"
+    ).strip() or "default"
 
     eng = init_engine()
     await ensure_bootstrap_schema(eng)
@@ -1019,15 +1223,21 @@ async def _bootstrap_chat_user_coroutine(
         return
 
     if interactive:
-        print("\n=== Creazione utente login chat (tabella users del DB unificato) ===\n")
+        print(
+            "\n=== Creazione utente login chat (tabella users del DB unificato) ===\n"
+        )
         identifier = _prompt_str("Username (identifier)", "admin")
         pw = getpass.getpass("Password chat: ")
         pw2 = getpass.getpass("Ripeti password: ")
         if pw != pw2:
-            print("ERRORE: password diverse. Crea l’utente dall'Admin UI o tramite l’API POST /admin/users.")
+            print(
+                "ERRORE: password diverse. Crea l’utente dall'Admin UI o tramite l’API POST /admin/users."
+            )
             return
         if not pw:
-            print("Password vuota. Crea l’utente dall'Admin UI o tramite l’API POST /admin/users.")
+            print(
+                "Password vuota. Crea l’utente dall'Admin UI o tramite l’API POST /admin/users."
+            )
             return
     else:
         # Nuovi nomi + fallback legacy
@@ -1057,7 +1267,9 @@ async def _bootstrap_chat_user_coroutine(
             password=pw,
         )
     except UserAlreadyExistsError:
-        print(f"\n→ Utente {identifier!r} già presente nel tenant {tenant_id!r}; nessuna modifica.\n")
+        print(
+            f"\n→ Utente {identifier!r} già presente nel tenant {tenant_id!r}; nessuna modifica.\n"
+        )
         return
 
     db_url = merged_env.get("AION_DB_URL", "")
@@ -1120,10 +1332,21 @@ def main() -> int:
     print(f"\n✨  AION Agent Setup  —  {_ver}\n")
     ap = argparse.ArgumentParser(description="Setup guidato .env per AION Agent")
 
-    ap.add_argument("--simple", action="store_true", help="Solo impostazioni principali")
-    ap.add_argument("--advanced", action="store_true", help="Setup esteso dopo il nucleo comune")
-    ap.add_argument("--dry-run", action="store_true", help="Stampa anteprima senza scrivere")
-    ap.add_argument("--output", type=Path, default=_REPO_ROOT / ".env", help="File output (default: .env)")
+    ap.add_argument(
+        "--simple", action="store_true", help="Solo impostazioni principali"
+    )
+    ap.add_argument(
+        "--advanced", action="store_true", help="Setup esteso dopo il nucleo comune"
+    )
+    ap.add_argument(
+        "--dry-run", action="store_true", help="Stampa anteprima senza scrivere"
+    )
+    ap.add_argument(
+        "--output",
+        type=Path,
+        default=_REPO_ROOT / ".env",
+        help="File output (default: .env)",
+    )
     ap.add_argument(
         "--import-state",
         type=Path,
@@ -1141,7 +1364,10 @@ def main() -> int:
 
     if args.import_state is not None:
         if not args.import_state.is_file():
-            print(f"ERRORE: --import-state non è un file: {args.import_state}", file=sys.stderr)
+            print(
+                f"ERRORE: --import-state non è un file: {args.import_state}",
+                file=sys.stderr,
+            )
             return 2
         state = _initial_state()
         for k, v in _parse_env_file(args.import_state.resolve()).items():
@@ -1151,7 +1377,8 @@ def main() -> int:
         managed = {k: state.get(k, example.get(k, "")) for k in managed_keys}
         old = _parse_env_file(env_path)
         preserved = {
-            k: v for k, v in old.items()
+            k: v
+            for k, v in old.items()
             if k not in managed and k not in _DEPRECATED_KEYS
         }
         if args.dry_run:
@@ -1159,7 +1386,10 @@ def main() -> int:
             print(_build_write_blocks(managed, preserved))
             return 0
         if env_path.is_file() and not args.yes:
-            if not _prompt_yesno(f"Scrivere (chiavi da .env.example + preservazione altre) su {env_path}?", True):
+            if not _prompt_yesno(
+                f"Scrivere (chiavi da .env.example + preservazione altre) su {env_path}?",
+                True,
+            ):
                 print("Annullato.")
                 return 1
         _, bak = _write_env(env_path, managed, dry_run=False)
@@ -1176,7 +1406,9 @@ def main() -> int:
     elif args.advanced:
         state = run_advanced(state)
     else:
-        print("Modalità:\n  1) Semplice — LLM, API, login chat, reasoning, LTM, embeddings\n")
+        print(
+            "Modalità:\n  1) Semplice — LLM, API, login chat, reasoning, LTM, embeddings\n"
+        )
         print(
             "  2) Avanzata — come (1) + timeout, STM, OCR, MCP, ricerca web (allowlist/enforce), DB/Redis, PII, plugin, approval, "
             "compressor, skill/nudge, API key\n"
@@ -1193,8 +1425,13 @@ def main() -> int:
         print(_build_write_blocks(managed, {}))
         return 0
 
-    if env_path.is_file() and not args.yes and not _prompt_yesno(
-        f"Scrivere (chiavi da .env.example + preservazione altre) su {env_path}?", True
+    if (
+        env_path.is_file()
+        and not args.yes
+        and not _prompt_yesno(
+            f"Scrivere (chiavi da .env.example + preservazione altre) su {env_path}?",
+            True,
+        )
     ):
         print("Annullato.")
         return 1
@@ -1209,11 +1446,19 @@ def main() -> int:
         print("  DOCKER_BUILDKIT=1 docker compose build")
         print("  docker compose up -d")
         print("  docker compose logs -f backend")
-        print("  Apri http://localhost/  (chat-ui)  |  http://localhost/admin  |  http://localhost/docs/")
+        print(
+            "  Apri http://localhost/  (chat-ui)  |  http://localhost/admin  |  http://localhost/docs/"
+        )
     else:
-        print("  # deps: upgrade-aion.sh usa uv se disponibile (come il Dockerfile backend)")
-        print("  python scripts/init_unified_db.py     # idempotente: alembic + timeline backfill")
-        print("  ./scripts/dev-api.sh                    # backend FastAPI :8001 (uv venv se disponibile)")
+        print(
+            "  # deps: upgrade-aion.sh usa uv se disponibile (come il Dockerfile backend)"
+        )
+        print(
+            "  python scripts/init_unified_db.py     # idempotente: alembic + timeline backfill"
+        )
+        print(
+            "  ./scripts/dev-api.sh                    # backend FastAPI :8001 (uv venv se disponibile)"
+        )
         print("  cd chat-ui && pnpm install && pnpm dev  # client primario :8003")
     return 0
 

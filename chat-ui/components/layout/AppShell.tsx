@@ -140,7 +140,7 @@ export function AppShell({
             ? "translate-x-0 border-r border-border/40 opacity-100"
             : "-translate-x-full border-r-0 opacity-0 pointer-events-none lg:pointer-events-auto",
           // Desktop collapsed rail
-          !isSidebarOpen && "lg:w-[72px] lg:translate-x-0 lg:opacity-100 lg:border-r lg:border-border/40",
+          !isSidebarOpen && "lg:w-14 lg:translate-x-0 lg:opacity-100 lg:border-r lg:border-border/40",
         )}
       >
         {sidebar}

@@ -14,18 +14,21 @@ mcp = FastMCP("AION Prometheus Server")
 # Initialize tools with central config
 _tools = PrometheusTools(
     api_url=config.get("prometheus.api_url"),
-    timeout=config.get("prometheus.timeout", 10)
+    timeout=config.get("prometheus.timeout", 10),
 )
+
 
 @mcp.tool()
 def search_metric(metric_name: str) -> str:
     """Cerca metriche in Prometheus per nome o pattern."""
     return _tools.search_metric(metric_name)
 
+
 @mcp.tool()
 def get_metric_labels(metric_name: str, limit: int = 20) -> str:
     """Recupera tutte le label/serie disponibili per una metrica specifica."""
     return _tools.get_metric_labels(metric_name, limit)
+
 
 @mcp.tool()
 def execute_promql(query: str) -> str:
@@ -44,7 +47,7 @@ if __name__ == "__main__":
                 await mcp._mcp_server.run(
                     read_stream,
                     write_stream,
-                    mcp._mcp_server.create_initialization_options()
+                    mcp._mcp_server.create_initialization_options(),
                 )
         except Exception as e:
             with open("data/mcp_debug.log", "a") as f:

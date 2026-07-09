@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { Loader2 } from "lucide-react";
 import { useT } from "@/lib/i18n/use-t";
+import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 
 type Props = {
   title: string;
@@ -29,9 +30,13 @@ export function StreamingContentPreview({
   const header =
     kind === "plan"
       ? t("chat.generating.plan")
-      : title.trim()
-        ? t("chat.generating.document_named", { title })
-        : t("chat.generating.document");
+      : isScriptLikeTitle(title) && title.trim()
+        ? t("chat.generating.script_named", { title })
+        : isScriptLikeTitle(title)
+          ? t("chat.generating.script")
+          : title.trim()
+            ? t("chat.generating.document_named", { title })
+            : t("chat.generating.document");
 
   return (
     <div className="flex h-full min-h-0 flex-col border-b border-border bg-card/40">

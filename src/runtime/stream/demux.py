@@ -39,7 +39,7 @@ _ARTIFACT_TYPES = frozenset(
 _TOOL_TYPES = frozenset({"tool_event"})
 _TOKEN_TYPES = frozenset({"token", "reasoning"})
 _CONTROL_TYPES = frozenset(
-    {"keepalive", "done", "error", "stream_end", "context_length_error"}
+    {"keepalive", "done", "error", "stream_end", "context_length_error", "llm_error"}
 )
 
 
@@ -65,7 +65,7 @@ class StreamDemux:
         Called for ``token`` and ``reasoning`` chunks.
     on_control:
         Called for control-flow chunks: ``keepalive``, ``done``, ``error``,
-        ``stream_end``, ``context_length_error``.
+        ``stream_end``, ``context_length_error``, ``llm_error``.
     on_any:
         Called for *every* chunk before type-specific dispatch.
     """

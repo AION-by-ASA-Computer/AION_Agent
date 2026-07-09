@@ -2,6 +2,7 @@
 MCP sandbox sessione: elenco file, lettura testo, scrittura workspace, esecuzione Python isolata.
 Richiede AION_CHAT_SESSION_ID.
 """
+
 from __future__ import annotations
 
 import os
@@ -27,7 +28,12 @@ def sandbox_list_files(subdir: str = "uploads", recursive: bool = False) -> str:
     import json
     import mimetypes
 
-    from src.session_workspace import SESSION_CONTENT_ROOTS, list_dir, safe_resolve, session_root
+    from src.session_workspace import (
+        SESSION_CONTENT_ROOTS,
+        list_dir,
+        safe_resolve,
+        session_root,
+    )
 
     try:
         if not recursive:
@@ -84,6 +90,7 @@ def sandbox_read_text_file(relative_path: str, max_bytes: int = 500000) -> str:
 def sandbox_get_absolute_path(relative_path: str) -> str:
     """Get the host's absolute path of a session file/directory (uploads/, workspace/, derived/)."""
     from src.session_workspace import safe_resolve
+
     try:
         p = safe_resolve(_sid(), relative_path, must_exist=False)
         return str(p.absolute())
@@ -94,19 +101,20 @@ def sandbox_get_absolute_path(relative_path: str) -> str:
 @mcp.tool()
 def sandbox_write_workspace_file(relative_path: str, content: str) -> str:
     """
-    Overwrite a file under the session workspace (path must resolve to workspace/*).
+    Write a file under the session workspace (path must resolve to workspace/*).
 
-  Do **not** use for new full HTML/CSS landing pages when artifact protocol is active:
-  emit a markdown ```html code block with `# artifact_id`, `# title`, `# filename` instead.
+    Overwrites if the file exists. Prefer sandbox_edit_workspace_file for small changes
+    on existing files. If the file exists, read it first with sandbox_read_text_file.
     """
     from src.runtime.mcp_tool_args import normalize_workspace_relative_path
     from src.session_workspace import safe_resolve
+
     try:
         rel = normalize_workspace_relative_path(relative_path)
         if not rel.startswith("workspace/"):
             return (
                 "Error: path must be under workspace/ (e.g. workspace/page.html). "
-                "For new HTML pages use markdown artifact blocks with # artifact_id / # filename metadata."
+                "Use sandbox_write_workspace_file(relative_path, content)."
             )
         p = safe_resolve(_sid(), rel)
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -188,6 +196,46 @@ def sandbox_edit_workspace_file(
 
 
 @mcp.tool()
+def sandbox_apply_patch(patch_text: str) -> str:
+    """
+    Apply an OpenCode-style patch to workspace files.
+
+    Patch envelope:
+    *** Begin Patch
+    *** Add File: path
+    +line
+    *** Update File: path
+    @@
+    -old
+    +new
+    *** Delete File: path
+    *** End Patch
+    """
+    import json
+
+    from src.runtime.apply_patch import PatchApplyError, apply_patch_text
+    from src.session_workspace import session_root
+
+    try:
+        result = apply_patch_text(session_root(_sid()), patch_text)
+        return json.dumps(
+            {
+                "ok": True,
+                "summary": result.summary,
+                "files": [
+                    {"path": f.path, "action": f.action, "move_path": f.move_path}
+                    for f in result.files
+                ],
+            },
+            ensure_ascii=False,
+        )
+    except PatchApplyError as e:
+        return json.dumps({"ok": False, "error": "patch_apply_error", "message": str(e)}, ensure_ascii=False)
+    except Exception as e:
+        return f"Error: {e}"
+
+
+@mcp.tool()
 def sandbox_grep_content(
     pattern: str,
     relative_root: str = "workspace",
@@ -222,7 +270,16 @@ def sandbox_grep_content(
         sroot = session_root(_sid())
         root_path = safe_resolve(_sid(), root_rel, must_exist=False)
         if not root_path.is_dir():
-            return json.dumps({"ok": True, "results": [], "count": 0, "truncated": False, "note": "Empty or missing directory"}, ensure_ascii=False)
+            return json.dumps(
+                {
+                    "ok": True,
+                    "results": [],
+                    "count": 0,
+                    "truncated": False,
+                    "note": "Empty or missing directory",
+                },
+                ensure_ascii=False,
+            )
 
         results = grep_content(
             sroot,
@@ -264,7 +321,10 @@ def sandbox_grep_content(
             ensure_ascii=False,
         )
     except ValueError as e:
-        return json.dumps({"ok": False, "error": "validation_error", "message": str(e)}, ensure_ascii=False)
+        return json.dumps(
+            {"ok": False, "error": "validation_error", "message": str(e)},
+            ensure_ascii=False,
+        )
     except Exception as e:
         return f"Error: {e}"
 
@@ -315,7 +375,10 @@ def sandbox_fnmatch_glob(
         )
 
     except ValueError as e:
-        return json.dumps({"ok": False, "error": "validation_error", "message": str(e)}, ensure_ascii=False)
+        return json.dumps(
+            {"ok": False, "error": "validation_error", "message": str(e)},
+            ensure_ascii=False,
+        )
     except Exception as e:
         return f"Error: {e}"
 
@@ -349,11 +412,18 @@ def sandbox_read_file_chunk(
 
     except FileNotFoundError:
         return json.dumps(
-            {"ok": False, "error": "not_found", "message": f"File not found: {relative_path}"},
+            {
+                "ok": False,
+                "error": "not_found",
+                "message": f"File not found: {relative_path}",
+            },
             ensure_ascii=False,
         )
     except ValueError as e:
-        return json.dumps({"ok": False, "error": "validation_error", "message": str(e)}, ensure_ascii=False)
+        return json.dumps(
+            {"ok": False, "error": "validation_error", "message": str(e)},
+            ensure_ascii=False,
+        )
     except Exception as e:
         return f"Error: {e}"
 
@@ -387,12 +457,20 @@ def sandbox_exec_allowlisted(
     """
     import json
 
-    from src.tools.session_exec import ExecAllowlistError, ExecDeniedError, run_allowlisted
+    from src.tools.session_exec import (
+        ExecAllowlistError,
+        ExecDeniedError,
+        run_allowlisted,
+    )
 
     try:
         if not argv or not isinstance(argv, list):
             return json.dumps(
-                {"ok": False, "error": "validation", "message": "argv must be a non-empty list"},
+                {
+                    "ok": False,
+                    "error": "validation",
+                    "message": "argv must be a non-empty list",
+                },
                 ensure_ascii=False,
             )
 
@@ -400,9 +478,15 @@ def sandbox_exec_allowlisted(
         return json.dumps(result, ensure_ascii=False)
 
     except ExecDeniedError as e:
-        return json.dumps({"ok": False, "error": "exec_disabled", "message": str(e)}, ensure_ascii=False)
+        return json.dumps(
+            {"ok": False, "error": "exec_disabled", "message": str(e)},
+            ensure_ascii=False,
+        )
     except ExecAllowlistError as e:
-        return json.dumps({"ok": False, "error": "allowlist_denied", "message": str(e)}, ensure_ascii=False)
+        return json.dumps(
+            {"ok": False, "error": "allowlist_denied", "message": str(e)},
+            ensure_ascii=False,
+        )
     except Exception as e:
         return f"Error: {e}"
 
@@ -410,9 +494,12 @@ def sandbox_exec_allowlisted(
 # @mcp.tool()
 def sandbox_execute_python(code: str) -> str:
     """
-    [DISABILITATO DEFINITIVAMENTE] - Usa <aion_artifact> con auto_execute="true".
+    [PERMANENTLY DISABLED] — use sandbox_write_workspace_file + sandbox_run_python_file.
     """
-    return "ERROR: This tool is disabled. Usa <aion_artifact identifier='...' type='python' auto_execute='true'> to run code."
+    return (
+        "ERROR: This tool is disabled. Write scripts with "
+        "sandbox_write_workspace_file(relative_path, content), then sandbox_run_python_file."
+    )
 
 
 @mcp.tool()
@@ -422,12 +509,12 @@ def sandbox_install_python_packages(
 ) -> str:
     """
     Install PyPI packages into the isolated session venv (``data/sessions/<id>/.venv``).
-    Abilitato di default (``AION_SANDBOX_ALLOW_PACKAGE_INSTALL=1``). Disabilitato solo se la variabile è ``0``.
+    Enabled by default (``AION_SANDBOX_ALLOW_PACKAGE_INSTALL=1``). Disabled only when the variable is ``0``.
     Do not ask the user for manual installs: use this tool.
 
-    - ``packages``: nomi sicuri (es. ``httpx``, ``pandas``, ``httpx[http2]``); no shell/redirezioni.
-    - ``use_uv``: se true usa ``uv pip install`` (deve essere sul PATH); altrimenti ``pip`` del venv.
-    Variabili utili: ``AION_SANDBOX_PIP_INDEX_URL``, ``AION_SANDBOX_PIP_TIMEOUT_SEC``, ``AION_SANDBOX_PIP_MAX_PACKAGES``,
+    - ``packages``: safe names (e.g. ``httpx``, ``pandas``, ``httpx[http2]``); no shell/redirections.
+    - ``use_uv``: if true uses ``uv pip install`` (must be on PATH); otherwise the venv ``pip``.
+    Useful env vars: ``AION_SANDBOX_PIP_INDEX_URL``, ``AION_SANDBOX_PIP_TIMEOUT_SEC``, ``AION_SANDBOX_PIP_MAX_PACKAGES``,
     ``AION_SANDBOX_BACKEND`` (``subprocess`` dev / ``container`` Podman prod).
     """
     from src.tools.session_venv import install_packages
@@ -441,12 +528,14 @@ def sandbox_install_python_packages(
 
 
 @mcp.tool()
-def sandbox_run_python_file(relative_path: str, extra_args: list[str] | None = None) -> str:
+def sandbox_run_python_file(
+    relative_path: str, extra_args: list[str] | None = None
+) -> str:
     """
     Run ``python -u <relative_path>`` with working directory = session root.
-    Uses the **session venv** Python (``.../.venv``) se presente o se ``AION_SANDBOX_AUTO_VENV=1`` (default),
+    Uses the **session venv** Python (``.../.venv``) when present or when ``AION_SANDBOX_AUTO_VENV=1`` (default),
     so packages installed with ``sandbox_install_python_packages``. Otherwise the MCP process interpreter.
-    Only accepts paths under ``workspace/*.py``. Extra arguments go in ``extra_args`` (argv dopo lo script).
+    Only accepts paths under ``workspace/*.py``. Extra arguments go in ``extra_args`` (argv after the script).
     No ``result`` field: stdout/stderr and exit code are in the return message.
     """
     from src.tools.session_code import SessionSandboxExecutor
@@ -456,13 +545,10 @@ def sandbox_run_python_file(relative_path: str, extra_args: list[str] | None = N
     except Exception as e:
         err_msg = str(e)
         if any(h in err_msg.lower() for h in ["not found", "non valido", "no such file"]):
-            strategy = os.getenv("AION_ARTIFACT_STRATEGY", "markdown").lower()
-            if strategy == "tool":
-                hint = "Make sure you called 'sandbox_write_workspace_file' BEFORE running the script."
-            elif strategy == "markdown":
-                hint = "Make sure you emitted the code in a Markdown block with metadata (artifact_id) BEFORE the tool call."
-            else:
-                hint = "Make sure you emitted the code using <aion_artifact> in the current response BEFORE the tool call."
+            hint = (
+                "Call sandbox_write_workspace_file(relative_path, content) in the SAME turn "
+                "BEFORE sandbox_run_python_file."
+            )
             return f"Error: {err_msg}\nHINT: {hint}"
         return f"Error: {err_msg}"
 
@@ -489,7 +575,9 @@ def sandbox_install_npm_packages(
 
 
 @mcp.tool()
-def sandbox_run_node_file(relative_path: str, extra_args: list[str] | None = None) -> str:
+def sandbox_run_node_file(
+    relative_path: str, extra_args: list[str] | None = None
+) -> str:
     """
     Run ``node <relative_path>`` with cwd = session root. Accepts only ``workspace/*.js`` (.mjs / .cjs).
     Use for **docx-js** skill. Install deps first with ``sandbox_install_npm_packages(packages=["docx"])``.

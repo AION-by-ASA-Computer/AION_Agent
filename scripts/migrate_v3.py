@@ -1,6 +1,7 @@
 import sqlite3
 import os
 
+
 def migrate():
     db_path = os.getenv("AION_DB_PATH", "data/aion.db")
     if not os.path.exists(db_path):
@@ -9,7 +10,7 @@ def migrate():
 
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     # Add trace_id to messages
     try:
         cursor.execute("ALTER TABLE messages ADD COLUMN trace_id TEXT;")
@@ -37,6 +38,7 @@ def migrate():
     conn.commit()
     conn.close()
     print("Migration V3 complete.")
+
 
 if __name__ == "__main__":
     migrate()

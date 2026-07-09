@@ -4,7 +4,7 @@
  */
 :root {
   --radius: 0.875rem;
-  --sidebar-w: 14rem;
+  --sidebar-w: 18rem;
   --dock-w: 420px;
   --dock-min-w: 280px;
   --dock-max-w: min(560px, 50vw);

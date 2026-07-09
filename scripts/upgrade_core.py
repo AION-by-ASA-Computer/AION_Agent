@@ -21,7 +21,9 @@ def _read_version() -> str:
     """Legge la versione dal file centralizzato version.json nella root del repo."""
     try:
         version_file = ROOT / "version.json"
-        return json.loads(version_file.read_text(encoding="utf-8")).get("version", "unknown")
+        return json.loads(version_file.read_text(encoding="utf-8")).get(
+            "version", "unknown"
+        )
     except Exception:
         return "unknown"
 
@@ -80,7 +82,9 @@ def _prune_junk_profile_files(*, dry_run: bool, report: Report) -> None:
             report.log_warn(f"Could not remove directory {path.name}: {exc}")
 
 
-def _ensure_skill_packages(py_exec: str, dry_run: bool, report: Report, *, force_mcp: bool) -> None:
+def _ensure_skill_packages(
+    py_exec: str, dry_run: bool, report: Report, *, force_mcp: bool
+) -> None:
     if not ENSURE_SKILL_PACKAGES.is_file():
         report.log_warn("ensure_skill_packages.py missing — skip skill sync")
         return
@@ -184,6 +188,34 @@ def _rewrite_env_key(env_path: Path, key: str, value: str) -> bool:
     return True
 
 
+def _remove_env_key(env_path: Path, key: str) -> bool:
+    """Drop KEY=... from .env (deprecated keys)."""
+    if not env_path.is_file():
+        return False
+    entries = _parse_env_simple(env_path)
+    out_lines: list[str] = []
+    seen: set[str] = set()
+    removed = False
+    for k, _, raw in entries:
+        if not k:
+            out_lines.append(raw)
+            continue
+        if k in seen:
+            continue
+        seen.add(k)
+        if k == key:
+            removed = True
+            continue
+        out_lines.append(raw)
+    if not removed:
+        return True
+    try:
+        env_path.write_text("\n".join(out_lines) + "\n", encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
 def _migrate_env_legacy_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
     """Migra le chiavi legacy del .env ai nomi moderni (AION_CHAT_*).
 
@@ -232,7 +264,9 @@ def _migrate_env_legacy_keys(env_path: Path, *, dry_run: bool, report: Report) -
             # Entrambe presenti: vince quella valorizzata (NEW di default se entrambe vuote o entrambe piene)
             if new_val == "" and old_val != "":
                 promote_value[new_k] = old_val
-                actions.append(f"MERGE  {new_k} era vuoto → copio valore da {old_k}, dropy {old_k}")
+                actions.append(
+                    f"MERGE  {new_k} era vuoto → copio valore da {old_k}, dropy {old_k}"
+                )
             else:
                 promote_value[new_k] = new_val
                 actions.append(f"DROP   {old_k} (entrambe presenti, {new_k} vince)")
@@ -269,11 +303,14 @@ def _migrate_env_legacy_keys(env_path: Path, *, dry_run: bool, report: Report) -
         print(f"  {line}")
 
     if dry_run:
-        report.log_ok(f"Migrate legacy env keys: {len(actions)} azioni (dry-run, nessuna scrittura)")
+        report.log_ok(
+            f"Migrate legacy env keys: {len(actions)} azioni (dry-run, nessuna scrittura)"
+        )
         return 0
 
     # Backup
     from datetime import datetime, timezone
+
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     bak = env_path.with_suffix(env_path.suffix + f".bak.{ts}")
     try:
@@ -295,7 +332,9 @@ def _migrate_env_legacy_keys(env_path: Path, *, dry_run: bool, report: Report) -
             pass
         return 4
 
-    report.log_ok(f"Migrate legacy env keys: {len(actions)} azioni applicate (backup: {bak.name})")
+    report.log_ok(
+        f"Migrate legacy env keys: {len(actions)} azioni applicate (backup: {bak.name})"
+    )
     return 0
 
 
@@ -319,7 +358,9 @@ def _rewrite_docker_data_path(value: str, *, host_default: str) -> str | None:
     return f"data/{suffix}" if suffix else host_default
 
 
-def _migrate_docker_data_paths_in_env(env_path: Path, *, dry_run: bool, report: Report) -> int:
+def _migrate_docker_data_paths_in_env(
+    env_path: Path, *, dry_run: bool, report: Report
+) -> int:
     """Rewrite /app/data/* paths in .env when upgrade runs outside Docker."""
     if Path("/.dockerenv").exists():
         report.log_ok("Migrate Docker data paths: inside container, skip")
@@ -536,9 +577,24 @@ _PLAN_MODE_ENV_DEFAULTS: dict[str, str] = {
     "AION_PLAN_MODE_TOOL_FIRST": "1",
     "AION_PLAN_TEXT_PARSER": "0",
     "AION_PLAN_FINALIZER_TIMEOUT_SEC": "20",
-    "AION_ARTIFACT_STRATEGY": "tool",
     "AION_ORCHESTRATION_SECRET_AUTH": "1",
 }
+
+# Tool-first runtime (prompt fragments, file preview, doom loop, vLLM tool args, LLM audit).
+_TOOL_RUNTIME_ENV_DEFAULTS: dict[str, str] = {
+    "AION_MODEL_PROMPT_FRAGMENTS": "1",
+    "AION_ARTIFACT_STREAM_LEGACY": "0",
+    "AION_STREAM_LOOP_V2": "1",
+    "AION_MODEL_TOOL_POLICY": "1",
+    "AION_DOOM_LOOP_THRESHOLD": "3",
+    "AION_DOOM_LOOP_ACTION": "reminder",
+    "AION_JSON_RECOVERY_ALLOW_EMPTY": "0",
+    "AION_VLLM_TOOLS_STRICT": "0",
+    "AION_VLLM_TOOL_ARG_TOKEN_FLOOR": "8192",
+    "AION_LLM_CALL_AUDIT": "0",
+}
+
+_DEPRECATED_ENV_REMOVE: tuple[str, ...] = ("AION_ARTIFACT_STRATEGY",)
 
 _DEEP_RESEARCH_ENV_DEFAULTS: dict[str, str] = {
     "AION_DEEP_RESEARCH_ENABLED": "1",
@@ -580,7 +636,9 @@ def _ensure_sandbox_env_keys(env_path: Path, *, dry_run: bool, report: Report) -
         report.log_ok("Sandbox env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"Sandbox env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"Sandbox env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- Session sandbox pip/npm (append da upgrade-aion) ---\n"
@@ -588,7 +646,10 @@ def _ensure_sandbox_env_keys(env_path: Path, *, dry_run: bool, report: Report) -
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"Sandbox env defaults: scrittura fallita: {e}")
         return 3
@@ -596,19 +657,25 @@ def _ensure_sandbox_env_keys(env_path: Path, *, dry_run: bool, report: Report) -
     return 0
 
 
-def _ensure_docker_compose_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+def _ensure_docker_compose_env_keys(
+    env_path: Path, *, dry_run: bool, report: Report
+) -> int:
     """Aggiunge chiavi usate da docker-compose.yml se assenti nel .env."""
     if not env_path.is_file():
         report.log_ok("Docker compose env defaults: .env assente, skip")
         return 0
     entries = _parse_env_simple(env_path)
     keys_file = {k for k, _, _ in entries if k}
-    missing = [(k, v) for k, v in _DOCKER_COMPOSE_ENV_DEFAULTS.items() if k not in keys_file]
+    missing = [
+        (k, v) for k, v in _DOCKER_COMPOSE_ENV_DEFAULTS.items() if k not in keys_file
+    ]
     if not missing:
         report.log_ok("Docker compose env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"Docker compose env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"Docker compose env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- Docker Compose / Caddy (append da upgrade-aion) ---\n"
@@ -616,7 +683,10 @@ def _ensure_docker_compose_env_keys(env_path: Path, *, dry_run: bool, report: Re
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"Docker compose env defaults: scrittura fallita: {e}")
         return 3
@@ -635,7 +705,9 @@ def _ensure_sql_qm_env_keys(env_path: Path, *, dry_run: bool, report: Report) ->
         report.log_ok("SQL QueryMemory env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"SQL QueryMemory env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"SQL QueryMemory env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- SQL QueryMemory (append da upgrade-aion): cache SELECT Postgres separata da PromQL ---\n"
@@ -643,7 +715,10 @@ def _ensure_sql_qm_env_keys(env_path: Path, *, dry_run: bool, report: Report) ->
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"SQL QueryMemory env defaults: scrittura fallita: {e}")
         return 3
@@ -654,7 +729,9 @@ def _ensure_sql_qm_env_keys(env_path: Path, *, dry_run: bool, report: Report) ->
 def _patch_sql_query_memory_config(py_exec: str, dry_run: bool, report: Report) -> None:
     patch_script = ROOT / "scripts" / "patch_sql_query_memory_config.py"
     if not patch_script.is_file():
-        report.log_warn("patch_sql_query_memory_config.py missing — skip profile/skill patch")
+        report.log_warn(
+            "patch_sql_query_memory_config.py missing — skip profile/skill patch"
+        )
         return
     if dry_run:
         report.log_ok("SQL QueryMemory config patch skipped in dry-run")
@@ -666,13 +743,17 @@ def _patch_sql_query_memory_config(py_exec: str, dry_run: bool, report: Report) 
         report.log_warn("SQL QueryMemory config patch exited non-zero")
 
 
-def _ensure_mempalace_nav_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+def _ensure_mempalace_nav_env_keys(
+    env_path: Path, *, dry_run: bool, report: Report
+) -> int:
     if not env_path.is_file():
         report.log_ok("MemPalace navigation env defaults: .env assente, skip")
         return 0
     entries = _parse_env_simple(env_path)
     keys_file = {k for k, _, _ in entries if k}
-    missing = [(k, v) for k, v in _MEMPALACE_NAV_ENV_DEFAULTS.items() if k not in keys_file]
+    missing = [
+        (k, v) for k, v in _MEMPALACE_NAV_ENV_DEFAULTS.items() if k not in keys_file
+    ]
     if not missing:
         report.log_ok("MemPalace navigation env defaults: chiavi già presenti")
         return 0
@@ -687,7 +768,10 @@ def _ensure_mempalace_nav_env_keys(env_path: Path, *, dry_run: bool, report: Rep
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"MemPalace navigation env defaults: scrittura fallita: {e}")
         return 3
@@ -706,7 +790,9 @@ def _ensure_mcp_pool_env_keys(env_path: Path, *, dry_run: bool, report: Report) 
         report.log_ok("MCP pool env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"MCP pool env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"MCP pool env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- MCP pool / startup warm (append da upgrade-aion) ---\n"
@@ -714,7 +800,10 @@ def _ensure_mcp_pool_env_keys(env_path: Path, *, dry_run: bool, report: Report) 
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"MCP pool env defaults: scrittura fallita: {e}")
         return 3
@@ -733,7 +822,9 @@ def _ensure_profile_env_keys(env_path: Path, *, dry_run: bool, report: Report) -
         report.log_ok("Profile env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"Profile env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"Profile env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- Profili P2 (append da upgrade-aion) ---\n"
@@ -741,7 +832,10 @@ def _ensure_profile_env_keys(env_path: Path, *, dry_run: bool, report: Report) -
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"Profile env defaults: scrittura fallita: {e}")
         return 3
@@ -749,13 +843,17 @@ def _ensure_profile_env_keys(env_path: Path, *, dry_run: bool, report: Report) -
     return 0
 
 
-def _ensure_skill_lifecycle_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+def _ensure_skill_lifecycle_env_keys(
+    env_path: Path, *, dry_run: bool, report: Report
+) -> int:
     if not env_path.is_file():
         report.log_ok("Skill lifecycle env defaults: .env assente, skip")
         return 0
     entries = _parse_env_simple(env_path)
     keys_file = {k for k, _, _ in entries if k}
-    missing = [(k, v) for k, v in _SKILL_LIFECYCLE_ENV_DEFAULTS.items() if k not in keys_file]
+    missing = [
+        (k, v) for k, v in _SKILL_LIFECYCLE_ENV_DEFAULTS.items() if k not in keys_file
+    ]
     if not missing:
         report.log_ok("Skill lifecycle env defaults: chiavi già presenti")
         return 0
@@ -770,7 +868,10 @@ def _ensure_skill_lifecycle_env_keys(env_path: Path, *, dry_run: bool, report: R
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"Skill lifecycle env defaults: scrittura fallita: {e}")
         return 3
@@ -778,18 +879,24 @@ def _ensure_skill_lifecycle_env_keys(env_path: Path, *, dry_run: bool, report: R
     return 0
 
 
-def _ensure_skill_view_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+def _ensure_skill_view_env_keys(
+    env_path: Path, *, dry_run: bool, report: Report
+) -> int:
     if not env_path.is_file():
         report.log_ok("skill_view env defaults: .env assente, skip")
         return 0
     entries = _parse_env_simple(env_path)
     keys_file = {k for k, _, _ in entries if k}
-    missing = [(k, v) for k, v in _SKILL_VIEW_ENV_DEFAULTS.items() if k not in keys_file]
+    missing = [
+        (k, v) for k, v in _SKILL_VIEW_ENV_DEFAULTS.items() if k not in keys_file
+    ]
     if not missing:
         report.log_ok("skill_view env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"skill_view env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"skill_view env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- skills_hub profile allowlist (append da upgrade-aion) ---\n"
@@ -797,7 +904,10 @@ def _ensure_skill_view_env_keys(env_path: Path, *, dry_run: bool, report: Report
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"skill_view env defaults: scrittura fallita: {e}")
         return 3
@@ -805,10 +915,14 @@ def _ensure_skill_view_env_keys(env_path: Path, *, dry_run: bool, report: Report
     return 0
 
 
-def _patch_mempalace_navigation_config(py_exec: str, dry_run: bool, report: Report) -> None:
+def _patch_mempalace_navigation_config(
+    py_exec: str, dry_run: bool, report: Report
+) -> None:
     patch_script = ROOT / "scripts" / "patch_mempalace_navigation_config.py"
     if not patch_script.is_file():
-        report.log_warn("patch_mempalace_navigation_config.py missing — skip MemPalace nav patch")
+        report.log_warn(
+            "patch_mempalace_navigation_config.py missing — skip MemPalace nav patch"
+        )
         return
     if dry_run:
         report.log_ok("MemPalace navigation config patch skipped in dry-run")
@@ -820,13 +934,17 @@ def _patch_mempalace_navigation_config(py_exec: str, dry_run: bool, report: Repo
         report.log_warn("MemPalace navigation config patch exited non-zero")
 
 
-def _ensure_context_compress_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+def _ensure_context_compress_env_keys(
+    env_path: Path, *, dry_run: bool, report: Report
+) -> int:
     if not env_path.is_file():
         report.log_ok("Context compress env defaults: .env assente, skip")
         return 0
     entries = _parse_env_simple(env_path)
     keys_file = {k for k, _, _ in entries if k}
-    missing = [(k, v) for k, v in _CONTEXT_COMPRESS_ENV_DEFAULTS.items() if k not in keys_file]
+    missing = [
+        (k, v) for k, v in _CONTEXT_COMPRESS_ENV_DEFAULTS.items() if k not in keys_file
+    ]
     if not missing:
         report.log_ok("Context compress env defaults: chiavi già presenti")
         return 0
@@ -841,7 +959,10 @@ def _ensure_context_compress_env_keys(env_path: Path, *, dry_run: bool, report: 
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"Context compress env defaults: scrittura fallita: {e}")
         return 3
@@ -860,7 +981,9 @@ def _ensure_cron_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> i
         report.log_ok("Cron env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"Cron env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"Cron env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- Scheduled jobs (append da upgrade-aion): per-user cron in-process ---\n"
@@ -868,11 +991,60 @@ def _ensure_cron_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> i
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"Cron env defaults: scrittura fallita: {e}")
         return 3
     report.log_ok(f"Cron env defaults: aggiunte {len(missing)} chiavi")
+    return 0
+
+
+def _remove_deprecated_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> None:
+    """Drop env keys removed from the product (no rename target)."""
+    if not env_path.is_file():
+        return
+    entries = _parse_env_simple(env_path)
+    present = {k for k, _, _ in entries if k}
+    for dep in _DEPRECATED_ENV_REMOVE:
+        if dep not in present:
+            continue
+        if dry_run:
+            report.log_ok(f"Deprecated env: would remove {dep}")
+        elif _remove_env_key(env_path, dep):
+            report.log_ok(f"Deprecated env: removed {dep}")
+        else:
+            report.log_fail(f"Deprecated env: failed to remove {dep} from .env")
+
+
+def _ensure_tool_runtime_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+    """Tool-first delivery, vLLM tool-arg floor, doom loop, LLM call audit defaults."""
+    if not env_path.is_file():
+        report.log_ok("Tool runtime env defaults: .env assente, skip")
+        return 0
+    _remove_deprecated_env_keys(env_path, dry_run=dry_run, report=report)
+    entries = _parse_env_simple(env_path)
+    keys_file = {k for k, _, _ in entries if k}
+    missing = [(k, v) for k, v in _TOOL_RUNTIME_ENV_DEFAULTS.items() if k not in keys_file]
+    if not missing:
+        report.log_ok("Tool runtime env defaults: chiavi già presenti")
+        return 0
+    if dry_run:
+        report.log_ok(f"Tool runtime env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        return 0
+    block = (
+        "\n# --- Tool-first runtime (append da upgrade-aion): file tools, vLLM, doom loop, LLM audit ---\n"
+        + "\n".join(f"{k}={v}" for k, v in missing)
+        + "\n"
+    )
+    try:
+        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+    except Exception as e:
+        report.log_fail(f"Tool runtime env defaults: scrittura fallita: {e}")
+        return 3
+    report.log_ok(f"Tool runtime env defaults: aggiunte {len(missing)} chiavi")
     return 0
 
 
@@ -883,19 +1055,13 @@ def _ensure_plan_mode_env_keys(env_path: Path, *, dry_run: bool, report: Report)
     entries = _parse_env_simple(env_path)
     keys_file = {k for k, _, _ in entries if k}
     missing = [(k, v) for k, v in _PLAN_MODE_ENV_DEFAULTS.items() if k not in keys_file]
-    for k, v, _ in entries:
-        if k == "AION_ARTIFACT_STRATEGY" and (v or "").strip().lower() in ("plan", "markdown"):
-            if dry_run:
-                report.log_ok("Plan mode: would set AION_ARTIFACT_STRATEGY=xml (was legacy)")
-            elif _rewrite_env_key(env_path, "AION_ARTIFACT_STRATEGY", "xml"):
-                report.log_ok("Plan mode: upgraded AION_ARTIFACT_STRATEGY to xml")
-            else:
-                report.log_fail("Plan mode: failed to rewrite AION_ARTIFACT_STRATEGY in .env")
     if not missing:
         report.log_ok("Plan mode env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"Plan mode env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"Plan mode env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- Plan mode tool-first (append da upgrade-aion) ---\n"
@@ -903,7 +1069,10 @@ def _ensure_plan_mode_env_keys(env_path: Path, *, dry_run: bool, report: Report)
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"Plan mode env defaults: scrittura fallita: {e}")
         return 3
@@ -923,18 +1092,24 @@ def _warn_public_orchestration_secret(env_path: Path, *, report: Report) -> None
             return
 
 
-def _ensure_agent_mode_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+def _ensure_agent_mode_env_keys(
+    env_path: Path, *, dry_run: bool, report: Report
+) -> int:
     if not env_path.is_file():
         report.log_ok("Agent mode env defaults: .env assente, skip")
         return 0
     entries = _parse_env_simple(env_path)
     keys_file = {k for k, _, _ in entries if k}
-    missing = [(k, v) for k, v in _AGENT_MODE_ENV_DEFAULTS.items() if k not in keys_file]
+    missing = [
+        (k, v) for k, v in _AGENT_MODE_ENV_DEFAULTS.items() if k not in keys_file
+    ]
     if not missing:
         report.log_ok("Agent mode env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"Agent mode env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"Agent mode env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- Agent mode (append da upgrade-aion): modalità default agent e tool bloccati in plan mode ---\n"
@@ -942,7 +1117,10 @@ def _ensure_agent_mode_env_keys(env_path: Path, *, dry_run: bool, report: Report
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"Agent mode env defaults: scrittura fallita: {e}")
         return 3
@@ -950,18 +1128,24 @@ def _ensure_agent_mode_env_keys(env_path: Path, *, dry_run: bool, report: Report
     return 0
 
 
-def _ensure_deep_research_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+def _ensure_deep_research_env_keys(
+    env_path: Path, *, dry_run: bool, report: Report
+) -> int:
     if not env_path.is_file():
         report.log_ok("Deep research env defaults: .env assente, skip")
         return 0
     entries = _parse_env_simple(env_path)
     keys_file = {k for k, _, _ in entries if k}
-    missing = [(k, v) for k, v in _DEEP_RESEARCH_ENV_DEFAULTS.items() if k not in keys_file]
+    missing = [
+        (k, v) for k, v in _DEEP_RESEARCH_ENV_DEFAULTS.items() if k not in keys_file
+    ]
     if not missing:
         report.log_ok("Deep research env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"Deep research env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"Deep research env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- Deep research (append da upgrade-aion): IterResearch, report HTML, tool trigger_research ---\n"
@@ -969,7 +1153,10 @@ def _ensure_deep_research_env_keys(env_path: Path, *, dry_run: bool, report: Rep
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"Deep research env defaults: scrittura fallita: {e}")
         return 3
@@ -977,18 +1164,24 @@ def _ensure_deep_research_env_keys(env_path: Path, *, dry_run: bool, report: Rep
     return 0
 
 
-def _ensure_web_search_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+def _ensure_web_search_env_keys(
+    env_path: Path, *, dry_run: bool, report: Report
+) -> int:
     if not env_path.is_file():
         report.log_ok("Web search env defaults: .env assente, skip")
         return 0
     entries = _parse_env_simple(env_path)
     keys_file = {k for k, _, _ in entries if k}
-    missing = [(k, v) for k, v in _WEB_SEARCH_ENV_DEFAULTS.items() if k not in keys_file]
+    missing = [
+        (k, v) for k, v in _WEB_SEARCH_ENV_DEFAULTS.items() if k not in keys_file
+    ]
     if not missing:
         report.log_ok("Web search env defaults: chiavi già presenti")
         return 0
     if dry_run:
-        report.log_ok(f"Web search env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        report.log_ok(
+            f"Web search env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
         return 0
     block = (
         "\n# --- Web search (append da upgrade-aion): provider, fetch, allowlist org "
@@ -997,7 +1190,10 @@ def _ensure_web_search_env_keys(env_path: Path, *, dry_run: bool, report: Report
         + "\n"
     )
     try:
-        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
     except Exception as e:
         report.log_fail(f"Web search env defaults: scrittura fallita: {e}")
         return 3
@@ -1066,14 +1262,22 @@ class LockManager:
             age = max(0, int(time.time()) - started) if started else self.stale_sec + 1
             stale = (not self._pid_alive(pid)) and age >= self.stale_sec
             if stale and not self.yes and sys.stdin.isatty():
-                ans = input(f"Stale lock detected ({self.lock_path}). Reclaim? [y/N] ").strip().lower()
+                ans = (
+                    input(f"Stale lock detected ({self.lock_path}). Reclaim? [y/N] ")
+                    .strip()
+                    .lower()
+                )
                 if ans not in ("y", "yes"):
                     raise SystemExit(2)
             elif not stale:
                 raise SystemExit(f"Lock active: {self.lock_path}")
             self.lock_path.unlink(missing_ok=True)
 
-        payload = {"pid": os.getpid(), "hostname": socket.gethostname(), "started_at": int(time.time())}
+        payload = {
+            "pid": os.getpid(),
+            "hostname": socket.gethostname(),
+            "started_at": int(time.time()),
+        }
         self.lock_path.write_text(json.dumps(payload), encoding="utf-8")
 
     def release(self) -> None:
@@ -1106,7 +1310,14 @@ def _docker_upgrade(args, report: Report) -> int:
     docker_env = _docker_client_env(env_file if env_file.is_file() else None)
 
     if not args.skip_backup and not args.dry_run:
-        rc = _run([sys.executable, str(ROOT / "scripts/aion_backup.py"), "--output", args.backup_dir])
+        rc = _run(
+            [
+                sys.executable,
+                str(ROOT / "scripts/aion_backup.py"),
+                "--output",
+                args.backup_dir,
+            ]
+        )
         if rc != 0:
             report.log_fail("Backup snapshot (docker mode)")
             return rc
@@ -1115,50 +1326,78 @@ def _docker_upgrade(args, report: Report) -> int:
         report.log_warn("Backup skipped by flag")
 
     # Migrazione legacy AION_CHAINLIT_* → AION_CHAT_* prima di sync_config/check.
-    rc = _migrate_env_legacy_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _migrate_env_legacy_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _migrate_docker_data_paths_in_env(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _migrate_docker_data_paths_in_env(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _ensure_web_search_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_web_search_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _ensure_context_compress_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_context_compress_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _ensure_mcp_pool_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_mcp_pool_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _ensure_profile_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_profile_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _ensure_sql_qm_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_sql_qm_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _ensure_mempalace_nav_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_mempalace_nav_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _ensure_skill_lifecycle_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_skill_lifecycle_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _ensure_agent_mode_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_agent_mode_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _ensure_plan_mode_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_plan_mode_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
     _warn_public_orchestration_secret(Path(args.env_file), report=report)
-    rc = _ensure_deep_research_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_deep_research_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
     rc = _ensure_cron_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
     if rc != 0:
         return rc
-    rc = _ensure_sandbox_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_sandbox_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
-    rc = _ensure_docker_compose_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+    rc = _ensure_docker_compose_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
     if rc != 0:
         return rc
 
@@ -1206,10 +1445,17 @@ def _docker_upgrade(args, report: Report) -> int:
     if rc != 0:
         report.log_fail("docker compose build")
         return rc
-    report.log_ok("docker compose build (DOCKER_BUILDKIT=%s)" % docker_env.get("DOCKER_BUILDKIT", "1"))
+    report.log_ok(
+        "docker compose build (DOCKER_BUILDKIT=%s)"
+        % docker_env.get("DOCKER_BUILDKIT", "1")
+    )
 
     # Restart con recreate (gestisce config drift)
-    rc = _run(compose_cmd + ["up", "-d", "--remove-orphans"], dry_run=args.dry_run, env=docker_env)
+    rc = _run(
+        compose_cmd + ["up", "-d", "--remove-orphans"],
+        dry_run=args.dry_run,
+        env=docker_env,
+    )
     if rc != 0:
         report.log_fail("docker compose up -d")
         return rc
@@ -1293,7 +1539,9 @@ def main() -> int:
 
     if args.docker:
         report = Report()
-        lock = LockManager(ROOT / "data" / ".upgrade.lock", args.stale_lock_sec, args.yes)
+        lock = LockManager(
+            ROOT / "data" / ".upgrade.lock", args.stale_lock_sec, args.yes
+        )
         lock.acquire()
         try:
             return _docker_upgrade(args, report)
@@ -1327,7 +1575,15 @@ def main() -> int:
         report.log_ok("Preflight checks")
 
         if not args.skip_backup:
-            rc = _run([py_exec, str(ROOT / "scripts/aion_backup.py"), "--output", args.backup_dir], dry_run=args.dry_run)
+            rc = _run(
+                [
+                    py_exec,
+                    str(ROOT / "scripts/aion_backup.py"),
+                    "--output",
+                    args.backup_dir,
+                ],
+                dry_run=args.dry_run,
+            )
             if rc != 0:
                 report.log_fail("Backup snapshot")
                 return rc
@@ -1337,53 +1593,85 @@ def main() -> int:
 
         # Migrazione chiavi env legacy (AION_CHAINLIT_* → AION_CHAT_*).
         # Eseguita PRIMA di setup_core.py cosi' il setup vede i nomi nuovi.
-        rc = _migrate_env_legacy_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _migrate_env_legacy_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _migrate_docker_data_paths_in_env(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _migrate_docker_data_paths_in_env(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_web_search_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_web_search_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_context_compress_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_context_compress_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_mcp_pool_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_mcp_pool_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_profile_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_profile_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_sql_qm_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_sql_qm_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_mempalace_nav_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_mempalace_nav_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_skill_view_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_skill_view_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_skill_lifecycle_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_skill_lifecycle_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_agent_mode_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_agent_mode_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_plan_mode_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_plan_mode_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
         _warn_public_orchestration_secret(Path(args.env_file), report=report)
-        rc = _ensure_deep_research_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_deep_research_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_cron_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_cron_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_sandbox_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_sandbox_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
-        rc = _ensure_docker_compose_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
+        rc = _ensure_docker_compose_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
         if rc != 0:
             return rc
 
@@ -1407,9 +1695,16 @@ def main() -> int:
                 extras_cmd.append("--skip-promo-playwright")
             rc = _run(extras_cmd, dry_run=args.dry_run)
             if rc != 0:
-                report.log_warn("Runtime extras (fs policy / promo Playwright) exited non-zero")
+                report.log_warn(
+                    "Runtime extras (fs policy / promo Playwright) exited non-zero"
+                )
 
-        setup_cmd = [py_exec, str(ROOT / "scripts/setup_core.py"), "--output", args.env_file]
+        setup_cmd = [
+            py_exec,
+            str(ROOT / "scripts/setup_core.py"),
+            "--output",
+            args.env_file,
+        ]
         if args.dry_run:
             setup_cmd.append("--dry-run")
         if args.interactive:
@@ -1423,7 +1718,9 @@ def main() -> int:
         report.log_ok("Upgrade env")
         _prune_junk_profile_files(dry_run=args.dry_run, report=report)
 
-        rc = _run([py_exec, str(ROOT / "scripts/init_unified_db.py")], dry_run=args.dry_run)
+        rc = _run(
+            [py_exec, str(ROOT / "scripts/init_unified_db.py")], dry_run=args.dry_run
+        )
         if rc != 0:
             report.log_fail("Init unified DB + alembic + timeline backfill")
             return rc
@@ -1432,9 +1729,14 @@ def main() -> int:
         _warmup_chroma_embeddings(py_exec, dry_run=args.dry_run, report=report)
 
         if not args.dry_run:
-            rc = _run([py_exec, str(ROOT / "scripts/seed_mcp_integration_configs.py")], dry_run=False)
+            rc = _run(
+                [py_exec, str(ROOT / "scripts/seed_mcp_integration_configs.py")],
+                dry_run=False,
+            )
             if rc != 0:
-                report.log_warn("seed_mcp_integration_configs.py exited non-zero (optional)")
+                report.log_warn(
+                    "seed_mcp_integration_configs.py exited non-zero (optional)"
+                )
             else:
                 report.log_ok("Seed MCP integration configs (idempotent)")
 
@@ -1459,13 +1761,19 @@ def main() -> int:
                 if args.with_destructive:
                     allowed = args.destructive_token == "UNIFY"
                     if not allowed and not args.yes and sys.stdin.isatty():
-                        print("Destructive operation requested: unify_memory.py may remove legacy DB files.")
+                        print(
+                            "Destructive operation requested: unify_memory.py may remove legacy DB files."
+                        )
                         typed = input("Type UNIFY to continue: ").strip()
                         allowed = typed == "UNIFY"
                     if not allowed:
-                        report.log_fail("Destructive token missing/invalid (expected UNIFY)")
+                        report.log_fail(
+                            "Destructive token missing/invalid (expected UNIFY)"
+                        )
                         return 2
-                    if not _confirm("Confirm destructive migration execution?", args.yes):
+                    if not _confirm(
+                        "Confirm destructive migration execution?", args.yes
+                    ):
                         report.log_warn("Destructive migration cancelled by user")
                     else:
                         rc = _run([py_exec, str(ROOT / "scripts/unify_memory.py")])
@@ -1517,7 +1825,9 @@ def main() -> int:
         )
         print("  ./scripts/setup_promo_playwright.sh        # promo PNG (if skipped)")
         print("  # Exec policy dev: ./scripts/upgrade-aion.sh --enable-fs-policy-dev")
-        print("  # (Docker)  ./scripts/upgrade-aion.sh --docker  # DOCKER_BUILDKIT=1 + uv build args")
+        print(
+            "  # (Docker)  ./scripts/upgrade-aion.sh --docker  # DOCKER_BUILDKIT=1 + uv build args"
+        )
         return 0
     finally:
         lock.release()

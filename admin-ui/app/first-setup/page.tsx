@@ -17,10 +17,31 @@ import {
   AlertTriangle,
   Info,
   Lock,
+  Cloud,
+  ScanLine,
 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { fetchAuthStatus } from "@/lib/auth/status";
+import {
+  embeddingProviderToProbeProvider,
+  embeddingServiceUrlFromProbeBase,
+  filterModelsForKind,
+  formatModelDisplayName,
+  hintForModel,
+  LlmProbeResponse,
+  modelIdsFromProbe,
+  pickDefaultModel,
+  probeBaseUrlFromOcrServiceUrl,
+  probeBaseUrlFromServiceUrl,
+  providerNeedsBaseUrl,
+  providerSupportsProbe,
+  runModelProbe,
+  slugFromModelId,
+  validateMaxChatTokens,
+} from "@/lib/llm-probe";
+
+type OcrMode = "remote" | "local";
 
 type Step = "llm" | "embeddings" | "ocr" | "search" | "policy" | "review";
 
@@ -34,10 +55,10 @@ export default function FirstSetupPage() {
 
   // --- Step 1: LLM Provider State ---
   const [llmForm, setLlmForm] = useState({
-    slug: "default-openai",
-    display_name: "OpenAI GPT-4o",
+    slug: "default-llm",
+    display_name: "Default LLM",
     provider: "openai",
-    model_name: "gpt-4o",
+    model_name: "",
     api_base_url: "",
     api_key: "",
     timeout: 120,
@@ -45,15 +66,27 @@ export default function FirstSetupPage() {
     thinking_token_budget: 12000,
   });
   const [showLlmKey, setShowLlmKey] = useState(false);
+  const [llmProbing, setLlmProbing] = useState(false);
+  const [llmProbeResult, setLlmProbeResult] = useState<LlmProbeResponse | null>(null);
+  const [llmProbeLatencyMs, setLlmProbeLatencyMs] = useState<number | null>(null);
+  const [llmConnectionTested, setLlmConnectionTested] = useState(false);
+  const [llmDiscoveredModelIds, setLlmDiscoveredModelIds] = useState<string[]>([]);
+  const [llmManualModelEntry, setLlmManualModelEntry] = useState(false);
 
   // --- Step 2: Embeddings State ---
   const [embForm, setEmbForm] = useState({
     provider: "openai",
-    model: "text-embedding-3-small",
+    model: "",
     url: "",
     api_key: "",
   });
   const [showEmbKey, setShowEmbKey] = useState(false);
+  const [embProbing, setEmbProbing] = useState(false);
+  const [embProbeResult, setEmbProbeResult] = useState<LlmProbeResponse | null>(null);
+  const [embProbeLatencyMs, setEmbProbeLatencyMs] = useState<number | null>(null);
+  const [embConnectionTested, setEmbConnectionTested] = useState(false);
+  const [embDiscoveredModelIds, setEmbDiscoveredModelIds] = useState<string[]>([]);
+  const [embManualModelEntry, setEmbManualModelEntry] = useState(false);
 
   // --- Step 3: OCR State ---
   const [ocrForm, setOcrForm] = useState({
@@ -64,8 +97,14 @@ export default function FirstSetupPage() {
     timeout: 120,
     max_image_bytes: 20971520,
   });
+  const [ocrMode, setOcrMode] = useState<OcrMode>("local");
   const [showOcrKey, setShowOcrKey] = useState(false);
-  const [ocrEnabled, setOcrEnabled] = useState(false);
+  const [ocrProbing, setOcrProbing] = useState(false);
+  const [ocrProbeResult, setOcrProbeResult] = useState<LlmProbeResponse | null>(null);
+  const [ocrProbeLatencyMs, setOcrProbeLatencyMs] = useState<number | null>(null);
+  const [ocrConnectionTested, setOcrConnectionTested] = useState(false);
+  const [ocrDiscoveredModelIds, setOcrDiscoveredModelIds] = useState<string[]>([]);
+  const [ocrManualModelEntry, setOcrManualModelEntry] = useState(false);
 
   // --- Step 4: Web Search State ---
   const [searchForm, setSearchForm] = useState({
@@ -115,52 +154,254 @@ export default function FirstSetupPage() {
     }
   };
 
+  const resetLlmProbeState = () => {
+    setLlmProbeResult(null);
+    setLlmProbeLatencyMs(null);
+    setLlmConnectionTested(false);
+    setLlmDiscoveredModelIds([]);
+    setLlmManualModelEntry(false);
+    setLlmForm((prev) => ({ ...prev, model_name: "" }));
+  };
+
+  const resetEmbProbeState = () => {
+    setEmbProbeResult(null);
+    setEmbProbeLatencyMs(null);
+    setEmbConnectionTested(false);
+    setEmbDiscoveredModelIds([]);
+    setEmbManualModelEntry(false);
+    setEmbForm((prev) => ({ ...prev, model: "" }));
+  };
+
+  const applyLlmModelSelection = (modelId: string, result: LlmProbeResponse | null) => {
+    const hint = hintForModel(result, modelId);
+    setLlmForm((prev) => ({
+      ...prev,
+      model_name: modelId,
+      display_name: formatModelDisplayName(modelId),
+      slug: slugFromModelId(modelId, prev.provider === "vllm" ? "local" : "default"),
+      max_chat_tokens: hint?.suggested_max_chat_tokens ?? prev.max_chat_tokens,
+    }));
+  };
+
   const handleLlmProviderChange = (provider: string) => {
-    let defaults = {
-      slug: "default-openai",
-      display_name: "OpenAI GPT-4o",
-      model_name: "gpt-4o",
-      max_chat_tokens: 8192,
-      thinking_token_budget: 12000,
+    const providerLabels: Record<string, { slug: string; display_name: string }> = {
+      openai: { slug: "default-llm", display_name: "Default LLM" },
+      anthropic: { slug: "default-llm", display_name: "Default LLM" },
+      gemini: { slug: "default-llm", display_name: "Default LLM" },
+      ollama: { slug: "local-ollama", display_name: "Ollama LLM" },
+      vllm: { slug: "local-vllm", display_name: "vLLM Model" },
     };
-    if (provider === "anthropic") {
-      defaults = {
-        slug: "default-anthropic",
-        display_name: "Anthropic Claude 3.5 Sonnet",
-        model_name: "claude-3-5-sonnet-20241022",
-        max_chat_tokens: 16384,
-        thinking_token_budget: 8192,
-      };
-    } else if (provider === "gemini") {
-      defaults = {
-        slug: "default-gemini",
-        display_name: "Google Gemini 1.5 Pro",
-        model_name: "gemini-1.5-pro",
-        max_chat_tokens: 8192,
-        thinking_token_budget: 0,
-      };
-    } else if (provider === "ollama") {
-      defaults = {
-        slug: "local-ollama",
-        display_name: "Ollama Llama 3",
-        model_name: "llama3",
-        max_chat_tokens: 4096,
-        thinking_token_budget: 0,
-      };
-    } else if (provider === "vllm") {
-      defaults = {
-        slug: "local-vllm",
-        display_name: "vLLM Model",
-        model_name: "meta-llama/Meta-Llama-3-8B-Instruct",
-        max_chat_tokens: 16384,
-        thinking_token_budget: 8192,
-      };
-    }
+    const meta = providerLabels[provider] ?? providerLabels.openai;
     setLlmForm((prev) => ({
       ...prev,
       provider,
-      ...defaults,
+      slug: meta.slug,
+      display_name: meta.display_name,
+      model_name: "",
+      max_chat_tokens: provider === "ollama" ? 4096 : 8192,
+      thinking_token_budget: provider === "gemini" || provider === "ollama" ? 0 : 12000,
     }));
+    resetLlmProbeState();
+  };
+
+  const handleEmbProviderChange = (provider: string) => {
+    setEmbForm((prev) => ({
+      ...prev,
+      provider,
+      model: "",
+      url: "",
+    }));
+    resetEmbProbeState();
+  };
+
+  const probeLlmConnection = async (): Promise<boolean> => {
+    if (providerNeedsBaseUrl(llmForm.provider) && !llmForm.api_base_url.trim()) {
+      setError("API Base URL is required for this provider.");
+      return false;
+    }
+    if (llmForm.provider !== "ollama" && !llmForm.api_key.trim()) {
+      setError("API Key is required to test the connection.");
+      return false;
+    }
+
+    setLlmProbing(true);
+    setError(null);
+    setLlmProbeLatencyMs(null);
+    try {
+      const result = await runModelProbe(apiFetch, apiBase(), {
+        provider: llmForm.provider,
+        api_base_url: llmForm.api_base_url.trim() || null,
+        api_key: llmForm.api_key.trim() || null,
+      });
+      const allIds = modelIdsFromProbe(result);
+      const chatIds = filterModelsForKind(allIds, "chat");
+      setLlmProbeResult(result);
+      setLlmDiscoveredModelIds(chatIds);
+      setLlmConnectionTested(true);
+      setLlmProbeLatencyMs(result.latency_ms);
+      setLlmForm((prev) => ({
+        ...prev,
+        api_base_url: result.base_url || prev.api_base_url,
+      }));
+
+      if (chatIds.length > 0) {
+        setLlmManualModelEntry(false);
+        applyLlmModelSelection(pickDefaultModel(allIds, "chat"), result);
+      } else {
+        setLlmManualModelEntry(true);
+        setLlmForm((prev) => ({ ...prev, model_name: "" }));
+      }
+
+      if (result.warning) {
+        setError(result.warning);
+      }
+      return true;
+    } catch (err: any) {
+      resetLlmProbeState();
+      setError(err.message || "Connection test failed.");
+      return false;
+    } finally {
+      setLlmProbing(false);
+    }
+  };
+
+  const probeEmbConnection = async (): Promise<boolean> => {
+    const probeBase = probeBaseUrlFromServiceUrl(embForm.url);
+    if (!probeBase) {
+      setError("Embedding service URL is required to test the connection.");
+      return false;
+    }
+    if (embForm.provider !== "google" && !embForm.api_key.trim()) {
+      setError("API Key is required to test the connection.");
+      return false;
+    }
+
+    setEmbProbing(true);
+    setError(null);
+    setEmbProbeLatencyMs(null);
+    try {
+      const result = await runModelProbe(apiFetch, apiBase(), {
+        provider: embeddingProviderToProbeProvider(embForm.provider),
+        api_base_url: probeBase,
+        api_key: embForm.api_key.trim() || null,
+      });
+      const allIds = modelIdsFromProbe(result);
+      const embIds = filterModelsForKind(allIds, "embedding");
+      setEmbProbeResult(result);
+      setEmbDiscoveredModelIds(embIds);
+      setEmbConnectionTested(true);
+      setEmbProbeLatencyMs(result.latency_ms);
+      setEmbForm((prev) => ({
+        ...prev,
+        url: embeddingServiceUrlFromProbeBase(result.base_url || probeBase),
+      }));
+
+      if (embIds.length > 0) {
+        setEmbManualModelEntry(false);
+        setEmbForm((prev) => ({
+          ...prev,
+          model: pickDefaultModel(allIds, "embedding"),
+        }));
+      } else {
+        setEmbManualModelEntry(true);
+        setEmbForm((prev) => ({ ...prev, model: "" }));
+      }
+
+      if (result.warning) {
+        setError(result.warning);
+      }
+      return true;
+    } catch (err: any) {
+      resetEmbProbeState();
+      setError(err.message || "Connection test failed.");
+      return false;
+    } finally {
+      setEmbProbing(false);
+    }
+  };
+
+  const resetOcrProbeState = () => {
+    setOcrProbeResult(null);
+    setOcrProbeLatencyMs(null);
+    setOcrConnectionTested(false);
+    setOcrDiscoveredModelIds([]);
+    setOcrManualModelEntry(false);
+    setOcrForm((prev) => ({ ...prev, model: "" }));
+  };
+
+  const handleOcrModeChange = (mode: OcrMode) => {
+    setOcrMode(mode);
+    resetOcrProbeState();
+    if (mode === "local") {
+      setOcrForm((prev) => ({
+        ...prev,
+        base_url: "",
+        model: "",
+        api_key: "",
+      }));
+    }
+  };
+
+  const probeOcrConnection = async (): Promise<boolean> => {
+    const probeBase = probeBaseUrlFromOcrServiceUrl(ocrForm.base_url);
+    if (!probeBase) {
+      setError("OCR service base URL is required to test the connection.");
+      return false;
+    }
+    if (!probeBase.startsWith("http://") && !probeBase.startsWith("https://")) {
+      setError("OCR service URL must start with http:// or https://");
+      return false;
+    }
+    const apiKey = ocrForm.api_key.trim();
+    if (!apiKey || apiKey === "EMPTY") {
+      setError(
+        "A non-empty API token is required for remote vision OCR (use any placeholder if the server has no auth — do not use EMPTY).",
+      );
+      return false;
+    }
+
+    setOcrProbing(true);
+    setError(null);
+    setOcrProbeLatencyMs(null);
+    try {
+      const result = await runModelProbe(apiFetch, apiBase(), {
+        provider: "vllm",
+        api_base_url: probeBase,
+        api_key: apiKey,
+      });
+      const allIds = modelIdsFromProbe(result);
+      const ocrIds = filterModelsForKind(allIds, "ocr");
+      setOcrProbeResult(result);
+      setOcrDiscoveredModelIds(ocrIds);
+      setOcrConnectionTested(true);
+      setOcrProbeLatencyMs(result.latency_ms);
+      setOcrForm((prev) => ({
+        ...prev,
+        base_url: result.base_url || probeBase,
+      }));
+
+      if (ocrIds.length > 0) {
+        setOcrManualModelEntry(false);
+        setOcrForm((prev) => ({
+          ...prev,
+          model: pickDefaultModel(allIds, "ocr"),
+        }));
+      } else {
+        setOcrManualModelEntry(true);
+        setOcrForm((prev) => ({ ...prev, model: "" }));
+      }
+
+      if (result.warning) {
+        setError(result.warning);
+      }
+      return true;
+    } catch (err: any) {
+      resetOcrProbeState();
+      setError(err.message || "OCR connection test failed.");
+      return false;
+    } finally {
+      setOcrProbing(false);
+    }
   };
 
   // --- Sequential Saving Flow ---
@@ -215,13 +456,13 @@ export default function FirstSetupPage() {
           AION_EMBEDDING_MODEL: embForm.model,
           AION_EMBEDDING_URL: embForm.url,
           AION_EMBEDDINGS_API_KEY: embForm.api_key,
-          // OCR
-          AION_OCR_BASE_URL: ocrEnabled ? ocrForm.base_url : "",
-          AION_OCR_MODEL: ocrEnabled ? ocrForm.model : "",
-          AION_OCR_API_KEY: ocrEnabled ? ocrForm.api_key : "",
-          AION_OCR_MAX_TOKENS: ocrEnabled ? String(ocrForm.max_tokens) : "",
-          AION_OCR_TIMEOUT: ocrEnabled ? String(ocrForm.timeout) : "",
-          AION_OCR_MAX_IMAGE_BYTES: ocrEnabled ? String(ocrForm.max_image_bytes) : "",
+          // OCR — remote vision server only; local mode clears env (MCP uses pymupdf/tesseract)
+          AION_OCR_BASE_URL: ocrMode === "remote" ? ocrForm.base_url : "",
+          AION_OCR_MODEL: ocrMode === "remote" ? ocrForm.model : "",
+          AION_OCR_API_KEY: ocrMode === "remote" ? ocrForm.api_key : "",
+          AION_OCR_MAX_TOKENS: ocrMode === "remote" ? String(ocrForm.max_tokens) : "",
+          AION_OCR_TIMEOUT: ocrMode === "remote" ? String(ocrForm.timeout) : "",
+          AION_OCR_MAX_IMAGE_BYTES: ocrMode === "remote" ? String(ocrForm.max_image_bytes) : "",
           // Web Search
           AION_WEB_SEARCH_TAVILY_ENABLED: searchForm.tavily_enabled ? "1" : "0",
           AION_TAVILY_API_KEY: searchForm.tavily_key,
@@ -301,43 +542,112 @@ export default function FirstSetupPage() {
 
   const stepsOrder: Step[] = ["llm", "embeddings", "ocr", "search", "policy", "review"];
 
-  const handleNext = () => {
+  const handleNext = async () => {
     setError(null);
-    if (currentStep === "ocr" && ocrEnabled) {
-      if (!ocrForm.base_url.trim()) {
-        setError("OCR Base URL is required when OCR is enabled.");
+    if (currentStep === "llm") {
+      if (providerNeedsBaseUrl(llmForm.provider) && !llmForm.api_base_url.trim()) {
+        setError("API Base URL is required for this provider.");
         return;
       }
-      if (!ocrForm.base_url.trim().startsWith("http://") && !ocrForm.base_url.trim().startsWith("https://")) {
-        setError("OCR Base URL must start with http:// or https://");
+      if (llmForm.provider !== "ollama" && !llmForm.api_key.trim()) {
+        setError("API Key is required.");
         return;
       }
-      if (!ocrForm.model.trim()) {
-        setError("OCR Model is required when OCR is enabled.");
+      if (!llmConnectionTested) {
+        const ok = await probeLlmConnection();
+        if (!ok) return;
+      }
+      if (!llmForm.model_name.trim()) {
+        setError(
+          llmManualModelEntry
+            ? "Enter the model name manually — the endpoint did not list any models."
+            : "Select a model from the list discovered by the connection test.",
+        );
         return;
       }
-      if (!ocrForm.api_key.trim()) {
-        setError("OCR API Key is required when OCR is enabled.");
+      const hint = hintForModel(llmProbeResult, llmForm.model_name);
+      const tokenErr = validateMaxChatTokens(
+        llmForm.max_chat_tokens,
+        Number(llmForm.thinking_token_budget) || 0,
+        hint,
+      );
+      if (tokenErr) {
+        setError(tokenErr);
         return;
       }
-
-      // Max tokens validation
-      if (ocrForm.max_tokens <= 0) {
-        setError("OCR Max Tokens must be a positive integer.");
+      const idx = stepsOrder.indexOf(currentStep);
+      setCurrentStep(stepsOrder[idx + 1]);
+      return;
+    }
+    if (currentStep === "embeddings") {
+      if (!embForm.url.trim()) {
+        setError("Embedding service URL is required.");
         return;
       }
-
-      // Timeout validation
-      if (ocrForm.timeout <= 0) {
-        setError("OCR Timeout must be a positive integer.");
+      if (embForm.provider !== "google" && !embForm.api_key.trim()) {
+        setError("Embedding API Key is required.");
         return;
       }
-
-      // Max image bytes validation
-      if (ocrForm.max_image_bytes <= 0) {
-        setError("OCR Max Image Bytes must be a positive integer.");
+      if (!embConnectionTested) {
+        const ok = await probeEmbConnection();
+        if (!ok) return;
+      }
+      if (!embForm.model.trim()) {
+        setError(
+          embManualModelEntry
+            ? "Enter the embedding model name manually — the endpoint did not list any models."
+            : "Select an embedding model from the list discovered by the connection test.",
+        );
         return;
       }
+      const idx = stepsOrder.indexOf(currentStep);
+      setCurrentStep(stepsOrder[idx + 1]);
+      return;
+    }
+    if (currentStep === "ocr") {
+      if (ocrMode === "remote") {
+        const probeBase = probeBaseUrlFromOcrServiceUrl(ocrForm.base_url);
+        if (!probeBase) {
+          setError("OCR service base URL is required for remote vision OCR.");
+          return;
+        }
+        if (!probeBase.startsWith("http://") && !probeBase.startsWith("https://")) {
+          setError("OCR service URL must start with http:// or https://");
+          return;
+        }
+        const apiKey = ocrForm.api_key.trim();
+        if (!apiKey || apiKey === "EMPTY") {
+          setError("A non-empty API token is required for remote vision OCR.");
+          return;
+        }
+        if (!ocrConnectionTested) {
+          const ok = await probeOcrConnection();
+          if (!ok) return;
+        }
+        if (!ocrForm.model.trim()) {
+          setError(
+            ocrManualModelEntry
+              ? "Enter the OCR model name manually — the endpoint did not list any models."
+              : "Select an OCR model from the list discovered by the connection test.",
+          );
+          return;
+        }
+        if (ocrForm.max_tokens <= 0) {
+          setError("OCR Max Tokens must be a positive integer.");
+          return;
+        }
+        if (ocrForm.timeout <= 0) {
+          setError("OCR Timeout must be a positive integer.");
+          return;
+        }
+        if (ocrForm.max_image_bytes <= 0) {
+          setError("OCR Max Image Bytes must be a positive integer.");
+          return;
+        }
+      }
+      const idx = stepsOrder.indexOf(currentStep);
+      setCurrentStep(stepsOrder[idx + 1]);
+      return;
     }
 
     const idx = stepsOrder.indexOf(currentStep);
@@ -431,12 +741,14 @@ export default function FirstSetupPage() {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold">1. Default LLM Provider</h2>
-                    <p className="text-xs text-gray-400">Specify the model and credentials for the main LLM orchestration.</p>
+                    <p className="text-xs text-gray-400">
+                      Enter the endpoint and credentials, test the connection, then pick a model from the discovered list.
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-2">
                     <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">LLM Provider</label>
                     <select
                       value={llmForm.provider}
@@ -451,37 +763,6 @@ export default function FirstSetupPage() {
                     </select>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Model Name</label>
-                    <input
-                      type="text"
-                      value={llmForm.model_name}
-                      onChange={(e) => setLlmForm((prev) => ({ ...prev, model_name: e.target.value }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. gpt-4o, claude-3-5-sonnet-20241022"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Display Name</label>
-                    <input
-                      type="text"
-                      value={llmForm.display_name}
-                      onChange={(e) => setLlmForm((prev) => ({ ...prev, display_name: e.target.value }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Slug (Unique ID)</label>
-                    <input
-                      type="text"
-                      value={llmForm.slug}
-                      onChange={(e) => setLlmForm((prev) => ({ ...prev, slug: e.target.value }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                    />
-                  </div>
-
                   {llmForm.provider !== "ollama" && (
                     <div className="space-y-2 md:col-span-2">
                       <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">API Key</label>
@@ -489,7 +770,10 @@ export default function FirstSetupPage() {
                         <input
                           type={showLlmKey ? "text" : "password"}
                           value={llmForm.api_key}
-                          onChange={(e) => setLlmForm((prev) => ({ ...prev, api_key: e.target.value }))}
+                          onChange={(e) => {
+                            setLlmForm((prev) => ({ ...prev, api_key: e.target.value }));
+                            resetLlmProbeState();
+                          }}
                           className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
                           placeholder="Enter API key"
                           autoComplete="new-password"
@@ -505,59 +789,164 @@ export default function FirstSetupPage() {
                     </div>
                   )}
 
-                  {(llmForm.provider === "ollama" || llmForm.provider === "vllm" || llmForm.provider === "openai") && (
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
-                        API Base URL {llmForm.provider !== "ollama" && llmForm.provider !== "vllm" && "(Optional)"}
-                      </label>
-                      <input
-                        type="text"
-                        value={llmForm.api_base_url}
-                        onChange={(e) => setLlmForm((prev) => ({ ...prev, api_base_url: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        placeholder={
-                          llmForm.provider === "ollama"
-                            ? "http://localhost:11434/v1"
-                            : llmForm.provider === "vllm"
-                              ? "http://localhost:8000/v1"
-                              : "https://api.openai.com/v1"
-                        }
-                      />
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
+                      API Base URL {providerNeedsBaseUrl(llmForm.provider) ? "" : "(optional — defaults to vendor API)"}
+                    </label>
+                    <input
+                      type="text"
+                      value={llmForm.api_base_url}
+                      onChange={(e) => {
+                        setLlmForm((prev) => ({ ...prev, api_base_url: e.target.value }));
+                        resetLlmProbeState();
+                      }}
+                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                      placeholder={
+                        llmForm.provider === "ollama"
+                          ? "http://localhost:11434/v1"
+                          : llmForm.provider === "vllm"
+                            ? "http://localhost:8000/v1"
+                            : llmForm.provider === "anthropic"
+                              ? "https://api.anthropic.com"
+                              : llmForm.provider === "gemini"
+                                ? "https://generativelanguage.googleapis.com/v1beta"
+                                : "https://api.openai.com/v1"
+                      }
+                    />
+                  </div>
+
+                  {providerSupportsProbe(llmForm.provider) && (
+                    <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={probeLlmConnection}
+                        disabled={llmProbing}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-300 text-sm font-semibold hover:bg-blue-500/20 transition-all disabled:opacity-50"
+                      >
+                        {llmProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                        Test connection & discover models
+                      </button>
+                      {llmConnectionTested && llmProbeLatencyMs != null && (
+                        <span className="text-xs text-emerald-400 font-mono">
+                          Connection OK · {llmProbeLatencyMs}ms
+                          {llmDiscoveredModelIds.length > 0
+                            ? ` · ${llmDiscoveredModelIds.length} models`
+                            : " · enter model manually"}
+                        </span>
+                      )}
                     </div>
                   )}
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Max Chat Tokens (AION_CHAT_MAX_TOKENS)</label>
-                    <input
-                      type="number"
-                      value={llmForm.max_chat_tokens}
-                      onChange={(e) => setLlmForm((prev) => ({ ...prev, max_chat_tokens: parseInt(e.target.value) || 0 }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. 8192"
-                    />
-                  </div>
+                  {!llmConnectionTested ? (
+                    <div className="md:col-span-2 p-4 rounded-xl border border-dashed border-[#262626] bg-[#0a0a0a]/60 text-sm text-gray-500 flex items-start gap-3">
+                      <Info className="w-5 h-5 shrink-0 mt-0.5 text-gray-600" />
+                      <span>
+                        Test the endpoint to discover available models. The model will be selected automatically from the list.
+                      </span>
+                    </div>
+                  ) : llmManualModelEntry ? (
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Model name (manual)</label>
+                      <input
+                        type="text"
+                        value={llmForm.model_name}
+                        onChange={(e) => {
+                          const modelId = e.target.value;
+                          setLlmForm((prev) => ({
+                            ...prev,
+                            model_name: modelId,
+                            display_name: modelId ? formatModelDisplayName(modelId) : prev.display_name,
+                            slug: modelId
+                              ? slugFromModelId(modelId, llmForm.provider === "vllm" ? "local" : "default")
+                              : prev.slug,
+                          }));
+                        }}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                        placeholder="Enter the exact model id served by your endpoint"
+                      />
+                      <p className="text-[11px] text-amber-400/90">
+                        No models were returned by GET /v1/models — enter the model id manually.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Model (auto-discovered)</label>
+                      <select
+                        value={llmForm.model_name}
+                        onChange={(e) => applyLlmModelSelection(e.target.value, llmProbeResult)}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono cursor-pointer"
+                      >
+                        {llmDiscoveredModelIds.map((id) => (
+                          <option key={id} value={id}>
+                            {id}
+                          </option>
+                        ))}
+                      </select>
+                      {hintForModel(llmProbeResult, llmForm.model_name) && (
+                        <p className="text-[11px] text-gray-500 font-mono">
+                          Context window:{" "}
+                          {hintForModel(llmProbeResult, llmForm.model_name)?.context_window.toLocaleString()} tokens
+                        </p>
+                      )}
+                    </div>
+                  )}
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Thinking Token Budget (AION_THINKING_TOKEN_BUDGET)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      value={llmForm.thinking_token_budget ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (val === "") {
-                          setLlmForm((prev) => ({ ...prev, thinking_token_budget: "" as any }));
-                          return;
-                        }
-                        const parsed = parseInt(val, 10);
-                        if (!isNaN(parsed)) {
-                          setLlmForm((prev) => ({ ...prev, thinking_token_budget: Math.max(0, parsed) }));
-                        }
-                      }}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. 12000 (0 to disable)"
-                    />
-                  </div>
+                  {llmConnectionTested && llmForm.model_name && (
+                    <>
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Display Name</label>
+                        <input
+                          type="text"
+                          value={llmForm.display_name}
+                          onChange={(e) => setLlmForm((prev) => ({ ...prev, display_name: e.target.value }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Slug (Unique ID)</label>
+                        <input
+                          type="text"
+                          value={llmForm.slug}
+                          onChange={(e) => setLlmForm((prev) => ({ ...prev, slug: e.target.value }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Max Chat Tokens (AION_CHAT_MAX_TOKENS)</label>
+                        <input
+                          type="number"
+                          value={llmForm.max_chat_tokens}
+                          onChange={(e) => setLlmForm((prev) => ({ ...prev, max_chat_tokens: parseInt(e.target.value) || 0 }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                          placeholder="e.g. 8192"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Thinking Token Budget (AION_THINKING_TOKEN_BUDGET)</label>
+                        <input
+                          type="number"
+                          min={0}
+                          value={llmForm.thinking_token_budget ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (val === "") {
+                              setLlmForm((prev) => ({ ...prev, thinking_token_budget: "" as any }));
+                              return;
+                            }
+                            const parsed = parseInt(val, 10);
+                            if (!isNaN(parsed)) {
+                              setLlmForm((prev) => ({ ...prev, thinking_token_budget: Math.max(0, parsed) }));
+                            }
+                          }}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                          placeholder="e.g. 12000 (0 to disable)"
+                        />
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -571,22 +960,18 @@ export default function FirstSetupPage() {
                   </div>
                   <div>
                     <h2 className="text-xl font-bold">2. Autonomous Memory (Embeddings)</h2>
-                    <p className="text-xs text-gray-400">Configure the model used to create vector embeddings for Long-Term Memory (LTM).</p>
+                    <p className="text-xs text-gray-400">
+                      Enter the embedding service URL and credentials, test the connection, then pick a model from the discovered list.
+                    </p>
                   </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-2">
                     <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding Provider</label>
                     <select
                       value={embForm.provider}
-                      onChange={(e) =>
-                        setEmbForm((prev) => ({
-                          ...prev,
-                          provider: e.target.value,
-                          model: e.target.value === "google" ? "models/text-embedding-004" : "text-embedding-3-small",
-                        }))
-                      }
+                      onChange={(e) => handleEmbProviderChange(e.target.value)}
                       className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all cursor-pointer"
                     >
                       <option value="openai">OpenAI-Compatible</option>
@@ -594,48 +979,110 @@ export default function FirstSetupPage() {
                     </select>
                   </div>
 
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding Model</label>
-                    <input
-                      type="text"
-                      value={embForm.model}
-                      onChange={(e) => setEmbForm((prev) => ({ ...prev, model: e.target.value }))}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. text-embedding-3-small"
-                    />
-                  </div>
-
                   <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding API Key</label>
-                    <div className="relative">
-                      <input
-                        type={showEmbKey ? "text" : "password"}
-                        value={embForm.api_key}
-                        onChange={(e) => setEmbForm((prev) => ({ ...prev, api_key: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        placeholder="Enter API key"
-                        autoComplete="new-password"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowEmbKey(!showEmbKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
-                      >
-                        {showEmbKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding Service URL (Optional)</label>
+                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding Service URL</label>
                     <input
                       type="text"
                       value={embForm.url}
-                      onChange={(e) => setEmbForm((prev) => ({ ...prev, url: e.target.value }))}
+                      onChange={(e) => {
+                        setEmbForm((prev) => ({ ...prev, url: e.target.value }));
+                        resetEmbProbeState();
+                      }}
                       className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder="e.g. https://api.openai.com/v1"
+                      placeholder={
+                        embForm.provider === "google"
+                          ? "https://generativelanguage.googleapis.com/v1beta/models"
+                          : "http://localhost:11434/v1/embeddings or https://api.openai.com/v1/embeddings"
+                      }
                     />
+                    <p className="text-[11px] text-gray-500">
+                      Base URL or full <span className="font-mono">/v1/embeddings</span> path — used for POST; probe uses GET /v1/models on the base.
+                    </p>
                   </div>
+
+                  {embForm.provider !== "google" && (
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding API Key</label>
+                      <div className="relative">
+                        <input
+                          type={showEmbKey ? "text" : "password"}
+                          value={embForm.api_key}
+                          onChange={(e) => {
+                            setEmbForm((prev) => ({ ...prev, api_key: e.target.value }));
+                            resetEmbProbeState();
+                          }}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                          placeholder="Enter API key"
+                          autoComplete="new-password"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowEmbKey(!showEmbKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+                        >
+                          {showEmbKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={probeEmbConnection}
+                      disabled={embProbing}
+                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-semibold hover:bg-purple-500/20 transition-all disabled:opacity-50"
+                    >
+                      {embProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                      Test connection & discover models
+                    </button>
+                    {embConnectionTested && embProbeLatencyMs != null && (
+                      <span className="text-xs text-emerald-400 font-mono">
+                        Connection OK · {embProbeLatencyMs}ms
+                        {embDiscoveredModelIds.length > 0
+                          ? ` · ${embDiscoveredModelIds.length} embedding models`
+                          : " · enter model manually"}
+                      </span>
+                    )}
+                  </div>
+
+                  {!embConnectionTested ? (
+                    <div className="md:col-span-2 p-4 rounded-xl border border-dashed border-[#262626] bg-[#0a0a0a]/60 text-sm text-gray-500 flex items-start gap-3">
+                      <Info className="w-5 h-5 shrink-0 mt-0.5 text-gray-600" />
+                      <span>
+                        Test the embedding endpoint to discover available models. Embedding models are preferred when detected in the list.
+                      </span>
+                    </div>
+                  ) : embManualModelEntry ? (
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding model (manual)</label>
+                      <input
+                        type="text"
+                        value={embForm.model}
+                        onChange={(e) => setEmbForm((prev) => ({ ...prev, model: e.target.value }))}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-purple-500/50 outline-none transition-all font-mono"
+                        placeholder="e.g. text-embedding-3-small, qwen3-embedding"
+                      />
+                      <p className="text-[11px] text-amber-400/90">
+                        No models were returned by GET /v1/models — enter the embedding model id manually.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding model (auto-discovered)</label>
+                      <select
+                        value={embForm.model}
+                        onChange={(e) => setEmbForm((prev) => ({ ...prev, model: e.target.value }))}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-purple-500/50 outline-none transition-all font-mono cursor-pointer"
+                      >
+                        {embDiscoveredModelIds.map((id) => (
+                          <option key={id} value={id}>
+                            {id}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -643,63 +1090,85 @@ export default function FirstSetupPage() {
             {/* Step 3: OCR */}
             {currentStep === "ocr" && (
               <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                      <Eye className="w-5 h-5 text-amber-500" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold">3. OCR Document Processing</h2>
-                      <p className="text-xs text-gray-400">Configure the vision-based OCR service for extracting text from images and scanned PDFs.</p>
-                    </div>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
+                    <Eye className="w-5 h-5 text-amber-500" />
                   </div>
+                  <div>
+                    <h2 className="text-xl font-bold">3. OCR Document Processing</h2>
+                    <p className="text-xs text-gray-400">
+                      OCR is always available via the MCP tool. Choose how text is extracted from images and scanned PDFs.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <button
+                    type="button"
+                    onClick={() => handleOcrModeChange("remote")}
+                    className={`p-4 rounded-xl border text-left flex flex-col gap-2 transition-all ${ocrMode === "remote"
+                      ? "bg-amber-500/5 border-amber-500/40 text-amber-200"
+                      : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
+                      }`}
+                  >
+                    <div className="flex items-center gap-2 font-bold text-sm">
+                      <Cloud className="w-4 h-4" /> Remote vision OCR (recommended)
+                    </div>
+                    <span className="text-xs opacity-90 leading-relaxed">
+                      OpenAI-compatible vLLM vision server (e.g. GLM-OCR). Highest accuracy on images and scanned PDF pages.
+                    </span>
+                  </button>
 
                   <button
                     type="button"
-                    onClick={() => setOcrEnabled(!ocrEnabled)}
-                    className={`w-12 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${ocrEnabled ? "bg-amber-500" : "bg-neutral-800"
+                    onClick={() => handleOcrModeChange("local")}
+                    className={`p-4 rounded-xl border text-left flex flex-col gap-2 transition-all ${ocrMode === "local"
+                      ? "bg-amber-500/5 border-amber-500/40 text-amber-200"
+                      : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
                       }`}
                   >
-                    <div
-                      className={`w-4 h-4 rounded-full bg-white transition-all ${ocrEnabled ? "translate-x-6" : "translate-x-0"
-                        }`}
-                    />
+                    <div className="flex items-center gap-2 font-bold text-sm">
+                      <ScanLine className="w-4 h-4" /> Local Python OCR (basic)
+                    </div>
+                    <span className="text-xs opacity-90 leading-relaxed">
+                      PDF via <span className="font-mono">pymupdf4llm</span>, images via <span className="font-mono">pytesseract</span>. No remote server — lower accuracy, requires Tesseract on the host.
+                    </span>
                   </button>
                 </div>
 
-                {ocrEnabled ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {ocrMode === "remote" ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
                     <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Service Base URL</label>
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
+                        OCR Service Base URL (OpenAI-compatible)
+                      </label>
                       <input
                         type="text"
                         value={ocrForm.base_url}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, base_url: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
+                        onChange={(e) => {
+                          setOcrForm((prev) => ({ ...prev, base_url: e.target.value }));
+                          resetOcrProbeState();
+                        }}
+                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
                         placeholder="e.g. http://localhost:8002/v1"
                       />
+                      <p className="text-[11px] text-gray-500">
+                        Base URL for <span className="font-mono">POST /v1/chat/completions</span> — probe uses <span className="font-mono">GET /v1/models</span>.
+                      </p>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Model</label>
-                      <input
-                        type="text"
-                        value={ocrForm.model}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        placeholder=""
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR API Key</label>
+                    <div className="space-y-2 md:col-span-2">
+                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR API Token</label>
                       <div className="relative">
                         <input
                           type={showOcrKey ? "text" : "password"}
                           value={ocrForm.api_key}
-                          onChange={(e) => setOcrForm((prev) => ({ ...prev, api_key: e.target.value }))}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                          placeholder="Enter API key"
+                          onChange={(e) => {
+                            setOcrForm((prev) => ({ ...prev, api_key: e.target.value }));
+                            resetOcrProbeState();
+                          }}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
+                          placeholder="Bearer token (any non-empty value if auth is disabled)"
                           autoComplete="new-password"
                         />
                         <button
@@ -712,44 +1181,115 @@ export default function FirstSetupPage() {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Tokens</label>
-                      <input
-                        type="number"
-                        value={ocrForm.max_tokens}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 0 }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      />
+                    <div className="md:col-span-2 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={probeOcrConnection}
+                        disabled={ocrProbing}
+                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-semibold hover:bg-amber-500/20 transition-all disabled:opacity-50"
+                      >
+                        {ocrProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                        Test connection & discover models
+                      </button>
+                      {ocrConnectionTested && ocrProbeLatencyMs != null && (
+                        <span className="text-xs text-emerald-400 font-mono">
+                          Connection OK · {ocrProbeLatencyMs}ms
+                          {ocrDiscoveredModelIds.length > 0
+                            ? ` · ${ocrDiscoveredModelIds.length} vision/OCR models`
+                            : " · enter model manually"}
+                        </span>
+                      )}
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Timeout (seconds)</label>
-                      <input
-                        type="number"
-                        value={ocrForm.timeout}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, timeout: parseInt(e.target.value) || 0 }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      />
-                    </div>
+                    {!ocrConnectionTested ? (
+                      <div className="md:col-span-2 p-4 rounded-xl border border-dashed border-[#262626] bg-[#0a0a0a]/60 text-sm text-gray-500 flex items-start gap-3">
+                        <Info className="w-5 h-5 shrink-0 mt-0.5 text-gray-600" />
+                        <span>
+                          Test the vision OCR endpoint to discover models. Vision/OCR models are preferred when detected.
+                        </span>
+                      </div>
+                    ) : ocrManualModelEntry ? (
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR model (manual)</label>
+                        <input
+                          type="text"
+                          value={ocrForm.model}
+                          onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
+                          placeholder="e.g. zai-org/GLM-OCR"
+                        />
+                        <p className="text-[11px] text-amber-400/90">
+                          No models were returned by GET /v1/models — enter the vision model id manually.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2 md:col-span-2">
+                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR model (auto-discovered)</label>
+                        <select
+                          value={ocrForm.model}
+                          onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
+                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono cursor-pointer"
+                        >
+                          {ocrDiscoveredModelIds.map((id) => (
+                            <option key={id} value={id}>
+                              {id}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
 
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Image Bytes</label>
-                      <input
-                        type="number"
-                        value={ocrForm.max_image_bytes}
-                        onChange={(e) => setOcrForm((prev) => ({ ...prev, max_image_bytes: parseInt(e.target.value) || 0 }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      />
+                    {ocrConnectionTested && ocrForm.model && (
+                      <>
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Tokens</label>
+                          <input
+                            type="number"
+                            value={ocrForm.max_tokens}
+                            onChange={(e) => setOcrForm((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 0 }))}
+                            className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
+                          />
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Timeout (seconds)</label>
+                          <input
+                            type="number"
+                            value={ocrForm.timeout}
+                            onChange={(e) => setOcrForm((prev) => ({ ...prev, timeout: parseInt(e.target.value) || 0 }))}
+                            className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
+                          />
+                        </div>
+
+                        <div className="space-y-2 md:col-span-2">
+                          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Image Bytes</label>
+                          <input
+                            type="number"
+                            value={ocrForm.max_image_bytes}
+                            onChange={(e) => setOcrForm((prev) => ({ ...prev, max_image_bytes: parseInt(e.target.value) || 0 }))}
+                            className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-5 rounded-2xl border border-dashed border-[#262626] bg-[#0d0d0d]/30 text-sm text-gray-400 flex items-start gap-3">
+                    <Info className="w-8 h-8 shrink-0 text-gray-600" />
+                    <div className="space-y-2">
+                      <p>
+                        The OCR MCP tool stays active. Without a remote vision server it falls back to local extractors:
+                      </p>
+                      <ul className="list-disc list-inside text-xs text-gray-500 space-y-1">
+                        <li>PDF → <span className="font-mono">pymupdf4llm</span> (text layer / markdown)</li>
+                        <li>Images → <span className="font-mono">pytesseract</span> (requires Tesseract binary on the host)</li>
+                      </ul>
+                      <p className="text-xs text-amber-400/80">
+                        No <span className="font-mono">AION_OCR_*</span> variables will be written — switch to remote mode anytime in Admin Settings.
+                      </p>
                     </div>
                   </div>
-                ) :
-                  <>
-                    <div className="p-5 rounded-2xl border border-dashed border-[#262626] bg-[#0d0d0d]/30 text-center text-gray-500 text-sm">
-                      <Info className="w-8 h-8 mx-auto mb-2 text-gray-600" />
-                      OCR document processing is disabled. <br />
-                      The agent will run OCR MCP without vision-based text extraction but with basic extraction scripts.
-                    </div>
-                  </>}
+                )}
               </div>
             )}
 
@@ -1049,10 +1589,12 @@ export default function FirstSetupPage() {
                     <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">OCR Processing</span>
                     <div className="flex flex-col">
                       <span className="font-bold text-white">
-                        {ocrEnabled && ocrForm.base_url ? ocrForm.base_url : "Disabled"}
+                        {ocrMode === "remote" ? "Remote vision OCR" : "Local Python OCR"}
                       </span>
                       <span className="text-xs text-gray-400 font-mono">
-                        {ocrEnabled ? `Model: ${ocrForm.model} | Key: ${ocrForm.api_key ? "••••••••" : "None"}` : "OCR capabilities will be inactive."}
+                        {ocrMode === "remote"
+                          ? `${ocrForm.base_url || "—"} · model: ${ocrForm.model || "—"}`
+                          : "pymupdf4llm + pytesseract (no AION_OCR_* env vars)"}
                       </span>
                     </div>
                   </div>

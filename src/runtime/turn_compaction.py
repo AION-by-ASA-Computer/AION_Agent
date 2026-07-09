@@ -242,6 +242,11 @@ def compact_agent_messages_in_place() -> bool:
     compressor = get_default_compressor()
     threshold_ratio = float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_RATIO", "0.85"))
     mid_trigger = int(stats["max_prompt"] * threshold_ratio)
+
+    logger.warning(
+        f"THRESOLD RATIO {threshold_ratio} MID TRIGGER: {mid_trigger}   TOTAL {stats['total']} TRIGGER {compressor.compress_trigger_tokens()}"
+    )
+
     if (
         stats["total"] < mid_trigger
         and stats["total"] < compressor.compress_trigger_tokens()
@@ -352,10 +357,48 @@ def _skip_mid_turn_compact_for_tool(tool_name: str, result: str) -> bool:
     return len(str(result or "")) < 800
 
 
+def maybe_inject_max_steps_prompt() -> None:
+    """Inject assistant warning when one LLM step remains before the hard agent limit."""
+    if _agent_exec_ctx is None or _turn_runtime is None:
+        return
+    exec_ctx = _agent_exec_ctx.get()
+    rt = _turn_runtime.get()
+    if exec_ctx is None or not isinstance(rt, dict):
+        return
+    if rt.get("max_steps_injected"):
+        return
+    agent = rt.get("agent")
+    max_steps = getattr(agent, "max_agent_steps", None) if agent else None
+    if not max_steps:
+        return
+    try:
+        cap = max(1, int(max_steps))
+    except (TypeError, ValueError):
+        return
+    llm_steps = int(rt.get("llm_steps") or 0)
+    if llm_steps < cap - 1:
+        return
+    state = getattr(exec_ctx, "state", None)
+    if state is None:
+        return
+    messages = state.get("messages")
+    if not isinstance(messages, list):
+        return
+    from src.runtime.doom_loop import MAX_STEPS_PROMPT
+
+    messages.append(ChatMessage.from_assistant(MAX_STEPS_PROMPT))
+    state["messages"] = messages
+    rt["max_steps_injected"] = True
+
+
 def maybe_compact_after_tool(*, tool_name: str, result: str) -> str:
     """Tronca output tool e, se serve, compatta lo state agent prima del prossimo LLM step."""
     out = truncate_tool_result(result, tool_name=tool_name)
     add_turn_token_estimate(count_tokens(out) + 128)
+    try:
+        maybe_inject_max_steps_prompt()
+    except Exception as exc:
+        logger.debug("max_steps inject failed: %s", exc)
     if mid_turn_compaction_enabled() and not _skip_mid_turn_compact_for_tool(
         tool_name, out
     ):

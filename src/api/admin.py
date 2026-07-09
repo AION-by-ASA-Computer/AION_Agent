@@ -3152,13 +3152,10 @@ async def get_conversation_messages(conv_id: str, include_internal: bool = False
             )
 
         data = []
-        orphan_steps = list(steps_by_msg.get("orphan", []))
-        orphan_atts = list(atts_by_msg.get("orphan", []))
 
         for r in msgs:
             nr = normalize_message_role(r.role)
 
-            # Collect steps and attachments for this message
             current_steps = steps_by_msg.get(r.id, [])
             current_atts = atts_by_msg.get(r.id, [])
 
@@ -3170,15 +3167,6 @@ async def get_conversation_messages(conv_id: str, include_internal: bool = False
             ):
                 continue
 
-            final_steps = current_steps
-            final_atts = current_atts
-            if nr == "assistant":
-                # Legacy fallback only: older records may have no message_id.
-                final_steps = orphan_steps + final_steps
-                final_atts = orphan_atts + final_atts
-                orphan_steps = []
-                orphan_atts = []
-
             data.append(
                 {
                     "id": r.id,
@@ -3189,8 +3177,8 @@ async def get_conversation_messages(conv_id: str, include_internal: bool = False
                     "tool_call_id": r.tool_call_id,
                     "created_at": r.created_at,
                     "seq": r.seq,
-                    "steps": final_steps,
-                    "artifacts": final_atts,
+                    "steps": current_steps,
+                    "artifacts": current_atts,
                 }
             )
         return {"messages": data}

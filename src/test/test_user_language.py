@@ -22,8 +22,17 @@ def test_normalize_ui_language():
 
 def test_build_ui_language_prompt_section_explicit():
     section = build_ui_language_prompt_section("en")
-    assert "Always reply in English" in section
+    assert "Always reply to the user in English" in section
+    assert "thinking/reasoning blocks must stay in English" in section
     assert "Response language" in section
+
+
+def test_build_ui_language_prompt_section_italian_user_english_thinking():
+    section = build_ui_language_prompt_section("it")
+    assert "Italiano" in section
+    assert "reply to the user in Italiano" in section
+    assert "thinking/reasoning blocks must stay in English" in section
+    assert "Do not write thinking in Italiano" in section
 
 
 def test_default_ui_language_env(monkeypatch: pytest.MonkeyPatch):

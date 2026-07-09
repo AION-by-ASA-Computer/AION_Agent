@@ -12,12 +12,11 @@ from src.runtime.skill_alias import resolve_skill_alias
 
 def test_resolve_skill_alias_matrix():
     assert resolve_skill_alias("core_protocol") == "core_protocol"
+    assert resolve_skill_alias("artifact_protocol") == "artifact_protocol"
     assert (
-        resolve_skill_alias("artifact_protocol", "markdown")
-        == "artifact_protocol_markdown"
+        resolve_skill_alias("artifact_protocol", "legacy_ignored")
+        == "artifact_protocol"
     )
-    assert resolve_skill_alias("artifact_protocol", "tool") == "artifact_protocol_tool"
-    assert resolve_skill_alias("artifact_protocol", "xml") == "artifact_protocol_xml"
 
 
 def test_get_profile_slug_only(tmp_path: Path, monkeypatch):

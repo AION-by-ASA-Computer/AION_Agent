@@ -237,12 +237,45 @@ AION V2 introduces Redis for multi-worker scalability.
 | `AION_PLAN_MODE_TOOL_FIRST` | `1` | Plan mode uses `draft_execution_plan` (tool) instead of `<plan>` tags. |
 | `AION_PLAN_TEXT_PARSER` | `0` | Legacy text parser (only if tool-first off or rollback). |
 | `AION_PLAN_FINALIZER_TIMEOUT_SEC` | `20` | Plan finalizer timeout (seconds). |
-| `AION_ARTIFACT_STRATEGY` | `tool` | `tool` = artifact via native tools; `text` = stream parsing. |
 | `AION_PROMPT_LAYER_TOTAL_BUDGET` | `6000` | Estimated token budget for layers injected in the turn. |
 | `AION_AGENT_EXEC_LEGACY_THREAD` | `0` | `1` = `Agent.run` in thread; `0` = `run_async` (default). |
 | `AION_SETTINGS_LEGACY_FALLBACK` | `1` | Fallback `os.getenv` during migration to `src/settings.py`. |
 
 `AION_API_URL` and `AION_MODEL` are **mandatory** (no hardcoded default IP). The limits per turn (`AION_TOOL_CALLS_MAX_PER_TURN`, `AION_STREAM_EVENTS_MAX_PER_TURN`, `AION_NO_PROGRESS_TIMEOUT_SEC`) are loaded from `TurnBudget` / `AionSettings`.
+
+---
+
+## Tool-first runtime (OpenCode-style)
+
+File delivery and agent-loop hardening are controlled by the following variables. `scripts/upgrade_core.py` injects missing keys via `_TOOL_RUNTIME_ENV_DEFAULTS` when you run `./scripts/upgrade-aion.sh` (local or `--docker`). The deprecated `AION_ARTIFACT_STRATEGY` key is **removed** on upgrade.
+
+| Variable | Default | Description |
+|-----------|---------|-------------|
+| `AION_MODEL_PROMPT_FRAGMENTS` | `1` | Merge provider/model fragments from `config_std/prompts/*.txt` (`src/runtime/system_prompt.py`). |
+| `AION_ARTIFACT_STREAM_LEGACY` | `0` | `1` = re-enable `<aion_artifact>` stream parsing and legacy write-tool blocking (`artifact_tool_policy`). |
+| `AION_STREAM_LOOP_V2` | `1` | Use `StreamLoop` v2 in `src/runtime/stream/loop.py` (tool settlement, file-preview bridge, doom loop). |
+| `AION_MODEL_TOOL_POLICY` | `1` | Per-model tool exposure: GPT → `sandbox_apply_patch`; others → write + edit. |
+| `AION_DOOM_LOOP_THRESHOLD` | `3` | Identical `(tool, args)` repeats before doom-loop action. |
+| `AION_DOOM_LOOP_ACTION` | `reminder` | `reminder` (inject nudge) or `stop` (end turn). |
+| `AION_JSON_RECOVERY_ALLOW_EMPTY` | `0` | `0` = do not map `""` → `{}` for tools with required fields. |
+| `AION_VLLM_TOOLS_STRICT` | `0` | Force Haystack `tools_strict` on local vLLM (off by default — truncated tool JSON is common). |
+| `AION_VLLM_TOOL_ARG_TOKEN_FLOOR` | `8192` | Minimum `max_tokens` floor for vLLM when thinking + large tool-call payloads. |
+| `AION_LLM_CALL_AUDIT` | `0` | Persist every LiteLLM/vLLM request+response under `data/diagnostics/llm_calls/`; analyze with `python scripts/audit_llm_calls.py`. |
+| `AION_PROMPTS_DIR` | `config_std/prompts` | Override directory for model prompt fragments. |
+| `AION_TOOL_DESCRIPTIONS_DIR` | `config_std/tool_descriptions` | Extended MCP tool descriptions for sandbox write/edit/patch. |
+
+**Primary file path:** `sandbox_write_workspace_file`, `sandbox_edit_workspace_file`, `sandbox_apply_patch` — not chat-stream XML. Phantom tool names (`aion_artifact`, `artifact`, `create_file`) are rejected by `src/runtime/tool_settlement.py` before MCP runs.
+
+See [Agent pipeline — Tool-first file delivery](../api-and-runtime/agent-pipeline.md#tool-first-file-delivery-opencode-style).
+
+### `.env.example` coverage check
+
+```bash
+python scripts/check_env_example_coverage.py          # getenv + AionSettings + upgrade defaults
+python scripts/check_env_example_coverage.py --strict   # only active lines in .env.example
+```
+
+Exit code `1` if any `AION_*` used in `src/` or `upgrade_core.py` defaults is missing from `.env.example`.
 
 ---
 

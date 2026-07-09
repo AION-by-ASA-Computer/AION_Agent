@@ -315,6 +315,42 @@ Downloads of files associated with the session do **not** go through the `/v1/co
 
 ---
 
+## Admin API (selected)
+
+Admin routes live under `/admin/*` and require Bearer token with `admin` role. Full surface is used by [admin-ui](../clients/admin-ui.md). Selected endpoints relevant to this release:
+
+### Probe LLM provider
+
+`POST /admin/llm-providers/probe` (Admin auth)
+
+Tests connectivity to an OpenAI-compatible endpoint and returns discovered model ids plus optional per-model hints (context window, suggested `max_chat_tokens`).
+
+**Request body:**
+```json
+{
+  "provider": "openai",
+  "api_base_url": "https://api.openai.com/v1",
+  "api_key": "sk-..."
+}
+```
+
+Supported `provider` values include `openai`, `anthropic`, `gemini`, `ollama`, `vllm`. Implementation: `src/runtime/llm_probe.py` (SSRF-safe URL validation, `GET /v1/models`, LiteLLM catalog fallback).
+
+**Response (example):**
+```json
+{
+  "ok": true,
+  "base_url": "https://api.openai.com/v1",
+  "latency_ms": 142,
+  "models": [{"id": "gpt-4o", "hints": {"suggested_max_chat_tokens": 16384}}],
+  "warning": null
+}
+```
+
+Used by admin-ui **First setup** (`/first-setup`) and **Settings** (`/settings`) for LLM, embeddings, and remote OCR configuration.
+
+---
+
 ## Common Errors and Rate Limiting
 
 ### Rate Limiting

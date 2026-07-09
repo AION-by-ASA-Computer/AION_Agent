@@ -89,6 +89,12 @@ class TurnPersistence:
         only_new: bool = False,
         include_attachments: bool = True,
     ) -> None:
+        if not (message_id or "").strip():
+            logger.warning(
+                "persist_pending_turn_records skipped: message_id required (session=%s)",
+                self.session_id,
+            )
+            return
         seen_updates: set[str] = set()
         for step in self.pending_db_steps:
             sig = self._step_persist_sig(step)

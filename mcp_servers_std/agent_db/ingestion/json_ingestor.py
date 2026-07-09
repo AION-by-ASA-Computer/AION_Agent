@@ -2,6 +2,7 @@
 import json
 from typing import List, Dict, Any
 
+
 def read_json(content: str) -> List[Dict[str, Any]]:
     """Reads JSON array content and returns a list of dictionaries."""
     data = json.loads(content)

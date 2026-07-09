@@ -254,6 +254,7 @@ flowchart TD
 **Features:**
 - Manage cron jobs for the scheduled sending of prompts to the agent (requires `AION_CRON_ENABLED=1` in the backend).
 - Define cron expressions, time zones, associated profiles, and prompts to execute.
+- Bind each job to a dedicated **SQL QueryMemory project** — required for memory-enabled profiles (the `default` drawer is blocked at runtime to prevent cross-project contamination). The selected project is persisted on the job and written into the scheduled-job conversation metadata so the run is scope-bound exactly like a chat-ui turn.
 - Monitor the outcome of the latest executions and view the detailed history of each run (status, timestamp, error messages).
 - Enable, disable, or force immediate execution of a job.
 
@@ -321,7 +322,27 @@ flowchart TD
 **Features:**
 - Configure global environment variables by writing them directly to the `.env` file via an integrated visual editor.
 - Automatic parameter validation (e.g. consistency between `AION_CHAT_MAX_TOKENS` and `AION_THINKING_TOKEN_BUDGET` for Anthropic models).
+- **LLM provider CRUD** with **connection probe**: test endpoint credentials, discover models via `GET /v1/models`, pick from list or enter model id manually (`admin-ui/lib/llm-probe.ts` → `POST /admin/llm-providers/probe`).
+- Same probe flow for **embeddings** and **remote OCR** (vision server) on the settings form.
+- Default provider save syncs `AION_CHAT_MAX_TOKENS` / `AION_THINKING_TOKEN_BUDGET` into `.env` and clears the agent cache.
 - Automatic restart of the Docker container in case of changes (if the environment runs under Docker).
+
+### 15. First setup wizard
+
+**Path:** `/first-setup` (shown when the backend reports setup incomplete)
+
+Multi-step wizard aligned with `/settings` and Docker/local `.env` parity:
+
+| Step | Content |
+|------|---------|
+| LLM | Provider, API key, base URL → **Test connection & discover models** → model select (or manual id) → token budget validation |
+| Embeddings | Service URL + key → probe → embedding model select |
+| OCR | **Local** (PyMuPDF/Tesseract via MCP; clears `AION_OCR_*`) or **Remote** vision server → probe → model select |
+| Web search | Tavily / other keys |
+| Policy | Approval and feature toggles |
+| Review | Writes merged keys to `.env` via settings API |
+
+Probe requires a successful connection test before advancing LLM/embedding/OCR (remote) steps. Shared client helpers: `admin-ui/lib/llm-probe.ts`; backend: `src/runtime/llm_probe.py`, `src/api/llm_providers.py`.
 
 ---
 
@@ -354,7 +375,8 @@ admin-ui/
 │   ├── profile-memory/     # Legacy SOUL/MEMORY/USER (deprecated)
 │   ├── security/           # Security Audit & Scans
 │   ├── system/             # Infrastructure integrity (System health)
-│   └── settings/           # General Settings (.env editor)
+│   ├── first-setup/        # Initial setup wizard (LLM/embeddings/OCR probe)
+│   └── settings/           # General Settings (.env editor + LLM providers)
 ├── public/                 # Static files
 │   └── reports/            # Generated security audit reports
 └── package.json            # Package scripts and dependencies

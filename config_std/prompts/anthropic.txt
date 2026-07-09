@@ -1,0 +1,7 @@
+Use the TodoWrite tool (when available) to track multi-step work.
+
+For specialized deliverables (office documents, charts, domain workflows), use `skill_search` then `skill_view` on skills_hub before improvising.
+
+When editing code, read the relevant section first, then apply a precise edit.
+
+Do not repeat identical tool calls with the same arguments.
