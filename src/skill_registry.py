@@ -82,6 +82,15 @@ class SkillRegistry:
             if f.parent != d and f.name.lower() not in ["skill.md", "index.md"]:
                 continue
 
+            # Se è un file flat (es. docx.md) e sotto d esiste una cartella pacchetto
+            # con lo stesso nome (es. docx/) contenente SKILL.md/skill.md, saltiamo il file flat
+            if f.parent == d:
+                pkg_dir = d / f.stem
+                if pkg_dir.is_dir() and (
+                    (pkg_dir / "SKILL.md").is_file() or (pkg_dir / "skill.md").is_file()
+                ):
+                    continue
+
             try:
                 post = frontmatter.loads(f.read_text(encoding="utf-8"))
                 meta_raw = dict(post.metadata) if post.metadata else {}
