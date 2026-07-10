@@ -1,0 +1,15 @@
+# OSV-Scanner configuration (repo root).
+# See https://google.github.io/osv-scanner/configuration/
+
+# chromadb is a transitive dependency of mempalace (embedded client only).
+# CVE-2026-45829 / GHSA-f4j7-r4q5-qw2c affects the ChromaDB Python FastAPI
+# *server* when exposed with trust_remote_code; AION never starts that server.
+# No patched PyPI release exists as of 2026-07; remove this ignore when
+# chromadb publishes a fix (>1.5.9).
+[[IgnoredVulns]]
+id = "GHSA-f4j7-r4q5-qw2c"
+reason = "chromadb embedded client only (mempalace); FastAPI server not started; no upstream fix yet"
+
+[[IgnoredVulns]]
+id = "PYSEC-2026-311"
+reason = "alias of GHSA-f4j7-r4q5-qw2c; same embedded-client exposure"
