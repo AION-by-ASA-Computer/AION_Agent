@@ -254,6 +254,7 @@ flowchart TD
 **Features:**
 - Manage cron jobs for the scheduled sending of prompts to the agent (requires `AION_CRON_ENABLED=1` in the backend).
 - Define cron expressions, time zones, associated profiles, and prompts to execute.
+- Bind each job to a dedicated **SQL QueryMemory project** — required for memory-enabled profiles (the `default` drawer is blocked at runtime to prevent cross-project contamination). The selected project is persisted on the job and written into the scheduled-job conversation metadata so the run is scope-bound exactly like a chat-ui turn.
 - Monitor the outcome of the latest executions and view the detailed history of each run (status, timestamp, error messages).
 - Enable, disable, or force immediate execution of a job.
 

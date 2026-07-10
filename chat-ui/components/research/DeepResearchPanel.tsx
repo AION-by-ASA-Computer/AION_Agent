@@ -24,9 +24,10 @@ import { useT } from "@/lib/i18n/use-t";
 
 type JobState = ResearchJob & { progress?: ResearchProgress; done?: boolean };
 
-function formatElapsed(startedAt?: number): string {
+function formatElapsed(startedAt?: number, completedAt?: number): string {
   if (!startedAt) return "";
-  const sec = Math.max(0, Math.floor(Date.now() / 1000 - startedAt));
+  const end = completedAt || (Date.now() / 1000);
+  const sec = Math.max(0, Math.floor(end - startedAt));
   if (sec < 60) return `${sec}s`;
   const m = Math.floor(sec / 60);
   const s = sec % 60;
@@ -122,7 +123,7 @@ export function DeepResearchPanel({
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
   const unsubRef = useRef<Map<string, () => void>>(new Map());
-  const refreshRef = useRef<() => void>(() => {});
+  const refreshRef = useRef<() => void>(() => { });
 
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 1000);
@@ -172,6 +173,7 @@ export function DeepResearchPanel({
           progress: st.progress,
           activities: st.activities,
           started_at: st.started_at,
+          completed_at: st.completed_at,
           done: st.status !== "running",
         });
       }
@@ -180,16 +182,17 @@ export function DeepResearchPanel({
         const st = statusById.get(j.session_id);
         const reconciled = st
           ? {
-              ...j,
-              status: st.status || j.status,
-              query: st.query || j.query,
-              progress:
-                j.progress?.ts && st.progress?.ts && j.progress.ts > st.progress.ts
-                  ? j.progress
-                  : st.progress ?? j.progress,
-              activities: st.activities?.length ? st.activities : j.activities,
-              done: st.status !== "running" ? true : j.done,
-            }
+            ...j,
+            status: st.status || j.status,
+            query: st.query || j.query,
+            progress:
+              j.progress?.ts && st.progress?.ts && j.progress.ts > st.progress.ts
+                ? j.progress
+                : st.progress ?? j.progress,
+            activities: st.activities?.length ? st.activities : j.activities,
+            completed_at: st.completed_at ?? j.completed_at,
+            done: st.status !== "running" ? true : j.done,
+          }
           : j;
         const keepLocal =
           reconciled.status === "running" ||
@@ -215,6 +218,7 @@ export function DeepResearchPanel({
               ? cur.progress
               : a.progress ?? cur?.progress,
           activities: acts,
+          completed_at: a.completed_at ?? cur?.completed_at,
           done: cur?.done,
         });
       }
@@ -258,7 +262,7 @@ export function DeepResearchPanel({
     void refreshLibrary();
   };
 
-  const attachStreamRef = useRef<(sessionId: string) => void>(() => {});
+  const attachStreamRef = useRef<(sessionId: string) => void>(() => { });
 
   const attachStream = useCallback(
     (sessionId: string) => {
@@ -284,6 +288,7 @@ export function DeepResearchPanel({
                 progress: ev,
                 activities: mergedActs ?? j.activities,
                 status: ev.final ? ev.status || j.status : ev.status || j.status,
+                completed_at: (ev as any).completed_at ?? j.completed_at,
                 done: ev.final ? true : j.done,
               };
             };
@@ -295,6 +300,7 @@ export function DeepResearchPanel({
                   status: ev.status || "running",
                   progress: ev,
                   activities: ev.activities,
+                  completed_at: (ev as any).completed_at,
                   done: Boolean(ev.final),
                 },
                 ...prev,
@@ -476,7 +482,7 @@ export function DeepResearchPanel({
                   </div>
                   <p className="mt-1.5 text-xs text-violet-200/90">{progressSummary(j, t)}</p>
                   <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
-                    {j.started_at ? <span>⏱ {formatElapsed(j.started_at)}</span> : null}
+                    {j.started_at ? <span>⏱ {formatElapsed(j.started_at, j.completed_at)}</span> : null}
                     {j.progress?.round != null ? (
                       <span>{t("research.round", { round: j.progress.round })}</span>
                     ) : null}
@@ -530,7 +536,7 @@ export function DeepResearchPanel({
                         className="focus-ring inline-flex items-center gap-1 text-xs text-violet-300 hover:underline"
                         onClick={() => openReport(j.session_id, token)}
                       >
-                        <ExternalLink className="h-3 w-3" /> {t("research.open_report")}
+                        <ExternalLink className="h-3 w-3 cursor-pointer" /> {t("research.open_report")}
                       </button>
                     )}
                     {j.status === "running" && (

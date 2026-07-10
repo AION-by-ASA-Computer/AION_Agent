@@ -31,10 +31,8 @@ class AdminScheduledJobCreate(ScheduledJobCreate):
 
 
 def _require_cron() -> None:
-    if not cron_tools_enabled():
-        raise HTTPException(
-            status_code=503, detail="Cron disabled (AION_CRON_ENABLED=0)"
-        )
+    # Admin is allowed to perform CRUD actions on cron-jobs even if AION_CRON_ENABLED is 0
+    pass
 
 
 def _out(d: dict) -> ScheduledJobOut:
@@ -88,6 +86,7 @@ async def create_cron_job(
             profile_slug=body.profile_slug,
             session_mode=body.session_mode,
             session_id=body.session_id,
+            sql_query_project=body.sql_query_project,
             timezone=body.timezone,
             description=body.description,
             enabled=body.enabled,

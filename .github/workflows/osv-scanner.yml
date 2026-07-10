@@ -24,7 +24,9 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@fa4ff678dd5d0a4fa3d628e57af8162873e93cd6 # main (export-results=false)
+    with:
+      export-results: false
 
   # Full scan on main / weekly — logs + fail-on-vuln; no SARIF upload (avoids a
   # second Code Scanning config that PRs cannot satisfy).
@@ -35,6 +37,7 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@9a498708959aeaef5ef730655706c5a1df1edbc2 # v2.3.8
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@fa4ff678dd5d0a4fa3d628e57af8162873e93cd6 # main (export-results=false)
     with:
       upload-sarif: false
+      export-results: false

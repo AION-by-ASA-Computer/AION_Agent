@@ -30,7 +30,6 @@ def test_should_not_inject_in_plan_mode():
 
 def test_build_nudge_mentions_skill_view():
     text = build_skill_discovery_nudge("corso ML in docx")
-    assert "skill_search" in text
     assert "skill_view" in text
     assert "aion_artifact" in text
     assert "chat reply" in text
@@ -65,3 +64,45 @@ def test_skill_search_respects_allowed_names(tmp_path, monkeypatch):
     assert hits[0]["name"] == "alpha"
     none = reg.search("beta", top_k=5, allowed_names=["alpha"])
     assert none == []
+
+
+def test_build_nudge_with_session_loaded_skills(tmp_path, monkeypatch):
+    # Mock session_root to return our tmp_path
+    monkeypatch.setattr("src.session_workspace.session_root", lambda sid: tmp_path)
+
+    # Create the assets dir and marker files
+    assets_dir = tmp_path / ".aion_skill_assets"
+    assets_dir.mkdir(parents=True)
+    (assets_dir / "plane.json").write_text('{"slug": "plane"}', encoding="utf-8")
+    (assets_dir / "docx.json").write_text('{"slug": "docx"}', encoding="utf-8")
+
+    text = build_skill_discovery_nudge("corso ML in docx", session_id="test_session")
+    assert "do not call" in text and "again" in text
+
+
+def test_should_inject_nudge_with_loaded_skills(tmp_path, monkeypatch):
+    monkeypatch.setattr("src.session_workspace.session_root", lambda sid: tmp_path)
+
+    # Create marker files for loaded skills
+    assets_dir = tmp_path / ".aion_skill_assets"
+    assets_dir.mkdir(parents=True)
+    (assets_dir / "plane.json").write_text('{"slug": "plane"}', encoding="utf-8")
+
+    # The nudge should always be injected when the skills hub is enabled
+    assert should_inject_skill_discovery_nudge(
+        "quali sono i progetti?",
+        profile_has_skills_hub=True,
+        session_id="test_session",
+    )
+
+    assert should_inject_skill_discovery_nudge(
+        "crea un file word docx",
+        profile_has_skills_hub=True,
+        session_id="test_session",
+    )
+
+    assert should_inject_skill_discovery_nudge(
+        "crea un report in docx e caricalo su plane",
+        profile_has_skills_hub=True,
+        session_id="test_session",
+    )

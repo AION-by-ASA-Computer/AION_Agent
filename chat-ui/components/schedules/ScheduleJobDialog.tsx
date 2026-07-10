@@ -6,6 +6,7 @@ import { Clock, X } from "lucide-react";
 
 import { ComposerOptionRow } from "@/components/chat/ComposerOptionRow";
 import { ProfileOptionGrid } from "@/components/chat/ProfileOptionGrid";
+import { ProjectSelector } from "@/components/query-memory/ProjectSelector";
 import {
   CronScheduleBuilder,
 } from "@/components/schedules/CronScheduleBuilder";
@@ -67,8 +68,14 @@ export function ScheduleJobDialog({
     (job?.session_mode as "fixed" | "new") ?? "fixed",
   );
   const [timezone, setTimezone] = useState(job?.timezone ?? "Europe/Rome");
+  const [sqlProject, setSqlProject] = useState(job?.sql_query_project ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const sqlProjectPayload =
+    (sqlProject || "").trim().toLowerCase() === "default"
+      ? null
+      : (sqlProject || "").trim() || null;
 
   useEffect(() => {
     if (!userId) return;
@@ -107,6 +114,7 @@ export function ScheduleJobDialog({
             prompt: prompt.trim(),
             profile_slug: profile,
             session_mode: sessionMode,
+            sql_query_project: sqlProjectPayload,
             timezone,
             enabled: true,
           },
@@ -123,6 +131,7 @@ export function ScheduleJobDialog({
             prompt: prompt.trim(),
             profile_slug: profile,
             session_mode: sessionMode,
+            sql_query_project: sqlProjectPayload,
             timezone,
           },
           token,
@@ -244,6 +253,23 @@ export function ScheduleJobDialog({
                 />
               </div>
             )}
+
+            <div>
+              <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {t("schedulesPage.field_sql_project")}
+              </label>
+              <ProjectSelector
+                userId={userId}
+                token={token}
+                profileSlug={profile}
+                value={sqlProject || ""}
+                onChange={setSqlProject}
+                className="w-full"
+              />
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {t("schedulesPage.field_sql_project_hint")}
+              </p>
+            </div>
 
             <fieldset className="space-y-1 rounded-2xl border border-border/60 bg-card/20 p-3">
               <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
