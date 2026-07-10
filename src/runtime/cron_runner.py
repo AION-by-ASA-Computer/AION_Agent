@@ -166,6 +166,10 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
             user_message_id=user_message_id,
             profile_name=profile,
         )
+        from src.api.v1.chat import _background_runs, BackgroundChatRun
+
+        run = BackgroundChatRun(conversation_id)
+        _background_runs[conversation_id] = run
         # ---------------------------------------------------------
 
         assistant_text = ""
@@ -197,6 +201,10 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
                 message_source="scheduled_trigger",
                 sql_query_project=(job.get("sql_query_project") or "").strip() or None,
             ):
+                event_data = {"event": "message", "data": json.dumps(chunk)}
+                run.history.append(event_data)
+                for q in list(run.queues):
+                    await q.put(event_data)
                 ctype = str(chunk.get("type") or "")
                 if ctype == "token":
                     parts.append(str(chunk.get("content") or ""))
@@ -229,6 +237,10 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
             status = "error"
             raise
         finally:
+            run.is_done = True
+            for q in list(run.queues):
+                await q.put(None)
+            _background_runs.pop(conversation_id, None)
             # ---------------------------------------------------------
             # 6. PULIZIA REDIS
             # Diciamo alla UI che lo stream è finito e può smettere di fare polling

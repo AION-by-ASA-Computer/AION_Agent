@@ -200,6 +200,29 @@ export async function postChatStream(
   return r.body;
 }
 
+export async function getChatStreamReconnect(
+  conversationId: string,
+  userId: string,
+  token?: string | null,
+  signal?: AbortSignal
+): Promise<ReadableStream<Uint8Array> | null> {
+  const r = await fetch(
+    `${apiBase()}/v1/chat/stream/reconnect/${encodeURIComponent(conversationId)}`,
+    {
+      headers: {
+        ...baseUserHeaders(userId, token),
+        Accept: "text/event-stream",
+      },
+      signal,
+      cache: "no-store",
+    }
+  );
+  if (!r.ok) {
+    throw new Error(`Chat HTTP ${r.status}`);
+  }
+  return r.body;
+}
+
 export async function consumeChatStream(
   stream: ReadableStream<Uint8Array> | null,
   onChunk: (c: ChatChunk) => void
@@ -382,8 +405,8 @@ export async function fetchConversationHistory(
     const r = await fetch(
       `${apiBase()}/chat-ui/conversations/${encodeURIComponent(conversationId)}/messages${qs}`,
       {
-      headers: baseUserHeaders(userId, token),
-      signal,
+        headers: baseUserHeaders(userId, token),
+        signal,
       },
     );
     if (!r.ok) {
