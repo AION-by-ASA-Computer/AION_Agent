@@ -1,6 +1,6 @@
 /** Dock panel width persisted in localStorage; external store for useSyncExternalStore. */
 
-export const DOCK_STORAGE_KEY = "aion-chat-dock-w";
+const DOCK_STORAGE_KEY = "aion-chat-dock-w";
 export const DOCK_WIDTH_SERVER_SNAPSHOT = 420;
 
 export function clampDock(n: number, min: number, max: number) {

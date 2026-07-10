@@ -615,7 +615,7 @@ export function segmentsForMessage(msg: {
   return segmentsFromHistoryMessage(msg);
 }
 
-export function segmentsFromHistoryMessage(msg: {
+function segmentsFromHistoryMessage(msg: {
   reasoning?: string | null;
   content?: string | null;
   steps?: Array<{

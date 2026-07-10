@@ -4,7 +4,7 @@ import * as RadixSelect from "@radix-ui/react-select";
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/cn";
 
-export type RadixSelectItem = { value: string; label: string };
+type RadixSelectItem = { value: string; label: string };
 
 type Props = {
   value: string;

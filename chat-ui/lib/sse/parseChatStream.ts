@@ -1,14 +1,14 @@
 import type { ChatChunk } from "./types";
 
 /** Normalize CRLF / lone CR to LF for SSE framing. */
-export function normalizeSseText(s: string): string {
+function normalizeSseText(s: string): string {
   return s.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
 }
 
 /**
  * Parses sse-starlette stream: blocks separated by blank line, lines like `event:` / `data:`.
  */
-export function parseSseBlock(block: string): { event: string; data: string } | null {
+function parseSseBlock(block: string): { event: string; data: string } | null {
   let event = "message";
   const dataLines: string[] = [];
   for (const raw of normalizeSseText(block).split("\n")) {

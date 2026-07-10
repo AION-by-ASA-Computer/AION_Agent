@@ -3,7 +3,7 @@ export type LlmModelHint = {
   suggested_max_chat_tokens: number;
 };
 
-export type LlmProbeModel = {
+type LlmProbeModel = {
   id: string;
 };
 
@@ -96,7 +96,7 @@ function isPrivateOrLocalHost(hostname: string): boolean {
 }
 
 /** Map UI provider + URL to backend probe provider (SSRF-safe self-hosted detection). */
-export function resolveProbeProvider(provider: string, apiBaseUrl?: string | null): string {
+function resolveProbeProvider(provider: string, apiBaseUrl?: string | null): string {
   const p = (provider || "openai").trim().toLowerCase();
   if (p === "ollama" || p === "vllm") return p;
 
@@ -161,12 +161,6 @@ export function embeddingServiceUrlFromProbeBase(baseUrl: string): string {
   return `${base}/embeddings`;
 }
 
-export function defaultEmbeddingServiceUrl(provider: string): string {
-  if (provider === "google") {
-    return "https://generativelanguage.googleapis.com/v1beta/models";
-  }
-  return "https://api.openai.com/v1/embeddings";
-}
 
 export async function runModelProbe(
   apiFetchFn: (input: string, init?: RequestInit) => Promise<Response>,

@@ -1,5 +1,5 @@
 /** Human-readable message from FastAPI ``detail`` (string, validation array, or object). */
-export function formatApiErrorDetail(detail: unknown): string {
+function formatApiErrorDetail(detail: unknown): string {
   if (detail == null) return "";
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) {

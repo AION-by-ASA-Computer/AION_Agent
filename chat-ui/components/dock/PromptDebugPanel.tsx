@@ -5,19 +5,19 @@ import { Copy, Check, Search } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 
-export type PromptInjectLayer = {
+type PromptInjectLayer = {
   key: string;
   text: string;
 };
 
-export type PromptMessageRow = {
+type PromptMessageRow = {
   index: number;
   role: string;
   content: string;
   chars: number;
 };
 
-export type PromptToolRow = {
+type PromptToolRow = {
   name: string;
   description?: string;
   spec?: unknown;
@@ -221,7 +221,7 @@ export function PromptDebugPanel({
             </span>
           ) : null}
           {typeof active.turn_metrics?.artifact_salvage === "number" &&
-          active.turn_metrics.artifact_salvage > 0 ? (
+            active.turn_metrics.artifact_salvage > 0 ? (
             <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-amber-700 dark:text-amber-300">
               artifact salvage: {active.turn_metrics.artifact_salvage}
             </span>

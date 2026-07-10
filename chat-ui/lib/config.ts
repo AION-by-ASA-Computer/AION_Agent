@@ -8,7 +8,3 @@ export function apiBase(): string {
 export function adminUiBase(): string {
   return (process.env.NEXT_PUBLIC_AION_ADMIN_UI_URL || "http://localhost:3870").replace(/\/$/, "");
 }
-
-export const CHAINLIT_FILE_INLINE_MAX = Number(
-  process.env.NEXT_PUBLIC_AION_FILE_INLINE_MAX_BYTES || 32 * 1024 * 1024
-);

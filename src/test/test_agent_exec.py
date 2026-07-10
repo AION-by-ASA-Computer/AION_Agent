@@ -25,7 +25,6 @@ def test_json_recovery_proxy_does_not_mutate_stdlib_json():
     implementation (not our recovery wrapper) so that concurrent callers are unaffected.
     """
     import src.aion_env  # noqa: F401
-    import src.main as _main_mod  # trigger patch install
 
     import haystack.components.generators.utils as _gen_utils
 

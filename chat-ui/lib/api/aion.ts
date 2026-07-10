@@ -119,7 +119,7 @@ export type ChatPrepareStatus = {
   has_errors?: boolean;
 };
 
-export async function fetchChatPrepareStatus(
+async function fetchChatPrepareStatus(
   conversationId: string,
   profile: string,
   userId: string,
@@ -427,20 +427,6 @@ export async function fetchConversationHistory(
   }
 }
 
-export async function createChatUiConversation(
-  userId: string,
-  profile: string,
-  token?: string | null,
-  title?: string
-): Promise<ConversationSummary | null> {
-  const r = await fetch(`${apiBase()}/chat-ui/conversations`, {
-    method: "POST",
-    headers: jsonHeaders(userId, token),
-    body: JSON.stringify({ profile_name: profile, title: title ?? null }),
-  });
-  if (!r.ok) return null;
-  return r.json();
-}
 
 export async function openSessionEventsStream(
   sessionId: string,
@@ -605,13 +591,6 @@ export async function saveAssistantMessage(
   );
 }
 
-export type PartialStep = {
-  name: string;
-  type?: string;
-  input?: string;
-  output?: string;
-  is_error?: boolean;
-};
 
 export async function patchMessageTimeline(
   conversationId: string,
@@ -637,32 +616,6 @@ export async function patchMessageTimeline(
   }
 }
 
-/**
- * @deprecated Server persists tool steps via TurnPersistence. Admin/debug only.
- */
-export async function saveMessageSteps(
-  conversationId: string,
-  messageId: string,
-  steps: PartialStep[],
-  userId: string,
-  token?: string | null,
-): Promise<{ saved: number }> {
-  if (!steps.length) return { saved: 0 };
-  try {
-    const r = await fetch(
-      `${apiBase()}/chat-ui/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/steps`,
-      {
-        method: "POST",
-        headers: jsonHeaders(userId, token),
-        body: JSON.stringify({ steps }),
-      }
-    );
-    if (!r.ok) return { saved: 0 };
-    return r.json();
-  } catch {
-    return { saved: 0 };
-  }
-}
 
 export type ScheduledJobRow = {
   job_id: string;
@@ -824,7 +777,7 @@ export async function fetchKhubFileContent(
 }
 
 /** Orchestration plan SSOT (tool-first / DB). */
-export type OrchestrationPlanTask = {
+type OrchestrationPlanTask = {
   id: string;
   title: string;
   description?: string;
@@ -833,7 +786,7 @@ export type OrchestrationPlanTask = {
   status?: string;
 };
 
-export type OrchestrationPlanPayload = {
+type OrchestrationPlanPayload = {
   goal: string;
   tasks: OrchestrationPlanTask[];
   context?: string;
@@ -891,77 +844,6 @@ export async function fetchOrchestrationPlan(
   return r.json();
 }
 
-export type PlanDecisionBody = {
-  session_id: string;
-  approved_markdown?: string;
-  approved_plan?: OrchestrationPlanPayload;
-  todos?: unknown[];
-  annotations?: Record<string, unknown>;
-  approve_only?: boolean;
-  reason?: string;
-  user_id?: string;
-  profile_name?: string;
-};
-
-export async function approveOrchestrationPlan(
-  apiBaseUrl: string,
-  planId: string,
-  body: PlanDecisionBody,
-  userId: string,
-  token?: string | null,
-): Promise<Response> {
-  return fetch(orchestrationPath(apiBaseUrl, `/plans/${encodeURIComponent(planId)}/approve`), {
-    method: "POST",
-    headers: jsonHeaders(userId, token),
-    body: JSON.stringify(body),
-  });
-}
-
-export async function rejectOrchestrationPlan(
-  apiBaseUrl: string,
-  planId: string,
-  body: PlanDecisionBody,
-  userId: string,
-  token?: string | null,
-): Promise<Response> {
-  return fetch(orchestrationPath(apiBaseUrl, `/plans/${encodeURIComponent(planId)}/reject`), {
-    method: "POST",
-    headers: jsonHeaders(userId, token),
-    body: JSON.stringify(body),
-  });
-}
-
-export async function completeOrchestrationTask(
-  apiBaseUrl: string,
-  planId: string,
-  taskId: string,
-  sessionId: string,
-  userId: string,
-  token?: string | null,
-): Promise<Response> {
-  return fetch(
-    orchestrationPath(apiBaseUrl, `/plans/${encodeURIComponent(planId)}/tasks/${encodeURIComponent(taskId)}/complete`),
-    {
-      method: "POST",
-      headers: jsonHeaders(userId, token),
-      body: JSON.stringify({ session_id: sessionId }),
-    },
-  );
-}
-
-export async function completeAllOrchestrationTasks(
-  apiBaseUrl: string,
-  planId: string,
-  sessionId: string,
-  userId: string,
-  token?: string | null,
-): Promise<Response> {
-  return fetch(orchestrationPath(apiBaseUrl, `/plans/${encodeURIComponent(planId)}/tasks/complete-all`), {
-    method: "POST",
-    headers: jsonHeaders(userId, token),
-    body: JSON.stringify({ session_id: sessionId }),
-  });
-}
 
 export async function fetchPromptSnapshots(
   sessionId: string,

@@ -11,12 +11,6 @@ import {
   type PlanExecutionRunSummary,
 } from "@/lib/api/plan-execution";
 
-export type PlanExecutionRehydrateResult = {
-  runId: string | null;
-  planId: string;
-  status: string;
-};
-
 type Candidate = {
   runId: string;
   planId: string;
