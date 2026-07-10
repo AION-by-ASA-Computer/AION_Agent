@@ -51,11 +51,14 @@ async def _ensure_conversation(
     from src.data.models import Conversation
 
     job_name = (job.get("name") or "").strip() or f"Cron {conversation_id[:8]}"
+    sql_project = (job.get("sql_query_project") or "").strip() or None
     meta = {
         "source": "scheduled_job",
         "cron_job_id": job.get("job_id"),
         "cron_job_name": job_name,
     }
+    if sql_project:
+        meta["sql_query_project"] = sql_project
 
     async with get_async_session_maker()() as session:
         existing = await session.get(Conversation, conversation_id)
@@ -66,6 +69,8 @@ async def _ensure_conversation(
                     current["source"] = "scheduled_job"
                 current.setdefault("cron_job_id", job.get("job_id"))
                 current.setdefault("cron_job_name", job_name)
+                if sql_project:
+                    current["sql_query_project"] = sql_project
                 existing.metadata_json = json.dumps(current)
             except Exception:
                 pass
@@ -190,6 +195,7 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
                 user_message_id=user_message_id,
                 assistant_message_id=assistant_message_id,
                 message_source="scheduled_trigger",
+                sql_query_project=(job.get("sql_query_project") or "").strip() or None,
             ):
                 ctype = str(chunk.get("type") or "")
                 if ctype == "token":

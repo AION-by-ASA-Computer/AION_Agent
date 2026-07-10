@@ -93,6 +93,12 @@ def classify_tool_result_text(text: str, tool_name: str = "") -> Tuple[bool, str
     Ensures SQL/MCP failures are visible to the LLM and UI even when no exception was raised.
     """
     raw = str(text or "")
+
+    # Skip keyword-based error heuristics for documentation/skill tools to avoid false positives
+    tname = (tool_name or "").strip().lower()
+    if "skill_view" in tname or "skill_search" in tname or "skill_list" in tname:
+        return False, raw
+
     stripped = raw.strip()
     if not stripped:
         base = tool_name.split("-")[-1] if tool_name else tool_name

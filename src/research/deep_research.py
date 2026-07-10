@@ -204,12 +204,14 @@ class DeepResearcher:
         progress_callback: Optional[Callable] = None,
         search_provider: Optional[str] = None,
         category: Optional[str] = None,
+        language: Optional[str] = None,
     ):
         self.llm_endpoint = llm_endpoint
         self.llm_model = llm_model
         self.llm_headers = llm_headers
         self.search_provider_override = search_provider
         self.category = category
+        self.language = language
         self.max_rounds = max_rounds
         self.max_time = max_time
         self.max_urls_per_round = max_urls_per_round
@@ -416,6 +418,11 @@ class DeepResearcher:
     async def _create_plan(self, question: str) -> str:
         """LLM analyzes the question and creates a research plan."""
         prompt = current_date_context() + RESEARCH_PLAN_PROMPT.format(question=question)
+        if self.language and self.language != "en":
+            from src.runtime.user_language import LANG_DISPLAY_NAMES
+
+            lang_name = LANG_DISPLAY_NAMES.get(self.language, self.language.title())
+            prompt += f"\n\nIMPORTANT: Respond and write the plan fields (sub_questions, key_topics, success_criteria) strictly in {lang_name}."
         try:
             response = await self._llm(
                 [{"role": "user", "content": prompt}],
@@ -680,6 +687,13 @@ class DeepResearcher:
             report=current_report or "(First round — no report yet.)",
             new_findings=findings_text,
         )
+        if self.language and self.language != "en":
+            from src.runtime.user_language import LANG_DISPLAY_NAMES
+
+            lang_name = LANG_DISPLAY_NAMES.get(self.language, self.language.title())
+            prompt += (
+                f"\n\nIMPORTANT: Write the updated report strictly in {lang_name}."
+            )
 
         try:
             return await self._llm(
@@ -741,6 +755,15 @@ class DeepResearcher:
         cat_extra = CATEGORY_PROMPTS.get(self.category or "", "")
         if cat_extra:
             prompt += "\n\n" + cat_extra
+
+        if self.language and self.language != "en":
+            from src.runtime.user_language import LANG_DISPLAY_NAMES
+
+            lang_name = LANG_DISPLAY_NAMES.get(self.language, self.language.title())
+            prompt += (
+                f"\n\nIMPORTANT: Write the entire final research report, including COMPARE TABLES, "
+                f"verdicts, pros/cons, headings, and executive summary strictly in {lang_name}."
+            )
 
         try:
             result = await self._llm(

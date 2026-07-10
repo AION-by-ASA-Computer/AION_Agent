@@ -11,6 +11,8 @@ import {
   PowerOff,
   History,
   X,
+  AlertTriangle,
+  ChevronDown,
 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
@@ -40,6 +42,11 @@ type CronRun = {
   assistant_preview?: string;
 };
 
+type SqlProject = {
+  slug: string;
+  display_name: string;
+};
+
 export default function SchedulesPage() {
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +65,40 @@ export default function SchedulesPage() {
   const [formTz, setFormTz] = useState("Europe/Rome");
   const [formSessionMode, setFormSessionMode] = useState("fixed");
   const [formEnabled, setFormEnabled] = useState(true);
+  const [formSqlProject, setFormSqlProject] = useState<string>("");
+
+  const [sqlProjects, setSqlProjects] = useState<SqlProject[]>([]);
+
+  const [cronEnabledGlobal, setCronEnabledGlobal] = useState<boolean | null>(null);
+  const [updatingGlobal, setUpdatingGlobal] = useState(false);
+  const [restarting, setRestarting] = useState(false);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [pendingGlobalValue, setPendingGlobalValue] = useState<boolean | null>(null);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/query-memory/projects`);
+      if (res.ok) {
+        const data = await res.json();
+        setSqlProjects((data.projects || []).map((p: { slug: string; display_name: string }) => ({ slug: p.slug, display_name: p.display_name })));
+      }
+    } catch {
+      // non-critical: silently ignore
+    }
+  }, []);
+
+  const fetchGlobalCronStatus = useCallback(async () => {
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/settings`);
+      if (res.ok) {
+        const data = await res.json();
+        const enabled = data.settings?.AION_CRON_ENABLED === "1";
+        setCronEnabledGlobal(enabled);
+      }
+    } catch (e) {
+      console.error("Failed to load global cron settings", e);
+    }
+  }, []);
 
   const fetchJobs = useCallback(async () => {
     setLoading(true);
@@ -68,6 +109,14 @@ export default function SchedulesPage() {
       if (filterEnabled === "0") q.set("enabled", "false");
       const res = await apiFetch(`${apiBase()}/admin/cron-jobs?${q.toString()}`);
       if (!res.ok) {
+        if (res.status === 503) {
+          const err = await res.json().catch(() => ({}));
+          if (err.detail && err.detail.includes("AION_CRON_ENABLED=0")) {
+            setCronEnabledGlobal(false);
+            setJobs([]);
+            return;
+          }
+        }
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Failed to load jobs");
       }
@@ -83,9 +132,107 @@ export default function SchedulesPage() {
     }
   }, [filterUser, filterEnabled]);
 
+  const pollHealth = useCallback(async () => {
+    const maxAttempts = 30;
+    let attempt = 0;
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    const interval = setInterval(async () => {
+      attempt++;
+      try {
+        const res = await fetch(`${apiBase()}/health`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === "ok") {
+            clearInterval(interval);
+            setRestarting(false);
+            setToast({ message: "API Container restarted and configuration applied successfully.", variant: "success" });
+            fetchGlobalCronStatus();
+            fetchJobs();
+          }
+        }
+      } catch (err) {
+        console.log("Waiting for backend to come back online...", err);
+      }
+
+      if (attempt >= maxAttempts) {
+        clearInterval(interval);
+        setRestarting(false);
+        setToast({ message: "API Container took too long to restart. Please verify manually.", variant: "error" });
+        fetchGlobalCronStatus();
+        fetchJobs();
+      }
+    }, 1500);
+  }, [fetchGlobalCronStatus, fetchJobs]);
+
+  const toggleGlobalCron = async (forcedValue?: boolean) => {
+    setUpdatingGlobal(true);
+    try {
+      const settingsRes = await apiFetch(`${apiBase()}/admin/settings`);
+      if (!settingsRes.ok) throw new Error("Failed to fetch current settings");
+      const currentSettingsData = await settingsRes.json();
+      const currentSettings = currentSettingsData.settings || {};
+
+      const nextVal = forcedValue !== undefined ? forcedValue : !cronEnabledGlobal;
+
+      const res = await apiFetch(`${apiBase()}/admin/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            ...currentSettings,
+            AION_CRON_ENABLED: nextVal ? "1" : "0",
+          },
+        }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to update global cron setting");
+      }
+
+      const data = await res.json();
+      if (data.restarting) {
+        setRestarting(true);
+        pollHealth();
+      } else {
+        setToast({
+          message: `Cron scheduler ${nextVal ? "enabled" : "disabled"} successfully.`,
+          variant: "success",
+        });
+        await fetchGlobalCronStatus();
+        await fetchJobs();
+      }
+    } catch (e: unknown) {
+      setToast({
+        message: e instanceof Error ? e.message : "Failed to toggle global scheduler status",
+        variant: "error",
+      });
+    } finally {
+      setUpdatingGlobal(false);
+    }
+  };
+
+  const handleToggleClick = (forcedValue?: boolean) => {
+    const nextVal = forcedValue !== undefined ? forcedValue : !cronEnabledGlobal;
+    setPendingGlobalValue(nextVal);
+    setShowConfirmModal(true);
+  };
+
+  const confirmToggleGlobalCron = async () => {
+    if (pendingGlobalValue === null) return;
+    setShowConfirmModal(false);
+    const val = pendingGlobalValue;
+    setPendingGlobalValue(null);
+    await toggleGlobalCron(val);
+  };
+
   useEffect(() => {
+    fetchGlobalCronStatus();
     fetchJobs();
-  }, [fetchJobs]);
+    fetchProjects();
+  }, [fetchJobs, fetchGlobalCronStatus, fetchProjects]);
 
   const openEdit = (job: CronJob) => {
     setEditing(job);
@@ -96,6 +243,7 @@ export default function SchedulesPage() {
     setFormTz(job.timezone);
     setFormSessionMode(job.session_mode);
     setFormEnabled(job.enabled);
+    setFormSqlProject((job as CronJob & { sql_query_project?: string }).sql_query_project ?? "");
   };
 
   const saveEdit = async () => {
@@ -113,6 +261,7 @@ export default function SchedulesPage() {
           timezone: formTz,
           session_mode: formSessionMode,
           enabled: formEnabled,
+          sql_query_project: formSqlProject || null,
         }),
       });
       if (!res.ok) {
@@ -200,21 +349,62 @@ export default function SchedulesPage() {
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <PageToast toast={toast} onDismiss={() => setToast(null)} />
-      <div className="flex items-center gap-3 mb-6">
-        <Clock className="w-8 h-8 text-blue-400" />
-        <div>
-          <h1 className="text-2xl font-bold">Scheduled jobs</h1>
-          <p className="text-sm text-gray-400">Per-user cron jobs (requires AION_CRON_ENABLED=1)</p>
+      <div className="flex flex-wrap items-center gap-4 mb-6">
+        <div className="flex items-center gap-3">
+          <Clock className="w-8 h-8 text-blue-400" />
+          <div>
+            <h1 className="text-2xl font-bold">Scheduled jobs</h1>
+            <p className="text-sm text-gray-400">Per-user cron jobs (requires AION_CRON_ENABLED=1)</p>
+          </div>
         </div>
+
+        {/* Global Scheduler Toggle Switch */}
+        <div className="sm:ml-auto flex items-center gap-3 bg-[#171717] border border-[#262626] px-4 py-2 rounded-lg">
+          <span className="text-sm font-medium text-gray-300">Global Scheduler:</span>
+          {cronEnabledGlobal === null ? (
+            <span className="text-xs text-gray-500 animate-pulse">Loading...</span>
+          ) : (
+            <button
+              type="button"
+              disabled={updatingGlobal}
+              onClick={() => handleToggleClick()}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
+                cronEnabledGlobal ? "bg-green-600" : "bg-zinc-800"
+              } ${updatingGlobal ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
+            >
+              <span
+                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
+                  cronEnabledGlobal ? "translate-x-6" : "translate-x-1"
+                }`}
+              />
+            </button>
+          )}
+          <span className={`text-xs font-semibold ${cronEnabledGlobal ? "text-green-400" : "text-gray-500"}`}>
+            {cronEnabledGlobal === null ? "" : cronEnabledGlobal ? "ENABLED" : "DISABLED"}
+          </span>
+        </div>
+
         <button
           type="button"
-          onClick={() => fetchJobs()}
-          className="ml-auto flex items-center gap-2 px-3 py-2 rounded bg-[#262626] hover:bg-[#333] text-sm"
+          onClick={() => {
+            fetchGlobalCronStatus();
+            fetchJobs();
+          }}
+          className="flex items-center gap-2 px-3 py-2 rounded bg-[#262626] hover:bg-[#333] text-sm"
         >
           <RefreshCw className="w-4 h-4" />
           Refresh
         </button>
       </div>
+
+      {cronEnabledGlobal === false && (
+        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-xl flex items-center gap-3 mb-6 animate-in fade-in duration-300">
+          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+          <div className="text-sm text-left">
+            <span className="font-bold">Global Scheduler is Disabled.</span> Active jobs will not fire automatically. You can enable it using the switch above.
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-3 mb-4">
         <input
@@ -366,14 +556,43 @@ export default function SchedulesPage() {
                 onChange={(e) => setFormTz(e.target.value)}
                 placeholder="Timezone"
               />
-              <select
-                className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2"
-                value={formSessionMode}
-                onChange={(e) => setFormSessionMode(e.target.value)}
-              >
-                <option value="fixed">fixed session</option>
-                <option value="new">new session each run</option>
-              </select>
+              <div className="relative w-full">
+                <select
+                  className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2 text-white appearance-none cursor-pointer pr-8"
+                  style={{ colorScheme: "dark" }}
+                  value={formSessionMode}
+                  onChange={(e) => setFormSessionMode(e.target.value)}
+                >
+                  <option value="fixed">fixed session</option>
+                  <option value="new">new session each run</option>
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              </div>
+
+              {/* SQL Query Project */}
+              <div className="space-y-1">
+                <label className="text-xs text-gray-400 font-medium uppercase tracking-wide">SQL Query Project</label>
+                <div className="relative w-full">
+                  <select
+                    className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2 text-white appearance-none cursor-pointer pr-8"
+                    style={{ colorScheme: "dark" }}
+                    value={formSqlProject}
+                    onChange={(e) => setFormSqlProject(e.target.value)}
+                  >
+                    <option value="">— None —</option>
+                    {sqlProjects.map((p) => (
+                      <option key={p.slug} value={p.slug}>
+                        {p.display_name} ({p.slug})
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                </div>
+                {sqlProjects.length === 0 && (
+                  <p className="text-xs text-gray-500">No SQL projects found. Create one in the Memory page.</p>
+                )}
+              </div>
+
               <label className="flex items-center gap-2">
                 <input
                   type="checkbox"
@@ -438,6 +657,67 @@ export default function SchedulesPage() {
                 ))}
               </ul>
             )}
+          </div>
+        </div>
+      )}
+
+      {showConfirmModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0a0a0a] border border-[#333] rounded-2xl w-full max-w-md p-6 shadow-2xl shadow-amber-500/5 space-y-6">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-amber-500/15 text-amber-500 rounded-xl">
+                <AlertTriangle className="w-6 h-6 animate-pulse" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Restart Kernel Required</h3>
+                <p className="text-xs text-gray-400">Action: {pendingGlobalValue ? "Enable" : "Disable"} Global Scheduler</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-300 leading-relaxed text-left">
+              Toggling the global scheduler requires restarting the <strong className="text-white">AI Kernel (API container)</strong> to apply the changes. 
+              This will temporarily interrupt active background operations.
+            </p>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <button
+                type="button"
+                className="px-4 py-2 text-sm font-medium text-gray-400 bg-zinc-900 border border-[#262626] rounded-xl hover:bg-zinc-800 transition-colors"
+                onClick={() => {
+                  setShowConfirmModal(false);
+                  setPendingGlobalValue(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="px-5 py-2 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-500 rounded-xl transition-all shadow-lg shadow-amber-600/25 active:scale-95"
+                onClick={confirmToggleGlobalCron}
+              >
+                Proceed & Restart
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {restarting && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-50 animate-in fade-in duration-300">
+          <div className="bg-[#0d0d0d] border border-[#262626] rounded-3xl p-8 max-w-md w-full text-center space-y-6 shadow-2xl shadow-blue-500/10">
+            <div className="relative w-20 h-20 mx-auto">
+              <div className="absolute inset-0 border-4 border-blue-500/20 rounded-full" />
+              <div className="absolute inset-0 border-4 border-t-blue-500 rounded-full animate-spin" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold text-white">Reinitializing AI Kernel</h3>
+              <p className="text-sm text-gray-500">
+                The API container is restarting to apply the new scheduler settings. This usually takes about 5 to 10 seconds.
+              </p>
+            </div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-blue-500 bg-blue-500/10 px-3 py-1.5 rounded-full inline-block animate-pulse">
+              Waiting for health check...
+            </div>
           </div>
         </div>
       )}

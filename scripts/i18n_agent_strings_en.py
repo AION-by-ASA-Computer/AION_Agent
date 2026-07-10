@@ -126,10 +126,31 @@ R(
 )
 R(_sb, "Accetta solo path sotto", "Only accepts paths under")
 R(_sb, "Argomenti extra vanno in", "Extra arguments go in")
-R(_sb, "Non richiede ``result``: stdout/stderr ed exit code sono nel messaggio di ritorno.", "No ``result`` field: stdout/stderr and exit code are in the return message.")
-R(_sb, '["non trovato", "non valido", "no such file"]', '["not found", "non valido", "no such file"]')
-R(_sb, "Assicurati di aver chiamato 'sandbox_write_workspace_file' PRIMA di eseguire lo script.", "Make sure you called 'sandbox_write_workspace_file' BEFORE running the script.")
-R(_sb, "Assicurati di aver chiamato sandbox_write_workspace_file nella stessa risposta PRIMA della tool call.", "Call sandbox_write_workspace_file in the same turn BEFORE this tool.")
+R(
+    _sb,
+    "Non richiede ``result``: stdout/stderr ed exit code sono nel messaggio di ritorno.",
+    "No ``result`` field: stdout/stderr and exit code are in the return message.",
+)
+R(
+    _sb,
+    '["non trovato", "non valido", "no such file"]',
+    '["not found", "non valido", "no such file"]',
+)
+R(
+    _sb,
+    "Assicurati di aver chiamato 'sandbox_write_workspace_file' PRIMA di eseguire lo script.",
+    "Make sure you called 'sandbox_write_workspace_file' BEFORE running the script.",
+)
+R(
+    _sb,
+    "Assicurati di aver emesso il codice usando un blocco Markdown con metadati (artifact_id) PRIMA della tool call.",
+    "Make sure you emitted the code in a Markdown block with metadata (artifact_id) BEFORE the tool call.",
+)
+R(
+    _sb,
+    "Assicurati di aver emesso il codice usando il formato <aion_artifact> nella risposta attuale PRIMA della tool call.",
+    "Make sure you emitted the code using <aion_artifact> in the current response BEFORE the tool call.",
+)
 R(_sb, "Errore: {err_msg}\\nSUGGERIMENTO:", "Error: {err_msg}\\nHINT:")
 
 # --- query_memory (key strings) ---
@@ -597,10 +618,31 @@ R(
 )
 
 # skill_discovery_nudge
-R("src/runtime/skill_discovery_nudge.py", "[Istruzione sistema — skill discovery]", "[System instruction — skill discovery]")
-R("src/runtime/skill_discovery_nudge.py", "Prima di lavoro specializzato, prova skills_hub:", "Before specialized work, try skills_hub:")
-R("src/runtime/skill_discovery_nudge.py", "Poi crea file con **`sandbox_write_workspace_file`**", "Then create files with **`sandbox_write_workspace_file`**")
-R("src/runtime/skill_discovery_nudge.py", "non `<aion_artifact>` in chat e non phantom tools", "not `<aion_artifact>` in chat and not phantom tools")
+R(
+    "src/runtime/skill_discovery_nudge.py",
+    "[Istruzione sistema — skill discovery]",
+    "[System instruction — skill discovery]",
+)
+R(
+    "src/runtime/skill_discovery_nudge.py",
+    "Prima di scrivere codice o file nel workspace per questo task, devi usare skills_hub:",
+    "Before writing code or files in the workspace for this task, you must use skills_hub:",
+)
+R(
+    "src/runtime/skill_discovery_nudge.py",
+    "Se `skill_search` non trova risultati ma il profilo elenca la skill, chiama direttamente ",
+    "If `skill_search` finds nothing but the profile lists the skill, call ",
+)
+R(
+    "src/runtime/skill_discovery_nudge.py",
+    "Dopo `skill_view`, gli script della skill (es. `scripts/office/unpack.py`) sono nella sessione;",
+    "After `skill_view`, skill scripts (e.g. `scripts/office/unpack.py`) are in the session;",
+)
+R(
+    "src/runtime/skill_discovery_nudge.py",
+    "Solo dopo aver caricato la skill procedi con tool mutanti o artifact.",
+    "Only after loading the skill proceed with mutating tools or artifacts.",
+)
 
 # turn_diagnostics
 R(
