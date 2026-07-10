@@ -30,6 +30,7 @@ from .main import set_event_loop
 from .runtime.tool_events import tool_event_bus
 from .runtime.redis_client import (
     redis_clear_stream_active,
+    redis_consume_stream_cancel,
     redis_set_stream_active,
 )
 from .api.history import history_manager
