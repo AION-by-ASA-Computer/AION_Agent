@@ -1381,9 +1381,6 @@ def _docker_upgrade(args, report: Report) -> int:
     )
     if rc != 0:
         return rc
-    rc = _ensure_tool_runtime_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
-    if rc != 0:
-        return rc
     _warn_public_orchestration_secret(Path(args.env_file), report=report)
     rc = _ensure_deep_research_env_keys(
         Path(args.env_file), dry_run=args.dry_run, report=report
@@ -1654,9 +1651,6 @@ def main() -> int:
         rc = _ensure_plan_mode_env_keys(
             Path(args.env_file), dry_run=args.dry_run, report=report
         )
-        if rc != 0:
-            return rc
-        rc = _ensure_tool_runtime_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
         if rc != 0:
             return rc
         _warn_public_orchestration_secret(Path(args.env_file), report=report)

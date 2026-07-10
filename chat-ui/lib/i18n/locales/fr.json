@@ -104,6 +104,8 @@
     "field_prompt": "Invite envoyée à chaque exécution",
     "field_timezone": "Fuseau horaire",
     "field_profile": "Profil agent",
+    "field_sql_project": "Projet QueryMemory",
+    "field_sql_project_hint": "Obligatoire pour les profils avec mémoire (le tiroir par défaut est bloqué). Sélectionnez un projet dédié.",
     "form_required": "Le nom et l'invite sont obligatoires.",
     "session_fixed": "Même conversation (contexte conservé)",
     "session_new": "Nouvelle conversation à chaque fois",
@@ -233,7 +235,9 @@
       "hide": "Masquer",
       "partial": "Partielle",
       "full": "Complète",
-      "plus_tooltip": "Ajouter un fichier ou modifier la vue des outils"
+      "plus_tooltip": "Ajouter un fichier ou modifier la vue des outils",
+      "drag_drop_title": "Déposer les fichiers ici",
+      "drag_drop_desc": "Glissez-déposez des documents pour les joindre à cette conversation"
     },
     "profile": {
       "label": "Profil",

@@ -160,6 +160,8 @@
     "field_prompt": "Prompt sent on each run",
     "field_timezone": "Timezone",
     "field_profile": "Agent profile",
+    "field_sql_project": "QueryMemory project",
+    "field_sql_project_hint": "Required for memory-enabled profiles (the default drawer is blocked). Select a dedicated project.",
     "form_required": "Name and prompt are required.",
     "session_fixed": "Same conversation each run (context is kept)",
     "session_new": "New conversation each run",
@@ -367,7 +369,9 @@
       "hide": "Hide",
       "partial": "Partial",
       "full": "Full",
-      "plus_tooltip": "Add file or change tools view"
+      "plus_tooltip": "Add file or change tools view",
+      "drag_drop_title": "Drop files here",
+      "drag_drop_desc": "Drag & drop documents to attach them to this conversation"
     },
     "profile": {
       "label": "Profile",

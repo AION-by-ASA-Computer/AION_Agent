@@ -74,3 +74,39 @@ async def test_resolve_session_fixed_creates_and_persists_when_missing(
     sid2 = await resolve_session_for_run(refreshed)
     assert sid2 == sid1
     await cron_db.delete_job(job["job_id"])
+
+
+@pytest.mark.anyio
+async def test_create_and_update_job_persists_sql_query_project(
+    monkeypatch, tmp_path: Path
+):
+    await _reset_unified_db(monkeypatch, tmp_path)
+    from src.data.bootstrap import ensure_bootstrap_schema
+    from src.data.engine import get_engine
+
+    await ensure_bootstrap_schema(get_engine())
+
+    job = await cron_db.create_job(
+        user_id="u1",
+        name="Project job",
+        cron_expression="0 9 * * *",
+        prompt="ping",
+        profile_slug="data_agent",
+        session_mode="fixed",
+        sql_query_project="am_2_new",
+        created_by="test",
+    )
+    assert job["sql_query_project"] == "am_2_new"
+
+    fetched = await cron_db.get_job(job["job_id"])
+    assert fetched and fetched["sql_query_project"] == "am_2_new"
+
+    updated = await cron_db.update_job(
+        job["job_id"], patch={"sql_query_project": "aion_am"}
+    )
+    assert updated and updated["sql_query_project"] == "aion_am"
+
+    cleared = await cron_db.update_job(job["job_id"], patch={"sql_query_project": None})
+    assert cleared and cleared["sql_query_project"] is None
+
+    await cron_db.delete_job(job["job_id"])

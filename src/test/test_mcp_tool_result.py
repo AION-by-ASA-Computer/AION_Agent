@@ -52,3 +52,10 @@ def test_format_exception_for_tool():
     data = json.loads(body)
     assert data["ok"] is False
     assert "connection reset" in data["message"]
+
+
+def test_classify_skill_view_not_error_despite_keywords():
+    raw = "Plane Project Management. Error: this tool failed sometimes due to Pydantic Validation exception."
+    is_err, body = classify_tool_result_text(raw, "skill_view")
+    assert is_err is False
+    assert body == raw

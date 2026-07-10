@@ -109,6 +109,7 @@ async def create_my_cron_job(
             profile_slug=body.profile_slug,
             session_mode=body.session_mode,
             session_id=body.session_id,
+            sql_query_project=body.sql_query_project,
             timezone=body.timezone,
             description=body.description,
             enabled=body.enabled,

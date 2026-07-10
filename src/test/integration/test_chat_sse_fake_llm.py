@@ -336,3 +336,105 @@ def test_turn_context_module_importable():
 
     assert callable(build_turn_context)
     assert TurnContext.__dataclass_fields__["messages"].type is not None
+
+
+@pytest.mark.anyio
+async def test_chat_stream_route_passes_turn_attachments(monkeypatch):
+    """POST /v1/chat/stream passing turn_attachments correctly propagates them to AgentPipeline.run_stream."""
+    import src.aion_env  # noqa: F401
+
+    monkeypatch.setenv("AION_CHAT_PASSWORD_AUTH", "0")
+
+    fake_agent = MagicMock()
+    fake_agent.run_async = AsyncMock(return_value={"messages": []})
+    fake_agent.system_prompt = ""
+    fake_agent.tools = []
+
+    mock_turn_context = MagicMock()
+    mock_turn_context.messages = []
+    mock_turn_context.augmented_user = "Read this"
+    mock_turn_context.prompt_inject_layers = []
+    mock_turn_context.qm_project = None
+    mock_turn_context.qm_profile_slug = None
+    mock_turn_context.context_stats = {}
+
+    mock_get_agent = AsyncMock(return_value=(fake_agent, "aion_std"))
+    mock_build_turn_context = AsyncMock(return_value=mock_turn_context)
+
+    with (
+        patch("src.api.v1.chat.get_agent", new=mock_get_agent),
+        patch(
+            "src.runtime.turn.turn_context.build_turn_context",
+            new=mock_build_turn_context,
+        ),
+        patch(
+            "src.api.history.history_manager.get_window",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch("src.api.v1.chat.require_chat_auth", return_value=None),
+        patch("src.agent_pipeline.redis_set_stream_active", new_callable=AsyncMock),
+        patch("src.agent_pipeline.redis_clear_stream_active", new_callable=AsyncMock),
+        patch(
+            "src.agent_pipeline.redis_consume_force_compact",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+        patch(
+            "src.agent_pipeline.redis_consume_stream_cancel",
+            new_callable=AsyncMock,
+            return_value=False,
+        ),
+        patch(
+            "src.runtime.sql_query_project_scope.verify_user_project_access",
+            new_callable=AsyncMock,
+            return_value=None,
+        ),
+    ):
+        from httpx import ASGITransport, AsyncClient
+        from src.api.main import app
+
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            resp = await client.post(
+                "/v1/chat/stream",
+                json={
+                    "message": "Read this",
+                    "session_id": "test-session-attachments",
+                    "attachments": [
+                        {
+                            "relative_path": "uploads/f1.txt",
+                            "original_name": "f1.txt",
+                            "mime": "text/plain",
+                        }
+                    ],
+                    "turn_attachments": [
+                        {
+                            "relative_path": "uploads/f1.txt",
+                            "original_name": "f1.txt",
+                            "mime": "text/plain",
+                        }
+                    ],
+                },
+                timeout=5.0,
+            )
+            await resp.aread()
+            assert resp.status_code == 200, f"Error {resp.status_code}: {resp.text}"
+
+        # Verify that build_turn_context was called with correct turn_attachments
+        mock_build_turn_context.assert_called_once()
+        kwargs = mock_build_turn_context.call_args[1]
+        assert kwargs.get("attachments") == [
+            {
+                "relative_path": "uploads/f1.txt",
+                "original_name": "f1.txt",
+                "mime": "text/plain",
+            }
+        ]
+        assert kwargs.get("turn_attachments") == [
+            {
+                "relative_path": "uploads/f1.txt",
+                "original_name": "f1.txt",
+                "mime": "text/plain",
+            }
+        ]
