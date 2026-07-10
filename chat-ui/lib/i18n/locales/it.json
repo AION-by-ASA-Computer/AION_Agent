@@ -369,7 +369,9 @@
       "hide": "Nascondi",
       "partial": "Parziale",
       "full": "Completa",
-      "plus_tooltip": "Aggiungi file o cambia vista tools"
+      "plus_tooltip": "Aggiungi file o cambia vista tools",
+      "drag_drop_title": "Rilascia i file qui",
+      "drag_drop_desc": "Trascina e rilascia i documenti per allegarli a questa conversazione"
     },
     "profile": {
       "label": "Profilo",

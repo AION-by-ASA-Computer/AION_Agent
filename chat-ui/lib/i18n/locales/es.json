@@ -235,7 +235,9 @@
       "hide": "Ocultar",
       "partial": "Parcial",
       "full": "Completa",
-      "plus_tooltip": "Adjuntar archivo o cambiar vista de herramientas"
+      "plus_tooltip": "Adjuntar archivo o cambiar vista de herramientas",
+      "drag_drop_title": "Arrastra los archivos aquí",
+      "drag_drop_desc": "Arrastra y suelta documentos para adjuntarlos a esta conversación"
     },
     "profile": {
       "label": "Perfil",

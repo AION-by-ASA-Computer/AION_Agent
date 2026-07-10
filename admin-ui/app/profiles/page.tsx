@@ -76,9 +76,12 @@ export default function Profiles() {
       const data = await res.json();
       setProfiles(data);
       if (data.length > 0 && !selectedProfile) {
-        // Automatically fetch details for the first profile in the list
+        const lastSlug = typeof window !== "undefined" ? localStorage.getItem("aion_last_selected_profile") : null;
+        const exists = lastSlug ? data.some((p: any) => profileSlug(p) === lastSlug) : false;
+        const targetSlug = exists ? lastSlug : profileSlug(data[0]);
+
         const detailRes = await apiFetch(
-          `${apiBase()}/admin/profiles/${encodeURIComponent(profileSlug(data[0]))}`
+          `${apiBase()}/admin/profiles/${encodeURIComponent(targetSlug as string)}`
         );
         if (detailRes.ok) {
           const detailData = await detailRes.json();
@@ -113,6 +116,9 @@ export default function Profiles() {
         ...data,
         native_tool_groups: Array.isArray(data.native_tool_groups) ? data.native_tool_groups : [],
       });
+      if (typeof window !== "undefined" && slug) {
+        localStorage.setItem("aion_last_selected_profile", slug);
+      }
     } catch (e: any) {
       setToast({
         message: `Error loading profile: ${e?.message || "unknown error"}`,
@@ -152,10 +158,13 @@ export default function Profiles() {
       const res = await apiFetch(
         `${apiBase()}/admin/profiles/${encodeURIComponent(slug)}`,
         {
-        method: "DELETE"
+          method: "DELETE"
         }
       );
       if (!res.ok) throw new Error("Error during deletion");
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("aion_last_selected_profile");
+      }
       fetchProfiles();
       setSelectedProfile(null);
       setIsDeleteModalOpen(false);
@@ -183,7 +192,16 @@ export default function Profiles() {
         body: JSON.stringify(selectedProfile)
       });
       if (!res.ok) throw new Error("Error during save");
-      fetchProfiles();
+
+      const resData = await res.json();
+      const savedSlug = resData.slug || profileSlug(selectedProfile);
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("aion_last_selected_profile", savedSlug);
+      }
+
+      await fetchProfiles();
+      await handleEdit(savedSlug);
       setToast({ message: "Profile saved successfully!", variant: "success" });
     } catch (e: any) {
       setToast({ message: "Save failed: " + e.message, variant: "error" });
@@ -200,7 +218,7 @@ export default function Profiles() {
       const updatedSkills = isAttached
         ? current.filter((s: string) => s !== skill)
         : [...current, skill];
-      
+
       const currentCritical = prev.critical_skills ?? [];
       const updatedCritical = isAttached
         ? currentCritical.filter((s: string) => s !== skill)
