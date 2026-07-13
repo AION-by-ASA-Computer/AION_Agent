@@ -16,9 +16,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Bug Fixes
 
-* asyncronous agent run and SSE recovery connection ([989c14d](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/989c14d6a915744d4158bbf86ca800ffcb851f08))
-* asyncronous agent run and SSE recovery connection ([ae8da9a](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/ae8da9ae48fa5f1bb67f3dc0f8cba0eaac150949))
-* asyncronous run ([7179651](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7179651622cdc1ef61c7fe41398e0ad1873abd59))
+* asynchronous agent run and SSE recovery connection ([989c14d](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/989c14d6a915744d4158bbf86ca800ffcb851f08))
+* asynchronous agent run and SSE recovery connection ([ae8da9a](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/ae8da9ae48fa5f1bb67f3dc0f8cba0eaac150949))
+* asynchronous run ([7179651](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7179651622cdc1ef61c7fe41398e0ad1873abd59))
 * bug admin panel selection of skills and MCPs, drag and drop componen… ([7c4d4b9](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7c4d4b9025ecfd95f5c9cdf17a57236bf5889c97))
 * dependencies and code based cleaning, removed all old code and d… ([7e2e3db](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7e2e3dbdf82d86e55131b1a1433cfd7f554fef93))
 * dependencies and code based cleaning, removed all old code and deprecated methods ([fb142b6](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/fb142b69ecaebe6f1bdc5492c0ec956db6ee2fb9))
