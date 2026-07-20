@@ -1281,11 +1281,15 @@ class AgentPipeline:
             if metadata:
                 _merged_meta.update(metadata)
             if plan_id or plan_execution_task_id:
-                _merged_meta.update({
-                    "plan_id": (plan_id or "").strip() or None,
-                    "plan_task_id": (plan_execution_task_id or "").strip() or None,
-                })
-            _plan_meta_json = json.dumps(_merged_meta, ensure_ascii=False) if _merged_meta else None
+                _merged_meta.update(
+                    {
+                        "plan_id": (plan_id or "").strip() or None,
+                        "plan_task_id": (plan_execution_task_id or "").strip() or None,
+                    }
+                )
+            _plan_meta_json = (
+                json.dumps(_merged_meta, ensure_ascii=False) if _merged_meta else None
+            )
 
             try:
                 await history_manager.upsert_message_content(

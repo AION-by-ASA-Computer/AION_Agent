@@ -21,9 +21,15 @@ def test_normalize_workspace_relative_path_adds_prefix():
         normalize_workspace_relative_path("workspace/workspace/promo/x.html")
         == "workspace/promo/x.html"
     )
-    assert normalize_workspace_relative_path("uploads/invoice.xml") == "uploads/invoice.xml"
+    assert (
+        normalize_workspace_relative_path("uploads/invoice.xml")
+        == "uploads/invoice.xml"
+    )
     assert normalize_workspace_relative_path("derived/chart.png") == "derived/chart.png"
-    assert normalize_workspace_relative_path("unpacked/word/document.xml") == "unpacked/word/document.xml"
+    assert (
+        normalize_workspace_relative_path("unpacked/word/document.xml")
+        == "unpacked/word/document.xml"
+    )
 
 
 def test_write_path_auto_normalized():
