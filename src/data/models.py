@@ -136,6 +136,8 @@ class Message(Base):
     )
     profile_name: Mapped[str] = mapped_column(String(256), default="default")
     trace_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    feedback_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
 

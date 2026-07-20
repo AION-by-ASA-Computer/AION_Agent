@@ -8,7 +8,7 @@ import { MermaidBlock } from "@/components/chat/MermaidBlock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -47,6 +47,7 @@ import {
   updateConversationProfile,
   updateConversationTitle,
   patchMessageTimeline,
+  rateMessage,
   saveAssistantMessage,
   saveChatMessage,
   fetchKhubFileContent,
@@ -142,6 +143,34 @@ type LiveArtifactMessage = {
 };
 type ChatMessageArtifact = ChatHistoryArtifact | LiveArtifactMessage;
 
+function isMemorizationMessage(content: string): boolean {
+  const prefixes = [
+    "L'agente ha memorizzato:",
+    "The agent has memorized:",
+    "El agente ha memorizado:",
+    "L'agent a mémorisé:",
+    "Der Agent hat gespeichert:",
+    "L'agente ha memorizzato",
+    "The agent has memorized",
+    "El agente ha memorizado",
+    "L'agent a mémorisé",
+    "Der Agent hat gespeichert",
+    "L'agente ha rilevato",
+    "The agent detected",
+    "El agente detectó",
+    "L'agent a détecté",
+    "Der Agent hat festgestellt",
+    "L'agente ha vericato",
+    "L'agente ha verificato",
+    "The agent verified",
+    "El agente verificó",
+    "L'agent a vérifié",
+    "Der Agent hat verifiziert"
+  ];
+  const cleaned = content.trim();
+  return prefixes.some(p => cleaned.includes(p));
+}
+
 type ChatViewState = { kind: "main" } | { kind: "task"; taskId: string };
 
 type ChatMessage = {
@@ -151,6 +180,7 @@ type ChatMessage = {
   metadata?: {
     plan_id?: string;
     plan_task_id?: string;
+    memorized_message_id?: string;
   };
   reasoning?: string;
   steps?: ChatHistoryStep[];
@@ -160,6 +190,8 @@ type ChatMessage = {
   webSources?: WebSourceCard[];
   /** Persisted or live interleaved timeline (preferred over flat fields for display). */
   segments?: TurnSegment[];
+  rating?: MessageRating | null;
+  feedbackComment?: string | null;
 };
 
 function parseWebHostInput(raw: string): string | null {
@@ -249,6 +281,8 @@ function historyMessageFromApi(m: ChatHistoryMessage): ChatMessage {
     webSources,
     segments: m.timeline && m.timeline.length > 0 ? (m.timeline as TurnSegment[]) : undefined,
     metadata: m.metadata,
+    rating: m.rating as MessageRating | undefined,
+    feedbackComment: m.feedback_comment,
   };
 }
 
@@ -313,15 +347,16 @@ function planChunkFromRecord(value: unknown): PlanPendingChunk | null {
 
 
 
-function formatTextWithCitations(text: string): string {
+function formatTextWithCitations(text: string, messageId?: string): string {
   if (!text) return text;
   // split by code blocks to avoid replacing inside them
   const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
   for (let i = 0; i < parts.length; i++) {
     // even indices are outside code blocks
     if (i % 2 === 0) {
+      const prefix = messageId ? `source-${messageId}` : "source";
       // replace [1], [2], etc. avoiding negative lookbehinds for Safari compat
-      parts[i] = parts[i].replace(/(^|[^\[])\[(\d+)\](?!\(|\])/g, "$1[[$2]](#source-$2)");
+      parts[i] = parts[i].replace(/(^|[^\[])\[(\d+)\](?!\(|\])/g, `$1[[$2]](#${prefix}-$2)`);
       // Clean double brackets and URL-encode spaces in file paths for markdown link compatibility
       parts[i] = parts[i].replace(/\[\[?([^\]]+)\]\]?\(([^)]+)\)/g, (match, label, url) => {
         const cleanUrl = url.trim().startsWith("#") ? url.trim() : url.trim().replace(/ /g, "%20");
@@ -557,29 +592,65 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editInput, setEditInput] = useState("");
   const [messageRatings, setMessageRatings] = useState<Record<string, MessageRating>>({});
+  const [activeCommentBoxId, setActiveCommentBoxId] = useState<string | null>(null);
 
   useEffect(() => {
     setMessageRatings(loadMessageRatings());
   }, []);
 
-  const handleMessageRate = useCallback((messageId: string, rating: MessageRating | null) => {
-    if (rating == null) {
-      clearMessageRating(messageId);
-      setMessageRatings((prev) => {
-        const next = { ...prev };
-        delete next[messageId];
-        return next;
-      });
-      return;
-    }
-    const next = toggleMessageRating(messageId, rating);
+  const handleMessageRate = useCallback(async (messageId: string, rating: MessageRating | null) => {
     setMessageRatings((prev) => {
       const copy = { ...prev };
-      if (next == null) delete copy[messageId];
-      else copy[messageId] = next;
+      if (rating == null) delete copy[messageId];
+      else copy[messageId] = rating;
       return copy;
     });
-  }, []);
+
+    if (rating === -1) {
+      setActiveCommentBoxId(messageId);
+    } else {
+      setActiveCommentBoxId(null);
+    }
+
+    if (rating == null) {
+      clearMessageRating(messageId);
+    } else {
+      toggleMessageRating(messageId, rating);
+    }
+
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...m, rating: rating }
+          : m
+      )
+    );
+
+    try {
+      const msg = messages.find((m) => m.id === messageId);
+      const comment = msg?.feedbackComment || null;
+      await rateMessage(conversationId, messageId, rating, comment, userId, token);
+    } catch (e) {
+      console.error("Error rating message:", e);
+    }
+  }, [conversationId, userId, token, messages]);
+
+  const handleMessageComment = useCallback(async (messageId: string, comment: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...m, feedbackComment: comment }
+          : m
+      )
+    );
+
+    try {
+      const rating = messageRatings[messageId] ?? null;
+      await rateMessage(conversationId, messageId, rating, comment, userId, token);
+    } catch (e) {
+      console.error("Error saving comment:", e);
+    }
+  }, [conversationId, userId, token, messageRatings]);
 
   const lastUserMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -650,6 +721,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   );
 
   const [projectCreateOpen, setProjectCreateOpen] = useState(false);
+  const [isSavingInfo, setIsSavingInfo] = useState(false);
+  const [memorizingMessageId, setMemorizingMessageId] = useState<string | null>(null);
+  const [projectWarningModalOpen, setProjectWarningModalOpen] = useState(false);
 
   // States for available SQL QueryMemory projects
   const [sqlProjects, setSqlProjects] = useState<SqlProject[]>([]);
@@ -981,6 +1055,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [streaming, setStreaming] = useState(false);
   const [streamRecovery, setStreamRecovery] = useState(false);
   const streamRecoveryRef = useRef(false);
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     if (dockTab !== "none") {
@@ -1496,7 +1571,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   );
 
   const mainFeedMessages = useMemo(() => {
-    let list = visibleMessages.filter((m) => m.role !== "internal");
+    let list = visibleMessages.filter((m) => m.role !== "internal" && !m.metadata?.memorized_message_id);
     if (planExecAdoptRunId && planExecutionProgress?.tasks?.length) {
       const planMsgIds = allPlanExecutionMessageIds(planExecutionProgress.tasks);
       if (planMsgIds.size) {
@@ -1546,6 +1621,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const showMainTurnVisual = Boolean(
     turnVisual &&
     chatView.kind === "main" &&
+    !memorizingMessageId &&
     !(
       planExecAdoptRunId &&
       recoveryAssistantId &&
@@ -1617,6 +1693,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         deepResearchModeOverride?: boolean;
         /** Hide orchestration system prompts from the chat transcript. */
         showUserBubble?: boolean;
+        metadata?: Record<string, any>;
       },
     ) => {
       const effectiveAgentMode = opts?.agentModeOverride ?? agentMode;
@@ -1630,6 +1707,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           : effectiveAgentMode === "deep_research";
       let uidMsg = crypto.randomUUID();
       let aid = crypto.randomUUID();
+      setActiveMessageId(aid);
 
       const hasPendingFiles = pendingFiles.length > 0;
       const uploads = await uploadSessionFiles(conversationId, userId, pendingFiles, token);
@@ -1711,6 +1789,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               ? sqlQueryProject.trim()
               : undefined,
             llm_provider_name: selectedProvider || undefined,
+            metadata: opts?.metadata,
           },
           token,
           abortRef.current.signal
@@ -2025,6 +2104,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         setStreamRecovery(false);
         streamRecoveryRef.current = false;
         setRecoveryAssistantId(null);
+        setActiveMessageId(null);
         setTurnVisual(null);
         clearActiveStreamMarker(conversationId);
         abortRef.current = null;
@@ -2055,6 +2135,75 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       selectedProvider,
     ]
   );
+
+  const handleMemorize = useCallback(async (msgId: string) => {
+    const msgIdx = messages.findIndex((msg) => msg.id === msgId);
+    if (msgIdx === -1) return;
+
+    const clickedMsg = messages[msgIdx];
+
+    // Find the preceding user message (the question)
+    let userQuestion = "";
+    for (let i = msgIdx - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        userQuestion = messages[i].content;
+        break;
+      }
+    }
+
+    let assistantThinking = clickedMsg.reasoning || "";
+    let assistantResponse = clickedMsg.content || "";
+
+    if (clickedMsg.segments && clickedMsg.segments.length > 0) {
+      const thinkingParts: string[] = [];
+      const responseParts: string[] = [];
+      for (const seg of clickedMsg.segments) {
+        if (seg.kind === "reasoning" && seg.content) {
+          thinkingParts.push(seg.content);
+        } else if (seg.kind === "text" && seg.content) {
+          responseParts.push(seg.content);
+        }
+      }
+      if (thinkingParts.length > 0) {
+        assistantThinking = thinkingParts.join("\n").trim();
+      }
+      if (responseParts.length > 0) {
+        assistantResponse = responseParts.join("\n").trim();
+      }
+    }
+
+    const turnDetails = [
+      `[Domanda Utente]\n${userQuestion.trim()}`,
+      assistantThinking.trim() ? `[Thinking Agente]\n${assistantThinking.trim()}` : "",
+      `[Risposta Agente]\n${assistantResponse.trim()}`
+    ].filter(Boolean).join("\n\n");
+
+    const hasNoActiveProject = !sqlQueryProject || sqlQueryProject === "default";
+    if (hasNoActiveProject) {
+      setProjectWarningModalOpen(true);
+      return;
+    }
+
+    setMemorizingMessageId(msgId);
+    setIsSavingInfo(true);
+    try {
+      const activeProject = sqlQueryProject;
+      const projectWingName = `wing_proj_${activeProject}`;
+
+      const instruction = t("chat.actions.memorize_instruction");
+      const prompt = `${instruction}\n\n[Active Project Context]\nActive SQL QueryMemory project slug: "${activeProject}"\nMemPalace project wing: "${projectWingName}"\n\n[Conversation Turn to Memorize]\n${turnDetails}`;
+      await runChatRequest(prompt, {
+        message_source: "internal_trigger",
+        showUserBubble: false,
+        metadata: { memorized_message_id: msgId },
+      });
+    } catch (err) {
+      console.error("[aion-chat-ui] error during memorization:", err);
+    } finally {
+      setIsSavingInfo(false);
+      setMemorizingMessageId(null);
+    }
+  }, [messages, sqlQueryProject, runChatRequest, t]);
 
   const handleSaveEdit = useCallback(async (msgId: string) => {
     const newText = editInput.trim();
@@ -2272,6 +2421,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         });
 
         const hist = result.ok ? result.messages : [];
+        const ratingsMap: Record<string, MessageRating> = {};
+        hist.forEach((m) => {
+          if (m.rating === 1 || m.rating === -1) {
+            ratingsMap[m.id] = m.rating as MessageRating;
+          }
+        });
+        setMessageRatings((prev) => ({ ...prev, ...ratingsMap }));
 
         // 1. Sincronizza Agent DB table hint da cronologia (disabilitato)
         /*
@@ -2386,6 +2542,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       streamRecoveryRef.current = false;
       setStreamRecovery(false);
       setRecoveryAssistantId(null);
+      setActiveMessageId(null);
       streamingRef.current = false;
       setStreaming(false);
       setTurnVisual(null);
@@ -2434,6 +2591,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 const uid = String(chunk.user_message_id || "");
                 const asst = String(chunk.assistant_message_id || "");
                 setRecoveryAssistantId(asst || null);
+                setActiveMessageId(asst || null);
                 writeActiveStreamMarker(conversationId, {
                   assistantMessageId: asst,
                   userMessageId: uid,
@@ -3131,7 +3289,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                             ) : null}
                           </>
                         ) : null}
-                        {m.role === "assistant" &&
+                        {m.role === "assistant" && m.content && isMemorizationMessage(m.content) ? (
+                          <div className="flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-sm text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto">
+                            <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                            <div className="flex-1">
+                              <InternalMessageMarkdown
+                                content={m.content.trim()}
+                                streaming={streaming}
+                                renderMarkdownLink={renderMarkdownLink}
+                                formatTextWithCitations={formatTextWithCitations}
+                              />
+                            </div>
+                          </div>
+                        ) : m.role === "assistant" &&
                           (m.reasoning || (m.steps && m.steps.length > 0) || (m.artifacts && m.artifacts.length > 0) || m.content) ? (
                           <div className={cn(afterUser ? "mb-2" : "mb-3")}>
                             <TurnTimeline
@@ -3165,6 +3335,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               isPlanArtifact={isPlanArtifact}
                               renderMarkdownLink={renderMarkdownLink}
                               formatTextWithCitations={formatTextWithCitations}
+                              messageId={m.id}
                             />
                           </div>
                         ) : null}
@@ -3241,7 +3412,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           </div>
                         ) : null}
                         {m.role === "assistant" && m.webSources && m.webSources.length > 0 ? (
-                          <WebSourcesBar cards={m.webSources} />
+                          <WebSourcesBar cards={m.webSources} messageId={m.id} />
                         ) : null}
                         {m.role === "assistant" && m.reasoningUnavailable ? (
                           <p className="mt-2 border-t border-border pt-2 text-[11px] leading-snug text-muted-foreground">
@@ -3270,8 +3441,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         </div>
                       ) : null}
 
-                      {m.role === "assistant" && !streaming ? (
-                        <div className="mt-0.5 flex justify-start pl-1">
+                      {m.role === "assistant" && !streaming && !isMemorizationMessage(m.content) ? (
+                        <div className="mt-0.5 flex flex-col items-start justify-start pl-1 w-full">
                           <MessageActions
                             messageId={m.id}
                             copyText={extractAssistantCopyText(m)}
@@ -3286,9 +3457,100 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               m.id === lastAssistantMessageId &&
                               messages[messages.length - 1]?.id === m.id
                             }
+                            onMemorize={() => handleMemorize(m.id)}
                           />
+                          {activeCommentBoxId === m.id && (
+                            <div className="mt-3 w-full max-w-xl p-4 sm:p-5 rounded-2xl bg-card border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.08)] flex flex-col gap-4 relative">
+                              {/* Header */}
+                              <div className="flex items-center justify-between shrink-0">
+                                <div className="flex items-center gap-2 font-bold text-xs text-rose-400">
+                                  <ThumbsDown className="w-4 h-4 text-rose-500 fill-current" />
+                                  {t("chat.actions.feedback_title")}
+                                </div>
+                                <button
+                                  onClick={() => setActiveCommentBoxId(null)}
+                                  className="p-1 text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              {/* Textarea Wrapper */}
+                              <div className="relative w-full">
+                                <textarea
+                                  id={`feedback-textarea-${m.id}`}
+                                  placeholder={t("chat.actions.feedback_placeholder")}
+                                  className="w-full min-h-[85px] text-xs bg-black/40 border border-white/10 hover:border-white/20 focus:border-rose-500 rounded-xl p-3 pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-rose-500/30 resize-none transition-all placeholder:text-muted-foreground/75"
+                                  defaultValue={m.feedbackComment ?? ""}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      const text = (e.target as HTMLTextAreaElement).value;
+                                      handleMessageComment(m.id, text);
+                                      setActiveCommentBoxId(null);
+                                    }
+                                  }}
+                                />
+                              </div>
+
+                              {/* Footer Actions */}
+                              <div className="flex items-center justify-end gap-2 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    handleMessageRate(m.id, null);
+                                    setActiveCommentBoxId(null);
+                                  }}
+                                  className="px-4 py-1.5 text-xs font-semibold rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-gray-300 transition-all cursor-pointer"
+                                >
+                                  {t("chat.actions.feedback_cancel")}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const el = document.getElementById(`feedback-textarea-${m.id}`) as HTMLTextAreaElement;
+                                    if (el) {
+                                      handleMessageComment(m.id, el.value);
+                                    }
+                                    setActiveCommentBoxId(null);
+                                  }}
+                                  className="px-5 py-1.5 text-xs font-bold rounded-full bg-rose-500 hover:bg-rose-600 text-white transition-all shadow-md shadow-rose-500/20 cursor-pointer"
+                                >
+                                  {t("chat.actions.feedback_submit")}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ) : null}
+
+                      {memorizingMessageId === m.id && streaming ? (
+                        <div className="flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-sm text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary mt-0.5" />
+                          <div className="flex-1">
+                            <div className="font-semibold">{t("chat.agent_status.saving_info")}</div>
+                            <div className="text-xs text-muted-foreground">{t("chat.agent_status.saving_info_desc")}</div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {(() => {
+                        const memorizationMsgs = messages.filter(
+                          (msg) => msg.metadata?.memorized_message_id === m.id
+                        );
+                        if (memorizationMsgs.length === 0) return null;
+                        return memorizationMsgs.map((mm) => (
+                          <div key={mm.id} className="flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-sm text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
+                            <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                            <div className="flex-1">
+                              <InternalMessageMarkdown
+                                content={mm.content.trim()}
+                                streaming={streaming}
+                                renderMarkdownLink={renderMarkdownLink}
+                                formatTextWithCitations={formatTextWithCitations}
+                              />
+                            </div>
+                          </div>
+                        ));
+                      })()}
                     </div>
                   );
                 })
@@ -3305,7 +3567,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               ) : null}
               {showMainTurnVisual && turnVisual ? (
                 <div className="mr-auto mt-0.5 w-full max-w-4xl min-h-[3.5rem] bg-transparent px-5 pt-0 pb-3 text-[15px] leading-relaxed text-foreground">
-                  {showContextCompactingShimmer ? (
+                  {isSavingInfo ? (
+                    <StatusProgressCard
+                      className="mb-3"
+                      icon={Database}
+                      title={t("chat.agent_status.saving_info")}
+                      subtitle={t("chat.agent_status.saving_info_desc")}
+                    />
+                  ) : showContextCompactingShimmer ? (
                     <StatusProgressCard
                       className="mb-3"
                       icon={Database}
@@ -3316,20 +3585,23 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     <AgentWorkingShimmer label={agentWorkingLabel} />
                   ) : null}
 
-                  <TurnTimeline
-                    key={streamEpoch}
-                    segments={turnVisual.segments}
-                    toolsView={toolsView}
-                    streaming={streaming}
-                    conversationId={conversationId}
-                    token={token}
-                    isPlanArtifact={isPlanArtifact}
-                    renderMarkdownLink={renderMarkdownLink}
-                    formatTextWithCitations={formatTextWithCitations}
-                  />
+                  {!isSavingInfo && (
+                    <TurnTimeline
+                      key={streamEpoch}
+                      segments={turnVisual.segments}
+                      toolsView={toolsView}
+                      streaming={streaming}
+                      conversationId={conversationId}
+                      token={token}
+                      isPlanArtifact={isPlanArtifact}
+                      renderMarkdownLink={renderMarkdownLink}
+                      formatTextWithCitations={formatTextWithCitations}
+                      messageId={activeMessageId || undefined}
+                    />
+                  )}
 
-                  {streaming && turnVisual.webSourceCards.length > 0 ? (
-                    <WebSourcesBar cards={turnVisual.webSourceCards} />
+                  {streaming && !isSavingInfo && turnVisual.webSourceCards.length > 0 ? (
+                    <WebSourcesBar cards={turnVisual.webSourceCards} messageId={activeMessageId || undefined} />
                   ) : null}
                 </div>
               ) : null}
@@ -3429,24 +3701,24 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   </div>
                 )}
                 <div className="min-h-0 flex-1 overflow-hidden">
-                <textarea
-                  ref={composerTextareaRef}
-                  value={input}
-                  disabled={streaming || isProjectRequiredButMissing}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Tab" && e.shiftKey) {
-                      e.preventDefault();
-                      handleAgentModeChange(agentMode === "plan" ? "normal" : "plan");
-                    } else if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void send();
-                    }
-                  }}
-                  placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
-                  className="focus-ring box-border h-full min-h-0 min-w-0 max-w-full w-full resize-none overflow-x-hidden overflow-y-auto break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
-                  rows={1}
-                />
+                  <textarea
+                    ref={composerTextareaRef}
+                    value={input}
+                    disabled={streaming || isProjectRequiredButMissing}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Tab" && e.shiftKey) {
+                        e.preventDefault();
+                        handleAgentModeChange(agentMode === "plan" ? "normal" : "plan");
+                      } else if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void send();
+                      }
+                    }}
+                    placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
+                    className="focus-ring box-border h-full min-h-0 min-w-0 max-w-full w-full resize-none overflow-x-hidden overflow-y-auto break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
+                    rows={1}
+                  />
                 </div>
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-2 pb-1">
                   <input
@@ -4001,6 +4273,53 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           handleProjectChange(slug);
         }}
       />
+      {projectWarningModalOpen ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm transition-all"
+          role="presentation"
+          onClick={() => setProjectWarningModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-warning/10 p-2 text-warning">
+                <AlertTriangle className="size-6 text-amber-500" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-foreground">
+                  {t("chat.project_warning.title")}
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  {t("chat.project_warning.desc")}
+                </p>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setProjectWarningModalOpen(false)}
+                    className="rounded-lg border border-border/60 bg-muted/10 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all duration-200"
+                  >
+                    {t("cancel") || "Annulla"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectWarningModalOpen(false);
+                      setProjectCreateOpen(true);
+                    }}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-all duration-200"
+                  >
+                    {t("chat.project_warning.action")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {webRestrictModalOpen ? (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm transition-all"

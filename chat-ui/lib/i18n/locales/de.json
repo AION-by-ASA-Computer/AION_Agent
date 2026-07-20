@@ -226,7 +226,9 @@
       "thinking": "Der Agent denkt nach…",
       "working": "Der Agent arbeitet…",
       "compacting": "Kontext wird komprimiert…",
-      "compacting_desc": "Komprimierung des Kurzzeitgedächtnisses…"
+      "compacting_desc": "Komprimierung des Kurzzeitgedächtnisses…",
+      "saving_info": "Informationen werden gespeichert…",
+      "saving_info_desc": "Der Agent speichert die Langzeitinformationen…"
     },
     "tools": {
       "attach_file": "Datei anhängen",
@@ -270,6 +272,25 @@
       "textarea_placeholder": "Erstellen oder wählen Sie ein Projekt, um den Chat freizugeben..."
     },
     "go_to_source": "Zur Quelle gehen",
+    "project_warning": {
+      "title": "Achtung: Fehlender Projektspeicher",
+      "desc": "Es sieht so aus, als ob Sie versuchen, Abfragen oder Datenbankschemata zu speichern, aber Sie haben keinen aktiven Projektspeicher erstellt oder ausgewählt.",
+      "action": "Klicken Sie hier, um ihn zu erstellen"
+    },
+    "actions": {
+      "copy": "Antwort kopieren",
+      "copied": "Kopiert",
+      "good": "Gute Antwort",
+      "bad": "Schlechte Antwort",
+      "regenerate": "Antwort regenerieren",
+      "memorize": "Information speichern",
+      "memorized_prefix": "Der Agent hat gespeichert: ",
+      "memorize_instruction": "Analysieren Sie die folgende Konversationsrunde (Frage, Denken und Antwort) und extrahieren Sie die relevanten Hauptinformationen. Speichern Sie diese in der angegebenen Projekt-Wing. Um in MemPalace zu speichern, müssen Sie AUSSCHLIESSLICH das Tool 'mempalace_add_drawer' verwenden, um einen Drawer in der aktuellen Projekt-Wing zu erstellen. Verwenden Sie unter keinen Umständen die Tools des Knowledge Graph (wie 'mempalace_kg_add'). Wenn es SQL-Abfragen, Datenbankschemata oder Projekteinstellungen gibt, speichern Sie diese auch mit dem Tool 'sql_memory_save'. Wenn die Info bereits gespeichert ist, speichern Sie sie nicht erneut. Antworten Sie ausschließlich mit einem einzigen Satz, der direkt mit dem Präfix 'Der Agent hat gespeichert: ' beginnt, gefolgt von einer kurzen Zusammenfassung dessen, was in welcher Wing gespeichert wurde (oder 'Der Agent hat festgestellt, dass die Info bereits im Speicher vorhanden ist', falls sie bereits aufgezeichnet war). Fügen Sie vor diesem Präfix keine Einleitung und danach keine weiteren Erklärungen oder Kommentare hinzu.",
+      "feedback_placeholder": "Warum hat Ihnen diese Nachricht nicht gefallen? (Fügen Sie eine optionale Beschreibung hinzu)...",
+      "feedback_title": "Feedback zur Antwort",
+      "feedback_submit": "Senden",
+      "feedback_cancel": "Abbrechen"
+    },
     "plan": {
       "task": {
         "starting": "Starten"

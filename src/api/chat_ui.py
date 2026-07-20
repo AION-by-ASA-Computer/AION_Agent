@@ -342,6 +342,8 @@ async def get_conversation_messages_chat_ui(
                 "seq": r.seq,
                 "steps": current_steps,
                 "artifacts": current_atts,
+                "rating": r.rating,
+                "feedback_comment": r.feedback_comment,
             }
             if meta:
                 row["metadata"] = meta
@@ -539,6 +541,11 @@ class MessageTimelinePatchBody(BaseModel):
     timeline: List[Dict[str, Any]]
 
 
+class MessageRateBody(BaseModel):
+    rating: Optional[int] = None
+    comment: Optional[str] = None
+
+
 class StepItem(BaseModel):
     step_id: Optional[str] = None
     name: str
@@ -656,6 +663,33 @@ async def patch_message_timeline_chat_ui(
         if not msg or msg.conversation_id != conv_id:
             raise HTTPException(404, "Message not found")
         msg.timeline_json = json.dumps(body.timeline, ensure_ascii=False)
+        await session.commit()
+    return {"updated": True, "message_id": message_id}
+
+
+@router.post("/conversations/{conv_id}/messages/{message_id}/rate")
+async def rate_message_chat_ui(
+    conv_id: str,
+    message_id: str,
+    body: MessageRateBody,
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
+    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+):
+    """Save user rating and comments for a message."""
+    _check_internal_secret(x_chat_ui_secret)
+    _require_unified()
+    user_id = (x_aion_user_id or "").strip() or "default"
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
+
+    async with get_async_session_maker()() as session:
+        conv = await session.get(Conversation, conv_id)
+        if not conv or conv.tenant_id != tenant or conv.user_id != user_id:
+            raise HTTPException(404, "Conversation not found")
+        msg = await fetch_message_by_id(session, message_id)
+        if not msg or msg.conversation_id != conv_id:
+            raise HTTPException(404, "Message not found")
+        msg.rating = body.rating
+        msg.feedback_comment = body.comment
         await session.commit()
     return {"updated": True, "message_id": message_id}
 

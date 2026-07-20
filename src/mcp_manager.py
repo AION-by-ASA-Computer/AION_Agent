@@ -575,6 +575,8 @@ class MCPStdioWorker:
                                         raw_args = apply_mempalace_project_scope(
                                             tool_name, raw_args
                                         )
+                                    elif self.server_name in ("odoo", "odoo_mcp_server") and tool_name == "get_document_attachments":
+                                        raw_args["chat_session_id"] = inject_sid
                                     call_coro = session.call_tool(
                                         name=tool_name,
                                         arguments=sanitize_mcp_tool_arguments(raw_args),

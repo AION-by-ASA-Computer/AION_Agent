@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, Pencil, RefreshCw, Trash2, X } from "lucide-react";
 import {
   deleteNavigationDrawer,
@@ -14,6 +14,7 @@ import {
 } from "@/lib/api/navigation-memory";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
+import { fetchSqlProjects } from "@/lib/api/query-memory";
 
 const ROOMS = [
   "entry_points",
@@ -62,12 +63,13 @@ export function NavigationMemoryPanel({
   token,
   projectSlug,
   profileSlug: _profileSlug,
-  onProjectChange: _onProjectChange,
+  onProjectChange,
   embedded = false,
 }: Props) {
   const t = useT();
   const [rows, setRows] = useState<NavigationDrawer[]>([]);
   const [wing, setWing] = useState("");
+  const [selectedWing, setSelectedWing] = useState("");
   const [drawerCount, setDrawerCount] = useState(0);
   const [allWings, setAllWings] = useState<Record<string, number>>({});
   const [roomFilter, setRoomFilter] = useState<string>("");
@@ -80,6 +82,13 @@ export function NavigationMemoryPanel({
   const [editContent, setEditContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingItem, setDeletingItem] = useState<NavigationDrawer | null>(null);
+  const [sqlProjects, setSqlProjects] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetchSqlProjects(userId, token, _profileSlug)
+      .then((list) => setSqlProjects(list || []))
+      .catch((e) => console.error("Error loading SQL projects in NavigationMemoryPanel", e));
+  }, [userId, token, _profileSlug]);
 
   useEffect(() => {
     if (!deletingItem) return;
@@ -92,15 +101,27 @@ export function NavigationMemoryPanel({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [deletingItem]);
 
+  // Sync selected wing with active project's wing when projectSlug changes
+  useEffect(() => {
+    setSelectedWing("");
+  }, [projectSlug]);
+
   const load = useCallback(async () => {
     if (!projectSlug || !sessionId) return;
     setLoading(true);
     setError(null);
     try {
       const st = await fetchNavigationStatus(userId, sessionId, projectSlug, token);
-      setWing(st.wing);
+      const currentActiveWing = st.wing;
+      setWing(currentActiveWing);
       setDrawerCount(st.drawer_count);
       setAllWings(st.wings ?? {});
+
+      const wingToQuery = selectedWing || currentActiveWing;
+      if (!selectedWing) {
+        setSelectedWing(currentActiveWing);
+      }
+
       let loaded: NavigationDrawer[] = [];
       if (searchQ.trim()) {
         const hit = await searchNavigationMemory(
@@ -109,7 +130,7 @@ export function NavigationMemoryPanel({
           projectSlug,
           searchQ.trim(),
           token,
-          { room: roomFilter || undefined, limit: 50 }
+          { room: roomFilter || undefined, limit: 50, wing: wingToQuery }
         );
         loaded = hit.results ?? [];
       } else {
@@ -118,12 +139,11 @@ export function NavigationMemoryPanel({
           sessionId,
           projectSlug,
           token,
-          { room: roomFilter || undefined, limit: 100 }
+          { room: roomFilter || undefined, limit: 100, wing: wingToQuery }
         );
-        setWing(data.wing);
         loaded = data.drawers ?? [];
       }
-      if (!roomFilter && !searchQ.trim() && loaded.length === 0 && (st.sample_drawers?.length ?? 0) > 0) {
+      if (!roomFilter && !searchQ.trim() && loaded.length === 0 && (st.sample_drawers?.length ?? 0) > 0 && wingToQuery === currentActiveWing) {
         loaded = st.sample_drawers ?? [];
       }
       if (roomFilter) {
@@ -137,7 +157,7 @@ export function NavigationMemoryPanel({
     } finally {
       setLoading(false);
     }
-  }, [userId, sessionId, token, projectSlug, roomFilter, searchQ]);
+  }, [userId, sessionId, token, projectSlug, roomFilter, searchQ, selectedWing]);
 
   useEffect(() => {
     void load();
@@ -227,6 +247,53 @@ export function NavigationMemoryPanel({
     .sort((a, b) => b[1] - a[1])
     .slice(0, 8);
 
+  const wingOptions = useMemo(() => {
+    const options = new Set<string>();
+
+    // 1. Project wings from all SQL projects
+    if (sqlProjects && sqlProjects.length > 0) {
+      sqlProjects.forEach((p) => {
+        if (p.slug) {
+          options.add(`wing_proj_${p.slug.toLowerCase().trim()}`);
+        }
+      });
+    }
+
+    // 2. Always show the active project wing
+    const projWing = `wing_proj_${projectSlug}`;
+    options.add(projWing);
+
+    // 3. Always show standard system and user wings
+    const uWing = userId ? `wing_user_${userId.toLowerCase().trim()}` : "wing_user_default";
+    options.add(uWing);
+    options.add("wing_user_default");
+    options.add("wing_aion_system");
+    options.add("wing_session_context");
+    options.add("wing_research");
+
+    // 4. Show the currently resolved active wing
+    if (wing) {
+      options.add(wing);
+    }
+
+    // 5. Add all other wings returned by status API
+    Object.keys(allWings).forEach((w) => {
+      if (w.trim()) {
+        options.add(w.trim());
+      }
+    });
+
+    return Array.from(options).sort();
+  }, [projectSlug, wing, allWings, userId, sqlProjects]);
+
+  const handleWingChange = (newWing: string) => {
+    setSelectedWing(newWing);
+    if (newWing.startsWith("wing_proj_")) {
+      const proj = newWing.replace("wing_proj_", "");
+      onProjectChange(proj);
+    }
+  };
+
   return (
     <div className={cn("flex flex-col text-sm", embedded ? "h-full min-h-0" : "h-full")}>
       <div
@@ -235,13 +302,25 @@ export function NavigationMemoryPanel({
           embedded ? "border-b border-border/60 bg-muted/20 px-4 py-3" : "border-b border-border p-3"
         )}
       >
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-          <span>
-            {t("navigation_memory.wing")}{" "}
-            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-foreground">
-              {wing || "—"}
-            </code>
-          </span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <span>{t("navigation_memory.wing")}</span>
+            <select
+              className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-foreground shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
+              value={selectedWing || wing || `wing_proj_${projectSlug}`}
+              onChange={(e) => handleWingChange(e.target.value)}
+            >
+              {wingOptions.map((w) => {
+                const count = allWings[w] ?? 0;
+                const displayLabel = count > 0 ? `${w} (${count})` : w;
+                return (
+                  <option key={w} value={w}>
+                    {displayLabel}
+                  </option>
+                );
+              })}
+            </select>
+          </div>
           {drawerCount > 0 && (
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-primary">
               {drawerCount} {t("navigation_memory.drawers")}
@@ -330,9 +409,9 @@ export function NavigationMemoryPanel({
           <div className="space-y-3">
             <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
               <p className="text-xs text-muted-foreground">{t("navigation_memory.empty")}</p>
-              {wing ? (
+              {selectedWing || wing ? (
                 <p className="mt-2 font-mono text-[10px] text-muted-foreground">
-                  {t("navigation_memory.active_wing")}: {wing}
+                  {t("navigation_memory.active_wing")}: {selectedWing || wing}
                 </p>
               ) : null}
             </div>

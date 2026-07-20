@@ -71,12 +71,13 @@ export async function fetchNavigationDrawers(
   sessionId: string,
   project: string,
   token?: string | null,
-  opts?: { room?: string; limit?: number }
+  opts?: { room?: string; limit?: number; wing?: string }
 ): Promise<{ drawers: NavigationDrawer[]; wing: string }> {
   const params = new URLSearchParams({
     project,
     session_id: sessionId,
   });
+  if (opts?.wing) params.set("wing", opts.wing);
   if (opts?.room) params.set("room", opts.room);
   if (opts?.limit) params.set("limit", String(opts.limit));
   const r = await fetch(`${apiBase()}/v1/navigation-memory/drawers?${params}`, {
@@ -92,13 +93,14 @@ export async function searchNavigationMemory(
   project: string,
   q: string,
   token?: string | null,
-  opts?: { room?: string; limit?: number }
+  opts?: { room?: string; limit?: number; wing?: string }
 ): Promise<{ results: NavigationDrawer[] }> {
   const params = new URLSearchParams({
     project,
     session_id: sessionId,
     q,
   });
+  if (opts?.wing) params.set("wing", opts.wing);
   if (opts?.room) params.set("room", opts.room);
   if (opts?.limit) params.set("limit", String(opts.limit));
   const r = await fetch(`${apiBase()}/v1/navigation-memory/search?${params}`, {

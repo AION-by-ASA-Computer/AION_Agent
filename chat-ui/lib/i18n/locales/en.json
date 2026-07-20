@@ -353,7 +353,9 @@
       "thinking": "The agent is thinking…",
       "working": "The agent is working…",
       "compacting": "Compacting context…",
-      "compacting_desc": "Compacting short-term memory…"
+      "compacting_desc": "Compacting short-term memory…",
+      "saving_info": "Saving information…",
+      "saving_info_desc": "The agent is saving long-term information…"
     },
     "generating": {
       "plan": "Generating plan…",
@@ -439,12 +441,24 @@
       "textarea_placeholder": "Create or select a project to unlock chat..."
     },
     "go_to_source": "Go to source",
+    "project_warning": {
+      "title": "Attention: Missing Project Memory",
+      "desc": "It looks like you are trying to save queries or database schemas, but you haven't created or selected an active project memory.",
+      "action": "Click here to create it"
+    },
     "actions": {
       "copy": "Copy response",
       "copied": "Copied",
       "good": "Good response",
       "bad": "Bad response",
-      "regenerate": "Regenerate response"
+      "regenerate": "Regenerate response",
+      "memorize": "Memorize information",
+      "memorized_prefix": "The agent has memorized: ",
+      "memorize_instruction": "Analyze the following conversation turn (question, thinking and answer) and extract the relevant main information. Save it in the specified project wing. To save in MemPalace, you must EXCLUSIVELY use the 'mempalace_add_drawer' tool to create a drawer in the current project wing. DO NOT use the Knowledge Graph tools (such as 'mempalace_kg_add') under any circumstances. If there are SQL queries, database schemas, or project settings, save them also using the 'sql_memory_save' tool. If the info is already memorized, do not save it again. Respond providing exclusively a single sentence starting directly with the prefix 'The agent has memorized: ' followed by a very short summary of what was memorized and in which wing (or 'The agent detected that the info is already in memory' if it was already recorded). Do not add any introduction before, nor any additional explanations or comments after this prefix.",
+      "feedback_placeholder": "Why didn't you like this message? (Add an optional description)...",
+      "feedback_title": "Feedback on response",
+      "feedback_submit": "Submit",
+      "feedback_cancel": "Cancel"
     },
     "reasoning": {
       "label": "Reasoning",

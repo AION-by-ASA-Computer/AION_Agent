@@ -136,12 +136,12 @@ async def list_drawers(
     chat_session_id: str,
     *,
     project_slug: str,
+    wing: Optional[str] = None,
     room: Optional[str] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
-    slug = sanitize_project_slug(project_slug)
-    wing = project_wing(slug)
-    args: Dict[str, Any] = {"wing": wing, "limit": limit}
+    resolved_wing = wing or project_wing(sanitize_project_slug(project_slug))
+    args: Dict[str, Any] = {"wing": resolved_wing, "limit": limit}
     if room:
         args["room"] = room
     data = await _call_mempalace(chat_session_id, "mempalace_list_drawers", args)
@@ -179,14 +179,14 @@ async def search_drawers(
     chat_session_id: str,
     *,
     project_slug: str,
+    wing: Optional[str] = None,
     query: str,
     room: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    slug = sanitize_project_slug(project_slug)
-    wing = project_wing(slug)
+    resolved_wing = wing or project_wing(sanitize_project_slug(project_slug))
     lim = limit or int(os.getenv("AION_MEMPALACE_NAV_SEARCH_LIMIT", "5"))
-    args: Dict[str, Any] = {"wing": wing, "query": query, "limit": lim}
+    args: Dict[str, Any] = {"wing": resolved_wing, "query": query, "limit": lim}
     if room:
         args["room"] = room
     data = await _call_mempalace(chat_session_id, "mempalace_search", args)

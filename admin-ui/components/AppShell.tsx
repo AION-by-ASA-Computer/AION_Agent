@@ -20,6 +20,7 @@ import {
   KeyRound,
   Plug2,
   Clock,
+  MessageSquare,
 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { adminPath } from "@/lib/paths";
@@ -62,6 +63,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { name: "Skill Registry", href: "/skills", icon: Zap },
     { name: "MCP Hub", href: "/hub", icon: Globe },
     { name: "Conversations", href: "/conversations", icon: ClipboardList },
+    { name: "Feedback", href: "/feedback", icon: MessageSquare },
     { name: "Scheduled jobs", href: "/schedules", icon: Clock },
     { name: "API Keys", href: "/api-keys", icon: ShieldCheck },
     { name: "Memory", href: "/memory", icon: Brain },

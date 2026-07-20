@@ -80,8 +80,10 @@ function truncate(s: string, n: number): string {
   return `${t.slice(0, n - 1)}…`;
 }
 
-export function WebSourcesBar({ cards }: { cards: WebSourceCard[] }) {
+export function WebSourcesBar({ cards, messageId }: { cards: WebSourceCard[]; messageId?: string }) {
   if (!cards.length) return null;
+
+  const prefix = messageId ? `source-${messageId}` : "source";
 
   return (
     <div className="mt-2 mb-1 w-full overflow-hidden">
@@ -98,7 +100,7 @@ export function WebSourcesBar({ cards }: { cards: WebSourceCard[] }) {
         {cards.map((c) => (
           <a
             key={`${c.index}-${c.url}`}
-            id={`source-${c.index}`}
+            id={`${prefix}-${c.index}`}
             href={c.url}
             target="_blank"
             rel="noopener noreferrer"

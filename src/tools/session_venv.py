@@ -108,7 +108,7 @@ def ensure_session_venv(session_id: str) -> Path:
     if py.is_file():
         return vdir
     timeout = _pip_timeout()
-    argv = [sys.executable, "-m", "venv", str(vdir)]
+    argv = [sys.executable, "-m", "venv", "--system-site-packages", str(vdir)]
     root = session_root(session_id)
     env = build_session_env(session_id, session_root=root)
     proc = run_session_subprocess(

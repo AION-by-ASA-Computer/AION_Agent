@@ -32,7 +32,8 @@ type Props = {
   ? A
   : never
   : never;
-  formatTextWithCitations?: (text: string) => string;
+  formatTextWithCitations?: (text: string, messageId?: string) => string;
+  messageId?: string;
 };
 
 export function TurnTimeline({
@@ -44,6 +45,7 @@ export function TurnTimeline({
   isPlanArtifact,
   renderMarkdownLink,
   formatTextWithCitations = (t) => t,
+  messageId,
 }: Props) {
   const t = useT();
   if (!segments.length) return null;
@@ -212,7 +214,7 @@ export function TurnTimeline({
                 streaming={streaming}
                 isLast={isLast}
                 renderMarkdownLink={renderMarkdownLink}
-                formatTextWithCitations={formatTextWithCitations}
+                formatTextWithCitations={(txt: string) => formatTextWithCitations(txt, messageId)}
               />
             </div>
           );

@@ -186,7 +186,7 @@ async def _setup_plan_artifact_chunk(
         )
         if not registered:
             logger.warning(
-                "Plan artifact not registered in DB for %s (session %s) — skipping pending SSE",
+                "Plan artifact not registered in DB for %s (session %s) â€” skipping pending SSE",
                 pid,
                 session_id,
             )
@@ -332,7 +332,7 @@ def _find_input_end_index(
         target.role.value if hasattr(target.role, "value") else str(target.role)
     )
 
-    # Cerca prima per identità di oggetto (più veloce e sicuro)
+    # Cerca prima per identitÃ  di oggetto (piÃ¹ veloce e sicuro)
     for i in range(len(turn_messages) - 1, -1, -1):
         if turn_messages[i] is target:
             return i
@@ -357,7 +357,7 @@ def _chat_multimodal_attachments_enabled() -> bool:
 
 
 def _chat_multimodal_pdf_embed_enabled() -> bool:
-    """Haystack FileContent → OpenAI 'file' parts; many OpenAI-compat servers (e.g. vLLM) return 501."""
+    """Haystack FileContent â†’ OpenAI 'file' parts; many OpenAI-compat servers (e.g. vLLM) return 501."""
     return os.getenv("AION_CHAT_MULTIMODAL_PDF", "0").strip().lower() in (
         "1",
         "true",
@@ -617,7 +617,7 @@ class AgentPipeline:
                 orp = a.get("original_relative_path", "")
                 on = a.get("original_name") or ""
                 mime = a.get("mime") or ""
-                extra = f" — `{on}`" if on else ""
+                extra = f" â€” `{on}`" if on else ""
                 lines.append(f"- `{rp}`{extra} ({mime})")
                 if orp and orp != rp:
                     lines.append(f"  alias: `{orp}`")
@@ -630,7 +630,7 @@ class AgentPipeline:
                 orp = a.get("original_relative_path", "")
                 on = a.get("original_name") or ""
                 mime = a.get("mime") or ""
-                extra = f" — `{on}`" if on else ""
+                extra = f" â€” `{on}`" if on else ""
                 lines.append(f"- `{rp}`{extra} ({mime})")
                 if orp and orp != rp:
                     lines.append(f"  alias: `{orp}`")
@@ -716,13 +716,13 @@ class AgentPipeline:
                 if plans:
                     active = await resolve_active_plan_id(self.session_id)
                     orch_lines = [
-                        "### EXECUTION PLAN (orchestration DB — sidebar Plan)",
+                        "### EXECUTION PLAN (orchestration DB â€” sidebar Plan)",
                         "Plans are **not** `workspace/execution_plan_*.md` files. "
                         "For task state: `list_session_execution_plans`, `get_execution_plan`, `mark_task_completed`.",
                     ]
                     for row in plans:
                         pid = row.get("plan_id", "")
-                        tag = " **← active plan**" if active and pid == active else ""
+                        tag = " **â† active plan**" if active and pid == active else ""
                         orch_lines.append(
                             f"- `{pid}` status={row.get('status')} revision={row.get('revision')}{tag}"
                         )
@@ -740,7 +740,7 @@ class AgentPipeline:
                         if md:
                             excerpt = format_plan_tasks_excerpt(md, max_lines=24)
                             orch_lines.append(
-                                f"\nActive plan `{active}` — use `mark_task_completed(task_id=...)` "
+                                f"\nActive plan `{active}` â€” use `mark_task_completed(task_id=...)` "
                                 f"(plan_id optional) or `get_execution_plan()`:\n{excerpt}"
                             )
                     blocks.append("\n".join(orch_lines))
@@ -1045,7 +1045,7 @@ class AgentPipeline:
                     will_compact=False,
                 )
                 logger.warning(
-                    "context_compress db_done session=%s messages=%d total %d→%d",
+                    "context_compress db_done session=%s messages=%d total %dâ†’%d",
                     self.session_id[:8],
                     len(reloaded),
                     before,
@@ -1079,7 +1079,7 @@ class AgentPipeline:
         )
         after = compressor.total_with_overhead(compressed, overhead)
         logger.warning(
-            "context_compress memory_done session=%s messages %d→%d tokens %d→%d",
+            "context_compress memory_done session=%s messages %dâ†’%d tokens %dâ†’%d",
             self.session_id[:8],
             len(messages),
             len(compressed),
@@ -1128,6 +1128,7 @@ class AgentPipeline:
         sql_query_project: Optional[str] = None,
         plan_id: Optional[str] = None,
         plan_execution_task_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         logger.info(">>> [0] ENTERING run_stream for session %s", self.session_id)
         cancel_checker_task: Optional[asyncio.Task] = None
@@ -1276,7 +1277,15 @@ class AgentPipeline:
                 if _msg_src in ("user_input", "scheduled_trigger")
                 else "internal"
             )
-            _plan_meta_json = _plan_turn_metadata_json(plan_id, plan_execution_task_id)
+            _merged_meta = {}
+            if metadata:
+                _merged_meta.update(metadata)
+            if plan_id or plan_execution_task_id:
+                _merged_meta.update({
+                    "plan_id": (plan_id or "").strip() or None,
+                    "plan_task_id": (plan_execution_task_id or "").strip() or None,
+                })
+            _plan_meta_json = json.dumps(_merged_meta, ensure_ascii=False) if _merged_meta else None
 
             try:
                 await history_manager.upsert_message_content(
@@ -2352,7 +2361,7 @@ class AgentPipeline:
                                             "phase": "reasoning_guard",
                                             "message": (
                                                 "Molto reasoning senza tool: esegui la query o un tool "
-                                                "rilevante (SQL, memoria, OpenMetadata, …) oppure rispondi."
+                                                "rilevante (SQL, memoria, OpenMetadata, â€¦) oppure rispondi."
                                             ),
                                         }
                                     )
@@ -2398,7 +2407,7 @@ class AgentPipeline:
                                                 stop_reason = "plan_mark_already_used"
                                                 _block_msg = (
                                                     "mark_task_completed was already called this turn. "
-                                                    "STOP — do not call more tools."
+                                                    "STOP â€” do not call more tools."
                                                 )
                                                 yield _track_sse(
                                                     {
@@ -2449,8 +2458,8 @@ class AgentPipeline:
                                                 "phase": "mempalace",
                                                 "tool": _tn,
                                                 "message": (
-                                                    f"MemPalace · {_tn} "
-                                                    f"({tool_calls}/{max_tool_calls or '∞'})"
+                                                    f"MemPalace Â· {_tn} "
+                                                    f"({tool_calls}/{max_tool_calls or 'âˆž'})"
                                                 ),
                                             }
                                         )
@@ -2700,7 +2709,7 @@ class AgentPipeline:
                                                 "artifact": {
                                                     "identifier": aid,
                                                     "type": a_type,
-                                                    "title": f"📄 Artifact: {saved_path}",
+                                                    "title": f"ðŸ“„ Artifact: {saved_path}",
                                                     "auto_execute": False,
                                                 },
                                             }
@@ -2718,7 +2727,7 @@ class AgentPipeline:
                                             "artifact": {
                                                 "identifier": aid,
                                                 "type": a_type,
-                                                "title": f"📄 Artifact: {saved_path}",
+                                                "title": f"ðŸ“„ Artifact: {saved_path}",
                                                 "path": saved_path,
                                                 "saved": True,
                                                 "version": 1,
@@ -2742,7 +2751,7 @@ class AgentPipeline:
                                         "type": "turn_outcome",
                                         "code": "plan_task_completed",
                                         "message": (
-                                            "Task marked completed. Turn interrupted — "
+                                            "Task marked completed. Turn interrupted â€” "
                                             "the server will continue with the next task."
                                         ),
                                     }
@@ -2800,7 +2809,7 @@ class AgentPipeline:
                                                 "artifact": {
                                                     "identifier": aid,
                                                     "type": a_type,
-                                                    "title": f"✏️ Edit: {saved_path}",
+                                                    "title": f"âœï¸ Edit: {saved_path}",
                                                     "auto_execute": False,
                                                 },
                                             }
@@ -2818,7 +2827,7 @@ class AgentPipeline:
                                                 "artifact": {
                                                     "identifier": aid,
                                                     "type": a_type,
-                                                    "title": f"✏️ Edit: {saved_path}",
+                                                    "title": f"âœï¸ Edit: {saved_path}",
                                                     "path": saved_path,
                                                     "saved": True,
                                                     "version": 1,
@@ -2988,7 +2997,7 @@ class AgentPipeline:
                             tool_name = msg.meta.get("tool_name")
                             tool_call_id = msg.meta.get("tool_call_id")
 
-                        # Se è l'ultimo messaggio assistant del turno, usiamo l'assistant_message_id sincronizzato
+                        # Se Ã¨ l'ultimo messaggio assistant del turno, usiamo l'assistant_message_id sincronizzato
                         mid = None
                         if (
                             role == "assistant"
@@ -3215,7 +3224,7 @@ class AgentPipeline:
                             yield _track_sse(
                                 plan_controller.sse_phase(
                                     "finalizing",
-                                    message="Structuring the execution plan…",
+                                    message="Structuring the execution planâ€¦",
                                 )
                             )
                         _turn_pid = _resolve_turn_plan_id(plan_controller, None)

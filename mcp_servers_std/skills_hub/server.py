@@ -1,4 +1,4 @@
-"""MCP: ricerca e lettura on-demand delle skill (Hermes FASE A)."""
+﻿"""MCP: ricerca e lettura on-demand delle skill (Hermes FASE A)."""
 
 from __future__ import annotations
 
@@ -434,3 +434,4 @@ if __name__ == "__main__":
             raise
 
     asyncio.run(main())
+

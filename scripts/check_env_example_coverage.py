@@ -120,7 +120,7 @@ def main() -> int:
         action="store_true",
         help="Non verificare che i default di upgrade_core siano righe attive in .env.example",
     )
-    ap.add_argument("-v", "--verbose", action="store_true")
+    ap.add_argument(
         "-v",
         "--verbose",
         action="store_true",
