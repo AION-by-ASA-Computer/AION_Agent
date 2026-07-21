@@ -250,6 +250,11 @@ _PYTHON_BINARIES = frozenset(
 )
 
 
+def _is_python_executable(exe: str) -> bool:
+    base = os.path.basename((exe or "").strip()).lower()
+    return base in _PYTHON_BINARIES or base.startswith("python3.")
+
+
 def _validate_python_argv(argv: List[str]) -> None:
     """Block inline execution; require a script path as argv[1] (docx/office helpers)."""
     if len(argv) < 2:
@@ -320,8 +325,8 @@ def run_allowlisted(
     allowlist = policy.get_exec_allowlist()
     entry = _validate_argv_against_allowlist(argv, allowlist)
 
-    exe_base = os.path.basename(argv[0]).lower()
-    if exe_base in _PYTHON_BINARIES or exe_base.startswith("python3."):
+    is_python = _is_python_executable(argv[0])
+    if is_python:
         _validate_python_argv(argv)
 
     path_positions = entry.get("validate_path_positions") or []
@@ -347,15 +352,31 @@ def run_allowlisted(
                 "message": f"Script not found in sessione: {argv[1]}.{hint}",
                 "command": argv,
             }
+
+    venv_dir = None
+    if is_python:
+        from .session_venv import resolve_run_python_executable, session_venv_dir
+
+        py_exe = resolve_run_python_executable(sid)
+        argv[0] = str(py_exe)
+        candidate = session_venv_dir(sid)
+        if candidate.is_dir():
+            venv_dir = candidate
+
     env_minimal = build_exec_env(
-        sid, session_root=session_root(sid), argv=argv, repo_root=_REPO_ROOT
+        sid,
+        session_root=session_root(sid),
+        argv=argv,
+        repo_root=_REPO_ROOT,
+        venv_dir=venv_dir,
     )
 
     import shutil
 
-    resolved_exe = shutil.which(argv[0], path=env_minimal.get("PATH"))
-    if resolved_exe:
-        argv[0] = resolved_exe
+    if not is_python:
+        resolved_exe = shutil.which(argv[0], path=env_minimal.get("PATH"))
+        if resolved_exe:
+            argv[0] = resolved_exe
 
     logger.info(
         "exec_allowlisted session=%s argv=%r",

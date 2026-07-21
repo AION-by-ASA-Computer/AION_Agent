@@ -1,0 +1,11 @@
+# Python deps for office skill scripts (docx/pptx/pdf/xlsx) run via sandbox_exec_allowlisted.
+# Installed into /opt/venv at sandbox image build time and seeded into new session .venv in dev.
+defusedxml>=0.7.1
+lxml>=5.0.0
+python-docx>=1.1.0
+python-pptx>=1.0.0
+openpyxl>=3.1.0
+pypdf>=6.13.3
+pdfplumber>=0.11.10
+pdf2image>=1.17.0
+Pillow>=12.2.0

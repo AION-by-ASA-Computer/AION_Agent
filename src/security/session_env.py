@@ -140,7 +140,16 @@ def build_session_env(
     env["AION_SANDBOX_SESSION_ROOT"] = str(session_root_resolved)
 
     if venv_dir is not None:
-        env["VIRTUAL_ENV"] = str(venv_dir.resolve())
+        vdir = venv_dir.resolve()
+        env["VIRTUAL_ENV"] = str(vdir)
+        venv_bin = vdir / ("Scripts" if os.name == "nt" else "bin")
+        if venv_bin.is_dir():
+            current_path = env.get("PATH", "")
+            prefix = str(venv_bin)
+            if prefix not in current_path.split(os.pathsep):
+                env["PATH"] = (
+                    f"{prefix}{os.pathsep}{current_path}" if current_path else prefix
+                )
 
     # Minimal PYTHONPATH: repo root for ``-m src.security.sandbox_py_runner`` only.
     repo_root = Path(__file__).resolve().parents[2]
@@ -168,6 +177,7 @@ def build_exec_env(
     session_root: Path,
     argv: list[str],
     repo_root: Optional[Path] = None,
+    venv_dir: Optional[Path] = None,
 ) -> Dict[str, str]:
     """
     Minimal env for ``sandbox_exec_allowlisted`` — stricter than general session runs.
@@ -179,8 +189,16 @@ def build_exec_env(
         _resolve_wren_project_home,
         _exe_matches,
     )
+    from ..tools.session_venv import session_venv_dir
 
-    env = build_session_env(session_id, session_root=session_root)
+    if venv_dir is None and session_id:
+        candidate = session_venv_dir(session_id)
+        if candidate.is_dir():
+            venv_dir = candidate
+
+    env = build_session_env(
+        session_id, session_root=session_root, venv_dir=venv_dir
+    )
     _extend_path_for_exec(env)
 
     deny_prefixes = _deny_prefixes()

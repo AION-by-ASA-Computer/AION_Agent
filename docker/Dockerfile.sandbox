@@ -23,7 +23,7 @@ ENV VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /build
-COPY requirements-sandbox.txt ./
+COPY requirements-sandbox.txt requirements-sandbox-skills.txt ./
 RUN --mount=type=cache,target=/tmp/uv-cache \
     uv pip install --python /opt/venv/bin/python -r requirements-sandbox.txt
 
@@ -38,7 +38,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     AION_SANDBOX_FLAT_SESSION_ROOT=1
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tini nodejs npm \
+ && apt-get install -y --no-install-recommends tini nodejs npm poppler-utils \
  && rm -rf /var/lib/apt/lists/* \
  && groupadd --gid 10001 sandbox \
  && useradd --uid 10001 --gid sandbox --create-home --shell /usr/sbin/nologin sandbox
@@ -49,6 +49,7 @@ WORKDIR /app
 COPY src/ ./src/
 COPY mcp_servers_std/session_sandbox/ ./mcp_servers/session_sandbox/
 COPY config_std/fs_policy.example.yaml ./config_std/fs_policy.example.yaml
+COPY requirements-sandbox-skills.txt ./requirements-sandbox-skills.txt
 
 RUN mkdir -p /session && chown sandbox:sandbox /session /app
 

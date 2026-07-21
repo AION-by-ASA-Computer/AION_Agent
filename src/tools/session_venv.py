@@ -19,6 +19,9 @@ from ..session_workspace import ensure_session_dirs, session_root
 
 logger = logging.getLogger("aion.session_venv")
 
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_SKILLS_REQUIREMENTS = _REPO_ROOT / "requirements-sandbox-skills.txt"
+
 # Nome PEP-ish semplice + un gruppo extras opzionale, es. httpx[http2]
 _PACKAGE_TOKEN_RE = re.compile(
     r"^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?(\[[a-zA-Z0-9_,=\-]+\])?$"
@@ -100,6 +103,114 @@ def _validate_package_names(packages: List[str]) -> List[str]:
     return out
 
 
+def _in_sandbox_container() -> bool:
+    return os.environ.get("AION_SANDBOX_IN_CONTAINER", "0").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _venv_bootstrap_skills_enabled() -> bool:
+    return os.environ.get("AION_SANDBOX_VENV_BOOTSTRAP_SKILLS", "1").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def _venv_create_argv(vdir: Path) -> List[str]:
+    argv: List[str] = [sys.executable, "-m", "venv"]
+    if _in_sandbox_container():
+        # Inherit /opt/venv office skill deps baked into the sandbox image.
+        argv.append("--system-site-packages")
+    argv.append(str(vdir))
+    return argv
+
+
+def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
+    """Seed a new dev session venv with office skill Python deps (container uses system-site-packages)."""
+    if _in_sandbox_container() or not _venv_bootstrap_skills_enabled():
+        return
+    if not _SKILLS_REQUIREMENTS.is_file():
+        logger.warning("skills requirements not found: %s", _SKILLS_REQUIREMENTS)
+        return
+    if not _pip_install_allowed():
+        logger.info("skip skills venv bootstrap (AION_SANDBOX_ALLOW_PACKAGE_INSTALL=0)")
+        return
+
+    vpy = session_venv_python(session_id)
+    if not vpy.is_file():
+        return
+
+    timeout = _pip_timeout()
+    root = session_root(session_id)
+    env = build_session_env(
+        session_id,
+        session_root=root,
+        venv_dir=vdir,
+        extra={"PIP_DISABLE_PIP_VERSION_CHECK": "1"},
+    )
+    index_url = (os.environ.get("AION_SANDBOX_PIP_INDEX_URL") or "").strip()
+    extra_pip: List[str] = []
+    if index_url:
+        extra_pip.extend(["--index-url", index_url])
+
+    use_uv_flag = _default_use_uv()
+    if use_uv_flag:
+        uv = shutil.which("uv")
+        if not uv:
+            logger.warning("uv not on PATH; skip skills venv bootstrap")
+            return
+        argv = [
+            uv,
+            "pip",
+            "install",
+            "--python",
+            str(vpy),
+            *extra_pip,
+            "-r",
+            str(_SKILLS_REQUIREMENTS),
+        ]
+        exec_paths = [Path(uv), vpy]
+    else:
+        argv = [
+            str(vpy),
+            "-m",
+            "pip",
+            "install",
+            "--no-user",
+            *extra_pip,
+            "-r",
+            str(_SKILLS_REQUIREMENTS),
+        ]
+        exec_paths = [vpy]
+
+    proc = run_session_subprocess(
+        session_id,
+        argv,
+        cwd=str(root),
+        env=env,
+        timeout=timeout,
+        confinement_root=root,
+        confinement_venv=vdir,
+        confinement_mode="exec",
+        confinement_executables=exec_paths,
+    )
+    if proc.returncode != 0:
+        err = ((proc.stderr or "") + (proc.stdout or ""))[:2000]
+        logger.warning(
+            "skills venv bootstrap failed session=%s exit=%s err=%s",
+            session_id[:8],
+            proc.returncode,
+            err,
+        )
+        return
+    logger.info("Session venv bootstrapped with office skill deps: %s", vdir)
+
+
 def ensure_session_venv(session_id: str) -> Path:
     """Crea ``.venv`` sotto la sessione se assente."""
     ensure_session_dirs(session_id)
@@ -108,7 +219,7 @@ def ensure_session_venv(session_id: str) -> Path:
     if py.is_file():
         return vdir
     timeout = _pip_timeout()
-    argv = [sys.executable, "-m", "venv", str(vdir)]
+    argv = _venv_create_argv(vdir)
     root = session_root(session_id)
     env = build_session_env(session_id, session_root=root)
     proc = run_session_subprocess(
@@ -128,6 +239,7 @@ def ensure_session_venv(session_id: str) -> Path:
         )
     if not py.is_file():
         raise RuntimeError("venv creato ma interprete not found")
+    _bootstrap_session_venv_skills(session_id, vdir)
     logger.info("Session venv creato: %s", vdir)
     return vdir
 
