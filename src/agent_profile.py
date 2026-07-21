@@ -3,6 +3,7 @@ import os
 import re
 import shutil
 import yaml
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Iterator
 
@@ -142,6 +143,17 @@ ALWAYS_CRITICAL_SKILL_NAMES = frozenset({"core_protocol"})
 _WARNED_FULL_SKILL_MODE = False
 
 
+def _substitute_datetime_placeholders(
+    text: str, now: datetime | None = None
+) -> str:
+    """Replace AION date/time placeholders so Haystack Jinja2 does not treat them as template vars."""
+    if now is None:
+        now = datetime.now()
+    text = text.replace("{{current_date}}", now.strftime("%Y-%m-%d"))
+    text = text.replace("{{current_time}}", now.strftime("%H:%M:%S"))
+    return text
+
+
 class AgentProfile:
     def __init__(
         self,
@@ -182,8 +194,6 @@ class AgentProfile:
         model_id: str = "",
     ) -> str:
         """System prompt: istruzioni + skill (index o full legacy) + opz. MEMORY/USER."""
-        from datetime import datetime
-
         skill_registry.reload_if_stale()
 
         mode = os.getenv("AION_SKILL_SYSTEM_PROMPT_MODE", "index").lower()
@@ -197,17 +207,7 @@ class AgentProfile:
                 "prompt; use 'index' + critical_skills for smaller prompts."
             )
 
-        # Sostituzione placeholder dinamici nelle istruzioni
-        instructions = self.instructions
-        now = datetime.now()
-        instructions = instructions.replace(
-            "{{current_date}}", now.strftime("%Y-%m-%d")
-        )
-        instructions = instructions.replace(
-            "{{current_time}}", now.strftime("%H:%M:%S")
-        )
-
-        parts = [f"# Role: {self.name}", instructions]
+        parts = [f"# Role: {self.name}", self.instructions]
 
         try:
             from .runtime.system_prompt import assemble_model_prompt_section
@@ -317,7 +317,7 @@ class AgentProfile:
         #         "3. Non aggiungere commenti discorsivi DOPO il blocco JSON."
         #     )
 
-        return "\n\n".join(parts)
+        return _substitute_datetime_placeholders("\n\n".join(parts))
 
 
 class ProfileManager:

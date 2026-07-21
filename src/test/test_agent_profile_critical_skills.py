@@ -56,3 +56,19 @@ def test_critical_none_matches_legacy_default():
     )
     body = p.generate_system_prompt()
     assert "### Protocol rules (agent_db_protocol)" in body
+
+
+def test_datetime_placeholders_resolved_in_inlined_skills():
+    """core_protocol documents {{current_date}}/{{current_time}}; must not leak to Haystack Jinja2."""
+    p = AgentProfile(
+        name="T",
+        description="",
+        instructions="Today: {{current_date}} at {{current_time}}.",
+        skills=["core_protocol"],
+        slug="t",
+    )
+    body = p.generate_system_prompt()
+    assert "{{current_date}}" not in body
+    assert "{{current_time}}" not in body
+    assert "Today:" in body
+    assert "### Protocol rules (core_protocol)" in body

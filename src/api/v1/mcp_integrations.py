@@ -347,6 +347,12 @@ async def save_credentials(
             display_hint=hint,
         )
 
+    from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
+
+    await invalidate_mcp_credentials_runtime(
+        user_id, body.server_slug, tenant_id=tenant
+    )
+
     clear_integrations_cache()
     return {
         "ok": True,
@@ -370,6 +376,11 @@ async def delete_user_credential(
     )
     if not deleted:
         raise HTTPException(status_code=404, detail="Credential not found")
+    from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
+
+    await invalidate_mcp_credentials_runtime(
+        user_id, server_slug, tenant_id=tenant
+    )
     clear_integrations_cache()
     return {"ok": True}
 
@@ -541,6 +552,12 @@ async def oauth_callback(
             refresh_token,
             tenant_id=tenant,
         )
+
+    from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
+
+    await invalidate_mcp_credentials_runtime(
+        user_id, body.server_slug, tenant_id=tenant
+    )
 
     clear_integrations_cache()
     return {"ok": True, "server_slug": body.server_slug}
