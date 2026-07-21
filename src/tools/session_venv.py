@@ -130,12 +130,31 @@ def _venv_create_argv(vdir: Path) -> List[str]:
     return argv
 
 
+def _skills_bootstrap_marker(vdir: Path) -> Path:
+    return vdir / ".aion_skills_bootstrapped"
+
+
+def _skills_requirements_path() -> Path:
+    """Prefer repo-root file; sandbox image also ships a copy under /app."""
+    if _SKILLS_REQUIREMENTS.is_file():
+        return _SKILLS_REQUIREMENTS
+    container_copy = Path("/app/requirements-sandbox-skills.txt")
+    if container_copy.is_file():
+        return container_copy
+    return _SKILLS_REQUIREMENTS
+
+
 def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
-    """Seed a new dev session venv with office skill Python deps (container uses system-site-packages)."""
-    if _in_sandbox_container() or not _venv_bootstrap_skills_enabled():
+    """Seed session venv with office skill Python deps (idempotent via marker file)."""
+    if not _venv_bootstrap_skills_enabled():
         return
-    if not _SKILLS_REQUIREMENTS.is_file():
-        logger.warning("skills requirements not found: %s", _SKILLS_REQUIREMENTS)
+    marker = _skills_bootstrap_marker(vdir)
+    if marker.is_file():
+        return
+
+    req = _skills_requirements_path()
+    if not req.is_file():
+        logger.warning("skills requirements not found: %s", req)
         return
     if not _pip_install_allowed():
         logger.info("skip skills venv bootstrap (AION_SANDBOX_ALLOW_PACKAGE_INSTALL=0)")
@@ -172,7 +191,7 @@ def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
             str(vpy),
             *extra_pip,
             "-r",
-            str(_SKILLS_REQUIREMENTS),
+            str(req),
         ]
         exec_paths = [Path(uv), vpy]
     else:
@@ -184,7 +203,7 @@ def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
             "--no-user",
             *extra_pip,
             "-r",
-            str(_SKILLS_REQUIREMENTS),
+            str(req),
         ]
         exec_paths = [vpy]
 
@@ -208,6 +227,11 @@ def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
             err,
         )
         return
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        marker.write_text("ok\n", encoding="utf-8")
+    except OSError as exc:
+        logger.warning("skills bootstrap marker write failed: %s", exc)
     logger.info("Session venv bootstrapped with office skill deps: %s", vdir)
 
 
@@ -217,6 +241,7 @@ def ensure_session_venv(session_id: str) -> Path:
     vdir = session_venv_dir(session_id)
     py = session_venv_python(session_id)
     if py.is_file():
+        _bootstrap_session_venv_skills(session_id, vdir)
         return vdir
     timeout = _pip_timeout()
     argv = _venv_create_argv(vdir)
@@ -246,9 +271,12 @@ def ensure_session_venv(session_id: str) -> Path:
 
 def resolve_run_python_executable(session_id: str) -> Path:
     """
-    Interprete per ``sandbox_run_python_file``: venv sessione se esiste o se auto-venv è attivo.
+    Interprete per ``sandbox_run_python_file`` / ``sandbox_exec_allowlisted`` (python):
+    venv sessione se esiste o se auto-venv è attivo.
     """
     if session_venv_exists(session_id):
+        vdir = session_venv_dir(session_id)
+        _bootstrap_session_venv_skills(session_id, vdir)
         return session_venv_python(session_id)
     if _auto_venv_enabled():
         ensure_session_venv(session_id)

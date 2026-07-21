@@ -526,9 +526,6 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
         : "";
     if (msg.trim()) {
       next.segments = upsertStatusSegment(next.segments, msg.trim(), "warning");
-      if (!next.assistantContent.trim() && !next.error) {
-        next.assistantContent = msg.trim();
-      }
     }
     return next;
   }

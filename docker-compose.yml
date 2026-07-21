@@ -91,6 +91,8 @@ services:
       CONTAINER_HOST: unix:///run/podman/podman.sock
       AION_SANDBOX_FAIL_CLOSED: ${AION_SANDBOX_FAIL_CLOSED:-1}
       AION_SANDBOX_MCP_JAIL: ${AION_SANDBOX_MCP_JAIL:-1}
+      # Absolute host path to data/ (required for Podman session bind-mounts + live src overlay)
+      AION_SANDBOX_HOST_DATA_DIR: ${AION_SANDBOX_HOST_DATA_DIR}
     volumes:
       - aion_data:/app/data
       # Host-visible sessions so rootless Podman can bind-mount per chat (see AION_SANDBOX_HOST_DATA_DIR)
@@ -101,6 +103,8 @@ services:
       # Versioned templates from git (git pull + restart propagates without image rebuild)
       - ./config_std:/app/config_std:ro
       - ./mcp_servers_std:/app/mcp_servers_std:ro
+      - ./src:/app/src:ro
+      - ./requirements-sandbox-skills.txt:/app/requirements-sandbox-skills.txt:ro
       # Writable runtime overlay (synced from *_std at boot; local customizations persist)
       - ./config:/app/config
       - ./mcp_servers:/app/mcp_servers

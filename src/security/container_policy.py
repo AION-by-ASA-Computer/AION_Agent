@@ -66,6 +66,8 @@ def build_container_run_argv(
     from .container_paths import (
         SANDBOX_FS_POLICY_CONTAINER_PATH,
         resolve_fs_policy_host_mount,
+        resolve_host_skills_requirements_mount,
+        resolve_host_src_mount,
     )
 
     name = container_name_for_session(session_id)
@@ -98,6 +100,22 @@ def build_container_run_argv(
     if policy_host is not None:
         policy_mount = f"{policy_host}:{SANDBOX_FS_POLICY_CONTAINER_PATH}:ro{_selinux_mount_suffix()}"
         argv.extend(["-v", policy_mount])
+
+    # Live Python sources: Podman often keeps a stale sandbox image while backend bind-mounts
+    # config_std/mcp_servers_std. Overlay host src/ so session_exec/session_venv fixes apply
+    # without rebuilding aion/sandbox:latest on every deploy.
+    src_host = resolve_host_src_mount()
+    if src_host is not None:
+        src_mount = f"{src_host}:/app/src:ro{_selinux_mount_suffix()}"
+        argv.extend(["-v", src_mount])
+
+    skills_req_host = resolve_host_skills_requirements_mount()
+    if skills_req_host is not None:
+        req_mount = (
+            f"{skills_req_host}:/app/requirements-sandbox-skills.txt:ro"
+            f"{_selinux_mount_suffix()}"
+        )
+        argv.extend(["-v", req_mount])
 
     argv.extend(
         [

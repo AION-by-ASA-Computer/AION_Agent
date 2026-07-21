@@ -134,6 +134,38 @@ class TestContainerPolicy(unittest.TestCase):
                 joined,
             )
 
+    def test_run_argv_mounts_host_src_when_host_data_dir_set(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "aion"
+            data = repo / "data"
+            src = repo / "src"
+            src.mkdir(parents=True)
+            (repo / "requirements-sandbox-skills.txt").write_text(
+                "defusedxml\n", encoding="utf-8"
+            )
+            session_host = data / "sessions" / "sess-1234"
+            session_host.mkdir(parents=True)
+            with patch.dict(
+                os.environ,
+                {"AION_SANDBOX_HOST_DATA_DIR": str(data)},
+                clear=False,
+            ):
+                argv = build_container_run_argv(
+                    runtime="podman",
+                    image="aion/sandbox:latest",
+                    session_id="sess-1234",
+                    session_host_path=session_host,
+                )
+            joined = " ".join(argv)
+            self.assertIn(f"{src.resolve()}:/app/src:ro", joined)
+            self.assertIn(
+                f"{(repo / 'requirements-sandbox-skills.txt').resolve()}"
+                ":/app/requirements-sandbox-skills.txt:ro",
+                joined,
+            )
+
 
 class TestContainerPaths(unittest.TestCase):
     def test_resolve_host_repo_path(self):

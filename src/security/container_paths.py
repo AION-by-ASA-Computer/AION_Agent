@@ -9,6 +9,40 @@ from typing import Optional
 SANDBOX_FS_POLICY_CONTAINER_PATH = "/etc/aion/fs_policy.yaml"
 
 
+def resolve_host_repo_root() -> Optional[Path]:
+    """
+    Host checkout root for bind-mounting live ``src/`` into Podman sandboxes.
+
+    Derived from ``AION_SANDBOX_HOST_REPO`` or parent of ``AION_SANDBOX_HOST_DATA_DIR``.
+    Paths are for the **host** Podman daemon — do not require them to exist inside the
+    backend container filesystem.
+    """
+    explicit = (os.environ.get("AION_SANDBOX_HOST_REPO") or "").strip()
+    if explicit:
+        return Path(explicit).expanduser().resolve()
+
+    host_data = (os.environ.get("AION_SANDBOX_HOST_DATA_DIR") or "").strip()
+    if not host_data:
+        return None
+    return Path(host_data).expanduser().resolve().parent
+
+
+def resolve_host_src_mount() -> Optional[Path]:
+    """Host ``src/`` directory to overlay ``/app/src`` in session sandbox containers."""
+    root = resolve_host_repo_root()
+    if root is None:
+        return None
+    return (root / "src").resolve()
+
+
+def resolve_host_skills_requirements_mount() -> Optional[Path]:
+    """Host ``requirements-sandbox-skills.txt`` for session venv bootstrap in sandboxes."""
+    root = resolve_host_repo_root()
+    if root is None:
+        return None
+    return (root / "requirements-sandbox-skills.txt").resolve()
+
+
 def resolve_host_repo_path(container_path: Path) -> Path:
     """
     Map a path under the backend repo (e.g. ``/app/config/...``) to the host
