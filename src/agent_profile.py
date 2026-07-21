@@ -143,9 +143,7 @@ ALWAYS_CRITICAL_SKILL_NAMES = frozenset({"core_protocol"})
 _WARNED_FULL_SKILL_MODE = False
 
 
-def _substitute_datetime_placeholders(
-    text: str, now: datetime | None = None
-) -> str:
+def _substitute_datetime_placeholders(text: str, now: datetime | None = None) -> str:
     """Replace AION date/time placeholders so Haystack Jinja2 does not treat them as template vars."""
     if now is None:
         now = datetime.now()

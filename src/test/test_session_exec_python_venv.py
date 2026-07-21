@@ -93,6 +93,7 @@ def test_run_allowlisted_python_uses_session_venv(
     def _fake_run(session_id, argv, **kwargs):
         captured["argv"] = list(argv)
         captured["env"] = kwargs.get("env", {})
+
         class _Proc:
             returncode = 0
             stdout = "ok"

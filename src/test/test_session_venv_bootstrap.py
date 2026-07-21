@@ -16,7 +16,13 @@ def test_venv_create_argv_uses_system_site_packages_in_container(
 ) -> None:
     monkeypatch.setenv("AION_SANDBOX_IN_CONTAINER", "1")
     argv = session_venv._venv_create_argv(Path("/session/.venv"))
-    assert argv == [session_venv.sys.executable, "-m", "venv", "--system-site-packages", "/session/.venv"]
+    assert argv == [
+        session_venv.sys.executable,
+        "-m",
+        "venv",
+        "--system-site-packages",
+        "/session/.venv",
+    ]
 
 
 def test_venv_create_argv_plain_on_host(monkeypatch: pytest.MonkeyPatch) -> None:

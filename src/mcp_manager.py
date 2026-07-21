@@ -1499,9 +1499,10 @@ class MCPManager:
                     tid = "default"
                 else:
                     _slug, uid, tid = ctx
-                if sanitize_user_id(uid) == safe_uid and (
-                    (tid or "default").strip() or "default"
-                ) == tenant:
+                if (
+                    sanitize_user_id(uid) == safe_uid
+                    and ((tid or "default").strip() or "default") == tenant
+                ):
                     to_stop.append((sid, sname))
 
             workers = []

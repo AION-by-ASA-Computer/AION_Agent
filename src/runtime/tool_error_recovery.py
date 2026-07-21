@@ -172,7 +172,9 @@ def recover_from_consecutive_tool_errors(state: Any) -> None:
     last = messages[-1]
     role = getattr(last, "role", None)
     role_val = str(role.value if hasattr(role, "value") else role or "").lower()
-    has_tool_calls = bool(getattr(last, "tool_calls", None) or getattr(last, "tool_call", None))
+    has_tool_calls = bool(
+        getattr(last, "tool_calls", None) or getattr(last, "tool_call", None)
+    )
     text = (getattr(last, "text", None) or "").strip()
     if role_val != ChatRole.ASSISTANT.value and role_val != "assistant":
         return

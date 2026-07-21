@@ -196,9 +196,7 @@ def build_exec_env(
         if candidate.is_dir():
             venv_dir = candidate
 
-    env = build_session_env(
-        session_id, session_root=session_root, venv_dir=venv_dir
-    )
+    env = build_session_env(session_id, session_root=session_root, venv_dir=venv_dir)
     _extend_path_for_exec(env)
 
     deny_prefixes = _deny_prefixes()

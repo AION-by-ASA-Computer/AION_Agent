@@ -22,9 +22,7 @@ def test_record_tool_error_triggers_after_threshold():
     reset_tracker("sess-ter")
     threshold = tool_error_threshold()
     for _ in range(threshold - 1):
-        assert (
-            record_tool_error("sess-ter", "create_project", "HTTP 400") is None
-        )
+        assert record_tool_error("sess-ter", "create_project", "HTTP 400") is None
     hit = record_tool_error("sess-ter", "create_project", "HTTP 409")
     assert hit is not None
     assert hit["consecutive_errors"] >= threshold
