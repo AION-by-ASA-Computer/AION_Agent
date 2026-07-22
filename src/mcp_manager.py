@@ -489,6 +489,17 @@ class MCPStdioWorker:
                     )
                     self._container_jail = True
 
+            # Expand environment variable placeholders (e.g., ${VAR}) in command line arguments
+            expanded_args = []
+            for arg in args:
+                if isinstance(arg, str) and "${" in arg:
+                    for k, v in env.items():
+                        placeholder = f"${{{k}}}"
+                        if placeholder in arg:
+                            arg = arg.replace(placeholder, v)
+                expanded_args.append(arg)
+            args = expanded_args
+
             server_params = StdioServerParameters(command=command, args=args, env=env)
 
             logger.info(

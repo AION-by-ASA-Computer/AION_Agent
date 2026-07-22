@@ -206,6 +206,7 @@ class MCPUpdate(BaseModel):
     aion_connector_id: Optional[str] = None
     type: Optional[str] = None
     url: Optional[str] = None
+    oauth: Optional[Dict[str, Any]] = None
 
 
 class MCPInstallRequest(BaseModel):
@@ -2213,6 +2214,15 @@ async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -
             sse_url, name, target.get("description") or "", auth_type=auth_type
         )
         config.update(remote_config)
+
+        # Add oauth parameters if provided during remote installation
+        if target.get("client_id") or target.get("client_secret"):
+            config["oauth"] = {}
+            if target.get("client_id"):
+                config["oauth"]["client_id"] = target.get("client_id")
+            if target.get("client_secret"):
+                config["oauth"]["client_secret"] = target.get("client_secret")
+
         mcp_manager._registry_local[name] = config
         mcp_manager._rebuild_merged()
         mcp_manager.save_registry()
@@ -2281,6 +2291,8 @@ async def install_from_github_url(body: GitHubInstallBody):
 class RemoteInstallBody(BaseModel):
     url: str = Field(..., min_length=8, description="URL del server MCP remoto")
     display_name: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
 
 
 @router.post("/market/install-remote")
@@ -2317,6 +2329,8 @@ async def install_from_remote_url(body: RemoteInstallBody):
         "url": url,
         "install_type": "remote",
         "remotes": [{"type": "sse", "url": url}],
+        "client_id": body.client_id.strip() if body.client_id else None,
+        "client_secret": body.client_secret.strip() if body.client_secret else None,
     }
     try:
         name = await _install_market_record(target, item_id=str(target.get("id") or ""))

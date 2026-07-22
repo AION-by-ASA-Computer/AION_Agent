@@ -392,10 +392,19 @@ async def sync_mcp_server_config_from_registry(
                     )
                 except Exception:
                     oauth_cfg = {}
+
+                # Merge any custom oauth properties defined in the registry config
+                registry_oauth = raw_cfg.get("oauth")
+                if isinstance(registry_oauth, dict):
+                    for k, v in registry_oauth.items():
+                        oauth_cfg[k] = v
+
                 if not oauth_cfg.get("remote_url"):
                     oauth_cfg["remote_url"] = raw_cfg.get("remote_url", "")
-                    oauth_cfg["provider"] = oauth_cfg.get("provider") or "generic"
-                    row.oauth_config_json = json.dumps(oauth_cfg)
+                if not oauth_cfg.get("provider"):
+                    oauth_cfg["provider"] = "generic"
+
+                row.oauth_config_json = json.dumps(oauth_cfg)
                 # Auto-abilita i server remote-bridge esistenti ancora disabilitati
                 if not row.is_enabled_for_users:
                     row.is_enabled_for_users = True
@@ -409,8 +418,14 @@ async def sync_mcp_server_config_from_registry(
         else:
             oauth_cfg = {}
             if raw_cfg.get("type") == "remote-bridge":
-                oauth_cfg["remote_url"] = raw_cfg.get("remote_url", "")
-                oauth_cfg["provider"] = "generic"
+                registry_oauth = raw_cfg.get("oauth")
+                if isinstance(registry_oauth, dict):
+                    for k, v in registry_oauth.items():
+                        oauth_cfg[k] = v
+                if not oauth_cfg.get("remote_url"):
+                    oauth_cfg["remote_url"] = raw_cfg.get("remote_url", "")
+                if not oauth_cfg.get("provider"):
+                    oauth_cfg["provider"] = "generic"
             # I server remote-bridge vengono abilitati per gli utenti automaticamente
             # perché l'admin li ha installati esplicitamente per la configurazione per-utente
             auto_enabled = raw_cfg.get("type") == "remote-bridge"

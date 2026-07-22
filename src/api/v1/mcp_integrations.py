@@ -630,16 +630,23 @@ async def oauth_start(
     modified = False
 
     # ─── STEP 1: Discovery dal resource server ───────────────────────────────
-    # Se non abbiamo ancora l'authorization server, prova la discovery completa
+    # Riconfigura o scopre gli endpoint se mancano o se è un server remoto
+    # (così da aggiornare gli endpoint se il server/tunnel è stato riavviato).
+    from src.mcp_manager import mcp_manager as _mgr
+
+    _mgr.load_registry()
+    reg_cfg = _mgr.get_server_config(server_slug) or {}
+    is_remote = reg_cfg.get("aion_market_install") == "remote" or reg_cfg.get("type") in (
+        "sse",
+        "remote-bridge",
+    )
+
     if (
-        not oauth_cfg.get("authorization_server")
+        is_remote
+        or not oauth_cfg.get("authorization_server")
         or not oauth_cfg.get("token_url")
         or not oauth_cfg.get("authorization_endpoint")
     ):
-        from src.mcp_manager import mcp_manager as _mgr
-
-        _mgr.load_registry()
-        reg_cfg = _mgr.get_server_config(server_slug) or {}
         remote_url = reg_cfg.get("remote_url") or oauth_cfg.get("remote_url") or ""
 
         if remote_url:
@@ -720,7 +727,7 @@ async def oauth_start(
 
                     if auth_servers:
                         auth_server_url = auth_servers[0]
-                        if not oauth_cfg.get("authorization_server"):
+                        if oauth_cfg.get("authorization_server") != auth_server_url:
                             oauth_cfg["authorization_server"] = auth_server_url
                             modified = True
 
@@ -772,24 +779,19 @@ async def oauth_start(
                                 continue
 
                         if as_meta:
-                            if not oauth_cfg.get("token_url") and as_meta.get(
-                                "token_endpoint"
-                            ):
-                                oauth_cfg["token_url"] = as_meta["token_endpoint"]
+                            token_endpoint = as_meta.get("token_endpoint")
+                            if token_endpoint and oauth_cfg.get("token_url") != token_endpoint:
+                                oauth_cfg["token_url"] = token_endpoint
                                 modified = True
-                            if not oauth_cfg.get(
-                                "authorization_endpoint"
-                            ) and as_meta.get("authorization_endpoint"):
-                                oauth_cfg["authorization_endpoint"] = as_meta[
-                                    "authorization_endpoint"
-                                ]
+
+                            auth_endpoint = as_meta.get("authorization_endpoint")
+                            if auth_endpoint and oauth_cfg.get("authorization_endpoint") != auth_endpoint:
+                                oauth_cfg["authorization_endpoint"] = auth_endpoint
                                 modified = True
-                            if not oauth_cfg.get(
-                                "registration_endpoint"
-                            ) and as_meta.get("registration_endpoint"):
-                                oauth_cfg["registration_endpoint"] = as_meta[
-                                    "registration_endpoint"
-                                ]
+
+                            reg_endpoint = as_meta.get("registration_endpoint")
+                            if reg_endpoint and oauth_cfg.get("registration_endpoint") != reg_endpoint:
+                                oauth_cfg["registration_endpoint"] = reg_endpoint
                                 modified = True
 
                         # ─── STEP 3: Dynamic Client Registration (RFC 7591) ──
