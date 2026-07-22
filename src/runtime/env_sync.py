@@ -73,7 +73,9 @@ def _load_meta(path: Path) -> Dict[str, Any]:
 
 def _save_meta(path: Path, meta: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(dict(meta), indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    path.write_text(
+        json.dumps(dict(meta), indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
 
 def load_base_env(*, repo_root: Path | None = None) -> Dict[str, str]:
@@ -234,7 +236,9 @@ def reconcile_runtime_env_on_boot() -> Dict[str, Any]:
         return {"error": True}
 
 
-def diff_against_base(settings: Mapping[str, str], *, repo_root: Path | None = None) -> Dict[str, str]:
+def diff_against_base(
+    settings: Mapping[str, str], *, repo_root: Path | None = None
+) -> Dict[str, str]:
     base = load_base_env(repo_root=repo_root)
     seed_base_env_from_process(base)
     overrides: Dict[str, str] = {}
