@@ -25,7 +25,7 @@ _PROBE_CACHE_TTL: int = int(os.environ.get("AION_INTEGRATIONS_PROBE_TTL", "60"))
 # Per-slug cache for discover_mcp_credentials – eliminates the 2-3 redundant
 # calls per integration during the integrations-list endpoint.
 # ---------------------------------------------------------------------------
-_DISCOVERY_CACHE: dict[str, CredentialDiscoveryResult] = {}
+_DISCOVERY_CACHE: dict[str, tuple[float, CredentialDiscoveryResult]] = {}
 
 # Timeout for HTTP probes – reduced from 15 s to a configurable value
 # (default 5 s).  Page-load probing does not need a full 15 s wait.
@@ -425,6 +425,76 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
             except Exception:
                 pass
 
+            # 3d. Prova /.well-known/oauth-protected-resource (RFC 9728)
+            try:
+                from urllib.parse import urlparse, urlunparse
+
+                parsed_url = urlparse(url)
+                urls_to_try = []
+                if parsed_url.netloc:
+                    urls_to_try.append(
+                        urlunparse(
+                            (
+                                parsed_url.scheme,
+                                parsed_url.netloc,
+                                "/.well-known/oauth-protected-resource",
+                                "",
+                                "",
+                                "",
+                            )
+                        )
+                    )
+                urls_to_try.append(
+                    f"{url.rstrip('/')}/.well-known/oauth-protected-resource"
+                )
+
+                resource_meta = {}
+                for well_known_url in urls_to_try:
+                    try:
+                        wk_res = requests.get(well_known_url, timeout=_PROBE_TIMEOUT)
+                        if wk_res.status_code == 200:
+                            resource_meta = wk_res.json()
+                            break
+                    except Exception:
+                        continue
+
+                auth_servers = resource_meta.get("authorization_servers") or []
+                issuer = auth_servers[0] if auth_servers else ""
+                if issuer:
+                    token_url = None
+                    try:
+                        wk_url = f"{issuer.rstrip('/')}/.well-known/oauth-authorization-server"
+                        wk_res = requests.get(wk_url, timeout=5.0)
+                        if wk_res.status_code != 200:
+                            wk_url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
+                            wk_res = requests.get(wk_url, timeout=5.0)
+                        if wk_res.status_code == 200:
+                            token_url = wk_res.json().get("token_endpoint")
+                    except Exception:
+                        pass
+
+                    provider = detect_oauth_provider(issuer)
+                    return {
+                        "type": "oauth2",
+                        "url": url,
+                        "hint": www_auth,
+                        "connectUrl": connect_url,
+                        "credential_mode": "per_user",
+                        "oauth_provider": provider,
+                        "oauth_server": issuer,
+                        "oauth_token_url": token_url or f"{issuer.rstrip('/')}/token",
+                        "credential_schema": [
+                            {
+                                "key": "OAUTH_TOKEN",
+                                "label": "OAuth Token",
+                                "type": "oauth",
+                                "required": True,
+                            }
+                        ],
+                    }
+            except Exception:
+                pass
+
             # Fallback 401
             if "bearer" in www_auth.lower():
                 return {
@@ -520,9 +590,14 @@ def discover_mcp_credentials(
     Analizza file installati e registry per proporre schema credenziali e modalità.
     """
     # Fast path: reuse discovery result for the same slug within this request.
+    now = time.monotonic()
     cached = _DISCOVERY_CACHE.get(server_slug)
     if cached is not None:
-        return cached
+        ts, result = cached
+        if now - ts < _PROBE_CACHE_TTL:
+            return result
+        else:
+            del _DISCOVERY_CACHE[server_slug]
 
     cfg = server_config or {}
 
@@ -557,7 +632,7 @@ def discover_mcp_credentials(
                 sources=["remote_discovery"],
                 remote_auth_type="no-remote",
             )
-            _DISCOVERY_CACHE[server_slug] = _res
+            _DISCOVERY_CACHE[server_slug] = (time.monotonic(), _res)
             return _res
 
         headers = remote.get("headers") or []
@@ -635,7 +710,7 @@ def discover_mcp_credentials(
             remote_oauth_token_url=final_res.get("oauth_token_url"),
             has_env_auth=(mode_hint != "none" and auth_type != "unreachable"),
         )
-        _DISCOVERY_CACHE[server_slug] = _res
+        _DISCOVERY_CACHE[server_slug] = (time.monotonic(), _res)
         return _res
 
     env = cfg.get("env") if isinstance(cfg.get("env"), dict) else {}
@@ -703,7 +778,7 @@ def discover_mcp_credentials(
         config_file_auth=config_file_auth,
         has_env_auth=has_env_auth,
     )
-    _DISCOVERY_CACHE[server_slug] = _res
+    _DISCOVERY_CACHE[server_slug] = (time.monotonic(), _res)
     return _res
 
 

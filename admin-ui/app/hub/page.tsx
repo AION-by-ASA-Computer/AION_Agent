@@ -41,6 +41,8 @@ export default function MCPHub() {
   const [remoteInstallOpen, setRemoteInstallOpen] = useState(false);
   const [remoteUrl, setRemoteUrl] = useState("");
   const [remoteDisplayName, setRemoteDisplayName] = useState("");
+  const [remoteClientId, setRemoteClientId] = useState("");
+  const [remoteClientSecret, setRemoteClientSecret] = useState("");
 
   const [activeTab, setActiveTab] = useState<"marketplace" | "installed">("installed");
   const [mcpFilter, setMcpFilter] = useState("all");
@@ -372,6 +374,12 @@ export default function MCPHub() {
       if (typeof v.aion_connector_id === "string" && v.aion_connector_id.trim()) {
         payload.aion_connector_id = v.aion_connector_id.trim();
       }
+      if (v.type === "sse" || v.type === "remote-bridge") {
+        payload.oauth = {
+          client_id: oauthConfig.client_id || undefined,
+          client_secret: oauthConfig.client_secret || undefined,
+        };
+      }
       const res = await apiFetch(`${apiBase()}/admin/mcp/${editingConfig.name}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -526,6 +534,8 @@ export default function MCPHub() {
         body: JSON.stringify({
           url,
           display_name: remoteDisplayName.trim() || undefined,
+          client_id: remoteClientId.trim() || undefined,
+          client_secret: remoteClientSecret.trim() || undefined,
         }),
       });
       if (!res.ok) {
@@ -548,6 +558,8 @@ export default function MCPHub() {
       setRemoteInstallOpen(false);
       setRemoteUrl("");
       setRemoteDisplayName("");
+      setRemoteClientId("");
+      setRemoteClientSecret("");
       fetchRegistry();
       setActiveTab("installed");
     } catch (e: unknown) {
@@ -861,7 +873,13 @@ export default function MCPHub() {
               </div>
               <button
                 type="button"
-                onClick={() => setRemoteInstallOpen(false)}
+                onClick={() => {
+                  setRemoteInstallOpen(false);
+                  setRemoteUrl("");
+                  setRemoteDisplayName("");
+                  setRemoteClientId("");
+                  setRemoteClientSecret("");
+                }}
                 className="text-gray-500 hover:text-white p-1 cursor-pointer"
               >
                 <X className="w-5 h-5" />
@@ -887,10 +905,38 @@ export default function MCPHub() {
                 className="mt-1.5 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500/80 outline-none"
               />
             </label>
+            <div className="grid grid-cols-2 gap-4">
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
+                OAuth Client ID (optional)
+                <input
+                  type="text"
+                  value={remoteClientId}
+                  onChange={(e) => setRemoteClientId(e.target.value)}
+                  placeholder="e.g. client-id"
+                  className="mt-1.5 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500/80 outline-none"
+                />
+              </label>
+              <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
+                OAuth Client Secret (optional)
+                <input
+                  type="password"
+                  value={remoteClientSecret}
+                  onChange={(e) => setRemoteClientSecret(e.target.value)}
+                  placeholder="e.g. client-secret"
+                  className="mt-1.5 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500/80 outline-none"
+                />
+              </label>
+            </div>
             <div className="flex gap-3 justify-end pt-2">
               <button
                 type="button"
-                onClick={() => setRemoteInstallOpen(false)}
+                onClick={() => {
+                  setRemoteInstallOpen(false);
+                  setRemoteUrl("");
+                  setRemoteDisplayName("");
+                  setRemoteClientId("");
+                  setRemoteClientSecret("");
+                }}
                 className="px-4 py-2 text-sm text-gray-400 hover:text-white cursor-pointer"
               >
                 Cancel
@@ -1354,21 +1400,55 @@ export default function MCPHub() {
               </div>
 
               {
-                editingConfig.values.type === "sse" ? (
-                  <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">SSE Endpoint URL</label>
-                    <input
-                      type="text"
-                      value={editingConfig.values.url ?? ""}
-                      onChange={(e) =>
-                        setEditingConfig({
-                          ...editingConfig,
-                          values: { ...editingConfig.values, url: e.target.value },
-                        })
-                      }
-                      placeholder="https://example.com/sse"
-                      className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner font-mono"
-                    />
+                editingConfig.values.type === "sse" || editingConfig.values.type === "remote-bridge" ? (
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">SSE Endpoint URL</label>
+                      <input
+                        type="text"
+                        value={editingConfig.values.url ?? ""}
+                        onChange={(e) =>
+                          setEditingConfig({
+                            ...editingConfig,
+                            values: { ...editingConfig.values, url: e.target.value },
+                          })
+                        }
+                        placeholder="https://example.com/sse"
+                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner font-mono"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">OAuth Client ID (Optional)</label>
+                        <input
+                          type="text"
+                          value={oauthConfig.client_id ?? ""}
+                          onChange={(e) =>
+                            setOauthConfig({
+                              ...oauthConfig,
+                              client_id: e.target.value,
+                            })
+                          }
+                          placeholder="e.g. client-id"
+                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">OAuth Client Secret (Optional)</label>
+                        <input
+                          type="password"
+                          value={oauthConfig.client_secret ?? ""}
+                          onChange={(e) =>
+                            setOauthConfig({
+                              ...oauthConfig,
+                              client_secret: e.target.value,
+                            })
+                          }
+                          placeholder="e.g. client-secret"
+                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner"
+                        />
+                      </div>
+                    </div>
                   </div>
                 ) : editingConfig.values.type !== "in_process" ? (
                   <>
