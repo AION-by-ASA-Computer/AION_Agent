@@ -59,6 +59,7 @@ services:
       AION_SANDBOX_FAIL_CLOSED: ${AION_SANDBOX_FAIL_CLOSED:-1}
       AION_SANDBOX_MCP_JAIL: ${AION_SANDBOX_MCP_JAIL:-1}
     volumes:
+      - ./.env:/app/.env:ro
       - ./src:/app/src
       - ./scripts:/app/scripts
       - ./config_std:/app/config_std:ro

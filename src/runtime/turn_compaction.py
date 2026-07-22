@@ -282,7 +282,7 @@ def compact_agent_messages_in_place() -> bool:
             compaction_summary_prompt(),
             transcript,
             max_tokens=int(
-                os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "2000")
+                os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "8192")
             ),
             timeout=float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_TIMEOUT", "90")),
         )

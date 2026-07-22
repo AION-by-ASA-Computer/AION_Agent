@@ -11,9 +11,16 @@ from __future__ import annotations
 import os
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional
 
 from haystack.dataclasses import ChatMessage, ChatRole
+
+try:
+    from haystack.components.agents.state import State
+    from haystack.hooks import hook
+except ImportError:  # older/local Haystack without hooks API
+    State = None  # type: ignore[misc, assignment]
+    hook = None  # type: ignore[misc, assignment]
 
 _DEFAULT_THRESHOLD = 2
 _DEFAULT_MAX_RECOVERY_ATTEMPTS = 2
@@ -188,15 +195,19 @@ def recover_from_consecutive_tool_errors(state: Any) -> None:
     rt["tool_error_recovery_attempts"] = attempts + 1
 
 
+if hook is not None and State is not None:
+
+    @hook
+    def tool_error_recovery_on_exit(state: State) -> None:
+        recover_from_consecutive_tool_errors(state)
+
+    _DEFAULT_AGENT_HOOKS: Dict[str, List[Any]] = {
+        "on_exit": [tool_error_recovery_on_exit]
+    }
+else:
+    _DEFAULT_AGENT_HOOKS = {}
+
+
 def get_default_agent_hooks() -> Dict[str, List[Any]]:
     """Hooks passed to Haystack Agent at construction time."""
-    try:
-        from haystack.hooks import hook
-
-        @hook
-        def tool_error_recovery_on_exit(state: Any) -> None:
-            recover_from_consecutive_tool_errors(state)
-
-        return {"on_exit": [tool_error_recovery_on_exit]}
-    except ImportError:
-        return {"on_exit": [recover_from_consecutive_tool_errors]}
+    return dict(_DEFAULT_AGENT_HOOKS)

@@ -173,47 +173,89 @@ def compaction_summary_prompt(lang: str | None = None) -> str:
     if lang_lower == "en":
         return (
             "You are a context compressor for AI agents (Claude compaction style). "
-            "Synthesize the entire previous conversation into a high-fidelity summary. "
-            "You must include: user goals, decisions made, numeric facts, "
-            "file/server/metric names, tool call outcomes (success/error and key data), "
-            "resolved or open errors, explicit user constraints. "
-            "Do not invent. Respond in English, compact markdown with short sections."
+            "Synthesize the previous conversation into a high-fidelity summary that "
+            "preserves workflow state and logic so the agent can continue without "
+            "re-asking or re-discovering facts.\n\n"
+            "Required sections (markdown headers):\n"
+            "## Current workflow state — active task, pending steps, last action taken\n"
+            "## Decisions and constraints — choices made, user rules, rejected alternatives\n"
+            "## Artifacts and references — file paths, IDs, variables, configs, URLs, "
+            "server/metric names, code snippets that define current state\n"
+            "## Relevant tool outcomes — success/error and only the data needed to continue\n"
+            "## Open issues — unresolved errors, blockers, unanswered questions\n"
+            "## Brief history — salient events only (omit redundant retries and noise)\n\n"
+            "Omit: verbose tool dumps, repeated failed attempts already superseded, "
+            "internal reasoning, greetings, and filler. Do not invent. "
+            "Respond in English."
         )
     elif lang_lower == "es":
         return (
             "Eres un compresor de contexto para agentes de IA (estilo Claude compaction). "
-            "Sintetiza toda la conversación anterior en un resumen de alta fidelidad. "
-            "Debes incluir: objetivos del usuario, decisiones tomadas, hechos numéricos, "
-            "nombres de archivos/servidores/métricas, resultados de llamadas a herramientas (éxito/error y datos clave), "
-            "errores resueltos o abiertos, restricciones explícitas del usuario. "
-            "No inventes. Responde en español, markdown compacto con secciones cortas."
+            "Sintetiza la conversación anterior en un resumen de alta fidelidad que "
+            "preserve el estado y la lógica del workflow para que el agente pueda continuar "
+            "sin volver a preguntar o redescubrir hechos.\n\n"
+            "Secciones obligatorias (encabezados markdown):\n"
+            "## Estado actual del workflow — tarea activa, pasos pendientes, última acción\n"
+            "## Decisiones y restricciones — elecciones, reglas del usuario, alternativas descartadas\n"
+            "## Artefactos y referencias — rutas, IDs, variables, configs, URLs, "
+            "servidores/métricas, fragmentos de código que definen el estado actual\n"
+            "## Resultados relevantes de herramientas — éxito/error y solo los datos necesarios\n"
+            "## Problemas abiertos — errores sin resolver, bloqueos, preguntas pendientes\n"
+            "## Historial breve — solo eventos relevantes (omite reintentos redundantes)\n\n"
+            "Omite: volcados verbosos de herramientas, intentos fallidos ya superados, "
+            "razonamiento interno, saludos y relleno. No inventes. Responde en español."
         )
     elif lang_lower == "fr":
         return (
             "Vous êtes un compresseur de contexte pour agents IA (style Claude compaction). "
-            "Synthétisez toute la conversation précédente en un résumé haute fidélité. "
-            "Vous devez inclure : objectifs de l'utilisateur, décisions prises, faits numériques, "
-            "noms de fichiers/serveurs/métriques, résultats des appels d'outils (succès/erreur et données clés), "
-            "erreurs résolues ou ouvertes, contraintes explicites de l'utilisateur. "
-            "N'inventez rien. Répondez en français, markdown compact avec des sections courtes."
+            "Synthétisez la conversation précédente en un résumé haute fidélité qui "
+            "préserve l'état et la logique du workflow afin que l'agent puisse continuer "
+            "sans redemander ou redécouvrir des faits.\n\n"
+            "Sections obligatoires (en-têtes markdown) :\n"
+            "## État actuel du workflow — tâche active, étapes en attente, dernière action\n"
+            "## Décisions et contraintes — choix, règles utilisateur, alternatives écartées\n"
+            "## Artefacts et références — chemins, IDs, variables, configs, URLs, "
+            "serveurs/métriques, extraits de code définissant l'état actuel\n"
+            "## Résultats d'outils pertinents — succès/erreur et données nécessaires pour continuer\n"
+            "## Problèmes ouverts — erreurs non résolues, blocages, questions en suspens\n"
+            "## Historique bref — événements saillants uniquement (omettre les réessais redondants)\n\n"
+            "Omettre : dumps verbeux d'outils, tentatives échouées déjà dépassées, "
+            "raisonnement interne, salutations et remplissage. N'inventez rien. "
+            "Répondez en français."
         )
     elif lang_lower == "de":
         return (
             "Sie sind ein Kontext-Kompressor für KI-Agenten (Claude-Kompaktierungsstil). "
-            "Synthetisieren Sie die gesamte vorherige Konversation in eine detailgetreue Zusammenfassung. "
-            "Sie müssen Folgendes angeben: Benutzerziele, getroffene Entscheidungen, numerische Fakten, "
-            "Datei-/Server-/Metriknamen, Ergebnisse von Tool-Aufrufen (Erfolg/Fehler und Schlüsseldaten), "
-            "gelöste oder offene Fehler, explizite Benutzereinschränkungen. "
-            "Erfinden Sie nichts. Antworten Sie auf Deutsch, kompaktes Markdown mit kurzen Abschnitten."
+            "Synthetisieren Sie die vorherige Konversation in eine detailgetreue Zusammenfassung, "
+            "die Workflow-Zustand und Logik erhält, damit der Agent ohne erneutes Nachfragen "
+            "oder Entdecken fortfahren kann.\n\n"
+            "Pflichtabschnitte (Markdown-Überschriften):\n"
+            "## Aktueller Workflow-Zustand — aktive Aufgabe, ausstehende Schritte, letzte Aktion\n"
+            "## Entscheidungen und Einschränkungen — getroffene Wahl, Nutzerregeln, verworfene Alternativen\n"
+            "## Artefakte und Referenzen — Pfade, IDs, Variablen, Configs, URLs, "
+            "Server/Metriken, Code-Snippets zum aktuellen Zustand\n"
+            "## Relevante Tool-Ergebnisse — Erfolg/Fehler und nur nötige Daten zum Fortfahren\n"
+            "## Offene Probleme — ungelöste Fehler, Blocker, offene Fragen\n"
+            "## Kurze Historie — nur wesentliche Ereignisse (redundante Wiederholungen weglassen)\n\n"
+            "Weglassen: ausführliche Tool-Dumps, überholte Fehlversuche, internes Reasoning, "
+            "Begrüßungen und Fülltext. Nichts erfinden. Antwort auf Deutsch."
         )
     else:
         return (
             "Sei un compressore di contesto per agenti AI (stile Claude compaction). "
-            "Sintetizza l'intera conversazione precedente in un riepilogo ad alta fedeltà. "
-            "Includi obbligatoriamente: obiettivi dell'utente, decisioni prese, fatti numerici, "
-            "nomi file/server/metriche, esiti delle chiamate tool (successo/errore e dati chiave), "
-            "errori risolti o ancora aperti, vincoli espliciti dell'utente. "
-            "Non inventare. Rispondi in italiano, markdown compatto con sezioni brevi."
+            "Sintetizza la conversazione precedente in un riepilogo ad alta fedeltà che "
+            "preservi stato e logica del workflow, così l'agente può continuare senza "
+            "ridomandare o riscoprire fatti già noti.\n\n"
+            "Sezioni obbligatorie (intestazioni markdown):\n"
+            "## Stato workflow corrente — task attivo, passi pendenti, ultima azione eseguita\n"
+            "## Decisioni e vincoli — scelte fatte, regole utente, alternative scartate\n"
+            "## Artefatti e riferimenti — path file, ID, variabili, config, URL, "
+            "server/metriche, snippet di codice che definiscono lo stato attuale\n"
+            "## Esiti tool rilevanti — successo/errore e solo i dati necessari per proseguire\n"
+            "## Problemi aperti — errori irrisolti, blocchi, domande senza risposta\n"
+            "## Cronologia sintetica — solo eventi salienti (ometti retry ridondanti)\n\n"
+            "Ometti: dump verbosi di tool, tentativi falliti già superati, ragionamento interno, "
+            "saluti e riempitivi. Non inventare. Rispondi in italiano."
         )
 
 
@@ -312,7 +354,7 @@ class ContextCompressor:
                 compaction_summary_prompt(lang),
                 transcript,
                 max_tokens=int(
-                    os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "2000")
+                    os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "4096")
                 ),
                 timeout=float(
                     os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_TIMEOUT", "120")

@@ -95,6 +95,8 @@ services:
       AION_SANDBOX_HOST_DATA_DIR: ${AION_SANDBOX_HOST_DATA_DIR}
     volumes:
       - aion_data:/app/data
+      # Keep container .env in sync with host edits (runtime.env stores admin overrides only)
+      - ./.env:/app/.env:ro
       # Host-visible sessions so rootless Podman can bind-mount per chat (see AION_SANDBOX_HOST_DATA_DIR)
       - ./data/sessions:/app/data/sessions
       - ./data/db_test:/app/data/db_test
