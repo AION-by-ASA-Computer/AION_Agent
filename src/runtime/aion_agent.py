@@ -142,6 +142,13 @@ def get_aion_agent_class() -> type:
 def create_aion_agent(*args: Any, **kwargs: Any) -> Any:
     """Factory: istanzia AionAgent con firme run/run_async valide."""
     cls = get_aion_agent_class()
+    init_params = inspect.signature(cls.__init__).parameters
+    if "hooks" in kwargs and "hooks" not in init_params:
+        dropped = kwargs.pop("hooks")
+        if dropped:
+            logger.warning(
+                "Haystack Agent does not support hooks=; tool_error_recovery on_exit disabled"
+            )
     # region agent log
     _dbg(
         "H3",
