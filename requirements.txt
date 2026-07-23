@@ -18,7 +18,7 @@ aiosqlite
 sqlalchemy>=2.0
 cryptography>=48.0.1
 uuid6>=2025.0.1
-alembic>=1.13
+alembic>=1.18.5
 greenlet>=3.0.0
 mcp[cli]>=1.23.0
 fastmcp>=3.2.0
