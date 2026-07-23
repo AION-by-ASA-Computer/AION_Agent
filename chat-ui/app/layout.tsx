@@ -50,6 +50,20 @@ const langInit = `
   }
 `;
 
+const fontScaleInit = `
+  try {
+    var k = 'aion-chat-font-scale';
+    var s = localStorage.getItem(k);
+    var px = { small: '13px', medium: '14px', large: '15px' };
+    var scale = (s === 'small' || s === 'medium' || s === 'large') ? s : 'medium';
+    document.documentElement.setAttribute('data-chat-font-scale', scale);
+    document.documentElement.style.setProperty('--aion-chat-font-size', px[scale]);
+  } catch (e) {
+    document.documentElement.setAttribute('data-chat-font-scale', 'medium');
+    document.documentElement.style.setProperty('--aion-chat-font-size', '14px');
+  }
+`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -65,6 +79,10 @@ export default function RootLayout({
         <script
           id="aion-chat-lang-init"
           dangerouslySetInnerHTML={{ __html: langInit }}
+        />
+        <script
+          id="aion-chat-font-init"
+          dangerouslySetInnerHTML={{ __html: fontScaleInit }}
         />
       </head>
       <body className="min-h-screen">

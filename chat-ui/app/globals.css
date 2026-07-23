@@ -76,8 +76,14 @@
 
 /* Markdown prose (senza @tailwindcss/typography) */
 @layer components {
+  .chat-font {
+    font-size: var(--aion-chat-font-size, 14px);
+    line-height: var(--aion-chat-line-height, 1.625);
+  }
   .prose-chat {
-    @apply text-foreground text-[15px] leading-relaxed;
+    @apply text-foreground;
+    font-size: var(--aion-chat-font-size, 14px);
+    line-height: var(--aion-chat-line-height, 1.625);
   }
   .prose-chat :where(p):not(:where([class~="not-prose"])) {
     @apply mb-2 last:mb-0;
@@ -109,7 +115,8 @@
     @apply w-full max-w-full my-4 overflow-x-auto rounded-xl border border-border bg-card/40 shadow-sm;
   }
   .prose-chat :where(table):not(:where([class~="not-prose"])) {
-    @apply w-full border-collapse text-sm;
+    @apply w-full border-collapse;
+    font-size: 0.93em;
   }
   .prose-chat :where(thead):not(:where([class~="not-prose"])) {
     @apply bg-muted/70 text-muted-foreground;

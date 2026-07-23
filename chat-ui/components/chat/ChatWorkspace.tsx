@@ -3156,7 +3156,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         key={m.id}
                         data-message-id={m.id}
                         className={cn(
-                          "group relative mr-auto w-full max-w-[min(92%,48rem)] flex flex-col px-5 text-[15px] leading-relaxed text-foreground",
+                          "group relative mr-auto w-full max-w-[min(92%,48rem)] flex flex-col px-5 chat-font text-foreground",
                           afterUser ? "pt-0.5 pb-2" : "py-3",
                         )}
                       >
@@ -3230,7 +3230,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     >
                       <div
                         className={cn(
-                          "w-full px-5 text-[15px] leading-relaxed",
+                          "w-full px-5 chat-font",
                           m.role === "user"
                             ? cn(
                               "ml-auto max-w-[min(92%,42rem)] sm:max-w-[min(70%,42rem)] rounded-3xl text-foreground [&_a]:text-foreground [&_code]:bg-background [&_code]:text-foreground",
@@ -3250,7 +3250,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               {t("chat.plan.execution")}
                             </div>
                             {m.content?.trim() ? (
-                              <div className="prose-chat text-sm text-muted-foreground">
+                              <div className="prose-chat text-muted-foreground">
                                 <InternalMessageMarkdown
                                   content={m.content.trim()}
                                   streaming={streaming}
@@ -3262,7 +3262,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           </>
                         ) : null}
                         {m.role === "assistant" && m.content && isMemorizationMessage(m.content) ? (
-                          <div className="flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-sm text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto">
+                          <div className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto">
                             <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
                             <div className="flex-1">
                               <InternalMessageMarkdown
@@ -3353,7 +3353,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   }
                                 }}
                                 placeholder={t("chat.edit.placeholder")}
-                                className="focus-ring min-h-[80px] flex-1 w-full resize-none rounded-[20px] border-0 bg-transparent px-4 py-3 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
+                                className="focus-ring chat-font min-h-[80px] flex-1 w-full resize-none rounded-[20px] border-0 bg-transparent px-4 py-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
                               />
                             </div>
                             <div className="flex justify-end gap-2 text-xs">
@@ -3495,7 +3495,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       ) : null}
 
                       {memorizingMessageId === m.id && streaming ? (
-                        <div className="flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-sm text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
+                        <div className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
                           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary mt-0.5" />
                           <div className="flex-1">
                             <div className="font-semibold">{t("chat.agent_status.saving_info")}</div>
@@ -3510,7 +3510,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         );
                         if (memorizationMsgs.length === 0) return null;
                         return memorizationMsgs.map((mm) => (
-                          <div key={mm.id} className="flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-sm text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
+                          <div key={mm.id} className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
                             <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
                             <div className="flex-1">
                               <InternalMessageMarkdown
@@ -3538,7 +3538,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 </div>
               ) : null}
               {showMainTurnVisual && turnVisual ? (
-                <div className="mr-auto mt-0.5 w-full max-w-4xl min-h-[3.5rem] bg-transparent px-5 pt-0 pb-3 text-[15px] leading-relaxed text-foreground">
+                <div className="mr-auto mt-0.5 w-full max-w-4xl min-h-[3.5rem] bg-transparent px-5 pt-0 pb-3 chat-font text-foreground">
                   {isSavingInfo ? (
                     <StatusProgressCard
                       className="mb-3"
@@ -3688,7 +3688,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       }
                     }}
                     placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
-                    className="focus-ring box-border min-h-[48px] min-w-0 max-w-full w-full resize-none overflow-x-hidden break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
+                    className="focus-ring chat-font box-border min-h-[48px] min-w-0 max-w-full w-full resize-none overflow-x-hidden break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
                     rows={1}
                   />
                 </div>

@@ -8,6 +8,11 @@ import { LOCALE_OPTIONS } from "@/lib/i18n/locale-options";
 import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
 import { useT } from "@/lib/i18n/use-t";
 import { useChatTheme } from "@/lib/theme/chat-theme";
+import {
+  CHAT_FONT_SCALE_PX,
+  useChatFontScale,
+  type ChatFontScale,
+} from "@/lib/theme/chat-font-scale";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { useSyncExternalStore, useState } from "react";
 import { SettingsFieldRow } from "./SettingsCard";
@@ -20,6 +25,7 @@ export function AppearanceSection({
   const t = useT();
   const token = useStoredToken();
   const [theme, setTheme] = useChatTheme();
+  const [fontScale, setFontScale] = useChatFontScale();
   const locale = useSyncExternalStore(subscribe, getLocale, () => "en" as Locale);
   const [langOpen, setLangOpen] = useState(false);
 
@@ -38,8 +44,36 @@ export function AppearanceSection({
 
   const current = LOCALE_OPTIONS.find((l) => l.code === locale) ?? LOCALE_OPTIONS[0];
 
+  const fontScaleOptions: ChatFontScale[] = ["small", "medium", "large"];
+
   return (
     <div className="space-y-1">
+      <SettingsFieldRow
+        label={t("settings.appearance.font_scale_label")}
+        hint={t("settings.appearance.font_scale_desc")}
+      >
+        <div className="grid max-w-xs grid-cols-3 gap-1 rounded-xl bg-muted/40 p-1">
+          {fontScaleOptions.map((scale) => (
+            <button
+              key={scale}
+              type="button"
+              onClick={() => setFontScale(scale)}
+              className={cn(
+                "focus-ring rounded-lg px-2 py-2 text-xs font-semibold transition",
+                fontScale === scale
+                  ? "bg-background text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              {t(`settings.appearance.font_scale_${scale}`)}
+              <span className="mt-0.5 block text-[10px] font-normal text-muted-foreground">
+                {CHAT_FONT_SCALE_PX[scale]}px
+              </span>
+            </button>
+          ))}
+        </div>
+      </SettingsFieldRow>
+
       <SettingsFieldRow
         label={t("settings.appearance.theme_label")}
         hint={t("settings.appearance.theme_desc")}
