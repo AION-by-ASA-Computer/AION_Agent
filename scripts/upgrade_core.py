@@ -97,7 +97,7 @@ def _ensure_skill_packages(
     if rc != 0:
         report.log_warn("ensure_skill_packages exited non-zero")
     else:
-        report.log_ok("Skill packages (config_std + config + MCP sync)")
+        report.log_ok("Skill packages (config_std → config + MCP sync)")
 
 
 def _run(

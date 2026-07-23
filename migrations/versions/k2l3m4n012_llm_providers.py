@@ -15,6 +15,10 @@ depends_on = None
 
 
 def upgrade() -> None:
+    bind = op.get_bind()
+    insp = sa.inspect(bind)
+    if "llm_providers" in set(insp.get_table_names()):
+        return
     op.create_table(
         "llm_providers",
         sa.Column("id", sa.String(64), primary_key=True),

@@ -98,23 +98,24 @@ def _probe_value_error_detail(exc: ValueError) -> str:
 
 
 def _sync_default_provider_env(row: LlmProvider) -> None:
-    """Mirror default provider token limits into .env for legacy readers."""
+    """Mirror default provider token limits into runtime admin overrides."""
     if not row.is_default:
         return
     try:
         from src.api.settings_api import (
             _filter_settings_post,
-            _parse_env,
             _reload_env,
             _write_env,
         )
 
-        merged = _filter_settings_post(_parse_env())
+        updates: Dict[str, str] = {}
         if row.max_chat_tokens is not None:
-            merged["AION_CHAT_MAX_TOKENS"] = str(row.max_chat_tokens)
+            updates["AION_CHAT_MAX_TOKENS"] = str(row.max_chat_tokens)
         if row.thinking_token_budget is not None:
-            merged["AION_THINKING_TOKEN_BUDGET"] = str(row.thinking_token_budget)
-        _write_env(merged)
+            updates["AION_THINKING_TOKEN_BUDGET"] = str(row.thinking_token_budget)
+        if not updates:
+            return
+        _write_env(_filter_settings_post(updates))
         _reload_env()
     except Exception:
         logger.exception("Failed to sync default provider token limits to .env")

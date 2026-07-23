@@ -452,6 +452,8 @@ def sandbox_exec_allowlisted(
 ) -> str:
     """
     Run a subprocess only if listed in AION_FS_POLICY_PATH exec.allowlist (requires exec.enabled=true).
+    **Python** invocations use the **session venv** (``data/sessions/<id>/.venv``) when present —
+    same interpreter as ``sandbox_run_python_file`` / ``sandbox_install_python_packages``.
     **Not** for running Node/JavaScript files — use ``sandbox_run_node_file``.
     **Not** for npm install — use ``sandbox_install_npm_packages``. Default policy: exec disabled.
     """

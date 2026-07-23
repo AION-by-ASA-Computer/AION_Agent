@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SETUP_PY = ROOT / "scripts" / "setup_aion_env.py"
 SYNC_CONFIG = ROOT / "scripts" / "sync_config.py"
 SYNC_MCP_SERVERS = ROOT / "scripts" / "sync_mcp_servers.py"
+SYNC_RUNTIME_ENV = ROOT / "scripts" / "sync_runtime_env.py"
 RUNTIME_EXTRAS = ROOT / "scripts" / "runtime_extras_setup.py"
 ENSURE_SKILL_PACKAGES = ROOT / "scripts" / "ensure_skill_packages.py"
 PATCH_SQL_QM_CONFIG = ROOT / "scripts" / "patch_sql_query_memory_config.py"
@@ -118,6 +119,10 @@ def main() -> int:
             rc = _run([py_exec, str(SYNC_MCP_SERVERS)])
             if rc != 0:
                 return rc
+            if SYNC_RUNTIME_ENV.is_file():
+                rc = _run([py_exec, str(SYNC_RUNTIME_ENV)])
+                if rc != 0:
+                    print("[warn] sync_runtime_env failed", file=sys.stderr)
         if RUNTIME_EXTRAS.exists():
             extras_cmd = [
                 py_exec,

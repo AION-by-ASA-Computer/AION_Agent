@@ -112,6 +112,17 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
             "CREATE INDEX IF NOT EXISTS idx_audit_log_trace ON audit_log(trace_id)",
         )
 
+    # scheduled_jobs.sql_query_project (m4n5o6p014). create_all() does not ALTER
+    # existing tables; legacy DBs can have scheduled_jobs without this column while
+    # alembic is blocked on k2l3m4n012 (llm_providers already from create_all).
+    if await _sqlite_table_exists(conn, "scheduled_jobs"):
+        await _sqlite_add_column_if_missing(
+            conn,
+            "scheduled_jobs",
+            "sql_query_project",
+            "sql_query_project VARCHAR(128)",
+        )
+
 
 async def patch_sqlite_schema_drift(engine: AsyncEngine) -> None:
     """Idempotent SQLite column/index patches (safe after alembic stamp head)."""

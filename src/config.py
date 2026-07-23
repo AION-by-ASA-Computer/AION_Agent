@@ -48,20 +48,25 @@ class Config:
 
     def load(self):
         try:
-            from dotenv import load_dotenv
+            from src.runtime.env_sync import apply_merged_env_to_os
 
-            load_dotenv(self.base_path / ".env")
-            load_dotenv(self.base_path / ".env.local", override=False)
+            apply_merged_env_to_os(repo_root=self.base_path)
+        except Exception:
+            try:
+                from dotenv import load_dotenv
 
-            data_dir = os.environ.get("AION_DATA_DIR", "data")
-            data_path = Path(data_dir)
-            if not data_path.is_absolute():
-                data_path = self.base_path / data_path
-            runtime_env = data_path / "runtime.env"
-            if runtime_env.is_file():
-                load_dotenv(runtime_env, override=True)
-        except ImportError:
-            pass
+                load_dotenv(self.base_path / ".env")
+                load_dotenv(self.base_path / ".env.local", override=False)
+
+                data_dir = os.environ.get("AION_DATA_DIR", "data")
+                data_path = Path(data_dir)
+                if not data_path.is_absolute():
+                    data_path = self.base_path / data_path
+                runtime_env = data_path / "runtime.env"
+                if runtime_env.is_file():
+                    load_dotenv(runtime_env, override=True)
+            except ImportError:
+                pass
         if not self.config_path.exists():
             # Minimal fallback if file doesn't exist yet
             self._data = {}
