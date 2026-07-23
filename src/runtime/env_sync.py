@@ -117,10 +117,35 @@ def apply_merged_env_to_os(
     *,
     repo_root: Path | None = None,
     data_dir: Path | None = None,
+    respect_process_env: bool = True,
 ) -> Dict[str, str]:
-    merged = load_merged_env(repo_root=repo_root, data_dir=data_dir)
-    for key, value in merged.items():
-        os.environ[key] = value
+    """Apply merged env to ``os.environ``.
+
+  Precedence when ``respect_process_env`` is True (default boot):
+    1. Existing process env (CI, compose, pytest monkeypatch)
+    2. ``.env`` / ``.env.local`` base values (fill gaps only)
+    3. ``runtime.env`` admin overrides (always win)
+
+  When ``respect_process_env`` is False (admin reload): full merged snapshot.
+    """
+    base = load_base_env(repo_root=repo_root)
+    seed_base_env_from_process(base)
+    runtime_overrides = load_runtime_overrides(data_dir=data_dir)
+
+    if respect_process_env:
+        for key, value in base.items():
+            if key not in os.environ:
+                os.environ[key] = value
+        for key, value in runtime_overrides.items():
+            os.environ[key] = value
+    else:
+        merged = dict(base)
+        merged.update(runtime_overrides)
+        for key, value in merged.items():
+            os.environ[key] = value
+
+    merged = dict(base)
+    merged.update(runtime_overrides)
     return merged
 
 
@@ -290,7 +315,7 @@ def write_admin_overrides(
 
 def reload_env_into_process() -> None:
     """Reload merged env into ``os.environ`` and refresh dependent singletons."""
-    apply_merged_env_to_os()
+    apply_merged_env_to_os(respect_process_env=False)
     try:
         from src.runtime.agent_fs_policy import load_fs_policy
 

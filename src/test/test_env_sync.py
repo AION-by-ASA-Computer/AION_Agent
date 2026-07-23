@@ -118,3 +118,32 @@ def test_apply_merged_env_to_os(tmp_path, monkeypatch):
     monkeypatch.delenv("AION_MAX_AGENT_STEPS", raising=False)
     apply_merged_env_to_os(repo_root=repo, data_dir=data)
     assert os.environ["AION_MAX_AGENT_STEPS"] == "60"
+
+
+def test_apply_merged_env_respects_process_env_for_base(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    data = tmp_path / "data"
+    repo.mkdir()
+    data.mkdir()
+
+    _write_dotenv(repo / ".env", {"AION_CHAT_PASSWORD_AUTH": "1"})
+    monkeypatch.setenv("AION_CHAT_PASSWORD_AUTH", "0")
+    apply_merged_env_to_os(repo_root=repo, data_dir=data)
+    assert os.environ["AION_CHAT_PASSWORD_AUTH"] == "0"
+
+
+def test_apply_merged_env_runtime_overrides_process_env(tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    data = tmp_path / "data"
+    repo.mkdir()
+    data.mkdir()
+
+    _write_dotenv(repo / ".env", {"AION_CHAT_PASSWORD_AUTH": "0"})
+    write_admin_overrides(
+        {"AION_CHAT_PASSWORD_AUTH": "1"},
+        data_dir=data,
+        repo_root=repo,
+    )
+    monkeypatch.setenv("AION_CHAT_PASSWORD_AUTH", "0")
+    apply_merged_env_to_os(repo_root=repo, data_dir=data)
+    assert os.environ["AION_CHAT_PASSWORD_AUTH"] == "1"
