@@ -307,11 +307,11 @@ export function NavigationMemoryPanel({
           embedded ? "border-b border-border/60 bg-muted/20 px-4 py-3" : "border-b border-border p-3"
         )}
       >
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[11px] text-muted-foreground">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[0.786em] text-muted-foreground">
           <div className="flex items-center gap-1.5">
             <span>{t("navigation_memory.wing")}</span>
             <select
-              className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[10px] text-foreground shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
+              className="rounded border border-border bg-background px-1.5 py-0.5 font-mono text-[0.714em] text-foreground shadow-sm outline-none focus-visible:ring-1 focus-visible:ring-primary/30"
               value={selectedWing || wing || `wing_proj_${projectSlug}`}
               onChange={(e) => handleWingChange(e.target.value)}
             >
@@ -368,7 +368,7 @@ export function NavigationMemoryPanel({
             {t("navigation_memory.advanced")}
           </summary>
           <div className="space-y-2 border-t border-border/50 px-3 py-2">
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
+            <p className="text-[0.786em] leading-relaxed text-muted-foreground">
               {t("navigation_memory.hint")}
             </p>
             <div className="flex flex-wrap gap-2">
@@ -391,7 +391,7 @@ export function NavigationMemoryPanel({
               </button>
             </div>
             {prunePreview && prunePreview.length > 0 && (
-              <p className="text-[11px] text-amber-600 dark:text-amber-400">
+              <p className="text-[0.786em] text-amber-600 dark:text-amber-400">
                 {t("navigation_memory.legacy_wings")}: {prunePreview.join(", ")}
               </p>
             )}
@@ -415,7 +415,7 @@ export function NavigationMemoryPanel({
             <div className="rounded-xl border border-dashed border-border bg-muted/20 px-4 py-8 text-center">
               <p className="text-xs text-muted-foreground">{t("navigation_memory.empty")}</p>
               {selectedWing || wing ? (
-                <p className="mt-2 font-mono text-[10px] text-muted-foreground">
+                <p className="mt-2 font-mono text-[0.714em] text-muted-foreground">
                   {t("navigation_memory.active_wing")}: {selectedWing || wing}
                 </p>
               ) : null}
@@ -425,7 +425,7 @@ export function NavigationMemoryPanel({
                 <p className="text-xs font-medium text-amber-800 dark:text-amber-200">
                   {t("navigation_memory.other_wings_hint")}
                 </p>
-                <ul className="mt-2 space-y-1 font-mono text-[10px] text-muted-foreground">
+                <ul className="mt-2 space-y-1 font-mono text-[0.714em] text-muted-foreground">
                   {otherWingsWithData.map(([name, count]) => (
                     <li key={name}>
                       {name} — {count} {t("navigation_memory.drawers")}
@@ -451,7 +451,7 @@ export function NavigationMemoryPanel({
               >
                 <div className="p-3">
                   <div className="mb-2 flex items-center justify-between gap-2">
-                    <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    <span className="rounded-md bg-muted px-2 py-0.5 font-mono text-[0.714em] font-medium uppercase tracking-wide text-muted-foreground">
                       {ROOM_LABELS[room] ?? room}
                     </span>
                     {id && !isEditing && (
@@ -501,7 +501,7 @@ export function NavigationMemoryPanel({
                       />
                       <p
                         className={cn(
-                          "text-[11px]",
+                          "text-[0.786em]",
                           editContentTooLong ? "text-destructive" : "text-muted-foreground"
                         )}
                       >

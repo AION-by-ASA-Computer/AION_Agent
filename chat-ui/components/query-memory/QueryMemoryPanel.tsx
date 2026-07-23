@@ -178,7 +178,7 @@ export function QueryMemoryPanel({
           </button>
         </div>
         {!embedded && (
-          <p className="text-[11px] text-muted-foreground">{t("query_memory.empty_hint")}</p>
+          <p className="text-[0.786em] text-muted-foreground">{t("query_memory.empty_hint")}</p>
         )}
       </div>
 
@@ -220,7 +220,7 @@ export function QueryMemoryPanel({
                         placeholder={t("query_memory.request_label")}
                       />
                       <textarea
-                        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 font-mono text-[11px] leading-relaxed"
+                        className="w-full rounded-lg border border-border bg-background px-2.5 py-2 font-mono text-[0.786em] leading-relaxed"
                         rows={8}
                         value={editSql}
                         onChange={(e) => setEditSql(e.target.value)}
@@ -260,7 +260,7 @@ export function QueryMemoryPanel({
                         </p>
                         <span
                           className={cn(
-                            "shrink-0 rounded-md px-1.5 py-0.5 text-[10px] font-medium",
+                            "shrink-0 rounded-md px-1.5 py-0.5 text-[0.714em] font-medium",
                             row.is_verified
                               ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
                               : "bg-muted text-muted-foreground"
@@ -271,7 +271,7 @@ export function QueryMemoryPanel({
                             : t("query_memory.draft")}
                         </span>
                       </div>
-                      <pre className="max-h-28 overflow-auto rounded-lg bg-muted/50 p-2.5 font-mono text-[10px] leading-relaxed text-foreground/90 whitespace-pre-wrap">
+                      <pre className="max-h-28 overflow-auto rounded-lg bg-muted/50 p-2.5 font-mono text-[0.714em] leading-relaxed text-foreground/90 whitespace-pre-wrap">
                         {row.sql_text}
                       </pre>
                       <div className="mt-2 flex items-center gap-1 border-t border-border/50 pt-2">
@@ -289,7 +289,7 @@ export function QueryMemoryPanel({
                             )}
                           </button>
                           {copiedId === row.id && (
-                            <span className="absolute bottom-full left-1/2 z-10 -translate-x-1/2 mb-1.5 rounded bg-foreground px-2 py-1 text-[10px] font-medium text-background shadow-md animate-in fade-in-0 slide-in-from-bottom-1 duration-150 whitespace-nowrap">
+                            <span className="absolute bottom-full left-1/2 z-10 -translate-x-1/2 mb-1.5 rounded bg-foreground px-2 py-1 text-[0.714em] font-medium text-background shadow-md animate-in fade-in-0 slide-in-from-bottom-1 duration-150 whitespace-nowrap">
                               {t("header.copied")}
                             </span>
                           )}
@@ -317,7 +317,7 @@ export function QueryMemoryPanel({
                             aria-hidden
                           />
                         )}
-                        <span className="ml-auto text-[10px] text-muted-foreground">
+                        <span className="ml-auto text-[0.714em] text-muted-foreground">
                           ×{row.success_count}
                         </span>
                       </div>
@@ -370,7 +370,7 @@ export function QueryMemoryPanel({
               <p className="text-xs font-medium text-foreground leading-snug">
                 {deletingItem.user_request}
               </p>
-              <pre className="rounded-lg border border-border/50 bg-muted/30 p-3 text-[10px] font-mono leading-relaxed text-foreground/90 max-h-40 overflow-y-auto whitespace-pre-wrap">
+              <pre className="rounded-lg border border-border/50 bg-muted/30 p-3 text-[0.714em] font-mono leading-relaxed text-foreground/90 max-h-40 overflow-y-auto whitespace-pre-wrap">
                 {deletingItem.sql_text}
               </pre>
               {error && <p className="text-xs text-destructive">{error}</p>}

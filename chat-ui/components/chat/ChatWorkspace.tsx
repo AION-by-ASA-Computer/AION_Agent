@@ -4,7 +4,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, mem
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
-import { MermaidBlock } from "@/components/chat/MermaidBlock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -118,6 +117,8 @@ import {
 import { WebSourcesBar } from "@/components/chat/WebResearchViews";
 import { TurnTimeline, AgentWorkingShimmer } from "@/components/chat/TurnTimeline";
 import { MessageActions } from "@/components/chat/MessageActions";
+import { useAutoResizeTextarea } from "@/lib/hooks/use-auto-resize-textarea";
+import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
 import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
 import { extractAssistantCopyText } from "@/lib/extract-message-text";
 import {
@@ -393,6 +394,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const showPromptDebug = AION_PROMPT_DEBUG_UI_ENABLED;
   const chatStreamDebug = AION_CHAT_STREAM_DEBUG_ENABLED;
   const COMPOSER_MIN_HEIGHT = 110;
+  const COMPOSER_TEXTAREA_MIN = 48;
+  const COMPOSER_TEXTAREA_DEFAULT_MAX = 200;
   const userId = useStoredUserId();
   const token = useStoredToken();
   const shellActions = useShellActions();
@@ -519,7 +522,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       return (
         <a
           href={href}
-          className="inline-flex items-center justify-center min-w-5 h-5 ml-0.5 px-1 text-[10px] font-semibold transition-all duration-300 bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded-full text-primary align-super no-underline shadow-sm"
+          className="inline-flex items-center justify-center min-w-5 h-5 ml-0.5 px-1 text-[0.714em] font-semibold transition-all duration-300 bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded-full text-primary align-super no-underline shadow-sm"
           title={t("chat.go_to_source")}
           onClick={(e) => {
             e.preventDefault();
@@ -1217,14 +1220,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [input, setInput] = useState("");
-  const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
+  const [composerTextMax, setComposerTextMax] = useState(COMPOSER_TEXTAREA_DEFAULT_MAX);
   const [composerResizing, setComposerResizing] = useState(false);
   const composerContainerRef = useRef<HTMLDivElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const composerHeightRef = useRef(COMPOSER_MIN_HEIGHT);
-  const composerPendingHeightRef = useRef(COMPOSER_MIN_HEIGHT);
-  const composerRafRef = useRef<number | null>(null);
-  const composerResizeStartRef = useRef({ y: 0, height: COMPOSER_MIN_HEIGHT });
+  const composerResizeStartRef = useRef({ y: 0, textMax: COMPOSER_TEXTAREA_DEFAULT_MAX });
+  useAutoResizeTextarea(composerTextareaRef, input, {
+    minHeight: COMPOSER_TEXTAREA_MIN,
+    maxHeight: composerTextMax,
+  });
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   const handleFilesDropped = useCallback((files: File[]) => {
@@ -2719,43 +2723,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   };
 
   useEffect(() => {
-    composerHeightRef.current = composerHeight;
-    if (composerContainerRef.current) {
-      composerContainerRef.current.style.height = `${composerHeight}px`;
-    }
-  }, [composerHeight]);
-
-  useEffect(() => {
     if (!composerResizing) return;
-    function flushComposerHeight() {
-      composerRafRef.current = null;
-      const nextHeight = composerPendingHeightRef.current;
-      composerHeightRef.current = nextHeight;
-      if (composerContainerRef.current) {
-        composerContainerRef.current.style.height = `${nextHeight}px`;
-      }
-    }
     function onMouseMove(e: MouseEvent) {
-      const maxHeight = Math.max(COMPOSER_MIN_HEIGHT, Math.floor(window.innerHeight * 0.55));
+      const maxCap = Math.max(COMPOSER_TEXTAREA_MIN, Math.floor(window.innerHeight * 0.45));
       const dy = composerResizeStartRef.current.y - e.clientY;
-      const nextHeight = Math.min(Math.max(composerResizeStartRef.current.height + dy, COMPOSER_MIN_HEIGHT), maxHeight);
-      composerPendingHeightRef.current = nextHeight;
-      if (composerRafRef.current === null) {
-        composerRafRef.current = window.requestAnimationFrame(flushComposerHeight);
-      }
+      const next = Math.min(
+        maxCap,
+        Math.max(COMPOSER_TEXTAREA_MIN, composerResizeStartRef.current.textMax + dy)
+      );
+      setComposerTextMax(next);
     }
     function onMouseUp() {
       setComposerResizing(false);
-      if (composerRafRef.current !== null) {
-        window.cancelAnimationFrame(composerRafRef.current);
-        composerRafRef.current = null;
-      }
-      const nextHeight = composerPendingHeightRef.current;
-      composerHeightRef.current = nextHeight;
-      if (composerContainerRef.current) {
-        composerContainerRef.current.style.height = `${nextHeight}px`;
-      }
-      setComposerHeight(composerHeightRef.current);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       window.removeEventListener("mousemove", onMouseMove);
@@ -2764,10 +2743,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
     return () => {
-      if (composerRafRef.current !== null) {
-        window.cancelAnimationFrame(composerRafRef.current);
-        composerRafRef.current = null;
-      }
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       window.removeEventListener("mousemove", onMouseMove);
@@ -2778,13 +2753,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const startComposerResize = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       e.preventDefault();
-      composerResizeStartRef.current = { y: e.clientY, height: composerHeightRef.current };
-      composerPendingHeightRef.current = composerHeightRef.current;
+      composerResizeStartRef.current = { y: e.clientY, textMax: composerTextMax };
       document.body.style.cursor = "ns-resize";
       document.body.style.userSelect = "none";
       setComposerResizing(true);
     },
-    []
+    [composerTextMax]
   );
 
   const tabsToRender = useMemo(() => {
@@ -3182,7 +3156,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         key={m.id}
                         data-message-id={m.id}
                         className={cn(
-                          "group relative mr-auto w-full max-w-[min(92%,48rem)] flex flex-col px-5 text-[15px] leading-relaxed text-foreground",
+                          "group relative mr-auto w-full max-w-[min(92%,48rem)] flex flex-col px-5 chat-font text-foreground",
                           afterUser ? "pt-0.5 pb-2" : "py-3",
                         )}
                       >
@@ -3256,7 +3230,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     >
                       <div
                         className={cn(
-                          "w-full px-5 text-[15px] leading-relaxed",
+                          "w-full px-5 chat-font",
                           m.role === "user"
                             ? cn(
                               "ml-auto max-w-[min(92%,42rem)] sm:max-w-[min(70%,42rem)] rounded-3xl text-foreground [&_a]:text-foreground [&_code]:bg-background [&_code]:text-foreground",
@@ -3272,11 +3246,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       >
                         {m.role === "internal" ? (
                           <>
-                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <div className="mb-2 text-[0.786em] font-semibold uppercase tracking-wide text-muted-foreground">
                               {t("chat.plan.execution")}
                             </div>
                             {m.content?.trim() ? (
-                              <div className="prose-chat text-sm text-muted-foreground">
+                              <div className="prose-chat text-muted-foreground">
                                 <InternalMessageMarkdown
                                   content={m.content.trim()}
                                   streaming={streaming}
@@ -3288,7 +3262,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           </>
                         ) : null}
                         {m.role === "assistant" && m.content && isMemorizationMessage(m.content) ? (
-                          <div className="flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-sm text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto">
+                          <div className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto">
                             <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
                             <div className="flex-1">
                               <InternalMessageMarkdown
@@ -3356,7 +3330,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   <Paperclip size={13} className="text-muted-foreground" />
                                   <span className="font-medium truncate max-w-[200px]">{title}</span>
                                   {mime && (
-                                    <span className="text-[10px] text-muted-foreground uppercase px-1.5 py-0.5 bg-muted/50 rounded">
+                                    <span className="text-[0.714em] text-muted-foreground uppercase px-1.5 py-0.5 bg-muted/50 rounded">
                                       {mime.split("/")[1] || mime}
                                     </span>
                                   )}
@@ -3379,7 +3353,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   }
                                 }}
                                 placeholder={t("chat.edit.placeholder")}
-                                className="focus-ring min-h-[80px] flex-1 w-full resize-none rounded-[20px] border-0 bg-transparent px-4 py-3 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
+                                className="focus-ring chat-font min-h-[80px] flex-1 w-full resize-none rounded-[20px] border-0 bg-transparent px-4 py-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
                               />
                             </div>
                             <div className="flex justify-end gap-2 text-xs">
@@ -3413,7 +3387,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           <WebSourcesBar cards={m.webSources} messageId={m.id} />
                         ) : null}
                         {m.role === "assistant" && m.reasoningUnavailable ? (
-                          <p className="mt-2 border-t border-border pt-2 text-[11px] leading-snug text-muted-foreground">
+                          <p className="mt-2 border-t border-border pt-2 text-[0.786em] leading-snug text-muted-foreground">
                             {t("chat.edit.no_reasoning", { level: "min" })}
                           </p>
                         ) : null}
@@ -3521,7 +3495,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       ) : null}
 
                       {memorizingMessageId === m.id && streaming ? (
-                        <div className="flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-sm text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
+                        <div className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
                           <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary mt-0.5" />
                           <div className="flex-1">
                             <div className="font-semibold">{t("chat.agent_status.saving_info")}</div>
@@ -3536,7 +3510,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         );
                         if (memorizationMsgs.length === 0) return null;
                         return memorizationMsgs.map((mm) => (
-                          <div key={mm.id} className="flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-sm text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
+                          <div key={mm.id} className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
                             <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
                             <div className="flex-1">
                               <InternalMessageMarkdown
@@ -3564,7 +3538,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 </div>
               ) : null}
               {showMainTurnVisual && turnVisual ? (
-                <div className="mr-auto mt-0.5 w-full max-w-4xl min-h-[3.5rem] bg-transparent px-5 pt-0 pb-3 text-[15px] leading-relaxed text-foreground">
+                <div className="mr-auto mt-0.5 w-full max-w-4xl min-h-[3.5rem] bg-transparent px-5 pt-0 pb-3 chat-font text-foreground">
                   {isSavingInfo ? (
                     <StatusProgressCard
                       className="mb-3"
@@ -3635,7 +3609,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   {pendingFiles.map((f) => (
                     <span
                       key={f.name}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-3 py-1.5 text-[12px] font-medium text-foreground backdrop-blur-sm"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-3 py-1.5 text-[0.857em] font-medium text-foreground backdrop-blur-sm"
                     >
                       {f.name}
                       <button
@@ -3676,7 +3650,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       : "border-border hover:border-border/80 focus-within:ring-primary/30",
                   composerResizing ? "" : "transition-colors"
                 )}
-                style={{ height: composerHeight }}
+                style={{ minHeight: COMPOSER_MIN_HEIGHT }}
               >
                 <button
                   type="button"
@@ -3685,7 +3659,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   className="focus-ring absolute left-0 top-0 z-10 h-4 w-full -translate-y-1/2 cursor-ns-resize bg-transparent"
                 />
                 {(webRestrictHosts.length > 0 || !webSearchEnabled) && (
-                  <div className="flex flex-wrap gap-2 px-3 pt-1 text-[11px] text-muted-foreground" aria-live="polite">
+                  <div className="flex flex-wrap gap-2 px-3 pt-1 text-[0.786em] text-muted-foreground" aria-live="polite">
                     {!webSearchEnabled ? (
                       <span className="rounded-full border border-amber-500/40 bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-200">
                         {t("chat.web_search.disabled")}
@@ -3698,7 +3672,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     ) : null}
                   </div>
                 )}
-                <div className="min-h-0 flex-1 overflow-hidden">
+                <div className="min-h-0 shrink-0">
                   <textarea
                     ref={composerTextareaRef}
                     value={input}
@@ -3714,7 +3688,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       }
                     }}
                     placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
-                    className="focus-ring box-border h-full min-h-0 min-w-0 max-w-full w-full resize-none overflow-x-hidden overflow-y-auto break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
+                    className="focus-ring chat-font box-border min-h-[48px] min-w-0 max-w-full w-full resize-none overflow-x-hidden break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
                     rows={1}
                   />
                 </div>
@@ -3819,7 +3793,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   onMouseEnter={() => setIsToolsViewSubOpen(true)}
                                   className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                 >
-                                  <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
+                                  <div className="px-2 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
                                     {t("chat.tools.select_view")}
                                   </div>
                                   <div className="space-y-0.5">
@@ -3923,7 +3897,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   onMouseEnter={() => setIsWebSearchSubOpen(true)}
                                   className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                 >
-                                  <div className="border-b border-border/45 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                                  <div className="border-b border-border/45 px-2 py-1 text-[0.714em] font-semibold text-muted-foreground">
                                     {t("chat.web_search.global")}
                                   </div>
                                   <div className="space-y-0.5 p-0.5">
@@ -4005,7 +3979,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   onMouseEnter={() => setIsThinkingSubOpen(true)}
                                   className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                 >
-                                  <div className="border-b border-border/45 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                                  <div className="border-b border-border/45 px-2 py-1 text-[0.714em] font-semibold text-muted-foreground">
                                     {t("chat.thinking.label")}
                                   </div>
                                   <div className="space-y-0.5 p-0.5">
@@ -4125,7 +4099,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           setIsAgentModeOpen(false);
                         }}
                         className={cn(
-                          "focus-ring inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                          "focus-ring inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[0.786em] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
                           isProfileOpen
                             ? "border-primary/45 bg-primary/10 text-primary"
                             : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
@@ -4140,10 +4114,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
                       {isProfileOpen && (
                         <div className="absolute bottom-full left-0 mb-2 z-50 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
                             {t("chat.profile.select")}
                           </div>
-                          <p className="px-2.5 py-1 text-[10px] leading-snug text-muted-foreground">
+                          <p className="px-2.5 py-1 text-[0.714em] leading-snug text-muted-foreground">
                             {t("chat.profile.active_hint")}
                           </p>
                           <div className="max-h-52 overflow-y-auto p-0.5">
@@ -4219,7 +4193,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         type="button"
                         onClick={() => setMcpPendingOpen(true)}
                         className={cn(
-                          "focus-ring flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium",
+                          "focus-ring flex items-center gap-1 rounded-full border px-2.5 py-1 text-[0.786em] font-medium",
                           mcpRuntimeErrors.length > 0
                             ? "border-red-500/50 bg-red-500/15 text-red-800 dark:text-red-200"
                             : "border-amber-500/50 bg-amber-500/15 text-amber-800 dark:text-amber-200"
@@ -4253,7 +4227,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   </div>
                 </div>
               </div>
-              <div className="mt-3 text-center text-[12px] font-medium text-muted-foreground">
+              <div className="mt-3 text-center text-[0.857em] font-medium text-muted-foreground">
                 {t("chat.footer_hint")}
               </div>
             </div>
@@ -4507,7 +4481,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   <div className="font-medium text-red-700 dark:text-red-300">{p.display_name}</div>
                   <p className="mt-1 text-xs text-muted-foreground">{p.message}</p>
                   {p.error ? (
-                    <p className="mt-1 break-all font-mono text-[10px] text-red-600/90 dark:text-red-400/90">{p.error}</p>
+                    <p className="mt-1 break-all font-mono text-[0.714em] text-red-600/90 dark:text-red-400/90">{p.error}</p>
                   ) : null}
                 </li>
               ))}
@@ -4547,32 +4521,7 @@ const InternalMessageMarkdown = memo(function InternalMessageMarkdown({
 }) {
   const components = useMemo(() => ({
     a: renderMarkdownLink,
-    pre: ({ children, ...props }: any) => {
-      const codeElement = Array.isArray(children) ? children[0] : children;
-      if (codeElement && codeElement.props && codeElement.props.className) {
-        const match = /language-(\w+)/.exec(codeElement.props.className || "");
-        if (match && match[1] === "mermaid") {
-          return codeElement;
-        }
-      }
-      return <pre {...props}>{children}</pre>;
-    },
-    code: ({ className, children, ...props }: any) => {
-      const match = /language-(\w+)/.exec(className || "");
-      const lang = match ? match[1] : "";
-      const isInline = !match;
-      const codeContent = String(children).replace(/\n$/, "");
-
-      if (!isInline && lang === "mermaid") {
-        return <MermaidBlock code={codeContent} isStreaming={streaming} />;
-      }
-
-      return (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    }
+    ...markdownCodeComponents({ streaming }),
   }), [streaming, renderMarkdownLink]);
 
   return (
@@ -4603,32 +4552,7 @@ const UserMessageMarkdown = memo(function UserMessageMarkdown({
         <table {...props} />
       </div>
     ),
-    pre: ({ children, ...props }: any) => {
-      const codeElement = Array.isArray(children) ? children[0] : children;
-      if (codeElement && codeElement.props && codeElement.props.className) {
-        const match = /language-(\w+)/.exec(codeElement.props.className || "");
-        if (match && match[1] === "mermaid") {
-          return codeElement;
-        }
-      }
-      return <pre {...props}>{children}</pre>;
-    },
-    code: ({ className, children, ...props }: any) => {
-      const match = /language-(\w+)/.exec(className || "");
-      const lang = match ? match[1] : "";
-      const isInline = !match;
-      const codeContent = String(children).replace(/\n$/, "");
-
-      if (!isInline && lang === "mermaid") {
-        return <MermaidBlock code={codeContent} isStreaming={false} />;
-      }
-
-      return (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    },
+    ...markdownCodeComponents(),
     a: renderMarkdownLink
   }), [renderMarkdownLink]);
 

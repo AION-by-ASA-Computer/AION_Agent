@@ -8,9 +8,11 @@ import { LOCALE_OPTIONS } from "@/lib/i18n/locale-options";
 import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
 import { useT } from "@/lib/i18n/use-t";
 import { useChatTheme } from "@/lib/theme/chat-theme";
+import { useChatFontSize } from "@/lib/theme/chat-font-scale";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { useSyncExternalStore, useState } from "react";
 import { SettingsFieldRow } from "./SettingsCard";
+import { FontSizeSlider } from "./FontSizeSlider";
 
 export function AppearanceSection({
   onLanguageSaved,
@@ -20,6 +22,7 @@ export function AppearanceSection({
   const t = useT();
   const token = useStoredToken();
   const [theme, setTheme] = useChatTheme();
+  const [fontSize, setFontSize] = useChatFontSize();
   const locale = useSyncExternalStore(subscribe, getLocale, () => "en" as Locale);
   const [langOpen, setLangOpen] = useState(false);
 
@@ -40,6 +43,17 @@ export function AppearanceSection({
 
   return (
     <div className="space-y-1">
+      <SettingsFieldRow
+        label={t("settings.appearance.font_scale_label")}
+        hint={t("settings.appearance.font_scale_desc")}
+      >
+        <FontSizeSlider
+          value={fontSize}
+          onChange={setFontSize}
+          aria-label={t("settings.appearance.font_scale_label")}
+        />
+      </SettingsFieldRow>
+
       <SettingsFieldRow
         label={t("settings.appearance.theme_label")}
         hint={t("settings.appearance.theme_desc")}

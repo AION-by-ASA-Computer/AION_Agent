@@ -60,7 +60,7 @@ export function IntegrationCard({
               <h3 className="text-base font-semibold text-foreground">{integration.display_name}</h3>
               <span
                 className={cn(
-                  "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase",
+                  "rounded-full px-2 py-0.5 text-[0.714em] font-bold uppercase",
                   isConnected
                     ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
                     : "bg-amber-500/15 text-amber-800 dark:text-amber-300",
@@ -75,20 +75,20 @@ export function IntegrationCard({
               <p className="mt-0.5 text-sm text-muted-foreground">{integration.description}</p>
             ) : null}
             {integration.org_managed ? (
-              <p className="mt-2 text-[11px] text-muted-foreground">{orgManagedLabel}</p>
+              <p className="mt-2 text-[0.786em] text-muted-foreground">{orgManagedLabel}</p>
             ) : null}
             {integration.credential_mode === "per_user" && !integration.org_managed ? (
-              <p className="mt-2 text-[11px] text-muted-foreground">{perUserHint}</p>
+              <p className="mt-2 text-[0.786em] text-muted-foreground">{perUserHint}</p>
             ) : null}
             {isConnected ? (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {integration.has_oauth && hasOAuthToken ? (
-                  <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 dark:text-emerald-300">
+                  <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[0.714em] font-semibold text-emerald-800 dark:text-emerald-300">
                     {t("integrationsPage.oauth_connected")}
                   </span>
                 ) : null}
                 {integration.has_oauth && !hasOAuthToken && !integration.is_configured ? (
-                  <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-800 dark:text-amber-300">
+                  <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[0.714em] font-semibold text-amber-800 dark:text-amber-300">
                     {t("integrationsPage.oauth_required")}
                   </span>
                 ) : null}
@@ -98,7 +98,7 @@ export function IntegrationCard({
                     <span
                       key={h.key}
                       className={cn(
-                        "rounded-md px-2 py-0.5 text-[10px] font-medium",
+                        "rounded-md px-2 py-0.5 text-[0.714em] font-medium",
                         h.is_expired
                           ? "bg-destructive/15 text-destructive"
                           : "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300",

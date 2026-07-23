@@ -93,7 +93,7 @@ export function WebSourcesBar({ cards, messageId }: { cards: WebSourceCard[]; me
         aria-label="Fonti"
         style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
       >
-        <div className="mr-1 flex shrink-0 items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground select-none">
+        <div className="mr-1 flex shrink-0 items-center gap-1 text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground select-none">
           <Globe className="size-3" aria-hidden />
           <span>Fonti</span>
         </div>
@@ -111,7 +111,7 @@ export function WebSourcesBar({ cards, messageId }: { cards: WebSourceCard[]; me
               "hover:border-primary/25 hover:bg-muted/50 hover:text-foreground",
             )}
           >
-            <span className="flex size-4 items-center justify-center rounded-full bg-background text-[8px] font-bold text-muted-foreground group-hover:text-primary">
+            <span className="flex size-4 items-center justify-center rounded-full bg-background text-[0.571em] font-bold text-muted-foreground group-hover:text-primary">
               {c.index}
             </span>
             <span className="max-w-[140px] truncate font-medium">{webHostLabel(c.url)}</span>
@@ -134,13 +134,13 @@ function ToolParamsBlock({ input }: { input: unknown }) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/30 px-2 py-0.5 text-[10px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+        className="inline-flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/30 px-2 py-0.5 text-[0.714em] font-medium text-muted-foreground transition-colors hover:text-foreground"
       >
         <ChevronDown className={cn("size-3 transition-transform duration-200", open && "rotate-180")} />
         <span>{t("chat.tool.params")}</span>
       </button>
       {open ? (
-        <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-background/60 p-2 font-mono text-[10px] leading-relaxed text-foreground/90">
+        <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-background/60 p-2 font-mono text-[0.714em] leading-relaxed text-foreground/90">
           {formatted}
         </pre>
       ) : null}
@@ -175,7 +175,7 @@ function ToolCardShell({
   return (
     <div
       className={cn(
-        "rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5 text-[12px] shadow-sm",
+        "rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5 text-[0.857em] shadow-sm",
         isError && "border-destructive/35 bg-destructive/5",
         className,
       )}
@@ -226,7 +226,7 @@ function ToolInvocationCard({
               <ShimmerText className="text-xs font-medium">{t("chat.tool.web_search_running")}</ShimmerText>
             </div>
             {inputQuery ? (
-              <p className="mt-1.5 line-clamp-2 text-[11px] text-muted-foreground italic">
+              <p className="mt-1.5 line-clamp-2 text-[0.786em] text-muted-foreground italic">
                 &ldquo;{truncate(inputQuery, 120)}&rdquo;
               </p>
             ) : null}
@@ -245,12 +245,12 @@ function ToolInvocationCard({
               <Search className="size-3.5 shrink-0 text-primary/80" aria-hidden />
               <span className="text-xs font-medium text-foreground">{t("chat.tool.web_search_done")}</span>
               {tokens_in !== undefined && tokens_out !== undefined ? (
-                <span className="ml-auto rounded border border-border/50 bg-background/50 px-1.5 py-0.5 text-[9px] font-medium text-muted-foreground">
+                <span className="ml-auto rounded border border-border/50 bg-background/50 px-1.5 py-0.5 text-[0.643em] font-medium text-muted-foreground">
                   {tokens_in} in / {tokens_out} out
                 </span>
               ) : null}
             </div>
-            <p className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{line}</p>
+            <p className="mt-1.5 line-clamp-2 text-[0.786em] leading-relaxed text-muted-foreground">{line}</p>
           </ToolCardShell>
         );
       }
@@ -278,7 +278,7 @@ function ToolInvocationCard({
               <Globe className="size-3.5 shrink-0 text-primary/80" aria-hidden />
               <span className="text-xs font-medium text-foreground">{t("chat.tool.web_fetch_done")}</span>
             </div>
-            <p className="mt-1.5 line-clamp-2 text-[11px] text-muted-foreground">{line}</p>
+            <p className="mt-1.5 line-clamp-2 text-[0.786em] text-muted-foreground">{line}</p>
           </ToolCardShell>
         );
       }
@@ -293,28 +293,28 @@ function ToolInvocationCard({
             <StatusDot running={false} isError={isError} />
             <Search className="size-4 shrink-0 text-primary/80" aria-hidden />
             <div className="min-w-0 flex-1">
-              <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+              <div className="text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground">
                 {t("chat.tool.web_search_done")}
               </div>
-              <div className="mt-0.5 truncate text-[13px] font-medium text-foreground" title={ws.query}>
+              <div className="mt-0.5 truncate text-[0.929em] font-medium text-foreground" title={ws.query}>
                 {ws.query || "—"}
               </div>
             </div>
             {ws.provider ? (
-              <span className="shrink-0 rounded-full border border-border/50 bg-background px-2 py-0.5 text-[9px] font-semibold uppercase text-muted-foreground">
+              <span className="shrink-0 rounded-full border border-border/50 bg-background px-2 py-0.5 text-[0.643em] font-semibold uppercase text-muted-foreground">
                 {ws.provider}
               </span>
             ) : null}
           </div>
           {ws.error ? (
-            <div className="px-3.5 py-2.5 text-[11px] font-medium text-destructive">{ws.error}</div>
+            <div className="px-3.5 py-2.5 text-[0.786em] font-medium text-destructive">{ws.error}</div>
           ) : (
             <ul className="max-h-52 divide-y divide-border/40 overflow-y-auto px-2 py-2">
               {ws.results
                 .filter((r) => r.url)
                 .slice(0, 20)
                 .map((r, idx) => (
-                  <li key={`${r.url}-${idx}`} className="rounded-lg px-2.5 py-2 text-[11px] hover:bg-muted/30">
+                  <li key={`${r.url}-${idx}`} className="rounded-lg px-2.5 py-2 text-[0.786em] hover:bg-muted/30">
                     <a
                       href={r.url}
                       target="_blank"
@@ -323,7 +323,7 @@ function ToolInvocationCard({
                     >
                       {truncate(r.title, 120)}
                     </a>
-                    <div className="mt-0.5 truncate text-[10px] text-muted-foreground">{r.url}</div>
+                    <div className="mt-0.5 truncate text-[0.714em] text-muted-foreground">{r.url}</div>
                   </li>
                 ))}
             </ul>
@@ -337,7 +337,7 @@ function ToolInvocationCard({
           <div className="flex items-center gap-2 border-b border-border/40 pb-2">
             <StatusDot running={false} isError={isError} />
             <Globe className="size-4 shrink-0 text-primary/80" aria-hidden />
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground">
               {t("chat.tool.web_fetch_done")}
             </span>
           </div>
@@ -346,12 +346,12 @@ function ToolInvocationCard({
               href={wf.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 block truncate text-[12px] font-medium text-primary underline-offset-2 hover:underline"
+              className="mt-2 block truncate text-[0.857em] font-medium text-primary underline-offset-2 hover:underline"
             >
               {wf.url}
             </a>
           ) : null}
-          {wf.error ? <p className="mt-1.5 text-[11px] text-destructive">{wf.error}</p> : null}
+          {wf.error ? <p className="mt-1.5 text-[0.786em] text-destructive">{wf.error}</p> : null}
         </ToolCardShell>
       );
     }
@@ -359,7 +359,7 @@ function ToolInvocationCard({
 
   if (toolsView === "full" && output != null) {
     return (
-      <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-background/50 p-2.5 font-mono text-[10px] leading-relaxed text-foreground/90">
+      <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-background/50 p-2.5 font-mono text-[0.714em] leading-relaxed text-foreground/90">
         {output}
       </pre>
     );
@@ -395,15 +395,15 @@ export function AssistantToolStepBlock({
   const preview = toolInputPreview(input);
 
   const header = (
-    <div className="flex items-center gap-2 font-mono text-[10px] font-semibold text-muted-foreground">
+    <div className="flex items-center gap-2 font-mono text-[0.714em] font-semibold text-muted-foreground">
       <StatusDot running={running} isError={isError} />
       <span>{name}</span>
       {running ? (
-        <ShimmerText className="text-[10px] font-medium">
+        <ShimmerText className="text-[0.714em] font-medium">
           {t("chat.tool.running", { name })}
         </ShimmerText>
       ) : tokens_in !== undefined && tokens_out !== undefined ? (
-        <span className="ml-auto rounded border border-border/50 bg-background/50 px-1.5 py-0.5 text-[9px] font-medium">
+        <span className="ml-auto rounded border border-border/50 bg-background/50 px-1.5 py-0.5 text-[0.643em] font-medium">
           {tokens_in} in / {tokens_out} out
         </span>
       ) : null}
@@ -437,7 +437,7 @@ export function AssistantToolStepBlock({
       <ToolCardShell>
         {header}
         {preview && running ? (
-          <p className="mt-1.5 truncate pl-4 text-[10px] italic text-muted-foreground">&ldquo;{preview}&rdquo;</p>
+          <p className="mt-1.5 truncate pl-4 text-[0.714em] italic text-muted-foreground">&ldquo;{preview}&rdquo;</p>
         ) : null}
       </ToolCardShell>
     );
@@ -464,12 +464,12 @@ export function AssistantToolStepBlock({
         <ToolParamsBlock input={input} />
         {output != null && output.trim() !== "" ? (
           <div className="mt-2 border-t border-border/40 pt-2">
-            <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <div className="mb-1 text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground">
               {isError ? t("chat.tool.result_error") : t("chat.tool.result")}
             </div>
             <pre
               className={cn(
-                "max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border p-2 font-mono text-[10px] leading-relaxed",
+                "max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border p-2 font-mono text-[0.714em] leading-relaxed",
                 isError
                   ? "border-destructive/25 bg-destructive/5 text-destructive"
                   : "border-border/50 bg-background/50 text-foreground/90",
@@ -479,10 +479,10 @@ export function AssistantToolStepBlock({
             </pre>
           </div>
         ) : isError && !running ? (
-          <p className="mt-2 pl-4 text-[11px] font-medium text-destructive">{t("chat.tool.result_error")}</p>
+          <p className="mt-2 pl-4 text-[0.786em] font-medium text-destructive">{t("chat.tool.result_error")}</p>
         ) : running ? (
           <p className="mt-2 pl-4">
-            <ShimmerText className="text-[11px]">{t("chat.tool.waiting")}</ShimmerText>
+            <ShimmerText className="text-[0.786em]">{t("chat.tool.waiting")}</ShimmerText>
           </p>
         ) : null}
       </ToolCardShell>

@@ -165,7 +165,7 @@ export function ChatHeader({
         <button
           type="button"
           onClick={() => void copySession()}
-          className="focus-ring inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/80 bg-muted/30 px-2.5 py-1 font-mono text-[11px] text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all duration-200 sm:px-3"
+          className="focus-ring inline-flex max-w-full items-center gap-1.5 rounded-full border border-border/80 bg-muted/30 px-2.5 py-1 font-mono text-[0.786em] text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-all duration-200 sm:px-3"
           title={t("header.copy_session")}
         >
           <span className="hidden truncate sm:inline">Session · {conversationId.slice(0, 8)}</span>
@@ -174,7 +174,7 @@ export function ChatHeader({
           {copied ? <span className="sr-only">{t("header.copied")}</span> : null}
         </button>
         {copied ? (
-          <span className="hidden text-[10px] font-medium text-emerald-500 animate-pulse sm:inline" aria-live="polite">
+          <span className="hidden text-[0.714em] font-medium text-emerald-500 animate-pulse sm:inline" aria-live="polite">
             {t("header.copied")}
           </span>
         ) : null}

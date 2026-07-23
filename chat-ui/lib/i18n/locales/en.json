@@ -35,9 +35,11 @@
     },
     "appearance": {
       "title": "Appearance",
-      "desc": "Interface theme and application language.",
+      "desc": "Interface theme, text size, and application language.",
       "theme_label": "Theme",
       "theme_desc": "Choose light or dark mode.",
+      "font_scale_label": "Text size",
+      "font_scale_desc": "Adjust text across the app.",
       "language_label": "Interface language"
     },
     "security": {

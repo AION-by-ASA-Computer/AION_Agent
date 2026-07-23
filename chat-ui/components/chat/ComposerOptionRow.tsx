@@ -29,13 +29,13 @@ export function ComposerOptionRow({
             {icon}
             <span className="text-xs font-semibold text-muted-foreground">{label}</span>
             {badge ? (
-              <span className="rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
+              <span className="rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[0.643em] font-semibold text-muted-foreground">
                 {badge}
               </span>
             ) : null}
           </div>
           {description ? (
-            <p className="mt-0.5 pl-0 text-[10px] leading-snug text-muted-foreground/80">{description}</p>
+            <p className="mt-0.5 pl-0 text-[0.714em] leading-snug text-muted-foreground/80">{description}</p>
           ) : null}
         </div>
       </div>
@@ -61,7 +61,7 @@ export function ComposerOptionRow({
         {description ? (
           <p
             className={cn(
-              "mt-0.5 text-[10px] leading-snug",
+              "mt-0.5 text-[0.714em] leading-snug",
               selected ? "text-primary/80" : "text-muted-foreground",
             )}
           >

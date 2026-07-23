@@ -221,7 +221,7 @@ export function IntegrationsPanel() {
 
         {configured.length > 0 ? (
           <section className="mb-8">
-            <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+            <h2 className="mb-3 text-[0.786em] font-bold uppercase tracking-wider text-muted-foreground">
               {t("integrationsPage.section_configured")}
             </h2>
             <div className="space-y-3">
@@ -243,7 +243,7 @@ export function IntegrationsPanel() {
 
         {notConfigured.length > 0 ? (
           <section className="mb-8">
-            <h2 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+            <h2 className="mb-3 text-[0.786em] font-bold uppercase tracking-wider text-muted-foreground">
               {t("integrationsPage.section_pending")}
             </h2>
             <div className="space-y-3">

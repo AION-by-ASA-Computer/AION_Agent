@@ -2997,7 +2997,13 @@ class AgentPipeline:
 
                 turn_new_messages = list(new_messages) if new_messages else []
 
-                if new_messages:
+                if new_messages and _use_stream_loop_v2 and assistant_message_persisted:
+                    logger.debug(
+                        "Skipping legacy Haystack message persistence "
+                        "(stream_loop_v2 already flushed assistant %s)",
+                        assistant_message_id,
+                    )
+                elif new_messages:
                     for i, msg in enumerate(new_messages):
                         content = chat_message_text(msg)
                         raw_role = (
@@ -3070,6 +3076,25 @@ class AgentPipeline:
                                 )
                                 if mid == assistant_message_id and role == "assistant":
                                     assistant_message_persisted = True
+                            elif (
+                                _use_stream_loop_v2
+                                and role == "assistant"
+                                and assistant_message_id
+                            ):
+                                await history_manager.upsert_message_content(
+                                    self.session_id,
+                                    assistant_message_id,
+                                    role,
+                                    content,
+                                    profile_name=self.profile_name,
+                                    user_id=self.user_id,
+                                    tool_name=tool_name,
+                                    tool_call_id=tool_call_id,
+                                    reasoning=reasoning,
+                                    timeline_json=tl_json,
+                                    metadata_json=_plan_meta_json,
+                                )
+                                assistant_message_persisted = True
                             else:
                                 await history_manager.add_message(
                                     self.session_id,

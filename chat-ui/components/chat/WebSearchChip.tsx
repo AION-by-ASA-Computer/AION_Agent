@@ -38,7 +38,7 @@ export function WebSearchChip({
         type="button"
         onClick={() => onOpenChange(!open)}
         className={cn(
-          "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+          "focus-ring inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[0.786em] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
           open || enabled
             ? "border-cyan-500/35 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300"
             : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
@@ -52,7 +52,7 @@ export function WebSearchChip({
 
       {open ? (
         <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,15rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-          <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="border-b border-border/45 px-2.5 py-1.5 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
             {t("chat.web_search.global")}
           </div>
           <div className="p-0.5">
