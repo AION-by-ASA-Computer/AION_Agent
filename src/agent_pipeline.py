@@ -3076,6 +3076,25 @@ class AgentPipeline:
                                 )
                                 if mid == assistant_message_id and role == "assistant":
                                     assistant_message_persisted = True
+                            elif (
+                                _use_stream_loop_v2
+                                and role == "assistant"
+                                and assistant_message_id
+                            ):
+                                await history_manager.upsert_message_content(
+                                    self.session_id,
+                                    assistant_message_id,
+                                    role,
+                                    content,
+                                    profile_name=self.profile_name,
+                                    user_id=self.user_id,
+                                    tool_name=tool_name,
+                                    tool_call_id=tool_call_id,
+                                    reasoning=reasoning,
+                                    timeline_json=tl_json,
+                                    metadata_json=_plan_meta_json,
+                                )
+                                assistant_message_persisted = True
                             else:
                                 await history_manager.add_message(
                                     self.session_id,

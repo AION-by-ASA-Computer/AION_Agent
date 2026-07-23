@@ -20,7 +20,7 @@ export function markdownCodeComponents(opts: MarkdownCodeOptions = {}): Partial<
       if (isInline) {
         return (
           <code
-            className="rounded-md bg-muted/80 px-1.5 py-0.5 font-mono text-[0.85em] text-foreground ring-1 ring-border/50"
+            className="rounded-md bg-muted/80 px-1.5 py-0.5 font-mono text-[0.93em] text-foreground ring-1 ring-border/50"
             {...props}
           >
             {children}

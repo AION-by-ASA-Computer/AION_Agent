@@ -72,32 +72,32 @@ export function MarkdownCodeBlock({
   return (
     <div
       className={cn(
-        "not-prose group/code my-3 overflow-hidden rounded-xl border border-border/80 bg-[#0d1117] text-xs shadow-sm ring-1 ring-black/5 dark:ring-white/10",
+        "not-prose group/code my-3 overflow-hidden rounded-xl border border-border/80 bg-[#0d1117] text-sm shadow-sm ring-1 ring-black/5 dark:ring-white/10",
         className
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-[#161b22] px-3 py-1.5">
-        <span className="font-mono text-[10px] font-medium uppercase tracking-wide text-[#8b949e]">
+      <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-[#161b22] px-3.5 py-2">
+        <span className="font-mono text-xs font-medium uppercase tracking-wide text-[#8b949e]">
           {lang}
         </span>
         <button
           type="button"
-          className="focus-ring inline-flex items-center gap-1 rounded-md border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] font-medium text-[#c9d1d9] opacity-100 transition-opacity hover:bg-white/10 sm:opacity-0 sm:group-hover/code:opacity-100 sm:focus-visible:opacity-100"
+          className="focus-ring inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-[#c9d1d9] opacity-100 transition-opacity hover:bg-white/10 sm:opacity-0 sm:group-hover/code:opacity-100 sm:focus-visible:opacity-100"
           onClick={() => void copy()}
           aria-label={t("chat.actions.copy")}
         >
-          {copied ? <Check size={11} aria-hidden /> : <Copy size={11} aria-hidden />}
+          {copied ? <Check size={13} aria-hidden /> : <Copy size={13} aria-hidden />}
           {copied ? t("chat.actions.copied") : t("chat.actions.copy")}
         </button>
       </div>
-      <div className="max-h-[min(28rem,50vh)] overflow-auto">
+      <div className="max-h-[min(32rem,55vh)] overflow-auto">
         {html ? (
           <div
-            className="[&_pre]:!m-0 [&_pre]:!bg-transparent [&_pre]:!p-3 [&_pre]:text-[12px] [&_pre]:leading-relaxed [&_code]:font-mono"
+            className="[&_pre]:!m-0 [&_pre]:!bg-transparent [&_pre]:!p-4 [&_pre]:text-[15px] [&_pre]:leading-[1.65] [&_code]:font-mono"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         ) : (
-          <pre className="m-0 whitespace-pre-wrap break-words p-3 font-mono text-[12px] leading-relaxed text-[#e6edf3]">
+          <pre className="m-0 whitespace-pre-wrap break-words p-4 font-mono text-[15px] leading-[1.65] text-[#e6edf3]">
             <code>{code}</code>
           </pre>
         )}
