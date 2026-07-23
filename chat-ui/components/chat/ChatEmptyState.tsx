@@ -47,7 +47,7 @@ export function ChatEmptyState({
           : t("chat.empty.subtitle")}
       </p>
 
-      <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/25 px-3 py-1 text-[11px] text-muted-foreground">
+      <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/25 px-3 py-1 text-[0.786em] text-muted-foreground">
         <Paperclip size={12} aria-hidden />
         <span>{t("chat.empty.hint_attach")}</span>
       </div>

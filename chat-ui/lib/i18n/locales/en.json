@@ -39,10 +39,7 @@
       "theme_label": "Theme",
       "theme_desc": "Choose light or dark mode.",
       "font_scale_label": "Text size",
-      "font_scale_desc": "Chat messages and code blocks scale together.",
-      "font_scale_small": "Small",
-      "font_scale_medium": "Medium",
-      "font_scale_large": "Large",
+      "font_scale_desc": "Adjust text across the app.",
       "language_label": "Interface language"
     },
     "security": {

@@ -83,12 +83,12 @@ export function ScheduleJobCard({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-base font-semibold text-foreground">{job.name}</h3>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-bold uppercase", statusPill)}>
+              <span className={cn("rounded-full px-2 py-0.5 text-[0.714em] font-bold uppercase", statusPill)}>
                 {job.enabled ? t("schedulesPage.badge_active") : t("schedulesPage.badge_paused")}
               </span>
             </div>
             <p className="mt-0.5 text-sm text-muted-foreground">{scheduleLabel}</p>
-            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.786em] text-muted-foreground">
               <span className="rounded-md bg-muted/50 px-2 py-0.5 font-medium">{job.profile_slug}</span>
               {job.timezone ? <span>{job.timezone}</span> : null}
               {job.next_run_at && job.enabled ? (

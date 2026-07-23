@@ -45,13 +45,13 @@ export function UserMdSection({
       icon={<HelpCircle className="h-4.5 w-4.5" aria-hidden />}
     >
       <div className="mb-4 flex justify-end">
-        <span className="rounded-md border border-border/40 bg-muted/50 px-2.5 py-1 font-mono text-[10px] text-muted-foreground">
+        <span className="rounded-md border border-border/40 bg-muted/50 px-2.5 py-1 font-mono text-[0.714em] text-muted-foreground">
           ID: {userId}
         </span>
       </div>
 
       <div className="space-y-2 pb-4">
-        <label className="text-[10px] font-bold tracking-wider uppercase text-muted-foreground/80">
+        <label className="text-[0.714em] font-bold tracking-wider uppercase text-muted-foreground/80">
           {t("settings.usermd.profile_label")}
         </label>
         {loadingProfiles ? (
@@ -92,14 +92,14 @@ export function UserMdSection({
           </div>
         ) : null}
         {isOverLimit && !loadingUserMd ? (
-          <div className="absolute top-3 right-3 flex items-center gap-1 rounded border border-destructive/20 bg-destructive/10 px-2.5 py-1 text-[10px] font-bold text-destructive">
+          <div className="absolute top-3 right-3 flex items-center gap-1 rounded border border-destructive/20 bg-destructive/10 px-2.5 py-1 text-[0.714em] font-bold text-destructive">
             <AlertTriangle size={11} aria-hidden />
             <span>{t("settings.usermd.overlimit")}</span>
           </div>
         ) : null}
       </div>
 
-      <div className="mt-2 flex items-center justify-between px-1 text-[11px] text-muted-foreground">
+      <div className="mt-2 flex items-center justify-between px-1 text-[0.786em] text-muted-foreground">
         <span>{t("settings.usermd.markdown_hint")}</span>
         <span className={cn("font-mono", isOverLimit && "font-bold text-destructive")}>
           {t("settings.usermd.chars", { count: charCount })}

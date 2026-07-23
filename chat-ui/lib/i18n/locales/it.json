@@ -39,10 +39,7 @@
       "theme_label": "Tema",
       "theme_desc": "Scegli tra modalità chiara o scura.",
       "font_scale_label": "Dimensione testo",
-      "font_scale_desc": "Messaggi e blocchi codice si adattano insieme, in proporzione.",
-      "font_scale_small": "Piccolo",
-      "font_scale_medium": "Medio",
-      "font_scale_large": "Grande",
+      "font_scale_desc": "Regola il testo in tutta l'app",
       "language_label": "Lingua interfaccia"
     },
     "security": {

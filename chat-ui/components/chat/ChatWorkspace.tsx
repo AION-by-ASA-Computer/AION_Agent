@@ -522,7 +522,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       return (
         <a
           href={href}
-          className="inline-flex items-center justify-center min-w-5 h-5 ml-0.5 px-1 text-[10px] font-semibold transition-all duration-300 bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded-full text-primary align-super no-underline shadow-sm"
+          className="inline-flex items-center justify-center min-w-5 h-5 ml-0.5 px-1 text-[0.714em] font-semibold transition-all duration-300 bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded-full text-primary align-super no-underline shadow-sm"
           title={t("chat.go_to_source")}
           onClick={(e) => {
             e.preventDefault();
@@ -3246,7 +3246,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       >
                         {m.role === "internal" ? (
                           <>
-                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <div className="mb-2 text-[0.786em] font-semibold uppercase tracking-wide text-muted-foreground">
                               {t("chat.plan.execution")}
                             </div>
                             {m.content?.trim() ? (
@@ -3330,7 +3330,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   <Paperclip size={13} className="text-muted-foreground" />
                                   <span className="font-medium truncate max-w-[200px]">{title}</span>
                                   {mime && (
-                                    <span className="text-[10px] text-muted-foreground uppercase px-1.5 py-0.5 bg-muted/50 rounded">
+                                    <span className="text-[0.714em] text-muted-foreground uppercase px-1.5 py-0.5 bg-muted/50 rounded">
                                       {mime.split("/")[1] || mime}
                                     </span>
                                   )}
@@ -3387,7 +3387,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           <WebSourcesBar cards={m.webSources} messageId={m.id} />
                         ) : null}
                         {m.role === "assistant" && m.reasoningUnavailable ? (
-                          <p className="mt-2 border-t border-border pt-2 text-[11px] leading-snug text-muted-foreground">
+                          <p className="mt-2 border-t border-border pt-2 text-[0.786em] leading-snug text-muted-foreground">
                             {t("chat.edit.no_reasoning", { level: "min" })}
                           </p>
                         ) : null}
@@ -3609,7 +3609,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   {pendingFiles.map((f) => (
                     <span
                       key={f.name}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-3 py-1.5 text-[12px] font-medium text-foreground backdrop-blur-sm"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-3 py-1.5 text-[0.857em] font-medium text-foreground backdrop-blur-sm"
                     >
                       {f.name}
                       <button
@@ -3659,7 +3659,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   className="focus-ring absolute left-0 top-0 z-10 h-4 w-full -translate-y-1/2 cursor-ns-resize bg-transparent"
                 />
                 {(webRestrictHosts.length > 0 || !webSearchEnabled) && (
-                  <div className="flex flex-wrap gap-2 px-3 pt-1 text-[11px] text-muted-foreground" aria-live="polite">
+                  <div className="flex flex-wrap gap-2 px-3 pt-1 text-[0.786em] text-muted-foreground" aria-live="polite">
                     {!webSearchEnabled ? (
                       <span className="rounded-full border border-amber-500/40 bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-200">
                         {t("chat.web_search.disabled")}
@@ -3793,7 +3793,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   onMouseEnter={() => setIsToolsViewSubOpen(true)}
                                   className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                 >
-                                  <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
+                                  <div className="px-2 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
                                     {t("chat.tools.select_view")}
                                   </div>
                                   <div className="space-y-0.5">
@@ -3897,7 +3897,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   onMouseEnter={() => setIsWebSearchSubOpen(true)}
                                   className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                 >
-                                  <div className="border-b border-border/45 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                                  <div className="border-b border-border/45 px-2 py-1 text-[0.714em] font-semibold text-muted-foreground">
                                     {t("chat.web_search.global")}
                                   </div>
                                   <div className="space-y-0.5 p-0.5">
@@ -3979,7 +3979,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   onMouseEnter={() => setIsThinkingSubOpen(true)}
                                   className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                 >
-                                  <div className="border-b border-border/45 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                                  <div className="border-b border-border/45 px-2 py-1 text-[0.714em] font-semibold text-muted-foreground">
                                     {t("chat.thinking.label")}
                                   </div>
                                   <div className="space-y-0.5 p-0.5">
@@ -4099,7 +4099,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           setIsAgentModeOpen(false);
                         }}
                         className={cn(
-                          "focus-ring inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                          "focus-ring inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[0.786em] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
                           isProfileOpen
                             ? "border-primary/45 bg-primary/10 text-primary"
                             : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
@@ -4114,10 +4114,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
                       {isProfileOpen && (
                         <div className="absolute bottom-full left-0 mb-2 z-50 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
                             {t("chat.profile.select")}
                           </div>
-                          <p className="px-2.5 py-1 text-[10px] leading-snug text-muted-foreground">
+                          <p className="px-2.5 py-1 text-[0.714em] leading-snug text-muted-foreground">
                             {t("chat.profile.active_hint")}
                           </p>
                           <div className="max-h-52 overflow-y-auto p-0.5">
@@ -4193,7 +4193,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         type="button"
                         onClick={() => setMcpPendingOpen(true)}
                         className={cn(
-                          "focus-ring flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium",
+                          "focus-ring flex items-center gap-1 rounded-full border px-2.5 py-1 text-[0.786em] font-medium",
                           mcpRuntimeErrors.length > 0
                             ? "border-red-500/50 bg-red-500/15 text-red-800 dark:text-red-200"
                             : "border-amber-500/50 bg-amber-500/15 text-amber-800 dark:text-amber-200"
@@ -4227,7 +4227,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   </div>
                 </div>
               </div>
-              <div className="mt-3 text-center text-[12px] font-medium text-muted-foreground">
+              <div className="mt-3 text-center text-[0.857em] font-medium text-muted-foreground">
                 {t("chat.footer_hint")}
               </div>
             </div>
@@ -4481,7 +4481,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   <div className="font-medium text-red-700 dark:text-red-300">{p.display_name}</div>
                   <p className="mt-1 text-xs text-muted-foreground">{p.message}</p>
                   {p.error ? (
-                    <p className="mt-1 break-all font-mono text-[10px] text-red-600/90 dark:text-red-400/90">{p.error}</p>
+                    <p className="mt-1 break-all font-mono text-[0.714em] text-red-600/90 dark:text-red-400/90">{p.error}</p>
                   ) : null}
                 </li>
               ))}

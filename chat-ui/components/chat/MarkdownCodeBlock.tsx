@@ -75,7 +75,7 @@ export function MarkdownCodeBlock({
         "not-prose group/code my-3 overflow-hidden rounded-xl border border-border/80 bg-[#0d1117] shadow-sm ring-1 ring-black/5 dark:ring-white/10",
         className
       )}
-      style={{ fontSize: "var(--aion-chat-font-size, 14px)" }}
+      style={{ fontSize: "var(--aion-chat-code-font-size, 10.5px)" }}
     >
       <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-[#161b22] px-3.5 py-2">
         <span className="font-mono text-[0.86em] font-medium uppercase tracking-wide text-[#8b949e]">

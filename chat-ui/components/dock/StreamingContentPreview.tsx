@@ -46,7 +46,7 @@ export function StreamingContentPreview({
       </div>
       <pre
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-relaxed text-foreground/90"
+        className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-[0.786em] leading-relaxed text-foreground/90"
       >
         {content.trim() || t("artifacts.live_preview_empty")}
       </pre>

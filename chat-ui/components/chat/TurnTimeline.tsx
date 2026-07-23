@@ -233,7 +233,7 @@ export function TurnTimeline({
 
 /** Shimmer label while the agent has not started visible output yet. */
 export function AgentWorkingShimmer({ label }: { label: string }) {
-  return <ShimmerText className="py-2 text-[15px] leading-relaxed">{label}</ShimmerText>;
+  return <ShimmerText className="py-2 leading-relaxed">{label}</ShimmerText>;
 }
 
 const TextSegment = memo(function TextSegment({

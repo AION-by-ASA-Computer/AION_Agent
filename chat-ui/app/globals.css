@@ -43,6 +43,11 @@
 }
 
 @layer base {
+  html {
+    font-size: var(--aion-chat-font-size, 14px);
+    --aion-chat-code-font-size: calc(var(--aion-chat-font-size, 14px) * 0.75);
+  }
+
   * {
     border-color: hsl(var(--border));
   }
@@ -77,12 +82,11 @@
 /* Markdown prose (senza @tailwindcss/typography) */
 @layer components {
   .chat-font {
-    font-size: var(--aion-chat-font-size, 14px);
     line-height: var(--aion-chat-line-height, 1.625);
   }
   .prose-chat {
     @apply text-foreground;
-    font-size: var(--aion-chat-font-size, 14px);
+    font-size: 1em;
     line-height: var(--aion-chat-line-height, 1.625);
   }
   .prose-chat :where(p):not(:where([class~="not-prose"])) {
@@ -92,7 +96,7 @@
     @apply text-primary underline-offset-2 hover:underline;
   }
   .prose-chat :where(code):not(:where([class~="not-prose"], .not-prose *)) {
-    @apply rounded-md bg-muted/80 px-1.5 py-0.5 font-mono text-[0.93em] text-foreground ring-1 ring-border/50;
+    @apply rounded-md bg-muted/80 px-1.5 py-0.5 font-mono text-[0.88em] text-foreground ring-1 ring-border/50;
   }
   .prose-chat :where(pre):not(:where([class~="not-prose"], .not-prose *)) {
     @apply my-0 overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none;
@@ -154,6 +158,44 @@
   }
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+
+  /* Apple-style text size slider (Settings → Appearance) */
+  .font-size-slider {
+    height: 28px;
+    margin: 0;
+  }
+  .font-size-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    background: transparent;
+  }
+  .font-size-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 22px;
+    height: 22px;
+    margin-top: -9px;
+    border-radius: 9999px;
+    border: 0.5px solid hsl(var(--border) / 0.65);
+    background: hsl(var(--background));
+    box-shadow:
+      0 1px 2px hsl(var(--foreground) / 0.08),
+      0 2px 6px hsl(var(--foreground) / 0.12);
+  }
+  .font-size-slider::-moz-range-track {
+    height: 4px;
+    background: transparent;
+    border: none;
+  }
+  .font-size-slider::-moz-range-thumb {
+    width: 22px;
+    height: 22px;
+    border-radius: 9999px;
+    border: 0.5px solid hsl(var(--border) / 0.65);
+    background: hsl(var(--background));
+    box-shadow:
+      0 1px 2px hsl(var(--foreground) / 0.08),
+      0 2px 6px hsl(var(--foreground) / 0.12);
   }
 }
 

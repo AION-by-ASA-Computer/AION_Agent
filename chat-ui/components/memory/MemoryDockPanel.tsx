@@ -83,7 +83,7 @@ export function MemoryDockPanel({
             <h2 className="text-sm font-semibold tracking-tight text-foreground">
               {t("memory_dock.title")}
             </h2>
-            <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">
+            <p className="mt-0.5 text-[0.786em] leading-relaxed text-muted-foreground">
               {t("memory_dock.subtitle")}
             </p>
           </div>
@@ -111,7 +111,7 @@ export function MemoryDockPanel({
           <p className="mt-3 text-xs font-medium text-foreground">{sectionTitle}</p>
         )}
 
-        <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{activeHint}</p>
+        <p className="mt-2 text-[0.786em] leading-snug text-muted-foreground">{activeHint}</p>
       </header>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

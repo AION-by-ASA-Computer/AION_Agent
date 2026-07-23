@@ -72,7 +72,7 @@ function CopyButton({ text, label }: { text: string; label: string }) {
     <button
       type="button"
       onClick={() => void onCopy()}
-      className="focus-ring inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[11px] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+      className="focus-ring inline-flex items-center gap-1 rounded-md border border-border bg-muted/40 px-2 py-1 text-[0.786em] font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
       title={label}
     >
       {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
@@ -85,7 +85,7 @@ function RawBlock({ children, className }: { children: ReactNode; className?: st
   return (
     <pre
       className={cn(
-        "whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-muted/20 p-3 font-mono text-[11px] leading-relaxed text-foreground",
+        "whitespace-pre-wrap break-words rounded-lg border border-border/60 bg-muted/20 p-3 font-mono text-[0.786em] leading-relaxed text-foreground",
         className
       )}
     >
@@ -169,7 +169,7 @@ export function PromptDebugPanel({
     <div className="flex h-full min-h-0 flex-col">
       <div className="shrink-0 space-y-3 border-b border-border p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <label className="text-[11px] font-medium text-muted-foreground">
+          <label className="text-[0.786em] font-medium text-muted-foreground">
             {t("prompt_debug.turn_select")}
           </label>
           <select
@@ -186,7 +186,7 @@ export function PromptDebugPanel({
           <CopyButton text={active.raw_concatenated} label={t("prompt_debug.copy_all")} />
         </div>
 
-        <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+        <div className="flex flex-wrap gap-2 text-[0.714em] text-muted-foreground">
           <span className="rounded bg-muted px-1.5 py-0.5">
             {t("prompt_debug.stats.total")}: {stats.total ?? "—"}
           </span>
@@ -251,7 +251,7 @@ export function PromptDebugPanel({
               type="button"
               onClick={() => setViewTab(tab.id)}
               className={cn(
-                "focus-ring rounded-md px-2 py-1 text-[11px] font-medium",
+                "focus-ring rounded-md px-2 py-1 text-[0.786em] font-medium",
                 viewTab === tab.id
                   ? "bg-primary/15 text-primary"
                   : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
@@ -271,7 +271,7 @@ export function PromptDebugPanel({
         {viewTab === "output" && (
           <div className="space-y-3">
             <div>
-              <div className="mb-1 flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+              <div className="mb-1 flex items-center justify-between text-[0.786em] font-medium text-muted-foreground">
                 <span>{t("prompt_debug.output.model")}</span>
                 <CopyButton
                   text={active.assistant_output || ""}
@@ -286,7 +286,7 @@ export function PromptDebugPanel({
             </div>
             {active.plan_coerced_markdown ? (
               <div>
-                <div className="mb-1 flex items-center justify-between text-[11px] font-medium text-muted-foreground">
+                <div className="mb-1 flex items-center justify-between text-[0.786em] font-medium text-muted-foreground">
                   <span>{t("prompt_debug.output.coerced")}</span>
                   <CopyButton
                     text={active.plan_coerced_markdown}
@@ -310,13 +310,13 @@ export function PromptDebugPanel({
           <div className="space-y-3">
             {(active.messages || []).map((row) => (
               <div key={row.index} className="rounded-lg border border-border/60 bg-card/40">
-                <div className="flex items-center justify-between border-b border-border/40 px-3 py-1.5 text-[11px] font-medium">
+                <div className="flex items-center justify-between border-b border-border/40 px-3 py-1.5 text-[0.786em] font-medium">
                   <span>
                     {row.role.toUpperCase()} [{row.index}] · {row.chars} chars
                   </span>
                   <CopyButton text={row.content} label={t("prompt_debug.copy_section")} />
                 </div>
-                <pre className="whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-relaxed">
+                <pre className="whitespace-pre-wrap break-words p-3 font-mono text-[0.786em] leading-relaxed">
                   {highlightQuery(row.content, search)}
                 </pre>
               </div>
@@ -331,11 +331,11 @@ export function PromptDebugPanel({
             ) : (
               active.inject_layers.map((layer, i) => (
                 <div key={`${layer.key}-${i}`} className="rounded-lg border border-border/60 bg-card/40">
-                  <div className="flex items-center justify-between border-b border-border/40 px-3 py-1.5 text-[11px] font-medium">
+                  <div className="flex items-center justify-between border-b border-border/40 px-3 py-1.5 text-[0.786em] font-medium">
                     <span className="font-mono text-primary">{layer.key}</span>
                     <CopyButton text={layer.text} label={t("prompt_debug.copy_section")} />
                   </div>
-                  <pre className="whitespace-pre-wrap break-words p-3 font-mono text-[11px] leading-relaxed">
+                  <pre className="whitespace-pre-wrap break-words p-3 font-mono text-[0.786em] leading-relaxed">
                     {highlightQuery(layer.text, search)}
                   </pre>
                 </div>
@@ -357,7 +357,7 @@ export function PromptDebugPanel({
                     </span>
                   ) : null}
                 </summary>
-                <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words border-t border-border/40 p-3 font-mono text-[10px] leading-relaxed text-muted-foreground">
+                <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words border-t border-border/40 p-3 font-mono text-[0.714em] leading-relaxed text-muted-foreground">
                   {tool.spec ? JSON.stringify(tool.spec, null, 2) : "—"}
                 </pre>
               </details>

@@ -214,7 +214,7 @@ export function ScheduleJobDialog({
                   {t("schedulesPage.field_prompt")}
                   <span className="ml-1 text-destructive">*</span>
                 </label>
-                <span className="text-[10px] text-muted-foreground">{t("schedulesPage.prompt_templates")}</span>
+                <span className="text-[0.714em] text-muted-foreground">{t("schedulesPage.prompt_templates")}</span>
               </div>
               <div className="mb-2 flex flex-wrap gap-1.5">
                 {PROMPT_TEMPLATES.map((key) => (
@@ -225,7 +225,7 @@ export function ScheduleJobDialog({
                       setPrompt(t(`schedulesPage.templates.${key}.prompt`));
                       if (!name.trim()) setName(t(`schedulesPage.templates.${key}.name`));
                     }}
-                    className="focus-ring rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 text-[10px] font-semibold text-muted-foreground transition hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
+                    className="focus-ring rounded-full border border-border/70 bg-muted/30 px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground transition hover:border-primary/30 hover:bg-primary/5 hover:text-foreground"
                   >
                     {t(`schedulesPage.templates.${key}.name`)}
                   </button>
@@ -266,7 +266,7 @@ export function ScheduleJobDialog({
                 onChange={setSqlProject}
                 className="w-full"
               />
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1 text-[0.786em] text-muted-foreground">
                 {t("schedulesPage.field_sql_project_hint")}
               </p>
             </div>
@@ -359,7 +359,7 @@ export function ScheduleJobRuns({
 
   return (
     <div className="border-t border-border/50 bg-background/30 px-4 py-3 sm:px-5">
-      <p className="mb-2 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">
+      <p className="mb-2 text-[0.714em] font-bold uppercase tracking-wide text-muted-foreground">
         {t("schedulesPage.recent_runs")}
       </p>
       {loading ? (

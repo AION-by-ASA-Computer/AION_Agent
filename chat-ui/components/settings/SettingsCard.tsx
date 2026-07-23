@@ -49,7 +49,7 @@ export function SettingsFieldRow({
     <div className="grid gap-2 border-b border-border/35 py-4 last:border-b-0 sm:grid-cols-[minmax(9rem,11rem)_1fr] sm:items-start sm:gap-6">
       <div className="pt-1">
         <div className="text-xs font-semibold text-foreground">{label}</div>
-        {hint ? <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{hint}</p> : null}
+        {hint ? <p className="mt-1 text-[0.786em] leading-snug text-muted-foreground">{hint}</p> : null}
       </div>
       <div className="min-w-0">{children}</div>
     </div>

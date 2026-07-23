@@ -157,15 +157,15 @@ export function CodeArtifactBlock({
     >
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-white/10 bg-[#161b22] px-3.5 py-2 text-[#c9d1d9]">
         <div className="min-w-0">
-          <div className="truncate text-[12px] font-semibold text-[#f0f6fc]">{title}</div>
-          <div className="mt-0.5 truncate font-mono text-[10px] text-[#8b949e]">
+          <div className="truncate text-[0.857em] font-semibold text-[#f0f6fc]">{title}</div>
+          <div className="mt-0.5 truncate font-mono text-[0.714em] text-[#8b949e]">
             {savedPath || lang}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {downloadUrl ? (
             <a
-              className="focus-ring inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-[#c9d1d9] hover:bg-white/10 transition-all duration-200 active:scale-[0.98]"
+              className="focus-ring inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[0.786em] text-[#c9d1d9] hover:bg-white/10 transition-all duration-200 active:scale-[0.98]"
               href={downloadUrl}
               target="_blank"
               rel="noreferrer"
@@ -178,7 +178,7 @@ export function CodeArtifactBlock({
           {displayedCode && !isPlaceholder && !isLoading ? (
             <button
               type="button"
-              className="focus-ring inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[11px] text-[#c9d1d9] hover:bg-white/10 transition-all duration-200 active:scale-[0.98]"
+              className="focus-ring inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[0.786em] text-[#c9d1d9] hover:bg-white/10 transition-all duration-200 active:scale-[0.98]"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -194,12 +194,12 @@ export function CodeArtifactBlock({
 
       <div className="max-h-[520px] overflow-auto">
         {isLoading ? (
-          <div className="flex items-center gap-2 p-4 text-[#8b949e] font-mono text-[12px]">
+          <div className="flex items-center gap-2 p-4 text-[#8b949e] font-mono text-[0.857em]">
             <Loader2 className="animate-spin text-primary shrink-0" size={14} />
             Caricamento contenuto file...
           </div>
         ) : fetchError ? (
-          <div className="p-4 text-rose-400 font-mono text-[12px] flex flex-col gap-1">
+          <div className="p-4 text-rose-400 font-mono text-[0.857em] flex flex-col gap-1">
             <span className="font-semibold text-rose-300">Errore di caricamento</span>
             <span>{fetchError}</span>
             {downloadUrl && (
@@ -207,7 +207,7 @@ export function CodeArtifactBlock({
                 href={downloadUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="mt-2 text-primary hover:underline text-[11px] inline-flex items-center gap-1"
+                className="mt-2 text-primary hover:underline text-[0.786em] inline-flex items-center gap-1"
               >
                 Tenta di scaricare direttamente
               </a>
@@ -215,11 +215,11 @@ export function CodeArtifactBlock({
           </div>
         ) : html ? (
           <div
-            className="[&_pre]:!m-0 [&_pre]:!bg-transparent [&_pre]:!p-4 [&_pre]:text-[12px] [&_pre]:leading-relaxed [&_code]:font-mono"
+            className="[&_pre]:!m-0 [&_pre]:!bg-transparent [&_pre]:!p-4 [&_pre]:text-[0.857em] [&_pre]:leading-relaxed [&_code]:font-mono"
             dangerouslySetInnerHTML={{ __html: html }}
           />
         ) : (
-          <pre className="m-0 whitespace-pre-wrap break-words p-4 font-mono text-[12px] leading-relaxed text-[#c9d1d9]">
+          <pre className="m-0 whitespace-pre-wrap break-words p-4 font-mono text-[0.857em] leading-relaxed text-[#c9d1d9]">
             {displayedCode || "Artifact in attesa di contenuto..."}
           </pre>
         )}
@@ -227,8 +227,8 @@ export function CodeArtifactBlock({
 
       {execution ? (
         <div className="border-t border-white/10 bg-black/20">
-          <div className="px-3 py-2 text-[11px] font-medium text-[#8b949e]">Risultato esecuzione</div>
-          <pre className="m-0 max-h-56 overflow-auto whitespace-pre-wrap p-4 pt-0 font-mono text-[11px] leading-relaxed text-[#c9d1d9]">
+          <div className="px-3 py-2 text-[0.786em] font-medium text-[#8b949e]">Risultato esecuzione</div>
+          <pre className="m-0 max-h-56 overflow-auto whitespace-pre-wrap p-4 pt-0 font-mono text-[0.786em] leading-relaxed text-[#c9d1d9]">
             {execution}
           </pre>
         </div>

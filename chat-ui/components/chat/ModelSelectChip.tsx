@@ -53,7 +53,7 @@ export function ModelSelectChip({
         type="button"
         onClick={() => onOpenChange(!open)}
         className={cn(
-          "focus-ring inline-flex h-8 max-w-[11rem] items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] sm:max-w-[13rem]",
+          "focus-ring inline-flex h-8 max-w-[11rem] items-center gap-1.5 rounded-full border px-3 text-[0.786em] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] sm:max-w-[13rem]",
           open || selectedSlug
             ? "border-primary/40 bg-primary/10 text-primary"
             : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
@@ -80,7 +80,7 @@ export function ModelSelectChip({
               : "bottom-full mb-2 slide-in-from-bottom-2",
           )}
         >
-          <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="border-b border-border/45 px-2.5 py-1.5 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
             {t("chat.model.select")}
           </div>
           <div className="max-h-56 overflow-y-auto p-0.5">

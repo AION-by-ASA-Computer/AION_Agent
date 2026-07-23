@@ -90,7 +90,7 @@ export function AgentModeSelectChip({
         type="button"
         onClick={() => onOpenChange(!open)}
         className={cn(
-          "focus-ring inline-flex h-8 max-w-[10.5rem] items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] sm:max-w-[12rem]",
+          "focus-ring inline-flex h-8 max-w-[10.5rem] items-center gap-1.5 rounded-full border px-3 text-[0.786em] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] sm:max-w-[12rem]",
           chipClass,
         )}
       >
@@ -101,7 +101,7 @@ export function AgentModeSelectChip({
 
       {open ? (
         <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-          <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="border-b border-border/45 px-2.5 py-1.5 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
             {t("chat.agent_mode.select")}
           </div>
           <div className="max-h-64 overflow-y-auto p-0.5">

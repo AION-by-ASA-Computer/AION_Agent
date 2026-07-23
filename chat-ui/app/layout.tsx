@@ -5,6 +5,7 @@ import "./globals.css";
 import "katex/dist/katex.min.css";
 import { AuthGate } from "@/components/auth/AuthGate";
 import { LanguageSync } from "@/components/i18n/LanguageSync";
+import { FontSizeSync } from "@/components/theme/FontSizeSync";
 const inter = Inter({
   subsets: ["latin"],
   variable: "--font-sans",
@@ -52,15 +53,21 @@ const langInit = `
 
 const fontScaleInit = `
   try {
-    var k = 'aion-chat-font-scale';
-    var s = localStorage.getItem(k);
-    var px = { small: '13px', medium: '14px', large: '15px' };
-    var scale = (s === 'small' || s === 'medium' || s === 'large') ? s : 'medium';
-    document.documentElement.setAttribute('data-chat-font-scale', scale);
-    document.documentElement.style.setProperty('--aion-chat-font-size', px[scale]);
+    var legacy = localStorage.getItem('aion-chat-font-scale');
+    var stored = localStorage.getItem('aion-chat-font-size');
+    var px = 14;
+    if (stored) {
+      var n = parseInt(stored, 10);
+      if (!isNaN(n)) px = Math.min(18, Math.max(12, n));
+    } else if (legacy === 'small') px = 13;
+    else if (legacy === 'large') px = 15;
+    else if (legacy === 'medium') px = 14;
+    document.documentElement.style.setProperty('--aion-chat-font-size', px + 'px');
+    document.documentElement.style.setProperty('--aion-chat-code-font-size', (Math.round(px * 0.75 * 10) / 10) + 'px');
+    document.documentElement.setAttribute('data-chat-font-size', String(px));
   } catch (e) {
-    document.documentElement.setAttribute('data-chat-font-scale', 'medium');
     document.documentElement.style.setProperty('--aion-chat-font-size', '14px');
+    document.documentElement.style.setProperty('--aion-chat-code-font-size', '10.5px');
   }
 `;
 
@@ -87,6 +94,7 @@ export default function RootLayout({
       </head>
       <body className="min-h-screen">
         <LanguageSync />
+        <FontSizeSync />
         <AuthGate>{children}</AuthGate>
       </body>
     </html>

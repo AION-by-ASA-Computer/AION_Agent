@@ -329,7 +329,7 @@ export function ArtifactsPanel({
             </div>
             <span>{folderTitle}</span>
           </div>
-          <span className="text-[10px] bg-muted/65 text-muted-foreground px-1.5 py-0.5 rounded-full border border-border/30">
+          <span className="text-[0.714em] bg-muted/65 text-muted-foreground px-1.5 py-0.5 rounded-full border border-border/30">
             {files.length}
           </span>
         </button>
@@ -338,7 +338,7 @@ export function ArtifactsPanel({
         {isExpanded && (
           <div className="border-t border-border/35 bg-card/10 p-2 space-y-1 animate-in fade-in-50 duration-150">
             {files.length === 0 ? (
-              <p className="text-[11px] text-muted-foreground/50 italic py-2 px-3 pl-8 select-none">
+              <p className="text-[0.786em] text-muted-foreground/50 italic py-2 px-3 pl-8 select-none">
                 Nessun file presente.
               </p>
             ) : (
@@ -367,7 +367,7 @@ export function ArtifactsPanel({
                           {displayName}
                         </span>
                         {file.size_bytes !== undefined && (
-                          <span className="shrink-0 text-[10px] text-muted-foreground/50">
+                          <span className="shrink-0 text-[0.714em] text-muted-foreground/50">
                             {formatBytes(file.size_bytes)}
                           </span>
                         )}
@@ -400,7 +400,7 @@ export function ArtifactsPanel({
       {/* Session Files Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1 py-1 border-b border-border/15 pb-2 mb-3">
-          <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1.5 select-none">
+          <h3 className="text-[0.786em] font-bold uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1.5 select-none">
             <Folder size={12} />
             {t("artifacts.session_files")}
           </h3>
@@ -408,7 +408,7 @@ export function ArtifactsPanel({
             <button
               type="button"
               onClick={onRefreshFiles}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 transition-all select-none"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.714em] text-muted-foreground/60 hover:text-foreground hover:bg-muted/50 transition-all select-none"
               title={t("artifacts.refresh")}
             >
               <RefreshCw size={10} className={cn(loadingFiles && "animate-spin")} />
@@ -418,7 +418,7 @@ export function ArtifactsPanel({
         </div>
         
         {loadingFiles && sessionFiles.length === 0 ? (
-          <p className="text-[11px] text-muted-foreground/50 text-center py-4 animate-pulse select-none">Caricamento...</p>
+          <p className="text-[0.786em] text-muted-foreground/50 text-center py-4 animate-pulse select-none">Caricamento...</p>
         ) : (
           <div className="space-y-2.5">
             {rootFiles.length > 0 && renderFolder("root", rootFiles)}
@@ -433,7 +433,7 @@ export function ArtifactsPanel({
       {filteredItems.length > 0 && (
         <div className="space-y-2 mt-6">
           <div className="flex items-center justify-between px-1 py-1 border-b border-border/15 pb-2 mb-3 select-none">
-            <h3 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1.5">
+            <h3 className="text-[0.786em] font-bold uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1.5">
               <FileCode size={12} />
               {t("artifacts.generated_artifacts")}
             </h3>
@@ -460,16 +460,16 @@ export function ArtifactsPanel({
 
                       {/* Info File */}
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-medium text-foreground transition-colors group-hover:text-foreground/90">
+                        <p className="truncate text-[0.929em] font-medium text-foreground transition-colors group-hover:text-foreground/90">
                           {item.title}
                         </p>
-                        <p className="mt-0.5 text-[11px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                        <p className="mt-0.5 text-[0.786em] text-muted-foreground flex items-center gap-1.5 flex-wrap">
                           <span>{item.typeLabel}</span>
                           <span className="text-muted-foreground/30">•</span>
                           <span>{item.language}</span>
                           <span className="text-muted-foreground/30">•</span>
                           <span className={cn(
-                            "inline-flex items-center rounded-full px-1.5 py-0.2 text-[9px] font-semibold border uppercase tracking-wider",
+                            "inline-flex items-center rounded-full px-1.5 py-0.2 text-[0.643em] font-semibold border uppercase tracking-wider",
                             item.source === "live"
                               ? "bg-amber-500/10 text-amber-400 border-amber-500/20"
                               : "bg-blue-500/10 text-blue-400 border-blue-500/20"
@@ -483,7 +483,7 @@ export function ArtifactsPanel({
                     {/* Azioni */}
                     {item.downloadUrl ? (
                       <a
-                        className="focus-ring shrink-0 rounded-full bg-primary/15 px-2.5 py-1 text-[11px] font-medium text-primary transition-colors hover:bg-primary/25 flex items-center gap-1.5"
+                        className="focus-ring shrink-0 rounded-full bg-primary/15 px-2.5 py-1 text-[0.786em] font-medium text-primary transition-colors hover:bg-primary/25 flex items-center gap-1.5"
                         href={item.downloadUrl}
                         target="_blank"
                         rel="noreferrer"
@@ -493,7 +493,7 @@ export function ArtifactsPanel({
                         {t("artifacts.download")}
                       </a>
                     ) : (
-                      <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] text-muted-foreground">
+                      <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[0.786em] text-muted-foreground">
                         {t("artifacts.in_memory")}
                       </span>
                     )}
@@ -501,12 +501,12 @@ export function ArtifactsPanel({
 
                   {/* Path e Risultato Esecuzione allineati perfettamente */}
                   {item.savedPath ? (
-                    <p className="mt-2 truncate font-mono text-[10px] text-muted-foreground pl-[38px]">
+                    <p className="mt-2 truncate font-mono text-[0.714em] text-muted-foreground pl-[38px]">
                       {item.savedPath}
                     </p>
                   ) : null}
                   {item.execution ? (
-                    <p className="mt-2 text-[11px] text-muted-foreground pl-[38px]">
+                    <p className="mt-2 text-[0.786em] text-muted-foreground pl-[38px]">
                       {item.execution}
                     </p>
                   ) : null}

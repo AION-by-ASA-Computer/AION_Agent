@@ -157,7 +157,7 @@ export function SessionCharts({ charts }: { charts: SessionChart[] }) {
             <p className="mb-2 text-xs text-muted-foreground">
               {title}
               {kind !== "line" ? (
-                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] uppercase text-muted-foreground">
+                <span className="ml-2 rounded bg-muted px-1.5 py-0.5 font-mono text-[0.714em] uppercase text-muted-foreground">
                   {kind}
                 </span>
               ) : null}

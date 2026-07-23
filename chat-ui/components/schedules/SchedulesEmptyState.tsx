@@ -63,7 +63,7 @@ export function SchedulesEmptyState({
                     <div className="text-sm font-semibold text-foreground">
                       {t(`schedulesPage.templates.${key}.name`)}
                     </div>
-                    <p className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                    <p className="mt-0.5 line-clamp-2 text-[0.786em] leading-snug text-muted-foreground">
                       {t(`schedulesPage.templates.${key}.desc`)}
                     </p>
                   </div>

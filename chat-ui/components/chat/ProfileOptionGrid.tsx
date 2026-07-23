@@ -47,7 +47,7 @@ export function ProfileOptionGrid({
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-foreground">{p.name}</div>
                 {p.description ? (
-                  <p className="mt-1 line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+                  <p className="mt-1 line-clamp-2 text-[0.786em] leading-snug text-muted-foreground">
                     {p.description}
                   </p>
                 ) : null}

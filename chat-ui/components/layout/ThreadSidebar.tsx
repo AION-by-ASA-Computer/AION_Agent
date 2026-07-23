@@ -363,7 +363,7 @@ export function ThreadSidebar({
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-1 mt-3 flex items-center gap-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-primary">
+    <div className="mb-1 mt-3 flex items-center gap-1.5 px-2 text-[0.786em] font-semibold uppercase tracking-wider text-primary">
       {children}
     </div>
   );
@@ -419,7 +419,7 @@ function ConversationRow({
               setEditingId(null);
             }
           }}
-          className="min-w-0 flex-1 bg-transparent text-[13px] text-foreground focus:outline-none"
+          className="min-w-0 flex-1 bg-transparent text-[0.929em] text-foreground focus:outline-none"
           autoFocus
         />
         <button
@@ -462,14 +462,14 @@ function ConversationRow({
               setConfirmDeleteId(null);
               void onRefresh();
             }}
-            className="rounded bg-rose-500 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white shadow-sm transition-all duration-150 hover:bg-rose-600"
+            className="rounded bg-rose-500 px-2 py-0.5 text-[0.714em] font-semibold uppercase tracking-wider text-white shadow-sm transition-all duration-150 hover:bg-rose-600"
           >
             {t("btn.yes")}
           </button>
           <button
             type="button"
             onClick={() => setConfirmDeleteId(null)}
-            className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-foreground transition-all duration-150 hover:bg-muted/80"
+            className="rounded bg-muted px-1.5 py-0.5 text-[0.714em] font-semibold uppercase tracking-wider text-foreground transition-all duration-150 hover:bg-muted/80"
           >
             {t("btn.no")}
           </button>

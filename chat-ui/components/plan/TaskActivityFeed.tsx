@@ -63,7 +63,7 @@ export function TaskActivityFeed({
           <li
             key={`${act.ts ?? idx}-${act.phase}-${act.tool_name || ""}-${label.slice(0, 48)}`}
             className={cn(
-              "flex gap-2.5 rounded-lg border px-3 py-2.5 text-[13px] leading-snug",
+              "flex gap-2.5 rounded-lg border px-3 py-2.5 text-[0.929em] leading-snug",
               isLatest
                 ? "border-primary/30 bg-primary/5 text-foreground"
                 : "border-border/50 bg-background/60 text-muted-foreground",
@@ -73,7 +73,7 @@ export function TaskActivityFeed({
             <span className="min-w-0 flex-1">
               <span className="block">{label}</span>
               {act.ts ? (
-                <span className="mt-0.5 block text-[10px] opacity-60">{formatTime(act.ts)}</span>
+                <span className="mt-0.5 block text-[0.714em] opacity-60">{formatTime(act.ts)}</span>
               ) : null}
             </span>
           </li>
