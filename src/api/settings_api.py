@@ -10,6 +10,7 @@ from src.runtime.env_sync import (
     load_base_env,
     load_merged_env,
     reload_env_into_process,
+    RUNTIME_STICKY_KEYS,
     write_admin_overrides,
 )
 
@@ -140,7 +141,7 @@ async def update_settings(update: SettingsUpdate):
         merged = _filter_settings_post(dict(update.settings))
         base = load_base_env(repo_root=_get_repo_root())
         for key, value in base.items():
-            if key not in merged:
+            if key not in merged and key not in RUNTIME_STICKY_KEYS:
                 merged[key] = value
 
         # Validation: If provider is anthropic, AION_CHAT_MAX_TOKENS must be > AION_THINKING_TOKEN_BUDGET
