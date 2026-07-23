@@ -5,6 +5,33 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.3.0...v1.4.0) (2026-07-23)
+
+
+### Features
+
+* add datetime placeholder substitution in agent profile and implement user worker restart in MCP manager ([abfdd41](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/abfdd41894fd1c4558c89bc4875334bab19d8a8f))
+* enhance chat UI with dynamic font size adjustments and improved styling ([b895889](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/b8958892aeec1137d60305332a296e2be5742190))
+* enhance chat UI with improved code block styling and dynamic textarea resizing ([c83bedf](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/c83bedf725808eb9292dcdcc247fe16360af5e4b))
+* enhance environment application logic with process environment respect ([e67fa47](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/e67fa4706bb23fa6ceeea5ba4ecab92b769c0642))
+* enhance environment synchronization and configuration management ([edca433](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/edca433f693e3fa13d3a285f486640cbe6c953c1))
+* enhance message persistence in agent pipeline and add test for stream loop handling ([fdb17f6](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/fdb17f6350d3431738947d5f77783468ddd7e485))
+* enhance session environment with office skill dependencies and venv management ([cf1ddcb](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/cf1ddcb52c5f3454230c5ac8cba6a7b4cfc5fff3))
+* implement agent streaming pipeline and MCP tool manager for enhanced orchestration ([13cd1db](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/13cd1db98af4f1a9a2e236094ee4e5ba5fdaea79))
+* implement character limit for drawer content in NavigationMemoryPanel ([0d762a2](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/0d762a28e36a58b332540ccb22eaeffcc8cfe0db))
+* implement chat font scaling and improve appearance settings ([cfe8e9f](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/cfe8e9f7d3e11e8007d3eabd6328e39c88489839))
+* memory button chatui ([2f59eb0](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/2f59eb005cba9f9953cbc8a4482400ba7b057feb))
+* memory chat button, memory fix and feedback page for like and dislike ([5c90231](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/5c902312767d5b02f9df2cb751092e05d85698ad))
+* preserve AION_FIRST_SETUP_COMPLETE during environment reconciliation ([307b070](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/307b0706b7953187d269a8a453cac7c7ed7436c5))
+
+
+### Bug Fixes
+
+* add checks for existing tables in migrations and update scheduled_jobs schema ([38d9ed3](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/38d9ed3e67623b6c4886c9a85b8fbcb1728bb3a9))
+* mcp credentials reload after edit ([06ce6c0](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/06ce6c0f92672a9ecee049b112b9dedbe70af284))
+* setup unexpected reset and improve chat-ui design ([955ecdb](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/955ecdb5c904d64ae1e63e11d6b51cf8324a0798))
+* update code block font size in chat UI for improved readability ([e3606f5](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/e3606f5a9c6b7eda9d47b12e844b33a1fd3c986d))
+
 ## [1.3.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.2.0...v1.3.0) (2026-07-10)
 
 
