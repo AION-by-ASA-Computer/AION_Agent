@@ -25,6 +25,8 @@ const ROOMS = [
   "discoveries",
 ] as const;
 
+const DRAWER_CONTENT_MAX = 20000;
+
 const ROOM_LABELS: Record<string, string> = {
   entry_points: "Entry",
   join_paths: "JOIN",
@@ -183,8 +185,11 @@ export function NavigationMemoryPanel({
 
   const cancelEdit = () => setEditingId(null);
 
+  const editContentLen = editContent.trim().length;
+  const editContentTooLong = editContentLen > DRAWER_CONTENT_MAX;
+
   const onSaveEdit = async () => {
-    if (!editingId || !editContent.trim()) return;
+    if (!editingId || !editContent.trim() || editContentTooLong) return;
     setSaving(true);
     setError(null);
     try {
@@ -494,10 +499,18 @@ export function NavigationMemoryPanel({
                         value={editContent}
                         onChange={(e) => setEditContent(e.target.value)}
                       />
+                      <p
+                        className={cn(
+                          "text-[11px]",
+                          editContentTooLong ? "text-destructive" : "text-muted-foreground"
+                        )}
+                      >
+                        {editContentLen} / {DRAWER_CONTENT_MAX}
+                      </p>
                       <button
                         type="button"
-                        disabled={saving}
-                        className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground"
+                        disabled={saving || editContentTooLong}
+                        className="rounded-lg bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
                         onClick={() => void onSaveEdit()}
                       >
                         {t("btn.save")}

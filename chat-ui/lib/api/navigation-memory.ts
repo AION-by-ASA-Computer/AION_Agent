@@ -24,8 +24,19 @@ export type NavigationStatus = {
 
 async function parseError(r: Response): Promise<string> {
   try {
-    const j = (await r.json()) as { detail?: string };
+    const j = (await r.json()) as {
+      detail?: string | Array<{ msg?: string; loc?: (string | number)[] }>;
+    };
     if (typeof j.detail === "string") return j.detail;
+    if (Array.isArray(j.detail) && j.detail.length > 0) {
+      const parts = j.detail
+        .map((item) => {
+          const field = item.loc?.filter((x) => typeof x === "string").join(".") || "body";
+          return item.msg ? `${field}: ${item.msg}` : "";
+        })
+        .filter(Boolean);
+      if (parts.length) return parts.join("; ");
+    }
   } catch {
     /* ignore */
   }

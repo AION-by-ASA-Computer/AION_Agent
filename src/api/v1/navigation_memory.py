@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.memory.navigation_memory_service import (
     delete_drawer,
+    drawer_content_max_chars,
     get_drawer,
     list_drawers,
     list_wings,
@@ -52,7 +53,12 @@ class UpsertDrawerBody(BaseModel):
     session_id: str = Field(..., min_length=1)
     project: str = Field(..., min_length=1)
     room: str = Field(..., min_length=1)
-    content: str = Field(..., min_length=1, max_length=500)
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=drawer_content_max_chars(),
+        description="Drawer body (MemPalace); agent guideline is ~500 chars",
+    )
     drawer_id: Optional[str] = Field(None, description="If set, replace this drawer")
 
 

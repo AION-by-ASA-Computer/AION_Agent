@@ -20,6 +20,14 @@ from src.runtime.mempalace_tool_scope import (
 logger = logging.getLogger("aion.navigation_memory")
 
 _MEMPALACE_SERVER = "mempalace"
+# MemPalace drawers: 500 chars is the agent guideline; UI edits must accept stored bodies.
+_DRAWER_CONTENT_MAX_CHARS = int(
+    os.getenv("AION_MEMPALACE_DRAWER_MAX_CHARS", "20000") or "20000"
+)
+
+
+def drawer_content_max_chars() -> int:
+    return _DRAWER_CONTENT_MAX_CHARS
 
 
 def _enabled() -> bool:
@@ -226,7 +234,7 @@ async def add_drawer(
         {
             "wing": wing,
             "room": room_norm,
-            "content": (content or "").strip()[:500],
+            "content": (content or "").strip()[:_DRAWER_CONTENT_MAX_CHARS],
             "added_by": "chat_ui",
         },
     )

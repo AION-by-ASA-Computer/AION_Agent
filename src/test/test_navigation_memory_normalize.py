@@ -1,6 +1,9 @@
 """Normalize MemPalace drawer rows for navigation-memory API."""
 
-from src.memory.navigation_memory_service import _normalize_drawer_row
+from src.memory.navigation_memory_service import (
+    _normalize_drawer_row,
+    drawer_content_max_chars,
+)
 
 
 def test_normalize_list_drawers_shape():
@@ -27,3 +30,7 @@ def test_normalize_search_shape():
     out = _normalize_drawer_row(raw)
     assert out["text"] == raw["text"]
     assert out["content"] == raw["text"]
+
+
+def test_drawer_content_max_chars_allows_ui_edits_beyond_agent_guideline():
+    assert drawer_content_max_chars() >= 20000
