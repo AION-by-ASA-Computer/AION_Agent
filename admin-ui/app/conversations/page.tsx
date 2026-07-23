@@ -1,15 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
 import { getStoredToken } from "@/lib/auth/storage";
-import { MessageSquare, User, Clock, ChevronRight, Search, X, Terminal, Bot, RefreshCw, Paperclip, FileCode, Layers, Download } from "lucide-react";
+import { MessageSquare, User, Clock, ChevronRight, Search, X, Terminal, Bot, RefreshCw, Paperclip, FileCode, Layers, Download, ThumbsUp, ThumbsDown } from "lucide-react";
 import { CustomDatePicker } from "@/components/CustomDatePicker";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 
-export default function GlobalConversations() {
+import { Suspense } from "react";
+
+function ConversationsContent() {
   const [convs, setConvs] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
@@ -18,6 +21,30 @@ export default function GlobalConversations() {
   const [selectedConv, setSelectedConv] = useState<any | null>(null);
   const [messages, setMessages] = useState<any[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+
+  const searchParams = useSearchParams();
+  const preselectedId = searchParams.get("id");
+  const preselectedMessageId = searchParams.get("message");
+
+  useEffect(() => {
+    if (preselectedId && convs.length > 0) {
+      const found = convs.find(c => c.id === preselectedId);
+      if (found) {
+        handleSelectConv(found);
+      }
+    }
+  }, [preselectedId, convs]);
+
+  useEffect(() => {
+    if (preselectedMessageId && messages.length > 0) {
+      setTimeout(() => {
+        const el = document.getElementById(`message-${preselectedMessageId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+        }
+      }, 100);
+    }
+  }, [preselectedMessageId, messages]);
 
   const fetchConvs = () => {
     setLoading(true);
@@ -116,7 +143,7 @@ export default function GlobalConversations() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         {/* Conversations List (Left Column) */}
-        <div className="lg:col-span-5 xl:col-span-4 space-y-4">
+        <div className="lg:col-span-5 xl:col-span-4 flex flex-col h-[78vh] space-y-4">
           <div className="flex items-center justify-between px-1">
             <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
               Active Sessions ({filteredConvs.length})
@@ -173,7 +200,7 @@ export default function GlobalConversations() {
           </div>
 
           {/* Sessions Cards */}
-          <div className="space-y-3 overflow-y-auto max-h-[85vh] pr-1 custom-scrollbar">
+          <div className="space-y-3 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
             {loading && convs.length === 0 ? (
               <div className="py-12 text-center text-gray-500 animate-pulse text-sm">
                 Loading interaction records...
@@ -246,7 +273,7 @@ export default function GlobalConversations() {
         </div>
 
         {/* Audit Log / Detail Area (Right Column) */}
-        <div className="lg:col-span-7 xl:col-span-8 flex flex-col h-[75vh]">
+        <div className="lg:col-span-7 xl:col-span-8 flex flex-col h-[78vh]">
           {selectedConv ? (
             <div className="glass-card flex-1 flex flex-col p-6 sm:p-8 border border-white/10 rounded-3xl bg-gradient-to-b from-[#181818]/90 to-[#121212]/90 shadow-2xl relative overflow-hidden">
               <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
@@ -312,13 +339,22 @@ export default function GlobalConversations() {
                 ) : messages.length === 0 ? (
                   <div className="py-20 text-center text-gray-600 italic text-sm">No messages recorded in this session.</div>
                 ) : (
-                  messages.map((m) => (
-                    <div key={m.id} className={`flex gap-4 p-4 rounded-2xl transition-colors ${m.role === 'user'
-                      ? 'bg-white/[0.02] border border-white/5'
-                      : m.tool_name
-                        ? 'bg-amber-500/[0.02] border border-amber-500/10'
-                        : 'bg-blue-500/[0.04] border border-blue-500/10'
-                      }`}>
+                  messages.map((m) => {
+                    const isHighlighted = m.id === preselectedMessageId;
+                    return (
+                      <div
+                        key={m.id}
+                        id={`message-${m.id}`}
+                        className={`flex gap-4 p-4 rounded-2xl transition-all duration-300 ${
+                          isHighlighted
+                            ? "bg-blue-500/10 border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)] ring-2 ring-blue-500/20"
+                            : m.role === "user"
+                              ? "bg-white/[0.02] border border-white/5"
+                              : m.tool_name
+                                ? "bg-amber-500/[0.02] border border-amber-500/10"
+                                : "bg-blue-500/[0.04] border border-blue-500/10"
+                        }`}
+                      >
                       <div className={`w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 ${m.role === 'user'
                         ? 'bg-gray-500/10 border-gray-500/20 text-gray-400'
                         : m.tool_name
@@ -330,8 +366,18 @@ export default function GlobalConversations() {
                       <div className="space-y-1.5 flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
                           <span className={`text-[10px] font-bold uppercase tracking-widest ${m.role === 'user' ? 'text-gray-400' : m.tool_name ? 'text-amber-500' : 'text-blue-400'
-                            }`}>
+                            } flex items-center gap-1.5`}>
                             {m.role === 'user' ? 'Human' : m.tool_name ? `Tool: ${m.tool_name}` : 'AION Agent'}
+                            {m.rating === 1 && (
+                              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full lowercase tracking-normal normal-case">
+                                <ThumbsUp className="w-3 h-3 text-emerald-400 shrink-0" /> liked
+                              </span>
+                            )}
+                            {m.rating === -1 && (
+                              <span className="flex items-center gap-1 text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full lowercase tracking-normal normal-case">
+                                <ThumbsDown className="w-3 h-3 text-rose-400 shrink-0" /> disliked
+                              </span>
+                            )}
                           </span>
                           <span className="text-[9px] font-mono text-gray-600">#{m.seq}</span>
                         </div>
@@ -438,7 +484,8 @@ export default function GlobalConversations() {
                         })()}
                       </div>
                     </div>
-                  ))
+                  );
+                })
                 )}
               </div>
             </div>
@@ -458,6 +505,14 @@ export default function GlobalConversations() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function GlobalConversations() {
+  return (
+    <Suspense fallback={<div className="py-20 text-center text-gray-500 animate-pulse">Loading conversations ledger...</div>}>
+      <ConversationsContent />
+    </Suspense>
   );
 }
 

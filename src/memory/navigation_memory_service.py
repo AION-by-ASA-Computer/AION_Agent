@@ -20,6 +20,14 @@ from src.runtime.mempalace_tool_scope import (
 logger = logging.getLogger("aion.navigation_memory")
 
 _MEMPALACE_SERVER = "mempalace"
+# MemPalace drawers: 500 chars is the agent guideline; UI edits must accept stored bodies.
+_DRAWER_CONTENT_MAX_CHARS = int(
+    os.getenv("AION_MEMPALACE_DRAWER_MAX_CHARS", "20000") or "20000"
+)
+
+
+def drawer_content_max_chars() -> int:
+    return _DRAWER_CONTENT_MAX_CHARS
 
 
 def _enabled() -> bool:
@@ -136,12 +144,12 @@ async def list_drawers(
     chat_session_id: str,
     *,
     project_slug: str,
+    wing: Optional[str] = None,
     room: Optional[str] = None,
     limit: int = 50,
 ) -> List[Dict[str, Any]]:
-    slug = sanitize_project_slug(project_slug)
-    wing = project_wing(slug)
-    args: Dict[str, Any] = {"wing": wing, "limit": limit}
+    resolved_wing = wing or project_wing(sanitize_project_slug(project_slug))
+    args: Dict[str, Any] = {"wing": resolved_wing, "limit": limit}
     if room:
         args["room"] = room
     data = await _call_mempalace(chat_session_id, "mempalace_list_drawers", args)
@@ -179,14 +187,14 @@ async def search_drawers(
     chat_session_id: str,
     *,
     project_slug: str,
+    wing: Optional[str] = None,
     query: str,
     room: Optional[str] = None,
     limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
-    slug = sanitize_project_slug(project_slug)
-    wing = project_wing(slug)
+    resolved_wing = wing or project_wing(sanitize_project_slug(project_slug))
     lim = limit or int(os.getenv("AION_MEMPALACE_NAV_SEARCH_LIMIT", "5"))
-    args: Dict[str, Any] = {"wing": wing, "query": query, "limit": lim}
+    args: Dict[str, Any] = {"wing": resolved_wing, "query": query, "limit": lim}
     if room:
         args["room"] = room
     data = await _call_mempalace(chat_session_id, "mempalace_search", args)
@@ -226,7 +234,7 @@ async def add_drawer(
         {
             "wing": wing,
             "room": room_norm,
-            "content": (content or "").strip()[:500],
+            "content": (content or "").strip()[:_DRAWER_CONTENT_MAX_CHARS],
             "added_by": "chat_ui",
         },
     )

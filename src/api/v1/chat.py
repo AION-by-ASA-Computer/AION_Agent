@@ -88,6 +88,7 @@ async def _run_pipeline_in_background(
                 body.web_search_restrict_hosts
             ),
             sql_query_project=sql_project_resolved,
+            metadata=body.metadata,
         ):
             event_data = {"event": "message", "data": json.dumps(chunk)}
             run.history.append(event_data)
@@ -177,6 +178,7 @@ class ChatStreamBody(BaseModel):
         default=None,
         description="Slug del provider LLM da usare per questa sessione (opzionale).",
     )
+    metadata: Optional[Dict[str, Any]] = None
 
     class Config:
         populate_by_name = True

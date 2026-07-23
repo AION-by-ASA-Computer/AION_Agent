@@ -452,10 +452,8 @@ def sandbox_exec_allowlisted(
 ) -> str:
     """
     Run a subprocess only if listed in AION_FS_POLICY_PATH exec.allowlist (requires exec.enabled=true).
-    **Python** invocations use the **session venv** (``data/sessions/<id>/.venv``) when present —
-    same interpreter as ``sandbox_run_python_file`` / ``sandbox_install_python_packages``.
-    **Not** for running Node/JavaScript files — use ``sandbox_run_node_file``.
-    **Not** for npm install — use ``sandbox_install_npm_packages``. Default policy: exec disabled.
+    **Not** for running Node/JavaScript files â€” use ``sandbox_run_node_file``.
+    **Not** for npm install â€” use ``sandbox_install_npm_packages``. Default policy: exec disabled.
     """
     import json
 
@@ -496,7 +494,7 @@ def sandbox_exec_allowlisted(
 # @mcp.tool()
 def sandbox_execute_python(code: str) -> str:
     """
-    [PERMANENTLY DISABLED] — use sandbox_write_workspace_file + sandbox_run_python_file.
+    [PERMANENTLY DISABLED] â€” use sandbox_write_workspace_file + sandbox_run_python_file.
     """
     return (
         "ERROR: This tool is disabled. Write scripts with "
@@ -507,15 +505,19 @@ def sandbox_execute_python(code: str) -> str:
 @mcp.tool()
 def sandbox_install_python_packages(
     packages: list[str],
-    use_uv: bool = False,
+    use_uv: bool | None = None,
 ) -> str:
     """
     Install PyPI packages into the isolated session venv (``data/sessions/<id>/.venv``).
     Enabled by default (``AION_SANDBOX_ALLOW_PACKAGE_INSTALL=1``). Disabled only when the variable is ``0``.
     Do not ask the user for manual installs: use this tool.
 
+    NOTE: Common libraries like `pandas`, `openpyxl`, `numpy`, `python-docx`, `reportlab`, `pypdf`, `pdfplumber`,
+    `pymupdf` (fitz), `pdf2image`, `Pillow`, and `tabulate` are ALREADY pre-installed in the default python
+    environment. You do NOT need to install them.
+
     - ``packages``: safe names (e.g. ``httpx``, ``pandas``, ``httpx[http2]``); no shell/redirections.
-    - ``use_uv``: if true uses ``uv pip install`` (must be on PATH); otherwise the venv ``pip``.
+    - ``use_uv``: if true/false overrides the environment variable AION_SANDBOX_PIP_USE_UV; if None, uses it.
     Useful env vars: ``AION_SANDBOX_PIP_INDEX_URL``, ``AION_SANDBOX_PIP_TIMEOUT_SEC``, ``AION_SANDBOX_PIP_MAX_PACKAGES``,
     ``AION_SANDBOX_BACKEND`` (``subprocess`` dev / ``container`` Podman prod).
     """
@@ -537,6 +539,11 @@ def sandbox_run_python_file(
     Run ``python -u <relative_path>`` with working directory = session root.
     Uses the **session venv** Python (``.../.venv``) when present or when ``AION_SANDBOX_AUTO_VENV=1`` (default),
     so packages installed with ``sandbox_install_python_packages``. Otherwise the MCP process interpreter.
+    
+    NOTE: Common libraries like `pandas`, `openpyxl`, `numpy`, `python-docx`, `reportlab`, `pypdf`, `pdfplumber`,
+    `pymupdf` (fitz), `pdf2image`, `Pillow`, and `tabulate` are ALREADY pre-installed in the default python
+    environment and inherited by session venvs.
+
     Only accepts paths under ``workspace/*.py``. Extra arguments go in ``extra_args`` (argv after the script).
     No ``result`` field: stdout/stderr and exit code are in the return message.
     """
@@ -583,7 +590,7 @@ def sandbox_run_node_file(
     """
     Run ``node <relative_path>`` with cwd = session root. Accepts only ``workspace/*.js`` (.mjs / .cjs).
     Use for **docx-js** skill. Install deps first with ``sandbox_install_npm_packages(packages=["docx"])``.
-    **Do not** use ``sandbox_exec_allowlisted`` to run Node scripts — use this tool.
+    **Do not** use ``sandbox_exec_allowlisted`` to run Node scripts â€” use this tool.
     For Python use ``sandbox_run_python_file``.
     """
     from src.tools.session_code import SessionSandboxExecutor
@@ -615,3 +622,4 @@ if __name__ == "__main__":
             raise e
 
     asyncio.run(main())
+

@@ -98,10 +98,12 @@ def apply_mempalace_project_scope(
         ctx = None
     if not ctx or not ctx.project_slug:
         return arguments
-    wing = project_wing(ctx.project_slug)
     out = dict(arguments or {})
     prev = out.get("wing")
     prev_s = str(prev or "").strip()
+    if is_global_wing(prev_s):
+        return out
+    wing = project_wing(ctx.project_slug)
     if prev_s and (
         is_legacy_navigation_wing(prev_s)
         or (prev_s.lower().startswith("wing_proj_") and prev_s.lower() != wing.lower())

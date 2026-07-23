@@ -226,7 +226,9 @@
       "thinking": "El agente está pensando…",
       "working": "El agente está trabajando…",
       "compacting": "Compactando contexto…",
-      "compacting_desc": "Compactando memoria a corto plazo…"
+      "compacting_desc": "Compactando memoria a corto plazo…",
+      "saving_info": "Guardando información…",
+      "saving_info_desc": "El agente está guardando la información a largo plazo…"
     },
     "tools": {
       "attach_file": "Adjuntar Archivo",
@@ -270,6 +272,25 @@
       "textarea_placeholder": "Cree o seleccione un proyecto para desbloquear el chat..."
     },
     "go_to_source": "Ir a la fuente",
+    "project_warning": {
+      "title": "Atención: Memoria de Proyecto Faltante",
+      "desc": "Parece que estás intentando guardar consultas o esquemas de base de datos, pero no has creado o seleccionado una memoria de proyecto activa.",
+      "action": "Haz clic aquí para crearla"
+    },
+    "actions": {
+      "copy": "Copiar respuesta",
+      "copied": "Copiado",
+      "good": "Buena respuesta",
+      "bad": "Mala respuesta",
+      "regenerate": "Regenerar respuesta",
+      "memorize": "Memorizar información",
+      "memorized_prefix": "El agente ha memorizado: ",
+      "memorize_instruction": "Analiza el siguiente turno de conversación (pregunta, pensamiento y respuesta) y extrae la información clave relevante. Guárdala en la wing de proyecto especificada. Para guardar en MemPalace debes utilizar EXCLUSIVAMENTE la herramienta 'mempalace_add_drawer' para crear un drawer en la wing de proyecto actual. NO utilices en ningún caso las herramientas del Knowledge Graph (como 'mempalace_kg_add'). Si hay consultas SQL, esquemas de bases de datos o configuraciones de proyectos, guárdalos también usando la herramienta 'sql_memory_save'. Si la información ya está memorizada, no la guardes de nuevo. Responde proporcionando exclusivamente una única frase que comience directamente con el prefijo 'El agente ha memorizado: ' seguido de un resumen muy breve de lo guardado y en qué wing (o 'El agente detectó que la información ya está en memoria' si ya estaba registrada). No agregues ninguna introducción antes, ni explicaciones o comentarios adicionales después de este prefijo.",
+      "feedback_placeholder": "¿Por qué no te gustó este mensaje? (Agrega una descripción opcional)...",
+      "feedback_title": "Comentarios sobre la respuesta",
+      "feedback_submit": "Enviar",
+      "feedback_cancel": "Cancelar"
+    },
     "plan": {
       "task": {
         "starting": "Iniciando"

@@ -217,3 +217,44 @@ html[data-theme="light"] .agent-shimmer-text {
   scrollbar-width: thin;
 }
 
+/* Custom micro-animation for rating clicks */
+@keyframes pop-bounce {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.4) rotate(12deg); }
+  50% { transform: scale(0.9) rotate(-10deg); }
+  75% { transform: scale(1.1) rotate(5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.animate-pop-bounce {
+  animation: pop-bounce 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Sparkle Animations for feedback button clicks */
+@keyframes sparkle-1 {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translate(-18px, -18px) scale(0.6) rotate(45deg); opacity: 0; }
+}
+@keyframes sparkle-2 {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translate(18px, -18px) scale(0.6) rotate(-45deg); opacity: 0; }
+}
+@keyframes sparkle-3 {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translate(-18px, 18px) scale(0.6) rotate(-45deg); opacity: 0; }
+}
+@keyframes sparkle-4 {
+  0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  50% { opacity: 1; }
+  100% { transform: translate(18px, 18px) scale(0.6) rotate(45deg); opacity: 0; }
+}
+
+.animate-sparkle-1 { animation: sparkle-1 0.45s ease-out forwards; }
+.animate-sparkle-2 { animation: sparkle-2 0.45s ease-out forwards; }
+.animate-sparkle-3 { animation: sparkle-3 0.45s ease-out forwards; }
+.animate-sparkle-4 { animation: sparkle-4 0.45s ease-out forwards; }
+
+

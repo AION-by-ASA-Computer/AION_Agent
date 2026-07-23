@@ -353,7 +353,9 @@
       "thinking": "L'agente sta pensando…",
       "working": "L'agente sta elaborando…",
       "compacting": "Compattazione in corso…",
-      "compacting_desc": "Compattazione memoria a breve termine…"
+      "compacting_desc": "Compattazione memoria a breve termine…",
+      "saving_info": "Salvataggio informazioni in corso…",
+      "saving_info_desc": "L'agente sta salvando le informazioni a lungo termine…"
     },
     "generating": {
       "plan": "Generando piano…",
@@ -439,12 +441,24 @@
       "textarea_placeholder": "Crea o seleziona un progetto per sbloccare la chat..."
     },
     "go_to_source": "Vai alla fonte",
+    "project_warning": {
+      "title": "Attenzione: Memoria di Progetto Mancante",
+      "desc": "Sembra che tu stia provando a salvare query o schemi di database, ma non hai creato o selezionato una memoria di progetto attiva.",
+      "action": "Clicca qui per crearla"
+    },
     "actions": {
       "copy": "Copia risposta",
       "copied": "Copiato",
       "good": "Risposta utile",
       "bad": "Risposta non utile",
-      "regenerate": "Rielabora risposta"
+      "regenerate": "Rielabora risposta",
+      "memorize": "Memorizza informazione",
+      "memorized_prefix": "L'agente ha memorizzato: ",
+      "memorize_instruction": "Analizza il seguente turno di conversazione (domanda, thinking e risposta) ed estrai le informazioni principali rilevanti. Salvale nella wing di progetto specificata. Per salvare in MemPalace devi utilizzare ESCLUSIVAMENTE il tool 'mempalace_add_drawer' per creare un drawer nella wing di progetto corrente. NON utilizzare assolutamente i tool del Knowledge Graph (come 'mempalace_kg_add'). Se ci sono query SQL, schemi database o impostazioni di progetto, salvale anche usando il tool 'sql_memory_save'. Se l'informazione è già memorizzata, non salvarla di nuovo. Rispondi fornendo esclusivamente un'unica frase che inizi direttamente con il prefisso 'L'agente ha memorizzato: ' seguito da un brevissimo riassunto di cosa è stato memorizzato e dove (oppure 'L'agente ha rilevato che l'informazione è già presente in memoria' se era già registrata). Non aggiungere alcuna introduzione prima, né spiegazioni o commenti aggiuntivi dopo questo prefisso.",
+      "feedback_placeholder": "Perché non ti è piaciuto questo messaggio? (Aggiungi una descrizione opzionale)...",
+      "feedback_title": "Feedback sulla risposta",
+      "feedback_submit": "Invia",
+      "feedback_cancel": "Annulla"
     },
     "reasoning": {
       "label": "Ragionamento",

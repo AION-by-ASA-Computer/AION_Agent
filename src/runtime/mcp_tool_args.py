@@ -99,7 +99,7 @@ def normalize_workspace_relative_path(path: str) -> str:
         return p
     while p.startswith("workspace/workspace/"):
         p = p[len("workspace/") :]
-    if p.startswith("workspace/"):
+    if p.startswith(("workspace/", "uploads/", "derived/", "unpacked/")):
         return p
     return f"workspace/{p}"
 

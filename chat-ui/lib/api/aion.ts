@@ -99,6 +99,7 @@ export type ChatRequestBody = {
   sql_query_project?: string;
   /** LLM provider slug to use for this chat session. */
   llm_provider_name?: string;
+  metadata?: Record<string, any>;
 };
 
 
@@ -365,6 +366,8 @@ export type ChatHistoryMessage = {
     plan_id?: string;
     plan_task_id?: string;
   };
+  rating?: number | null;
+  feedback_comment?: string | null;
 };
 
 export type StreamStatusResponse = {
@@ -589,6 +592,31 @@ export async function saveAssistantMessage(
     reasoning,
     timeline,
   );
+}
+
+
+export async function rateMessage(
+  conversationId: string,
+  messageId: string,
+  rating: number | null,
+  comment: string | null,
+  userId: string,
+  token?: string | null,
+): Promise<{ updated: boolean }> {
+  try {
+    const r = await fetch(
+      `${apiBase()}/chat-ui/conversations/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(messageId)}/rate`,
+      {
+        method: "POST",
+        headers: jsonHeaders(userId, token),
+        body: JSON.stringify({ rating, comment }),
+      },
+    );
+    if (!r.ok) return { updated: false };
+    return (await r.json()) as { updated: boolean };
+  } catch {
+    return { updated: false };
+  }
 }
 
 

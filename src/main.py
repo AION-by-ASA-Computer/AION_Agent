@@ -10,7 +10,7 @@ from collections import OrderedDict
 from typing import List, Optional, Dict, Any, Tuple
 
 from sqlalchemy import select
-from . import aion_env  # noqa: F401 — carica `.env` prima di altri moduli locali
+from . import aion_env  # noqa: F401 â€” carica `.env` prima di altri moduli locali
 
 from haystack.tools import Tool
 from src.runtime.aion_agent import (
@@ -205,7 +205,7 @@ def _aion_mcp_tool_run(
 ) -> str:
     """
     Invocazione MCP serializzabile (funzione top-level, non __call__ su istanza).
-    Haystack snapshot/error path chiama Tool.to_dict → serialize_callable.
+    Haystack snapshot/error path chiama Tool.to_dict â†’ serialize_callable.
     """
     import json
     from opentelemetry.propagate import inject
@@ -244,7 +244,7 @@ def _aion_mcp_tool_run(
     # Ensure all preceding text/artifacts from the stream are processed before tool execution
     StreamSync.wait_for_sync(session_id)
 
-    # Re-check stop_event after potentially blocking on StreamSync — cancellation may
+    # Re-check stop_event after potentially blocking on StreamSync â€” cancellation may
     # have been requested during the sync wait.
     if stop_event and stop_event.is_set():
         return format_exception_for_tool(
@@ -324,7 +324,7 @@ def _aion_mcp_tool_run(
         )
 
     def _emit_tool_outcome(*, is_error: bool, body: str) -> str:
-        # SSE/UI first — mid-turn compaction can block 60–90s on the agent thread.
+        # SSE/UI first â€” mid-turn compaction can block 60â€“90s on the agent thread.
         if is_error:
             loop.call_soon_threadsafe(
                 tool_event_bus.put_event,
@@ -710,7 +710,7 @@ async def build_mcp_tools(
             )
             discovered_tools.append(haystack_tool)
 
-        logger.info(f"✅ Discovered {len(discovered_tools)} tools from {name}")
+        logger.info(f"âœ… Discovered {len(discovered_tools)} tools from {name}")
         logger.info(
             "mcp_tools_discovered server=%s count=%d tools=%s",
             name,
@@ -719,7 +719,7 @@ async def build_mcp_tools(
         )
     except Exception as e:
         err = str(e).strip() or type(e).__name__
-        logger.error("❌ Handshake FAILED for %s: %s", name, err)
+        logger.error("âŒ Handshake FAILED for %s: %s", name, err)
         try:
             from .runtime.mcp_health import record_mcp_load_error
 
@@ -971,7 +971,7 @@ async def get_agent(
     """
     Agent Factory: Carica il profilo, le skill e i tool MCP dinamicamente.
     Con AION_AGENT_CACHE=1 riusa agente + tool discovery per la stessa tripletta
-    (session_id, profilo, user_id) così i worker MCP restano caldi e non si ripete il log di init.
+    (session_id, profilo, user_id) cosÃ¬ i worker MCP restano caldi e non si ripete il log di init.
     """
     logger.info(
         "agent_build_start profile=%s session=%s user=%s",
@@ -1051,7 +1051,7 @@ async def get_agent(
         plan_mode,
         message_source=message_source,
     )
-    # Env default (e.g. AION_DEFAULT_AGENT_MODE=plan) only for real user turns — not post-approval execution.
+    # Env default (e.g. AION_DEFAULT_AGENT_MODE=plan) only for real user turns â€” not post-approval execution.
     if (message_source or "user_input").strip() in ("user_input",):
         env_default_mode = (
             (os.getenv("AION_DEFAULT_AGENT_MODE") or "normal").strip().lower()
@@ -1149,7 +1149,7 @@ async def _finish_get_agent_build(
 
     # 5. Plan Mode: rimuovi fisicamente i tool mutanti dalla lista passata al LLM.
     # Il blocco avviene a livello di protocollo (il LLM non vede i tool nella sua context window),
-    # non solo per direttiva nel prompt. La lista è configurabile via AION_PLAN_MODE_BLOCKED_TOOLS.
+    # non solo per direttiva nel prompt. La lista Ã¨ configurabile via AION_PLAN_MODE_BLOCKED_TOOLS.
     if resolved_agent_mode == "plan":
         from src.runtime.plan_mode import (
             PLAN_MODE_DRAFT_TOOL_NAMES,
@@ -1179,7 +1179,7 @@ async def _finish_get_agent_build(
             tools = allowed_tools
             if removed_names:
                 logger.info(
-                    "🔒 Plan Mode: rimossi %d tool mutanti dalla lista agente: %s",
+                    "ðŸ”’ Plan Mode: rimossi %d tool mutanti dalla lista agente: %s",
                     len(removed_names),
                     ", ".join(sorted(removed_names)),
                 )
@@ -1198,7 +1198,7 @@ async def _finish_get_agent_build(
             tools = allowed_tools
             if removed_names:
                 logger.info(
-                    "🔒 Deep Research Mode: rimossi %d tool dalla lista agente: %s",
+                    "ðŸ”’ Deep Research Mode: rimossi %d tool dalla lista agente: %s",
                     len(removed_names),
                     ", ".join(sorted(removed_names)),
                 )
@@ -1278,7 +1278,7 @@ async def _finish_get_agent_build(
     llm_timeout = resolve_llm_timeout()
 
     logger.info(
-        f"🚀 Initializing Generator: {llm_model} at {llm_url} Provider: {llm_provider_name} (Timeout: {llm_timeout}s, Mode: {resolved_agent_mode})"
+        f"ðŸš€ Initializing Generator: {llm_model} at {llm_url} Provider: {llm_provider_name} (Timeout: {llm_timeout}s, Mode: {resolved_agent_mode})"
     )
     eb = gen_kw.get("extra_body")
     if isinstance(eb, dict) and eb.get("thinking_token_budget") is not None:
@@ -1308,7 +1308,7 @@ async def _finish_get_agent_build(
 
     provider_loaded = False
     row = None
-    # Se llm_provider_name è specificato, carica il provider dal database
+    # Se llm_provider_name Ã¨ specificato, carica il provider dal database
     if llm_provider_name:
         logger.info("Caricamento provider LLM dal database: %s", llm_provider_name)
         from src.api.llm_providers import LlmProviderPublic
@@ -1332,7 +1332,7 @@ async def _finish_get_agent_build(
         if row:
             if not row.enabled:
                 logger.warning(
-                    "Provider LLM %s è disattivato, uso configurazione env",
+                    "Provider LLM %s Ã¨ disattivato, uso configurazione env",
                     llm_provider_name,
                 )
             else:
@@ -1354,7 +1354,7 @@ async def _finish_get_agent_build(
                         os.getenv("AION_LLM_API_KEY", "placeholder-token")
                     )
 
-                # extra_body è vLLM/OpenAI-specific — va rimosso per provider che non lo supportano
+                # extra_body Ã¨ vLLM/OpenAI-specific â€” va rimosso per provider che non lo supportano
                 provider_gen_kw = None
                 if gen_kw:
                     provider_gen_kw = {
@@ -1455,7 +1455,7 @@ async def _finish_get_agent_build(
                 "Provider LLM %s non trovato, uso configurazione env", llm_provider_name
             )
 
-    # Fallback: crea chat_generator dalla configurazione env se non già caricato dal DB
+    # Fallback: crea chat_generator dalla configurazione env se non giÃ  caricato dal DB
     if not provider_loaded:
         api_key_secret = Secret.from_token(
             os.getenv("AION_LLM_API_KEY", "placeholder-token")
