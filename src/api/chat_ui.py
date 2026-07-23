@@ -27,6 +27,7 @@ from src.data.message_roles import (
     looks_like_raw_plan_content,
     is_empty_technical_message,
 )
+from src.chat_turn_history import collapse_redundant_assistant_fragments
 from src.khub_auth import khub_token_manager
 from src.runtime.timeline_reconstruct import (
     parse_timeline_json,
@@ -267,7 +268,6 @@ async def get_conversation_messages_chat_ui(
             .order_by(Message.seq.asc())
         )
         msgs = (await session.execute(q_msg)).scalars().all()
-        last_msg_id = msgs[-1].id if msgs else None
 
         # Fetch Steps
         q_steps = (
@@ -295,6 +295,13 @@ async def get_conversation_messages_chat_ui(
         for a in atts:
             mid = a.message_id or "orphan"
             atts_by_msg.setdefault(mid, []).append(_serialize_attachment_row(a))
+
+        msgs = collapse_redundant_assistant_fragments(
+            msgs,
+            steps_by_msg=steps_by_msg,
+            atts_by_msg=atts_by_msg,
+        )
+        last_msg_id = msgs[-1].id if msgs else None
 
         data = []
 

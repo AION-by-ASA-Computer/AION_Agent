@@ -18,7 +18,7 @@ import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
 import { artifactLanguage } from "@/lib/artifacts";
 import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 import { sessionDownloadUrl } from "@/lib/api/aion";
-import { MermaidBlock } from "@/components/chat/MermaidBlock";
+import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
 
 type Props = {
   segments: TurnSegment[];
@@ -255,32 +255,7 @@ const TextSegment = memo(function TextSegment({
         <table {...props} />
       </div>
     ),
-    pre: ({ children, ...props }: any) => {
-      const codeElement = Array.isArray(children) ? children[0] : children;
-      if (codeElement && codeElement.props && codeElement.props.className) {
-        const match = /language-(\w+)/.exec(codeElement.props.className || "");
-        if (match && match[1] === "mermaid") {
-          return codeElement;
-        }
-      }
-      return <pre {...props}>{children}</pre>;
-    },
-    code: ({ className, children, ...props }: any) => {
-      const match = /language-(\w+)/.exec(className || "");
-      const lang = match ? match[1] : "";
-      const isInline = !match;
-      const codeContent = String(children).replace(/\n$/, "");
-
-      if (!isInline && lang === "mermaid") {
-        return <MermaidBlock code={codeContent} isStreaming={streaming && isLast} />;
-      }
-
-      return (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    },
+    ...markdownCodeComponents({ streaming: streaming && isLast }),
     ...(renderMarkdownLink ? { a: renderMarkdownLink } : {}),
   }), [streaming, isLast, renderMarkdownLink]);
 

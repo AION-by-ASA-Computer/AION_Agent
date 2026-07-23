@@ -85,14 +85,14 @@
   .prose-chat :where(a):not(:where([class~="not-prose"])) {
     @apply text-primary underline-offset-2 hover:underline;
   }
-  .prose-chat :where(code):not(:where([class~="not-prose"])) {
-    @apply rounded-md bg-muted px-1.5 py-0.5 text-[0.85em] text-foreground;
+  .prose-chat :where(code):not(:where([class~="not-prose"], .not-prose *)) {
+    @apply rounded-md bg-muted/80 px-1.5 py-0.5 font-mono text-[0.85em] text-foreground ring-1 ring-border/50;
   }
-  .prose-chat :where(pre):not(:where([class~="not-prose"])) {
-    @apply mt-2 overflow-x-auto rounded-[var(--radius)] border border-border bg-background p-3 text-xs shadow-sm;
+  .prose-chat :where(pre):not(:where([class~="not-prose"], .not-prose *)) {
+    @apply my-0 overflow-visible rounded-none border-0 bg-transparent p-0 shadow-none;
   }
-  .prose-chat :where(pre code):not(:where([class~="not-prose"])) {
-    @apply bg-transparent p-0;
+  .prose-chat :where(pre code):not(:where([class~="not-prose"], .not-prose *)) {
+    @apply bg-transparent p-0 ring-0;
   }
   .prose-chat :where(ul, ol):not(:where([class~="not-prose"])) {
     @apply my-2 ml-4 list-outside;

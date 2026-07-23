@@ -4,7 +4,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, mem
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
-import { MermaidBlock } from "@/components/chat/MermaidBlock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
@@ -118,6 +117,8 @@ import {
 import { WebSourcesBar } from "@/components/chat/WebResearchViews";
 import { TurnTimeline, AgentWorkingShimmer } from "@/components/chat/TurnTimeline";
 import { MessageActions } from "@/components/chat/MessageActions";
+import { useAutoResizeTextarea } from "@/lib/hooks/use-auto-resize-textarea";
+import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
 import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
 import { extractAssistantCopyText } from "@/lib/extract-message-text";
 import {
@@ -393,6 +394,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const showPromptDebug = AION_PROMPT_DEBUG_UI_ENABLED;
   const chatStreamDebug = AION_CHAT_STREAM_DEBUG_ENABLED;
   const COMPOSER_MIN_HEIGHT = 110;
+  const COMPOSER_TEXTAREA_MIN = 48;
+  const COMPOSER_TEXTAREA_DEFAULT_MAX = 200;
   const userId = useStoredUserId();
   const token = useStoredToken();
   const shellActions = useShellActions();
@@ -1217,14 +1220,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [input, setInput] = useState("");
-  const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
+  const [composerTextMax, setComposerTextMax] = useState(COMPOSER_TEXTAREA_DEFAULT_MAX);
   const [composerResizing, setComposerResizing] = useState(false);
   const composerContainerRef = useRef<HTMLDivElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const composerHeightRef = useRef(COMPOSER_MIN_HEIGHT);
-  const composerPendingHeightRef = useRef(COMPOSER_MIN_HEIGHT);
-  const composerRafRef = useRef<number | null>(null);
-  const composerResizeStartRef = useRef({ y: 0, height: COMPOSER_MIN_HEIGHT });
+  const composerResizeStartRef = useRef({ y: 0, textMax: COMPOSER_TEXTAREA_DEFAULT_MAX });
+  useAutoResizeTextarea(composerTextareaRef, input, {
+    minHeight: COMPOSER_TEXTAREA_MIN,
+    maxHeight: composerTextMax,
+  });
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   const handleFilesDropped = useCallback((files: File[]) => {
@@ -2719,43 +2723,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   };
 
   useEffect(() => {
-    composerHeightRef.current = composerHeight;
-    if (composerContainerRef.current) {
-      composerContainerRef.current.style.height = `${composerHeight}px`;
-    }
-  }, [composerHeight]);
-
-  useEffect(() => {
     if (!composerResizing) return;
-    function flushComposerHeight() {
-      composerRafRef.current = null;
-      const nextHeight = composerPendingHeightRef.current;
-      composerHeightRef.current = nextHeight;
-      if (composerContainerRef.current) {
-        composerContainerRef.current.style.height = `${nextHeight}px`;
-      }
-    }
     function onMouseMove(e: MouseEvent) {
-      const maxHeight = Math.max(COMPOSER_MIN_HEIGHT, Math.floor(window.innerHeight * 0.55));
+      const maxCap = Math.max(COMPOSER_TEXTAREA_MIN, Math.floor(window.innerHeight * 0.45));
       const dy = composerResizeStartRef.current.y - e.clientY;
-      const nextHeight = Math.min(Math.max(composerResizeStartRef.current.height + dy, COMPOSER_MIN_HEIGHT), maxHeight);
-      composerPendingHeightRef.current = nextHeight;
-      if (composerRafRef.current === null) {
-        composerRafRef.current = window.requestAnimationFrame(flushComposerHeight);
-      }
+      const next = Math.min(
+        maxCap,
+        Math.max(COMPOSER_TEXTAREA_MIN, composerResizeStartRef.current.textMax + dy)
+      );
+      setComposerTextMax(next);
     }
     function onMouseUp() {
       setComposerResizing(false);
-      if (composerRafRef.current !== null) {
-        window.cancelAnimationFrame(composerRafRef.current);
-        composerRafRef.current = null;
-      }
-      const nextHeight = composerPendingHeightRef.current;
-      composerHeightRef.current = nextHeight;
-      if (composerContainerRef.current) {
-        composerContainerRef.current.style.height = `${nextHeight}px`;
-      }
-      setComposerHeight(composerHeightRef.current);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       window.removeEventListener("mousemove", onMouseMove);
@@ -2764,10 +2743,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
     return () => {
-      if (composerRafRef.current !== null) {
-        window.cancelAnimationFrame(composerRafRef.current);
-        composerRafRef.current = null;
-      }
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       window.removeEventListener("mousemove", onMouseMove);
@@ -2778,13 +2753,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const startComposerResize = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       e.preventDefault();
-      composerResizeStartRef.current = { y: e.clientY, height: composerHeightRef.current };
-      composerPendingHeightRef.current = composerHeightRef.current;
+      composerResizeStartRef.current = { y: e.clientY, textMax: composerTextMax };
       document.body.style.cursor = "ns-resize";
       document.body.style.userSelect = "none";
       setComposerResizing(true);
     },
-    []
+    [composerTextMax]
   );
 
   const tabsToRender = useMemo(() => {
@@ -3676,7 +3650,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       : "border-border hover:border-border/80 focus-within:ring-primary/30",
                   composerResizing ? "" : "transition-colors"
                 )}
-                style={{ height: composerHeight }}
+                style={{ minHeight: COMPOSER_MIN_HEIGHT }}
               >
                 <button
                   type="button"
@@ -3698,7 +3672,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     ) : null}
                   </div>
                 )}
-                <div className="min-h-0 flex-1 overflow-hidden">
+                <div className="min-h-0 shrink-0">
                   <textarea
                     ref={composerTextareaRef}
                     value={input}
@@ -3714,7 +3688,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       }
                     }}
                     placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
-                    className="focus-ring box-border h-full min-h-0 min-w-0 max-w-full w-full resize-none overflow-x-hidden overflow-y-auto break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
+                    className="focus-ring box-border min-h-[48px] min-w-0 max-w-full w-full resize-none overflow-x-hidden break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
                     rows={1}
                   />
                 </div>
@@ -4547,32 +4521,7 @@ const InternalMessageMarkdown = memo(function InternalMessageMarkdown({
 }) {
   const components = useMemo(() => ({
     a: renderMarkdownLink,
-    pre: ({ children, ...props }: any) => {
-      const codeElement = Array.isArray(children) ? children[0] : children;
-      if (codeElement && codeElement.props && codeElement.props.className) {
-        const match = /language-(\w+)/.exec(codeElement.props.className || "");
-        if (match && match[1] === "mermaid") {
-          return codeElement;
-        }
-      }
-      return <pre {...props}>{children}</pre>;
-    },
-    code: ({ className, children, ...props }: any) => {
-      const match = /language-(\w+)/.exec(className || "");
-      const lang = match ? match[1] : "";
-      const isInline = !match;
-      const codeContent = String(children).replace(/\n$/, "");
-
-      if (!isInline && lang === "mermaid") {
-        return <MermaidBlock code={codeContent} isStreaming={streaming} />;
-      }
-
-      return (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    }
+    ...markdownCodeComponents({ streaming }),
   }), [streaming, renderMarkdownLink]);
 
   return (
@@ -4603,32 +4552,7 @@ const UserMessageMarkdown = memo(function UserMessageMarkdown({
         <table {...props} />
       </div>
     ),
-    pre: ({ children, ...props }: any) => {
-      const codeElement = Array.isArray(children) ? children[0] : children;
-      if (codeElement && codeElement.props && codeElement.props.className) {
-        const match = /language-(\w+)/.exec(codeElement.props.className || "");
-        if (match && match[1] === "mermaid") {
-          return codeElement;
-        }
-      }
-      return <pre {...props}>{children}</pre>;
-    },
-    code: ({ className, children, ...props }: any) => {
-      const match = /language-(\w+)/.exec(className || "");
-      const lang = match ? match[1] : "";
-      const isInline = !match;
-      const codeContent = String(children).replace(/\n$/, "");
-
-      if (!isInline && lang === "mermaid") {
-        return <MermaidBlock code={codeContent} isStreaming={false} />;
-      }
-
-      return (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    },
+    ...markdownCodeComponents(),
     a: renderMarkdownLink
   }), [renderMarkdownLink]);
 
