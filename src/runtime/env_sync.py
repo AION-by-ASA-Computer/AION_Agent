@@ -121,12 +121,12 @@ def apply_merged_env_to_os(
 ) -> Dict[str, str]:
     """Apply merged env to ``os.environ``.
 
-  Precedence when ``respect_process_env`` is True (default boot):
-    1. Existing process env (CI, compose, pytest monkeypatch)
-    2. ``.env`` / ``.env.local`` base values (fill gaps only)
-    3. ``runtime.env`` admin overrides (always win)
+    Precedence when ``respect_process_env`` is True (default boot):
+      1. Existing process env (CI, compose, pytest monkeypatch)
+      2. ``.env`` / ``.env.local`` base values (fill gaps only)
+      3. ``runtime.env`` admin overrides (always win)
 
-  When ``respect_process_env`` is False (admin reload): full merged snapshot.
+    When ``respect_process_env`` is False (admin reload): full merged snapshot.
     """
     base = load_base_env(repo_root=repo_root)
     seed_base_env_from_process(base)
