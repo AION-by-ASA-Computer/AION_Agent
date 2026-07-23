@@ -23,7 +23,7 @@ export type ScheduleBuilderState = {
   customExpression: string;
 };
 
-export const DEFAULT_SCHEDULE_STATE: ScheduleBuilderState = {
+const DEFAULT_SCHEDULE_STATE: ScheduleBuilderState = {
   frequency: "daily",
   minute: 0,
   hour: 9,

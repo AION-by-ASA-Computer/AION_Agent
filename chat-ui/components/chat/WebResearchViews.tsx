@@ -9,7 +9,7 @@ import type { WebSourceCard } from "@/lib/sse/types";
 import { ShimmerText } from "@/components/chat/ShimmerText";
 import { useT } from "@/lib/i18n/use-t";
 
-export function webHostLabel(url: string): string {
+function webHostLabel(url: string): string {
   try {
     const host = new URL(url).hostname.replace(/^www\./, "");
     return host || url;
@@ -18,14 +18,14 @@ export function webHostLabel(url: string): string {
   }
 }
 
-export type ParsedWebSearch = {
+type ParsedWebSearch = {
   query: string;
   provider?: string;
   error?: string;
   results: Array<{ title: string; url: string; provider?: string }>;
 };
 
-export function parseWebSearchOutput(raw: string | undefined | null): ParsedWebSearch | null {
+function parseWebSearchOutput(raw: string | undefined | null): ParsedWebSearch | null {
   if (raw == null || !String(raw).trim()) return null;
   try {
     const j = JSON.parse(raw) as Record<string, unknown>;
@@ -52,14 +52,14 @@ export function parseWebSearchOutput(raw: string | undefined | null): ParsedWebS
   }
 }
 
-export type ParsedWebFetch = {
+type ParsedWebFetch = {
   url: string;
   error?: string;
   mode?: string;
   textLen?: number;
 };
 
-export function parseWebFetchOutput(raw: string | undefined | null): ParsedWebFetch | null {
+function parseWebFetchOutput(raw: string | undefined | null): ParsedWebFetch | null {
   if (raw == null || !String(raw).trim()) return null;
   try {
     const j = JSON.parse(raw) as Record<string, unknown>;
@@ -185,7 +185,7 @@ function ToolCardShell({
   );
 }
 
-export function ToolInvocationCard({
+function ToolInvocationCard({
   name,
   input,
   output,

@@ -1,5 +1,5 @@
 /** Filesystem tools that stream file content via early artifact SSE on tool_start. */
-export const FILE_PREVIEW_TOOL_NAMES = new Set([
+const FILE_PREVIEW_TOOL_NAMES = new Set([
   "sandbox_write_workspace_file",
   "sandbox_edit_workspace_file",
   "sandbox_apply_patch",

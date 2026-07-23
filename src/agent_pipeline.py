@@ -30,7 +30,6 @@ from .main import set_event_loop
 from .runtime.tool_events import tool_event_bus
 from .runtime.redis_client import (
     redis_clear_stream_active,
-    redis_consume_force_compact,
     redis_consume_stream_cancel,
     redis_set_stream_active,
 )
@@ -46,9 +45,6 @@ from .memory.context_compressor import (
     format_compaction_block,
     get_default_compressor,
     log_context_budget,
-    model_context_window,
-    reserve_output_tokens,
-    truncate_messages_to_prompt_budget,
 )
 from .runtime.hooks import HookContext, hook_registry
 from .runtime.reasoning_effort import generation_kwargs_for_agent
@@ -654,6 +650,9 @@ class AgentPipeline:
                 lines.append(
                     "IMPORTANT: A new document has been uploaded in this prompt. "
                     "You MUST read, analyze, and consider this document to answer the current request."
+                    "Always use OCR tools to read the document."
+                    "If OCR tools are not available, try to read the document anyway using any "
+                    "available tool."
                 )
 
             if old_files:

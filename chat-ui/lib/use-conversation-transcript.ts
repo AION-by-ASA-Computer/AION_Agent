@@ -18,7 +18,7 @@ export type HistoryApplyMode = "replace" | "merge";
  * - Sidebar load / recovery finish → replace transcript (no cross-conversation merge).
  * - Post-stream / recovery poll / plan execution → merge only for the active conversation.
  */
-export function shouldSkipHistoryMerge(
+function shouldSkipHistoryMerge(
   targetConversationId: string,
   streaming: TranscriptStreamingState,
 ): boolean {

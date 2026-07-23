@@ -18,7 +18,7 @@ from src.identity import sanitize_user_id
 from src.runtime.reasoning_effort import effective_reasoning_effort
 from src.chart_queue import chart_queue
 from src.runtime.redis_client import redis_set_stream_cancel
-from .admin import router as admin_router, list_profiles as admin_list_profiles
+from .admin import router as admin_router
 from .a2a_server import router as a2a_router
 from .session_uploads import router as session_uploads_router
 from .orchestration import router as orchestration_router

@@ -58,8 +58,26 @@ async def complete_messages(
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
+        model_name = model
+        if "/" in model_name:
+            parts = model_name.split("/", 1)
+            if parts[0] in (
+                "vllm",
+                "openai",
+                "ollama",
+                "openrouter",
+                "deepinfra",
+                "groq",
+                "together",
+                "anyscale",
+                "perplexity",
+                "mistral",
+                "fireworks",
+            ):
+                model_name = parts[1]
+
         payload: Dict[str, Any] = {
-            "model": model,
+            "model": model_name,
             "messages": messages,
             "temperature": temperature,
             "max_tokens": max_tokens or _max_report_tokens(),

@@ -19,7 +19,7 @@ import {
 } from "@/lib/sse/planDisplay";
 import type { ChatChunk } from "@/lib/sse/types";
 
-export type PlanPendingChunk = ChatChunk & { type: "orchestration_plan_pending" };
+type PlanPendingChunk = ChatChunk & { type: "orchestration_plan_pending" };
 
 function chunkRevision(chunk: PlanPendingChunk | null): number {
   if (!chunk) return 0;
@@ -84,9 +84,9 @@ export function usePlanDockState({
           chunk as unknown as OrchestrationPlanPendingEvent,
         )
           ? (normalizePlanPendingChunk(
-              chunk as unknown as OrchestrationPlanPendingEvent &
-                Record<string, unknown>,
-            ) as PlanPendingChunk)
+            chunk as unknown as OrchestrationPlanPendingEvent &
+            Record<string, unknown>,
+          ) as PlanPendingChunk)
           : chunk;
 
       const planId = String(normalized.plan_id || "").trim();

@@ -5,7 +5,7 @@ import { adminPath } from "@/lib/paths";
  * Headers da iniettare in tutte le fetch admin-ui.
  * Aggiunge `Authorization: Bearer <token>` se presente in localStorage.
  */
-export function authHeaders(extra?: HeadersInit): HeadersInit {
+function authHeaders(extra?: HeadersInit): HeadersInit {
   const t = getStoredToken();
   const base: Record<string, string> = {};
   if (t) base.Authorization = `Bearer ${t}`;

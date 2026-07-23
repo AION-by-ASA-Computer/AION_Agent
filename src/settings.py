@@ -161,8 +161,6 @@ class AionSettings(BaseSettings):
             return None
         return v
 
-        return "complete"
-
 
 @lru_cache(maxsize=1)
 def get_settings() -> AionSettings:

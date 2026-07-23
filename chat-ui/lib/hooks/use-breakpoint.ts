@@ -20,9 +20,3 @@ export function useIsLgUp(): boolean {
     () => true,
   );
 }
-
-/** `true` when viewport is below Tailwind `lg`. */
-export function useIsMobileLayout(): boolean {
-  const lg = useIsLgUp();
-  return !lg;
-}

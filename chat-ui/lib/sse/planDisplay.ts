@@ -203,7 +203,7 @@ export function extractStreamingPlanMarkdown(assistantContent: string): string {
 }
 
 /** SSOT plan payload from orchestration DB (tool-first / SSE). */
-export type OrchestrationPlanTask = {
+type OrchestrationPlanTask = {
   id: string;
   title: string;
   description?: string;
@@ -225,19 +225,6 @@ export type OrchestrationPlanPendingEvent = {
   revision?: number;
   goal?: string;
   force_sidebar_refresh?: boolean;
-};
-
-export type PlanPhaseEvent = {
-  type: "plan_phase";
-  phase: string;
-  plan_id?: string;
-  message?: string;
-};
-
-export type PlanErrorEvent = {
-  type: "plan_error";
-  plan_id: string;
-  message: string;
 };
 
 /** Prefer structured plan JSON from orchestration; skip markdown re-parse when present. */

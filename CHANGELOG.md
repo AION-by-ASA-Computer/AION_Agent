@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.2.0...v1.3.0) (2026-07-10)
+
+
+### Features
+
+* add redis_consume_stream_cancel to redis client imports ([2f46606](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/2f46606c58eb1f6147a3c011bf968987390fd17f))
+* add SQL QueryMemory project binding for cron jobs and implement… ([e866fc4](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/e866fc4824690689b690cacfc57ef6b455ea1318))
+
+
+### Bug Fixes
+
+* asynchronous agent run and SSE recovery connection ([989c14d](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/989c14d6a915744d4158bbf86ca800ffcb851f08))
+* asynchronous agent run and SSE recovery connection ([ae8da9a](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/ae8da9ae48fa5f1bb67f3dc0f8cba0eaac150949))
+* asynchronous run ([7179651](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7179651622cdc1ef61c7fe41398e0ad1873abd59))
+* bug admin panel selection of skills and MCPs, drag and drop componen… ([7c4d4b9](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7c4d4b9025ecfd95f5c9cdf17a57236bf5889c97))
+* dependencies and code based cleaning, removed all old code and d… ([7e2e3db](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7e2e3dbdf82d86e55131b1a1433cfd7f554fef93))
+* dependencies and code based cleaning, removed all old code and deprecated methods ([fb142b6](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/fb142b69ecaebe6f1bdc5492c0ec956db6ee2fb9))
+* linting ([c4f8540](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/c4f8540b5ec84d3f08a60b19256fae49a2f7dbaf))
+* prompt injenction, skill retrieve and deep research in all language ([f900fe1](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/f900fe1ad3c206c504828f051c8131f087402b54))
+* scheduled job execution engine with headless background processing and skill registry management ([1d6bd3c](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/1d6bd3c8c795f78b74892b0b4c3c9bc0d15168f5))
+
 ## [1.2.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.1.0...v1.2.0) (2026-07-06)
 
 

@@ -48,6 +48,7 @@ async def _run_pipeline_in_background(
     resolved_agent_mode: str,
     sql_project_resolved: Optional[str],
     att: Optional[list],
+    turn_att: Optional[list] = None,
 ):
     run = _background_runs.get(conversation_id)
     if not run:
@@ -77,6 +78,7 @@ async def _run_pipeline_in_background(
         async for chunk in pipeline.run_stream(
             body.message,
             attachments=att,
+            turn_attachments=turn_att,
             reasoning_effort=resolved_effort,
             user_message_id=body.user_message_id,
             assistant_message_id=body.assistant_message_id,
@@ -146,6 +148,7 @@ class ChatStreamBody(BaseModel):
     )
     message: str
     attachments: Optional[List[AttachmentRef]] = None
+    turn_attachments: Optional[List[AttachmentRef]] = None
     profile: str = Field(
         default="aion_std",
         validation_alias=AliasChoices("profile", "profile_slug", "profile_name"),
@@ -517,6 +520,10 @@ async def chat_stream(
     if body.attachments:
         att = [a.model_dump() for a in body.attachments]
 
+    turn_att = None
+    if body.turn_attachments:
+        turn_att = [a.model_dump() for a in body.turn_attachments]
+
     # Check if a background run is already active
     run = (
         _background_runs.get(body.conversation_id) if not _project_access_err else None
@@ -532,6 +539,7 @@ async def chat_stream(
                 resolved_agent_mode=resolved_agent_mode,
                 sql_project_resolved=sql_project_resolved,
                 att=att,
+                turn_att=turn_att,
             ),
             name=f"chat-run-{body.conversation_id[:8]}",
         )

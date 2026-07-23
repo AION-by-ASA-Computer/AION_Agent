@@ -6,7 +6,7 @@ export type ActiveStreamMarker = {
   startedAt: number;
 };
 
-export function activeStreamMarkerKey(conversationId: string): string {
+function activeStreamMarkerKey(conversationId: string): string {
   return `${PREFIX}${conversationId}`;
 }
 

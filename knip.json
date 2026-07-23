@@ -1,0 +1,66 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/*.{js,mjs,ps1,sh}",
+        "sdk/typescript/src/index.ts",
+        "sdk/widget/aion-widget.js"
+      ],
+      "project": [
+        "scripts/**/*.{js,mjs}",
+        "sdk/typescript/src/**/*.ts",
+        "sdk/widget/**/*.js"
+      ],
+      "ignore": [
+        "test-regex.js",
+        "test-regex2.js",
+        "**/*.test.ts",
+        ".github/skills/impeccable/scripts/**"
+      ]
+    },
+    "chat-ui": {
+      "entry": [
+        "app/page.tsx",
+        "app/**/page.tsx",
+        "app/**/route.ts",
+        "app/layout.tsx",
+        "app/providers.tsx"
+      ],
+      "project": [
+        "app/**/*.{ts,tsx,js,jsx}",
+        "components/**/*.{ts,tsx,js,jsx}",
+        "hooks/**/*.{ts,tsx,js,jsx}",
+        "lib/**/*.{ts,tsx,js,jsx}"
+      ],
+      "ignore": [
+        "lib/**/*.test.ts",
+        "**/*.test.ts"
+      ]
+    },
+    "admin-ui": {
+      "entry": [
+        "app/page.tsx",
+        "app/**/page.tsx",
+        "app/**/route.ts",
+        "app/layout.tsx",
+        "components/**/*.tsx"
+      ],
+      "project": [
+        "app/**/*.{ts,tsx,js,jsx}",
+        "components/**/*.{ts,tsx,js,jsx}",
+        "lib/**/*.{ts,tsx,js,jsx}"
+      ]
+    },
+    "website": {
+      "entry": [
+        "docusaurus.config.ts",
+        "sidebars.ts",
+        "src/pages/**/*.{js,jsx,ts,tsx,md,mdx}"
+      ],
+      "project": [
+        "src/**/*.{js,jsx,ts,tsx,md,mdx,css}"
+      ]
+    }
+  }
+}

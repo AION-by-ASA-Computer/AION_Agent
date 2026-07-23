@@ -15,7 +15,7 @@ export type PlanExecutionActivity = {
   detail?: string;
 };
 
-export type PlanExecutionTaskTurn = {
+type PlanExecutionTaskTurn = {
   user_message_id?: string;
   assistant_message_id?: string;
 };
@@ -156,23 +156,6 @@ export async function fetchActivePlanExecutions(
   if (!r.ok) return [];
   const j = (await r.json()) as { active?: PlanExecutionJob[] };
   return j.active || [];
-}
-
-export async function startPlanExecution(
-  userId: string,
-  body: { plan_id: string; chat_session_id?: string; profile_name?: string },
-  token?: string | null
-): Promise<{ run_id: string; status: string; plan_id: string }> {
-  const r = await fetch(`${apiBase()}/plan-execution/start`, {
-    method: "POST",
-    headers: jsonHeaders(userId, token),
-    body: JSON.stringify(body),
-  });
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error(t || `HTTP ${r.status}`);
-  }
-  return r.json();
 }
 
 export async function cancelPlanExecution(

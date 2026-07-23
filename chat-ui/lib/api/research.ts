@@ -39,6 +39,7 @@ export type ResearchJob = {
   progress?: ResearchProgress;
   activities?: ResearchActivity[];
   started_at?: number;
+  completed_at?: number;
   chat_session_id?: string;
 };
 
@@ -87,6 +88,7 @@ export type ResearchStatusResponse = {
   progress?: ResearchProgress;
   activities?: ResearchActivity[];
   started_at?: number;
+  completed_at?: number;
 };
 
 export async function fetchResearchStatus(

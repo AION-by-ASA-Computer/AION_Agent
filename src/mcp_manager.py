@@ -1237,7 +1237,7 @@ class MCPManager:
                 return f"credenziali mancanti per {server_name} ({key})"
         return None
 
-    def _pre_materialize_office_skills(
+    async def _pre_materialize_office_skills(
         self, chat_session_id: str, profile_slug: str
     ) -> None:
         """Copy office skill scripts into the session before the first docx exec."""
@@ -1248,13 +1248,27 @@ class MCPManager:
                 materialize_skill_scripts,
             )
 
-            profile_manager.load_all()
-            profile = profile_manager.get_profile(profile_slug)
+            # Eseguiamo il caricamento dei profili in un thread per non bloccare l'event loop.
+            def load_profile():
+                profile_manager.load_all()
+                return profile_manager.get_profile(profile_slug)
+
+            profile = await asyncio.to_thread(load_profile)
             if not profile or not profile.skills:
                 return
-            for slug in OFFICE_SKILL_SLUGS:
-                if slug in profile.skills:
-                    materialize_skill_scripts(chat_session_id, slug)
+
+            skills_to_materialize = [
+                slug for slug in OFFICE_SKILL_SLUGS if slug in profile.skills
+            ]
+
+            if skills_to_materialize:
+                # Eseguiamo la materializzazione concorrente in thread in modo non bloccante per l'event loop.
+                # L'agente attenderà il completamento della materializzazione prima di procedere.
+                tasks = [
+                    asyncio.to_thread(materialize_skill_scripts, chat_session_id, slug)
+                    for slug in skills_to_materialize
+                ]
+                await asyncio.gather(*tasks)
         except Exception as exc:
             logger.warning(
                 "office skill pre-materialize failed session=%s profile=%s: %s",
@@ -1439,7 +1453,7 @@ class MCPManager:
                 chat_session_id[:8] + "...",
                 stdio_names,
             )
-        self._pre_materialize_office_skills(chat_session_id, profile_slug)
+        await self._pre_materialize_office_skills(chat_session_id, profile_slug)
         # TODO(multi-worker): warm MCP pool / agent cache in Redis to avoid thundering herd across workers.
 
     async def restart_worker(self, chat_session_id: str, server_name: str) -> None:

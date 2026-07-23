@@ -19,7 +19,7 @@ import json
 import asyncio
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+import urllib.parse
 from sse_starlette.sse import EventSourceResponse
 
 
@@ -2295,8 +2295,6 @@ async def install_from_remote_url(body: RemoteInstallBody):
 
     # Estrae il nome dell'host o un valore di default
     if not body.display_name:
-        import urllib.parse
-
         try:
             parsed = urllib.parse.urlparse(url)
             name_parts = parsed.netloc.split(".")

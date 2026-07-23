@@ -104,7 +104,6 @@ import {
 import { rememberWatchedResearch } from "@/lib/api/research";
 import { researchLog } from "@/lib/research-debug";
 import { ArtifactsPanel, type DockArtifactItem } from "@/components/dock/ArtifactsPanel";
-// import { AgentDbPanel } from "@/components/dock/AgentDbPanel";
 import { PromptDebugPanel, type PromptSnapshot } from "@/components/dock/PromptDebugPanel";
 import { MemoryDockPanel } from "@/components/memory/MemoryDockPanel";
 import { ProjectMemoryChip } from "@/components/memory/ProjectMemoryChip";
@@ -2900,7 +2899,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           token={token}
         />
       )}
-      {/* {dockTab === "agentdb" && <AgentDbPanel userId={userId} tableHint={dbTableHint} />} */}
       {dockTab === "prompt_debug" && (
         <PromptDebugPanel snapshots={promptSnapshots} enabled={showPromptDebug} />
       )}

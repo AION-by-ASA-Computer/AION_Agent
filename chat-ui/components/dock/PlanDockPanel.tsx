@@ -7,7 +7,7 @@ import type { ChatChunk } from "@/lib/sse/types";
 
 const TaskPlanManagerV4 = dynamic(() => import("./TaskPlanManagerV4"), { ssr: false });
 
-export function planChunkToProps(
+function planChunkToProps(
   chunk: ChatChunk & { type: "orchestration_plan_pending" },
   apiBaseUrl: string,
   sessionId: string,
