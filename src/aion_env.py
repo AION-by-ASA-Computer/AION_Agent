@@ -45,15 +45,29 @@ try:
     load_dotenv(_ROOT / ".env")
     load_dotenv(_ROOT / ".env.local", override=False)
 
-    data_dir = os.environ.get("AION_DATA_DIR", "data")
-    data_path = Path(data_dir)
-    if not data_path.is_absolute():
-        data_path = _ROOT / data_path
-    runtime_env = data_path / "runtime.env"
-    if runtime_env.is_file():
-        load_dotenv(runtime_env, override=True)
+    from src.runtime.env_sync import (
+        apply_merged_env_to_os,
+        reconcile_runtime_env_on_boot,
+    )
+
+    reconcile_runtime_env_on_boot()
+    apply_merged_env_to_os()
 except ImportError:
     pass
+except Exception:
+    # Fallback: legacy runtime.env override if reconcile/apply fails at import time.
+    try:
+        from dotenv import load_dotenv
+
+        data_dir = os.environ.get("AION_DATA_DIR", "data")
+        data_path = Path(data_dir)
+        if not data_path.is_absolute():
+            data_path = _ROOT / data_path
+        runtime_env = data_path / "runtime.env"
+        if runtime_env.is_file():
+            load_dotenv(runtime_env, override=True)
+    except ImportError:
+        pass
 
 # Inizializzazione precoce di OpenLit (dopo load_dotenv così AION_OTEL_* è disponibile).
 if (

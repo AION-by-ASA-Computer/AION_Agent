@@ -1476,6 +1476,62 @@ class MCPManager:
                 server_name,
             )
 
+    async def restart_workers_for_user(
+        self,
+        user_id: str,
+        *,
+        server_slug: Optional[str] = None,
+        tenant_id: str = "default",
+    ) -> int:
+        """Shutdown pooled stdio workers for a user (optionally one server slug)."""
+        safe_uid = sanitize_user_id(user_id)
+        tenant = (tenant_id or "default").strip() or "default"
+        user_pool_key = f"__user__{safe_uid}__{tenant}"
+        to_stop: list[tuple[str, str]] = []
+
+        async with self._pool_lock:
+            for (sid, sname), _worker in list(self._pool.items()):
+                if server_slug and sname != server_slug:
+                    continue
+                if sid == user_pool_key:
+                    to_stop.append((sid, sname))
+                    continue
+                ctx = self._session_ctx.get(sid)
+                if not ctx:
+                    continue
+                if len(ctx) == 2:
+                    _slug, uid = ctx
+                    tid = "default"
+                else:
+                    _slug, uid, tid = ctx
+                if (
+                    sanitize_user_id(uid) == safe_uid
+                    and ((tid or "default").strip() or "default") == tenant
+                ):
+                    to_stop.append((sid, sname))
+
+            workers = []
+            for key in to_stop:
+                worker = self._pool.pop(key, None)
+                if worker is not None:
+                    workers.append(worker)
+
+        stopped = 0
+        for worker in workers:
+            if worker._task and not worker._task.done():
+                worker._task.cancel()
+            try:
+                await asyncio.wait_for(
+                    worker.shutdown(),
+                    timeout=float(os.getenv("AION_MCP_WORKER_SHUTDOWN_TIMEOUT", "15")),
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "MCP worker shutdown slow after credential invalidation; dropped"
+                )
+            stopped += 1
+        return stopped
+
     async def call_tool_pooled(
         self,
         chat_session_id: str,

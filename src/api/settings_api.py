@@ -2,9 +2,16 @@ import os
 import asyncio
 import logging
 from pathlib import Path
-from typing import Dict, Set
+from typing import Dict
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+from src.runtime.env_sync import (
+    load_base_env,
+    load_merged_env,
+    reload_env_into_process,
+    write_admin_overrides,
+)
 
 logger = logging.getLogger("aion.settings_api")
 
@@ -25,62 +32,8 @@ def _get_data_dir() -> Path:
     return data_path
 
 
-def _get_env_path() -> Path:
-    repo_root = _get_repo_root()
-    runtime_env = _get_data_dir() / "runtime.env"
-    if os.path.exists("/.dockerenv") or runtime_env.is_file():
-        return runtime_env
-    return repo_root / ".env"
-
-
-def _parse_env_file(path: Path) -> Dict[str, str]:
-    out = {}
-    if not path.is_file():
-        return out
-    try:
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            key = k.strip()
-            val = v.strip().strip('"').strip("'")
-            out[key] = val
-    except Exception as e:
-        logger.error(f"Failed to parse env file {path}: {e}")
-    return out
-
-
 def _parse_env() -> Dict[str, str]:
-    repo_root = _get_repo_root()
-    out = {}
-
-    # 1. Initialize from current system process environment (only AION_* keys)
-    for k, v in os.environ.items():
-        if k.startswith("AION_"):
-            out[k] = v
-
-    # 2. Parse .env (without overriding existing keys)
-    dot_env = _parse_env_file(repo_root / ".env")
-    for k, v in dot_env.items():
-        if k not in out:
-            out[k] = v
-
-    # 3. Parse .env.local (without overriding existing keys)
-    dot_env_local = _parse_env_file(repo_root / ".env.local")
-    for k, v in dot_env_local.items():
-        if k not in out:
-            out[k] = v
-
-    # 4. Parse runtime.env (overrides everything)
-    runtime_env_path = _get_data_dir() / "runtime.env"
-    runtime_env = _parse_env_file(runtime_env_path)
-    for k, v in runtime_env.items():
-        out[k] = v
-
-    return out
+    return load_merged_env(repo_root=_get_repo_root(), data_dir=_get_data_dir())
 
 
 def _is_sensitive_env_key(key: str) -> bool:
@@ -131,39 +84,11 @@ def _filter_settings_post(updates: Dict[str, str]) -> Dict[str, str]:
 
 
 def _write_env(updates: Dict[str, str]):
-    path = _get_env_path()
-
-    # Ensure the parent directory (e.g. /app/data) exists
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    lines = []
-
-    if not path.is_file():
-        for k, v in updates.items():
-            lines.append(f"{k}={v}")
-        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        return
-
-    current_content = path.read_text(encoding="utf-8").splitlines()
-    new_lines = []
-    seen_keys: Set[str] = set()
-
-    for line in current_content:
-        stripped = line.strip()
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            k, _, _ = stripped.partition("=")
-            key = k.strip()
-            if key in updates:
-                new_lines.append(f"{key}={updates[key]}")
-                seen_keys.add(key)
-                continue
-        new_lines.append(line)
-
-    for k, v in updates.items():
-        if k not in seen_keys:
-            new_lines.append(f"{k}={v}")
-
-    path.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+    write_admin_overrides(
+        updates,
+        data_dir=_get_data_dir(),
+        repo_root=_get_repo_root(),
+    )
 
 
 def _resolve_provider_type(env_dict: Dict[str, str]) -> str:
@@ -200,32 +125,9 @@ async def _deferred_exit():
 
 
 def _reload_env():
-    """Reload dotenv files into os.environ and clear the fs policy LRU cache."""
+    """Reload dotenv files into os.environ and clear dependent caches."""
     try:
-        from dotenv import load_dotenv
-
-        repo_root = _get_repo_root()
-
-        # 1. Load .env
-        load_dotenv(repo_root / ".env", override=True)
-        # 2. Load .env.local
-        load_dotenv(repo_root / ".env.local", override=True)
-
-        # 3. Load runtime.env if it exists
-        runtime_env = _get_data_dir() / "runtime.env"
-        if runtime_env.is_file():
-            load_dotenv(runtime_env, override=True)
-
-        # 4. Clear FSPolicy cache
-        from src.runtime.agent_fs_policy import load_fs_policy
-
-        load_fs_policy.cache_clear()
-
-        # 5. Reload Config singleton
-        from src.config import config
-
-        config.load()
-
+        reload_env_into_process()
         logger.info("AION Environment and Config reloaded successfully in-process.")
     except Exception as e:
         logger.error(f"Error reloading AION Environment: {e}")
@@ -236,6 +138,10 @@ async def update_settings(update: SettingsUpdate):
     """Update .env settings."""
     try:
         merged = _filter_settings_post(dict(update.settings))
+        base = load_base_env(repo_root=_get_repo_root())
+        for key, value in base.items():
+            if key not in merged:
+                merged[key] = value
 
         # Validation: If provider is anthropic, AION_CHAT_MAX_TOKENS must be > AION_THINKING_TOKEN_BUDGET
         adapter = merged.get("AION_LLM_ADAPTER") or ""

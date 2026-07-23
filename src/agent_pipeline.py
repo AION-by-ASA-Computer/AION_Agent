@@ -2602,6 +2602,33 @@ class AgentPipeline:
                                 tool_calls_log.append(evt)
                                 if evt.get("type") in ("tool_end", "tool_error"):
                                     try:
+                                        from src.runtime.tool_error_recovery import (
+                                            record_tool_error,
+                                            record_tool_success,
+                                        )
+
+                                        if evt.get("type") == "tool_error":
+                                            recovery = record_tool_error(
+                                                self.session_id,
+                                                str(evt.get("name") or ""),
+                                                str(evt.get("error") or ""),
+                                            )
+                                            if recovery:
+                                                yield _track_sse(
+                                                    {
+                                                        "type": "turn_status",
+                                                        "phase": "tool_error_recovery",
+                                                        "message": recovery.get(
+                                                            "message"
+                                                        )
+                                                        or "",
+                                                    }
+                                                )
+                                        else:
+                                            record_tool_success(self.session_id)
+                                    except Exception as ter_exc:
+                                        logger.debug("tool_error_recovery: %s", ter_exc)
+                                    try:
                                         import src.runtime.db_navigation_mempalace_hooks  # noqa: F401
                                         import src.runtime.exploration_tracker  # noqa: F401
                                         from src.runtime.exploration_tracker import (

@@ -88,8 +88,15 @@ def set_turn_runtime(
             "extra_tokens": 0,
             "last_compact_at": 0.0,
             "llm_steps": 0,
+            "tool_error_recovery_attempts": 0,
         }
     )
+    try:
+        from src.runtime.tool_error_recovery import reset_tracker
+
+        reset_tracker(session_id)
+    except Exception:
+        pass
 
 
 def bump_llm_step() -> int:
@@ -243,7 +250,7 @@ def compact_agent_messages_in_place() -> bool:
     threshold_ratio = float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_RATIO", "0.85"))
     mid_trigger = int(stats["max_prompt"] * threshold_ratio)
 
-    logger.warning(
+    logger.debug(
         f"THRESOLD RATIO {threshold_ratio} MID TRIGGER: {mid_trigger}   TOTAL {stats['total']} TRIGGER {compressor.compress_trigger_tokens()}"
     )
 
@@ -275,7 +282,7 @@ def compact_agent_messages_in_place() -> bool:
             compaction_summary_prompt(),
             transcript,
             max_tokens=int(
-                os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "2000")
+                os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "8192")
             ),
             timeout=float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_TIMEOUT", "90")),
         )
@@ -386,7 +393,7 @@ def maybe_inject_max_steps_prompt() -> None:
         return
     from src.runtime.doom_loop import MAX_STEPS_PROMPT
 
-    messages.append(ChatMessage.from_assistant(MAX_STEPS_PROMPT))
+    messages.append(ChatMessage.from_system(MAX_STEPS_PROMPT))
     state["messages"] = messages
     rt["max_steps_injected"] = True
 

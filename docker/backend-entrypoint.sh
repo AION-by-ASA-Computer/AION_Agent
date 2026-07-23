@@ -8,6 +8,8 @@ if [ "${AION_SYNC_ON_BOOT:-1}" = "1" ]; then
   python scripts/sync_config.py --force
   echo "[aion-entrypoint] Syncing mcp_servers_std -> mcp_servers ..."
   python scripts/sync_mcp_servers.py --force
+  echo "[aion-entrypoint] Reconciling .env <-> data/runtime.env ..."
+  python scripts/sync_runtime_env.py
 else
   echo "[aion-entrypoint] AION_SYNC_ON_BOOT=0 — skipping config/MCP sync"
 fi

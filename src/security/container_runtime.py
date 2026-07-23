@@ -37,6 +37,18 @@ def sandbox_container_mode_enabled() -> bool:
     return True
 
 
+def _resolve_container_socket() -> str:
+    """Pick a Podman/Docker socket path that exists inside the current process namespace."""
+    explicit = (os.environ.get("AION_PODMAN_SOCKET") or "").strip()
+    container_host = (os.environ.get("CONTAINER_HOST") or "").strip()
+    if container_host.startswith("unix://"):
+        container_host = container_host[len("unix://") :]
+    for candidate in (explicit, container_host):
+        if candidate and Path(candidate).exists():
+            return candidate
+    return explicit or container_host
+
+
 def resolve_session_host_mount_path(session_path: Path) -> Path:
     """
     Map container session paths to host paths when Podman/Docker runs on the host
@@ -95,7 +107,7 @@ class ContainerRuntime:
         self.image = (
             os.environ.get("AION_SANDBOX_CONTAINER_IMAGE") or "aion/sandbox:latest"
         ).strip()
-        self.socket = (os.environ.get("AION_PODMAN_SOCKET") or "").strip()
+        self.socket = _resolve_container_socket()
 
     def _base_env(self) -> Dict[str, str]:
         env = os.environ.copy()

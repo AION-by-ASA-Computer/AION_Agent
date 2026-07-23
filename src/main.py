@@ -1701,6 +1701,8 @@ async def _finish_get_agent_build(
         tools, provider=_policy_provider, model_id=_policy_model
     )
 
+    from src.runtime.tool_error_recovery import get_default_agent_hooks
+
     agent = create_aion_agent(
         chat_generator=chat_generator,
         tools=tools,
@@ -1709,6 +1711,7 @@ async def _finish_get_agent_build(
             int(os.getenv("AION_MAX_AGENT_STEPS", "15")),
             getattr(profile, "max_agent_steps", 999) or 999,
         ),
+        hooks=get_default_agent_hooks(),
     )
 
     pair = (agent, profile.slug)
