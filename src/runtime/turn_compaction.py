@@ -61,6 +61,13 @@ def tool_result_max_chars() -> int:
 
 
 _PER_TOOL_CAP_ENV: Dict[str, str] = {
+    # Distinct from AION_WEB_FETCH_MAX_CHARS in web_providers.py (page extract limit).
+    "web_fetch_page": "AION_TOOL_WEB_FETCH_MAX_CHARS",
+    "web_search": "AION_TOOL_WEB_SEARCH_MAX_CHARS",
+}
+
+# Legacy env names (context-recovery rollout); prefer AION_TOOL_* above.
+_PER_TOOL_CAP_LEGACY: Dict[str, str] = {
     "web_fetch_page": "AION_WEB_FETCH_MAX_CHARS",
     "web_search": "AION_WEB_SEARCH_MAX_CHARS",
 }
@@ -73,13 +80,65 @@ _PER_TOOL_DEFAULTS: Dict[str, int] = {
 
 def tool_result_max_chars_for(tool_name: str) -> int:
     key = (tool_name or "").strip().lower()
-    env_name = _PER_TOOL_CAP_ENV.get(key)
-    if env_name:
+    for env_map in (_PER_TOOL_CAP_ENV, _PER_TOOL_CAP_LEGACY):
+        env_name = env_map.get(key)
+        if not env_name:
+            continue
         try:
-            return max(500, int(os.getenv(env_name, str(_PER_TOOL_DEFAULTS.get(key, 6000)))))
+            default = str(_PER_TOOL_DEFAULTS.get(key, 6000))
+            return max(500, int(os.getenv(env_name, default)))
         except ValueError:
             return _PER_TOOL_DEFAULTS.get(key, 6000)
     return tool_result_max_chars()
+
+
+def _truncate_web_tool_json(text: str, tool_name: str, cap: int) -> Optional[str]:
+    """Shrink web tool JSON without breaking structure (chat-ui parses output)."""
+    import json
+
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+
+    note = " [AION: truncated for context budget]"
+    key = (tool_name or "").strip().lower()
+
+    if key == "web_fetch_page":
+        body = data.get("text")
+        if isinstance(body, str) and body:
+            max_body = max(200, cap - 420)
+            if len(body) > max_body:
+                data["text"] = body[:max_body] + note
+        out = json.dumps(data, ensure_ascii=False)
+        if len(out) <= cap:
+            return out
+        short = dict(data)
+        short["text"] = str(data.get("text", ""))[: max(120, cap - 280)] + note
+        short.pop("hint", None)
+        return json.dumps(short, ensure_ascii=False)
+
+    if key == "web_search":
+        results = data.get("results")
+        if isinstance(results, list):
+            budget = max(200, cap - 280)
+            per = max(60, budget // max(1, len(results)))
+            for row in results:
+                if not isinstance(row, dict):
+                    continue
+                for field in ("snippet", "content", "description"):
+                    val = row.get(field)
+                    if isinstance(val, str) and len(val) > per:
+                        row[field] = val[:per] + "…"
+        out = json.dumps(data, ensure_ascii=False)
+        while len(out) > cap and isinstance(results, list) and results:
+            results.pop()
+            out = json.dumps(data, ensure_ascii=False)
+        return out
+
+    return None
 
 
 def truncate_tool_result(result: str, *, tool_name: str = "") -> str:
@@ -88,6 +147,11 @@ def truncate_tool_result(result: str, *, tool_name: str = "") -> str:
     cap = tool_result_max_chars_for(tool_name)
     if len(text) <= cap:
         return text
+    key = (tool_name or "").strip().lower()
+    if key in ("web_fetch_page", "web_search"):
+        compact = _truncate_web_tool_json(text, key, cap)
+        if compact is not None and len(compact) <= cap:
+            return compact
     head = text[: cap // 2]
     tail = text[-(cap // 4) :]
     omitted = len(text) - len(head) - len(tail)

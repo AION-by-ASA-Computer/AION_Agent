@@ -984,7 +984,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         return stored;
       }
     }
-    return "full";
+    return "partial";
   });
 
   const handleToolsViewChange = useCallback((view: "hidden" | "partial" | "full") => {

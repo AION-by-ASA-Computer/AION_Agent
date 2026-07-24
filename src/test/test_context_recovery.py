@@ -53,10 +53,26 @@ def test_mechanical_shrink_replaces_oldest_tool_outputs():
     assert chat_message_text(shrunk[-1]) == "d" * 5000
 
 
-def test_web_fetch_has_lower_default_cap():
+def test_web_fetch_json_truncation_keeps_valid_json():
+    import json
+
+    payload = json.dumps(
+        {
+            "url": "https://example.org/page",
+            "mode": "httpx",
+            "text": "z" * 20000,
+        },
+        ensure_ascii=False,
+    )
+    with patch.dict(os.environ, {"AION_TOOL_WEB_FETCH_MAX_CHARS": "6000"}, clear=False):
+        out = truncate_tool_result(payload, tool_name="web_fetch_page")
+    parsed = json.loads(out)
+    assert parsed["url"] == "https://example.org/page"
+    assert len(out) <= 6000
+    assert isinstance(parsed.get("text"), str)
     with patch.dict(
         os.environ,
-        {"AION_WEB_FETCH_MAX_CHARS": "6000", "AION_TOOL_RESULT_MAX_CHARS": "24000"},
+        {"AION_TOOL_WEB_FETCH_MAX_CHARS": "6000", "AION_TOOL_RESULT_MAX_CHARS": "24000"},
         clear=False,
     ):
         cap = tool_result_max_chars_for("web_fetch_page")

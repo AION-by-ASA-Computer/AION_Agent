@@ -3,6 +3,12 @@
 import { useMemo, useState } from "react";
 import { ChevronDown, Globe, Search } from "lucide-react";
 import { formatToolInput, toolInputPreview } from "@/lib/sse/formatToolInput";
+import {
+  parseWebFetchOutput,
+  parseWebSearchOutput,
+  webFetchUrlFromInput,
+  webSearchQueryFromInput,
+} from "@/lib/sse/webToolParse";
 import type { ToolStepStatus } from "@/lib/sse/types";
 import { cn } from "@/lib/cn";
 import type { WebSourceCard } from "@/lib/sse/types";
@@ -15,62 +21,6 @@ function webHostLabel(url: string): string {
     return host || url;
   } catch {
     return url;
-  }
-}
-
-type ParsedWebSearch = {
-  query: string;
-  provider?: string;
-  error?: string;
-  results: Array<{ title: string; url: string; provider?: string }>;
-};
-
-function parseWebSearchOutput(raw: string | undefined | null): ParsedWebSearch | null {
-  if (raw == null || !String(raw).trim()) return null;
-  try {
-    const j = JSON.parse(raw) as Record<string, unknown>;
-    const q = typeof j.query === "string" ? j.query : "";
-    const err = typeof j.error === "string" ? j.error : undefined;
-    const prov =
-      typeof j.provider_used === "string"
-        ? j.provider_used
-        : typeof (j as { provider?: unknown }).provider === "string"
-          ? String((j as { provider?: string }).provider)
-          : undefined;
-    const rows = Array.isArray(j.results) ? j.results : [];
-    const results = rows.map((r) => {
-      const o = r as Record<string, unknown>;
-      return {
-        title: String(o.title || o.url || "Fonte"),
-        url: String(o.url || "").trim(),
-        provider: o.provider != null ? String(o.provider) : undefined,
-      };
-    });
-    return { query: q, provider: prov, error: err, results };
-  } catch {
-    return null;
-  }
-}
-
-type ParsedWebFetch = {
-  url: string;
-  error?: string;
-  mode?: string;
-  textLen?: number;
-};
-
-function parseWebFetchOutput(raw: string | undefined | null): ParsedWebFetch | null {
-  if (raw == null || !String(raw).trim()) return null;
-  try {
-    const j = JSON.parse(raw) as Record<string, unknown>;
-    return {
-      url: String(j.url || ""),
-      error: typeof j.error === "string" ? j.error : undefined,
-      mode: typeof j.mode === "string" ? j.mode : undefined,
-      textLen: typeof j.text === "string" ? j.text.length : undefined,
-    };
-  } catch {
-    return null;
   }
 }
 
@@ -208,16 +158,16 @@ function ToolInvocationCard({
   const running = status === "running";
   const ws = useMemo(() => (name === "web_search" ? parseWebSearchOutput(output || "") : null), [name, output]);
   const wf = useMemo(() => (name === "web_fetch_page" ? parseWebFetchOutput(output || "") : null), [name, output]);
-  const inputQuery =
-    input && typeof input === "object" && "query" in (input as object)
-      ? String((input as { query?: unknown }).query ?? "")
-      : "";
+  const inputQuery = webSearchQueryFromInput(input);
+  const inputUrl = webFetchUrlFromInput(input);
 
   const isWeb = name === "web_search" || name === "web_fetch_page";
+  const showWebCards = toolsView === "partial" || toolsView === "full";
 
-  if (toolsView === "partial" && isWeb) {
+  if (showWebCards && isWeb) {
     if (name === "web_search") {
       if (running && !ws) {
+        const q = inputQuery;
         return (
           <ToolCardShell>
             <div className="flex items-center gap-2">
@@ -225,19 +175,65 @@ function ToolInvocationCard({
               <Search className="size-3.5 shrink-0 text-primary/80" aria-hidden />
               <ShimmerText className="text-xs font-medium">{t("chat.tool.web_search_running")}</ShimmerText>
             </div>
-            {inputQuery ? (
+            {q ? (
               <p className="mt-1.5 line-clamp-2 text-[0.786em] text-muted-foreground italic">
-                &ldquo;{truncate(inputQuery, 120)}&rdquo;
+                &ldquo;{truncate(q, 120)}&rdquo;
               </p>
             ) : null}
           </ToolCardShell>
         );
       }
-      if (ws) {
-        const n = ws.results.filter((r) => r.url).length;
-        const line = ws.error
-          ? `${t("chat.tool.result_error")}: ${truncate(ws.error, 80)}`
-          : `"${truncate(ws.query || "—", 60)}" · ${n} risultati${ws.provider ? ` (${ws.provider})` : ""}`;
+      const effective = ws ?? (inputQuery ? { query: inputQuery, results: [], provider: undefined, error: undefined } : null);
+      if (effective) {
+        if (toolsView === "full" && effective.results.length > 0) {
+          return (
+            <ToolCardShell isError={isError} className="overflow-hidden p-0">
+              <div className="flex items-center gap-2 border-b border-border/50 bg-muted/30 px-3.5 py-2.5">
+                <StatusDot running={false} isError={isError} />
+                <Search className="size-4 shrink-0 text-primary/80" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <div className="text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground">
+                    {t("chat.tool.web_search_done")}
+                  </div>
+                  <div className="mt-0.5 truncate text-[0.929em] font-medium text-foreground" title={effective.query}>
+                    {effective.query || "—"}
+                  </div>
+                </div>
+                {effective.provider ? (
+                  <span className="shrink-0 rounded-full border border-border/50 bg-background px-2 py-0.5 text-[0.643em] font-semibold uppercase text-muted-foreground">
+                    {effective.provider}
+                  </span>
+                ) : null}
+              </div>
+              {effective.error ? (
+                <div className="px-3.5 py-2.5 text-[0.786em] font-medium text-destructive">{effective.error}</div>
+              ) : (
+                <ul className="max-h-52 divide-y divide-border/40 overflow-y-auto px-2 py-2">
+                  {effective.results
+                    .filter((r) => r.url)
+                    .slice(0, 20)
+                    .map((r, idx) => (
+                      <li key={`${r.url}-${idx}`} className="rounded-lg px-2.5 py-2 text-[0.786em] hover:bg-muted/30">
+                        <a
+                          href={r.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block font-medium text-primary underline-offset-2 hover:underline"
+                        >
+                          {truncate(r.title, 120)}
+                        </a>
+                        <div className="mt-0.5 truncate text-[0.714em] text-muted-foreground">{r.url}</div>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </ToolCardShell>
+          );
+        }
+        const n = effective.results.filter((r) => r.url).length;
+        const line = effective.error
+          ? `${t("chat.tool.result_error")}: ${truncate(effective.error, 80)}`
+          : `"${truncate(effective.query || inputQuery || "—", 60)}" · ${n} risultati${effective.provider ? ` (${effective.provider})` : ""}`;
         return (
           <ToolCardShell isError={isError}>
             <div className="flex items-center gap-2 text-muted-foreground">
@@ -257,6 +253,7 @@ function ToolInvocationCard({
     }
     if (name === "web_fetch_page") {
       if (running && !wf) {
+        const u = inputUrl;
         return (
           <ToolCardShell>
             <div className="flex items-center gap-2">
@@ -264,13 +261,41 @@ function ToolInvocationCard({
               <Globe className="size-3.5 shrink-0 text-primary/80" aria-hidden />
               <ShimmerText className="text-xs font-medium">{t("chat.tool.web_fetch_running")}</ShimmerText>
             </div>
+            {u ? (
+              <p className="mt-1.5 line-clamp-2 text-[0.786em] text-muted-foreground">{truncate(u, 120)}</p>
+            ) : null}
           </ToolCardShell>
         );
       }
-      if (wf) {
-        const line = wf.error
-          ? `${t("chat.tool.result_error")}: ${truncate(wf.error, 100)}`
-          : `${webHostLabel(wf.url || "—")}${wf.textLen != null ? ` · ~${wf.textLen} caratteri` : ""}`;
+      const effective = wf ?? (inputUrl ? { url: inputUrl, error: undefined, mode: undefined, textLen: undefined } : null);
+      if (effective) {
+        if (toolsView === "full") {
+          return (
+            <ToolCardShell isError={isError}>
+              <div className="flex items-center gap-2 border-b border-border/40 pb-2">
+                <StatusDot running={false} isError={isError} />
+                <Globe className="size-4 shrink-0 text-primary/80" aria-hidden />
+                <span className="text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground">
+                  {t("chat.tool.web_fetch_done")}
+                </span>
+              </div>
+              {effective.url ? (
+                <a
+                  href={effective.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-2 block truncate text-[0.857em] font-medium text-primary underline-offset-2 hover:underline"
+                >
+                  {effective.url}
+                </a>
+              ) : null}
+              {effective.error ? <p className="mt-1.5 text-[0.786em] text-destructive">{effective.error}</p> : null}
+            </ToolCardShell>
+          );
+        }
+        const line = effective.error
+          ? `${t("chat.tool.result_error")}: ${truncate(effective.error, 100)}`
+          : `${webHostLabel(effective.url || inputUrl || "—")}${effective.textLen != null ? ` · ~${effective.textLen} caratteri` : ""}`;
         return (
           <ToolCardShell isError={isError}>
             <div className="flex items-center gap-2">
@@ -285,79 +310,7 @@ function ToolInvocationCard({
     }
   }
 
-  if (toolsView === "full" && isWeb) {
-    if (name === "web_search" && ws) {
-      return (
-        <ToolCardShell isError={isError} className="overflow-hidden p-0">
-          <div className="flex items-center gap-2 border-b border-border/50 bg-muted/30 px-3.5 py-2.5">
-            <StatusDot running={false} isError={isError} />
-            <Search className="size-4 shrink-0 text-primary/80" aria-hidden />
-            <div className="min-w-0 flex-1">
-              <div className="text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground">
-                {t("chat.tool.web_search_done")}
-              </div>
-              <div className="mt-0.5 truncate text-[0.929em] font-medium text-foreground" title={ws.query}>
-                {ws.query || "—"}
-              </div>
-            </div>
-            {ws.provider ? (
-              <span className="shrink-0 rounded-full border border-border/50 bg-background px-2 py-0.5 text-[0.643em] font-semibold uppercase text-muted-foreground">
-                {ws.provider}
-              </span>
-            ) : null}
-          </div>
-          {ws.error ? (
-            <div className="px-3.5 py-2.5 text-[0.786em] font-medium text-destructive">{ws.error}</div>
-          ) : (
-            <ul className="max-h-52 divide-y divide-border/40 overflow-y-auto px-2 py-2">
-              {ws.results
-                .filter((r) => r.url)
-                .slice(0, 20)
-                .map((r, idx) => (
-                  <li key={`${r.url}-${idx}`} className="rounded-lg px-2.5 py-2 text-[0.786em] hover:bg-muted/30">
-                    <a
-                      href={r.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="block font-medium text-primary underline-offset-2 hover:underline"
-                    >
-                      {truncate(r.title, 120)}
-                    </a>
-                    <div className="mt-0.5 truncate text-[0.714em] text-muted-foreground">{r.url}</div>
-                  </li>
-                ))}
-            </ul>
-          )}
-        </ToolCardShell>
-      );
-    }
-    if (name === "web_fetch_page" && wf) {
-      return (
-        <ToolCardShell isError={isError}>
-          <div className="flex items-center gap-2 border-b border-border/40 pb-2">
-            <StatusDot running={false} isError={isError} />
-            <Globe className="size-4 shrink-0 text-primary/80" aria-hidden />
-            <span className="text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground">
-              {t("chat.tool.web_fetch_done")}
-            </span>
-          </div>
-          {wf.url ? (
-            <a
-              href={wf.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 block truncate text-[0.857em] font-medium text-primary underline-offset-2 hover:underline"
-            >
-              {wf.url}
-            </a>
-          ) : null}
-          {wf.error ? <p className="mt-1.5 text-[0.786em] text-destructive">{wf.error}</p> : null}
-        </ToolCardShell>
-      );
-    }
-  }
-
-  if (toolsView === "full" && output != null) {
+  if (toolsView === "full" && output != null && !isWeb) {
     return (
       <pre className="mt-1.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border border-border/50 bg-background/50 p-2.5 font-mono text-[0.714em] leading-relaxed text-foreground/90">
         {output}
