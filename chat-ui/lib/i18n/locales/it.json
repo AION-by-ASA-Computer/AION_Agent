@@ -359,6 +359,26 @@
       "saving_info": "Salvataggio informazioni in corso…",
       "saving_info_desc": "L'agente sta salvando le informazioni a lungo termine…"
     },
+    "context_budget": {
+      "title": "Contesto LLM",
+      "aria": "Saturazione contesto {{pct}} percento",
+      "trigger": "Soglia compattazione {{pct}}%",
+      "messages": "{{count}} messaggi",
+      "parts": {
+        "system_prompt": "System prompt",
+        "tool_specs": "Tool specs",
+        "skills": "Skill",
+        "web_tools": "Web search/fetch",
+        "tool_results": "Altri tool",
+        "user": "Utente",
+        "assistant": "Assistente",
+        "reasoning": "Ragionamento",
+        "compaction": "Compattazione",
+        "memory_injections": "Memoria/LTM",
+        "system_messages": "System msg",
+        "other": "Altro"
+      }
+    },
     "generating": {
       "plan": "Generando piano…",
       "document": "Generando documento…",

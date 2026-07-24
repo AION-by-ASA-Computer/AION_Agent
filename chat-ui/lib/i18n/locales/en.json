@@ -359,6 +359,26 @@
       "saving_info": "Saving information…",
       "saving_info_desc": "The agent is saving long-term information…"
     },
+    "context_budget": {
+      "title": "LLM context",
+      "aria": "Context saturation {{pct}} percent",
+      "trigger": "Compaction threshold {{pct}}%",
+      "messages": "{{count}} messages",
+      "parts": {
+        "system_prompt": "System prompt",
+        "tool_specs": "Tool specs",
+        "skills": "Skills",
+        "web_tools": "Web search/fetch",
+        "tool_results": "Other tools",
+        "user": "User",
+        "assistant": "Assistant",
+        "reasoning": "Reasoning",
+        "compaction": "Compaction",
+        "memory_injections": "Memory/LTM",
+        "system_messages": "System msg",
+        "other": "Other"
+      }
+    },
     "generating": {
       "plan": "Generating plan…",
       "document": "Generating document…",

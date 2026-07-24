@@ -85,6 +85,7 @@ import { upsertChatMessage } from "@/lib/merge-chat-history";
 import type { ChatChunk, TurnSegment, TurnState, WebSourceCard } from "@/lib/sse/types";
 
 import { ChatHeader } from "@/components/layout/ChatHeader";
+import { ContextBudgetBar } from "@/components/chat/ContextBudgetBar";
 import { useShellActions, useSidebarOpen } from "@/lib/shell/shell-context";
 import { cn } from "@/lib/cn";
 import { DeepResearchPanel } from "@/components/research/DeepResearchPanel";
@@ -2269,10 +2270,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const handleSaveEdit = useCallback(async (msgId: string) => {
     const newText = editInput.trim();
-    if (!newText || streaming) return;
+    if (!newText) return;
+    if (streaming || streamRecoveryRef.current) {
+      await stopActiveStream();
+    }
 
     setEditingMessageId(null);
-    setStreaming(true);
 
     try {
       const res = await fetch(`${apiBase()}/chat-ui/conversations/${conversationId}/messages/${msgId}`, {
@@ -2297,21 +2300,20 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       await runChatRequest(newText);
     } catch (err) {
       console.error("Error editing message:", err);
-    } finally {
-      setStreaming(false);
     }
-  }, [conversationId, editInput, streaming, userId, token, runChatRequest]);
+  }, [conversationId, editInput, streaming, userId, token, runChatRequest, stopActiveStream]);
 
   const handleRegenerate = useCallback(async () => {
-    if (streaming || !lastUserMessageId) return;
+    if (!lastUserMessageId) return;
+    if (streaming || streamRecoveryRef.current) {
+      await stopActiveStream();
+    }
 
     const lastUserMsg = messages.find((msg) => msg.id === lastUserMessageId);
     if (!lastUserMsg) return;
 
     const userText = lastUserMsg.content.trim();
     if (!userText) return;
-
-    setStreaming(true);
 
     try {
       const res = await fetch(`${apiBase()}/chat-ui/conversations/${conversationId}/messages/${lastUserMessageId}`, {
@@ -2336,10 +2338,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       await runChatRequest(userText);
     } catch (err) {
       console.error("Error regenerating response:", err);
-    } finally {
-      setStreaming(false);
     }
-  }, [conversationId, lastUserMessageId, messages, streaming, userId, token, runChatRequest]);
+  }, [conversationId, lastUserMessageId, messages, streaming, userId, token, runChatRequest, stopActiveStream]);
 
   useEffect(() => {
     fetchProfiles(userId, token)
@@ -3099,6 +3099,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }),
   );
   const contextCompacting = Boolean(turnVisual?.contextCompacting);
+  const contextBudget = turnVisual?.contextBudget ?? null;
   const showAgentWorkingShimmer = Boolean(
     streaming &&
     turnVisual &&
@@ -3732,6 +3733,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
           <div className="relative z-20 min-w-0 shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
             <div className="mx-auto w-full min-w-0 max-w-3xl">
+              {contextBudget ? (
+                <ContextBudgetBar budget={contextBudget} className="mb-3" />
+              ) : null}
               {pendingFiles.length > 0 && (
                 <div className="mb-3 flex flex-wrap gap-2">
                   {pendingFiles.map((f) => (

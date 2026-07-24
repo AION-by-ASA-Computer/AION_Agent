@@ -1665,6 +1665,7 @@ class AgentPipeline:
 
             async def _run_agent_async(msgs: List[ChatMessage]) -> Any:
                 nonlocal _harness_turn
+                current_msgs = list(msgs)
                 if harness_v2_turn():
                     _harness_turn = start_turn(self.session_id, len(msgs))
                 _turn_pid = (
@@ -1685,6 +1686,7 @@ class AgentPipeline:
                     agent=self.agent,
                     profile_name=self.profile_name,
                     user_id=self.user_id,
+                    preflight_messages=current_msgs,
                 )
                 _agent_debug_log(
                     "H3",
@@ -1697,7 +1699,6 @@ class AgentPipeline:
                     },
                 )
                 recovery_attempt = 0
-                current_msgs = list(msgs)
                 try:
                     while True:
                         try:
@@ -1768,11 +1769,12 @@ class AgentPipeline:
                 finally:
                     if harness_v2_turn() and _harness_turn is not None:
                         end_turn(self.session_id)
-                    clear_turn_runtime()
+                    clear_turn_runtime(self.session_id)
                     clear_context()
                     queue.put_nowait({"type": "done"})
 
             def _run_agent_sync(msgs: List[ChatMessage]) -> Any:
+                current_msgs = list(msgs)
                 _turn_pid = (
                     plan_controller.plan_id if plan_controller is not None else None
                 )
@@ -1791,6 +1793,7 @@ class AgentPipeline:
                     agent=self.agent,
                     profile_name=self.profile_name,
                     user_id=self.user_id,
+                    preflight_messages=current_msgs,
                 )
                 _agent_debug_log(
                     "H3",
@@ -1803,7 +1806,6 @@ class AgentPipeline:
                     },
                 )
                 recovery_attempt = 0
-                current_msgs = list(msgs)
                 try:
                     while True:
                         try:
@@ -1872,13 +1874,23 @@ class AgentPipeline:
                             loop.call_soon_threadsafe(queue.put_nowait, payload)
                             return None
                 finally:
-                    clear_turn_runtime()
+                    clear_turn_runtime(self.session_id)
                     clear_context()
                     loop.call_soon_threadsafe(queue.put_nowait, {"type": "done"})
 
             # 5. Main stream loop
             logger.info(">>> [5] Starting agent thread...")
             agent_messages = list(messages)
+            set_turn_runtime(
+                session_id=self.session_id,
+                loop=loop,
+                queue=queue,
+                stop_event=stop_event,
+                agent=self.agent,
+                profile_name=self.profile_name,
+                user_id=self.user_id,
+                preflight_messages=agent_messages,
+            )
             from src.runtime.agent_exec import run_agent_turn
 
             agent_task = asyncio.create_task(
@@ -1894,6 +1906,13 @@ class AgentPipeline:
                     while not agent_task.done():
                         await asyncio.sleep(0.5)
                         if await redis_consume_stream_cancel(self.session_id):
+                            from src.runtime.turn_diagnostics import log_turn_stop
+
+                            log_turn_stop(
+                                self.session_id,
+                                "user_cancelled",
+                                location="agent_pipeline:cancel_checker",
+                            )
                             logger.info(
                                 "Cancel requested for session %s, setting stop_event",
                                 self.session_id,
@@ -2259,6 +2278,27 @@ class AgentPipeline:
 
                             if chunk.get("type") == "llm_call":
                                 _llm_steps_done += 1
+                                try:
+                                    from src.runtime.turn_compaction import (
+                                        try_build_context_budget_event,
+                                    )
+
+                                    budget_evt = try_build_context_budget_event(
+                                        phase="llm_call",
+                                        session_id=self.session_id,
+                                    )
+                                    if budget_evt:
+                                        yield _track_sse(budget_evt)
+                                except Exception:
+                                    pass
+                                continue
+
+                            if ctype in (
+                                "context_budget",
+                                "context_compacting",
+                                "context_recovery",
+                            ):
+                                yield _track_sse(chunk)
                                 continue
 
                             if chunk.get("type") == "token":

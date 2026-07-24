@@ -230,6 +230,49 @@ def classify_turn_outcome(
     }
 
 
+def turn_debug_verbose() -> bool:
+    return os.getenv("AION_TURN_DEBUG_VERBOSE", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def log_turn_stop(
+    session_id: str,
+    reason: str,
+    *,
+    location: str = "",
+    **metrics: Any,
+) -> None:
+    """Structured log + JSONL when diagnostics enabled — every hard/agent stop."""
+    sid = (session_id or "")[:12]
+    msg = (
+        f"turn_stop session={sid} reason={reason} location={location or '?'}"
+        f" metrics={json.dumps(metrics, default=str)[:2000]}"
+    )
+    logger.warning(msg)
+    if turn_debug_verbose():
+        logger.info(msg)
+    append_jsonl(
+        turn_log_path(),
+        {
+            "kind": "turn_stop",
+            "session_id": session_id,
+            "reason": reason,
+            "location": location,
+            "metrics": metrics,
+        },
+    )
+    agent_debug_log(
+        "H2",
+        location or "turn:stop",
+        reason,
+        {"session_id": session_id, **metrics},
+    )
+
+
 def record_turn_outcome(record: Dict[str, Any]) -> None:
     append_jsonl(turn_log_path(), {"kind": "turn_outcome", **record})
     code = record.get("code", "ok")

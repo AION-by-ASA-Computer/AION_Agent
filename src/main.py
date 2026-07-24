@@ -1656,18 +1656,18 @@ async def _finish_get_agent_build(
 
         @functools.wraps(original_generator_run)
         def telemetry_wrapped_run(*args, **kwargs):
-            from src.runtime.turn_compaction import _turn_runtime
+            from src.runtime.turn_compaction import resolve_turn_runtime, sync_live_turn_messages
 
-            if _turn_runtime is not None:
+            rt = resolve_turn_runtime()
+            if isinstance(rt, dict):
                 try:
-                    rt = _turn_runtime.get()
-                    if isinstance(rt, dict):
-                        loop = rt.get("loop")
-                        queue = rt.get("queue")
-                        if loop and queue:
-                            loop.call_soon_threadsafe(
-                                queue.put_nowait, {"type": "llm_call"}
-                            )
+                    loop = rt.get("loop")
+                    queue = rt.get("queue")
+                    if loop and queue:
+                        sync_live_turn_messages(str(rt.get("session_id") or "") or None)
+                        loop.call_soon_threadsafe(
+                            queue.put_nowait, {"type": "llm_call"}
+                        )
                 except Exception:
                     pass
             return original_generator_run(*args, **kwargs)
@@ -1679,18 +1679,18 @@ async def _finish_get_agent_build(
 
             @functools.wraps(original_generator_run_async)
             async def telemetry_wrapped_run_async(*args, **kwargs):
-                from src.runtime.turn_compaction import _turn_runtime
+                from src.runtime.turn_compaction import resolve_turn_runtime, sync_live_turn_messages
 
-                if _turn_runtime is not None:
+                rt = resolve_turn_runtime()
+                if isinstance(rt, dict):
                     try:
-                        rt = _turn_runtime.get()
-                        if isinstance(rt, dict):
-                            loop = rt.get("loop")
-                            queue = rt.get("queue")
-                            if loop and queue:
-                                loop.call_soon_threadsafe(
-                                    queue.put_nowait, {"type": "llm_call"}
-                                )
+                        loop = rt.get("loop")
+                        queue = rt.get("queue")
+                        if loop and queue:
+                            sync_live_turn_messages(str(rt.get("session_id") or "") or None)
+                            loop.call_soon_threadsafe(
+                                queue.put_nowait, {"type": "llm_call"}
+                            )
                     except Exception:
                         pass
                 return await original_generator_run_async(*args, **kwargs)

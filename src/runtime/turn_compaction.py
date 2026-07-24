@@ -23,6 +23,9 @@ logger = logging.getLogger("aion.turn_compaction")
 
 _agent_exec_ctx: Any = None
 _turn_runtime: Any = None
+# Shared by session_id — SSE stream loop (parent asyncio task) and agent.run (child task)
+# mutate the same dict; contextvars alone do not propagate child → parent.
+_TURN_RUNTIME_REGISTRY: Dict[str, Dict[str, Any]] = {}
 
 try:
     import contextvars
@@ -31,6 +34,35 @@ try:
     _turn_runtime = contextvars.ContextVar("aion_turn_runtime", default=None)
 except ImportError:
     pass
+
+
+def context_budget_debug_enabled() -> bool:
+    return _env_bool("AION_CONTEXT_BUDGET_DEBUG", "0")
+
+
+def resolve_turn_runtime(session_id: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Turn runtime dict for SSE budget — registry first, then task-local contextvar."""
+    sid = (session_id or "").strip()
+    if sid:
+        rt = _TURN_RUNTIME_REGISTRY.get(sid)
+        if isinstance(rt, dict):
+            return rt
+    if _turn_runtime is not None:
+        rt = _turn_runtime.get()
+        if isinstance(rt, dict):
+            return rt
+    if not sid:
+        try:
+            from src.runtime.context import get_current_session_id
+
+            sid = (get_current_session_id() or "").strip()
+            if sid:
+                rt = _TURN_RUNTIME_REGISTRY.get(sid)
+                if isinstance(rt, dict):
+                    return rt
+        except Exception:
+            pass
+    return None
 
 
 def _env_bool(name: str, default: str = "1") -> bool:
@@ -171,25 +203,47 @@ def set_turn_runtime(
     agent: Any,
     profile_name: str,
     user_id: str,
+    preflight_messages: Optional[List[ChatMessage]] = None,
 ) -> None:
-    if _turn_runtime is None:
-        return
-    _turn_runtime.set(
-        {
-            "session_id": session_id,
+    sid = (session_id or "").strip()
+    existing = _TURN_RUNTIME_REGISTRY.get(sid) if sid else None
+    if isinstance(existing, dict):
+        rt = existing
+        rt.update(
+            {
+                "session_id": sid,
+                "loop": loop,
+                "queue": queue,
+                "stop_event": stop_event,
+                "agent": agent,
+                "profile_name": profile_name,
+                "user_id": user_id,
+                "preflight_messages": preflight_messages,
+            }
+        )
+        if preflight_messages is not None and not rt.get("live_messages"):
+            rt["live_messages"] = list(preflight_messages)
+    else:
+        rt = {
+            "session_id": sid,
             "loop": loop,
             "queue": queue,
             "stop_event": stop_event,
             "agent": agent,
             "profile_name": profile_name,
             "user_id": user_id,
+            "preflight_messages": preflight_messages,
+            "live_messages": list(preflight_messages or []),
             "extra_tokens": 0,
             "last_compact_at": 0.0,
             "llm_steps": 0,
             "tool_error_recovery_attempts": 0,
             "context_recovery_attempts": 0,
         }
-    )
+        if sid:
+            _TURN_RUNTIME_REGISTRY[sid] = rt
+    if _turn_runtime is not None:
+        _turn_runtime.set(rt)
     try:
         from src.runtime.tool_error_recovery import reset_tracker
 
@@ -199,9 +253,7 @@ def set_turn_runtime(
 
 
 def bump_llm_step() -> int:
-    if _turn_runtime is None:
-        return 0
-    rt = _turn_runtime.get()
+    rt = resolve_turn_runtime()
     if not isinstance(rt, dict):
         return 0
     n = int(rt.get("llm_steps") or 0) + 1
@@ -210,9 +262,7 @@ def bump_llm_step() -> int:
 
 
 def get_llm_step_count() -> int:
-    if _turn_runtime is None:
-        return 0
-    rt = _turn_runtime.get()
+    rt = resolve_turn_runtime()
     if not isinstance(rt, dict):
         return 0
     return int(rt.get("llm_steps") or 0)
@@ -224,9 +274,138 @@ def _mid_turn_debug_log(message: str, data: Dict[str, Any]) -> None:
     agent_debug_log("H4", "turn_compaction:compact", message, data)
 
 
+def _messages_from_exec_ctx(exec_ctx: Any = None) -> List[ChatMessage]:
+    if exec_ctx is None:
+        if _agent_exec_ctx is None:
+            return []
+        exec_ctx = _agent_exec_ctx.get()
+    if exec_ctx is None:
+        return []
+    state = getattr(exec_ctx, "state", None)
+    if state is None:
+        return []
+    data = getattr(state, "_data", None) or getattr(state, "data", None)
+    if not isinstance(data, dict):
+        return []
+    messages = data.get("messages")
+    if not isinstance(messages, list):
+        return []
+    return messages
+
+
+def sync_live_turn_messages(session_id: Optional[str] = None) -> bool:
+    """Copy Haystack State messages into turn_runtime (visible across asyncio tasks)."""
+    messages = _messages_from_exec_ctx()
+    if not messages:
+        return False
+    rt = resolve_turn_runtime(session_id)
+    if not isinstance(rt, dict):
+        return False
+    rt["live_messages"] = list(messages)
+    return True
+
+
+def get_turn_messages(session_id: Optional[str] = None) -> List[ChatMessage]:
+    """Live Haystack State messages during agent.run (mid-turn budget)."""
+    messages = _messages_from_exec_ctx()
+    if messages:
+        rt = resolve_turn_runtime(session_id)
+        if isinstance(rt, dict):
+            rt["live_messages"] = list(messages)
+        return messages
+    rt = resolve_turn_runtime(session_id)
+    if not isinstance(rt, dict):
+        return []
+    live = rt.get("live_messages")
+    if isinstance(live, list) and live:
+        return live
+    pref = rt.get("preflight_messages")
+    if isinstance(pref, list) and pref:
+        return pref
+    return []
+
+
+def try_build_context_budget_event(
+    *,
+    phase: str = "mid_turn",
+    session_id: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Build context_budget SSE payload from live agent state (or preflight fallback)."""
+    rt = resolve_turn_runtime(session_id)
+    if not isinstance(rt, dict):
+        return None
+    agent = rt.get("agent")
+    if agent is None:
+        return None
+    sid = (session_id or str(rt.get("session_id") or "")).strip()
+    messages = get_turn_messages(sid or None)
+    if not messages:
+        pref = rt.get("preflight_messages")
+        if isinstance(pref, list) and pref:
+            messages = pref
+    if not messages:
+        if context_budget_debug_enabled():
+            logger.warning(
+                "context_budget skip phase=%s session=%s: no messages",
+                phase,
+                sid[:12] if sid else "?",
+            )
+        return None
+    from src.memory.context_compressor import build_context_budget_event
+
+    payload = build_context_budget_event(agent, messages, phase=phase)
+    extra = int(rt.get("extra_tokens") or 0)
+    if extra > 0:
+        max_prompt = int(payload.get("max_prompt") or 1)
+        total = int(payload.get("total") or 0) + extra
+        payload["total"] = total
+        payload["pct"] = round(total * 100.0 / max(max_prompt, 1), 1)
+    if context_budget_debug_enabled():
+        web_tok = sum(
+            p.get("tokens", 0)
+            for p in (payload.get("parts") or [])
+            if p.get("key") in ("web_tools", "tool_results")
+        )
+        logger.info(
+            "context_budget phase=%s session=%s msgs=%s total=%s pct=%s web+tools=%s",
+            phase,
+            sid[:12] if sid else "?",
+            payload.get("message_count"),
+            payload.get("total"),
+            payload.get("pct"),
+            web_tok,
+        )
+    return payload
+
+
+def emit_context_budget_sse(
+    *, phase: str = "mid_turn", session_id: Optional[str] = None
+) -> None:
+    rt = resolve_turn_runtime(session_id)
+    if not isinstance(rt, dict):
+        return
+    loop = rt.get("loop")
+    queue = rt.get("queue")
+    if not loop or not queue:
+        return
+    sid = (session_id or str(rt.get("session_id") or "")).strip() or None
+    payload = try_build_context_budget_event(phase=phase, session_id=sid)
+    if not payload:
+        return
+    try:
+        loop.call_soon_threadsafe(queue.put_nowait, payload)
+    except Exception as exc:
+        logger.debug("context_budget SSE emit failed: %s", exc)
+
+
 def set_agent_execution_context(exec_ctx: Any) -> None:
     if _agent_exec_ctx is not None:
         _agent_exec_ctx.set(exec_ctx)
+    messages = _messages_from_exec_ctx(exec_ctx)
+    if messages:
+        rt = resolve_turn_runtime()
+        if isinstance(rt, dict):
+            rt["live_messages"] = list(messages)
 
 
 def clear_agent_execution_context() -> None:
@@ -234,16 +413,21 @@ def clear_agent_execution_context() -> None:
         _agent_exec_ctx.set(None)
 
 
-def clear_turn_runtime() -> None:
+def clear_turn_runtime(session_id: Optional[str] = None) -> None:
+    sid = (session_id or "").strip()
+    if not sid:
+        rt = resolve_turn_runtime()
+        if isinstance(rt, dict):
+            sid = str(rt.get("session_id") or "").strip()
+    if sid:
+        _TURN_RUNTIME_REGISTRY.pop(sid, None)
     if _turn_runtime is not None:
         _turn_runtime.set(None)
     clear_agent_execution_context()
 
 
 def add_turn_token_estimate(delta: int) -> None:
-    if _turn_runtime is None:
-        return
-    rt = _turn_runtime.get()
+    rt = resolve_turn_runtime()
     if not isinstance(rt, dict):
         return
     rt["extra_tokens"] = int(rt.get("extra_tokens") or 0) + max(0, delta)
@@ -457,9 +641,7 @@ def _sync_compact_head_tail(
 
 
 def _emit_compacting(active: bool, stats: Dict[str, int], *, phase: str) -> None:
-    if _turn_runtime is None:
-        return
-    rt = _turn_runtime.get()
+    rt = resolve_turn_runtime()
     if not isinstance(rt, dict):
         return
     loop = rt.get("loop")
@@ -478,6 +660,8 @@ def _emit_compacting(active: bool, stats: Dict[str, int], *, phase: str) -> None
         loop.call_soon_threadsafe(queue.put_nowait, payload)
     except Exception as exc:
         logger.debug("compact SSE emit failed: %s", exc)
+    if not active:
+        emit_context_budget_sse(phase=phase)
 
 
 def compact_agent_messages_in_place() -> bool:
@@ -487,10 +671,10 @@ def compact_agent_messages_in_place() -> bool:
     """
     if not mid_turn_compaction_enabled():
         return False
-    if _agent_exec_ctx is None or _turn_runtime is None:
+    if _agent_exec_ctx is None:
         return False
     exec_ctx = _agent_exec_ctx.get()
-    rt = _turn_runtime.get()
+    rt = resolve_turn_runtime()
     if exec_ctx is None or not isinstance(rt, dict):
         return False
 
@@ -542,6 +726,7 @@ def compact_agent_messages_in_place() -> bool:
             data["messages"] = system_msgs + new_convo
             rt["last_compact_at"] = now
             rt["extra_tokens"] = 0
+            rt["live_messages"] = data["messages"]
             after_stats = _estimate_prompt_total(agent, data["messages"])
             logger.warning(
                 "mid_turn_mechanical_compact session=%s tools_shrunk=%d tokens %d→%d",
@@ -584,6 +769,7 @@ def compact_agent_messages_in_place() -> bool:
     data["messages"] = compacted
     rt["last_compact_at"] = now
     rt["extra_tokens"] = 0
+    rt["live_messages"] = data["messages"]
 
     after_stats = _estimate_prompt_total(agent, data["messages"])
     _emit_compacting(False, after_stats, phase="mid_turn_done")
@@ -657,10 +843,10 @@ def _skip_mid_turn_compact_for_tool(tool_name: str, result: str) -> bool:
 
 def maybe_inject_max_steps_prompt() -> None:
     """Inject assistant warning when one LLM step remains before the hard agent limit."""
-    if _agent_exec_ctx is None or _turn_runtime is None:
+    if _agent_exec_ctx is None:
         return
     exec_ctx = _agent_exec_ctx.get()
-    rt = _turn_runtime.get()
+    rt = resolve_turn_runtime()
     if exec_ctx is None or not isinstance(rt, dict):
         return
     if rt.get("max_steps_injected"):
@@ -704,6 +890,8 @@ def maybe_compact_after_tool(*, tool_name: str, result: str) -> str:
             compact_agent_messages_in_place()
         except Exception as exc:
             logger.warning("maybe_compact_after_tool failed: %s", exc)
+    sync_live_turn_messages()
+    emit_context_budget_sse(phase="tool")
     return out
 
 

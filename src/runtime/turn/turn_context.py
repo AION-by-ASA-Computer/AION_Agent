@@ -641,10 +641,20 @@ async def build_turn_context(
         )
 
     post_stats = estimate_full_prompt_tokens(pipeline.agent, messages)
+    from src.memory.context_compressor import (
+        build_context_budget_event,
+        estimate_context_breakdown,
+    )
+
+    breakdown = estimate_context_breakdown(pipeline.agent, messages)
+    max_prompt = max(int(post_stats.get("max_prompt") or 1), 1)
     context_stats = {
         **post_stats,
         "message_count": len(messages),
+        "breakdown": breakdown,
+        "pct": round(int(post_stats.get("total") or 0) * 100.0 / max_prompt, 1),
     }
+    _emit(build_context_budget_event(pipeline.agent, messages, phase="preflight"))
     if post_stats["total"] >= post_stats["max_prompt"]:
         messages = truncate_messages_to_prompt_budget(
             messages,

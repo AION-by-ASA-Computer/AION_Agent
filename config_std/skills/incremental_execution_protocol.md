@@ -4,7 +4,7 @@ description: "Step-by-step research and file deliverables in normal mode — wor
 tags: [core, protocol, web, deliverable]
 status: verified
 source: curated
-version: 1
+version: 2
 ---
 
 # Incremental execution protocol
@@ -22,6 +22,18 @@ Call `skill_view("incremental_execution_protocol")` on **skills_hub** when:
 - The user asks to **create or update a file** with data you must gather first, and
 - You are **not** in Plan Mode planning turn, and
 - The work fits in one conversation thread without a sidebar execution plan.
+
+**Mandatory:** load this skill **before** the first web research tool — not after several searches and not only in reasoning.
+
+## Macro-steps (say once, then execute step 1)
+
+Before tools, list **3–6 logical macro-steps** in thinking (see `core_protocol`). Example shapes:
+
+| User ask | Macro-steps |
+|----------|-------------|
+| “Excel of product prices from vendor sites” | scout → skeleton CSV → slice by category → export xlsx |
+| “CSV of public holidays per country” | pick authority source → headers + 2 countries → add regions → final CSV |
+| “Report docx from uploaded PDF tables” | inspect PDF → extract table 1 to workspace → table 2 → assemble docx |
 
 ## Core idea: workspace is the database
 
@@ -75,18 +87,19 @@ You may use many web tools over the turn; the rule is **persist before changing 
 - Loading `skill_view("xlsx")` (or full office skill) before the first data commit.
 - Starting a new broad search for “complete dataset” when a partial file already exists — **extend the file** instead.
 
-## Example (World Cup → Excel)
+## Example (product catalog → Excel)
 
 ```
-user: Excel with all World Cup matches, scores, scorers
+user: Build an Excel with product name, price, and URL from public shop pages
 
-1. web_search → find FIFA or major sports results page
-2. sandbox_write → workspace/mondiali_2026.csv (headers + Group A rows from snippets)
-3. skill_view("xlsx") → only now
-4. web_fetch_page → one URL for Group A detail if needed
-5. sandbox_run_python_file → append parsed rows to CSV
-6. Repeat 4–5 per group OR ship partial xlsx + list missing groups
-7. sandbox_run_python_file → workspace/mondiali_2026.xlsx
+1. skill_view("incremental_execution_protocol")
+2. web_search → one category (e.g. "laptops site:…")
+3. sandbox_write → workspace/products.csv (headers + 3 rows from snippets)
+4. skill_view("xlsx") → only now
+5. web_fetch_page → one listing page for category A
+6. sandbox_run_python_file → append rows to products.csv
+7. Repeat 5–6 for category B, or ship partial xlsx + gaps list
+8. sandbox_run_python_file → workspace/products.xlsx
 ```
 
 ## Relation to Plan Mode

@@ -79,12 +79,10 @@ def build_context_recovery_prompt(exc: BaseException) -> str:
 
 def _turn_runtime_dict() -> Optional[Dict[str, Any]]:
     try:
-        from src.runtime.turn_compaction import _turn_runtime
+        from src.runtime.turn_compaction import resolve_turn_runtime
     except ImportError:
         return None
-    if _turn_runtime is None:
-        return None
-    rt = _turn_runtime.get()
+    rt = resolve_turn_runtime()
     return rt if isinstance(rt, dict) else None
 
 

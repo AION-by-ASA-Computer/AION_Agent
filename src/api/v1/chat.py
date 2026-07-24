@@ -17,7 +17,7 @@ from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.identity import sanitize_user_id
 from src.main import get_agent, set_event_loop
 from src.runtime.reasoning_effort import effective_reasoning_effort
-from src.runtime.redis_client import redis_set_stream_cancel
+from src.runtime.redis_client import redis_clear_stream_cancel, redis_set_stream_cancel
 from src.api.web_search_params import normalize_web_search_restrict_hosts
 
 logger = logging.getLogger("aion.v1.chat")
@@ -572,6 +572,9 @@ async def chat_stream(
     # Stop any in-flight turn before starting a new one (client abort is not enough).
     if not _project_access_err:
         await _stop_background_run(body.conversation_id, timeout=45.0)
+        # /chat/stop (or _stop_background_run) leaves a cancel flag that would
+        # be consumed by the new run's cancel checker — clear before starting.
+        await redis_clear_stream_cancel(body.conversation_id)
 
     run: Optional[BackgroundChatRun] = None
     if not _project_access_err:

@@ -175,6 +175,36 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
     return next;
   }
 
+  if (cType === "context_budget") {
+    const raw = chunk as {
+      phase?: string;
+      total?: number;
+      max_prompt?: number;
+      trigger?: number;
+      message_count?: number;
+      pct?: number;
+      parts?: Array<{ key?: string; tokens?: number; pct?: number }>;
+    };
+    const maxPrompt = Number(raw.max_prompt) || 1;
+    const total = Number(raw.total) || 0;
+    next.contextBudget = {
+      phase: raw.phase,
+      total,
+      maxPrompt,
+      trigger: Number(raw.trigger) || 0,
+      messageCount: Number(raw.message_count) || 0,
+      pct: Number(raw.pct) || Math.round((total * 100) / maxPrompt),
+      parts: (raw.parts || [])
+        .map((p) => ({
+          key: String(p.key || "other"),
+          tokens: Number(p.tokens) || 0,
+          pct: Number(p.pct) || 0,
+        }))
+        .filter((p) => p.tokens > 0),
+    };
+    return next;
+  }
+
   if (cType === "token") {
     const piece = coerceTokenPiece(chunk.content);
     next.assistantContent += piece;

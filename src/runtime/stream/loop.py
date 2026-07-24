@@ -231,6 +231,19 @@ class StreamLoop:
                 if ctype == "llm_call":
                     self.llm_calls += 1
                     self._llm_steps_done = self.llm_calls
+                    try:
+                        from src.runtime.turn_compaction import (
+                            try_build_context_budget_event,
+                        )
+
+                        budget_evt = try_build_context_budget_event(
+                            phase="llm_call",
+                            session_id=self.session_id,
+                        )
+                        if budget_evt:
+                            yield self._track_sse(budget_evt)
+                    except Exception:
+                        pass
                     continue
 
                 # --- Hard-stop budget guards ---
@@ -298,6 +311,11 @@ class StreamLoop:
                 if ctype == "stream_end":
                     self.is_streaming = False
                     self._last_finish_reason = chunk.get("finish_reason")
+                    yield self._track_sse(chunk)
+                    continue
+
+                # --- Context budget / compaction (queued from preflight or mid-turn) ---
+                if ctype in ("context_budget", "context_compacting", "context_recovery"):
                     yield self._track_sse(chunk)
                     continue
 
@@ -444,8 +462,12 @@ class StreamLoop:
             )
 
         if self.reasoning_hard_stop and (over_events or over_chars):
-            self.stop_event.set()
-            self.stop_reason = "reasoning_budget"
+            self._request_stop(
+                "reasoning_budget",
+                location="stream_loop:reasoning_guard",
+                over_events=over_events,
+                over_chars=over_chars,
+            )
             msg = (
                 "Interrotto automaticamente: reasoning loop oltre soglia "
                 f"(events={self.reasoning_events}/{self.max_reasoning_events}, "
@@ -526,8 +548,11 @@ class StreamLoop:
         self.last_progress_at = self.loop.time()
 
         if self.max_tool_events > 0 and self.tool_events > self.max_tool_events:
-            self.stop_event.set()
-            self.stop_reason = "tool_events_limit"
+            self._request_stop(
+                "tool_events_limit",
+                location="stream_loop:tool_events",
+                max_tool_events=self.max_tool_events,
+            )
             msg = (
                 "Interrotto automaticamente: troppi eventi tool nel turno "
                 f"({self.tool_events}/{self.max_tool_events})."
@@ -570,8 +595,10 @@ class StreamLoop:
 
                     _mo = get_context().get("mark_once")
                     if isinstance(_mo, dict) and _mo.get("used"):
-                        self.stop_event.set()
-                        self.stop_reason = "plan_mark_already_used"
+                        self._request_stop(
+                            "plan_mark_already_used",
+                            location="stream_loop:mark_once",
+                        )
                         _block_msg = (
                             "mark_task_completed was already called this turn. "
                             "STOP — do not call more tools."
@@ -599,8 +626,11 @@ class StreamLoop:
                             "message": _budget_msg or "",
                         }
                     )
-                    self.stop_event.set()
-                    self.stop_reason = "plan_research_budget"
+                    self._request_stop(
+                        "plan_research_budget",
+                        location="stream_loop:plan_research",
+                        tool=_tn,
+                    )
                     yield self._track_sse(
                         {"type": "error", "content": _budget_msg or ""}
                     )
@@ -636,8 +666,12 @@ class StreamLoop:
                 )
 
             if self.max_tool_calls > 0 and self.tool_calls > self.max_tool_calls:
-                self.stop_event.set()
-                self.stop_reason = "tool_calls_limit"
+                self._request_stop(
+                    "tool_calls_limit",
+                    location="stream_loop:tool_calls",
+                    tool_calls=self.tool_calls,
+                    max_tool_calls=self.max_tool_calls,
+                )
                 msg = (
                     "Interrotto automaticamente: troppi tool call nel turno "
                     f"({self.tool_calls}/{self.max_tool_calls})."
@@ -654,8 +688,11 @@ class StreamLoop:
             )
             if _doom:
                 if doom_loop_action() == "stop":
-                    self.stop_event.set()
-                    self.stop_reason = "doom_loop"
+                    self._request_stop(
+                        "doom_loop",
+                        location="stream_loop:doom_loop",
+                        detail=str(_doom)[:200],
+                    )
                     yield {"type": "error", "content": _doom}
                     yield _BreakSignal()
                     return
@@ -814,8 +851,10 @@ class StreamLoop:
             and evt.get("name") == "mark_task_completed"
             and self._msg_src == "internal_trigger"
         ):
-            self.stop_event.set()
-            self.stop_reason = "plan_task_completed"
+            self._request_stop(
+                "plan_task_completed",
+                location="stream_loop:mark_task_completed",
+            )
             outcome: Dict[str, Any] = {
                 "type": "turn_outcome",
                 "code": "plan_task_completed",
@@ -1059,6 +1098,17 @@ class StreamLoop:
                 evt["tokens_out"] = out_tokens
             except Exception as e:
                 logger.warning("Failed to count tool tokens: %s", e)
+            try:
+                from src.runtime.turn_compaction import try_build_context_budget_event
+
+                budget_evt = try_build_context_budget_event(
+                    phase="tool",
+                    session_id=self.session_id,
+                )
+                if budget_evt:
+                    yield self._track_sse(budget_evt)
+            except Exception:
+                pass
             self.turn_persist.queue_tool_step(evt)
             if self.assistant_message_id:
                 await self.turn_persist.persist_pending_turn_records(
@@ -1144,11 +1194,30 @@ class StreamLoop:
     # Private: budget guard checker
     # ------------------------------------------------------------------
 
+    def _request_stop(self, reason: str, *, location: str = "stream_loop", **metrics: Any) -> None:
+        from src.runtime.turn_diagnostics import log_turn_stop
+
+        self.stop_event.set()
+        self.stop_reason = reason
+        snapshot: Dict[str, Any] = {
+            "llm_calls": self.llm_calls,
+            "tool_calls": self.tool_calls,
+            "tool_events": self.tool_events,
+            "stream_events": self.stream_events,
+            "reasoning_chars": self.reasoning_chars,
+        }
+        snapshot.update(metrics)
+        log_turn_stop(self.session_id, reason, location=location, **snapshot)
+
     def _check_budget_guards(self, ctype: str) -> Optional[Dict[str, Any]]:
         """Return an error event if any hard-stop budget is exceeded, else None."""
         if self.max_stream_events > 0 and self.stream_events > self.max_stream_events:
-            self.stop_event.set()
-            self.stop_reason = "stream_events_limit"
+            self._request_stop(
+                "stream_events_limit",
+                location="stream_loop:budget_guards",
+                stream_events=self.stream_events,
+                max_stream_events=self.max_stream_events,
+            )
             return {
                 "type": "error",
                 "content": (
@@ -1160,8 +1229,12 @@ class StreamLoop:
             self.max_control_events > 0
             and self.control_events > self.max_control_events
         ):
-            self.stop_event.set()
-            self.stop_reason = "control_events_limit"
+            self._request_stop(
+                "control_events_limit",
+                location="stream_loop:budget_guards",
+                control_events=self.control_events,
+                max_control_events=self.max_control_events,
+            )
             return {
                 "type": "error",
                 "content": (
@@ -1170,8 +1243,12 @@ class StreamLoop:
                 ),
             }
         if self.max_output_events > 0 and self.output_events > self.max_output_events:
-            self.stop_event.set()
-            self.stop_reason = "output_events_limit"
+            self._request_stop(
+                "output_events_limit",
+                location="stream_loop:budget_guards",
+                output_events=self.output_events,
+                max_output_events=self.max_output_events,
+            )
             return {
                 "type": "error",
                 "content": (
@@ -1180,8 +1257,12 @@ class StreamLoop:
                 ),
             }
         if self.max_output_chars > 0 and self.output_chars > self.max_output_chars:
-            self.stop_event.set()
-            self.stop_reason = "output_chars_limit"
+            self._request_stop(
+                "output_chars_limit",
+                location="stream_loop:budget_guards",
+                output_chars=self.output_chars,
+                max_output_chars=self.max_output_chars,
+            )
             return {
                 "type": "error",
                 "content": (
@@ -1193,8 +1274,12 @@ class StreamLoop:
             self.no_progress_timeout > 0
             and (self.loop.time() - self.last_progress_at) > self.no_progress_timeout
         ):
-            self.stop_event.set()
-            self.stop_reason = "no_progress_timeout"
+            self._request_stop(
+                "no_progress_timeout",
+                location="stream_loop:budget_guards",
+                idle_sec=round(self.loop.time() - self.last_progress_at, 1),
+                no_progress_timeout=self.no_progress_timeout,
+            )
             return {
                 "type": "error",
                 "content": (

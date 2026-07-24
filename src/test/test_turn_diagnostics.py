@@ -70,3 +70,23 @@ def test_plan_created_without_final_text():
     assert out.get("user_visible_warning") is None
     assert out.get("suggested_final_text")
     assert "Plan" in out["suggested_final_text"]
+
+
+def test_log_turn_stop_accepts_snapshot_metrics(monkeypatch):
+    from src.runtime.turn_diagnostics import log_turn_stop
+
+    captured: list[dict] = []
+
+    def _fake_append(_path, record):
+        captured.append(record)
+
+    monkeypatch.setattr("src.runtime.turn_diagnostics.append_jsonl", _fake_append)
+    log_turn_stop(
+        "sess-1",
+        "tool_events_limit",
+        location="test",
+        tool_events=61,
+        max_tool_events=60,
+        llm_calls=20,
+    )
+    # WARNING log always fires; JSONL only when diagnostics enabled — no assert on captured
