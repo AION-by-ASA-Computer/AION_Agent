@@ -60,10 +60,32 @@ def tool_result_max_chars() -> int:
         return 24000
 
 
+_PER_TOOL_CAP_ENV: Dict[str, str] = {
+    "web_fetch_page": "AION_WEB_FETCH_MAX_CHARS",
+    "web_search": "AION_WEB_SEARCH_MAX_CHARS",
+}
+
+_PER_TOOL_DEFAULTS: Dict[str, int] = {
+    "web_fetch_page": 6000,
+    "web_search": 4000,
+}
+
+
+def tool_result_max_chars_for(tool_name: str) -> int:
+    key = (tool_name or "").strip().lower()
+    env_name = _PER_TOOL_CAP_ENV.get(key)
+    if env_name:
+        try:
+            return max(500, int(os.getenv(env_name, str(_PER_TOOL_DEFAULTS.get(key, 6000)))))
+        except ValueError:
+            return _PER_TOOL_DEFAULTS.get(key, 6000)
+    return tool_result_max_chars()
+
+
 def truncate_tool_result(result: str, *, tool_name: str = "") -> str:
     """Riduce output tool enormi (es. 200 email) prima che entrino nel contesto Haystack."""
     text = str(result or "")
-    cap = tool_result_max_chars()
+    cap = tool_result_max_chars_for(tool_name)
     if len(text) <= cap:
         return text
     head = text[: cap // 2]
@@ -101,6 +123,7 @@ def set_turn_runtime(
             "last_compact_at": 0.0,
             "llm_steps": 0,
             "tool_error_recovery_attempts": 0,
+            "context_recovery_attempts": 0,
         }
     )
     try:
@@ -196,6 +219,179 @@ def _estimate_prompt_total(
     }
 
 
+_MECHANICAL_TOOL_PLACEHOLDER = (
+    "[Earlier tool output removed to free context. "
+    "Use targeted search or a smaller fetch if you need those details again.]"
+)
+
+
+def _tool_message_origin(msg: ChatMessage) -> Any:
+    content = getattr(msg, "_content", None) or getattr(msg, "content", None)
+    if isinstance(content, list):
+        for part in content:
+            origin = getattr(part, "origin", None)
+            if origin is not None:
+                return origin
+    return getattr(msg, "_origin", None) or getattr(msg, "origin", None)
+
+
+def _shrink_tool_message(msg: ChatMessage, new_text: str) -> ChatMessage:
+    origin = _tool_message_origin(msg)
+    if origin is None:
+        origin = ChatMessage.from_assistant("tool")
+    return ChatMessage.from_tool(tool_result=new_text, origin=origin)
+
+
+def mechanical_shrink_conversation(
+    convo: List[ChatMessage],
+    *,
+    keep_recent_tools: int = 3,
+    placeholder: str = _MECHANICAL_TOOL_PLACEHOLDER,
+) -> tuple[List[ChatMessage], int]:
+    """
+    Replace oldest tool-result bodies with a short placeholder.
+    Returns (new_convo, count_shrunk).
+    """
+    tool_indices = [
+        i
+        for i, m in enumerate(convo)
+        if _message_role_str(m) == "tool"
+    ]
+    if len(tool_indices) <= keep_recent_tools:
+        return list(convo), 0
+
+    shrink_indices = set(tool_indices[: len(tool_indices) - keep_recent_tools])
+    if not shrink_indices:
+        return list(convo), 0
+
+    out: List[ChatMessage] = []
+    shrunk = 0
+    for i, m in enumerate(convo):
+        if i not in shrink_indices:
+            out.append(m)
+            continue
+        current = chat_message_text(m)
+        if current.strip() == placeholder:
+            out.append(m)
+            continue
+        out.append(_shrink_tool_message(m, placeholder))
+        shrunk += 1
+    return out, shrunk
+
+
+def emergency_compact_messages(
+    agent: Any,
+    messages: List[ChatMessage],
+    *,
+    force_sync: bool = False,
+    aggressive: bool = False,
+) -> Optional[List[ChatMessage]]:
+    """
+    Aggressively shrink in-flight agent messages (mechanical, then optional LLM summary).
+    Returns the new full message list, or None if nothing could be freed.
+    """
+    if not messages:
+        return None
+
+    system_msgs, convo = _split_system_and_conversation(list(messages))
+    if len(convo) < 2:
+        return None
+
+    compressor = get_default_compressor()
+    threshold_ratio = float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_RATIO", "0.92"))
+    max_prompt = compressor.max_prompt_tokens()
+    target = int(max_prompt * (0.70 if aggressive else 0.82))
+
+    keep_tools = 1 if aggressive else max(1, int(os.getenv("AION_MECHANICAL_COMPACT_KEEP_TOOLS", "3")))
+    working_convo = list(convo)
+    total_shrunk = 0
+
+    for _ in range(8):
+        stats = _estimate_prompt_total(agent, system_msgs + working_convo)
+        if stats["total"] <= target:
+            break
+        new_convo, shrunk = mechanical_shrink_conversation(
+            working_convo,
+            keep_recent_tools=keep_tools,
+        )
+        if shrunk:
+            working_convo = new_convo
+            total_shrunk += shrunk
+            continue
+        if keep_tools > 0:
+            keep_tools -= 1
+            continue
+        break
+
+    stats = _estimate_prompt_total(agent, system_msgs + working_convo)
+    if stats["total"] > max_prompt * 0.95 and force_sync:
+        compacted = _sync_compact_head_tail(
+            agent,
+            system_msgs,
+            working_convo,
+            stats=stats,
+            phase="emergency",
+        )
+        if compacted is not None:
+            return compacted
+
+    if total_shrunk == 0 and stats["total"] > target:
+        return None
+    return system_msgs + working_convo
+
+
+def _sync_compact_head_tail(
+    agent: Any,
+    system_msgs: List[ChatMessage],
+    convo: List[ChatMessage],
+    *,
+    stats: Dict[str, int],
+    phase: str,
+) -> Optional[List[ChatMessage]]:
+    compressor = get_default_compressor()
+    keep = compressor.keep_last
+    from src.runtime.harness_flags import harness_v2_compaction
+    from src.runtime.compaction import find_valid_cut_index
+
+    if harness_v2_compaction():
+        cut = find_valid_cut_index(convo, keep_last=keep)
+        if cut < 0:
+            return None
+        head = convo[:cut]
+        tail = convo[cut:]
+    else:
+        head = convo[:-keep] if len(convo) > keep else convo[:-1]
+        tail = convo[-keep:] if len(convo) > keep else convo[-1:]
+
+    transcript = "\n".join(f"{m.role}: {chat_message_text(m)[:3000]}" for m in head)
+    if not transcript.strip():
+        return None
+
+    _emit_compacting(True, stats, phase=phase)
+    from src.memory.context_compressor import compaction_summary_prompt
+    from src.memory.llm_extract import complete_text_sync
+
+    try:
+        summary = complete_text_sync(
+            compaction_summary_prompt(),
+            transcript,
+            max_tokens=int(os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "8192")),
+            timeout=float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_TIMEOUT", "90")),
+        )
+    except Exception as exc:
+        logger.warning("%s compact LLM failed: %s", phase, exc)
+        _emit_compacting(False, stats, phase=f"{phase}_failed")
+        return None
+
+    summary_msg = ChatMessage.from_user(
+        format_compaction_block(summary or "", source_messages=len(head))
+    )
+    new_messages = system_msgs + [summary_msg] + list(tail)
+    after_stats = _estimate_prompt_total(agent, new_messages)
+    _emit_compacting(False, after_stats, phase=f"{phase}_done")
+    return new_messages
+
+
 def _emit_compacting(active: bool, stats: Dict[str, int], *, phase: str) -> None:
     if _turn_runtime is None:
         return
@@ -276,55 +472,52 @@ def compact_agent_messages_in_place() -> bool:
     if len(convo) <= 1:
         return False
 
-    keep = compressor.keep_last
-    from src.runtime.harness_flags import harness_v2_compaction
-    from src.runtime.compaction import find_valid_cut_index
-
-    if harness_v2_compaction():
-        cut = find_valid_cut_index(convo, keep_last=keep)
-        if cut < 0:
-            return False
-        head = convo[:cut]
-        tail = convo[cut:]
-    else:
-        head = convo[:-keep] if len(convo) > keep else convo[:-1]
-        tail = convo[-keep:] if len(convo) > keep else convo[-1:]
-
-    transcript = "\n".join(f"{m.role}: {chat_message_text(m)[:3000]}" for m in head)
-    if not transcript.strip():
-        return False
-
     if not mid_turn_sync_compaction_enabled():
+        new_convo, shrunk = mechanical_shrink_conversation(convo)
+        if shrunk:
+            data["messages"] = system_msgs + new_convo
+            rt["last_compact_at"] = now
+            rt["extra_tokens"] = 0
+            after_stats = _estimate_prompt_total(agent, data["messages"])
+            logger.warning(
+                "mid_turn_mechanical_compact session=%s tools_shrunk=%d tokens %d→%d",
+                str(rt.get("session_id", ""))[:8],
+                shrunk,
+                stats["total"],
+                after_stats["total"],
+            )
+            _mid_turn_debug_log(
+                "mid_turn_mechanical_compact",
+                {
+                    "session_id": str(rt.get("session_id", ""))[:12],
+                    "tools_shrunk": shrunk,
+                    "tokens_before": stats["total"],
+                    "tokens_after": after_stats["total"],
+                },
+            )
+            return True
         logger.debug(
-            "mid_turn compact skipped (sync disabled); tokens=%s threshold=%s",
+            "mid_turn compact skipped (sync disabled, mechanical noop); tokens=%s",
             stats["total"],
-            mid_trigger,
         )
         return False
 
     _emit_compacting(True, stats, phase="mid_turn")
-
-    from src.memory.context_compressor import compaction_summary_prompt
-    from src.memory.llm_extract import complete_text_sync
-
-    try:
-        summary = complete_text_sync(
-            compaction_summary_prompt(),
-            transcript,
-            max_tokens=int(
-                os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "8192")
-            ),
-            timeout=float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_TIMEOUT", "90")),
-        )
-    except Exception as exc:
-        logger.warning("mid_turn compact LLM failed: %s", exc)
-        summary = "[compattazione intra-turno non disponibile]"
-
-    summary_msg = ChatMessage.from_user(
-        format_compaction_block(summary or "", source_messages=len(head))
+    compacted = _sync_compact_head_tail(
+        agent,
+        system_msgs,
+        convo,
+        stats=stats,
+        phase="mid_turn",
     )
-    new_convo = [summary_msg] + list(tail)
-    data["messages"] = system_msgs + new_convo
+    if compacted is None:
+        new_convo, shrunk = mechanical_shrink_conversation(convo, keep_recent_tools=1)
+        if not shrunk:
+            _emit_compacting(False, stats, phase="mid_turn_failed")
+            return False
+        compacted = system_msgs + new_convo
+
+    data["messages"] = compacted
     rt["last_compact_at"] = now
     rt["extra_tokens"] = 0
 
@@ -355,7 +548,11 @@ def compact_agent_messages_in_place() -> bool:
         },
     )
 
-    _schedule_db_persist(rt, summary_msg, len(tail))
+    summary_blocks = [
+        m for m in data["messages"] if "compacted into the following" in chat_message_text(m)
+    ]
+    if summary_blocks:
+        _schedule_db_persist(rt, summary_blocks[0], compressor.keep_last)
     return True
 
 

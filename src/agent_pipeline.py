@@ -1696,44 +1696,75 @@ class AgentPipeline:
                         "agent_mode": effective_agent_mode,
                     },
                 )
+                recovery_attempt = 0
+                current_msgs = list(msgs)
                 try:
-                    res = await self.agent.run_async(
-                        msgs,
-                        streaming_callback=haystack_agent_streaming_callback_async,
-                        generation_kwargs=gen_kw,
-                    )
-                    _agent_debug_log(
-                        "H1",
-                        "_run_agent_async:return",
-                        "agent_run_ok",
-                        {
-                            "session_id": self.session_id[:12],
-                            "result_type": type(res).__name__,
-                        },
-                    )
-                    return res
-                except Exception as e:
-                    _agent_debug_log(
-                        "H1",
-                        "_run_agent_async:except",
-                        "agent_run_exception",
-                        {
-                            "session_id": self.session_id[:12],
-                            "exc_type": type(e).__name__,
-                            "exc_msg": str(e)[:500],
-                            "stop_event": bool(stop_event.is_set()),
-                        },
-                    )
-                    if not stop_event.is_set():
-                        logger.error("Agent.run_async failed: %s", e)
-                        logger.error(traceback.format_exc())
-                        payload = litellm_error_to_sse(e)
-                        logger.info(
-                            "LLM error classified: code=%s exc_type=%s",
-                            payload.get("code"),
-                            payload.get("exc_type"),
-                        )
-                        queue.put_nowait(payload)
+                    while True:
+                        try:
+                            res = await self.agent.run_async(
+                                current_msgs,
+                                streaming_callback=haystack_agent_streaming_callback_async,
+                                generation_kwargs=gen_kw,
+                            )
+                            _agent_debug_log(
+                                "H1",
+                                "_run_agent_async:return",
+                                "agent_run_ok",
+                                {
+                                    "session_id": self.session_id[:12],
+                                    "result_type": type(res).__name__,
+                                    "recovery_attempts": recovery_attempt,
+                                },
+                            )
+                            return res
+                        except Exception as e:
+                            _agent_debug_log(
+                                "H1",
+                                "_run_agent_async:except",
+                                "agent_run_exception",
+                                {
+                                    "session_id": self.session_id[:12],
+                                    "exc_type": type(e).__name__,
+                                    "exc_msg": str(e)[:500],
+                                    "stop_event": bool(stop_event.is_set()),
+                                    "recovery_attempt": recovery_attempt,
+                                },
+                            )
+                            if stop_event.is_set():
+                                return None
+                            from src.runtime.context_recovery import (
+                                attempt_context_recovery,
+                                should_attempt_context_recovery,
+                            )
+
+                            if should_attempt_context_recovery(e, recovery_attempt):
+                                recovered = attempt_context_recovery(
+                                    agent=self.agent,
+                                    messages=current_msgs,
+                                    exc=e,
+                                    attempt=recovery_attempt + 1,
+                                    queue=queue,
+                                    loop=loop,
+                                )
+                                if recovered is not None:
+                                    recovery_attempt += 1
+                                    current_msgs = recovered
+                                    logger.warning(
+                                        "context_recovery retry %s session=%s",
+                                        recovery_attempt,
+                                        self.session_id[:8],
+                                    )
+                                    continue
+                            logger.error("Agent.run_async failed: %s", e)
+                            logger.error(traceback.format_exc())
+                            payload = litellm_error_to_sse(e)
+                            logger.info(
+                                "LLM error classified: code=%s exc_type=%s",
+                                payload.get("code"),
+                                payload.get("exc_type"),
+                            )
+                            queue.put_nowait(payload)
+                            return None
                 finally:
                     if harness_v2_turn() and _harness_turn is not None:
                         end_turn(self.session_id)
@@ -1771,44 +1802,75 @@ class AgentPipeline:
                         "agent_mode": effective_agent_mode,
                     },
                 )
+                recovery_attempt = 0
+                current_msgs = list(msgs)
                 try:
-                    res = self.agent.run(
-                        msgs,
-                        streaming_callback=haystack_agent_streaming_callback,
-                        generation_kwargs=gen_kw,
-                    )
-                    _agent_debug_log(
-                        "H1",
-                        "_run_agent_sync:return",
-                        "agent_run_ok",
-                        {
-                            "session_id": self.session_id[:12],
-                            "result_type": type(res).__name__,
-                        },
-                    )
-                    return res
-                except Exception as e:
-                    _agent_debug_log(
-                        "H1",
-                        "_run_agent_sync:except",
-                        "agent_run_exception",
-                        {
-                            "session_id": self.session_id[:12],
-                            "exc_type": type(e).__name__,
-                            "exc_msg": str(e)[:500],
-                            "stop_event": bool(stop_event.is_set()),
-                        },
-                    )
-                    if not stop_event.is_set():
-                        logger.error("Agent.run crashed in thread: %s", e)
-                        logger.error(traceback.format_exc())
-                        payload = litellm_error_to_sse(e)
-                        logger.info(
-                            "LLM error classified: code=%s exc_type=%s",
-                            payload.get("code"),
-                            payload.get("exc_type"),
-                        )
-                        loop.call_soon_threadsafe(queue.put_nowait, payload)
+                    while True:
+                        try:
+                            res = self.agent.run(
+                                current_msgs,
+                                streaming_callback=haystack_agent_streaming_callback,
+                                generation_kwargs=gen_kw,
+                            )
+                            _agent_debug_log(
+                                "H1",
+                                "_run_agent_sync:return",
+                                "agent_run_ok",
+                                {
+                                    "session_id": self.session_id[:12],
+                                    "result_type": type(res).__name__,
+                                    "recovery_attempts": recovery_attempt,
+                                },
+                            )
+                            return res
+                        except Exception as e:
+                            _agent_debug_log(
+                                "H1",
+                                "_run_agent_sync:except",
+                                "agent_run_exception",
+                                {
+                                    "session_id": self.session_id[:12],
+                                    "exc_type": type(e).__name__,
+                                    "exc_msg": str(e)[:500],
+                                    "stop_event": bool(stop_event.is_set()),
+                                    "recovery_attempt": recovery_attempt,
+                                },
+                            )
+                            if stop_event.is_set():
+                                return None
+                            from src.runtime.context_recovery import (
+                                attempt_context_recovery,
+                                should_attempt_context_recovery,
+                            )
+
+                            if should_attempt_context_recovery(e, recovery_attempt):
+                                recovered = attempt_context_recovery(
+                                    agent=self.agent,
+                                    messages=current_msgs,
+                                    exc=e,
+                                    attempt=recovery_attempt + 1,
+                                    queue=queue,
+                                    loop=loop,
+                                )
+                                if recovered is not None:
+                                    recovery_attempt += 1
+                                    current_msgs = recovered
+                                    logger.warning(
+                                        "context_recovery retry %s session=%s",
+                                        recovery_attempt,
+                                        self.session_id[:8],
+                                    )
+                                    continue
+                            logger.error("Agent.run crashed in thread: %s", e)
+                            logger.error(traceback.format_exc())
+                            payload = litellm_error_to_sse(e)
+                            logger.info(
+                                "LLM error classified: code=%s exc_type=%s",
+                                payload.get("code"),
+                                payload.get("exc_type"),
+                            )
+                            loop.call_soon_threadsafe(queue.put_nowait, payload)
+                            return None
                 finally:
                     clear_turn_runtime()
                     clear_context()

@@ -169,6 +169,12 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
     return next;
   }
 
+  if (cType === "context_recovery") {
+    next.contextCompacting = true;
+    next.error = null;
+    return next;
+  }
+
   if (cType === "token") {
     const piece = coerceTokenPiece(chunk.content);
     next.assistantContent += piece;

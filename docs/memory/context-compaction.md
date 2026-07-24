@@ -135,6 +135,11 @@ Exception: `mempalace_*` tools and outputs smaller than 800 chars **do not trigg
 | `AION_CONTEXT_COMPRESS_MID_TURN_REASONING` | `0` | Compact after each reasoning chunk |
 | `AION_CONTEXT_COMPRESS_MID_TURN_TIMEOUT` | `90` | LLM call timeout for mid-turn summary |
 | `AION_TOOL_RESULT_MAX_CHARS` | `24000` | Max chars per tool result before truncation |
+| `AION_WEB_FETCH_MAX_CHARS` | `6000` | Lower cap for `web_fetch_page` |
+| `AION_WEB_SEARCH_MAX_CHARS` | `4000` | Lower cap for `web_search` |
+| `AION_MECHANICAL_COMPACT_KEEP_TOOLS` | `3` | Full tool outputs kept during mechanical mid-turn shrink |
+| `AION_CONTEXT_RECOVERY` | `1` | Auto compact + retry on context overflow |
+| `AION_CONTEXT_RECOVERY_MAX` | `2` | Max automatic retries per turn |
 
 ---
 

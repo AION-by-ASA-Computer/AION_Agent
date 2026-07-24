@@ -2030,8 +2030,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             state.error.includes("approvazione sidebar")),
         );
         let assistantText = strippedContent;
-        if (!assistantText.trim() && state.error && !isPlanGuardError) {
-          assistantText = t("chat.error", { msg: state.error });
+        const streamError =
+          state.error && !isPlanGuardError ? state.error : null;
+        if (!assistantText.trim() && streamError) {
+          assistantText = t("chat.error", { msg: streamError });
+        } else if (assistantText.trim() && streamError) {
+          assistantText = `${assistantText}\n\n---\n${t("chat.error", { msg: streamError })}`;
         }
         const reasoningUnavailable =
           thinkingEnabled && !sawReasoning && assistantText.trim().length > 0 && !state.error;

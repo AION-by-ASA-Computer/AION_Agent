@@ -12,6 +12,13 @@ export type ChatChunk =
     tokens?: number;
     trigger?: number;
   }
+  | {
+    type: "context_recovery";
+    attempt?: number;
+    message?: string;
+    tokens_before?: number;
+    tokens_after?: number;
+  }
   | { type: "token"; content?: string | null }
   | { type: "reasoning"; reasoning?: unknown }
   | { type: "error"; content?: string }
