@@ -8,7 +8,7 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 import type { DockTab } from "@/lib/layout/dock-tab";
 
-export type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research";
+export type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research" | "long_run";
 
 export function ChatHeader({
   conversationId,

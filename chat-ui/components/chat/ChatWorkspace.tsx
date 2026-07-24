@@ -134,7 +134,7 @@ import { SessionCharts } from "@/components/chat/SessionCharts";
 import type { DockTab } from "@/lib/layout/dock-tab";
 
 type PlanPendingChunk = ChatChunk & { type: "orchestration_plan_pending" };
-type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research";
+type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research" | "long_run";
 type LiveArtifactMessage = {
   id: string;
   title: string;
@@ -2417,7 +2417,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               meta.agent_mode === "plan" ||
               meta.agent_mode === "ask" ||
               meta.agent_mode === "debug" ||
-              meta.agent_mode === "deep_research"
+              meta.agent_mode === "deep_research" ||
+              meta.agent_mode === "long_run"
             ) {
               setAgentMode(meta.agent_mode as AgentMode);
               localStorage.setItem("aion_agent_mode", meta.agent_mode);

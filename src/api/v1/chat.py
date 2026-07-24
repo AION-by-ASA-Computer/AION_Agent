@@ -88,7 +88,14 @@ async def _run_pipeline_in_background(
                 body.web_search_restrict_hosts
             ),
             sql_query_project=sql_project_resolved,
-            metadata=body.metadata,
+            metadata={
+                **(body.metadata or {}),
+                **(
+                    {"llm_provider_name": body.llm_provider_name}
+                    if body.llm_provider_name
+                    else {}
+                ),
+            },
         ):
             event_data = {"event": "message", "data": json.dumps(chunk)}
             run.history.append(event_data)
@@ -423,6 +430,24 @@ async def chat_stream(
         deep_research_mode=body.deep_research_mode,
         message_source=body.message_source,
     )
+
+    if resolved_agent_mode == "long_run":
+        from src.runtime.long_run_mode import long_run_enabled
+        from src.runtime.pi_runtime.pi_client import pi_worker_healthy
+
+        if not long_run_enabled():
+            raise HTTPException(
+                status_code=503,
+                detail="Long Run mode is disabled (set AION_LONG_RUN_ENABLED=1).",
+            )
+        if not await pi_worker_healthy():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Pi worker is not reachable. Start services/pi-long-run "
+                    "(AION_PI_WORKER_URL)."
+                ),
+            )
 
     sql_project_resolved = (body.sql_query_project or "").strip() or None
     conversation_project: str | None = None

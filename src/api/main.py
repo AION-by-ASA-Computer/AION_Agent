@@ -453,6 +453,10 @@ app.include_router(orchestration_router)
 app.include_router(research_router)
 app.include_router(plan_execution_router)
 
+from src.api.internal.pi_tools import router as pi_tools_router
+
+app.include_router(pi_tools_router)
+
 from .auth_login import router as auth_login_router
 from .chat_ui import router as chat_ui_router
 

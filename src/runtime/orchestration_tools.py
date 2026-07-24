@@ -110,7 +110,9 @@ def format_mark_task_result(
         "STOP this turn now — do not start the next task until the following execution turn.",
     ]
     if next_tid:
-        parts.append(f"Next pending task: `{next_tid}`.")
+        parts.append(
+            f"The server will run `{next_tid}` in the next execution turn — do not start it now."
+        )
     parts.append(
         f'Full markdown: get_execution_plan(plan_id="{plan_id}"). '
         f'To edit the plan: update_execution_plan(plan_id="{plan_id}", plan_markdown=...).'

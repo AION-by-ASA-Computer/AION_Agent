@@ -20,3 +20,19 @@ def test_plan_mode_false_downgrades_plan():
         resolve_agent_mode("plan", plan_mode=False, message_source="user_input")
         == "normal"
     )
+
+
+def test_long_run_requires_flag():
+    assert resolve_agent_mode("long_run", message_source="user_input") == "normal"
+
+
+def test_long_run_when_enabled(monkeypatch):
+    monkeypatch.setenv("AION_LONG_RUN_ENABLED", "1")
+    assert resolve_agent_mode("long_run", message_source="user_input") == "long_run"
+
+
+def test_internal_trigger_forces_normal_even_for_long_run(monkeypatch):
+    monkeypatch.setenv("AION_LONG_RUN_ENABLED", "1")
+    assert (
+        resolve_agent_mode("long_run", message_source="internal_trigger") == "normal"
+    )

@@ -864,6 +864,8 @@ class StreamLoop:
                 ),
             }
             yield self._track_sse(outcome)
+            yield _BreakSignal()
+            return
 
         # --- sandbox_write_workspace_file tool_end ---
         elif (

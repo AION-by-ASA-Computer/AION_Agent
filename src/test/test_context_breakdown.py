@@ -10,6 +10,7 @@ from src.memory.context_compressor import (
     estimate_context_breakdown,
 )
 from src.runtime.turn_compaction import (
+    add_turn_token_estimate,
     get_turn_messages,
     set_turn_runtime,
     sync_live_turn_messages,
@@ -132,3 +133,33 @@ def test_context_budget_reads_registry_without_contextvar(monkeypatch):
     assert evt["message_count"] == 2
     web_part = next(p for p in evt["parts"] if p["key"] == "web_tools")
     assert web_part["tokens"] > 100
+
+
+def test_context_budget_merges_runtime_deltas_into_parts(monkeypatch):
+    import contextvars
+
+    import src.runtime.turn_compaction as tc
+
+    agent = _FakeAgent()
+    monkeypatch.setattr(tc, "_turn_runtime", contextvars.ContextVar("rt_empty", default=None))
+    monkeypatch.setattr(tc, "_agent_exec_ctx", contextvars.ContextVar("exec_empty", default=None))
+    tc._TURN_RUNTIME_REGISTRY.clear()
+    set_turn_runtime(
+        session_id="delta-sess",
+        loop=object(),
+        queue=object(),
+        stop_event=object(),
+        agent=agent,
+        profile_name="generic_assistant",
+        user_id="admin",
+        preflight_messages=[ChatMessage.from_user("hello")],
+    )
+    tc.add_turn_token_estimate(5000, bucket="web_tools")
+    tc.add_turn_token_estimate(2000, bucket="tool_results")
+
+    evt = try_build_context_budget_event(phase="tool", session_id="delta-sess")
+    assert evt is not None
+    parts = {p["key"]: p["tokens"] for p in evt["parts"]}
+    assert parts.get("web_tools", 0) >= 5000
+    assert parts.get("tool_results", 0) >= 2000
+    assert evt["total"] == sum(parts.values())

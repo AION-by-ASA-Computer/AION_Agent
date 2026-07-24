@@ -354,12 +354,7 @@ def try_build_context_budget_event(
     from src.memory.context_compressor import build_context_budget_event
 
     payload = build_context_budget_event(agent, messages, phase=phase)
-    extra = int(rt.get("extra_tokens") or 0)
-    if extra > 0:
-        max_prompt = int(payload.get("max_prompt") or 1)
-        total = int(payload.get("total") or 0) + extra
-        payload["total"] = total
-        payload["pct"] = round(total * 100.0 / max(max_prompt, 1), 1)
+    payload = _merge_budget_deltas_into_payload(payload, rt)
     if context_budget_debug_enabled():
         web_tok = sum(
             p.get("tokens", 0)
@@ -426,11 +421,85 @@ def clear_turn_runtime(session_id: Optional[str] = None) -> None:
     clear_agent_execution_context()
 
 
-def add_turn_token_estimate(delta: int) -> None:
+def add_turn_token_estimate(delta: int, *, bucket: str = "tool_results") -> None:
     rt = resolve_turn_runtime()
     if not isinstance(rt, dict):
         return
-    rt["extra_tokens"] = int(rt.get("extra_tokens") or 0) + max(0, delta)
+    d = max(0, int(delta))
+    if d <= 0:
+        return
+    bd = rt.setdefault("budget_delta", {})
+    key = (bucket or "tool_results").strip() or "tool_results"
+    bd[key] = int(bd.get(key) or 0) + d
+    rt["extra_tokens"] = int(rt.get("extra_tokens") or 0) + d
+
+
+def record_pi_context_delta(
+    session_id: str,
+    bucket: str,
+    delta: int,
+) -> None:
+    """Track Pi long-run stream tokens (reasoning/assistant) for context budget bar."""
+    rt = resolve_turn_runtime(session_id)
+    if not isinstance(rt, dict):
+        return
+    add_turn_token_estimate(delta, bucket=bucket)
+
+
+def _merge_budget_deltas_into_payload(
+    payload: Dict[str, Any], rt: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Merge mid-turn token deltas into parts so the bar matches total/pct."""
+    from src.memory.context_compressor import _CONTEXT_BUDGET_PART_ORDER
+
+    bd: Dict[str, int] = dict(rt.get("budget_delta") or {})
+    legacy_extra = int(rt.get("extra_tokens") or 0)
+    accounted = sum(int(v) for v in bd.values())
+    if legacy_extra > accounted:
+        bd["tool_results"] = int(bd.get("tool_results") or 0) + (legacy_extra - accounted)
+    if not bd:
+        return payload
+
+    parts_by_key: Dict[str, Dict[str, Any]] = {
+        str(p.get("key")): dict(p) for p in (payload.get("parts") or []) if p.get("key")
+    }
+    for key, tok in bd.items():
+        if tok <= 0:
+            continue
+        if key in parts_by_key:
+            parts_by_key[key]["tokens"] = int(parts_by_key[key].get("tokens") or 0) + tok
+        else:
+            parts_by_key[key] = {"key": key, "tokens": tok, "pct": 0.0}
+
+    max_prompt = max(int(payload.get("max_prompt") or 1), 1)
+    ordered: List[Dict[str, Any]] = []
+    total = 0
+    seen: set[str] = set()
+    for key in _CONTEXT_BUDGET_PART_ORDER:
+        if key not in parts_by_key:
+            continue
+        p = parts_by_key[key]
+        tok = int(p.get("tokens") or 0)
+        if tok <= 0:
+            continue
+        p["pct"] = round(tok * 100.0 / max_prompt, 1)
+        ordered.append(p)
+        total += tok
+        seen.add(key)
+    for key, p in parts_by_key.items():
+        if key in seen:
+            continue
+        tok = int(p.get("tokens") or 0)
+        if tok <= 0:
+            continue
+        p["pct"] = round(tok * 100.0 / max_prompt, 1)
+        ordered.append(p)
+        total += tok
+
+    payload["parts"] = ordered
+    payload["total"] = total
+    payload["pct"] = round(total * 100.0 / max_prompt, 1)
+    return payload
 
 
 def _message_role_str(message: ChatMessage) -> str:
@@ -878,7 +947,15 @@ def maybe_inject_max_steps_prompt() -> None:
 def maybe_compact_after_tool(*, tool_name: str, result: str) -> str:
     """Tronca output tool e, se serve, compatta lo state agent prima del prossimo LLM step."""
     out = truncate_tool_result(result, tool_name=tool_name)
-    add_turn_token_estimate(count_tokens(out) + 128)
+    tname = (tool_name or "").strip().lower()
+    bucket = (
+        "web_tools"
+        if tname in ("web_search", "web_fetch_page")
+        else "skills"
+        if tname in ("skill_view", "skill_search", "skill_list")
+        else "tool_results"
+    )
+    add_turn_token_estimate(count_tokens(out) + 128, bucket=bucket)
     try:
         maybe_inject_max_steps_prompt()
     except Exception as exc:
@@ -898,7 +975,8 @@ def maybe_compact_after_tool(*, tool_name: str, result: str) -> str:
 def maybe_compact_after_reasoning(reasoning_piece: str) -> None:
     if not reasoning_piece:
         return
-    add_turn_token_estimate(count_tokens(str(reasoning_piece)))
+    add_turn_token_estimate(count_tokens(str(reasoning_piece)), bucket="reasoning")
+    emit_context_budget_sse(phase="reasoning")
     if not mid_turn_reasoning_compaction_enabled():
         return
     if mid_turn_compaction_enabled():

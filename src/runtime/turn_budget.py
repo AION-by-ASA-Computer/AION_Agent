@@ -26,9 +26,25 @@ class TurnBudget:
         *,
         message_source: str = "user_input",
         reasoning_effort: Optional[str] = None,
+        agent_mode: Optional[str] = None,
     ) -> "TurnBudget":
         import os
-        from src.runtime.reasoning_effort import effective_reasoning_effort
+
+        mode = (agent_mode or "normal").strip().lower()
+        if mode == "long_run":
+            from src.runtime.long_run_mode import long_run_turn_budget
+
+            lr = long_run_turn_budget()
+            base = cls._load_reasoning_limits(reasoning_effort)
+            return cls(
+                turn_timeout=lr.turn_timeout,
+                max_tool_calls=lr.max_tool_calls,
+                max_tool_events=lr.max_tool_events,
+                max_stream_events=int(os.getenv("AION_STREAM_EVENTS_MAX_PER_TURN", "0")),
+                no_progress_timeout=lr.no_progress_timeout,
+                max_reasoning_chars=base["max_reasoning_chars"],
+                max_reasoning_events=base["max_reasoning_events"],
+            )
 
         # Prioritize os.getenv to allow dynamic test/runtime overrides
         max_tool_calls_raw = os.getenv("AION_TOOL_CALLS_MAX_PER_TURN")
@@ -77,26 +93,7 @@ class TurnBudget:
             except Exception:
                 pass
 
-        # Resolve effort level (min, medium, max)
-        effort = effective_reasoning_effort(reasoning_effort)
-
-        # Base default limits from env
-        base_chars = int(os.getenv("AION_REASONING_MAX_CHARS", "20000"))
-        base_events = int(os.getenv("AION_REASONING_MAX_EVENTS", "240"))
-
-        if effort == "min":
-            max_reasoning_chars = int(os.getenv("AION_REASONING_MIN_CHARS", "2000"))
-            max_reasoning_events = int(os.getenv("AION_REASONING_MIN_EVENTS", "30"))
-        elif effort == "max":
-            max_reasoning_chars = int(
-                os.getenv("AION_REASONING_MAX_LEVEL_CHARS", str(base_chars * 2))
-            )
-            max_reasoning_events = int(
-                os.getenv("AION_REASONING_MAX_LEVEL_EVENTS", str(base_events * 2))
-            )
-        else:  # medium / fallback
-            max_reasoning_chars = base_chars
-            max_reasoning_events = base_events
+        reasoning = cls._load_reasoning_limits(reasoning_effort)
 
         return cls(
             turn_timeout=float(os.getenv("AION_AGENT_TURN_TIMEOUT", "600")),
@@ -104,9 +101,38 @@ class TurnBudget:
             max_tool_events=int(os.getenv("AION_TOOL_EVENTS_MAX_PER_TURN", "60")),
             max_stream_events=max_stream_events,
             no_progress_timeout=no_progress_timeout,
-            max_reasoning_chars=max_reasoning_chars,
-            max_reasoning_events=max_reasoning_events,
+            max_reasoning_chars=reasoning["max_reasoning_chars"],
+            max_reasoning_events=reasoning["max_reasoning_events"],
         )
+
+    @staticmethod
+    def _load_reasoning_limits(reasoning_effort: Optional[str]) -> Dict[str, int]:
+        import os
+
+        from src.runtime.reasoning_effort import effective_reasoning_effort
+
+        effort = effective_reasoning_effort(reasoning_effort)
+        base_chars = int(os.getenv("AION_REASONING_MAX_CHARS", "20000"))
+        base_events = int(os.getenv("AION_REASONING_MAX_EVENTS", "240"))
+
+        if effort == "min":
+            return {
+                "max_reasoning_chars": int(os.getenv("AION_REASONING_MIN_CHARS", "2000")),
+                "max_reasoning_events": int(os.getenv("AION_REASONING_MIN_EVENTS", "30")),
+            }
+        if effort == "max":
+            return {
+                "max_reasoning_chars": int(
+                    os.getenv("AION_REASONING_MAX_LEVEL_CHARS", str(base_chars * 2))
+                ),
+                "max_reasoning_events": int(
+                    os.getenv("AION_REASONING_MAX_LEVEL_EVENTS", str(base_events * 2))
+                ),
+            }
+        return {
+            "max_reasoning_chars": base_chars,
+            "max_reasoning_events": base_events,
+        }
 
     def telemetry_fields(self, state: TurnGuardState) -> Dict[str, Any]:
         return {

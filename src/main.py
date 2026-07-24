@@ -665,7 +665,9 @@ def _register_mcp_tool_function(server_name: str, tool_name: str, session_id: st
     fname = f"aion_mcp_x_{h}"
     g = sys.modules[__name__].__dict__
     if fname in g and callable(g[fname]):
-        return g[fname]
+        fn = g[fname]
+        fn.server_name = server_name
+        return fn
     code = compile(
         f"def {fname}(**kwargs):\n"
         f"    return _aion_mcp_tool_run({server_name!r}, {tool_name!r}, {session_id!r}, kwargs)\n",
@@ -673,8 +675,10 @@ def _register_mcp_tool_function(server_name: str, tool_name: str, session_id: st
         "exec",
     )
     exec(code, g)
+    fn = g[fname]
+    fn.server_name = server_name  # pi manifest + invoke bridge
     _MCP_FNAMES_BY_SESSION.setdefault(session_id, set()).add(fname)
-    return g[fname]
+    return fn
 
 
 async def build_mcp_tools(
@@ -1209,7 +1213,26 @@ async def _finish_get_agent_build(
             tools = allowed_tools
             if removed_names:
                 logger.info(
-                    "ðŸ”’ Deep Research Mode: rimossi %d tool dalla lista agente: %s",
+                    "🔒 Deep Research Mode: rimossi %d tool dalla lista agente: %s",
+                    len(removed_names),
+                    ", ".join(sorted(removed_names)),
+                )
+    elif resolved_agent_mode == "long_run":
+        from src.runtime.long_run_mode import long_run_blocked_tool_names
+
+        _blocked_names = long_run_blocked_tool_names()
+        if _blocked_names:
+            allowed_tools = []
+            removed_names = []
+            for t in tools:
+                if getattr(t, "name", None) in _blocked_names:
+                    removed_names.append(t.name)
+                else:
+                    allowed_tools.append(t)
+            tools = allowed_tools
+            if removed_names:
+                logger.info(
+                    "Long Run Mode: removed %d tools from agent list: %s",
                     len(removed_names),
                     ", ".join(sorted(removed_names)),
                 )

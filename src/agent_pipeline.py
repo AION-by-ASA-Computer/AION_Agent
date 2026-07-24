@@ -1145,6 +1145,7 @@ class AgentPipeline:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         logger.info(">>> [0] ENTERING run_stream for session %s", self.session_id)
+        self._llm_provider_name = (metadata or {}).get("llm_provider_name")
         cancel_checker_task: Optional[asyncio.Task] = None
         from src.runtime.web_search_context import (
             WebSearchRequestContext,
@@ -1892,14 +1893,31 @@ class AgentPipeline:
                 preflight_messages=agent_messages,
             )
             from src.runtime.agent_exec import run_agent_turn
+            from src.runtime.pi_runtime.pi_turn_runner import run_pi_agent_turn
 
-            agent_task = asyncio.create_task(
-                run_agent_turn(
-                    agent_messages,
-                    sync_runner=_run_agent_sync,
-                    async_runner=_run_agent_async,
+            if effective_agent_mode == "long_run":
+                agent_task = asyncio.create_task(
+                    run_pi_agent_turn(
+                        session_id=self.session_id,
+                        profile_name=self.profile_name,
+                        user_id=self.user_id,
+                        user_message=augmented_user or user_input,
+                        queue=queue,
+                        stop_event=stop_event,
+                        loop=loop,
+                        llm_provider_name=getattr(self, "_llm_provider_name", None),
+                        agent_tools=list(getattr(self.agent, "tools", None) or []),
+                        reasoning_effort=reasoning_effort,
+                    )
                 )
-            )
+            else:
+                agent_task = asyncio.create_task(
+                    run_agent_turn(
+                        agent_messages,
+                        sync_runner=_run_agent_sync,
+                        async_runner=_run_agent_async,
+                    )
+                )
 
             async def _cancel_checker() -> None:
                 try:
@@ -1953,6 +1971,7 @@ class AgentPipeline:
                 budget=TurnBudget.load(
                     message_source=_msg_src,
                     reasoning_effort=reasoning_effort,
+                    agent_mode=effective_agent_mode,
                 ),
             )
             max_reasoning_chars = turn_guards.max_reasoning_chars
@@ -2953,7 +2972,7 @@ class AgentPipeline:
                                         ),
                                     }
                                     yield _track_sse(outcome)
-                                elif (
+                                    break
                                     evt.get("type") == "tool_end"
                                     and evt.get("name") == "sandbox_edit_workspace_file"
                                 ):
@@ -3302,6 +3321,7 @@ class AgentPipeline:
             except asyncio.TimeoutError:
                 _turn_status = "timeout"
                 _turn_error_type = "TimeoutError"
+                stop_reason = "turn_timeout"
                 logger.error("Turn timeout for session %s", self.session_id)
                 yield {"type": "error", "content": "Operation timed out."}
             except asyncio.CancelledError:
@@ -3315,6 +3335,21 @@ class AgentPipeline:
                 logger.error(">>> [FATAL] Error in run_stream: %s", e, exc_info=True)
                 yield {"type": "error", "content": str(e)}
             finally:
+                if effective_agent_mode == "long_run":
+                    try:
+                        from src.runtime.pi_runtime.pi_turn_runner import (
+                            sync_pi_messages_to_history,
+                        )
+
+                        await sync_pi_messages_to_history(
+                            self.session_id,
+                            self.profile_name,
+                            self.user_id,
+                            assistant_message_id,
+                            history_manager,
+                        )
+                    except Exception as sync_exc:
+                        logger.debug("Pi post-turn sync skipped: %s", sync_exc)
                 try:
                     from src.runtime.sql_query_memory_context import (
                         clear_sql_qm_turn_context,

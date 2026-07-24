@@ -413,6 +413,8 @@
       "plan_desc": "Scompone il lavoro in passi prima di eseguire.",
       "deep_research": "Ricerca approfondita",
       "deep_research_desc": "Ricerche più lunghe con il pannello dedicato.",
+      "long_run": "Long run",
+      "long_run_desc": "Runtime Pi per deliverable lunghi (Excel, ricerche multi-step).",
       "ask": "Chiedi",
       "ask_desc": "Risposte in sola lettura senza effetti collaterali dei tool.",
       "debug": "Debug",

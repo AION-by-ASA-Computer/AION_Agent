@@ -5,6 +5,7 @@ import {
   BookOpen,
   Bug,
   ChevronDown,
+  Clock,
   HelpCircle,
   MessageSquare,
   Sparkles,
@@ -33,6 +34,11 @@ const MODE_META: Record<
     labelKey: "chat.agent_mode.deep_research",
     descKey: "chat.agent_mode.deep_research_desc",
     icon: BookOpen,
+  },
+  long_run: {
+    labelKey: "chat.agent_mode.long_run",
+    descKey: "chat.agent_mode.long_run_desc",
+    icon: Clock,
   },
   ask: {
     labelKey: "chat.agent_mode.ask",
@@ -80,7 +86,9 @@ export function AgentModeSelectChip({
       ? "border-orange-500/40 bg-orange-500/10 text-orange-500"
       : mode === "deep_research"
         ? "border-violet-500/40 bg-violet-500/10 text-violet-500"
-        : open || mode !== "normal"
+        : mode === "long_run"
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+          : open || mode !== "normal"
           ? "border-primary/40 bg-primary/10 text-primary"
           : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground";
 

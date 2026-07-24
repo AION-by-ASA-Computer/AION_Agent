@@ -328,7 +328,7 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
     } else if (et === "tool_end") {
       const id = resolveToolId(next, ev, name);
       const cur = next.toolSteps[id] || { id, name, input: ev.input ?? {} };
-      const output = String(ev.output ?? "");
+      const output = String(ev.output ?? ev.result ?? "");
       const tokens_in = typeof ev.tokens_in === "number" ? ev.tokens_in : undefined;
       const tokens_out = typeof ev.tokens_out === "number" ? ev.tokens_out : undefined;
       const toolSeg: any = {

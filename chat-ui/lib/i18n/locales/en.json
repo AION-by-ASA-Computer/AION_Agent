@@ -413,6 +413,8 @@
       "plan_desc": "Break work into steps before executing.",
       "deep_research": "Deep research",
       "deep_research_desc": "Longer research runs with the research panel.",
+      "long_run": "Long run",
+      "long_run_desc": "Pi agent runtime for long deliverables (Excel, multi-step research).",
       "ask": "Ask",
       "ask_desc": "Read-only answers without tool side effects.",
       "debug": "Debug",

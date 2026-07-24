@@ -1,6 +1,7 @@
 import contextvars
 import threading
-from typing import Any, Dict, Optional
+from contextlib import contextmanager
+from typing import Any, Dict, Iterator, Optional
 
 # ContextVar: propagato con contextvars.copy_context() nei worker del ToolInvoker Haystack
 # (thread pool). threading.local() non copiava → web_search perdeva session_id/loop.
@@ -39,6 +40,19 @@ def get_context() -> Dict[str, Any]:
 
 def get_current_session_id() -> str:
     return get_context().get("session_id", "default")
+
+
+@contextmanager
+def bind_session_id(session_id: str) -> Iterator[None]:
+    """Bind session_id for tool invocations outside the main agent turn (e.g. Pi bridge)."""
+    prev = _forward_ctx.get()
+    ctx = dict(prev) if isinstance(prev, dict) else {}
+    ctx["session_id"] = session_id
+    token = _forward_ctx.set(ctx)
+    try:
+        yield
+    finally:
+        _forward_ctx.reset(token)
 
 
 def clear_context() -> None:

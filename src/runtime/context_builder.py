@@ -96,6 +96,10 @@ def refresh_agent_turn_context(
             from src.runtime.deep_research_mode import build_deep_research_system_prompt
 
             prompt += build_deep_research_system_prompt()
+        elif mode == "long_run":
+            from src.runtime.long_run_mode import build_long_run_system_prompt
+
+            prompt += build_long_run_system_prompt()
         if prompt and hasattr(agent, "system_prompt"):
             agent.system_prompt = prompt
     except Exception:

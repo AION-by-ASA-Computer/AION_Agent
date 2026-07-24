@@ -36,12 +36,24 @@ def resolve_agent_mode(
     if resolved == "deep_research":
         return "deep_research"
 
+    if resolved == "long_run":
+        from src.runtime.long_run_mode import long_run_enabled
+
+        if long_run_enabled():
+            return "long_run"
+        return "normal"
+
     env_default = (os.getenv("AION_DEFAULT_AGENT_MODE") or "normal").strip().lower()
     if resolved == "normal" and env_default in (
         "plan",
         "ask",
         "debug",
         "deep_research",
+        "long_run",
     ):
+        if env_default == "long_run":
+            from src.runtime.long_run_mode import long_run_enabled
+
+            return "long_run" if long_run_enabled() else "normal"
         return env_default
     return resolved
