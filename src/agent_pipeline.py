@@ -682,6 +682,12 @@ class AgentPipeline:
         from datetime import datetime, timezone
         import json
 
+        date_enabled = os.getenv("AION_RUNTIME_DATE_CONTEXT", "1").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
         op_enabled = os.getenv("AION_MEMORY_OPERATIONAL_SUMMARY", "1").lower() in (
             "1",
             "true",
@@ -701,10 +707,16 @@ class AgentPipeline:
             "on",
         )
 
-        if not op_enabled and not manifest_enabled and not orch_ctx_enabled:
+        if not date_enabled and not op_enabled and not manifest_enabled and not orch_ctx_enabled:
             return user_input
 
         blocks = []
+
+        # Current date — always first so the model never falls back to training cutoff.
+        if date_enabled:
+            from src.runtime.current_date import current_date_context
+
+            blocks.append(current_date_context().rstrip())
 
         if orch_ctx_enabled:
             try:
@@ -1581,7 +1593,6 @@ class AgentPipeline:
 
             tool_listener_task = asyncio.create_task(listen_tool_events())
             from src.runtime.harness_flags import (
-                harness_v2_injections,
                 harness_v2_provider,
                 harness_v2_turn,
             )
@@ -1601,21 +1612,24 @@ class AgentPipeline:
             else:
                 gen_kw = generation_kwargs_for_agent(self.agent, reasoning_effort)
 
-            if harness_v2_injections():
-                from src.runtime.user_language import (
-                    load_user_ui_language,
-                    resolve_compaction_language,
-                )
+            # Always refresh system prompt so cached agents get the current date
+            # and any profile changes.  The harness_v2_injections flag used to
+            # gate this, but that left agents built before the flag was enabled
+            # running with a stale system prompt (wrong year, missing mode, etc.).
+            from src.runtime.user_language import (
+                load_user_ui_language,
+                resolve_compaction_language,
+            )
 
-                _db_lang = await load_user_ui_language(self.user_id)
-                _turn_user_lang = resolve_compaction_language(self.user_id, _db_lang)
-                refresh_agent_turn_context(
-                    self.agent,
-                    profile_name=self.profile_name,
-                    user_id=self.user_id,
-                    user_lang=_turn_user_lang,
-                    agent_mode=effective_agent_mode,
-                )
+            _db_lang = await load_user_ui_language(self.user_id)
+            _turn_user_lang = resolve_compaction_language(self.user_id, _db_lang)
+            refresh_agent_turn_context(
+                self.agent,
+                profile_name=self.profile_name,
+                user_id=self.user_id,
+                user_lang=_turn_user_lang,
+                agent_mode=effective_agent_mode,
+            )
 
             _harness_turn = None
 
