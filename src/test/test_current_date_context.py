@@ -32,6 +32,22 @@ def test_current_date_context_no_training_cutoff_language():
     assert "training" in ctx.lower()
 
 
+def test_current_date_context_recurring_events_guidance():
+    """The preamble must instruct the model to use the current year for recurring events."""
+    from src.runtime.current_date import current_date_context
+
+    now = datetime.now().astimezone()
+    ctx = current_date_context()
+
+    # Recurring-event guidance must mention the current year edition
+    assert now.strftime("%Y") in ctx
+    # Must reference recurring event types
+    assert any(
+        keyword in ctx.lower()
+        for keyword in ("world cup", "olympics", "champions league", "recurring")
+    ), "Preamble must mention recurring events to prevent training-data year confusion"
+
+
 # ---------------------------------------------------------------------------
 # 2. deep_research re-exports current_date_context from the shared utility
 # ---------------------------------------------------------------------------

@@ -128,6 +128,28 @@ def classify_turn_outcome(
         1 for m in msg_summary if m.get("role") == "assistant" and m.get("tools")
     )
 
+    # User-initiated cancel: never surface a scary warning to the chat UI.
+    if stop_reason and "cancel" in stop_reason.lower():
+        return {
+            "code": "user_cancelled",
+            "session_id": session_id,
+            "profile": profile,
+            "stop_reason": stop_reason,
+            "final_text_len": final_len,
+            "reasoning_len": reasoning_len,
+            "tool_calls": tool_calls_count,
+            "tool_events": tool_events_count,
+            "new_messages_count": len(new_messages) if isinstance(new_messages, list) else 0,
+            "assistant_text_msgs": 0,
+            "tool_only_assistant": 0,
+            "message_summary": [],
+            "context": context_stats or {},
+            "max_agent_steps": max_agent_steps,
+            "llm_steps": llm_steps,
+            "user_visible_warning": None,
+            "suggested_final_text": None,
+        }
+
     code = "ok"
     suggested_final_text: Optional[str] = None
     if final_len == 0 and reasoning_len > 200 and tool_calls_count == 0:

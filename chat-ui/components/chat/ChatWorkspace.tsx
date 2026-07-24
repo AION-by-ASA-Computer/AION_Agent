@@ -1250,6 +1250,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const streamingRef = useRef(false);
   /** Ignora stream-status Redis residuo subito dopo fine turno (stessa tab). */
   const streamFinishedAtRef = useRef(0);
+  /** Abort in-flight SSE recovery when the client starts or stops a stream. */
+  const recoveryAbortRef = useRef<AbortController | null>(null);
+  /** Bumped on each client-owned POST /chat/stream so recovery cannot wipe its turnVisual. */
+  const clientStreamGenRef = useRef(0);
   const activeConversationRef = useRef(conversationId);
   const {
     historyLoadEpochRef,
@@ -1686,7 +1690,20 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, [searchParams, planExecutionProgress?.tasks]);
 
+  // Grace period (ms) after an explicit user stop before stream-recovery may restart.
+  const STREAM_FINISHED_GRACE_MS = 8000;
+
+  const abortStreamRecovery = useCallback(() => {
+    recoveryAbortRef.current?.abort();
+    recoveryAbortRef.current = null;
+    streamRecoveryRef.current = false;
+    setStreamRecovery(false);
+  }, []);
+
   const stopActiveStream = useCallback(async () => {
+    // Mark the moment of stop so recovery maybeStart() can enforce the grace period.
+    streamFinishedAtRef.current = Date.now();
+    abortStreamRecovery();
     abortRef.current?.abort();
     abortRef.current = null;
     streamingRef.current = false;
@@ -1705,7 +1722,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       if (!st.active) break;
       await new Promise((r) => setTimeout(r, 150));
     }
-  }, [conversationId, userId, token]);
+  }, [conversationId, userId, token, abortStreamRecovery]);
 
   const runChatRequest = useCallback(
     async (
@@ -1732,6 +1749,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           await stopActiveStream();
         }
       }
+
+      abortStreamRecovery();
+      const streamGen = ++clientStreamGenRef.current;
 
       const effectiveAgentMode = opts?.agentModeOverride ?? agentMode;
       const effectivePlanMode =
@@ -2132,6 +2152,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         const msg = e instanceof Error ? e.message : String(e);
         setMessages((m) => [...m, { id: crypto.randomUUID(), role: "assistant", content: `❌ ${msg}` }]);
       } finally {
+        if (streamGen !== clientStreamGenRef.current) return;
         streamingRef.current = false;
         markStreamConversation(null);
         streamFinishedAtRef.current = Date.now();
@@ -2169,6 +2190,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       adoptResearchSession,
       selectedProvider,
       stopActiveStream,
+      abortStreamRecovery,
     ]
   );
 
@@ -2573,8 +2595,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     if (streamingRef.current && !streamRecoveryRef.current) return;
 
     let cancelled = false;
+    const recoveryAc = new AbortController();
+    recoveryAbortRef.current = recoveryAc;
 
-    const finishRecovery = async () => {
+    const finishRecovery = async (recoveryGen: number) => {
+      if (recoveryGen !== clientStreamGenRef.current) {
+        streamRecoveryRef.current = false;
+        setStreamRecovery(false);
+        return;
+      }
       streamRecoveryRef.current = false;
       setStreamRecovery(false);
       setRecoveryAssistantId(null);
@@ -2607,22 +2636,50 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     };
 
     const runSseRecovery = async () => {
+      if (streamingRef.current && !streamRecoveryRef.current) return;
+      const recoveryGen = clientStreamGenRef.current;
       streamRecoveryRef.current = true;
       setStreamRecovery(true);
-      streamingRef.current = true;
-      setStreaming(true);
+      if (!streamingRef.current) {
+        streamingRef.current = true;
+        setStreaming(true);
+      }
 
-      while (!cancelled && activeConversationRef.current === conversationId) {
+      while (
+        !cancelled &&
+        !recoveryAc.signal.aborted &&
+        activeConversationRef.current === conversationId &&
+        recoveryGen === clientStreamGenRef.current
+      ) {
         let state = newTurn();
         setTurnVisual(state);
 
         try {
-          const sseStream = await getChatStreamReconnect(conversationId, userId, token);
-          if (cancelled || activeConversationRef.current !== conversationId) break;
+          const sseStream = await getChatStreamReconnect(
+            conversationId,
+            userId,
+            token,
+            recoveryAc.signal,
+          );
+          if (
+            cancelled ||
+            recoveryAc.signal.aborted ||
+            activeConversationRef.current !== conversationId ||
+            recoveryGen !== clientStreamGenRef.current
+          ) {
+            break;
+          }
 
           if (sseStream) {
             await consumeChatStream(sseStream, (chunk) => {
-              if (cancelled || activeConversationRef.current !== conversationId) return;
+              if (
+                cancelled ||
+                recoveryAc.signal.aborted ||
+                activeConversationRef.current !== conversationId ||
+                recoveryGen !== clientStreamGenRef.current
+              ) {
+                return;
+              }
               if (chunk.type === "turn_started") {
                 const uid = String(chunk.user_message_id || "");
                 const asst = String(chunk.assistant_message_id || "");
@@ -2639,10 +2696,23 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             });
           }
         } catch (err) {
+          if (
+            (err instanceof DOMException && err.name === "AbortError") ||
+            (err instanceof Error && err.name === "AbortError")
+          ) {
+            break;
+          }
           console.error("[aion-chat-ui] SSE reconnect stream error:", err);
         }
 
-        if (cancelled || activeConversationRef.current !== conversationId) break;
+        if (
+          cancelled ||
+          recoveryAc.signal.aborted ||
+          activeConversationRef.current !== conversationId ||
+          recoveryGen !== clientStreamGenRef.current
+        ) {
+          break;
+        }
         const status = await fetchStreamStatus(conversationId, userId, token);
         if (!status.active) {
           break;
@@ -2650,19 +2720,36 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
-      if (!cancelled && activeConversationRef.current === conversationId) {
-        await finishRecovery();
+      if (
+        !cancelled &&
+        !recoveryAc.signal.aborted &&
+        activeConversationRef.current === conversationId
+      ) {
+        await finishRecovery(recoveryGen);
+      } else {
+        streamRecoveryRef.current = false;
+        setStreamRecovery(false);
       }
     };
 
     const maybeStart = async () => {
+      // Skip recovery if we just stopped intentionally (grace period not yet elapsed).
+      if (Date.now() - streamFinishedAtRef.current < STREAM_FINISHED_GRACE_MS) return;
+      if (cancelled || recoveryAc.signal.aborted) return;
+      if (streamingRef.current && !streamRecoveryRef.current) return;
+
       const marker = readActiveStreamMarker(conversationId);
       const status = await fetchStreamStatus(conversationId, userId, token);
-      if (cancelled || (streamingRef.current && !streamRecoveryRef.current)) return;
-      if (status.active || marker || planExecAdoptRunId) {
-        await runSseRecovery();
-      } else if (marker) {
+      if (cancelled || recoveryAc.signal.aborted) return;
+      if (streamingRef.current && !streamRecoveryRef.current) return;
+
+      // Stale sessionStorage marker after stop/reload — trust Redis stream-status.
+      if (!status.active && marker && !planExecAdoptRunId) {
         clearActiveStreamMarker(conversationId);
+        return;
+      }
+      if (status.active || planExecAdoptRunId) {
+        await runSseRecovery();
       }
     };
 
@@ -2677,6 +2764,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
     return () => {
       cancelled = true;
+      recoveryAc.abort();
+      if (recoveryAbortRef.current === recoveryAc) {
+        recoveryAbortRef.current = null;
+      }
       document.removeEventListener("visibilitychange", onVis);
     };
   }, [conversationId, userId, token, refreshThreads, planExecAdoptRunId]);

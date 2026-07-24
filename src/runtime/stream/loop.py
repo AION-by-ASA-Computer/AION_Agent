@@ -261,6 +261,7 @@ class StreamLoop:
 
                 # --- LLM / generic errors ---
                 if ctype in ("error", "context_length_error", "llm_error"):
+                    _error_content = str(chunk.get("content") or "").lower()
                     _agent_debug_log(
                         "H1",
                         "stream_loop:queue_error",
@@ -270,6 +271,14 @@ class StreamLoop:
                             "content": str(chunk.get("content") or "")[:300],
                         },
                     )
+                    # Detect user-initiated cancellation so downstream classifiers
+                    # can suppress the scary "no final answer" warning.
+                    if (
+                        "cancel" in _error_content
+                        or "session cancelled" in _error_content
+                        or "stopped by user" in _error_content
+                    ):
+                        self.stop_reason = "user_cancelled"
                     yield self._track_sse(chunk)
                     break
 

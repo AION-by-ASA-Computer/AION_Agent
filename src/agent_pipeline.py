@@ -2981,6 +2981,13 @@ class AgentPipeline:
 
                                 yield _track_sse(chunk)
 
+                # Belt-and-suspenders: if stop_event was set by a user cancel but
+                # stop_reason was never updated (e.g. the cancel arrived before the
+                # error chunk landed), mark it now so downstream classifiers can
+                # suppress the scary "no final answer" warning.
+                if stop_event.is_set() and stop_reason == "completed":
+                    stop_reason = "user_cancelled"
+
                 drain_sec = float(os.getenv("AION_AGENT_DRAIN_TIMEOUT_SEC", "0"))
                 if stop_event.is_set() and stop_reason != "completed" and drain_sec > 0:
                     try:

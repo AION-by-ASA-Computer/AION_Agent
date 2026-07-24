@@ -34,6 +34,26 @@ def test_empty_final_with_tools():
     assert "674" in out["user_visible_warning"]
 
 
+def test_user_cancelled_no_warning():
+    """User-initiated cancel must never surface the MemPalace scary warning."""
+    for stop in ("user_cancelled", "cancelled", "session_cancelled_by_user"):
+        out = classify_turn_outcome(
+            session_id="sess",
+            profile="aion_std",
+            stop_reason=stop,
+            final_text="",
+            full_reasoning="long " * 50,
+            tool_calls_count=3,
+            tool_events_count=6,
+            new_messages=[],
+            context_stats={"total": 30000, "message_count": 200},
+        )
+        assert out["code"] == "user_cancelled", f"Expected user_cancelled for stop={stop!r}, got {out['code']!r}"
+        assert out["user_visible_warning"] is None, (
+            f"No warning should be shown to user on cancel (stop={stop!r})"
+        )
+
+
 def test_plan_created_without_final_text():
     out = classify_turn_outcome(
         session_id="sess",

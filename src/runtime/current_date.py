@@ -18,9 +18,13 @@ def current_date_context() -> str:
     Uses only portable strftime directives (no %-d etc.).
     """
     now = datetime.now().astimezone()
+    year = now.strftime("%Y")
     return (
         f"Today's date is {now.strftime('%B %d, %Y')} ({now.strftime('%Y-%m-%d')}). "
         f"When a query needs a year or refers to 'latest'/'current'/'this year', "
-        f"use {now.strftime('%Y')} or relative wording — never a year inferred "
-        f"from training data.\n\n"
+        f"use {year} or relative wording — never a year inferred "
+        f"from training data. "
+        f"For recurring events (FIFA World Cup, Olympics, Champions League, etc.) "
+        f"that do not mention a specific year, assume the {year} edition "
+        f"unless context clearly indicates otherwise.\n\n"
     )
