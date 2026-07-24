@@ -81,6 +81,7 @@ import {
   applyHistoryToMessages,
   useConversationTranscriptRefs,
 } from "@/lib/use-conversation-transcript";
+import { upsertChatMessage } from "@/lib/merge-chat-history";
 import type { ChatChunk, TurnSegment, TurnState, WebSourceCard } from "@/lib/sse/types";
 
 import { ChatHeader } from "@/components/layout/ChatHeader";
@@ -1685,6 +1686,27 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, [searchParams, planExecutionProgress?.tasks]);
 
+  const stopActiveStream = useCallback(async () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+    streamingRef.current = false;
+    setStreaming(false);
+    setStreamRecovery(false);
+    streamRecoveryRef.current = false;
+    setRecoveryAssistantId(null);
+    setActiveMessageId(null);
+    setTurnVisual(null);
+    clearActiveStreamMarker(conversationId);
+    await chatStop(conversationId, userId, token).catch(() => undefined);
+    for (let i = 0; i < 30; i++) {
+      const st = await fetchStreamStatus(conversationId, userId, token).catch(() => ({
+        active: false,
+      }));
+      if (!st.active) break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }, [conversationId, userId, token]);
+
   const runChatRequest = useCallback(
     async (
       message: string,
@@ -1699,6 +1721,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         metadata?: Record<string, any>;
       },
     ) => {
+      const marker = readActiveStreamMarker(conversationId);
+      if (streamingRef.current || streamRecoveryRef.current || marker) {
+        await stopActiveStream();
+      } else {
+        const st = await fetchStreamStatus(conversationId, userId, token).catch(() => ({
+          active: false,
+        }));
+        if (st.active) {
+          await stopActiveStream();
+        }
+      }
+
       const effectiveAgentMode = opts?.agentModeOverride ?? agentMode;
       const effectivePlanMode =
         opts?.planModeOverride !== undefined
@@ -1987,9 +2021,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         {
           const persistedSegments = segmentsForPersist(state.segments);
           if (activeConversationRef.current === conversationId) {
-            setMessages((m) => [
-              ...m,
-              {
+            setMessages((m) =>
+              upsertChatMessage(m, {
                 id: aid,
                 role: "assistant",
                 content: assistantText,
@@ -1999,8 +2032,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 segments: persistedSegments.length ? persistedSegments : undefined,
                 reasoningUnavailable,
                 webSources: state.webSourceCards.length ? state.webSourceCards : undefined,
-              },
-            ]);
+              }),
+            );
           }
         }
 
@@ -2080,9 +2113,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             const completedSteps = turnSteps(state);
             const completedArtifacts = turnArtifacts(state);
             const partialSegments = segmentsForPersist(state.segments);
-            setMessages((m) => [
-              ...m,
-              {
+            setMessages((m) =>
+              upsertChatMessage(m, {
                 id: aid,
                 role: "assistant",
                 content: contentToSave,
@@ -2090,8 +2122,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 steps: completedSteps.length ? completedSteps : undefined,
                 artifacts: completedArtifacts.length ? completedArtifacts : undefined,
                 segments: partialSegments.length ? partialSegments : undefined,
-              },
-            ]);
+              }),
+            );
 
             void refreshThreads();
           }
@@ -2136,6 +2168,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       chatStreamDebug,
       adoptResearchSession,
       selectedProvider,
+      stopActiveStream,
     ]
   );
 
@@ -2686,7 +2719,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const send = async () => {
     const t = input.trim();
-    if (!t || streaming) return;
+    if (!t) return;
+    if (streaming || streamRecoveryRef.current) {
+      await stopActiveStream();
+    }
     if (isProjectRequiredButMissing) {
       setProjectCreateOpen(true);
       return;
@@ -2716,10 +2752,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   };
 
   const stop = () => {
-    abortRef.current?.abort();
-    void chatStop(conversationId, userId, token).catch(() => {
-      /* ignore network errors */
-    });
+    void stopActiveStream();
   };
 
   useEffect(() => {

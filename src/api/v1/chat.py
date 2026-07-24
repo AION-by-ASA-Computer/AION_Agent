@@ -121,6 +121,50 @@ async def _run_pipeline_in_background(
         _background_runs.pop(conversation_id, None)
 
 
+async def _stop_background_run(
+    conversation_id: str,
+    *,
+    timeout: float = 30.0,
+) -> None:
+    """Cancel an in-flight background pipeline and wait for teardown."""
+    cid = (conversation_id or "").strip()
+    if not cid:
+        return
+    run = _background_runs.get(cid)
+    if not run or run.is_done:
+        return
+
+    await redis_set_stream_cancel(cid)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(0.5, timeout)
+    while not run.is_done and loop.time() < deadline:
+        await asyncio.sleep(0.05)
+
+    if run.is_done:
+        return
+
+    logger.warning(
+        "Background chat run %s did not stop within %.1fs; cancelling task",
+        cid[:8],
+        timeout,
+    )
+    if run.task and not run.task.done():
+        run.task.cancel()
+        try:
+            await run.task
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.debug("background run task cancel: %s", exc)
+    _background_runs.pop(cid, None)
+    try:
+        from src.runtime.redis_client import redis_clear_stream_active
+
+        await redis_clear_stream_active(cid)
+    except Exception:
+        pass
+
+
 def _prepare_dedupe_key(conversation_id: str, profile: str, user_id: str) -> str:
     return f"{conversation_id}\0{profile}\0{user_id}"
 
@@ -354,6 +398,7 @@ async def chat_stop(
     if not cid:
         raise HTTPException(400, detail="conversation_id or session_id required")
     await redis_set_stream_cancel(cid)
+    await _stop_background_run(cid, timeout=15.0)
     return {"ok": True, "conversation_id": cid, "session_id": cid}
 
 
@@ -524,11 +569,12 @@ async def chat_stream(
     if body.turn_attachments:
         turn_att = [a.model_dump() for a in body.turn_attachments]
 
-    # Check if a background run is already active
-    run = (
-        _background_runs.get(body.conversation_id) if not _project_access_err else None
-    )
-    if not run and not _project_access_err:
+    # Stop any in-flight turn before starting a new one (client abort is not enough).
+    if not _project_access_err:
+        await _stop_background_run(body.conversation_id, timeout=45.0)
+
+    run: Optional[BackgroundChatRun] = None
+    if not _project_access_err:
         run = BackgroundChatRun(body.conversation_id)
         _background_runs[body.conversation_id] = run
         run.task = asyncio.create_task(
