@@ -1580,7 +1580,6 @@ class AgentPipeline:
                     tool_event_bus.unsubscribe(self.session_id, tool_q)
 
             tool_listener_task = asyncio.create_task(listen_tool_events())
-            gen_kw = generation_kwargs_for_agent(self.agent, reasoning_effort)
             from src.runtime.harness_flags import (
                 harness_v2_injections,
                 harness_v2_provider,
@@ -1593,6 +1592,14 @@ class AgentPipeline:
                 start_turn,
                 turn_new_messages_from_haystack,
             )
+
+            if harness_v2_provider():
+                gen_kw = merge_generation_kwargs(
+                    agent=self.agent,
+                    reasoning_effort=reasoning_effort,
+                )
+            else:
+                gen_kw = generation_kwargs_for_agent(self.agent, reasoning_effort)
 
             if harness_v2_injections():
                 from src.runtime.user_language import (
@@ -1608,13 +1615,6 @@ class AgentPipeline:
                     user_id=self.user_id,
                     user_lang=_turn_user_lang,
                     agent_mode=effective_agent_mode,
-                )
-
-            if harness_v2_provider():
-                gen_kw = merge_generation_kwargs(
-                    base=gen_kw,
-                    reasoning_effort=reasoning_effort,
-                    overrides=gen_kw,
                 )
 
             _harness_turn = None

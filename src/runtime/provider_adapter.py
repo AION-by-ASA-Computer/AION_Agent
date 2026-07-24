@@ -6,11 +6,7 @@ import re
 from typing import Any, Dict, List, Optional
 
 from src.runtime.harness_flags import harness_v2_provider
-from src.runtime.reasoning_effort import (
-    ReasoningEffortLevel,
-    effective_reasoning_effort,
-    generation_kwargs_for_agent,
-)
+from src.runtime.reasoning_effort import generation_kwargs_for_agent
 
 
 def provider_adapter_enabled() -> bool:
@@ -53,19 +49,14 @@ def normalize_stream_chunk(chunk: Any) -> Dict[str, Any]:
 
 def merge_generation_kwargs(
     *,
+    agent: Any,
     base: Optional[Dict[str, Any]] = None,
     reasoning_effort: Optional[str] = None,
-    provider: Optional[str] = None,
-    model_name: Optional[str] = None,
     overrides: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    effort: ReasoningEffortLevel = effective_reasoning_effort(reasoning_effort)
+    """Merge agent/turn generation kwargs through the provider adapter."""
     merged = dict(base or {})
-    gen = generation_kwargs_for_agent(
-        effort,
-        provider=provider or "",
-        model_name=model_name or "",
-    )
+    gen = generation_kwargs_for_agent(agent, reasoning_effort) or {}
     merged.update(gen)
     if overrides:
         merged.update(overrides)
