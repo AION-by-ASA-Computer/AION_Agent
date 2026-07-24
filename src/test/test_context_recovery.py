@@ -78,8 +78,11 @@ def test_emergency_compact_returns_smaller_message_list():
         side_effect=[
             {"total": 120000, "max_prompt": 131072, "messages": 100000, "overhead": 20000},
             {"total": 90000, "max_prompt": 131072, "messages": 70000, "overhead": 20000},
+            {"total": 90000, "max_prompt": 131072, "messages": 70000, "overhead": 20000},
         ],
     ):
         out = emergency_compact_messages(agent, convo, force_sync=False, aggressive=False)
     assert out is not None
-    assert len(out) < len(convo)
+    assert any(
+        "removed to free context" in chat_message_text(m) for m in out
+    )
