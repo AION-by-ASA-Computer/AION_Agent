@@ -158,6 +158,30 @@ export async function fetchActivePlanExecutions(
   return j.active || [];
 }
 
+export async function pausePlanExecution(
+  runId: string,
+  userId: string,
+  token?: string | null
+): Promise<void> {
+  await fetch(`${apiBase()}/plan-execution/pause/${encodeURIComponent(runId)}`, {
+    method: "POST",
+    headers: baseUserHeaders(userId, token),
+  });
+}
+
+export async function resumePlanExecution(
+  runId: string,
+  userId: string,
+  token?: string | null,
+): Promise<{ run_id: string; status: string; plan_id: string; ui_event?: string } | null> {
+  const r = await fetch(`${apiBase()}/plan-execution/resume/${encodeURIComponent(runId)}`, {
+    method: "POST",
+    headers: baseUserHeaders(userId, token),
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
 export async function cancelPlanExecution(
   runId: string,
   userId: string,

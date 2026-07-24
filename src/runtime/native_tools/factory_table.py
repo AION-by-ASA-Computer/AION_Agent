@@ -33,6 +33,16 @@ class WebSearchExecutor:
     ) -> str:
         sid = get_current_session_id()
         inp = {"query": query, "max_results": max_results, "language": language}
+        from src.runtime.plan_engine import apply_plan_mode_research_gate
+
+        blocked = apply_plan_mode_research_gate(
+            "web_search", session_id=sid, tool_input=inp
+        )
+        if blocked:
+            return json.dumps(
+                {"error": "plan_research_budget", "message": blocked, "results": []},
+                ensure_ascii=False,
+            )
         call_id = emit_tool_start(sid, "web_search", inp)
         try:
             if not get_web_search_request_context().enabled:
@@ -58,6 +68,21 @@ class WebFetchPageExecutor:
     def __call__(self, url: str, prefer_stealth: bool = False) -> str:
         sid = get_current_session_id()
         inp = {"url": url, "prefer_stealth": prefer_stealth}
+        from src.runtime.plan_engine import apply_plan_mode_research_gate
+
+        blocked = apply_plan_mode_research_gate(
+            "web_fetch_page", session_id=sid, tool_input=inp
+        )
+        if blocked:
+            return json.dumps(
+                {
+                    "error": "plan_research_budget",
+                    "message": blocked,
+                    "url": url,
+                    "text": "",
+                },
+                ensure_ascii=False,
+            )
         call_id = emit_tool_start(sid, "web_fetch_page", inp)
         try:
             if not get_web_search_request_context().enabled:

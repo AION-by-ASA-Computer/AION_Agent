@@ -1678,6 +1678,7 @@ class AgentPipeline:
                     queue,
                     stop_event,
                     turn_plan_id=_turn_pid,
+                    plan_controller=plan_controller,
                 )
                 set_turn_runtime(
                     session_id=self.session_id,
@@ -1785,6 +1786,7 @@ class AgentPipeline:
                     queue,
                     stop_event,
                     turn_plan_id=_turn_pid,
+                    plan_controller=plan_controller,
                 )
                 set_turn_runtime(
                     session_id=self.session_id,
@@ -2607,39 +2609,10 @@ class AgentPipeline:
                                                 break
                                         except Exception:
                                             pass
-                                    if plan_controller is not None:
-                                        _allowed, _budget_msg = (
-                                            plan_controller.on_research_tool_start(_tn)
+                                    if plan_controller is not None and plan_controller.is_research_tool(_tn):
+                                        yield _track_sse(
+                                            plan_controller.sse_phase("researching")
                                         )
-                                        if not _allowed:
-                                            yield _track_sse(
-                                                plan_controller.sse_phase(
-                                                    "research_budget_reached",
-                                                    message=_budget_msg,
-                                                )
-                                            )
-                                            yield _track_sse(
-                                                {
-                                                    "type": "turn_status",
-                                                    "phase": "plan_research_budget",
-                                                    "tool": _tn,
-                                                    "message": _budget_msg or "",
-                                                }
-                                            )
-                                            stop_event.set()
-                                            stop_reason = "plan_research_budget"
-                                            logger.warning(
-                                                "Plan Mode research budget hard-stop session=%s tool=%s",
-                                                self.session_id[:8],
-                                                _tn,
-                                            )
-                                            yield _track_sse(
-                                                {
-                                                    "type": "error",
-                                                    "content": _budget_msg or "",
-                                                }
-                                            )
-                                            break
                                     if _tn.startswith("mempalace_"):
                                         yield _track_sse(
                                             {
@@ -2973,6 +2946,7 @@ class AgentPipeline:
                                     }
                                     yield _track_sse(outcome)
                                     break
+                                elif (
                                     evt.get("type") == "tool_end"
                                     and evt.get("name") == "sandbox_edit_workspace_file"
                                 ):

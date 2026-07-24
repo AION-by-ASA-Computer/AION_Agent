@@ -18,6 +18,7 @@ def set_context(
     stop_event: Any,
     *,
     turn_plan_id: Optional[str] = None,
+    plan_controller: Any = None,
 ) -> None:
     ctx: Dict[str, Any] = {
         "session_id": session_id,
@@ -30,6 +31,8 @@ def set_context(
     }
     if turn_plan_id:
         ctx["turn_plan_id"] = turn_plan_id.strip()
+    if plan_controller is not None:
+        ctx["plan_controller"] = plan_controller
     _forward_ctx.set(ctx)
 
 

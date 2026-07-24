@@ -120,7 +120,7 @@ def build_plan_mode_skill_hint(user_message: str) -> str:
         f"The user asked for a complex {deliverable}. In **this** turn:\n"
         f"1. At most **{budget}** read-only tools (e.g. list workspace) if strictly needed.\n"
         "2. **Do not** call `skill_view` (blocked) or a series of thematic `web_search`.\n"
-        "3. Output = **only** `<plan>...</plan>` for the sidebar, then STOP.\n"
+        "3. Call **`draft_execution_plan`** once with structured arguments, then STOP.\n"
         "4. In the plan: tasks for `skill_view` (relevant skills), web research, chapters, bibliography **after** Approve Plan.\n"
         "5. `## Goal` = **current** request; do not reuse old forecasting/commercial templates.\n\n"
     )

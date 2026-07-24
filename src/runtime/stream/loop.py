@@ -609,33 +609,9 @@ class StreamLoop:
                 except Exception:
                     pass
 
-            # plan_controller research budget
-            if self.plan_controller is not None:
-                _allowed, _budget_msg = self.plan_controller.on_research_tool_start(_tn)
-                if not _allowed:
-                    yield self._track_sse(
-                        self.plan_controller.sse_phase(
-                            "research_budget_reached", message=_budget_msg
-                        )
-                    )
-                    yield self._track_sse(
-                        {
-                            "type": "turn_status",
-                            "phase": "plan_research_budget",
-                            "tool": _tn,
-                            "message": _budget_msg or "",
-                        }
-                    )
-                    self._request_stop(
-                        "plan_research_budget",
-                        location="stream_loop:plan_research",
-                        tool=_tn,
-                    )
-                    yield self._track_sse(
-                        {"type": "error", "content": _budget_msg or ""}
-                    )
-                    yield _BreakSignal()
-                    return
+            # plan_controller: research budget enforced in main._aion_mcp_tool_run (soft block).
+            if self.plan_controller is not None and self.plan_controller.is_research_tool(_tn):
+                yield self._track_sse(self.plan_controller.sse_phase("researching"))
 
             # MemPalace status notification
             if _tn.startswith("mempalace_"):

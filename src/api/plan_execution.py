@@ -137,6 +137,36 @@ async def plan_execution_cancel(
     return {"cancelled": ok}
 
 
+@router.post("/plan-execution/pause/{run_id}")
+async def plan_execution_pause(
+    run_id: str,
+    owner: str = Depends(plan_execution_owner),
+):
+    _validate_run_id(run_id)
+    _require_owner(run_id, owner)
+    ok = get_plan_execution_handler().pause_plan_execution(run_id)
+    return {"paused": ok}
+
+
+@router.post("/plan-execution/resume/{run_id}")
+async def plan_execution_resume(
+    run_id: str,
+    owner: str = Depends(plan_execution_owner),
+):
+    _validate_run_id(run_id)
+    _require_owner(run_id, owner)
+    if not plan_execution_enabled():
+        raise HTTPException(403, "Plan execution is disabled")
+    handler = get_plan_execution_handler()
+    try:
+        out = handler.resume_plan_execution(run_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(409, str(e)) from e
+    return out
+
+
 @router.get("/plan-execution/stream/{run_id}")
 async def plan_execution_stream(
     run_id: str,

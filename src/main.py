@@ -411,6 +411,12 @@ def _aion_mcp_tool_run(
     if sql_gate:
         return _emit_tool_outcome(is_error=True, body=sql_gate)
 
+    from src.runtime.plan_engine import block_plan_mode_research_tool
+
+    plan_research_block = block_plan_mode_research_tool(tool_name)
+    if plan_research_block:
+        return _emit_tool_outcome(is_error=True, body=plan_research_block)
+
     from .runtime.datasource_memory_mode import (
         block_list_tables_if_budget_exceeded,
         record_list_tables_call,

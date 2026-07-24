@@ -8,6 +8,7 @@ def test_setup_execution_plan_casts_ttl_to_int(monkeypatch):
 
     async def fake_set_pending(plan_id, *, session_id, user_id, draft, ttl_sec):
         captured["ttl_sec"] = ttl_sec
+        return True
 
     async def fake_upsert_execution_plan_draft(*args, **kwargs):
         return True

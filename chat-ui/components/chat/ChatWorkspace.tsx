@@ -92,7 +92,7 @@ import { DeepResearchPanel } from "@/components/research/DeepResearchPanel";
 import { PlanExecutionChatBanner } from "@/components/plan/PlanExecutionChatBanner";
 import { PlanPanel } from "@/components/plan/PlanPanel";
 import { TaskChatView } from "@/components/plan/TaskChatView";
-import { cancelPlanExecution, rememberWatchedPlanExecution } from "@/lib/api/plan-execution";
+import { cancelPlanExecution, pausePlanExecution, rememberWatchedPlanExecution, resumePlanExecution } from "@/lib/api/plan-execution";
 import { usePlanDockState } from "@/hooks/use-plan-dock-state";
 import { usePlanExecutionProgress } from "@/hooks/use-plan-execution-progress";
 import { usePlanExecutionRehydrate } from "@/hooks/use-plan-execution-rehydrate";
@@ -1673,6 +1673,23 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, [planExecAdoptRunId, userId, token]);
 
+  const handleResumePlanExecution = useCallback(async () => {
+    const rid = (planExecAdoptRunId || "").trim();
+    if (!rid) return;
+    try {
+      const out = await resumePlanExecution(rid, userId, token);
+      if (out?.run_id) {
+        adoptPlanExecution(
+          out.run_id,
+          out.plan_id || planExecAdoptPlanId || "",
+          { rehydrate: true, status: out.status },
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [planExecAdoptRunId, planExecAdoptPlanId, userId, token, adoptPlanExecution]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && chatView.kind === "task") {
@@ -1715,6 +1732,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     setActiveMessageId(null);
     setTurnVisual(null);
     clearActiveStreamMarker(conversationId);
+    const planRunId = (planExecAdoptRunId || "").trim();
+    if (planRunId && planExecutionProgress?.status === "running") {
+      await pausePlanExecution(planRunId, userId, token).catch(() => undefined);
+    }
     await chatStop(conversationId, userId, token).catch(() => undefined);
     for (let i = 0; i < 30; i++) {
       const st = await fetchStreamStatus(conversationId, userId, token).catch(() => ({
@@ -1723,7 +1744,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       if (!st.active) break;
       await new Promise((r) => setTimeout(r, 150));
     }
-  }, [conversationId, userId, token, abortStreamRecovery]);
+  }, [conversationId, userId, token, abortStreamRecovery, planExecAdoptRunId, planExecutionProgress?.status]);
 
   const runChatRequest = useCallback(
     async (
@@ -3334,6 +3355,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   progress={planExecutionProgress}
                   onOpenTask={openPlanTaskView}
                   onOpenAllTasks={() => setDockTab("plan")}
+                  onResume={handleResumePlanExecution}
                 />
               ) : null}
               {chatView.kind === "main" && !showEmptyState

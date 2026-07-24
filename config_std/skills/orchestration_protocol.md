@@ -159,7 +159,7 @@ Plan Mode is for projects needing approval. Incremental execution is for one-sho
    - Document ALL your reasoning, architecture decisions, and rationale under `## Context`.
 
 2. **Create a detailed, atomic plan**
-   - **Tool-first (default):** call **`draft_execution_plan`** with `goal` + `tasks` JSON (see above). This is the primary path.
+   - **Tool-first (default):** call **`draft_execution_plan`** with `goal` + `tasks` JSON (see above). Each task needs `description` (≥40 chars: scope, out-of-scope, Done when).
    - **Legacy text parser only:** write a complete `<plan> ... </plan>` block (intercepted by runtime).
    - Minimum quality requirements:
      - **at least 6 atomic tasks** for non-trivial requests (each a single action);
