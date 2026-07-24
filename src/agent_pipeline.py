@@ -266,7 +266,7 @@ def _handle_haystack_stream_chunk(chunk: Any, *, from_async: bool) -> None:
                 "reasoning_meta_len": len(str(reasoning or "")),
             },
         )
-        _emit_agent_stream_event(ctx, {"type": "stream_end"}, from_async=from_async)
+        _emit_agent_stream_event(ctx, {"type": "stream_end", "finish_reason": fr}, from_async=from_async)
 
     if fr == "length":
         logger.warning("Agent response truncated by model (finish_reason=length).")
@@ -288,12 +288,15 @@ def _handle_haystack_stream_chunk(chunk: Any, *, from_async: bool) -> None:
         sid = ctx.get("session_id")
         if sid:
             StreamSync.mark_busy(sid)
-        try:
-            maybe_compact_after_reasoning(
-                reasoning if isinstance(reasoning, str) else str(reasoning)
-            )
-        except Exception:
-            pass
+        from src.runtime.turn_compaction import mid_turn_reasoning_compaction_enabled
+
+        if mid_turn_reasoning_compaction_enabled():
+            try:
+                maybe_compact_after_reasoning(
+                    reasoning if isinstance(reasoning, str) else str(reasoning)
+                )
+            except Exception:
+                pass
         _emit_agent_stream_event(
             ctx, {"type": "reasoning", "reasoning": reasoning}, from_async=from_async
         )
@@ -1578,6 +1581,43 @@ class AgentPipeline:
 
             tool_listener_task = asyncio.create_task(listen_tool_events())
             gen_kw = generation_kwargs_for_agent(self.agent, reasoning_effort)
+            from src.runtime.harness_flags import (
+                harness_v2_injections,
+                harness_v2_provider,
+                harness_v2_turn,
+            )
+            from src.runtime.context_builder import refresh_agent_turn_context
+            from src.runtime.provider_adapter import merge_generation_kwargs
+            from src.runtime.turn.model import (
+                end_turn,
+                start_turn,
+                turn_new_messages_from_haystack,
+            )
+
+            if harness_v2_injections():
+                from src.runtime.user_language import (
+                    load_user_ui_language,
+                    resolve_compaction_language,
+                )
+
+                _db_lang = await load_user_ui_language(self.user_id)
+                _turn_user_lang = resolve_compaction_language(self.user_id, _db_lang)
+                refresh_agent_turn_context(
+                    self.agent,
+                    profile_name=self.profile_name,
+                    user_id=self.user_id,
+                    user_lang=_turn_user_lang,
+                    agent_mode=effective_agent_mode,
+                )
+
+            if harness_v2_provider():
+                gen_kw = merge_generation_kwargs(
+                    base=gen_kw,
+                    reasoning_effort=reasoning_effort,
+                    overrides=gen_kw,
+                )
+
+            _harness_turn = None
 
             if prompt_debug_enabled():
                 _prompt_snapshot = build_prompt_snapshot(
@@ -1610,6 +1650,9 @@ class AgentPipeline:
                 )
 
             async def _run_agent_async(msgs: List[ChatMessage]) -> Any:
+                nonlocal _harness_turn
+                if harness_v2_turn():
+                    _harness_turn = start_turn(self.session_id, len(msgs))
                 _turn_pid = (
                     plan_controller.plan_id if plan_controller is not None else None
                 )
@@ -1678,6 +1721,8 @@ class AgentPipeline:
                         )
                         queue.put_nowait(payload)
                 finally:
+                    if harness_v2_turn() and _harness_turn is not None:
+                        end_turn(self.session_id)
                     clear_turn_runtime()
                     clear_context()
                     queue.put_nowait({"type": "done"})
@@ -1936,7 +1981,13 @@ class AgentPipeline:
                     )
 
             logger.info(">>> [6] Entering stream loop...")
-            _use_stream_loop_v2 = _gs().stream_loop_v2
+            from src.runtime.harness_flags import stream_loop_legacy
+
+            _use_stream_loop_v2 = not stream_loop_legacy() and (
+                _gs().stream_loop_v2
+                or os.getenv("AION_STREAM_LOOP_V2", "1").strip().lower()
+                in ("1", "true", "yes", "on")
+            )
             try:
                 if _use_stream_loop_v2:
                     from src.runtime.stream.loop import StreamLoop
@@ -2634,8 +2685,8 @@ class AgentPipeline:
                                         from src.runtime.exploration_tracker import (
                                             record_exploration_tool,
                                         )
-                                        from src.runtime.datasource_memory_mode import (
-                                            maybe_append_same_turn_reminder,
+                                        from src.runtime.tool_result_postprocess import (
+                                            apply_tool_result_postprocess,
                                         )
 
                                         _tool_out = evt.get("output") or evt.get(
@@ -2649,12 +2700,12 @@ class AgentPipeline:
                                             profile_slug=self.profile_name,
                                         )
                                         if evt.get("type") == "tool_end":
-                                            _tool_out = maybe_append_same_turn_reminder(
+                                            _tool_out = apply_tool_result_postprocess(
+                                                _tool_out,
                                                 session_id=self.session_id,
                                                 profile_slug=self.profile_name,
                                                 tool_name=str(evt.get("name") or ""),
                                                 event_type="tool_end",
-                                                output=_tool_out,
                                             )
                                             evt["output"] = _tool_out
                                         _tenant_qm = (
@@ -2986,12 +3037,17 @@ class AgentPipeline:
 
                 # Applica il matching dell'indice dell'ultimo messaggio di input per ottenere solo i messaggi nuovi
                 if raw_list and messages:
-                    idx = _find_input_end_index(messages, raw_list)
-                    if idx >= 0:
-                        new_messages = raw_list[idx + 1 :]
+                    if _harness_turn is not None:
+                        new_messages = turn_new_messages_from_haystack(
+                            _harness_turn, raw_list
+                        )
                     else:
-                        # Fallback di sicurezza basato sulla lunghezza se non troviamo il messaggio di input
-                        new_messages = raw_list[len(messages) :]
+                        idx = _find_input_end_index(messages, raw_list)
+                        if idx >= 0:
+                            new_messages = raw_list[idx + 1 :]
+                        else:
+                            # Fallback di sicurezza basato sulla lunghezza se non troviamo il messaggio di input
+                            new_messages = raw_list[len(messages) :]
                 else:
                     new_messages = raw_list
 

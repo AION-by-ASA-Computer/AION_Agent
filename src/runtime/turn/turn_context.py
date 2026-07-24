@@ -36,6 +36,28 @@ if TYPE_CHECKING:
 logger = logging.getLogger("aion.turn_context")
 
 
+def _structured_injections() -> bool:
+    from src.runtime.harness_flags import harness_v2_injections
+
+    return harness_v2_injections()
+
+
+def _layer_inject(
+    layers: List[Dict[str, str]],
+    key: str,
+    text: str,
+    augmented: str,
+) -> str:
+    """Record injection; prepend to augmented_user only in legacy mode."""
+    body = str(text or "").strip()
+    if not body:
+        return augmented
+    layers.append({"key": key, "text": body})
+    if _structured_injections():
+        return augmented
+    return f"{body}\n\n{augmented}"
+
+
 # ---------------------------------------------------------------------------
 # Data container
 # ---------------------------------------------------------------------------
@@ -235,47 +257,81 @@ async def build_turn_context(
         if mode == "plan":
             plan_hint = build_plan_mode_skill_hint(user_input)
             if plan_hint:
-                user_input = plan_hint + user_input
-                track_prepend_layer(
-                    _prompt_inject_layers,
-                    "plan_mode_skill_hint",
-                    _pre_nudge,
-                    user_input,
-                )
+                if _structured_injections():
+                    augmented_user = _layer_inject(
+                        _prompt_inject_layers,
+                        "skill_nudge",
+                        plan_hint,
+                        user_input,
+                    )
+                else:
+                    user_input = plan_hint + user_input
+                    track_prepend_layer(
+                        _prompt_inject_layers,
+                        "plan_mode_skill_hint",
+                        _pre_nudge,
+                        user_input,
+                    )
         elif should_inject_skill_discovery_nudge(
             user_input,
             profile_has_skills_hub=has_hub,
             agent_mode=mode,
             session_id=pipeline.session_id,
         ):
-            user_input = (
-                build_skill_discovery_nudge(
-                    user_input,
-                    session_id=pipeline.session_id,
-                    profile_skills=prof.skills if prof else None,
-                    critical_skills=prof._resolved_critical_skill_names()
-                    if prof
-                    else None,
-                )
-                + user_input
-            )
-            track_prepend_layer(
-                _prompt_inject_layers,
-                "skill_discovery_nudge",
-                _pre_nudge,
+            nudge = build_skill_discovery_nudge(
                 user_input,
+                session_id=pipeline.session_id,
+                profile_skills=prof.skills if prof else None,
+                critical_skills=prof._resolved_critical_skill_names()
+                if prof
+                else None,
             )
-            logger.info(
-                "skill_nudge_injected session=%s profile=%s",
-                pipeline.session_id[:8],
-                pipeline.profile_name,
-            )
+            if _structured_injections():
+                augmented_user = _layer_inject(
+                    _prompt_inject_layers,
+                    "skill_nudge",
+                    nudge,
+                    user_input,
+                )
+            else:
+                user_input = nudge + user_input
+                track_prepend_layer(
+                    _prompt_inject_layers,
+                    "skill_discovery_nudge",
+                    _pre_nudge,
+                    user_input,
+                )
+                logger.info(
+                    "skill_nudge_injected session=%s profile=%s",
+                    pipeline.session_id[:8],
+                    pipeline.profile_name,
+                )
     except Exception as nudge_exc:
         logger.debug("skill nudge skipped: %s", nudge_exc)
 
+    if "augmented_user" not in locals():
+        augmented_user = user_input
+
     # Operational augmentation (tool summary + workspace manifest)
-    _pre_augment = user_input
-    augmented_user = await pipeline._augment_user_input(user_input)
+    _pre_augment = augmented_user
+    aug_full = await pipeline._augment_user_input(augmented_user)
+    if _structured_injections() and aug_full != augmented_user:
+        prefix = (
+            aug_full[: -len(augmented_user)].strip()
+            if aug_full.endswith(augmented_user)
+            else aug_full
+        )
+        if prefix:
+            augmented_user = _layer_inject(
+                _prompt_inject_layers,
+                "workspace",
+                prefix,
+                augmented_user,
+            )
+        else:
+            augmented_user = aug_full
+    else:
+        augmented_user = aug_full
     track_prepend_layer(
         _prompt_inject_layers,
         "operational_augment",
@@ -339,8 +395,9 @@ async def build_turn_context(
         ]
         for _key, _text in _injections:
             if _text:
-                _prompt_inject_layers.append({"key": _key, "text": str(_text)})
-                augmented_user = str(_text) + "\n\n" + augmented_user
+                augmented_user = _layer_inject(
+                    _prompt_inject_layers, _key, str(_text), augmented_user
+                )
 
         if _msg_src == "internal_trigger":
             _artifact_exec_reminder = ""
@@ -380,13 +437,12 @@ async def build_turn_context(
                     "Plan approved — execute ONE task, call mark_task_completed, then STOP.\n"
                     "</system-reminder>"
                 )
-            _prompt_inject_layers.append(
-                {
-                    "key": "plan_artifact_reminder",
-                    "text": _artifact_exec_reminder + "\n\n",
-                }
+            augmented_user = _layer_inject(
+                _prompt_inject_layers,
+                "plan_artifact_reminder",
+                _artifact_exec_reminder,
+                augmented_user,
             )
-            augmented_user = _artifact_exec_reminder + "\n\n" + augmented_user
 
         try:
             from src.runtime.datasource_memory_mode import (
@@ -447,9 +503,22 @@ async def build_turn_context(
 
     # LTM context retrieval
     _pre_ltm = augmented_user
-    augmented_user = ltm_orchestrator.build_augmented_user_text(
-        augmented_user, "", wake
-    )
+    with_ltm = ltm_orchestrator.build_augmented_user_text(augmented_user, "", wake)
+    if _structured_injections() and with_ltm != augmented_user:
+        ltm_prefix = (
+            with_ltm[: -len(augmented_user)].strip()
+            if with_ltm.endswith(augmented_user)
+            else with_ltm
+        )
+        if ltm_prefix:
+            augmented_user = _layer_inject(
+                _prompt_inject_layers,
+                "ltm_wake",
+                ltm_prefix,
+                augmented_user,
+            )
+    else:
+        augmented_user = with_ltm
     track_prepend_layer(
         _prompt_inject_layers,
         "ltm_wake",
@@ -471,14 +540,36 @@ async def build_turn_context(
     from src.agent_pipeline import _build_user_turn_chat_message
 
     messages: List[ChatMessage] = list(stm_window)
-    messages.append(
-        _build_user_turn_chat_message(
-            pipeline.session_id,
-            augmented_user,
-            attachments,
-            attach_block,
+    from src.runtime.harness_flags import harness_v2_messages
+    from src.runtime.context_builder import build_llm_messages
+
+    if harness_v2_messages():
+        user_for_llm = _user_input_raw if _structured_injections() else augmented_user
+        built = build_llm_messages(
+            messages,
+            user_text=user_for_llm,
+            inject_layers=_prompt_inject_layers if _structured_injections() else None,
+            attachments_block=attach_block if _structured_injections() else "",
         )
-    )
+        if not _structured_injections():
+            # Legacy v2 path: injections still inside augmented_user string
+            if attach_block.strip():
+                built = build_llm_messages(
+                    messages,
+                    user_text=f"{attach_block.strip()}\n\n{augmented_user}",
+                )
+            else:
+                built = build_llm_messages(messages, user_text=augmented_user)
+        messages = built.messages
+    else:
+        messages.append(
+            _build_user_turn_chat_message(
+                pipeline.session_id,
+                augmented_user,
+                attachments,
+                attach_block,
+            )
+        )
 
     # ------------------------------------------------------------------
     # 7. Context compression + token budget truncation
@@ -514,16 +605,27 @@ async def build_turn_context(
         exclude_message_ids=[user_message_id] if user_message_id else None,
     )
     if reloaded_from_db:
-        user_turn = _build_user_turn_chat_message(
-            pipeline.session_id,
-            augmented_user,
-            attachments,
-            attach_block,
-        )
+        if harness_v2_messages():
+            user_for_llm = _user_input_raw if _structured_injections() else augmented_user
+            built = build_llm_messages(
+                messages,
+                user_text=user_for_llm,
+                inject_layers=_prompt_inject_layers if _structured_injections() else None,
+                attachments_block=attach_block if _structured_injections() else "",
+            )
+            user_turn = built.messages[-1] if built.messages else None
+        else:
+            user_turn = _build_user_turn_chat_message(
+                pipeline.session_id,
+                augmented_user,
+                attachments,
+                attach_block,
+            )
         from src.haystack_chat import chat_message_text
 
-        if not messages or chat_message_text(messages[-1]) != chat_message_text(
-            user_turn
+        if user_turn and (
+            not messages
+            or chat_message_text(messages[-1]) != chat_message_text(user_turn)
         ):
             messages.append(user_turn)
     if did_compact:

@@ -146,9 +146,15 @@ def create_aion_agent(*args: Any, **kwargs: Any) -> Any:
     if "hooks" in kwargs and "hooks" not in init_params:
         dropped = kwargs.pop("hooks")
         if dropped:
-            logger.warning(
+            from src.runtime.harness_flags import tool_error_recovery_strict
+
+            msg = (
                 "Haystack Agent does not support hooks=; tool_error_recovery on_exit disabled"
             )
+            if tool_error_recovery_strict():
+                logger.error(msg)
+            else:
+                logger.warning(msg)
     # region agent log
     _dbg(
         "H3",

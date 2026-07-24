@@ -324,7 +324,18 @@ def _aion_mcp_tool_run(
         )
 
     def _emit_tool_outcome(*, is_error: bool, body: str) -> str:
-        # SSE/UI first â€” mid-turn compaction can block 60â€“90s on the agent thread.
+        from src.runtime.tool_result_postprocess import apply_tool_result_postprocess
+
+        ctx = get_context()
+        profile_slug = (ctx or {}).get("profile_name")
+        processed = apply_tool_result_postprocess(
+            body,
+            session_id=session_id,
+            profile_slug=profile_slug,
+            tool_name=tool_name,
+            event_type="tool_error" if is_error else "tool_end",
+        )
+        # SSE/UI first — mid-turn compaction can block on the agent thread when sync enabled.
         if is_error:
             loop.call_soon_threadsafe(
                 tool_event_bus.put_event,
@@ -333,11 +344,11 @@ def _aion_mcp_tool_run(
                     "type": "tool_error",
                     "id": call_id,
                     "name": tool_name,
-                    "error": body,
+                    "error": processed,
                     "input": tool_input,
                 },
             )
-            return body
+            return processed
         loop.call_soon_threadsafe(
             tool_event_bus.put_event,
             session_id,
@@ -345,11 +356,11 @@ def _aion_mcp_tool_run(
                 "type": "tool_end",
                 "id": call_id,
                 "name": tool_name,
-                "output": body,
+                "output": processed,
                 "input": tool_input,
             },
         )
-        return maybe_compact_after_tool(tool_name=tool_name, result=body)
+        return maybe_compact_after_tool(tool_name=tool_name, result=processed)
 
     settlement_err = settle_tool_call(tool_name, kwargs)
     if settlement_err:

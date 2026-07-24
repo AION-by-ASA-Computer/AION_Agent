@@ -41,6 +41,18 @@ def mid_turn_compaction_enabled() -> bool:
     return _env_bool("AION_CONTEXT_COMPRESS_MID_TURN", "1")
 
 
+def mid_turn_reasoning_compaction_enabled() -> bool:
+    from src.runtime.harness_flags import mid_turn_reasoning_compaction_enabled as _flag
+
+    return _flag()
+
+
+def mid_turn_sync_compaction_enabled() -> bool:
+    from src.runtime.harness_flags import mid_turn_sync_compaction_enabled as _flag
+
+    return _flag()
+
+
 def tool_result_max_chars() -> int:
     try:
         return max(2000, int(os.getenv("AION_TOOL_RESULT_MAX_CHARS", "24000")))
@@ -239,7 +251,7 @@ def compact_agent_messages_in_place() -> bool:
         return False
 
     now = time.monotonic()
-    min_interval = float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_MIN_SEC", "8"))
+    min_interval = float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_MIN_SEC", "15"))
     last = float(rt.get("last_compact_at") or 0.0)
     if now - last < min_interval:
         return False
@@ -247,7 +259,7 @@ def compact_agent_messages_in_place() -> bool:
     extra = int(rt.get("extra_tokens") or 0)
     stats = _estimate_prompt_total(agent, messages, extra=extra)
     compressor = get_default_compressor()
-    threshold_ratio = float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_RATIO", "0.85"))
+    threshold_ratio = float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_RATIO", "0.92"))
     mid_trigger = int(stats["max_prompt"] * threshold_ratio)
 
     logger.debug(
@@ -265,11 +277,29 @@ def compact_agent_messages_in_place() -> bool:
         return False
 
     keep = compressor.keep_last
-    head = convo[:-keep] if len(convo) > keep else convo[:-1]
-    tail = convo[-keep:] if len(convo) > keep else convo[-1:]
+    from src.runtime.harness_flags import harness_v2_compaction
+    from src.runtime.compaction import find_valid_cut_index
+
+    if harness_v2_compaction():
+        cut = find_valid_cut_index(convo, keep_last=keep)
+        if cut < 0:
+            return False
+        head = convo[:cut]
+        tail = convo[cut:]
+    else:
+        head = convo[:-keep] if len(convo) > keep else convo[:-1]
+        tail = convo[-keep:] if len(convo) > keep else convo[-1:]
 
     transcript = "\n".join(f"{m.role}: {chat_message_text(m)[:3000]}" for m in head)
     if not transcript.strip():
+        return False
+
+    if not mid_turn_sync_compaction_enabled():
+        logger.debug(
+            "mid_turn compact skipped (sync disabled); tokens=%s threshold=%s",
+            stats["total"],
+            mid_trigger,
+        )
         return False
 
     _emit_compacting(True, stats, phase="mid_turn")
@@ -420,6 +450,8 @@ def maybe_compact_after_reasoning(reasoning_piece: str) -> None:
     if not reasoning_piece:
         return
     add_turn_token_estimate(count_tokens(str(reasoning_piece)))
+    if not mid_turn_reasoning_compaction_enabled():
+        return
     if mid_turn_compaction_enabled():
         try:
             compact_agent_messages_in_place()

@@ -140,10 +140,16 @@ def build_transcript_from_rows(rows: Sequence[CompactionTranscriptRow]) -> str:
 
 
 def format_compaction_block(summary_text: str, *, source_messages: int = 0) -> str:
-    head = COMPACTION_MARKER
-    if source_messages > 0:
-        head += f" ({source_messages} turni precedenti)"
-    return f"{head}\n{summary_text.strip()}"
+    """Pi-style structured summary; COMPACTION_MARKER kept for DB/history detection."""
+    body = summary_text.strip()
+    if not body:
+        body = "(empty summary)"
+    suffix = f" ({source_messages} prior turns)" if source_messages > 0 else ""
+    return (
+        "The conversation history before this point was compacted into the following "
+        f"summary{suffix}:\n\n<summary>\n{body}\n</summary>\n\n"
+        f"{COMPACTION_MARKER}"
+    )
 
 
 LAST_ASSISTANT_SECTION = "## Ultima risposta assistant"

@@ -156,6 +156,7 @@ class StreamLoop:
 
         # Inner counters mirroring turn_guards.state
         self.is_streaming: bool = False
+        self._last_finish_reason: Optional[str] = None
         self.reasoning_chars: int = 0
         self.reasoning_events: int = 0
         self.tool_events: int = 0
@@ -287,6 +288,7 @@ class StreamLoop:
                 # --- Stream end ---
                 if ctype == "stream_end":
                     self.is_streaming = False
+                    self._last_finish_reason = chunk.get("finish_reason")
                     yield self._track_sse(chunk)
                     continue
 
@@ -530,6 +532,25 @@ class StreamLoop:
 
         # --- tool_start ---
         if evt.get("type") == "tool_start":
+            from src.runtime.tool_protocol import should_skip_tools_for_truncation
+
+            if should_skip_tools_for_truncation(getattr(self, "_last_finish_reason", None)):
+                yield self._track_sse(
+                    {
+                        "type": "tool_event",
+                        "event": {
+                            "type": "tool_end",
+                            "name": evt.get("name"),
+                            "result": (
+                                "[AION] Tool skipped: prior LLM output was truncated "
+                                "(finish_reason=length). Continue in the next step."
+                            ),
+                            "error": True,
+                        },
+                    }
+                )
+                return
+
             self.tool_calls += 1
             _tn = str(evt.get("name") or "")
 
@@ -724,9 +745,7 @@ class StreamLoop:
                 import src.runtime.db_navigation_mempalace_hooks  # noqa: F401
                 import src.runtime.exploration_tracker  # noqa: F401
                 from src.runtime.exploration_tracker import record_exploration_tool
-                from src.runtime.datasource_memory_mode import (
-                    maybe_append_same_turn_reminder,
-                )
+                from src.runtime.tool_result_postprocess import apply_tool_result_postprocess
 
                 _tool_out = evt.get("output") or evt.get("error")
                 record_exploration_tool(
@@ -737,12 +756,12 @@ class StreamLoop:
                     profile_slug=self.profile_name,
                 )
                 if evt.get("type") == "tool_end":
-                    _tool_out = maybe_append_same_turn_reminder(
+                    _tool_out = apply_tool_result_postprocess(
+                        _tool_out,
                         session_id=self.session_id,
                         profile_slug=self.profile_name,
                         tool_name=str(evt.get("name") or ""),
                         event_type="tool_end",
-                        output=_tool_out,
                     )
                     evt["output"] = _tool_out
                 _tenant_qm = (
