@@ -139,6 +139,17 @@ When the system declares **PLAN MODE** active:
 - Put thorough reasoning in the tool's `goal` string and each task `title` (stack, risks, acceptance criteria) — not in extended chat prose without structured tasks.
 - **Legacy fallback** (`AION_PLAN_TEXT_PARSER=1` only): emit one complete `<plan>` block (sections below), then stop.
 
+## Macro vs micro step-by-step
+
+Two complementary patterns — do not confuse them:
+
+| Level | Mechanism | Granularity |
+|-------|-----------|-------------|
+| **Macro** (Plan Mode execution) | `mark_task_completed` + stop turn | One **sidebar task** per agent turn |
+| **Micro** (normal mode deliverables) | `incremental_execution_protocol` | One **data slice** committed to `workspace/*` before the next research slice |
+
+Plan Mode is for projects needing approval. Incremental execution is for one-shot file deliverables without turning every chat into Plan Mode.
+
 ## Workflow
 
 1. **Understand the objective**

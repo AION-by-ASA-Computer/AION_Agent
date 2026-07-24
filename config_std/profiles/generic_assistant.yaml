@@ -19,11 +19,13 @@ skills:
 - llm_wiki
 - presentation_design
 - web_research_protocol
+- incremental_execution_protocol
 - email_imap_mcp
 critical_skills:
 - core_protocol
 - artifact_protocol
 - web_research_protocol
+- incremental_execution_protocol
 native_tool_groups:
 - web_research
 - deep_research

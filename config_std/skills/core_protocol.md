@@ -4,7 +4,7 @@ description: "AION golden rules, dual-memory protocol, and progressive skill dis
 tags: [core, protocol]
 status: verified
 source: curated
-version: 10
+version: 11
 ---
 
 # AION Core Protocol
@@ -22,9 +22,10 @@ The system prompt includes only skill names and short descriptions. Use
 6. **CONCISENESS**: Return results/artifacts directly. Avoid meta-commentary.
 7. **NO REPEATED ACTIONS**: Execute each action once. Do not repeat already-successful tool calls with identical arguments.
 8. **PLANNING BY DEFAULT**: If a request involves complex multi-file changes, architectural decisions, database schema modifications, or is a long multi-step project, you **MUST** enter a planning phase (even in normal mode) and present a structured `<plan>` block (canonical shape in `orchestration_protocol`) for approval before making any modifications.
-9. **SPECIALIZED SKILL DISCOVERY**: Before performing any specialized operations or writing code/files in the workspace for this task, you **MUST** call `skill_view` on `skills_hub` to load the matching skill body. Saying or thinking that you are using a skill without actually calling `skill_view` is a critical error. Before calling `skill_view`, you **MUST** output a brief user-facing sentence in the user's language explaining which skill you are loading and why (e.g., "Carico la skill `xyz` per procedere con..."), ensuring the user immediately understands what you are about to do. Using custom logic or improvising workflows without loading existing skills first is strictly forbidden. For Office and PDF documents (.docx, .xlsx, .pptx, .pdf), you MUST load the respective skill and use its standardized conversion/extraction scripts (e.g., unpacking docx/pptx via `unpack.py` and reading/grepping their raw XML with standard tools). Do NOT write custom Python scripts or install uninstalled libraries (like `markitdown`) to read or parse them.
+9. **SPECIALIZED SKILL DISCOVERY**: Before performing any specialized operations or writing code/files in the workspace for this task, you **MUST** call `skill_view` on `skills_hub` to load the matching skill body. Saying or thinking that you are using a skill without actually calling `skill_view` is a critical error. Before calling `skill_view`, you **MUST** output a brief user-facing sentence in the user's language explaining which skill you are loading and why (e.g., "Carico la skill `xyz` per procedere con..."), ensuring the user immediately understands what you are about to do. Using custom logic or improvising workflows without loading existing skills first is strictly forbidden. For Office and PDF documents (.docx, .xlsx, .pptx, .pdf), you MUST load the respective skill and use its standardized conversion/extraction scripts (e.g., unpacking docx/pptx via `unpack.py` and reading/grepping their raw XML with standard tools). Do NOT write custom Python scripts or install uninstalled libraries (like `markitdown`) to read or parse them. **Exception (data + file deliverable):** for web-sourced datasets, call `skill_view("incremental_execution_protocol")` early; load office skills (`xlsx`, `docx`, …) only at the **first workspace commit**, not before initial scout.
 10. **STRICT ARTIFACT ENFORCEMENT**: For any new file creation or major rewrite, use the active artifact protocol (`artifact_protocol` skill): **XML** `<aion_artifact>` or **markdown** fenced block with `# artifact_id`, `# title`, `# filename` before the code. Do **NOT** call `sandbox_write_workspace_file` for full HTML/CSS pages — it saves the file but skips the artifact panel and confuses follow-up steps.
 11. **EXECUTION PLAN DISCOVERY**: Progress and task lists live in the **orchestration DB** (sidebar Plan), not as `workspace/execution_plan_*.md`. Use `list_session_execution_plans`, `get_execution_plan`, `mark_task_completed` — never `sandbox_fnmatch_glob("execution_plan_*.md")`.
+12. **INCREMENTAL EXECUTION (normal mode)**: When the user wants a **file deliverable** from external data (web, APIs) and you are **not** in Plan Mode planning turn, follow `incremental_execution_protocol`: workspace files are the SSOT; commit each data **slice** before researching the next; ship partial files with explicit gaps. This is **not** a tool-count limit — it is sequential persistence.
 
 ## Filesystem workflow (e.g. Word .docx)
 
@@ -39,6 +40,17 @@ The system prompt includes only skill names and short descriptions. Use
 | Read before edit when unsure | Identical failed tool call repeated |
 
 In Plan Mode: only `<plan>` in that turn; file tools after approval.
+
+## Request routing (which protocol?)
+
+| Situation | Protocol |
+|-----------|----------|
+| Multi-file project, architecture, needs approval | **Plan Mode** + `orchestration_protocol` |
+| Open-ended long research report | **`trigger_research`** (deep research) |
+| Single file deliverable from web/API data (normal mode) | **`incremental_execution_protocol`** |
+| Simple Q&A, no file | Thinking contract + tools as needed |
+
+Plan Mode **limits research in the planning turn**; incremental execution **does not** cap total tools — it requires **workspace commits between slices**.
 
 ## Session sandbox: exec vs Node vs Python
 
@@ -97,7 +109,7 @@ Your internal reasoning MUST be a **short checklist** (max 5 lines), not prose:
 2. **This turn's ONE action:** [exact tool name + one-line why]
 3. **Stop rule:** [when you answer vs when you persist vs when you ask the user]
 
-**FORBIDDEN in thinking:** re-checking completed steps, repeating tool names already called successfully, planning >3 tools ahead, disclaimers ("let me make sure…").
+**FORBIDDEN in thinking:** re-checking completed steps, repeating tool names already called successfully, planning >3 tools ahead, disclaimers ("let me make sure…"), **tabular dumps** (match lists, scores, CSV-like rows), **"gather/compile all data before writing"** without an imminent sandbox commit, storing tool payloads in reasoning instead of `workspace/*`.
 
 After the checklist → **call the tool immediately** or give the final answer.
 
