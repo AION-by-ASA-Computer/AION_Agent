@@ -50,6 +50,17 @@ Session files: `data/sessions/<id>/.pi/` (`SYSTEM.md`, `skills/`, `models.json`,
 
 Production `docker-compose.yml` includes optional `pi-worker` service. Set `AION_LONG_RUN_ENABLED=1` on `backend`.
 
+## Pi-native compaction
+
+Pi maintains its own session transcript and runs **compaction inside the worker** when context nears the model window (`settings.json` → `compaction.reserveTokens` / `keepRecentTokens`, env `AION_PI_COMPACTION_*`).
+
+- Events: `compaction_start` / `compaction_end` → SSE `context_compacting { active: true|false }`
+- The worker may **pause token streaming** during compaction (no bug in chat-ui); the turn continues after `compaction_end`
+- chat-ui shows the banner **above the composer** (always visible while scrolling)
+- Do **not** stop the turn manually unless it exceeds `AION_LONG_RUN_TURN_TIMEOUT`; compaction can take 10–60s on large sessions
+
+Haystack mid-turn compaction (normal mode) is documented in [context-compaction.md](../memory/context-compaction.md).
+
 ## Related
 
 - Harness v2 patterns (Haystack): [aion-harness-v2.md](./aion-harness-v2.md)

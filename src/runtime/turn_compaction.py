@@ -105,8 +105,8 @@ _PER_TOOL_CAP_LEGACY: Dict[str, str] = {
 }
 
 _PER_TOOL_DEFAULTS: Dict[str, int] = {
-    "web_fetch_page": 6000,
-    "web_search": 4000,
+    "web_fetch_page": 12000,
+    "web_search": 12000,
 }
 
 
@@ -125,11 +125,52 @@ def tool_result_max_chars_for(tool_name: str) -> int:
 
 
 def _truncate_web_tool_json(text: str, tool_name: str, cap: int) -> Optional[str]:
-    """Shrink web tool JSON without breaking structure (chat-ui parses output)."""
+    """Shrink web tool JSON/TOON without breaking structure (chat-ui parses JSON events)."""
     import json
 
+    raw = str(text or "").strip()
+    if raw.startswith("```toon"):
+        key = (tool_name or "").strip().lower()
+        if key == "web_search":
+            from src.runtime.toon_encode import format_web_search_toon, parse_web_search_toon
+
+            data = parse_web_search_toon(raw)
+            if isinstance(data, dict):
+                results = data.get("results")
+                if isinstance(results, list):
+                    budget = max(200, cap - 280)
+                    per = max(40, budget // max(1, len(results)))
+                    for row in results:
+                        if not isinstance(row, dict):
+                            continue
+                        for field in ("snippet", "content", "description", "title"):
+                            val = row.get(field)
+                            if isinstance(val, str) and len(val) > per:
+                                row[field] = val[:per] + "…"
+                    out = format_web_search_toon(data)
+                    while len(out) > cap and isinstance(results, list) and len(results) > 1:
+                        results.pop()
+                        data["results"] = results
+                        out = format_web_search_toon(data)
+                    if len(out) <= cap:
+                        return out
+        note = "\n[AION: truncated for context budget]"
+        max_body = max(200, cap - 120)
+        if len(raw) <= cap:
+            return raw
+        # Keep TOON header lines; trim trailing text block.
+        lines = raw.splitlines()
+        head = []
+        for line in lines:
+            if line.startswith("text:") or line.strip() == "text: |":
+                break
+            head.append(line)
+        body_budget = max(120, cap - sum(len(l) + 1 for l in head) - len(note) - 8)
+        trimmed = "\n".join(head + ["text: |", raw[raw.find("text:") :][:body_budget] + note, "```"])
+        return trimmed[:cap]
+
     try:
-        data = json.loads(text)
+        data = json.loads(raw)
     except json.JSONDecodeError:
         return None
     if not isinstance(data, dict):
@@ -944,6 +985,73 @@ def maybe_inject_max_steps_prompt() -> None:
     rt["max_steps_injected"] = True
 
 
+def _web_tool_compact_threshold(agent: Any) -> int:
+    try:
+        ratio = float(os.getenv("AION_WEB_TOOL_COMPACT_RATIO", "0.55"))
+    except ValueError:
+        ratio = 0.55
+    try:
+        max_prompt = int(getattr(agent, "max_prompt_tokens", None) or os.getenv("AION_CONTEXT_WINDOW", "131072"))
+    except ValueError:
+        max_prompt = 131072
+    return int(max_prompt * ratio)
+
+
+def _maybe_early_web_tool_compact(
+    agent: Any,
+    data: Dict[str, Any],
+    messages: List[ChatMessage],
+    rt: Dict[str, Any],
+) -> bool:
+    """Mechanical shrink when many web tools fill context before global 92% threshold."""
+    try:
+        after_n = max(2, int(os.getenv("AION_WEB_TOOL_COMPACT_AFTER", "4")))
+    except ValueError:
+        after_n = 4
+    web_count = int(rt.get("web_tool_calls") or 0)
+    if web_count < after_n:
+        return False
+
+    system_msgs, convo = _split_system_and_conversation(list(messages))
+    if len(convo) <= 1:
+        return False
+
+    extra = int(rt.get("extra_tokens") or 0)
+    stats = _estimate_prompt_total(agent, messages, extra=extra)
+    if stats["total"] < _web_tool_compact_threshold(agent):
+        return False
+
+    keep = max(1, int(os.getenv("AION_MECHANICAL_COMPACT_KEEP_TOOLS", "2")))
+    new_convo, shrunk = mechanical_shrink_conversation(convo, keep_recent_tools=keep)
+    if not shrunk:
+        return False
+
+    data["messages"] = system_msgs + new_convo
+    rt["last_compact_at"] = time.monotonic()
+    rt["extra_tokens"] = 0
+    rt["live_messages"] = data["messages"]
+    after_stats = _estimate_prompt_total(agent, data["messages"])
+    logger.warning(
+        "web_tool_early_compact session=%s web_calls=%d tools_shrunk=%d tokens %d→%d",
+        str(rt.get("session_id", ""))[:8],
+        web_count,
+        shrunk,
+        stats["total"],
+        after_stats["total"],
+    )
+    _mid_turn_debug_log(
+        "web_tool_early_compact",
+        {
+            "session_id": str(rt.get("session_id", ""))[:12],
+            "web_tool_calls": web_count,
+            "tools_shrunk": shrunk,
+            "tokens_before": stats["total"],
+            "tokens_after": after_stats["total"],
+        },
+    )
+    return True
+
+
 def maybe_compact_after_tool(*, tool_name: str, result: str) -> str:
     """Tronca output tool e, se serve, compatta lo state agent prima del prossimo LLM step."""
     out = truncate_tool_result(result, tool_name=tool_name)
@@ -956,6 +1064,10 @@ def maybe_compact_after_tool(*, tool_name: str, result: str) -> str:
         else "tool_results"
     )
     add_turn_token_estimate(count_tokens(out) + 128, bucket=bucket)
+    if tname in ("web_search", "web_fetch_page"):
+        rt = resolve_turn_runtime()
+        if isinstance(rt, dict):
+            rt["web_tool_calls"] = int(rt.get("web_tool_calls") or 0) + 1
     try:
         maybe_inject_max_steps_prompt()
     except Exception as exc:
@@ -964,6 +1076,22 @@ def maybe_compact_after_tool(*, tool_name: str, result: str) -> str:
         tool_name, out
     ):
         try:
+            if tname in ("web_search", "web_fetch_page"):
+                exec_ctx = _agent_exec_ctx.get() if _agent_exec_ctx else None
+                state = getattr(exec_ctx, "state", None) if exec_ctx else None
+                data = getattr(state, "_data", None) or getattr(state, "data", None) if state else None
+                messages = data.get("messages") if isinstance(data, dict) else None
+                agent = (rt or {}).get("agent") if isinstance(rt, dict) else None
+                if (
+                    isinstance(rt, dict)
+                    and isinstance(data, dict)
+                    and isinstance(messages, list)
+                    and agent is not None
+                    and _maybe_early_web_tool_compact(agent, data, messages, rt)
+                ):
+                    sync_live_turn_messages()
+                    emit_context_budget_sse(phase="web_tool_compact")
+                    return out
             compact_agent_messages_in_place()
         except Exception as exc:
             logger.warning("maybe_compact_after_tool failed: %s", exc)

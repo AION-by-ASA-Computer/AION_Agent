@@ -5,7 +5,9 @@ import {
   isFilePreviewTool,
   isScriptLikeTitle,
 } from "./filePreviewTools";
+import { coalesceTurnSegments } from "./coalesceTurnSegments";
 import { initialTurnState } from "./types";
+import { webSearchSourceRows } from "./webToolParse";
 
 /** Legacy <plan> token stripping — off when tool-first Plan Mode is default. */
 const PLAN_TEXT_PARSER_ENABLED =
@@ -349,26 +351,22 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
       if (typeof ev.id === "string") delete next.activeToolKeyById[ev.id];
 
       if (name === "web_search") {
-        try {
-          const data = JSON.parse(output) as { results?: unknown[] };
-          const rows = Array.isArray(data?.results) ? data.results : [];
+        const rows = webSearchSourceRows(output);
+        if (rows.length > 0) {
           const seen = new Set(next.webSourceCards.map((c) => c.url));
           let idx = next.webSourceCards.length;
           for (const row of rows) {
-            const r = row as Record<string, unknown>;
-            const url = String(r?.url ?? "").trim();
+            const url = row.url.trim();
             if (!url || seen.has(url)) continue;
             seen.add(url);
             idx += 1;
             next.webSourceCards.push({
               index: idx,
-              title: String(r?.title || url).slice(0, 500),
+              title: row.title.slice(0, 500),
               url,
-              provider: r?.provider != null ? String(r.provider) : undefined,
+              provider: row.provider,
             });
           }
-        } catch {
-          /* ignore */
         }
       }
     } else if (et === "tool_error") {
@@ -713,7 +711,8 @@ function segmentsFromHistoryMessage(msg: {
 
 /** Normalize live segments before persisting to API (no running tools, no large buffers). */
 export function segmentsForPersist(segments: TurnSegment[]): TurnSegment[] {
-  return segments
+  return coalesceTurnSegments(
+    segments
     .filter(
       (seg) =>
         seg.kind !== "generating" &&
@@ -733,7 +732,8 @@ export function segmentsForPersist(segments: TurnSegment[]): TurnSegment[] {
         return { ...seg, buffer: "" };
       }
       return seg;
-    });
+    }),
+  );
 }
 
 function tryParseJson(raw: string | null | undefined): unknown {

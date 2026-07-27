@@ -1904,6 +1904,7 @@ class AgentPipeline:
                         profile_name=self.profile_name,
                         user_id=self.user_id,
                         user_message=augmented_user or user_input,
+                        preflight_messages=agent_messages,
                         queue=queue,
                         stop_event=stop_event,
                         loop=loop,

@@ -57,4 +57,32 @@ describe("ensurePiSession", () => {
     expect(call?.noTools).toBe("builtin");
     expect(call).not.toHaveProperty("tools");
   });
+
+  it("reuses an existing in-memory session on second ensure", async () => {
+    const session = {
+      setModel: vi.fn().mockResolvedValue(undefined),
+      supportsThinking: vi.fn().mockReturnValue(false),
+      setThinkingLevel: vi.fn(),
+      dispose: vi.fn(),
+      getAllTools: vi.fn().mockReturnValue([]),
+      modelRuntime: {
+        getModel: vi.fn().mockReturnValue({ id: "AIONQ35-35-Q8B", provider: "aion" }),
+      },
+    };
+    vi.mocked(createAgentSession).mockResolvedValue({ session } as never);
+
+    const payload = {
+      session_id: "sess-reuse-test",
+      workspace_dir: "/tmp/ws",
+      agent_dir: "/tmp/agent",
+      model_id: "AIONQ35-35-Q8B",
+    };
+    const first = await ensurePiSession(payload);
+    const second = await ensurePiSession(payload);
+
+    expect(first.created).toBe(true);
+    expect(second.created).toBe(false);
+    expect(createAgentSession).toHaveBeenCalledTimes(1);
+    expect(session.dispose).not.toHaveBeenCalled();
+  });
 });

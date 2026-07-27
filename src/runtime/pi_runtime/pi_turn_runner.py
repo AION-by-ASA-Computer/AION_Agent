@@ -11,6 +11,84 @@ logger = logging.getLogger("aion.pi_turn_runner")
 
 # Flush assistant token deltas to context_budget after this many estimated tokens.
 _PI_ASSISTANT_BUDGET_FLUSH_TOKENS = 400
+_PI_HISTORY_PREFIX_MAX_CHARS = int(
+    os.getenv("AION_PI_HISTORY_PREFIX_MAX_CHARS", "12000") or "12000"
+)
+
+
+def _pi_history_role(msg: Any) -> str:
+    role = getattr(msg, "role", None)
+    if role is None and isinstance(msg, dict):
+        role = msg.get("role")
+    return str(role or "user")
+
+
+def _count_pi_dialogue_messages(messages: List[Dict[str, Any]]) -> int:
+    count = 0
+    for msg in messages:
+        role = str(msg.get("role") or "").strip().lower()
+        if role in {"user", "assistant"}:
+            count += 1
+    return count
+
+
+def format_pi_history_prefix(
+    messages: Optional[List[Any]],
+    *,
+    max_chars: int = _PI_HISTORY_PREFIX_MAX_CHARS,
+) -> str:
+    """Format prior AION STM rows for a fresh Pi session (worker restart / cold start)."""
+    from src.haystack_chat import chat_message_text
+
+    rows = list(messages or [])
+    if len(rows) <= 1:
+        return ""
+    lines: List[str] = []
+    for msg in rows[:-1]:
+        text = chat_message_text(msg).strip()
+        if not text:
+            continue
+        lines.append(f"{_pi_history_role(msg)}: {text}")
+    if not lines:
+        return ""
+    block = "\n\n".join(lines)
+    if len(block) > max_chars:
+        block = "…\n" + block[-max_chars:]
+    return (
+        "--- Previous messages in this chat (continue the same task) ---\n"
+        f"{block}\n"
+        "--- End previous messages ---\n\n"
+    )
+
+
+async def _resolve_pi_prompt_message(
+    client: Any,
+    session_id: str,
+    *,
+    user_message: str,
+    preflight_messages: Optional[List[Any]],
+    session_created: bool,
+) -> str:
+    """Hydrate Pi with AION STM when the worker session was just created empty."""
+    if not session_created:
+        return user_message
+    try:
+        existing = await client.get_messages(session_id)
+    except Exception as exc:
+        logger.debug("Pi get_messages before prompt skipped: %s", exc)
+        existing = []
+    if _count_pi_dialogue_messages(existing) > 0:
+        return user_message
+    prefix = format_pi_history_prefix(preflight_messages)
+    if not prefix:
+        return user_message
+    logger.info(
+        "pi_history_hydrate session=%s prior_msgs=%d prefix_chars=%d",
+        session_id[:8],
+        max(0, len(preflight_messages or []) - 1),
+        len(prefix),
+    )
+    return prefix + user_message
 
 
 async def _emit_pi_context_budget(
@@ -95,6 +173,7 @@ async def run_pi_agent_turn(
     llm_provider_name: Optional[str] = None,
     agent_tools: Optional[list] = None,
     reasoning_effort: Optional[str] = None,
+    preflight_messages: Optional[List[Any]] = None,
 ) -> None:
     """Execute one long-run turn via Pi worker; push chunks to ``queue``."""
     from src.agent_profile import profile_manager
@@ -171,7 +250,7 @@ async def run_pi_agent_turn(
             client.base_url,
         )
         thinking_level = pi_thinking_level_for_effort(reasoning_effort)
-        await client.ensure_session(
+        ensured = await client.ensure_session(
             {
                 "session_id": session_id,
                 "workspace_dir": workspace,
@@ -189,11 +268,24 @@ async def run_pi_agent_turn(
                 "user_id": user_id,
             }
         )
-        logger.info("pi_stream_prompt session=%s chars=%d", session_id[:8], len(user_message))
+        session_created = bool(ensured.get("created"))
+        pi_prompt = await _resolve_pi_prompt_message(
+            client,
+            session_id,
+            user_message=user_message,
+            preflight_messages=preflight_messages,
+            session_created=session_created,
+        )
+        logger.info(
+            "pi_stream_prompt session=%s chars=%d hydrated=%s",
+            session_id[:8],
+            len(pi_prompt),
+            pi_prompt != user_message,
+        )
 
         async for chunk in client.stream_prompt(
             session_id,
-            user_message,
+            pi_prompt,
             stop_event=stop_event,
         ):
             if stop_event.is_set():

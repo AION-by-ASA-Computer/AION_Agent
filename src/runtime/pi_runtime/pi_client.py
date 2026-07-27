@@ -55,7 +55,8 @@ class PiWorkerClient:
                 json=payload,
             )
             r.raise_for_status()
-            return r.json()
+            data = r.json()
+            return data if isinstance(data, dict) else {"ok": True}
 
     async def abort_session(self, session_id: str) -> None:
         try:

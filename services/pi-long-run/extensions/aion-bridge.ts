@@ -26,20 +26,39 @@ function loadManifest(path: string): ManifestTool[] {
   }
 }
 
+/** Pi TypeBox rejects partial tool JSON before the AION bridge; server preflight handles required fields. */
+const RELAXED_CLIENT_VALIDATION = new Set([
+  "sandbox_write_workspace_file",
+  "sandbox_edit_workspace_file",
+  "sandbox_apply_patch",
+  "sandbox_install_npm_packages",
+  "sandbox_install_python_packages",
+]);
+
+function relaxPiParameters(toolName: string, schema: Record<string, unknown>): Record<string, unknown> {
+  if (!RELAXED_CLIENT_VALIDATION.has(toolName)) {
+    return schema;
+  }
+  const copy = { ...schema };
+  delete copy.required;
+  return { ...copy, type: "object", additionalProperties: true };
+}
+
 export function createAionBridgeExtension(config: BridgeConfig, manifestPath: string) {
   return (pi: ExtensionAPI) => {
     const tools = loadManifest(manifestPath);
     for (const tool of tools) {
-      const schema =
+      const rawSchema =
         tool.parameters && typeof tool.parameters === "object"
-          ? (tool.parameters as Parameters<typeof Type.Unsafe>[0])
+          ? (tool.parameters as Record<string, unknown>)
           : { type: "object", properties: {} };
+      const schema = relaxPiParameters(tool.name, rawSchema);
 
       pi.registerTool({
         name: tool.name,
         label: tool.name,
         description: tool.description || tool.name,
-        parameters: Type.Unsafe(schema),
+        parameters: Type.Unsafe(schema as Parameters<typeof Type.Unsafe>[0]),
         async execute(_toolCallId, params) {
           const res = await fetch(config.invokeUrl, {
             method: "POST",

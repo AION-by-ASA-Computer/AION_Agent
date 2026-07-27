@@ -59,9 +59,8 @@ class WebSearchExecutor:
         except Exception as e:
             emit_tool_error(sid, "web_search", call_id, str(e))
             raise
-        out = maybe_compact_after_tool(tool_name="web_search", result=out)
         emit_tool_end(sid, "web_search", call_id, out)
-        return out
+        return maybe_compact_after_tool(tool_name="web_search", result=out)
 
 
 class WebFetchPageExecutor:
@@ -100,9 +99,8 @@ class WebFetchPageExecutor:
         except Exception as e:
             emit_tool_error(sid, "web_fetch_page", call_id, str(e))
             raise
-        out = maybe_compact_after_tool(tool_name="web_fetch_page", result=out)
         emit_tool_end(sid, "web_fetch_page", call_id, out)
-        return out
+        return maybe_compact_after_tool(tool_name="web_fetch_page", result=out)
 
 
 def _profile_slug(profile: Optional["AgentProfile"]) -> str:
@@ -118,8 +116,9 @@ def build_web_search_tool(
     return Tool(
         name="web_search",
         description=(
-            "Web search (Tavily / Brave / SearXNG) in base alla configurazione server. "
-            "Returns JSON with results[{title,url,snippet,provider}]. Use concise queries."
+            "Web search (Tavily / Brave / SearXNG). Returns TOON or JSON with "
+            "results[{title,url,snippet,provider}]. Use short natural-language queries; "
+            "prefer fetching a known URL with web_fetch_page over repeated searches."
         ),
         function=WebSearchExecutor(),
         parameters={
@@ -128,7 +127,7 @@ def build_web_search_tool(
                 "query": {"type": "string", "description": "Search query"},
                 "max_results": {
                     "type": "integer",
-                    "description": "Max results (1–20, default da env)",
+                    "description": "Max results (1–20, default 8 from AION_WEB_SEARCH_MAX_RESULTS)",
                 },
                 "language": {
                     "type": "string",
@@ -148,7 +147,8 @@ def build_web_fetch_page_tool(
         name="web_fetch_page",
         description=(
             "Scarica il contenuto testuale di una singola pagina HTTP(S). "
-            "Prefer URLs already obtained from web_search. Returns JSON with a text field."
+            "Wikipedia: API MediaWiki (article o sezione #anchor); fallback HTML se API non disponibile. "
+            "Per pagine lunghe, usa URL con #sezione. Returns TOON or JSON with text."
         ),
         function=WebFetchPageExecutor(),
         parameters={

@@ -11,6 +11,7 @@ export function ComposerOptionRow({
   disabled,
   badge,
   icon,
+  trailing,
   onClick,
 }: {
   label: string;
@@ -19,6 +20,7 @@ export function ComposerOptionRow({
   disabled?: boolean;
   badge?: string;
   icon?: React.ReactNode;
+  trailing?: React.ReactNode;
   onClick?: () => void;
 }) {
   if (disabled) {
@@ -69,7 +71,10 @@ export function ComposerOptionRow({
           </p>
         ) : null}
       </div>
-      {selected ? <Check size={12} className="mt-0.5 shrink-0" aria-hidden /> : null}
+      <div className="mt-0.5 flex shrink-0 items-center gap-1">
+        {trailing}
+        {selected ? <Check size={12} aria-hidden /> : null}
+      </div>
     </button>
   );
 }

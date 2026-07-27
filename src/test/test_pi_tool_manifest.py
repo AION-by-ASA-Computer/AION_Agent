@@ -1,4 +1,8 @@
-from src.runtime.pi_runtime.tool_manifest import tools_to_pi_manifest, write_tool_manifest
+from src.runtime.pi_runtime.tool_manifest import (
+    relax_pi_tool_parameters,
+    tools_to_pi_manifest,
+    write_tool_manifest,
+)
 
 
 class _Tool:
@@ -37,6 +41,33 @@ def test_tools_to_pi_manifest_records_mcp_server_name():
     )
     assert manifest[0]["source"] == "mcp"
     assert manifest[0]["server_name"] == "session_sandbox"
+
+
+def test_relax_pi_tool_parameters_drops_required_for_sandbox_write():
+    raw = {
+        "type": "object",
+        "properties": {
+            "relative_path": {"type": "string"},
+            "content": {"type": "string"},
+        },
+        "required": ["relative_path", "content"],
+    }
+    relaxed = relax_pi_tool_parameters("sandbox_write_workspace_file", raw)
+    assert "required" not in relaxed
+    assert relaxed.get("additionalProperties") is True
+
+
+def test_tools_to_pi_manifest_relaxes_sandbox_write_schema():
+    params = {
+        "type": "object",
+        "properties": {"relative_path": {"type": "string"}, "content": {"type": "string"}},
+        "required": ["relative_path", "content"],
+    }
+    tool = _Tool("sandbox_write_workspace_file")
+    tool.parameters = params
+    manifest = tools_to_pi_manifest("sess-relax", [tool])
+    assert manifest[0]["parameters"].get("required") is None
+    assert manifest[0]["parameters"].get("additionalProperties") is True
 
 
 def test_write_tool_manifest(tmp_path, monkeypatch):

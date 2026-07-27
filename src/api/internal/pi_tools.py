@@ -50,16 +50,26 @@ async def invoke_pi_tool(
         )
         truncated = truncate_tool_result(content, tool_name=body.tool_name)
         is_truncated = truncated != content
+        is_error = False
+        try:
+            import json as _json
+
+            parsed = _json.loads(truncated)
+            if isinstance(parsed, dict) and parsed.get("ok") is False:
+                is_error = True
+        except Exception:
+            pass
         logger.debug(
-            "Pi tool invoke ok tool=%s session=%s chars=%d truncated=%s",
+            "Pi tool invoke ok tool=%s session=%s chars=%d truncated=%s error=%s",
             body.tool_name,
             body.session_id[:8],
             len(truncated),
             is_truncated,
+            is_error,
         )
         return {
             "content": truncated,
-            "is_error": False,
+            "is_error": is_error,
             "truncated": is_truncated,
         }
     except Exception as exc:

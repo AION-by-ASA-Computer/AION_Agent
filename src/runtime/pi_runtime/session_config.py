@@ -153,8 +153,8 @@ async def write_pi_models_json(
 
 
 def write_pi_settings_json(agent_dir: Path, *, default_model: Optional[str] = None) -> None:
-    reserve = int(os.getenv("AION_PI_COMPACTION_RESERVE_TOKENS", "16384"))
-    keep = int(os.getenv("AION_PI_COMPACTION_KEEP_RECENT_TOKENS", "20000"))
+    reserve = int(os.getenv("AION_PI_COMPACTION_RESERVE_TOKENS", "49152"))
+    keep = int(os.getenv("AION_PI_COMPACTION_KEEP_RECENT_TOKENS", "12000"))
     payload = {
         "compaction": {
             "enabled": True,

@@ -28,11 +28,13 @@ type ManagedSession = {
 
 const sessions = new Map<string, ManagedSession>();
 
-export async function ensurePiSession(payload: SessionCreatePayload): Promise<void> {
+export async function ensurePiSession(
+  payload: SessionCreatePayload,
+): Promise<{ created: boolean }> {
   const existing = sessions.get(payload.session_id);
   if (existing) {
-    existing.dispose();
-    sessions.delete(payload.session_id);
+    // Reuse in-memory Pi session so multi-turn chats keep tool/results context.
+    return { created: false };
   }
 
   const cwd = payload.workspace_dir;
@@ -107,6 +109,7 @@ export async function ensurePiSession(payload: SessionCreatePayload): Promise<vo
     session,
     dispose: () => session.dispose(),
   });
+  return { created: true };
 }
 
 export function getPiSession(sessionId: string): AgentSession | undefined {

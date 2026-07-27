@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -82,7 +82,16 @@ import {
   useConversationTranscriptRefs,
 } from "@/lib/use-conversation-transcript";
 import { upsertChatMessage } from "@/lib/merge-chat-history";
+import {
+  fetchCurrentUser,
+  readDefaultProfileSlug,
+  readStoredDefaultProfileSlug,
+  resolveDefaultProfileSlug,
+  syncDefaultProfileSlug,
+  writeStoredDefaultProfileSlug,
+} from "@/lib/api/user-preferences";
 import type { ChatChunk, TurnSegment, TurnState, WebSourceCard } from "@/lib/sse/types";
+import { webSearchSourceRows } from "@/lib/sse/webToolParse";
 
 import { ChatHeader } from "@/components/layout/ChatHeader";
 import { ContextBudgetBar } from "@/components/chat/ContextBudgetBar";
@@ -245,29 +254,23 @@ function historyMessageFromApi(m: ChatHistoryMessage): ChatMessage {
   if (m.steps) {
     for (const step of m.steps) {
       if (step.name === "web_search" && step.output) {
-        try {
-          const data = JSON.parse(step.output);
-          const rows = Array.isArray(data?.results) ? data.results : [];
-          if (rows.length > 0) {
-            webSources = webSources || [];
-            const seen = new Set(webSources.map((c) => c.url));
-            let idx = webSources.length;
-            for (const row of rows) {
-              const r = row as Record<string, unknown>;
-              const url = String(r?.url ?? "").trim();
-              if (!url || seen.has(url)) continue;
-              seen.add(url);
-              idx += 1;
-              webSources.push({
-                index: idx,
-                title: String(r?.title || url).slice(0, 500),
-                url,
-                provider: r?.provider != null ? String(r.provider) : undefined,
-              });
-            }
+        const rows = webSearchSourceRows(step.output);
+        if (rows.length > 0) {
+          webSources = webSources || [];
+          const seen = new Set(webSources.map((c) => c.url));
+          let idx = webSources.length;
+          for (const row of rows) {
+            const url = row.url.trim();
+            if (!url || seen.has(url)) continue;
+            seen.add(url);
+            idx += 1;
+            webSources.push({
+              index: idx,
+              title: row.title.slice(0, 500),
+              url,
+              provider: row.provider,
+            });
           }
-        } catch {
-          // ignore malformed step output
         }
       }
     }
@@ -686,6 +689,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [profile, setProfile] = useState("aion_std");
+  const [favoriteProfileSlug, setFavoriteProfileSlug] = useState<string | null>(() =>
+    readStoredDefaultProfileSlug(),
+  );
+  const favoriteProfileSlugRef = useRef(favoriteProfileSlug);
+  favoriteProfileSlugRef.current = favoriteProfileSlug;
   const [sqlQueryProject, setSqlQueryProject] = useState(() =>
     typeof window !== "undefined" ? readStoredSqlProject() : "default"
   );
@@ -931,6 +939,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         .catch((err) => console.error("Error saving profile preference to DB:", err));
     }
   }, [conversationId, messages.length, userId, token]);
+
+  const handleSetFavoriteProfile = useCallback(async (slug: string) => {
+    setFavoriteProfileSlug(slug);
+    writeStoredDefaultProfileSlug(slug);
+    handleProfileChange(slug);
+    if (token) {
+      const ok = await syncDefaultProfileSlug(token, slug);
+      if (!ok) {
+        console.error("Error saving default profile to user metadata");
+      }
+    }
+  }, [token, handleProfileChange]);
 
   const handleProjectChange = useCallback((newProject: string) => {
     const proj = newProject.trim();
@@ -2363,6 +2383,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   }, [conversationId, lastUserMessageId, messages, streaming, userId, token, runChatRequest, stopActiveStream]);
 
   useEffect(() => {
+    if (!token) return;
+    void fetchCurrentUser(token)
+      .then((user) => {
+        const slug = readDefaultProfileSlug(user?.metadata);
+        if (!slug) return;
+        setFavoriteProfileSlug(slug);
+        writeStoredDefaultProfileSlug(slug);
+      })
+      .catch((err: unknown) => console.error("default profile fetch", err));
+  }, [token]);
+
+  useEffect(() => {
     fetchProfiles(userId, token)
       .then((p) => {
         setProfiles(p);
@@ -2372,7 +2404,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             if (matched) {
               return matched.slug || matched.name;
             }
-            return p[0].slug || p[0].name;
+            return resolveDefaultProfileSlug(p, favoriteProfileSlugRef.current);
           });
         }
       })
@@ -2386,8 +2418,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   useEffect(() => {
     if (!conversationId) return;
 
-    // Reset immediato a "aion_std" (o primo profilo abilitato) per le nuove chat / fallback
-    const defaultProfile = profiles.some((x) => x.slug === "aion_std") ? "aion_std" : (profiles[0]?.slug || "aion_std");
+    // Reset immediato al profilo predefinito utente (o fallback) per le nuove chat
+    const defaultProfile = resolveDefaultProfileSlug(profiles, favoriteProfileSlugRef.current);
     setProfile(defaultProfile);
     setSqlQueryProject(readStoredSqlProject());
     setConversationTitle(null);
@@ -3125,7 +3157,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const showAgentWorkingShimmer = Boolean(
     streaming &&
     turnVisual &&
-    !contextCompacting &&
     !hasVisibleAssistantText &&
     !hasVisibleReasoning &&
     !hasRunningTool &&
@@ -3698,13 +3729,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       title={t("chat.agent_status.saving_info")}
                       subtitle={t("chat.agent_status.saving_info_desc")}
                     />
-                  ) : showContextCompactingShimmer ? (
-                    <StatusProgressCard
-                      className="mb-3"
-                      icon={Database}
-                      title={t("chat.agent_status.compacting")}
-                      subtitle={t("chat.agent_status.compacting_desc")}
-                    />
                   ) : showAgentWorkingShimmer ? (
                     <AgentWorkingShimmer label={agentWorkingLabel} />
                   ) : null}
@@ -3756,6 +3780,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
           <div className="relative z-20 min-w-0 shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
             <div className="mx-auto w-full min-w-0 max-w-3xl">
+              {showContextCompactingShimmer ? (
+                <StatusProgressCard
+                  className="mb-3 border-amber-500/30 bg-amber-500/5"
+                  icon={Database}
+                  title={t("chat.agent_status.compacting")}
+                  subtitle={t("chat.agent_status.compacting_desc")}
+                />
+              ) : null}
               {contextBudget ? (
                 <ContextBudgetBar budget={contextBudget} className="mb-3" />
               ) : null}
@@ -4279,6 +4311,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                             {profiles.map((p) => {
                               const slug = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
                               const isSelected = p.slug === profile || p.name === profile;
+                              const isFavorite = favoriteProfileSlug === slug;
                               return (
                                 <ComposerOptionRow
                                   key={p.name}
@@ -4289,6 +4322,37 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                     handleProfileChange(slug);
                                     setIsProfileOpen(false);
                                   }}
+                                  trailing={
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleSetFavoriteProfile(slug);
+                                      }}
+                                      className={cn(
+                                        "focus-ring rounded p-0.5 transition-colors",
+                                        isFavorite
+                                          ? "text-amber-500 hover:text-amber-600"
+                                          : "text-muted-foreground/50 hover:text-amber-500",
+                                      )}
+                                      aria-label={
+                                        isFavorite
+                                          ? t("chat.profile.favorite_active")
+                                          : t("chat.profile.favorite_set")
+                                      }
+                                      title={
+                                        isFavorite
+                                          ? t("chat.profile.favorite_active")
+                                          : t("chat.profile.favorite_set")
+                                      }
+                                    >
+                                      <Star
+                                        size={12}
+                                        className={cn(isFavorite && "fill-current")}
+                                        aria-hidden
+                                      />
+                                    </button>
+                                  }
                                 />
                               );
                             })}

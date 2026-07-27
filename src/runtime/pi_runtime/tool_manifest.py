@@ -10,6 +10,32 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("aion.pi_tool_manifest")
 
+# Pi validates tool args locally (TypeBox) before calling the AION bridge.
+# For tools with server-side preflight in mcp_tool_args, drop JSON-schema "required"
+# so partial calls reach Python and return actionable missing_arguments hints.
+_PI_RELAXED_CLIENT_VALIDATION = frozenset(
+    {
+        "sandbox_write_workspace_file",
+        "sandbox_edit_workspace_file",
+        "sandbox_apply_patch",
+        "sandbox_install_npm_packages",
+        "sandbox_install_python_packages",
+    }
+)
+
+
+def relax_pi_tool_parameters(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+    """Relax Pi-side required fields; enforce on AION bridge via prepare_mcp_tool_arguments."""
+    base = (tool_name or "").split("-")[-1].strip().lower()
+    if tool_name not in _PI_RELAXED_CLIENT_VALIDATION and base not in _PI_RELAXED_CLIENT_VALIDATION:
+        return parameters
+    if not isinstance(parameters, dict):
+        return {"type": "object", "properties": {}, "additionalProperties": True}
+    out = dict(parameters)
+    out.pop("required", None)
+    out["additionalProperties"] = True
+    return out
+
 
 @dataclass
 class PiToolEntry:
@@ -70,7 +96,7 @@ def tools_to_pi_manifest(
         entry = PiToolEntry(
             name=name,
             description=str(desc),
-            parameters=params,
+            parameters=relax_pi_tool_parameters(name, params),
             source=source,
             server_name=server_name,
         )

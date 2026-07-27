@@ -59,8 +59,12 @@ const server = http.createServer(async (req, res) => {
   if (req.method === "POST" && path === "/sessions") {
     try {
       const body = await readJson<SessionCreatePayload>(req);
-      await ensurePiSession(body);
-      writeJson(res, 200, { ok: true, session_id: body.session_id });
+      const ensured = await ensurePiSession(body);
+      writeJson(res, 200, {
+        ok: true,
+        session_id: body.session_id,
+        created: ensured.created,
+      });
     } catch (err) {
       writeJson(res, 500, { error: String(err) });
     }

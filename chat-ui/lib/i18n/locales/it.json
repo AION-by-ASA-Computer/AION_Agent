@@ -402,7 +402,9 @@
       "select": "Seleziona Profilo",
       "none": "Nessun profilo",
       "active_hint": "Tool, skill e sorgenti memoria per questa chat.",
-      "customize": "Personalizza profilo e istruzioni"
+      "customize": "Personalizza profilo e istruzioni",
+      "favorite_set": "Imposta come profilo predefinito",
+      "favorite_active": "Profilo predefinito"
     },
     "agent_mode": {
       "select": "Modalità agente",
