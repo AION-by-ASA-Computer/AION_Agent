@@ -19,6 +19,8 @@ version: 5
 | Find where a pattern appears | `sandbox_grep_content` |
 | List files by wildcard/pattern | `sandbox_fnmatch_glob` |
 | Read part of a large file | `sandbox_read_file_chunk` |
+| List offloaded tool outputs (web_fetch, etc.) | `sandbox_list_files(subdir="tool_results")` then `sandbox_read_file_chunk` on `derived/tool_results/...` |
+| Search inside offloaded tool text | `sandbox_grep_content(..., relative_root="derived", glob_filter="tool_results/*.txt")` |
 | Execute Python script | `sandbox_run_python_file` (`workspace/*.py` only) |
 | Office skill helpers (unpack/pack) | `skill_view(docx)` then `sandbox_exec_allowlisted` on `scripts/office/...` |
 | After docx unpack (read/grep/edit XML) | Unpack to **`workspace/unpacked/`**; then `sandbox_grep_content`, `sandbox_read_text_file`, `sandbox_edit_workspace_file` under `workspace/unpacked/` |
@@ -38,6 +40,19 @@ version: 5
    b) sandbox_edit_workspace_file(file, old, new) to patch
 4. sandbox_run_python_file to validate runtime behavior
 ```
+
+## Workflow: offloaded tool results (AION offload)
+
+When context shows `[AION offload]` or the tool trace lists paths under `derived/tool_results/`:
+
+```text
+1. sandbox_list_files(subdir="tool_results")  # or read path from tool trace / ledger
+2. sandbox_read_file_chunk("derived/tool_results/0003_web_fetch_page_call.txt", offset_lines=0, max_lines=200)
+3. For scores/patterns: sandbox_grep_content("2-1", relative_root="derived", glob_filter="tool_results/*.txt", fixed_string=True)
+```
+
+- `derived/tool_results/` is **read-only** session storage (not under `workspace/`).
+- Use `offset_lines=0` first — offload files are often a few very long lines.
 
 ## Workflow: large-file analysis
 
@@ -92,3 +107,4 @@ Do not call the tool with only `old_string` / `replace_all`: `relative_path` is 
 
 - `pandoc` must be on PATH in the backend container/host; prefer unpack + sandbox grep/read for `.docx` edits.
 - Paths are always relative to the session root; writable code lives under `workspace/`.
+- Read-only tool offload files live under `derived/tool_results/` (see workflow above).

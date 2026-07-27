@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { cn } from "@/lib/cn";
 import {
   LucideIcon,
@@ -18,10 +18,18 @@ import {
   ChevronRight,
   ChevronDown,
   RefreshCw,
+  Loader2,
+  Eye,
 } from "lucide-react";
 import { useT } from "@/lib/i18n/use-t";
 import { StreamingContentPreview } from "@/components/dock/StreamingContentPreview";
-import { sessionDownloadUrl, type SessionFileRow } from "@/lib/api/aion";
+import { ToolResultsPanel } from "@/components/dock/ToolResultsPanel";
+import {
+  fetchSessionFileText,
+  sessionDownloadUrl,
+  type SessionFileRow,
+  type ToolLedgerEntry,
+} from "@/lib/api/aion";
 
 export type DockArtifactItem = {
   key: string;
@@ -196,6 +204,7 @@ function getFileIconConfig(item: {
 export function ArtifactsPanel({
   items,
   sessionFiles = [],
+  toolLedgerEntries = [],
   loadingFiles = false,
   onRefreshFiles,
   conversationId,
@@ -203,6 +212,7 @@ export function ArtifactsPanel({
 }: {
   items: DockArtifactItem[];
   sessionFiles?: SessionFileRow[];
+  toolLedgerEntries?: ToolLedgerEntry[];
   loadingFiles?: boolean;
   onRefreshFiles?: () => void;
   conversationId?: string;
@@ -215,7 +225,37 @@ export function ArtifactsPanel({
     uploads: true,
     derived: true,
     workspace: true,
+    tool_results: true,
   });
+  const [filePreviewPath, setFilePreviewPath] = useState<string | null>(null);
+  const [filePreviewText, setFilePreviewText] = useState("");
+  const [filePreviewLoading, setFilePreviewLoading] = useState(false);
+  const [filePreviewError, setFilePreviewError] = useState<string | null>(null);
+
+  const openFilePreview = useCallback(
+    async (relPath: string) => {
+      if (!conversationId) return;
+      if (filePreviewPath === relPath) {
+        setFilePreviewPath(null);
+        setFilePreviewText("");
+        setFilePreviewError(null);
+        return;
+      }
+      setFilePreviewPath(relPath);
+      setFilePreviewText("");
+      setFilePreviewError(null);
+      setFilePreviewLoading(true);
+      try {
+        const text = await fetchSessionFileText(conversationId, relPath, token);
+        setFilePreviewText(text);
+      } catch (err) {
+        setFilePreviewError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setFilePreviewLoading(false);
+      }
+    },
+    [conversationId, token, filePreviewPath],
+  );
 
   const toggleFolder = (folder: string) => {
     setExpandedFolders((prev) => ({
@@ -260,7 +300,7 @@ export function ArtifactsPanel({
     }
   };
 
-  if (!filteredItems.length && !sessionFiles.length) {
+  if (!filteredItems.length && !sessionFiles.length && !toolLedgerEntries.length) {
     return (
       <div className="p-4 flex flex-col items-center justify-center gap-2 text-center text-muted-foreground select-none">
         <File size={24} className="opacity-40" />
@@ -276,15 +316,25 @@ export function ArtifactsPanel({
     return !rel.includes("/");
   });
   const uploadsFiles = sessionFiles.filter((f) => f.relative_path?.startsWith("uploads/"));
-  const derivedFiles = sessionFiles.filter((f) => f.relative_path?.startsWith("derived/"));
+  const derivedFiles = sessionFiles.filter(
+    (f) =>
+      f.relative_path?.startsWith("derived/") &&
+      !f.relative_path?.startsWith("derived/tool_results/"),
+  );
+  const toolResultFiles = sessionFiles.filter((f) =>
+    f.relative_path?.startsWith("derived/tool_results/"),
+  );
   const workspaceFiles = sessionFiles.filter((f) => f.relative_path?.startsWith("workspace/"));
 
   const renderFolder = (
-    folderKey: "root" | "uploads" | "derived" | "workspace",
-    files: SessionFileRow[]
+    folderKey: "root" | "uploads" | "derived" | "workspace" | "tool_results",
+    files: SessionFileRow[],
   ) => {
     const isExpanded = expandedFolders[folderKey];
-    const folderTitle = t(`artifacts.${folderKey}`);
+    const folderTitle =
+      folderKey === "tool_results"
+        ? t("artifacts.tool_results_folder")
+        : t(`artifacts.${folderKey}`);
     
     // Custom theme colors for folders
     const themeColors = {
@@ -307,6 +357,11 @@ export function ArtifactsPanel({
         bg: "bg-violet-500/10 hover:bg-violet-500/15 border-violet-500/20",
         text: "text-violet-400",
         folderBg: "bg-violet-500/10",
+      },
+      tool_results: {
+        bg: "bg-amber-500/10 hover:bg-amber-500/15 border-amber-500/20",
+        text: "text-amber-500",
+        folderBg: "bg-amber-500/10",
       },
     }[folderKey];
 
@@ -354,37 +409,76 @@ export function ArtifactsPanel({
                 });
 
                 return (
-                  <div
-                    key={idx}
-                    className="group relative flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-card/65 hover:text-foreground transition-all duration-150 pl-8"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className={cn("p-1 rounded shrink-0 flex items-center justify-center", iconConfig.bgClass)}>
-                        <iconConfig.icon size={13} className={iconConfig.iconClass} />
-                      </div>
-                      <div className="min-w-0 flex-1 flex items-center justify-between gap-2 pr-2">
-                        <span className="truncate text-xs font-medium text-foreground/85 group-hover:text-foreground">
-                          {displayName}
-                        </span>
-                        {file.size_bytes !== undefined && (
-                          <span className="shrink-0 text-[0.714em] text-muted-foreground/50">
-                            {formatBytes(file.size_bytes)}
+                  <div key={idx} className="space-y-1">
+                    <div
+                      className={cn(
+                        "group relative flex items-center justify-between rounded-md px-2.5 py-1.5 text-xs text-muted-foreground hover:bg-card/65 hover:text-foreground transition-all duration-150 pl-8",
+                        folderKey === "tool_results" && filePreviewPath === relPath && "bg-amber-500/10",
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className={cn("p-1 rounded shrink-0 flex items-center justify-center", iconConfig.bgClass)}>
+                          <iconConfig.icon size={13} className={iconConfig.iconClass} />
+                        </div>
+                        <div className="min-w-0 flex-1 flex items-center justify-between gap-2 pr-2">
+                          <span className="truncate text-xs font-medium text-foreground/85 group-hover:text-foreground">
+                            {displayName}
                           </span>
+                          {file.size_bytes !== undefined && (
+                            <span className="shrink-0 text-[0.714em] text-muted-foreground/50">
+                              {formatBytes(file.size_bytes)}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        {folderKey === "tool_results" && conversationId ? (
+                          <button
+                            type="button"
+                            onClick={() => void openFilePreview(relPath)}
+                            className="focus-ring opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground"
+                            title={t("artifacts.tool_results.view")}
+                          >
+                            <Eye size={13} />
+                          </button>
+                        ) : null}
+                        {downloadUrl && (
+                          <a
+                            href={downloadUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="focus-ring opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <DownloadIcon size={13} />
+                          </a>
                         )}
                       </div>
                     </div>
-
-                    {downloadUrl && (
-                      <a
-                        href={downloadUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="focus-ring opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-muted text-muted-foreground hover:text-foreground shrink-0"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <DownloadIcon size={13} />
-                      </a>
-                    )}
+                    {folderKey === "tool_results" && filePreviewPath === relPath ? (
+                      <div className="ml-8 mr-1 rounded-md border border-amber-500/25 bg-amber-500/5 p-2">
+                        {filePreviewLoading ? (
+                          <div className="flex items-center gap-2 py-4 text-xs text-muted-foreground justify-center">
+                            <Loader2 size={14} className="animate-spin" />
+                            {t("artifacts.tool_results.loading")}
+                          </div>
+                        ) : null}
+                        {filePreviewError ? (
+                          <p className="text-xs text-rose-500 px-1 py-2">{filePreviewError}</p>
+                        ) : null}
+                        {!filePreviewLoading && !filePreviewError && filePreviewText ? (
+                          <pre className="overflow-auto max-h-[min(36vh,360px)] rounded border border-border/40 bg-background/80 p-2 text-[0.714em] leading-relaxed font-mono whitespace-pre-wrap break-words">
+                            {filePreviewText}
+                          </pre>
+                        ) : null}
+                        {!filePreviewLoading && !filePreviewError && !filePreviewText ? (
+                          <p className="text-xs text-muted-foreground px-1 py-2">
+                            {t("artifacts.tool_results.empty_file")}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 );
               })
@@ -397,6 +491,14 @@ export function ArtifactsPanel({
 
   return (
     <div className="space-y-4 p-3">
+      {toolLedgerEntries.length > 0 ? (
+        <ToolResultsPanel
+          entries={toolLedgerEntries}
+          conversationId={conversationId}
+          token={token}
+        />
+      ) : null}
+
       {/* Session Files Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1 py-1 border-b border-border/15 pb-2 mb-3">
@@ -424,6 +526,8 @@ export function ArtifactsPanel({
             {rootFiles.length > 0 && renderFolder("root", rootFiles)}
             {renderFolder("uploads", uploadsFiles)}
             {renderFolder("derived", derivedFiles)}
+            {(toolResultFiles.length > 0 || toolLedgerEntries.length > 0) &&
+              renderFolder("tool_results", toolResultFiles)}
             {renderFolder("workspace", workspaceFiles)}
           </div>
         )}

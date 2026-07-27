@@ -154,7 +154,13 @@ def _missing_required(tool_name: str, args: Dict[str, Any]) -> list[str]:
     return missing
 
 
-def _preflight_error(tool_name: str, args: Dict[str, Any], missing: list[str]) -> str:
+def _preflight_error(
+    tool_name: str,
+    args: Dict[str, Any],
+    missing: list[str],
+    *,
+    error_code: str = "missing_arguments",
+) -> str:
     hints = {
         "sandbox_edit_workspace_file": (
             "Esempio: relative_path='workspace/script.py', "
@@ -174,7 +180,7 @@ def _preflight_error(tool_name: str, args: Dict[str, Any], missing: list[str]) -
     return json.dumps(
         {
             "ok": False,
-            "error": "missing_arguments",
+            "error": error_code,
             "tool": tool_name,
             "missing": missing,
             "received_keys": sorted(k for k in args if k not in _RESERVED_KEYS),
@@ -252,7 +258,11 @@ def prepare_mcp_tool_arguments(
         args["relative_path"] = normalize_workspace_relative_path(before)
     missing = _missing_required(tool_name, args)
     if missing:
-        return raw, _preflight_error(tool_name, args, missing)
+        error_code = "missing_arguments"
+        base_tool = (tool_name or "").split("-")[-1].strip().lower()
+        if base_tool == "sandbox_write_workspace_file" and "content" in missing:
+            error_code = "tool_args_truncated"
+        return raw, _preflight_error(tool_name, args, missing, error_code=error_code)
     # Ripristina chiavi riservate (es. _trace_context) per il downstream.
     for k in _RESERVED_KEYS:
         if k in raw:

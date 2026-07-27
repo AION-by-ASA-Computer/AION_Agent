@@ -528,6 +528,19 @@ async def build_turn_context(
 
     if attach_block.strip():
         _prompt_inject_layers.append({"key": "attachments_block", "text": attach_block})
+
+    from src.runtime.tool_ledger import render_ledger_table, tool_ledger_enabled
+
+    if tool_ledger_enabled():
+        ledger_table = render_ledger_table(pipeline.session_id)
+        if ledger_table.strip():
+            augmented_user = _layer_inject(
+                _prompt_inject_layers,
+                "tool_trace",
+                ledger_table,
+                augmented_user,
+            )
+
     _prompt_inject_layers.append({"key": "user_input_raw", "text": _user_input_raw})
     if user_input != _user_input_raw:
         _prompt_inject_layers.append(

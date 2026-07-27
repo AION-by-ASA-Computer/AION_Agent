@@ -41,6 +41,36 @@ class CompactionPolicy:
             f"{m.role}: {chat_message_text(m)[:2500]}" for m in head
         )
         ledger = extract_tool_ledger(head)
+        from src.runtime.tool_ledger import (
+            ledger_summary_lines,
+            offload_paths_for_session,
+            render_ledger_table,
+            tool_ledger_enabled,
+        )
+
+        if tool_ledger_enabled():
+            session_id = ""
+            try:
+                from src.runtime.context import get_current_session_id
+
+                session_id = (get_current_session_id() or "").strip()
+            except Exception:
+                pass
+            if session_id:
+                ledger = render_ledger_table(session_id) or ledger
+                offload_block = "\n".join(offload_paths_for_session(session_id)[:40])
+                if offload_block:
+                    ledger = (
+                        f"{ledger}\n\n<offloaded-results>\n"
+                        f"{offload_block}\n</offloaded-results>"
+                    )
+                trace_lines = ledger_summary_lines(session_id)
+                if trace_lines:
+                    ledger = (
+                        f"{ledger}\n\n<tool-trace>\n"
+                        + "\n".join(trace_lines)
+                        + "\n</tool-trace>"
+                    )
         summary_body = transcript[:12000]
         if ledger:
             summary_body = f"{summary_body}\n\n{ledger}"

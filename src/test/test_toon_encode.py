@@ -36,12 +36,12 @@ def test_web_search_toon_tabular_results():
 def test_web_fetch_toon_multiline_text():
     data = {
         "url": "https://en.wikipedia.org/wiki/2022_FIFA_World_Cup",
-        "mode": "wikipedia_api",
+        "mode": "trafilatura",
         "chars": 42,
         "text": "Line one\nLine two",
     }
     out = format_web_fetch_toon(data)
-    assert "wikipedia_api" in out
+    assert "trafilatura" in out
     assert "Line one" in out
 
 

@@ -76,6 +76,42 @@ async def _delete_messages_and_children(
     await session.execute(delete(Message).where(Message.id.in_(message_ids)))
 
 
+async def _archive_messages_and_children(
+    session: AsyncSession,
+    conversation_id: str,
+    message_ids: List[str],
+    *,
+    reason: str = "mid_turn_compaction",
+) -> int:
+    """Soft-delete messages for compaction/pruning (steps/attachments remain bound)."""
+    if not message_ids:
+        return 0
+    now = datetime.now(timezone.utc)
+    result = await session.execute(
+        update(Message)
+        .where(
+            Message.conversation_id == conversation_id,
+            Message.id.in_(message_ids),
+            Message.archived_at.is_(None),
+        )
+        .values(archived_at=now, archived_reason=(reason or "mid_turn_compaction")[:32])
+    )
+    count = int(getattr(result, "rowcount", 0) or 0)
+    if count:
+        logger.info(
+            "message_archive conversation=%s count=%s reason=%s",
+            (conversation_id or "")[:12],
+            count,
+            reason,
+        )
+    return count
+
+
+def _active_messages_clause():
+    """SQLAlchemy filter: only non-archived messages."""
+    return Message.archived_at.is_(None)
+
+
 async def _cleanup_orphan_steps_and_attachments(
     session: AsyncSession, conversation_id: str
 ) -> None:
@@ -102,7 +138,10 @@ async def _recount_conversation_messages(
             await session.execute(
                 select(func.count())
                 .select_from(Message)
-                .where(Message.conversation_id == conversation_id)
+                .where(
+                    Message.conversation_id == conversation_id,
+                    Message.archived_at.is_(None),
+                )
             )
         ).scalar_one()
         or 0
@@ -518,7 +557,10 @@ class UnifiedHistoryBridge:
             await self._ensure()
             q = select(
                 Message.role, Message.content, Message.tool_name, Message.reasoning
-            ).where(Message.conversation_id == session_id)
+            ).where(
+                Message.conversation_id == session_id,
+                Message.archived_at.is_(None),
+            )
             if exclude_message_ids:
                 q = q.where(Message.id.not_in(exclude_message_ids))
             q = q.order_by(Message.seq.desc()).limit(approx_rows)
@@ -611,7 +653,10 @@ class UnifiedHistoryBridge:
             cid = m0.conversation_id
             q = (
                 select(Message.id, Message.role, Message.content, Message.created_at)
-                .where(Message.conversation_id == cid)
+                .where(
+                    Message.conversation_id == cid,
+                    Message.archived_at.is_(None),
+                )
                 .order_by(Message.seq)
                 .limit(5000)
             )
@@ -650,6 +695,7 @@ class UnifiedHistoryBridge:
                 .where(
                     Message.conversation_id == session_id,
                     Message.promoted_to_ltm == 0,
+                    Message.archived_at.is_(None),
                 )
                 .order_by(Message.seq)
                 .limit(limit)
@@ -726,8 +772,9 @@ class UnifiedHistoryBridge:
                 .all()
             )
             pruned_ids = [mid for mid in all_ids if mid not in kept_ids]
-            await _delete_messages_and_children(session, session_id, pruned_ids)
-            await _cleanup_orphan_steps_and_attachments(session, session_id)
+            await _archive_messages_and_children(
+                session, session_id, pruned_ids, reason="stm_prune"
+            )
             await _recount_conversation_messages(session, session_id)
             await session.commit()
 
@@ -858,8 +905,7 @@ class UnifiedHistoryBridge:
                     .all()
                 )
                 pruned_ids = [mid for mid in all_ids if mid not in kept_ids]
-                await _delete_messages_and_children(session, session_id, pruned_ids)
-                await _cleanup_orphan_steps_and_attachments(session, session_id)
+                await _archive_messages_and_children(session, session_id, pruned_ids, reason="mid_turn_compaction")
                 await _sanitize_kept_assistant_timelines(session, session_id, kept_ids)
                 await _recount_conversation_messages(session, session_id)
                 await session.commit()
@@ -886,8 +932,7 @@ class UnifiedHistoryBridge:
             min_seq = min(int(r[1]) for r in kept_rows)
             summary_seq = max(0, min_seq - 1)
 
-            await _delete_messages_and_children(session, session_id, pruned_ids)
-            await _cleanup_orphan_steps_and_attachments(session, session_id)
+            await _archive_messages_and_children(session, session_id, pruned_ids, reason="mid_turn_compaction")
             await _sanitize_kept_assistant_timelines(session, session_id, kept_ids)
 
             await session.execute(

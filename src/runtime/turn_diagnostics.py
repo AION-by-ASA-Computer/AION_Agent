@@ -162,6 +162,12 @@ def classify_turn_outcome(
         )
     elif final_len == 0 and tool_calls_count > 0:
         code = "tools_without_final_answer"
+        if stop_reason == "reasoning_budget":
+            suggested_final_text = (
+                "Il turno è stato interrotto dal guard-rail sul reasoning (troppi chunk "
+                "di pensiero in un singolo step LLM). I tool sono stati eseguiti: "
+                "riprova con «Continua» o chiedi un riepilogo dei risultati già raccolti."
+            )
     elif final_len == 0 and new_msg_count > 0 and assistant_text_msgs == 0:
         code = "persisted_no_visible_text"
     elif final_len == 0:

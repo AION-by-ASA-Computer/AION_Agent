@@ -31,12 +31,100 @@ function partLabel(t: (key: string, vars?: Record<string, string | number>) => s
   return label === path ? key : label;
 }
 
-type Props = {
+function gaugeStrokeClass(pct: number, triggerPct: number): string {
+  if (pct >= triggerPct) return "stroke-destructive";
+  if (pct >= triggerPct * 0.85) return "stroke-amber-500";
+  return "stroke-emerald-500";
+}
+
+type GaugeProps = {
+  pct: number;
+  triggerPct: number;
+  active?: boolean;
+  unavailable?: boolean;
+  onClick: () => void;
+  className?: string;
+};
+
+export function ContextBudgetGauge({
+  pct,
+  triggerPct,
+  active,
+  unavailable,
+  onClick,
+  className,
+}: GaugeProps) {
+  const t = useT();
+  const clamped = Math.min(100, Math.max(0, pct));
+  const size = 28;
+  const stroke = 2.5;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference * (1 - clamped / 100);
+  const strokeClass = unavailable
+    ? "stroke-muted-foreground/35"
+    : gaugeStrokeClass(clamped, triggerPct);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "focus-ring inline-flex size-7 shrink-0 items-center justify-center rounded-full border transition-colors",
+        active
+          ? "border-primary/45 bg-primary/10"
+          : "border-border/80 bg-muted/25 hover:bg-muted/45",
+        className,
+      )}
+      aria-label={
+        unavailable
+          ? t("chat.context_budget.gauge_idle")
+          : t("chat.context_budget.gauge_aria", { pct: clamped.toFixed(0) })
+      }
+      aria-expanded={active}
+      title={
+        unavailable
+          ? t("chat.context_budget.gauge_idle")
+          : t("chat.context_budget.gauge_aria", { pct: clamped.toFixed(0) })
+      }
+    >
+      <svg
+        width={size}
+        height={size}
+        viewBox={`0 0 ${size} ${size}`}
+        className="-rotate-90"
+        aria-hidden
+      >
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          className="stroke-muted-foreground/30"
+          strokeWidth={stroke}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          className={cn(strokeClass, "transition-[stroke-dashoffset] duration-300")}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={unavailable ? circumference : offset}
+        />
+      </svg>
+    </button>
+  );
+}
+
+type DetailsProps = {
   budget: ContextBudgetState;
   className?: string;
 };
 
-export function ContextBudgetBar({ budget, className }: Props) {
+export function ContextBudgetBar({ budget, className }: DetailsProps) {
   const t = useT();
   const pct = Math.min(100, Math.max(0, budget.pct));
   const triggerPct =

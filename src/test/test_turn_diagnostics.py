@@ -72,6 +72,37 @@ def test_plan_created_without_final_text():
     assert "Plan" in out["suggested_final_text"]
 
 
+def test_reasoning_budget_with_tools_suggests_continue():
+    out = classify_turn_outcome(
+        session_id="sess",
+        profile="generic_assistant",
+        stop_reason="reasoning_budget",
+        final_text="",
+        full_reasoning="x" * 3000,
+        tool_calls_count=14,
+        tool_events_count=28,
+        new_messages=[],
+    )
+    assert out["code"] == "tools_without_final_answer"
+    assert out.get("suggested_final_text")
+    assert "Continua" in out["suggested_final_text"]
+
+
+def test_stream_loop_resets_reasoning_per_llm_call():
+    from src.runtime.stream.loop import StreamLoop
+
+    sl = object.__new__(StreamLoop)
+    sl.reasoning_events = 200
+    sl.reasoning_chars = 5000
+    sl.reasoning_guard_logged = True
+    sl.reasoning_no_tool_warned = True
+    StreamLoop.reset_reasoning_window(sl)
+    assert sl.reasoning_events == 0
+    assert sl.reasoning_chars == 0
+    assert sl.reasoning_guard_logged is False
+    assert sl.reasoning_no_tool_warned is False
+
+
 def test_log_turn_stop_accepts_snapshot_metrics(monkeypatch):
     from src.runtime.turn_diagnostics import log_turn_stop
 

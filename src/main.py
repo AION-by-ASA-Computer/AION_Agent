@@ -360,7 +360,11 @@ def _aion_mcp_tool_run(
                 "input": tool_input,
             },
         )
-        return maybe_compact_after_tool(tool_name=tool_name, result=processed)
+        return maybe_compact_after_tool(
+            tool_name=tool_name,
+            result=processed,
+            arguments=tool_input if isinstance(tool_input, dict) else None,
+        )
 
     settlement_err = settle_tool_call(tool_name, kwargs)
     if settlement_err:
@@ -382,6 +386,16 @@ def _aion_mcp_tool_run(
     )
 
     if preflight_err:
+        from .runtime.tool_circuit import (
+            maybe_block_repeat_preflight,
+            record_preflight_failure,
+        )
+
+        circuit_err = maybe_block_repeat_preflight(session_id, tool_name, prepared)
+        if circuit_err:
+            _, normalized = classify_tool_result_text(circuit_err, tool_name)
+            return _emit_tool_outcome(is_error=True, body=normalized or circuit_err)
+        record_preflight_failure(session_id, tool_name, prepared, preflight_err)
         _, normalized = classify_tool_result_text(preflight_err, tool_name)
         return _emit_tool_outcome(is_error=True, body=normalized or preflight_err)
 
@@ -778,12 +792,21 @@ def _build_chat_generation_kwargs() -> Tuple[Dict[str, Any], str]:
     Returns (generation_kwargs dict, stable fragment for agent cache key).
     """
     gen_kw: Dict[str, Any] = {}
-    _max_chat = os.getenv("AION_CHAT_MAX_TOKENS", "8192").strip()
+    max_tokens_sig = ""
     try:
-        if _max_chat:
-            gen_kw["max_tokens"] = int(_max_chat)
-    except ValueError:
-        logger.warning("AION_CHAT_MAX_TOKENS non numerico, ignorato")
+        from src.runtime.llm_limits import resolve_chat_max_tokens
+
+        max_t = resolve_chat_max_tokens(long_run=False)
+        gen_kw["max_tokens"] = max_t
+        max_tokens_sig = str(max_t)
+    except Exception:
+        _max_chat = os.getenv("AION_CHAT_MAX_TOKENS", "8192").strip()
+        max_tokens_sig = _max_chat
+        try:
+            if _max_chat:
+                gen_kw["max_tokens"] = int(_max_chat)
+        except ValueError:
+            logger.warning("AION_CHAT_MAX_TOKENS non numerico, ignorato")
 
     extra: Dict[str, Any] = {}
     raw_extra = (os.getenv("AION_VLLM_EXTRA_BODY") or "").strip()
@@ -814,7 +837,7 @@ def _build_chat_generation_kwargs() -> Tuple[Dict[str, Any], str]:
         gen_kw["extra_body"] = extra
 
     sig = json.dumps(extra, sort_keys=True, separators=(",", ":")) if extra else ""
-    cache_sig = f"{_max_chat}\v{sig}"
+    cache_sig = f"{max_tokens_sig}\v{sig}"
     return gen_kw, cache_sig
 
 

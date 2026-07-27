@@ -85,6 +85,7 @@ class PiWorkerClient:
         *,
         stop_event: Any = None,
     ) -> AsyncIterator[Dict[str, Any]]:
+        yielded = 0
         async with httpx.AsyncClient(timeout=None) as client:
             async with client.stream(
                 "POST",
@@ -95,12 +96,24 @@ class PiWorkerClient:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if stop_event is not None and getattr(stop_event, "is_set", lambda: False)():
+                        logger.info(
+                            "Pi stream_prompt stop_event session=%s after_chunks=%d",
+                            session_id[:8],
+                            yielded,
+                        )
                         await self.abort_session(session_id)
                         break
                     raw = (line or "").strip()
                     if not raw:
                         continue
                     try:
-                        yield json.loads(raw)
+                        chunk = json.loads(raw)
+                        yielded += 1
+                        yield chunk
                     except json.JSONDecodeError:
                         logger.warning("Pi worker invalid JSON line: %s", raw[:200])
+        if yielded == 0:
+            logger.warning(
+                "Pi stream_prompt empty session=%s (no NDJSON lines from worker)",
+                session_id[:8],
+            )

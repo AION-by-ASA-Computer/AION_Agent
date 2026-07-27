@@ -63,6 +63,10 @@ async def _invoke_mcp_tool(
         classify_tool_result_text,
         format_mcp_raw_result,
     )
+    from src.runtime.tool_circuit import (
+        maybe_block_repeat_preflight,
+        record_preflight_failure,
+    )
     from src.runtime.skill_profile_gate import block_skills_hub_tool_if_needed
     from src.runtime.sql_query_project_scope import (
         apply_sql_query_project_scope,
@@ -71,6 +75,10 @@ async def _invoke_mcp_tool(
 
     prepared, preflight_err = prepare_mcp_tool_arguments(tool_name, dict(arguments))
     if preflight_err:
+        circuit_err = maybe_block_repeat_preflight(session_id, tool_name, prepared)
+        if circuit_err:
+            return circuit_err
+        record_preflight_failure(session_id, tool_name, prepared, preflight_err)
         return preflight_err
 
     skill_block = block_skills_hub_tool_if_needed(
@@ -156,30 +164,50 @@ async def invoke_aion_tool_for_pi(
 
     await _ensure_mcp_session_context(session_id, profile_name, user_id)
 
+    from src.runtime.context import get_context, set_context
+    from src.runtime.turn_compaction import resolve_turn_runtime
+
+    rt = resolve_turn_runtime(session_id)
+    ctx = get_context()
+    restore_ctx = False
+    if (not ctx.get("loop") or not ctx.get("queue")) and isinstance(rt, dict):
+        loop = rt.get("loop")
+        queue = rt.get("queue")
+        stop_event = rt.get("stop_event")
+        if loop is not None and queue is not None:
+            set_context(session_id, loop, queue, stop_event)
+            restore_ctx = True
+
     from src.runtime.context import bind_session_id
 
     with bind_session_id(session_id):
-        entry = get_session_tool_registry(session_id).get(tool_name)
-        if entry and entry.source == "mcp":
-            server = entry.server_name or await _resolve_mcp_server(
-                session_id, profile, tool_name
-            )
-            if not server:
-                raise RuntimeError(f"No MCP server for tool {tool_name}")
-            return await _invoke_mcp_tool(
+        try:
+            entry = get_session_tool_registry(session_id).get(tool_name)
+            if entry and entry.source == "mcp":
+                server = entry.server_name or await _resolve_mcp_server(
+                    session_id, profile, tool_name
+                )
+                if not server:
+                    raise RuntimeError(f"No MCP server for tool {tool_name}")
+                return await _invoke_mcp_tool(
+                    session_id=session_id,
+                    profile_name=profile_name,
+                    user_id=user_id,
+                    server_name=server,
+                    tool_name=tool_name,
+                    arguments=args,
+                )
+
+            return await _invoke_native_tool(
                 session_id=session_id,
+                profile=profile,
                 profile_name=profile_name,
                 user_id=user_id,
-                server_name=server,
                 tool_name=tool_name,
                 arguments=args,
             )
+        finally:
+            if restore_ctx:
+                from src.runtime.context import clear_context
 
-        return await _invoke_native_tool(
-            session_id=session_id,
-            profile=profile,
-            profile_name=profile_name,
-            user_id=user_id,
-            tool_name=tool_name,
-            arguments=args,
-        )
+                clear_context()

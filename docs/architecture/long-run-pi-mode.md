@@ -43,6 +43,11 @@ Select **Long run** in the chat composer mode chip.
 | `AION_LONG_RUN_TURN_TIMEOUT` | `3600` | Whole-turn timeout (seconds) |
 | `AION_LONG_RUN_TOOL_CALLS_MAX` | `200` | Tool call cap |
 | `AION_LONG_RUN_NO_PROGRESS_TIMEOUT_SEC` | `600` | Stall detector |
+| `AION_TOOL_OFFLOAD_ENABLED` | `0` | Offload large tool results to `derived/tool_results/` |
+| `AION_TOOL_LEDGER_ENABLED` | `0` | Inject per-session tool trace table |
+| `AION_PI_CUSTOM_COMPACTION` | `0` | Pi compaction summary via AION backend |
+
+See [context-offloading.md](./context-offloading.md) for the full flag list and rollout steps.
 
 Session files: `data/sessions/<id>/.pi/` (`SYSTEM.md`, `skills/`, `models.json`, `tool_manifest.json`).
 
@@ -65,3 +70,4 @@ Haystack mid-turn compaction (normal mode) is documented in [context-compaction.
 
 - Harness v2 patterns (Haystack): [aion-harness-v2.md](./aion-harness-v2.md)
 - Context compaction (Haystack mid-turn): [context-compaction.md](../memory/context-compaction.md)
+- Context offloading (tool result microfiles + ledger): [context-offloading.md](./context-offloading.md)

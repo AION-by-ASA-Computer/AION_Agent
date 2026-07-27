@@ -406,6 +406,14 @@ async def chat_stop(
         raise HTTPException(400, detail="conversation_id or session_id required")
     await redis_set_stream_cancel(cid)
     await _stop_background_run(cid, timeout=15.0)
+    try:
+        from src.runtime.long_run_mode import long_run_enabled
+        from src.runtime.pi_runtime.pi_client import PiWorkerClient
+
+        if long_run_enabled():
+            await PiWorkerClient().abort_session(cid)
+    except Exception:
+        pass
     return {"ok": True, "conversation_id": cid, "session_id": cid}
 
 

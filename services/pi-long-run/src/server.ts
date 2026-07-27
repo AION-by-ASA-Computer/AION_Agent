@@ -110,6 +110,13 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // Cancel any in-flight prompt (e.g. client disconnected but worker still running).
+    try {
+      await session.abort();
+    } catch {
+      /* ignore */
+    }
+
     res.writeHead(200, {
       "Content-Type": "application/x-ndjson",
       "Cache-Control": "no-cache",

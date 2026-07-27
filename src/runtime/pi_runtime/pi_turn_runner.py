@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("aion.pi_turn_runner")
 
@@ -161,6 +161,18 @@ def pi_thinking_level_for_effort(reasoning_effort: Optional[str]) -> str:
     return "medium"
 
 
+async def _abort_stale_pi_session(client: Any, session_id: str) -> None:
+    """Kill orphaned Pi worker turns (client disconnected but worker still prompting)."""
+    sid = (session_id or "").strip()
+    if not sid:
+        return
+    try:
+        await client.abort_session(sid)
+        logger.info("pi_abort_stale session=%s", sid[:8])
+    except Exception as exc:
+        logger.debug("pi_abort_stale skipped session=%s: %s", sid[:8], exc)
+
+
 async def run_pi_agent_turn(
     *,
     session_id: str,
@@ -177,6 +189,7 @@ async def run_pi_agent_turn(
 ) -> None:
     """Execute one long-run turn via Pi worker; push chunks to ``queue``."""
     from src.agent_profile import profile_manager
+    from src.runtime.context import clear_context, set_context
     from src.runtime.pi_runtime.pi_client import PiWorkerClient, pi_worker_healthy
     from src.runtime.pi_runtime.session_config import prepare_pi_session_files
     from src.runtime.pi_runtime.tool_manifest import (
@@ -203,6 +216,10 @@ async def run_pi_agent_turn(
     profile = profile_manager.get_profile(profile_name)
     workspace = str(session_root(session_id) / "workspace")
     clear_session_tool_registry(session_id)
+    set_context(session_id, loop, queue, stop_event)
+    client = PiWorkerClient()
+    await _abort_stale_pi_session(client, session_id)
+    stream_chunks = 0
     try:
         agent_dir, llm_cfg = await prepare_pi_session_files(
             session_id,
@@ -232,7 +249,7 @@ async def run_pi_agent_turn(
             await mcp_manager.warm_session(
                 session_id,
                 profile.mcp_servers or [],
-                profile_name=profile_name,
+                profile_slug=profile_name,
                 user_id=user_id,
             )
         except Exception as exc:
@@ -240,7 +257,6 @@ async def run_pi_agent_turn(
 
         from src.runtime.long_run_mode import pi_worker_secret
 
-        client = PiWorkerClient()
         model_id = llm_cfg.model_id
 
         logger.info(
@@ -250,6 +266,17 @@ async def run_pi_agent_turn(
             client.base_url,
         )
         thinking_level = pi_thinking_level_for_effort(reasoning_effort)
+        from src.runtime.llm_limits import (
+            pi_runtime_config_fingerprint,
+            resolve_chat_max_tokens,
+        )
+        from src.runtime.pi_runtime.pi_compaction import pi_custom_compaction_enabled
+        from src.runtime.tool_ledger import tool_ledger_enabled
+
+        max_tokens = resolve_chat_max_tokens(long_run=True)
+        api_base = (
+            os.getenv("AION_PUBLIC_API_URL") or "http://127.0.0.1:8001"
+        ).rstrip("/")
         ensured = await client.ensure_session(
             {
                 "session_id": session_id,
@@ -259,13 +286,15 @@ async def run_pi_agent_turn(
                 "provider_id": "aion",
                 "thinking_level": thinking_level,
                 "tool_manifest_path": str(manifest_path),
-                "invoke_url": (
-                    (os.getenv("AION_PUBLIC_API_URL") or "http://127.0.0.1:8001").rstrip("/")
-                    + "/internal/pi/tools/invoke"
-                ),
+                "invoke_url": f"{api_base}/internal/pi/tools/invoke",
                 "invoke_secret": pi_worker_secret(),
                 "profile": profile_name,
                 "user_id": user_id,
+                "api_base_url": api_base,
+                "ledger_enabled": tool_ledger_enabled(),
+                "custom_compaction_enabled": pi_custom_compaction_enabled(),
+                "config_fingerprint": pi_runtime_config_fingerprint(),
+                "max_tokens": max_tokens,
             }
         )
         session_created = bool(ensured.get("created"))
@@ -290,7 +319,10 @@ async def run_pi_agent_turn(
         ):
             if stop_event.is_set():
                 break
+            stream_chunks += 1
             ctype = str(chunk.get("type") or "")
+            if ctype == "done":
+                continue
             if ctype == "context_compacting_start":
                 await queue.put({"type": "context_compacting", "active": True})
                 continue
@@ -320,6 +352,19 @@ async def run_pi_agent_turn(
         logger.error("Pi turn failed session=%s: %s", session_id[:8], exc, exc_info=True)
         await queue.put({"type": "error", "content": str(exc)})
     finally:
+        if stream_chunks == 0 and not stop_event.is_set():
+            logger.warning(
+                "pi_stream_empty session=%s (worker returned no NDJSON chunks; "
+                "check for orphaned prompt or Pi worker logs)",
+                session_id[:8],
+            )
+        clear_context()
+        try:
+            from src.runtime.tool_circuit import reset_session_circuit
+
+            reset_session_circuit(session_id)
+        except Exception:
+            pass
         await _flush_pi_context_budget(session_id, queue)
         loop.call_soon_threadsafe(queue.put_nowait, {"type": "done"})
 

@@ -60,7 +60,7 @@ class WebSearchExecutor:
             emit_tool_error(sid, "web_search", call_id, str(e))
             raise
         emit_tool_end(sid, "web_search", call_id, out)
-        return maybe_compact_after_tool(tool_name="web_search", result=out)
+        return maybe_compact_after_tool(tool_name="web_search", result=out, arguments=inp)
 
 
 class WebFetchPageExecutor:
@@ -100,7 +100,7 @@ class WebFetchPageExecutor:
             emit_tool_error(sid, "web_fetch_page", call_id, str(e))
             raise
         emit_tool_end(sid, "web_fetch_page", call_id, out)
-        return maybe_compact_after_tool(tool_name="web_fetch_page", result=out)
+        return maybe_compact_after_tool(tool_name="web_fetch_page", result=out, arguments=inp)
 
 
 def _profile_slug(profile: Optional["AgentProfile"]) -> str:
@@ -146,9 +146,10 @@ def build_web_fetch_page_tool(
     return Tool(
         name="web_fetch_page",
         description=(
-            "Scarica il contenuto testuale di una singola pagina HTTP(S). "
-            "Wikipedia: API MediaWiki (article o sezione #anchor); fallback HTML se API non disponibile. "
-            "Per pagine lunghe, usa URL con #sezione. Returns TOON or JSON with text."
+            "Scarica il contenuto testuale di una singola pagina HTTP(S) "
+            "(Scrapling Fetcher, fallback httpx + trafilatura/bs4). "
+            "Output grandi vanno su disco con AION_TOOL_OFFLOAD_ENABLED. "
+            "Returns TOON or JSON with text."
         ),
         function=WebFetchPageExecutor(),
         parameters={

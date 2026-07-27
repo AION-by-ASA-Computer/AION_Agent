@@ -59,7 +59,7 @@ export function createAionBridgeExtension(config: BridgeConfig, manifestPath: st
         label: tool.name,
         description: tool.description || tool.name,
         parameters: Type.Unsafe(schema as Parameters<typeof Type.Unsafe>[0]),
-        async execute(_toolCallId, params) {
+        async execute(toolCallId, params) {
           const res = await fetch(config.invokeUrl, {
             method: "POST",
             headers: {
@@ -74,6 +74,7 @@ export function createAionBridgeExtension(config: BridgeConfig, manifestPath: st
               user_id: config.userId,
               tool_name: tool.name,
               arguments: params ?? {},
+              call_id: toolCallId,
             }),
           });
           if (!res.ok) {
@@ -83,16 +84,19 @@ export function createAionBridgeExtension(config: BridgeConfig, manifestPath: st
           const body = (await res.json()) as {
             content?: string;
             is_error?: boolean;
+            details?: Record<string, unknown>;
           };
           if (body.is_error) {
             return {
               content: [{ type: "text", text: body.content || "Tool error" }],
               isError: true,
+              details: body.details,
             };
           }
           return {
             content: [{ type: "text", text: body.content || "" }],
             isError: false,
+            details: body.details,
           };
         },
       });

@@ -362,6 +362,9 @@
     "context_budget": {
       "title": "Contesto LLM",
       "aria": "Saturazione contesto {{pct}} percento",
+      "gauge_aria": "Contesto al {{pct}}%. Clicca per i dettagli.",
+      "gauge_idle": "Contesto LLM — clicca per i dettagli",
+      "unavailable": "Il riepilogo contesto è disponibile durante l'elaborazione di un messaggio.",
       "trigger": "Soglia compattazione {{pct}}%",
       "messages": "{{count}} messaggi",
       "parts": {
@@ -409,14 +412,15 @@
     "agent_mode": {
       "select": "Modalità agente",
       "soon": "Presto",
+      "beta": "Beta",
       "normal": "Normale",
       "normal_desc": "Chat bilanciata — tool e memoria come configurati.",
       "plan": "Pianifica",
       "plan_desc": "Scompone il lavoro in passi prima di eseguire.",
       "deep_research": "Ricerca approfondita",
       "deep_research_desc": "Ricerche più lunghe con il pannello dedicato.",
-      "long_run": "Long run",
-      "long_run_desc": "Runtime Pi per deliverable lunghi (Excel, ricerche multi-step).",
+      "long_run": "Agent V2",
+      "long_run_desc": "Runtime agente avanzato per deliverable lunghi (Excel, ricerche multi-step).",
       "ask": "Chiedi",
       "ask_desc": "Risposte in sola lettura senza effetti collaterali dei tool.",
       "debug": "Debug",
@@ -449,6 +453,9 @@
       "no_reasoning": "Nessun reasoning ricevuto dal modello per questa risposta. È normale se il backend non espone il chain-of-thought o il profilo usa reasoning {{level}}.",
       "tooltip": "Modifica messaggio",
       "btn": "Modifica"
+    },
+    "message": {
+      "archived_context": "Precedente nella conversazione (non nel contesto attivo dell'agente)"
     },
     "error": "Errore: {{msg}}",
     "history_load_error": "Impossibile caricare la cronologia: {{msg}}",
@@ -580,7 +587,19 @@
     "uploads": "Uploads",
     "derived": "Derived",
     "workspace": "Workspace",
-    "refresh": "Aggiorna"
+    "tool_results_folder": "Risultati tool (offload)",
+    "refresh": "Aggiorna",
+    "tool_results": {
+      "title": "Attività tool",
+      "col_tool": "Tool",
+      "col_target": "Target",
+      "col_size": "Dimensione",
+      "view": "Apri",
+      "hint": "Seleziona Apri su una riga per leggere la risposta offloaded del tool.",
+      "loading": "Caricamento output tool…",
+      "empty_file": "File vuoto.",
+      "inline_only": "Questa chiamata è rimasta inline nel contesto (sotto la soglia di offload) — nessun file separato salvato."
+    }
   },
   "research": {
     "title": "Ricerca",

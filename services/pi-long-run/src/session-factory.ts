@@ -6,6 +6,8 @@ import {
   type AgentSession,
 } from "@earendil-works/pi-coding-agent";
 import { createAionBridgeExtension } from "../extensions/aion-bridge.js";
+import { createAionCompactionExtension } from "../extensions/aion-compaction.js";
+import { createAionLedgerExtension } from "../extensions/aion-ledger.js";
 
 export type SessionCreatePayload = {
   session_id: string;
@@ -19,6 +21,9 @@ export type SessionCreatePayload = {
   invoke_secret?: string;
   profile?: string;
   user_id?: string;
+  api_base_url?: string;
+  ledger_enabled?: boolean;
+  custom_compaction_enabled?: boolean;
 };
 
 type ManagedSession = {
@@ -42,21 +47,37 @@ export async function ensurePiSession(
   const manifestPath =
     payload.tool_manifest_path || join(agentDir, "tool_manifest.json");
 
-  const bridge = createAionBridgeExtension(
-    {
-      invokeUrl: payload.invoke_url || "http://127.0.0.1:8001/internal/pi/tools/invoke",
-      invokeSecret: payload.invoke_secret || "",
-      sessionId: payload.session_id,
-      profile: payload.profile || "generic_assistant",
-      userId: payload.user_id || "default",
-    },
-    manifestPath,
-  );
+  const apiBase =
+    payload.api_base_url ||
+    (payload.invoke_url || "").replace(/\/internal\/pi\/tools\/invoke$/, "") ||
+    "http://127.0.0.1:8001";
+
+  const bridgeConfig = {
+    invokeUrl: payload.invoke_url || `${apiBase}/internal/pi/tools/invoke`,
+    invokeSecret: payload.invoke_secret || "",
+    sessionId: payload.session_id,
+    profile: payload.profile || "generic_assistant",
+    userId: payload.user_id || "default",
+  };
+
+  const bridge = createAionBridgeExtension(bridgeConfig, manifestPath);
+  const ledger = createAionLedgerExtension({
+    apiBaseUrl: apiBase,
+    invokeSecret: payload.invoke_secret || "",
+    sessionId: payload.session_id,
+    enabled: Boolean(payload.ledger_enabled),
+  });
+  const compaction = createAionCompactionExtension({
+    apiBaseUrl: apiBase,
+    invokeSecret: payload.invoke_secret || "",
+    sessionId: payload.session_id,
+    enabled: Boolean(payload.custom_compaction_enabled),
+  });
 
   const resourceLoader = new DefaultResourceLoader({
     cwd,
     agentDir,
-    extensionFactories: [bridge],
+    extensionFactories: [bridge, ledger, compaction],
   });
   await resourceLoader.reload();
 

@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import os
+import threading
 import time
 from typing import Any, Dict, List, Optional
 
@@ -26,6 +27,22 @@ _turn_runtime: Any = None
 # Shared by session_id — SSE stream loop (parent asyncio task) and agent.run (child task)
 # mutate the same dict; contextvars alone do not propagate child → parent.
 _TURN_RUNTIME_REGISTRY: Dict[str, Dict[str, Any]] = {}
+_TURN_RUNTIME_LOCKS: Dict[str, threading.RLock] = {}
+
+
+def _get_turn_lock(session_id: str) -> threading.RLock:
+    sid = (session_id or "").strip()
+    lock = _TURN_RUNTIME_LOCKS.get(sid)
+    if lock is None:
+        lock = threading.RLock()
+        _TURN_RUNTIME_LOCKS[sid] = lock
+    return lock
+
+
+def _drop_turn_lock(session_id: str) -> None:
+    sid = (session_id or "").strip()
+    if sid:
+        _TURN_RUNTIME_LOCKS.pop(sid, None)
 
 try:
     import contextvars
@@ -247,11 +264,26 @@ def set_turn_runtime(
     preflight_messages: Optional[List[ChatMessage]] = None,
 ) -> None:
     sid = (session_id or "").strip()
-    existing = _TURN_RUNTIME_REGISTRY.get(sid) if sid else None
-    if isinstance(existing, dict):
-        rt = existing
-        rt.update(
-            {
+    with _get_turn_lock(sid):
+        existing = _TURN_RUNTIME_REGISTRY.get(sid) if sid else None
+        if isinstance(existing, dict):
+            rt = existing
+            rt.update(
+                {
+                    "session_id": sid,
+                    "loop": loop,
+                    "queue": queue,
+                    "stop_event": stop_event,
+                    "agent": agent,
+                    "profile_name": profile_name,
+                    "user_id": user_id,
+                    "preflight_messages": preflight_messages,
+                }
+            )
+            if preflight_messages is not None and not rt.get("live_messages"):
+                rt["live_messages"] = list(preflight_messages)
+        else:
+            rt = {
                 "session_id": sid,
                 "loop": loop,
                 "queue": queue,
@@ -260,29 +292,15 @@ def set_turn_runtime(
                 "profile_name": profile_name,
                 "user_id": user_id,
                 "preflight_messages": preflight_messages,
+                "live_messages": list(preflight_messages or []),
+                "extra_tokens": 0,
+                "last_compact_at": 0.0,
+                "llm_steps": 0,
+                "tool_error_recovery_attempts": 0,
+                "context_recovery_attempts": 0,
             }
-        )
-        if preflight_messages is not None and not rt.get("live_messages"):
-            rt["live_messages"] = list(preflight_messages)
-    else:
-        rt = {
-            "session_id": sid,
-            "loop": loop,
-            "queue": queue,
-            "stop_event": stop_event,
-            "agent": agent,
-            "profile_name": profile_name,
-            "user_id": user_id,
-            "preflight_messages": preflight_messages,
-            "live_messages": list(preflight_messages or []),
-            "extra_tokens": 0,
-            "last_compact_at": 0.0,
-            "llm_steps": 0,
-            "tool_error_recovery_attempts": 0,
-            "context_recovery_attempts": 0,
-        }
-        if sid:
-            _TURN_RUNTIME_REGISTRY[sid] = rt
+            if sid:
+                _TURN_RUNTIME_REGISTRY[sid] = rt
     if _turn_runtime is not None:
         _turn_runtime.set(rt)
     try:
@@ -342,7 +360,9 @@ def sync_live_turn_messages(session_id: Optional[str] = None) -> bool:
     rt = resolve_turn_runtime(session_id)
     if not isinstance(rt, dict):
         return False
-    rt["live_messages"] = list(messages)
+    sid = str(rt.get("session_id") or session_id or "").strip()
+    with _get_turn_lock(sid):
+        rt["live_messages"] = list(messages)
     return True
 
 
@@ -441,7 +461,9 @@ def set_agent_execution_context(exec_ctx: Any) -> None:
     if messages:
         rt = resolve_turn_runtime()
         if isinstance(rt, dict):
-            rt["live_messages"] = list(messages)
+            sid = str(rt.get("session_id") or "").strip()
+            with _get_turn_lock(sid):
+                rt["live_messages"] = list(messages)
 
 
 def clear_agent_execution_context() -> None:
@@ -456,7 +478,9 @@ def clear_turn_runtime(session_id: Optional[str] = None) -> None:
         if isinstance(rt, dict):
             sid = str(rt.get("session_id") or "").strip()
     if sid:
-        _TURN_RUNTIME_REGISTRY.pop(sid, None)
+        with _get_turn_lock(sid):
+            _TURN_RUNTIME_REGISTRY.pop(sid, None)
+        _drop_turn_lock(sid)
     if _turn_runtime is not None:
         _turn_runtime.set(None)
     clear_agent_execution_context()
@@ -469,10 +493,12 @@ def add_turn_token_estimate(delta: int, *, bucket: str = "tool_results") -> None
     d = max(0, int(delta))
     if d <= 0:
         return
-    bd = rt.setdefault("budget_delta", {})
-    key = (bucket or "tool_results").strip() or "tool_results"
-    bd[key] = int(bd.get(key) or 0) + d
-    rt["extra_tokens"] = int(rt.get("extra_tokens") or 0) + d
+    sid = str(rt.get("session_id") or "").strip()
+    with _get_turn_lock(sid):
+        bd = rt.setdefault("budget_delta", {})
+        key = (bucket or "tool_results").strip() or "tool_results"
+        bd[key] = int(bd.get(key) or 0) + d
+        rt["extra_tokens"] = int(rt.get("extra_tokens") or 0) + d
 
 
 def record_pi_context_delta(
@@ -698,6 +724,40 @@ def emergency_compact_messages(
     return system_msgs + working_convo
 
 
+def _append_ledger_offload_context(transcript: str, session_id: str) -> str:
+    """Append ledger/offload pointers to mid-turn compaction transcript (mirrors policy.py)."""
+    from src.runtime.tool_ledger import (
+        ledger_summary_lines,
+        offload_paths_for_session,
+        render_ledger_table,
+        tool_ledger_enabled,
+    )
+
+    sid = (session_id or "").strip()
+    if not sid:
+        return transcript
+    ledger = ""
+    if tool_ledger_enabled():
+        ledger = render_ledger_table(sid) or ""
+        offload_block = "\n".join(offload_paths_for_session(sid)[:40])
+        if offload_block:
+            ledger = (
+                f"{ledger}\n\n<offloaded-results>\n{offload_block}\n</offloaded-results>"
+            )
+        trace_lines = ledger_summary_lines(sid)
+        if trace_lines:
+            ledger = (
+                f"{ledger}\n\n<tool-trace>\n" + "\n".join(trace_lines) + "\n</tool-trace>"
+            )
+    if not ledger:
+        return transcript
+    cap = 12000
+    body = transcript[:cap]
+    if len(transcript) > cap:
+        body += "\n...[transcript truncated]"
+    return f"{body}\n\n{ledger[:4000]}"
+
+
 def _sync_compact_head_tail(
     agent: Any,
     system_msgs: List[ChatMessage],
@@ -725,6 +785,15 @@ def _sync_compact_head_tail(
     if not transcript.strip():
         return None
 
+    session_id = ""
+    try:
+        from src.runtime.context import get_current_session_id
+
+        session_id = (get_current_session_id() or "").strip()
+    except Exception:
+        pass
+    transcript = _append_ledger_offload_context(transcript, session_id)
+
     _emit_compacting(True, stats, phase=phase)
     from src.memory.context_compressor import compaction_summary_prompt
     from src.memory.llm_extract import complete_text_sync
@@ -741,6 +810,14 @@ def _sync_compact_head_tail(
         _emit_compacting(False, stats, phase=f"{phase}_failed")
         return None
 
+    logger.info(
+        "mid_turn_compaction session=%s phase=%s archived_head_msgs=%s tokens_before=%s ledger_included=%s",
+        session_id[:12] if session_id else "?",
+        phase,
+        len(head),
+        stats.get("total"),
+        bool(session_id),
+    )
     summary_msg = ChatMessage.from_user(
         format_compaction_block(summary or "", source_messages=len(head))
     )
@@ -1052,9 +1129,23 @@ def _maybe_early_web_tool_compact(
     return True
 
 
-def maybe_compact_after_tool(*, tool_name: str, result: str) -> str:
+def maybe_compact_after_tool(
+    *,
+    tool_name: str,
+    result: str,
+    arguments: Optional[Dict[str, Any]] = None,
+) -> str:
     """Tronca output tool e, se serve, compatta lo state agent prima del prossimo LLM step."""
-    out = truncate_tool_result(result, tool_name=tool_name)
+    rt = resolve_turn_runtime()
+    session_id = str(rt.get("session_id") or "") if isinstance(rt, dict) else ""
+    from src.runtime.tool_offload import process_tool_result_for_context
+
+    out, _details = process_tool_result_for_context(
+        result,
+        session_id=session_id,
+        tool_name=tool_name,
+        arguments=arguments,
+    )
     tname = (tool_name or "").strip().lower()
     bucket = (
         "web_tools"

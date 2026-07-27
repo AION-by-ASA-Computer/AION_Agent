@@ -169,6 +169,13 @@ class StreamLoop:
         self.reasoning_guard_logged: bool = g.state.reasoning_guard_logged
         self.reasoning_no_tool_warned: bool = g.state.reasoning_no_tool_warned
 
+    def reset_reasoning_window(self) -> None:
+        """Reset per-LLM-call reasoning budget (not cumulative across tool rounds)."""
+        self.reasoning_chars = 0
+        self.reasoning_events = 0
+        self.reasoning_guard_logged = False
+        self.reasoning_no_tool_warned = False
+
     # ------------------------------------------------------------------
     # Flush Assistant = force persist assistant stream content & timeline (JSON)
     # ------------------------------------------------------------------
@@ -229,6 +236,7 @@ class StreamLoop:
                     self._demux.feed(chunk)
 
                 if ctype == "llm_call":
+                    self.reset_reasoning_window()
                     self.llm_calls += 1
                     self._llm_steps_done = self.llm_calls
                     try:
@@ -303,8 +311,14 @@ class StreamLoop:
 
                 # --- Reasoning events ---
                 if ctype == "reasoning":
+                    should_break = False
                     async for evt in self._handle_reasoning(chunk):
-                        yield evt
+                        if isinstance(evt, _BreakSignal):
+                            should_break = True
+                        else:
+                            yield evt
+                    if should_break:
+                        break
                     continue
 
                 # --- Stream end ---
@@ -432,8 +446,8 @@ class StreamLoop:
         reasoning_piece = chunk.get("reasoning") or ""
         if reasoning_piece:
             self.last_progress_at = self.loop.time()
-        self.reasoning_events += 1
-        self.reasoning_chars += len(reasoning_piece)
+            self.reasoning_events += 1
+            self.reasoning_chars += len(reasoning_piece)
 
         over_events = (
             self.max_reasoning_events > 0
@@ -475,7 +489,7 @@ class StreamLoop:
             )
             logger.warning("Hard-stop reasoning guard: %s", msg)
             yield self._track_sse({"type": "error", "content": msg})
-            # Caller checks stop_reason to break
+            yield _BreakSignal()
             return
 
         _chars_gate = (

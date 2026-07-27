@@ -262,19 +262,75 @@ export type SessionFileRow = {
   size_bytes?: number;
 };
 
+export type ToolLedgerEntry = {
+  seq?: number;
+  ts?: number;
+  tool?: string;
+  target?: string;
+  ok?: boolean;
+  chars?: number;
+  path?: string | null;
+  dur_ms?: number | null;
+};
+
 export async function listSessionFilesSubdir(
   sessionId: string,
   userId: string,
-  subdir: "uploads" | "workspace" | "derived" | "",
+  subdir: "uploads" | "workspace" | "derived" | "tool_results" | "",
   token?: string | null
 ): Promise<SessionFileRow[]> {
   const r = await fetch(
     `${apiBase()}/sessions/${encodeURIComponent(sessionId)}/files?subdir=${encodeURIComponent(subdir)}`,
     { headers: baseUserHeaders(userId, token) }
   );
-  if (!r.ok) return [];
+  if (r.status === 401) {
+    console.warn("[aion-chat-ui] session files list unauthorized (token missing or expired)");
+    return [];
+  }
+  if (!r.ok) {
+    console.warn(`[aion-chat-ui] session files list failed subdir=${subdir} status=${r.status}`);
+    return [];
+  }
   const j = (await r.json()) as { files?: SessionFileRow[] };
   return j.files || [];
+}
+
+export async function fetchToolLedger(
+  sessionId: string,
+  userId: string,
+  token?: string | null,
+): Promise<{ enabled: boolean; entries: ToolLedgerEntry[] }> {
+  const r = await fetch(
+    `${apiBase()}/sessions/${encodeURIComponent(sessionId)}/tool-ledger`,
+    { headers: baseUserHeaders(userId, token) },
+  );
+  if (!r.ok) return { enabled: false, entries: [] };
+  const j = (await r.json()) as {
+    enabled?: boolean;
+    entries?: ToolLedgerEntry[];
+  };
+  return {
+    enabled: Boolean(j.enabled),
+    entries: Array.isArray(j.entries) ? j.entries : [],
+  };
+}
+
+export async function fetchSessionFileText(
+  sessionId: string,
+  relativePath: string,
+  token?: string | null,
+  maxChars = 500_000,
+): Promise<string> {
+  const url = sessionDownloadUrl(sessionId, relativePath, token);
+  const r = await fetch(url);
+  if (!r.ok) {
+    throw new Error(`HTTP ${r.status}`);
+  }
+  const text = await r.text();
+  if (text.length > maxChars) {
+    return `${text.slice(0, maxChars)}\n\n… [truncated at ${maxChars.toLocaleString()} chars]`;
+  }
+  return text;
 }
 
 /**
@@ -368,6 +424,9 @@ export type ChatHistoryMessage = {
   };
   rating?: number | null;
   feedback_comment?: string | null;
+  /** True when message was archived by STM compaction (still shown in full transcript). */
+  archived?: boolean;
+  archived_reason?: string | null;
 };
 
 export type StreamStatusResponse = {
@@ -401,10 +460,14 @@ export async function fetchConversationHistory(
   userId: string,
   token?: string | null,
   signal?: AbortSignal,
-  opts?: { includePlanInternal?: boolean },
+  opts?: { includePlanInternal?: boolean; includeArchived?: boolean },
 ): Promise<ConversationHistoryResult> {
   try {
-    const qs = opts?.includePlanInternal ? "?include_plan_internal=1" : "";
+    const params = new URLSearchParams();
+    if (opts?.includePlanInternal) params.set("include_plan_internal", "1");
+    // Full transcript for chat-ui; LLM context excludes archived rows server-side.
+    if (opts?.includeArchived !== false) params.set("include_archived", "1");
+    const qs = params.toString() ? `?${params.toString()}` : "";
     const r = await fetch(
       `${apiBase()}/chat-ui/conversations/${encodeURIComponent(conversationId)}/messages${qs}`,
       {

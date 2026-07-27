@@ -21,6 +21,8 @@ _SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9\-_]{4,128}$")
 
 # Top-level dirs exposed to sandbox list/grep/glob (and typical agent workflows).
 SESSION_CONTENT_ROOTS = frozenset({"uploads", "derived", "workspace", "unpacked", ""})
+# Virtual listing keys for GET /sessions/{id}/files?subdir=...
+LISTABLE_SUBDIRS = SESSION_CONTENT_ROOTS | frozenset({"tool_results"})
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -149,10 +151,12 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
     sub = subdir.strip().replace("\\", "/").strip("/")
     if sub == ".":
         sub = ""
-    if sub not in SESSION_CONTENT_ROOTS:
+    if sub not in LISTABLE_SUBDIRS:
         raise ValueError(
-            f"subdir deve essere uno tra: {', '.join(sorted(SESSION_CONTENT_ROOTS))}"
+            f"subdir deve essere uno tra: {', '.join(sorted(LISTABLE_SUBDIRS))}"
         )
+    if sub == "tool_results":
+        return _list_tool_results_files(session_id)
     d = root / sub
     if not d.is_dir():
         return []
@@ -185,6 +189,31 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
                     "mime": mime or "application/octet-stream",
                 }
             )
+    return out
+
+
+def _list_tool_results_files(session_id: str) -> List[Dict[str, Any]]:
+    """List offloaded tool result files under derived/tool_results/ (excludes _ledger.jsonl)."""
+    try:
+        d = safe_resolve(session_id, "derived/tool_results")
+    except (ValueError, FileNotFoundError):
+        return []
+    if not d.is_dir():
+        return []
+    out: List[Dict[str, Any]] = []
+    for p in sorted(d.iterdir()):
+        if not p.is_file() or p.name.startswith("_"):
+            continue
+        rel = f"derived/tool_results/{p.name}".replace("\\", "/")
+        mime, _ = mimetypes.guess_type(p.name)
+        out.append(
+            {
+                "name": p.name,
+                "relative_path": rel,
+                "size_bytes": p.stat().st_size,
+                "mime": mime or "text/plain",
+            }
+        )
     return out
 
 

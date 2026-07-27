@@ -6,8 +6,7 @@ description: Three-layer plan (tool result offload, tool ledger, custom compacti
 
 # Context offloading — implementation plan
 
-Status: **proposal / not implemented**. This document is the executable plan for
-the dev team. No production code has been changed yet.
+Status: **implemented** (feature-flagged; enable via `.env`).
 
 ## Problem statement
 
@@ -492,6 +491,18 @@ and the agent re-reading at least one offloaded file with
 5. chat-ui web source cards are unchanged (guarded by the `web_search`
    exclusion).
 6. No path outside the session root is ever written.
+
+## Rollout (gradual)
+
+| Step | Flags | Environment |
+|------|-------|-------------|
+| 1 | `AION_TOOL_OFFLOAD_ENABLED=1` | dev/staging long_run |
+| 2 | + `AION_TOOL_LEDGER_ENABLED=1` | dev/staging |
+| 3 | + `AION_PI_CUSTOM_COMPACTION=1` | dev Pi worker |
+| 4 | All three ON | production `long_run` |
+| 5 | L1+L2 ON (Haystack normal) | production after long_run stable |
+
+Restart `services/pi-long-run` after changing Pi-related flags so extensions reload.
 
 ## Risks
 

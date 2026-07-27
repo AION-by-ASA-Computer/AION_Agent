@@ -102,15 +102,15 @@ async def write_pi_models_json(
     profile: Any,
     llm_provider_name: Optional[str],
 ) -> PiLlmConfig:
+    from src.runtime.llm_limits import (
+        pi_runtime_config_fingerprint,
+        resolve_chat_max_tokens,
+        resolve_context_window,
+    )
+
     cfg = await resolve_pi_llm_config(llm_provider_name)
-    try:
-        max_tokens = int(os.getenv("AION_CHAT_MAX_TOKENS", "16384"))
-    except ValueError:
-        max_tokens = 16384
-    try:
-        context_window = int(os.getenv("AION_CONTEXT_WINDOW", "131072"))
-    except ValueError:
-        context_window = 131072
+    max_tokens = resolve_chat_max_tokens(long_run=True)
+    context_window = resolve_context_window()
     compat: dict[str, Any] = {
         "supportsDeveloperRole": False,
         "supportsReasoningEffort": False,
@@ -149,12 +149,28 @@ async def write_pi_models_json(
         json.dumps(payload, indent=2),
         encoding="utf-8",
     )
+    (agent_dir / "runtime_fingerprint.json").write_text(
+        json.dumps(
+            {
+                "fingerprint": pi_runtime_config_fingerprint(),
+                "maxTokens": max_tokens,
+                "contextWindow": context_window,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
     return cfg
 
 
 def write_pi_settings_json(agent_dir: Path, *, default_model: Optional[str] = None) -> None:
-    reserve = int(os.getenv("AION_PI_COMPACTION_RESERVE_TOKENS", "49152"))
-    keep = int(os.getenv("AION_PI_COMPACTION_KEEP_RECENT_TOKENS", "12000"))
+    from src.runtime.llm_limits import (
+        resolve_pi_compaction_keep_tokens,
+        resolve_pi_compaction_reserve_tokens,
+    )
+
+    reserve = resolve_pi_compaction_reserve_tokens()
+    keep = resolve_pi_compaction_keep_tokens()
     payload = {
         "compaction": {
             "enabled": True,

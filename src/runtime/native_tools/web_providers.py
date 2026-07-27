@@ -7,7 +7,7 @@ import logging
 import os
 import re
 from typing import Any, Dict, List, Optional, Tuple
-from urllib.parse import unquote, urlparse
+from urllib.parse import urlparse
 
 import httpx
 
@@ -21,10 +21,7 @@ from src.runtime.web_search_context import get_web_search_request_context
 
 logger = logging.getLogger(__name__)
 
-_WIKI_HOST_RE = re.compile(
-    r"^(?P<lang>[a-z]{2,3})\.(m\.)?wikipedia\.org$", re.IGNORECASE
-)
-_WIKI_USER_AGENT = "AION-Agent/1.0 (+https://github.com/aion-agent; web_fetch_page)"
+_FETCH_USER_AGENT = "AION-Agent/1.0 (+https://github.com/aion-agent; web_fetch_page)"
 _SITE_OPERATOR_RE = re.compile(
     r"^\s*site:(?P<domain>[^\s/]+(?:\.[^\s/]+)*)\s*(?P<rest>.*)$",
     re.IGNORECASE,
@@ -35,11 +32,6 @@ def _truthy(val: Optional[str]) -> bool:
     if val is None:
         return False
     return val.strip().lower() in ("1", "true", "yes", "on")
-
-
-def _wiki_api_headers() -> Dict[str, str]:
-    """MediaWiki requires a descriptive User-Agent (403 otherwise)."""
-    return {"User-Agent": _WIKI_USER_AGENT}
 
 
 def _normalize_web_search_query(query: str) -> Tuple[str, List[str], Optional[str]]:
@@ -399,226 +391,30 @@ def _extract_main_text(html: str, *, url: str, max_chars: int) -> Tuple[str, str
     return _strip_html_simple(html, max_chars), "html_strip"
 
 
-def _normalize_wiki_anchor(value: str) -> str:
-    return unquote(value or "").replace("_", " ").strip().lower()
-
-
-def _parse_wikipedia_url(url: str) -> Optional[Tuple[str, str, Optional[str]]]:
+def _web_fetch_max_chars() -> int:
+    """Page extract cap before serialization. Higher when tool offload stores full text on disk."""
     try:
-        parsed = urlparse(url)
-    except Exception:
-        return None
-    host = (parsed.hostname or "").lower()
-    m = _WIKI_HOST_RE.match(host)
-    if not m:
-        return None
-    lang = m.group("lang").lower()
-    path = unquote(parsed.path or "")
-    if not path.startswith("/wiki/"):
-        return None
-    title = path[len("/wiki/") :].replace("_", " ").strip()
-    if not title or title.lower() == "main_page":
-        return None
-    anchor_raw = unquote((parsed.fragment or "")).strip()
-    anchor = anchor_raw if anchor_raw else None
-    return lang, title, anchor
-
-
-def _fetch_wikipedia_section(
-    client: httpx.Client,
-    *,
-    lang: str,
-    title: str,
-    anchor: str,
-    max_chars: int,
-    timeout: float,
-) -> Optional[str]:
-    api = f"https://{lang}.wikipedia.org/w/api.php"
-    target = _normalize_wiki_anchor(anchor)
-    try:
-        r = client.get(
-            api,
-            params={
-                "action": "parse",
-                "page": title,
-                "prop": "sections",
-                "format": "json",
-            },
-            headers=_wiki_api_headers(),
-            timeout=timeout,
-        )
-        r.raise_for_status()
-        sections = (r.json().get("parse") or {}).get("sections") or []
-        section_idx: Optional[str] = None
-        for sec in sections:
-            if not isinstance(sec, dict):
-                continue
-            candidates = (
-                str(sec.get("anchor") or ""),
-                str(sec.get("line") or ""),
-            )
-            if any(_normalize_wiki_anchor(c) == target for c in candidates if c):
-                section_idx = str(sec.get("index") or "")
-                break
-        if not section_idx:
-            logger.info(
-                "wikipedia section not found title=%s anchor=%s", title[:60], anchor
-            )
-            return None
-
-        r2 = client.get(
-            api,
-            params={
-                "action": "parse",
-                "page": title,
-                "section": section_idx,
-                "prop": "text",
-                "format": "json",
-            },
-            headers=_wiki_api_headers(),
-            timeout=timeout,
-        )
-        r2.raise_for_status()
-        html = ((r2.json().get("parse") or {}).get("text") or {}).get("*") or ""
-        if not html:
-            return None
-        page_url = f"https://{lang}.wikipedia.org/wiki/{title.replace(' ', '_')}"
-        text, _ = _extract_main_text(html, url=page_url, max_chars=max_chars)
-        return text.strip()[:max_chars] if text else None
-    except Exception as exc:
-        logger.warning(
-            "wikipedia section fetch failed title=%s anchor=%s: %s",
-            title[:60],
-            anchor,
-            exc,
-        )
-    return None
-
-
-def _wikipedia_extract_fallback_min_chars(max_chars: int) -> int:
-    """When API ``extracts`` returns fewer chars than this, fetch full HTML via parse."""
-    try:
-        floor = int(os.getenv("AION_WIKIPEDIA_EXTRACT_FALLBACK_MIN_CHARS", "2000"))
+        base = max(2000, int(os.getenv("AION_WEB_FETCH_MAX_CHARS", "24000")))
     except ValueError:
-        floor = 2000
-    return min(max_chars, max(500, floor))
-
-
-def _fetch_wikipedia_parse_html(
-    client: httpx.Client,
-    *,
-    lang: str,
-    title: str,
-    max_chars: int,
-    timeout: float,
-) -> Optional[str]:
-    """Full article via MediaWiki parse + trafilatura/bs4 (tables, match lists)."""
-    api = f"https://{lang}.wikipedia.org/w/api.php"
+        base = 24000
     try:
-        r = client.get(
-            api,
-            params={
-                "action": "parse",
-                "page": title,
-                "prop": "text",
-                "format": "json",
-            },
-            headers=_wiki_api_headers(),
-            timeout=timeout,
-        )
-        r.raise_for_status()
-        html = ((r.json().get("parse") or {}).get("text") or {}).get("*") or ""
-        if not html:
-            return None
-        page_url = f"https://{lang}.wikipedia.org/wiki/{title.replace(' ', '_')}"
-        text, _ = _extract_main_text(html, url=page_url, max_chars=max_chars)
-        return text.strip()[:max_chars] if text else None
-    except Exception as exc:
-        logger.warning("wikipedia parse html failed title=%s: %s", title[:80], exc)
-    return None
+        from src.runtime.tool_offload import offload_enabled
 
-
-def _fetch_wikipedia_best_article(
-    client: httpx.Client,
-    *,
-    lang: str,
-    title: str,
-    max_chars: int,
-    timeout: float,
-) -> Tuple[Optional[str], str, str, Optional[str]]:
-    """Article text: API extract when sufficient, else parse+extract HTML."""
-    wiki_mode = (os.getenv("AION_WIKIPEDIA_FETCH_MODE") or "article").strip().lower()
-    extract = _fetch_wikipedia_extract(
-        client, lang=lang, title=title, max_chars=max_chars, timeout=timeout
-    )
-    if wiki_mode == "intro" and extract:
-        return extract, "wikipedia_api", "intro", None
-
-    min_useful = _wikipedia_extract_fallback_min_chars(max_chars)
-    html_text: Optional[str] = None
-    if not extract or len(extract) < min_useful:
-        html_text = _fetch_wikipedia_parse_html(
-            client, lang=lang, title=title, max_chars=max_chars, timeout=timeout
-        )
-
-    if html_text and (not extract or len(html_text) > len(extract)):
-        hint: Optional[str] = None
-        if extract and len(extract) < min_useful:
-            hint = (
-                f"Wikipedia API returned only the article lead ({len(extract)} chars); "
-                f"full page text fetched via MediaWiki parse ({len(html_text)} chars). "
-                "For a single section, use a #anchor URL (e.g. #Matches)."
-            )
-        return html_text, "wikipedia_html", "article", hint
-
-    if extract:
-        source = "intro" if wiki_mode == "intro" else "article"
-        return extract, "wikipedia_api", source, None
-
-    if html_text:
-        return html_text, "wikipedia_html", "article", None
-    return None, "wikipedia_api", "article", None
-
-
-def _fetch_wikipedia_extract(
-    client: httpx.Client,
-    *,
-    lang: str,
-    title: str,
-    max_chars: int,
-    timeout: float,
-) -> Optional[str]:
-    mode = (os.getenv("AION_WIKIPEDIA_FETCH_MODE") or "article").strip().lower()
-    params: Dict[str, Any] = {
-        "action": "query",
-        "prop": "extracts",
-        "explaintext": True,
-        "redirects": 1,
-        "format": "json",
-        "titles": title,
-    }
-    if mode == "intro":
-        params["exintro"] = True
-    else:
-        params["exchars"] = max(500, max_chars)
-
-    api = f"https://{lang}.wikipedia.org/w/api.php"
+        if not offload_enabled():
+            return base
+    except Exception:
+        return base
+    raw = (os.getenv("AION_WEB_FETCH_OFFLOAD_MAX_CHARS") or "").strip()
+    if raw:
+        try:
+            return max(base, int(raw))
+        except ValueError:
+            pass
     try:
-        r = client.get(
-            api, params=params, headers=_wiki_api_headers(), timeout=timeout
-        )
-        r.raise_for_status()
-        data = r.json()
-        pages = (data.get("query") or {}).get("pages") or {}
-        for page in pages.values():
-            if not isinstance(page, dict):
-                continue
-            extract = page.get("extract")
-            if isinstance(extract, str) and extract.strip():
-                return extract.strip()[:max_chars]
-    except Exception as exc:
-        logger.warning("wikipedia API failed title=%s: %s", title[:80], exc)
-    return None
+        max_bytes = max(50_000, int(os.getenv("AION_WEB_FETCH_MAX_BYTES", "1500000")))
+    except ValueError:
+        max_bytes = 1_500_000
+    return max(base, min(max_bytes // 2, 250_000))
 
 
 def run_web_fetch_page(url: str, *, prefer_stealth: bool = False) -> str:
@@ -647,7 +443,7 @@ def run_web_fetch_page(url: str, *, prefer_stealth: bool = False) -> str:
         )
     timeout = float(os.getenv("AION_WEB_FETCH_TIMEOUT_SEC", "25"))
     max_bytes = int(os.getenv("AION_WEB_FETCH_MAX_BYTES", "1500000"))
-    max_chars = int(os.getenv("AION_WEB_FETCH_MAX_CHARS", "24000"))
+    max_chars = _web_fetch_max_chars()
     allow = (os.getenv("AION_WEB_FETCH_ALLOWLIST_REGEX") or "").strip()
     if allow:
         try:
@@ -667,48 +463,6 @@ def run_web_fetch_page(url: str, *, prefer_stealth: bool = False) -> str:
 
     if _url_path_looks_pdf(u):
         return _pdf_not_text_extractable_payload(u)
-
-    wiki = _parse_wikipedia_url(u)
-    if wiki:
-        lang, title, anchor = wiki
-        hint: Optional[str] = None
-        with httpx.Client(
-            follow_redirects=True, headers=_wiki_api_headers()
-        ) as client:
-            text: Optional[str] = None
-            mode = "wikipedia_api"
-            source = "article"
-            if anchor:
-                text = _fetch_wikipedia_section(
-                    client,
-                    lang=lang,
-                    title=title,
-                    anchor=anchor,
-                    max_chars=max_chars,
-                    timeout=timeout,
-                )
-                if text:
-                    mode = "wikipedia_section"
-                    source = anchor
-            if not text:
-                text, mode, source, hint = _fetch_wikipedia_best_article(
-                    client,
-                    lang=lang,
-                    title=title,
-                    max_chars=max_chars,
-                    timeout=timeout,
-                )
-        if text:
-            payload: Dict[str, Any] = {
-                "url": u,
-                "mode": mode,
-                "source": source,
-                "chars": len(text),
-                "text": text,
-            }
-            if hint:
-                payload["hint"] = hint
-            return _serialize_tool_payload(payload, tool="web_fetch_page")
 
     stealth = prefer_stealth and _truthy(
         os.getenv("AION_SCRAPLING_STEALTH_ENABLED", "0")
@@ -764,7 +518,7 @@ def run_web_fetch_page(url: str, *, prefer_stealth: bool = False) -> str:
             r = client.get(
                 u,
                 timeout=timeout,
-                headers={"User-Agent": "AION-Agent/1.0 (+web_fetch_page)"},
+                headers={"User-Agent": _FETCH_USER_AGENT},
             )
             r.raise_for_status()
             body = r.content[:max_bytes]

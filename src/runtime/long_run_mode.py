@@ -52,6 +52,10 @@ def build_long_run_system_prompt() -> str:
         "### Tool discipline\n"
         "- Prefer `incremental_execution_protocol`: one slice at a time, persist, then continue.\n"
         "- Context compaction runs automatically; do not repeat full fetch dumps in prose.\n"
+        "- Large tool results may be **offloaded** to `derived/tool_results/` with an "
+        "`[AION offload]` pointer in context. Re-read with `sandbox_read_file_chunk` "
+        "(offset_lines/max_lines) or `sandbox_grep_content` (relative_root=\"derived\"). "
+        "Do not re-fetch URLs that already appear in the tool trace ledger.\n"
     )
 
 

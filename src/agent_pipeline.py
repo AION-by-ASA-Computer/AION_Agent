@@ -888,6 +888,34 @@ class AgentPipeline:
             except Exception as ex:
                 logger.warning("workspace manifest generation failed: %s", ex)
 
+        # 3. Tool offload files (read-only under derived/tool_results/)
+        try:
+            from src.runtime.tool_offload import offload_enabled
+            from src.runtime.tool_ledger import (
+                offload_paths_for_session,
+                tool_ledger_enabled,
+            )
+
+            if offload_enabled() or tool_ledger_enabled():
+                offload_paths = offload_paths_for_session(self.session_id)
+                if offload_paths:
+                    recent = offload_paths[-12:]
+                    blocks.append(
+                        "### Tool results on disk (offloaded — read-only)\n"
+                        "Full outputs from large tool calls live under "
+                        "`derived/tool_results/`. You **can** read them:\n"
+                        "- `sandbox_read_file_chunk(relative_path="
+                        '"derived/tool_results/<file>.txt", offset_lines=0)`\n'
+                        "- `sandbox_list_files(subdir=\"tool_results\")`\n"
+                        "- `sandbox_grep_content(..., relative_root=\"derived\", "
+                        'glob_filter="tool_results/*.txt")` '
+                        "(do **not** use `relative_root=\"derived/tool_results\"` — invalid)\n"
+                        "Recent offload files:\n"
+                        + "\n".join(f"- `{p}`" for p in recent)
+                    )
+        except Exception as ex:
+            logger.debug("tool offload context block skipped: %s", ex)
+
         if not blocks:
             return user_input
 
@@ -1772,6 +1800,12 @@ class AgentPipeline:
                     if harness_v2_turn() and _harness_turn is not None:
                         end_turn(self.session_id)
                     clear_turn_runtime(self.session_id)
+                    try:
+                        from src.runtime.tool_circuit import reset_session_circuit
+
+                        reset_session_circuit(self.session_id)
+                    except Exception:
+                        pass
                     clear_context()
                     queue.put_nowait({"type": "done"})
 
@@ -2299,6 +2333,10 @@ class AgentPipeline:
                                 break
 
                             if chunk.get("type") == "llm_call":
+                                reasoning_chars = 0
+                                reasoning_events = 0
+                                reasoning_guard_logged = False
+                                reasoning_no_tool_warned = False
                                 _llm_steps_done += 1
                                 try:
                                     from src.runtime.turn_compaction import (
@@ -2470,8 +2508,8 @@ class AgentPipeline:
                                 reasoning_piece = chunk.get("reasoning") or ""
                                 if reasoning_piece:
                                     last_progress_at = loop.time()
-                                reasoning_events += 1
-                                reasoning_chars += len(reasoning_piece)
+                                    reasoning_events += 1
+                                    reasoning_chars += len(reasoning_piece)
                                 # Chunk di reasoning possono essere molto frammentati:
                                 # interrompiamo solo se supera ENTRAMBI i budget.
                                 over_events = (

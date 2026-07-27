@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
 vi.mock("@earendil-works/pi-coding-agent", () => {
   class DefaultResourceLoader {
@@ -32,6 +32,10 @@ import { createAgentSession } from "@earendil-works/pi-coding-agent";
 import { ensurePiSession } from "../src/session-factory.js";
 
 describe("ensurePiSession", () => {
+  beforeEach(() => {
+    vi.mocked(createAgentSession).mockClear();
+  });
+
   it("does not pass tools:[] allowlist (blocks bridged tools)", async () => {
     const session = {
       setModel: vi.fn().mockResolvedValue(undefined),

@@ -48,6 +48,26 @@ export function toolResultToText(result: unknown): string {
   }
 }
 
+/** Detect structured AION tool failures returned as plain text JSON. */
+export function toolResultLooksLikeError(text: string): boolean {
+  const trimmed = String(text || "").trim();
+  if (!trimmed.startsWith("{")) return false;
+  try {
+    const data = JSON.parse(trimmed) as { ok?: boolean; error?: string };
+    if (data.ok === false) return true;
+    if (
+      data.error === "missing_arguments" ||
+      data.error === "tool_args_truncated" ||
+      data.error === "circuit_breaker"
+    ) {
+      return true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}
+
 export function mapPiEventToAion(event: AgentSessionEvent): AionStreamChunk[] {
   const out: AionStreamChunk[] = [];
 
@@ -92,7 +112,7 @@ export function mapPiEventToAion(event: AgentSessionEvent): AionStreamChunk[] {
 
   if (event.type === "tool_execution_end") {
     const resultText = toolResultToText(event.result);
-    if (event.isError) {
+    if (event.isError || toolResultLooksLikeError(resultText)) {
       out.push({
         type: "tool_event",
         event: {

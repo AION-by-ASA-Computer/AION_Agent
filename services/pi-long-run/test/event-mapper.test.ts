@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { mapPiEventToAion, toolResultToText } from "../src/event-mapper.js";
+import {
+  mapPiEventToAion,
+  toolResultLooksLikeError,
+  toolResultToText,
+} from "../src/event-mapper.js";
 
 describe("mapPiEventToAion", () => {
   it("maps text deltas to token chunks", () => {
@@ -72,5 +76,40 @@ describe("mapPiEventToAion", () => {
         error: "No MCP server",
       },
     });
+  });
+
+  it("maps ok:false JSON tool results to tool_error even when isError is false", () => {
+    const payload = JSON.stringify({
+      ok: false,
+      error: "missing_arguments",
+      message: "missing content",
+    });
+    const end = mapPiEventToAion({
+      type: "tool_execution_end",
+      toolCallId: "c3",
+      toolName: "sandbox_write_workspace_file",
+      result: {
+        content: [{ type: "text", text: payload }],
+        isError: false,
+      },
+      isError: false,
+    } as never);
+    expect(end[0]).toMatchObject({
+      type: "tool_event",
+      event: {
+        type: "tool_error",
+        name: "sandbox_write_workspace_file",
+        error: payload,
+      },
+    });
+  });
+
+  it("detects structured tool errors in plain text", () => {
+    expect(
+      toolResultLooksLikeError(
+        JSON.stringify({ ok: false, error: "tool_args_truncated" }),
+      ),
+    ).toBe(true);
+    expect(toolResultLooksLikeError('{"ok": true}')).toBe(false);
   });
 });

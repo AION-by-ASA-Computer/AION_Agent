@@ -8,6 +8,7 @@ import {
 import { coalesceTurnSegments } from "./coalesceTurnSegments";
 import { initialTurnState } from "./types";
 import { webSearchSourceRows } from "./webToolParse";
+import { toolOutputLooksLikeError } from "./toolOutputParse";
 
 /** Legacy <plan> token stripping — off when tool-first Plan Mode is default. */
 const PLAN_TEXT_PARSER_ENABLED =
@@ -331,6 +332,7 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
       const id = resolveToolId(next, ev, name);
       const cur = next.toolSteps[id] || { id, name, input: ev.input ?? {} };
       const output = String(ev.output ?? ev.result ?? "");
+      const isError = toolOutputLooksLikeError(output);
       const tokens_in = typeof ev.tokens_in === "number" ? ev.tokens_in : undefined;
       const tokens_out = typeof ev.tokens_out === "number" ? ev.tokens_out : undefined;
       const toolSeg: any = {
@@ -339,13 +341,22 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
         name: cur.name || name,
         input: cur.input ?? ev.input,
         output,
-        status: "done",
+        status: isError ? "error" : "done",
+        isError,
         tokens_in,
         tokens_out,
         masked: ev.masked || (cur as any).masked,
       };
       next.segments = upsertToolSegment(next.segments, toolSeg);
-      next.toolSteps[id] = { ...cur, output, status: "done", tokens_in, tokens_out, masked: ev.masked || (cur as any).masked } as any;
+      next.toolSteps[id] = {
+        ...cur,
+        output,
+        status: isError ? "error" : "done",
+        isError,
+        tokens_in,
+        tokens_out,
+        masked: ev.masked || (cur as any).masked,
+      } as any;
       if (!next.toolOrder.includes(id)) next.toolOrder.push(id);
       delete next.activeToolKeyByName[name];
       if (typeof ev.id === "string") delete next.activeToolKeyById[ev.id];

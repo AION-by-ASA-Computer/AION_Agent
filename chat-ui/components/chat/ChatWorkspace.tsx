@@ -29,8 +29,10 @@ import {
   drainSessionEventsLoop,
   fetchProfiles,
   fetchSessionCharts,
+  fetchToolLedger,
   listSessionFilesSubdir,
   type SessionFileRow,
+  type ToolLedgerEntry,
   openSessionEventsStream,
   postChatStream,
   waitForChatPrepare,
@@ -90,11 +92,11 @@ import {
   syncDefaultProfileSlug,
   writeStoredDefaultProfileSlug,
 } from "@/lib/api/user-preferences";
-import type { ChatChunk, TurnSegment, TurnState, WebSourceCard } from "@/lib/sse/types";
+import type { ChatChunk, TurnSegment, TurnState, WebSourceCard, ContextBudgetState } from "@/lib/sse/types";
 import { webSearchSourceRows } from "@/lib/sse/webToolParse";
 
 import { ChatHeader } from "@/components/layout/ChatHeader";
-import { ContextBudgetBar } from "@/components/chat/ContextBudgetBar";
+import { ContextBudgetBar, ContextBudgetGauge } from "@/components/chat/ContextBudgetBar";
 import { useShellActions, useSidebarOpen } from "@/lib/shell/shell-context";
 import { cn } from "@/lib/cn";
 import { DeepResearchPanel } from "@/components/research/DeepResearchPanel";
@@ -203,6 +205,8 @@ type ChatMessage = {
   segments?: TurnSegment[];
   rating?: MessageRating | null;
   feedbackComment?: string | null;
+  /** Archived by compaction — visible in UI, excluded from LLM context. */
+  archived?: boolean;
 };
 
 function parseWebHostInput(raw: string): string | null {
@@ -288,6 +292,7 @@ function historyMessageFromApi(m: ChatHistoryMessage): ChatMessage {
     metadata: m.metadata,
     rating: m.rating as MessageRating | undefined,
     feedbackComment: m.feedback_comment,
+    archived: Boolean(m.archived),
   };
 }
 
@@ -465,22 +470,30 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   // States for session files (moved from left sidebar to files panel on the right)
   const [sessionFiles, setSessionFiles] = useState<SessionFileRow[]>([]);
+  const [toolLedgerEntries, setToolLedgerEntries] = useState<ToolLedgerEntry[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
   const fetchSessionFiles = useCallback(async () => {
     if (!conversationId || conversationId === "default") {
       setSessionFiles([]);
+      setToolLedgerEntries([]);
       return;
     }
     setLoadingFiles(true);
     try {
-      const [uploads, derived, workspace, rootFiles] = await Promise.all([
+      const [uploads, derived, workspace, rootFiles, toolResults, ledger] = await Promise.all([
         listSessionFilesSubdir(conversationId, userId, "uploads", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "derived", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "workspace", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "", token).catch(() => []),
+        listSessionFilesSubdir(conversationId, userId, "tool_results", token).catch(() => []),
+        fetchToolLedger(conversationId, userId, token).catch(() => ({
+          enabled: false,
+          entries: [] as ToolLedgerEntry[],
+        })),
       ]);
-      setSessionFiles([...uploads, ...derived, ...workspace, ...rootFiles]);
+      setSessionFiles([...uploads, ...derived, ...workspace, ...rootFiles, ...toolResults]);
+      setToolLedgerEntries(ledger.entries);
     } catch (err) {
       console.error("Errore recupero file di sessione:", err);
     } finally {
@@ -491,6 +504,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   useEffect(() => {
     fetchSessionFiles();
   }, [fetchSessionFiles]);
+
+  useEffect(() => {
+    if (dockTab === "artifacts") {
+      void fetchSessionFiles();
+    }
+  }, [dockTab, fetchSessionFiles, token]);
 
 
 
@@ -988,6 +1007,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [isPlusOpen, setIsPlusOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAgentModeOpen, setIsAgentModeOpen] = useState(false);
+  const [contextBudgetOpen, setContextBudgetOpen] = useState(false);
+  const [lastContextBudget, setLastContextBudget] = useState<ContextBudgetState | null>(null);
   const [isToolsViewSubOpen, setIsToolsViewSubOpen] = useState(false);
   const [isWebSearchSubOpen, setIsWebSearchSubOpen] = useState(false);
   const [isThinkingSubOpen, setIsThinkingSubOpen] = useState(false);
@@ -1155,6 +1176,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       }
     }
   }, [turnVisual, adoptResearchSession]);
+
+  useEffect(() => {
+    if (turnVisual?.contextBudget) {
+      setLastContextBudget(turnVisual.contextBudget);
+    }
+  }, [turnVisual?.contextBudget]);
 
   const {
     planChunk,
@@ -2112,7 +2139,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         setPostTurnCharts(ch);
 
         const newLinks: { rp: string; label: string }[] = [];
-        for (const sub of ["workspace", "derived"] as const) {
+        for (const sub of ["workspace", "derived", "tool_results"] as const) {
           const rows = await listSessionFilesSubdir(conversationId, userId, sub, token);
           for (const row of rows) {
             const rp = row.relative_path;
@@ -2417,6 +2444,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   // Carica le preferenze di Thinking, Reasoning Effort e Profilo quando cambia conversationId
   useEffect(() => {
     if (!conversationId) return;
+
+    setContextBudgetOpen(false);
+    setLastContextBudget(null);
 
     // Reset immediato al profilo predefinito utente (o fallback) per le nuove chat
     const defaultProfile = resolveDefaultProfileSlug(profiles, favoriteProfileSlugRef.current);
@@ -3049,6 +3079,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         <ArtifactsPanel
           items={dockArtifacts}
           sessionFiles={sessionFiles}
+          toolLedgerEntries={toolLedgerEntries}
           loadingFiles={loadingFiles}
           onRefreshFiles={fetchSessionFiles}
           conversationId={conversationId}
@@ -3153,7 +3184,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }),
   );
   const contextCompacting = Boolean(turnVisual?.contextCompacting);
-  const contextBudget = turnVisual?.contextBudget ?? null;
+  const contextBudget = turnVisual?.contextBudget ?? lastContextBudget;
   const showAgentWorkingShimmer = Boolean(
     streaming &&
     turnVisual &&
@@ -3409,8 +3440,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       className={cn(
                         "group relative w-full flex flex-col transition-opacity",
                         turnGapClass,
+                        m.archived && "opacity-[0.88]",
                       )}
                     >
+                      {m.archived ? (
+                        <p className="mb-1 px-5 text-[0.643em] font-medium uppercase tracking-wide text-muted-foreground/70">
+                          {t("chat.message.archived_context")}
+                        </p>
+                      ) : null}
                       <div
                         className={cn(
                           "w-full px-5 chat-font",
@@ -3578,7 +3615,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
                       {m.role === "user" && !streaming && editingMessageId !== m.id ? (
                         <div className="mt-1 flex justify-end gap-1 pr-2">
-                          {isLastUser ? (
+                          {isLastUser && !m.archived ? (
                             <button
                               type="button"
                               onClick={() => handleStartEdit(m)}
@@ -3788,8 +3825,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   subtitle={t("chat.agent_status.compacting_desc")}
                 />
               ) : null}
-              {contextBudget ? (
-                <ContextBudgetBar budget={contextBudget} className="mb-3" />
+              {contextBudgetOpen ? (
+                contextBudget ? (
+                  <ContextBudgetBar budget={contextBudget} className="mb-3" />
+                ) : (
+                  <div className="mb-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-[0.786em] text-muted-foreground">
+                    {t("chat.context_budget.unavailable")}
+                  </div>
+                )
               ) : null}
               {pendingFiles.length > 0 && (
                 <div className="mb-3 flex flex-wrap gap-2">
@@ -4286,14 +4329,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           setIsAgentModeOpen(false);
                         }}
                         className={cn(
-                          "focus-ring inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[0.786em] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                          "focus-ring inline-flex h-7 max-w-[9rem] items-center gap-1 rounded-full border px-2.5 text-[0.786em] font-medium transition-colors sm:max-w-[10rem]",
                           isProfileOpen
                             ? "border-primary/45 bg-primary/10 text-primary"
                             : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                         )}
                       >
                         <User size={12} className="shrink-0" aria-hidden />
-                        <span className="max-w-[6.5rem] truncate sm:max-w-[9rem]">
+                        <span className="max-w-[5.5rem] truncate sm:max-w-[7.5rem]">
                           {activeProfileName || t("chat.profile.label")}
                         </span>
                         <ChevronDown size={10} className="opacity-70" aria-hidden />
@@ -4402,6 +4445,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       onAfterSelect={(mode) => {
                         if (mode === "deep_research") setDockTab("research");
                       }}
+                    />
+
+                    <ContextBudgetGauge
+                      pct={contextBudget?.pct ?? 0}
+                      triggerPct={
+                        contextBudget && contextBudget.maxPrompt > 0
+                          ? Math.min(100, (contextBudget.trigger / contextBudget.maxPrompt) * 100)
+                          : 92
+                      }
+                      unavailable={!contextBudget}
+                      active={contextBudgetOpen}
+                      onClick={() => setContextBudgetOpen((open) => !open)}
                     />
                   </div>
 

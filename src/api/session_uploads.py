@@ -135,6 +135,26 @@ async def list_session_files(
     return {"files": rows}
 
 
+@router.get("/sessions/{session_id}/tool-ledger")
+async def get_session_tool_ledger(
+    session_id: str,
+    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+):
+    """Tool call trace for the session (from derived/tool_results/_ledger.jsonl)."""
+    from src.runtime.tool_ledger import list_ledger_entries, tool_ledger_enabled
+
+    try:
+        entries = list_ledger_entries(session_id)
+    except Exception as exc:
+        logger.debug("tool-ledger read failed session=%s: %s", session_id[:8], exc)
+        entries = []
+    return {
+        "ok": True,
+        "enabled": tool_ledger_enabled(),
+        "entries": entries,
+    }
+
+
 def _top_segment(rel: str) -> str:
     return (rel or "").strip().replace("\\", "/").split("/", 1)[0].lower()
 
