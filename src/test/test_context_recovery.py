@@ -29,7 +29,9 @@ def test_should_attempt_context_recovery_for_context_length():
         "litellm.ContextWindowExceededError: context length exceeded"
     )
     assert should_attempt_context_recovery(exc, 0) is True
-    assert should_attempt_context_recovery(exc, max_context_recovery_attempts()) is False
+    assert (
+        should_attempt_context_recovery(exc, max_context_recovery_attempts()) is False
+    )
 
 
 def test_build_context_recovery_prompt_includes_failure():
@@ -72,7 +74,10 @@ def test_web_fetch_json_truncation_keeps_valid_json():
     assert isinstance(parsed.get("text"), str)
     with patch.dict(
         os.environ,
-        {"AION_TOOL_WEB_FETCH_MAX_CHARS": "6000", "AION_TOOL_RESULT_MAX_CHARS": "24000"},
+        {
+            "AION_TOOL_WEB_FETCH_MAX_CHARS": "6000",
+            "AION_TOOL_RESULT_MAX_CHARS": "24000",
+        },
         clear=False,
     ):
         cap = tool_result_max_chars_for("web_fetch_page")
@@ -87,18 +92,35 @@ def test_emergency_compact_returns_smaller_message_list():
     origin = ChatMessage.from_assistant("call")
     convo = [ChatMessage.from_user("task")]
     for i in range(12):
-        convo.append(ChatMessage.from_tool(tool_result=f"page-{i} " + "z" * 8000, origin=origin))
+        convo.append(
+            ChatMessage.from_tool(tool_result=f"page-{i} " + "z" * 8000, origin=origin)
+        )
     agent = MagicMock()
     with patch(
         "src.runtime.turn_compaction._estimate_prompt_total",
         side_effect=[
-            {"total": 120000, "max_prompt": 131072, "messages": 100000, "overhead": 20000},
-            {"total": 90000, "max_prompt": 131072, "messages": 70000, "overhead": 20000},
-            {"total": 90000, "max_prompt": 131072, "messages": 70000, "overhead": 20000},
+            {
+                "total": 120000,
+                "max_prompt": 131072,
+                "messages": 100000,
+                "overhead": 20000,
+            },
+            {
+                "total": 90000,
+                "max_prompt": 131072,
+                "messages": 70000,
+                "overhead": 20000,
+            },
+            {
+                "total": 90000,
+                "max_prompt": 131072,
+                "messages": 70000,
+                "overhead": 20000,
+            },
         ],
     ):
-        out = emergency_compact_messages(agent, convo, force_sync=False, aggressive=False)
+        out = emergency_compact_messages(
+            agent, convo, force_sync=False, aggressive=False
+        )
     assert out is not None
-    assert any(
-        "removed to free context" in chat_message_text(m) for m in out
-    )
+    assert any("removed to free context" in chat_message_text(m) for m in out)

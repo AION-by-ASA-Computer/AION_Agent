@@ -148,9 +148,7 @@ def create_aion_agent(*args: Any, **kwargs: Any) -> Any:
         if dropped:
             from src.runtime.harness_flags import tool_error_recovery_strict
 
-            msg = (
-                "Haystack Agent does not support hooks=; tool_error_recovery on_exit disabled"
-            )
+            msg = "Haystack Agent does not support hooks=; tool_error_recovery on_exit disabled"
             if tool_error_recovery_strict():
                 logger.error(msg)
             else:

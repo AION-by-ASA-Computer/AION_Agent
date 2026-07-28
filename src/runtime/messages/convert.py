@@ -40,13 +40,18 @@ def convert_to_llm(messages: List[AionMessage]) -> List[ChatMessage]:
 
 
 def injection_from_layer(key: str, text: str) -> AionMessage:
-    layer = key if key in {
-        "ltm",
-        "memory",
-        "skill_nudge",
-        "plan",
-        "workspace",
-        "attachments",
-        "hooks",
-    } else "other"
+    layer = (
+        key
+        if key
+        in {
+            "ltm",
+            "memory",
+            "skill_nudge",
+            "plan",
+            "workspace",
+            "attachments",
+            "hooks",
+        }
+        else "other"
+    )
     return AionMessage(role="injection", content=text, meta={"layer": layer})

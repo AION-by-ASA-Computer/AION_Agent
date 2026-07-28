@@ -329,7 +329,11 @@ class StreamLoop:
                     continue
 
                 # --- Context budget / compaction (queued from preflight or mid-turn) ---
-                if ctype in ("context_budget", "context_compacting", "context_recovery"):
+                if ctype in (
+                    "context_budget",
+                    "context_compacting",
+                    "context_recovery",
+                ):
                     yield self._track_sse(chunk)
                     continue
 
@@ -460,7 +464,10 @@ class StreamLoop:
         # vLLM/Qwen reasoning streams as many tiny chunks; stop on events only when
         # enough text accumulated (chars alone still triggers immediately).
         min_chars_for_event_guard = max(
-            6000, int(self.max_reasoning_chars * 0.4) if self.max_reasoning_chars > 0 else 6000
+            6000,
+            int(self.max_reasoning_chars * 0.4)
+            if self.max_reasoning_chars > 0
+            else 6000,
         )
         hard_stop_reasoning = over_chars or (
             over_events and self.reasoning_chars >= min_chars_for_event_guard
@@ -590,7 +597,9 @@ class StreamLoop:
         if evt.get("type") == "tool_start":
             from src.runtime.tool_protocol import should_skip_tools_for_truncation
 
-            if should_skip_tools_for_truncation(getattr(self, "_last_finish_reason", None)):
+            if should_skip_tools_for_truncation(
+                getattr(self, "_last_finish_reason", None)
+            ):
                 yield self._track_sse(
                     {
                         "type": "tool_event",
@@ -632,7 +641,10 @@ class StreamLoop:
                     pass
 
             # plan_controller: research budget enforced in main._aion_mcp_tool_run (soft block).
-            if self.plan_controller is not None and self.plan_controller.is_research_tool(_tn):
+            if (
+                self.plan_controller is not None
+                and self.plan_controller.is_research_tool(_tn)
+            ):
                 yield self._track_sse(self.plan_controller.sse_phase("researching"))
 
             # MemPalace status notification
@@ -789,7 +801,9 @@ class StreamLoop:
                 import src.runtime.db_navigation_mempalace_hooks  # noqa: F401
                 import src.runtime.exploration_tracker  # noqa: F401
                 from src.runtime.exploration_tracker import record_exploration_tool
-                from src.runtime.tool_result_postprocess import apply_tool_result_postprocess
+                from src.runtime.tool_result_postprocess import (
+                    apply_tool_result_postprocess,
+                )
 
                 _tool_out = evt.get("output") or evt.get("error")
                 record_exploration_tool(
@@ -1194,7 +1208,9 @@ class StreamLoop:
     # Private: budget guard checker
     # ------------------------------------------------------------------
 
-    def _request_stop(self, reason: str, *, location: str = "stream_loop", **metrics: Any) -> None:
+    def _request_stop(
+        self, reason: str, *, location: str = "stream_loop", **metrics: Any
+    ) -> None:
         from src.runtime.turn_diagnostics import log_turn_stop
 
         self.stop_event.set()

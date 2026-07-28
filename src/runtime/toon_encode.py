@@ -99,7 +99,9 @@ def encode_toon(data: Any, *, indent: int = 0) -> str:
             return _encode_tabular_array("items", data, indent - 1 if indent else 0)
         lines = []
         for i, item in enumerate(data):
-            lines.append(f"{pad}- {_format_scalar(item) if not isinstance(item, (dict, list)) else ''}".rstrip())
+            lines.append(
+                f"{pad}- {_format_scalar(item) if not isinstance(item, (dict, list)) else ''}".rstrip()
+            )
             if isinstance(item, (dict, list)):
                 lines.append(encode_toon(item, indent=indent + 1))
         return "\n".join(lines)
@@ -182,7 +184,11 @@ def parse_web_search_toon(raw: str) -> Optional[Dict[str, Any]]:
             while i < len(lines):
                 line = lines[i]
                 trimmed = line.strip()
-                if section and re.match(r"^[a-zA-Z_][\w]*:\s", trimmed) and not line.startswith("  "):
+                if (
+                    section
+                    and re.match(r"^[a-zA-Z_][\w]*:\s", trimmed)
+                    and not line.startswith("  ")
+                ):
                     break
                 if not section and not line.startswith("  "):
                     break
@@ -193,7 +199,10 @@ def parse_web_search_toon(raw: str) -> Optional[Dict[str, Any]]:
                     break
                 i += 1
             rows = [
-                {fields[idx]: cells[idx] if idx < len(cells) else "" for idx in range(len(fields))}
+                {
+                    fields[idx]: cells[idx] if idx < len(cells) else ""
+                    for idx in range(len(fields))
+                }
                 for cells in _parse_tabular_rows("\n".join(section), len(fields))
             ]
             out["results"] = rows

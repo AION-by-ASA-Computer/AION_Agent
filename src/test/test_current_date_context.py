@@ -79,14 +79,20 @@ async def test_augment_includes_date_when_enabled(monkeypatch):
 
     from src.agent_pipeline import AgentPipeline
 
-    pipeline = AgentPipeline(agent=None, session_id="sess-date-test", profile_name="aion_std")
+    pipeline = AgentPipeline(
+        agent=None, session_id="sess-date-test", profile_name="aion_std"
+    )
 
     result = await pipeline._augment_user_input("What won the 2026 World Cup?")
 
     now = datetime.now().astimezone()
-    assert now.strftime("%Y-%m-%d") in result, "Augmented input must contain today's ISO date"
+    assert now.strftime("%Y-%m-%d") in result, (
+        "Augmented input must contain today's ISO date"
+    )
     assert "runtime context" in result.lower(), "Must use the runtime context wrapper"
-    assert result.endswith("What won the 2026 World Cup?"), "Original user input must appear at the end"
+    assert result.endswith("What won the 2026 World Cup?"), (
+        "Original user input must appear at the end"
+    )
 
 
 @pytest.mark.anyio
@@ -99,7 +105,9 @@ async def test_augment_skips_date_when_disabled(monkeypatch):
 
     from src.agent_pipeline import AgentPipeline
 
-    pipeline = AgentPipeline(agent=None, session_id="sess-date-off", profile_name="aion_std")
+    pipeline = AgentPipeline(
+        agent=None, session_id="sess-date-off", profile_name="aion_std"
+    )
 
     result = await pipeline._augment_user_input("hello")
 

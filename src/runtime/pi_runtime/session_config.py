@@ -87,7 +87,9 @@ async def resolve_pi_llm_config(
     base_url = _normalize_openai_base_url(row.api_base_url)
     model_id = (row.model_name or "").strip()
     if not model_id:
-        model_id = llm_model.split("/", 1)[-1] if "/" in (llm_model or "") else llm_model
+        model_id = (
+            llm_model.split("/", 1)[-1] if "/" in (llm_model or "") else llm_model
+        )
     if row.api_key_encrypted:
         try:
             api_key = decrypt_value(row.api_key_encrypted)
@@ -163,7 +165,9 @@ async def write_pi_models_json(
     return cfg
 
 
-def write_pi_settings_json(agent_dir: Path, *, default_model: Optional[str] = None) -> None:
+def write_pi_settings_json(
+    agent_dir: Path, *, default_model: Optional[str] = None
+) -> None:
     from src.runtime.llm_limits import (
         resolve_pi_compaction_keep_tokens,
         resolve_pi_compaction_reserve_tokens,
@@ -194,7 +198,11 @@ def write_system_prompt(
     llm_cfg: Optional[PiLlmConfig] = None,
 ) -> None:
     base = ""
-    provider = "vllm" if llm_cfg and _is_qwen_vllm_model(llm_cfg.model_id, llm_cfg.base_url) else ""
+    provider = (
+        "vllm"
+        if llm_cfg and _is_qwen_vllm_model(llm_cfg.model_id, llm_cfg.base_url)
+        else ""
+    )
     model_id = llm_cfg.model_id if llm_cfg else ""
     try:
         base = (

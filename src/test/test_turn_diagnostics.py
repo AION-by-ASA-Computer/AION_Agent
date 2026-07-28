@@ -48,7 +48,9 @@ def test_user_cancelled_no_warning():
             new_messages=[],
             context_stats={"total": 30000, "message_count": 200},
         )
-        assert out["code"] == "user_cancelled", f"Expected user_cancelled for stop={stop!r}, got {out['code']!r}"
+        assert out["code"] == "user_cancelled", (
+            f"Expected user_cancelled for stop={stop!r}, got {out['code']!r}"
+        )
         assert out["user_visible_warning"] is None, (
             f"No warning should be shown to user on cancel (stop={stop!r})"
         )

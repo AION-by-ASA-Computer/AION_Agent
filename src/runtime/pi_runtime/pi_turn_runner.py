@@ -128,7 +128,10 @@ async def _pi_track_stream_tokens(
     flush: bool = False,
 ) -> None:
     from src.memory.context_compressor import count_tokens
-    from src.runtime.turn_compaction import record_pi_context_delta, resolve_turn_runtime
+    from src.runtime.turn_compaction import (
+        record_pi_context_delta,
+        resolve_turn_runtime,
+    )
 
     piece = str(text or "")
     if not piece:
@@ -234,7 +237,9 @@ async def run_pi_agent_turn(
                 len(manifest),
             )
         else:
-            logger.info("pi_tool_manifest session=%s discovering tools...", session_id[:8])
+            logger.info(
+                "pi_tool_manifest session=%s discovering tools...", session_id[:8]
+            )
             manifest = await build_tool_manifest(session_id, profile, user_id)
             logger.info(
                 "pi_tool_manifest session=%s tools=%d (fresh discovery)",
@@ -274,9 +279,9 @@ async def run_pi_agent_turn(
         from src.runtime.tool_ledger import tool_ledger_enabled
 
         max_tokens = resolve_chat_max_tokens(long_run=True)
-        api_base = (
-            os.getenv("AION_PUBLIC_API_URL") or "http://127.0.0.1:8001"
-        ).rstrip("/")
+        api_base = (os.getenv("AION_PUBLIC_API_URL") or "http://127.0.0.1:8001").rstrip(
+            "/"
+        )
         ensured = await client.ensure_session(
             {
                 "session_id": session_id,
@@ -349,7 +354,9 @@ async def run_pi_agent_turn(
             await queue.put(chunk)
 
     except Exception as exc:
-        logger.error("Pi turn failed session=%s: %s", session_id[:8], exc, exc_info=True)
+        logger.error(
+            "Pi turn failed session=%s: %s", session_id[:8], exc, exc_info=True
+        )
         await queue.put({"type": "error", "content": str(exc)})
     finally:
         if stream_chunks == 0 and not stop_event.is_set():

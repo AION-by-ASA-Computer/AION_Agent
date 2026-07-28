@@ -119,7 +119,9 @@ async def test_handler_emits_task_activities(monkeypatch):
 
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_record", fake_fetch)
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_session", fake_session)
-    monkeypatch.setattr("src.plan_execution.handler._get_agent_for_execution", fake_get_agent)
+    monkeypatch.setattr(
+        "src.plan_execution.handler._get_agent_for_execution", fake_get_agent
+    )
     monkeypatch.setattr(
         "src.plan_execution.handler._make_plan_execution_pipeline",
         lambda *a, **k: FakePipe(),
@@ -197,7 +199,9 @@ async def test_handler_stops_on_failed_mark(monkeypatch):
 
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_record", fake_fetch)
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_session", fake_session)
-    monkeypatch.setattr("src.plan_execution.handler._get_agent_for_execution", fake_get_agent)
+    monkeypatch.setattr(
+        "src.plan_execution.handler._get_agent_for_execution", fake_get_agent
+    )
     monkeypatch.setattr(
         "src.plan_execution.handler._make_plan_execution_pipeline",
         lambda *a, **k: FakePipe(),
@@ -218,7 +222,10 @@ async def test_handler_stops_on_failed_mark(monkeypatch):
         on_progress=lambda _e: None,
     )
     assert entry.get("status") == "paused"
-    assert "paused" in (summary or "").lower() or "not completed" in (summary or "").lower()
+    assert (
+        "paused" in (summary or "").lower()
+        or "not completed" in (summary or "").lower()
+    )
 
 
 def test_tool_guard_blocks_after_mark():
@@ -259,7 +266,9 @@ async def test_cancel_stops_sub_turn(monkeypatch):
 
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_record", fake_fetch)
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_session", fake_session)
-    monkeypatch.setattr("src.plan_execution.handler._get_agent_for_execution", fake_get_agent)
+    monkeypatch.setattr(
+        "src.plan_execution.handler._get_agent_for_execution", fake_get_agent
+    )
     monkeypatch.setattr(
         "src.plan_execution.handler._make_plan_execution_pipeline",
         lambda *a, **k: FakePipe(),
@@ -315,7 +324,9 @@ async def test_handler_final_summary_required(monkeypatch):
 
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_record", fake_fetch)
     monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_session", fake_session)
-    monkeypatch.setattr("src.plan_execution.handler._get_agent_for_execution", fake_get_agent)
+    monkeypatch.setattr(
+        "src.plan_execution.handler._get_agent_for_execution", fake_get_agent
+    )
     monkeypatch.setattr(
         "src.plan_execution.handler._make_plan_execution_pipeline",
         lambda *a, **k: FakePipe(),

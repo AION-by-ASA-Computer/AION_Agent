@@ -90,7 +90,9 @@ class AionSettings(BaseSettings):
     tool_ledger_enabled: bool = Field(
         False, description="Persist per-session tool call ledger (JSONL)."
     )
-    tool_ledger_max_rows: int = Field(60, description="Max rows in ledger table render.")
+    tool_ledger_max_rows: int = Field(
+        60, description="Max rows in ledger table render."
+    )
     tool_ledger_max_chars: int = Field(
         3000, description="Max chars when rendering ledger into context."
     )

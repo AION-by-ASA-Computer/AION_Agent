@@ -60,7 +60,9 @@ class WebSearchExecutor:
             emit_tool_error(sid, "web_search", call_id, str(e))
             raise
         emit_tool_end(sid, "web_search", call_id, out)
-        return maybe_compact_after_tool(tool_name="web_search", result=out, arguments=inp)
+        return maybe_compact_after_tool(
+            tool_name="web_search", result=out, arguments=inp
+        )
 
 
 class WebFetchPageExecutor:
@@ -100,7 +102,9 @@ class WebFetchPageExecutor:
             emit_tool_error(sid, "web_fetch_page", call_id, str(e))
             raise
         emit_tool_end(sid, "web_fetch_page", call_id, out)
-        return maybe_compact_after_tool(tool_name="web_fetch_page", result=out, arguments=inp)
+        return maybe_compact_after_tool(
+            tool_name="web_fetch_page", result=out, arguments=inp
+        )
 
 
 def _profile_slug(profile: Optional["AgentProfile"]) -> str:

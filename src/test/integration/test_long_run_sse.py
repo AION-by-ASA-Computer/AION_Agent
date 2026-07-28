@@ -15,7 +15,9 @@ async def test_pi_worker_healthy_mock():
     with patch("src.runtime.pi_runtime.pi_client.httpx.AsyncClient") as mock_client:
         instance = mock_client.return_value.__aenter__.return_value
         instance.get = AsyncMock(
-            return_value=type("R", (), {"status_code": 200, "json": lambda self: {"ok": True}})()
+            return_value=type(
+                "R", (), {"status_code": 200, "json": lambda self: {"ok": True}}
+            )()
         )
         ok = await pi_worker_healthy(force=True)
         assert ok is True

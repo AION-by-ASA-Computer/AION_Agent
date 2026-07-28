@@ -70,7 +70,9 @@ def test_web_fetch_no_wikipedia_api_shortcut(monkeypatch):
     monkeypatch.setattr(wp.httpx, "Client", _Client)
     monkeypatch.setenv("AION_TOOL_RESULT_FORMAT", "json")
 
-    raw = wp.run_web_fetch_page("https://en.wikipedia.org/wiki/2026_FIFA_World_Cup_Group_A")
+    raw = wp.run_web_fetch_page(
+        "https://en.wikipedia.org/wiki/2026_FIFA_World_Cup_Group_A"
+    )
     data = json.loads(raw)
     assert data.get("error") is None
     assert "Mexico 2" in data.get("text", "")
@@ -82,7 +84,9 @@ def test_web_fetch_no_wikipedia_api_shortcut(monkeypatch):
 @pytest.mark.integration
 def test_web_fetch_wikipedia_live_no_wiki_api_mode(monkeypatch):
     monkeypatch.setenv("AION_TOOL_RESULT_FORMAT", "json")
-    raw = wp.run_web_fetch_page("https://en.wikipedia.org/wiki/2026_FIFA_World_Cup_Group_A")
+    raw = wp.run_web_fetch_page(
+        "https://en.wikipedia.org/wiki/2026_FIFA_World_Cup_Group_A"
+    )
     data = json.loads(raw)
     assert data.get("error") is None
     assert data["chars"] > 3000

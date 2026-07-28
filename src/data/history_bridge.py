@@ -905,7 +905,9 @@ class UnifiedHistoryBridge:
                     .all()
                 )
                 pruned_ids = [mid for mid in all_ids if mid not in kept_ids]
-                await _archive_messages_and_children(session, session_id, pruned_ids, reason="mid_turn_compaction")
+                await _archive_messages_and_children(
+                    session, session_id, pruned_ids, reason="mid_turn_compaction"
+                )
                 await _sanitize_kept_assistant_timelines(session, session_id, kept_ids)
                 await _recount_conversation_messages(session, session_id)
                 await session.commit()
@@ -932,7 +934,9 @@ class UnifiedHistoryBridge:
             min_seq = min(int(r[1]) for r in kept_rows)
             summary_seq = max(0, min_seq - 1)
 
-            await _archive_messages_and_children(session, session_id, pruned_ids, reason="mid_turn_compaction")
+            await _archive_messages_and_children(
+                session, session_id, pruned_ids, reason="mid_turn_compaction"
+            )
             await _sanitize_kept_assistant_timelines(session, session_id, kept_ids)
 
             await session.execute(

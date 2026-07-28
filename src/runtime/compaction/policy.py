@@ -7,7 +7,10 @@ from typing import List, Optional, Sequence
 
 from haystack.dataclasses import ChatMessage
 
-from src.memory.context_compressor import format_compaction_block, get_default_compressor
+from src.memory.context_compressor import (
+    format_compaction_block,
+    get_default_compressor,
+)
 from src.runtime.compaction.cut_point import find_valid_cut_index
 from src.runtime.compaction.ledger import extract_tool_ledger
 from src.runtime.harness_flags import harness_v2_compaction
@@ -37,9 +40,7 @@ class CompactionPolicy:
         if cut < 0:
             return CompactionResult(messages=list(messages), did_compact=False)
         head, tail = messages[:cut], messages[cut:]
-        transcript = "\n".join(
-            f"{m.role}: {chat_message_text(m)[:2500]}" for m in head
-        )
+        transcript = "\n".join(f"{m.role}: {chat_message_text(m)[:2500]}" for m in head)
         ledger = extract_tool_ledger(head)
         from src.runtime.tool_ledger import (
             ledger_summary_lines,
