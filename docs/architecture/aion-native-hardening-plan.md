@@ -1,8 +1,8 @@
 ---
-
-## title: Piano di solidificazione — Backend AION nativo
+title: Piano di solidificazione — Backend AION nativo
 sidebar_position: 21
 description: Piano operativo step-by-step per chiudere i gap di robustezza del backend AION nativo identificati in aion-vs-longrun-assessment.md.
+---
 
 # Piano di solidificazione — Backend AION nativo
 
