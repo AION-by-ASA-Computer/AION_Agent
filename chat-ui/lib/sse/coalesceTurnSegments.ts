@@ -50,13 +50,13 @@ export function coalesceTurnSegments(segments: TurnSegment[]): TurnSegment[] {
         i += 1;
         continue;
       }
+      const next = segments[i + 1];
       if (
         mid.kind === "reasoning" &&
-        i + 1 < segments.length &&
-        segments[i + 1].kind === "text" &&
-        shouldMergeTextAcrossReasoning(text, mid.content, segments[i + 1].content)
+        next?.kind === "text" &&
+        shouldMergeTextAcrossReasoning(text, mid.content, next.content)
       ) {
-        text += segments[i + 1].content;
+        text += next.content;
         i += 2;
         continue;
       }
