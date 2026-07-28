@@ -144,8 +144,6 @@ def tool_result_max_chars_for(tool_name: str) -> int:
 
 def _truncate_web_tool_json(text: str, tool_name: str, cap: int) -> Optional[str]:
     """Shrink web tool JSON/TOON without breaking structure (chat-ui parses JSON events)."""
-    import json
-
     raw = str(text or "").strip()
     if raw.startswith("```toon"):
         key = (tool_name or "").strip().lower()
@@ -190,7 +188,9 @@ def _truncate_web_tool_json(text: str, tool_name: str, cap: int) -> Optional[str
             if line.startswith("text:") or line.strip() == "text: |":
                 break
             head.append(line)
-        body_budget = max(120, cap - sum(len(l) + 1 for l in head) - len(note) - 8)
+        body_budget = max(
+            120, cap - sum(len(head_line) + 1 for head_line in head) - len(note) - 8
+        )
         trimmed = "\n".join(
             head + ["text: |", raw[raw.find("text:") :][:body_budget] + note, "```"]
         )

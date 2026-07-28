@@ -289,26 +289,6 @@ def _parse_tabular_rows(blob: str, field_count: int) -> List[List[str]]:
         rows.append(cells)
         pos += consumed
     return rows
-    cells: List[str] = []
-    cur = ""
-    in_quotes = False
-    for idx, ch in enumerate(line):
-        if ch == '"':
-            if in_quotes and idx + 1 < len(line) and line[idx + 1] == '"':
-                cur += '"'
-                continue
-            in_quotes = not in_quotes
-            continue
-        if ch == "," and not in_quotes:
-            cells.append(_parse_toon_scalar(cur))
-            cur = ""
-            if len(cells) >= field_count - 1:
-                cells.append(_parse_toon_scalar(line[idx + 1 :]))
-                return cells
-            continue
-        cur += ch
-    cells.append(_parse_toon_scalar(cur))
-    return cells
 
 
 def parse_tool_result_payload(raw: str) -> Optional[Dict[str, Any]]:
