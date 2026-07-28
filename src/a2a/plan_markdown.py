@@ -105,7 +105,7 @@ def _plain_bullet_title(line: str) -> str:
 
 
 def _append_plain_bullet_task(
-    out: List[ExecutionTask],
+    out: list[ExecutionTask],
     line: str,
     *,
     min_title_len: int = 2,
@@ -126,9 +126,9 @@ def _append_plain_bullet_task(
     return True
 
 
-def _parse_loose_tasks_anywhere(lines: List[str]) -> List[ExecutionTask]:
+def _parse_loose_tasks_anywhere(lines: list[str]) -> list[ExecutionTask]:
     """Parse Task N — / checkbox / plain bullet lines when ## Tasks section is missing."""
-    out: List[ExecutionTask] = []
+    out: list[ExecutionTask] = []
     task_num = re.compile(
         r"^\s*(?:\*\*)?(?:Task\s*)(\d+)\s*[—\-–:]\s*(.+?)(?:\*\*)?\s*$",
         re.IGNORECASE,
@@ -178,7 +178,7 @@ def format_task_line(task: ExecutionTask, *, checked: bool = False) -> str:
     return f"- [{box}] `{task.id}` **{task.title}** (deps: {deps})"
 
 
-def parse_task_checkbox_line(line: str) -> Optional[Tuple[str, str, bool]]:
+def parse_task_checkbox_line(line: str) -> tuple[str, str, bool] | None:
     """Parse a task checkbox line → (task_id, title, is_done), or None."""
     raw = (line or "").rstrip()
     if not raw.strip():
@@ -217,7 +217,7 @@ def _canonical_task_id(index: int) -> str:
     return f"task_{max(1, index):02d}"
 
 
-def is_degenerate_plan_json(plan_json: Optional[Dict[str, Any]]) -> bool:
+def is_degenerate_plan_json(plan_json: dict[str, Any] | None) -> bool:
     """True for parse-failure placeholders (single ``main`` task with a random uuid id)."""
     if not isinstance(plan_json, dict):
         return False
@@ -236,7 +236,7 @@ def parse_orphan_task_checkbox_line(
     line: str,
     *,
     index: int,
-) -> Optional[Tuple[str, str, bool]]:
+) -> tuple[str, str, bool] | None:
     """Parse any ``- [ ] …`` line; assign ``task_NN`` when id is missing (sidebar free text)."""
     raw = (line or "").rstrip()
     if not raw:
@@ -275,7 +275,7 @@ def parse_orphan_task_checkbox_line(
     return (_canonical_task_id(index), body[:240], checked)
 
 
-def parse_task_plain_line(line: str) -> Optional[Tuple[str, str]]:
+def parse_task_plain_line(line: str) -> tuple[str, str] | None:
     """Parse `task_01: Title` without checkbox prefix."""
     raw = (line or "").strip()
     if not raw or raw.startswith("#") or raw.startswith("- "):
@@ -295,9 +295,9 @@ def parse_task_plain_line(line: str) -> Optional[Tuple[str, str]]:
     return None
 
 
-def iter_plan_task_rows(markdown: str) -> List[Tuple[str, str, bool]]:
+def iter_plan_task_rows(markdown: str) -> list[tuple[str, str, bool]]:
     """All task lines in markdown: (task_id, title, is_done)."""
-    rows: List[Tuple[str, str, bool]] = []
+    rows: list[tuple[str, str, bool]] = []
     in_tasks = False
     task_idx = 0
     for raw in _unwrap_plan_xml_fence(markdown or "").splitlines():
@@ -327,7 +327,7 @@ def iter_plan_task_rows(markdown: str) -> List[Tuple[str, str, bool]]:
 def normalize_plan_task_lines(markdown: str) -> str:
     """Rewrite ## Tasks checkbox lines to canonical `- [ ] `task_XX` **Title**` format."""
     lines = _unwrap_plan_xml_fence(markdown or "").splitlines()
-    out: List[str] = []
+    out: list[str] = []
     in_tasks = False
     task_idx = 0
     for raw in lines:
@@ -380,7 +380,7 @@ def normalize_plan_task_lines(markdown: str) -> str:
 
 
 def plan_to_markdown(plan: ExecutionPlan) -> str:
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append("# Execution Plan")
     lines.append("")
     lines.append("## Goal")
@@ -410,10 +410,10 @@ def plan_to_markdown(plan: ExecutionPlan) -> str:
 
 def markdown_to_plan(markdown: str) -> ExecutionPlan:
     goal = ""
-    tasks: List[ExecutionTask] = []
+    tasks: list[ExecutionTask] = []
     lines = _unwrap_plan_xml_fence(markdown).splitlines()
     mode = ""
-    pending_desc: Dict[str, str] = {}
+    pending_desc: dict[str, str] = {}
     task_line_idx = 0
     for raw in lines:
         line = raw.rstrip()
@@ -566,7 +566,7 @@ def markdown_to_plan(markdown: str) -> ExecutionPlan:
         tasks = _parse_loose_tasks_anywhere(lines)
     if not tasks:
         raise ValueError("Nessun task trovato in markdown (sezione '## Tasks').")
-    hydrated: List[ExecutionTask] = []
+    hydrated: list[ExecutionTask] = []
     for t in tasks:
         hydrated.append(
             ExecutionTask(
@@ -580,8 +580,8 @@ def markdown_to_plan(markdown: str) -> ExecutionPlan:
     return ExecutionPlan(goal=goal, tasks=hydrated)
 
 
-def plan_to_todos(plan: ExecutionPlan) -> List[Dict[str, Any]]:
-    out: List[Dict[str, Any]] = []
+def plan_to_todos(plan: ExecutionPlan) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
     for t in plan.tasks:
         out.append(
             {
@@ -615,8 +615,8 @@ def markdown_goal(markdown: str) -> str:
     return goal or "Execution plan"
 
 
-def todos_to_plan(goal: str, todos: List[Dict[str, Any]]) -> ExecutionPlan:
-    tasks: List[ExecutionTask] = []
+def todos_to_plan(goal: str, todos: list[dict[str, Any]]) -> ExecutionPlan:
+    tasks: list[ExecutionTask] = []
     for i, t in enumerate(todos or []):
         if not isinstance(t, dict):
             raise ValueError(f"todo[{i}] non valido")
@@ -642,9 +642,9 @@ def todos_to_plan(goal: str, todos: List[Dict[str, Any]]) -> ExecutionPlan:
 def resolve_plan_markdown_for_approval(
     markdown: str,
     *,
-    todos: Optional[List[Dict[str, Any]]] = None,
-    plan_json: Optional[Dict[str, Any]] = None,
-) -> Tuple[str, ExecutionPlan]:
+    todos: list[dict[str, Any]] | None = None,
+    plan_json: dict[str, Any] | None = None,
+) -> tuple[str, ExecutionPlan]:
     """
     Parse sidebar/LLM plan markdown for approval.
     Coerces legacy formats and falls back to todos / plan JSON when needed.
@@ -659,7 +659,7 @@ def resolve_plan_markdown_for_approval(
         except Exception:
             pass
 
-    candidates: List[str] = []
+    candidates: list[str] = []
     if md:
         candidates.append(normalize_plan_task_lines(md))
         candidates.append(md)
@@ -693,9 +693,9 @@ def resolve_plan_markdown_for_approval(
 def resolve_plan_markdown_lenient(
     markdown: str,
     *,
-    todos: Optional[List[Dict[str, Any]]] = None,
-    plan_json: Optional[Dict[str, Any]] = None,
-) -> Tuple[str, ExecutionPlan]:
+    todos: list[dict[str, Any]] | None = None,
+    plan_json: dict[str, Any] | None = None,
+) -> tuple[str, ExecutionPlan]:
     """Like resolve_plan_markdown_for_approval but never raises (approve / recovery path)."""
     try:
         return resolve_plan_markdown_for_approval(
@@ -715,7 +715,7 @@ def resolve_plan_markdown_lenient(
     return plan_to_markdown(plan), plan
 
 
-def normalize_approved_payload(payload: Any) -> Tuple[str, Dict[str, Any]]:
+def normalize_approved_payload(payload: Any) -> tuple[str, dict[str, Any]]:
     """
     Accepts markdown string, legacy plan dict, or envelope dict.
     Returns (plan_markdown, metadata dict).
@@ -747,7 +747,7 @@ def mark_task_checked(markdown: str, task_id: str, checked: bool = True) -> str:
     target = (task_id or "").strip()
     if not target:
         raise ValueError("task_id vuoto")
-    out: List[str] = []
+    out: list[str] = []
     changed = False
     marker = "x" if checked else " "
     target_low = target.lower()
