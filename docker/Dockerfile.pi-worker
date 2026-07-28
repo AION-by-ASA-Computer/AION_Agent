@@ -23,4 +23,4 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/extensions ./extensions
 
 EXPOSE 8791
-CMD ["node", "dist/server.js"]
+CMD ["node", "dist/src/server.js"]
