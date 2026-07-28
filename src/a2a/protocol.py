@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
