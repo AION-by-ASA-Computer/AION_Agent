@@ -130,15 +130,14 @@ async def invoke_pi_tool(
         if details:
             payload["details"] = details
         return payload
-    except Exception as exc:
-        logger.warning(
-            "Pi tool invoke failed tool=%s session=%s: %s",
+    except Exception:
+        logger.exception(
+            "Pi tool invoke failed tool=%s session=%s",
             body.tool_name,
             body.session_id[:8],
-            exc,
         )
         return {
-            "content": str(exc),
+            "content": "An internal error has occurred.",
             "is_error": True,
             "truncated": False,
         }
