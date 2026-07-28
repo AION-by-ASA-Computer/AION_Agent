@@ -1,19 +1,32 @@
 import type { AgentSessionEvent } from "@earendil-works/pi-coding-agent";
 import { StreamSanitizer } from "./stream-sanitize.js";
 
+export type AionToolEvent =
+  | {
+      type: "tool_start";
+      id?: string;
+      name?: string;
+      input?: unknown;
+    }
+  | {
+      type: "tool_end";
+      id?: string;
+      name?: string;
+      output?: string;
+    }
+  | {
+      type: "tool_error";
+      id?: string;
+      name?: string;
+      error?: string;
+    };
+
 export type AionStreamChunk =
   | { type: "token"; content: string }
   | { type: "reasoning"; reasoning: string }
   | {
       type: "tool_event";
-      event: {
-        type: "tool_start" | "tool_end";
-        id?: string;
-        name?: string;
-        input?: unknown;
-        result?: string;
-        error?: boolean;
-      };
+      event: AionToolEvent;
     }
   | { type: "context_compacting_start" }
   | { type: "context_compacting_end" }
