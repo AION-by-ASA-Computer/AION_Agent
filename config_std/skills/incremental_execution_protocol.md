@@ -86,6 +86,7 @@ You may use many web tools over the turn; the rule is **persist before changing 
 - Many web calls in a row **without** updating `workspace/*` between slices.
 - Loading `skill_view("xlsx")` (or full office skill) before the first data commit.
 - Starting a new broad search for “complete dataset” when a partial file already exists — **extend the file** instead.
+- **One giant `sandbox_write_workspace_file`** with all match rows embedded in Python — vLLM truncates tool JSON (`tool_args_truncated`). Use `workspace/<slug>_data.json` + `sandbox_append_workspace_file`, then a short `build_xlsx.py` that reads the JSON.
 
 ## Example (product catalog → Excel)
 

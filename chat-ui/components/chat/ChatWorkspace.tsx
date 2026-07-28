@@ -94,6 +94,7 @@ import {
 } from "@/lib/api/user-preferences";
 import type { ChatChunk, TurnSegment, TurnState, WebSourceCard, ContextBudgetState } from "@/lib/sse/types";
 import { webSearchSourceRows } from "@/lib/sse/webToolParse";
+import { isToolOffloadSessionPath } from "@/lib/session-file-paths";
 
 import { ChatHeader } from "@/components/layout/ChatHeader";
 import { ContextBudgetBar, ContextBudgetGauge } from "@/components/chat/ContextBudgetBar";
@@ -481,18 +482,17 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
     setLoadingFiles(true);
     try {
-      const [uploads, derived, workspace, rootFiles, toolResults, ledger] = await Promise.all([
+      const [uploads, derived, workspace, rootFiles, ledger] = await Promise.all([
         listSessionFilesSubdir(conversationId, userId, "uploads", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "derived", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "workspace", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "", token).catch(() => []),
-        listSessionFilesSubdir(conversationId, userId, "tool_results", token).catch(() => []),
         fetchToolLedger(conversationId, userId, token).catch(() => ({
           enabled: false,
           entries: [] as ToolLedgerEntry[],
         })),
       ]);
-      setSessionFiles([...uploads, ...derived, ...workspace, ...rootFiles, ...toolResults]);
+      setSessionFiles([...uploads, ...derived, ...workspace, ...rootFiles]);
       setToolLedgerEntries(ledger.entries);
     } catch (err) {
       console.error("Errore recupero file di sessione:", err);
@@ -2139,11 +2139,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         setPostTurnCharts(ch);
 
         const newLinks: { rp: string; label: string }[] = [];
-        for (const sub of ["workspace", "derived", "tool_results"] as const) {
+        for (const sub of ["workspace", "derived"] as const) {
           const rows = await listSessionFilesSubdir(conversationId, userId, sub, token);
           for (const row of rows) {
             const rp = row.relative_path;
-            if (!rp || seenFilesRef.current.has(rp)) continue;
+            if (!rp || seenFilesRef.current.has(rp) || isToolOffloadSessionPath(rp)) continue;
             seenFilesRef.current.add(rp);
             newLinks.push({ rp, label: row.name || rp });
           }

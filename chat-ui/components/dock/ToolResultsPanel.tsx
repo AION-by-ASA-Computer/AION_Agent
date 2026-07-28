@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ChevronDown,
   ChevronRight,
-  Clock,
   ExternalLink,
   FileText,
   Loader2,
@@ -27,28 +26,6 @@ function formatChars(n?: number): string {
   if (v >= 1_000_000) return `${(v / 1_000_000).toFixed(1)}M`;
   if (v >= 1000) return `${(v / 1000).toFixed(1)}k`;
   return String(v);
-}
-
-function formatBytes(bytes?: number): string {
-  if (bytes === undefined || bytes === null || Number.isNaN(bytes)) return "";
-  if (bytes === 0) return "0 B";
-  const k = 1024;
-  const sizes = ["B", "KB", "MB", "GB"];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
-}
-
-function formatTime(ts?: number): string {
-  if (!ts) return "";
-  try {
-    return new Date(ts * 1000).toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    });
-  } catch {
-    return "";
-  }
 }
 
 function detectPreviewLanguage(text: string, path?: string): string {
@@ -86,7 +63,7 @@ export function ToolResultsPanel({
   token?: string | null;
 }) {
   const t = useT();
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const [preview, setPreview] = useState<PreviewState | null>(null);
   const [previewText, setPreviewText] = useState("");
   const [previewLoading, setPreviewLoading] = useState(false);
@@ -144,40 +121,43 @@ export function ToolResultsPanel({
     : "text";
 
   return (
-    <div className="space-y-2">
+    <div className="rounded-lg border border-border/40 bg-card/20 overflow-hidden">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
-        className="w-full flex items-center justify-between px-1 py-1 border-b border-border/15 pb-2 select-none"
+        className="w-full flex items-center justify-between gap-2 px-2.5 py-2 text-left hover:bg-muted/30 transition-colors select-none"
+        aria-expanded={expanded}
       >
-        <h3 className="text-[0.786em] font-bold uppercase tracking-wider text-muted-foreground/60 flex items-center gap-1.5">
-          <Wrench size={12} className="text-amber-500/80" />
-          {t("artifacts.tool_results.title")}
-        </h3>
-        <span className="flex items-center gap-1.5 text-[0.714em] text-muted-foreground/60">
-          <span className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full">
-            {sorted.length}
-          </span>
-          {expanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        <span className="flex items-center gap-1.5 min-w-0 text-[0.786em] font-semibold text-muted-foreground">
+          {expanded ? (
+            <ChevronDown size={12} className="shrink-0 opacity-70" />
+          ) : (
+            <ChevronRight size={12} className="shrink-0 opacity-70" />
+          )}
+          <Wrench size={12} className="shrink-0 text-amber-500/80" />
+          <span className="truncate">{t("artifacts.tool_results.title")}</span>
+        </span>
+        <span className="shrink-0 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 px-1.5 py-0.5 rounded-full text-[0.643em] font-medium tabular-nums">
+          {sorted.length}
         </span>
       </button>
 
       {expanded ? (
-        <div className="space-y-2 animate-in fade-in-50 duration-150">
-          <div className="rounded-lg border border-border/50 overflow-hidden bg-card/30">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-[0.786em]">
+        <div className="border-t border-border/30 px-2 pb-2 pt-1.5 space-y-2 animate-in fade-in-50 duration-150">
+          <div className="rounded-md border border-border/40 overflow-hidden bg-card/30">
+            <div className="overflow-x-auto max-h-[min(28vh,240px)] overflow-y-auto">
+              <table className="w-full text-left text-[0.714em]">
                 <thead>
                   <tr className="border-b border-border/40 bg-muted/30 text-muted-foreground">
-                    <th className="px-2 py-1.5 font-semibold w-8">#</th>
-                    <th className="px-2 py-1.5 font-semibold">{t("artifacts.tool_results.col_tool")}</th>
-                    <th className="px-2 py-1.5 font-semibold hidden sm:table-cell">
+                    <th className="px-1.5 py-1 font-semibold w-7">#</th>
+                    <th className="px-1.5 py-1 font-semibold">{t("artifacts.tool_results.col_tool")}</th>
+                    <th className="px-1.5 py-1 font-semibold hidden md:table-cell max-w-[7rem]">
                       {t("artifacts.tool_results.col_target")}
                     </th>
-                    <th className="px-2 py-1.5 font-semibold w-12 text-right">
+                    <th className="px-1.5 py-1 font-semibold w-10 text-right">
                       {t("artifacts.tool_results.col_size")}
                     </th>
-                    <th className="px-2 py-1.5 font-semibold w-8" />
+                    <th className="px-1 py-1 font-semibold w-7" />
                   </tr>
                 </thead>
                 <tbody>
@@ -196,42 +176,35 @@ export function ToolResultsPanel({
                           isActive ? "bg-amber-500/10" : "hover:bg-muted/25",
                         )}
                       >
-                        <td className="px-2 py-1.5 font-mono text-muted-foreground">{seq}</td>
-                        <td className="px-2 py-1.5">
-                          <div className="flex items-center gap-1.5 min-w-0">
+                        <td className="px-1.5 py-1 font-mono text-muted-foreground">{seq}</td>
+                        <td className="px-1.5 py-1">
+                          <div className="flex items-center gap-1 min-w-0">
                             {ok ? (
-                              <CheckCircle2 size={12} className="shrink-0 text-emerald-500/80" />
+                              <CheckCircle2 size={11} className="shrink-0 text-emerald-500/80" />
                             ) : (
-                              <XCircle size={12} className="shrink-0 text-rose-500/80" />
+                              <XCircle size={11} className="shrink-0 text-rose-500/80" />
                             )}
                             <span className="truncate font-medium text-foreground/90">{tool}</span>
                           </div>
-                          {row.dur_ms != null ? (
-                            <span className="mt-0.5 flex items-center gap-1 text-[0.643em] text-muted-foreground/70 pl-5">
-                              <Clock size={10} />
-                              {row.dur_ms}ms
-                              {row.ts ? ` · ${formatTime(row.ts)}` : ""}
-                            </span>
-                          ) : null}
                         </td>
-                        <td className="px-2 py-1.5 hidden sm:table-cell max-w-[9rem]">
-                          <span className="line-clamp-2 text-muted-foreground break-all">{target}</span>
+                        <td className="px-1.5 py-1 hidden md:table-cell max-w-[7rem]">
+                          <span className="line-clamp-1 text-muted-foreground break-all">{target}</span>
                         </td>
-                        <td className="px-2 py-1.5 text-right font-mono text-muted-foreground">
+                        <td className="px-1.5 py-1 text-right font-mono text-muted-foreground">
                           {formatChars(row.chars)}
                         </td>
-                        <td className="px-1 py-1">
+                        <td className="px-0.5 py-0.5">
                           <button
                             type="button"
                             disabled={!hasFile && !row.path}
                             onClick={() => void openPreview(row)}
                             className={cn(
-                              "focus-ring rounded px-1.5 py-0.5 text-[0.643em] font-medium transition-colors",
+                              "focus-ring rounded px-1 py-0.5 text-[0.643em] font-medium transition-colors",
                               hasFile || row.path === "inline"
                                 ? "text-amber-600 dark:text-amber-400 hover:bg-amber-500/15"
                                 : "text-muted-foreground/40 cursor-default",
                             )}
-                            title={hasFile ? row.path : undefined}
+                            title={hasFile ? (row.path ?? undefined) : undefined}
                           >
                             {t("artifacts.tool_results.view")}
                           </button>
@@ -245,7 +218,7 @@ export function ToolResultsPanel({
           </div>
 
           {preview ? (
-            <div className="rounded-lg border border-amber-500/25 bg-amber-500/5 overflow-hidden">
+            <div className="rounded-md border border-amber-500/25 bg-amber-500/5 overflow-hidden">
               <div className="flex items-start justify-between gap-2 border-b border-amber-500/20 px-3 py-2">
                 <div className="min-w-0">
                   <p className="text-xs font-semibold text-foreground truncate">{preview.title}</p>
@@ -318,11 +291,7 @@ export function ToolResultsPanel({
                 ) : null}
               </div>
             </div>
-          ) : (
-            <p className="text-[0.714em] text-muted-foreground/60 px-1">
-              {t("artifacts.tool_results.hint")}
-            </p>
-          )}
+          ) : null}
         </div>
       ) : null}
     </div>

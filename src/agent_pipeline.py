@@ -2520,10 +2520,18 @@ class AgentPipeline:
                                     max_reasoning_chars > 0
                                     and reasoning_chars > max_reasoning_chars
                                 )
+                                min_chars_for_event_guard = max(
+                                    6000,
+                                    int(max_reasoning_chars * 0.4)
+                                    if max_reasoning_chars > 0
+                                    else 6000,
+                                )
+                                hard_stop_reasoning = over_chars or (
+                                    over_events
+                                    and reasoning_chars >= min_chars_for_event_guard
+                                )
                                 # #region agent log
-                                if not reasoning_guard_logged and (
-                                    over_events or over_chars
-                                ):
+                                if not reasoning_guard_logged and hard_stop_reasoning:
                                     reasoning_guard_logged = True
                                     _agent_debug_log(
                                         "H1",
@@ -2544,7 +2552,7 @@ class AgentPipeline:
                                         },
                                     )
                                 # #endregion
-                                if reasoning_hard_stop and (over_events or over_chars):
+                                if reasoning_hard_stop and hard_stop_reasoning:
                                     stop_event.set()
                                     stop_reason = "reasoning_budget"
                                     msg = (

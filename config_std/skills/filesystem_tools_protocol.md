@@ -14,11 +14,13 @@ version: 5
 | Scenario | Recommended tool |
 |----------|------------------|
 | Create a new file | **`sandbox_write_workspace_file`** — read first if the file may already exist |
+| Append to a large JSON/CSV in chunks | **`sandbox_append_workspace_file`** — when one write would truncate tool JSON |
 | Small targeted change on existing file | **`sandbox_edit_workspace_file`** — always `relative_path`, `old_string`, `new_string` (optional `replace_all`) |
 | Multi-file or incremental patch (GPT) | **`sandbox_apply_patch`** |
 | Find where a pattern appears | `sandbox_grep_content` |
 | List files by wildcard/pattern | `sandbox_fnmatch_glob` |
 | Read part of a large file | `sandbox_read_file_chunk` |
+| Read a whole workspace script / text file | `sandbox_read_text_file` — **omit `max_bytes`** (do not pass 3000/5000) |
 | List offloaded tool outputs (web_fetch, etc.) | `sandbox_list_files(subdir="tool_results")` then `sandbox_read_file_chunk` on `derived/tool_results/...` |
 | Search inside offloaded tool text | `sandbox_grep_content(..., relative_root="derived", glob_filter="tool_results/*.txt")` |
 | Execute Python script | `sandbox_run_python_file` (`workspace/*.py` only) |
@@ -98,6 +100,10 @@ Do not call the tool with only `old_string` / `replace_all`: `relative_path` is 
 **Grep `invalid_regex`**
 - Use `fixed_string=True` for literal matching.
 - Or escape regex special characters.
+
+**Read `File too large (max 3000 bytes)`**
+- The model passed a tiny `max_bytes`; the server ignores values below 64KB and uses `AION_SANDBOX_READ_TEXT_MAX_BYTES` (default 2MB).
+- For files beyond that cap, use `sandbox_read_file_chunk` with `offset_lines`.
 
 **Grep `invalid_root` / empty glob after unpack**
 - Unpack output must be under `workspace/unpacked/` (recommended) or use `relative_root="unpacked"` if you used session-root `unpacked/`.

@@ -457,8 +457,16 @@ class StreamLoop:
             self.max_reasoning_chars > 0
             and self.reasoning_chars > self.max_reasoning_chars
         )
+        # vLLM/Qwen reasoning streams as many tiny chunks; stop on events only when
+        # enough text accumulated (chars alone still triggers immediately).
+        min_chars_for_event_guard = max(
+            6000, int(self.max_reasoning_chars * 0.4) if self.max_reasoning_chars > 0 else 6000
+        )
+        hard_stop_reasoning = over_chars or (
+            over_events and self.reasoning_chars >= min_chars_for_event_guard
+        )
 
-        if not self.reasoning_guard_logged and (over_events or over_chars):
+        if not self.reasoning_guard_logged and hard_stop_reasoning:
             self.reasoning_guard_logged = True
             _agent_debug_log(
                 "H1",
@@ -475,7 +483,7 @@ class StreamLoop:
                 },
             )
 
-        if self.reasoning_hard_stop and (over_events or over_chars):
+        if self.reasoning_hard_stop and hard_stop_reasoning:
             self._request_stop(
                 "reasoning_budget",
                 location="stream_loop:reasoning_guard",

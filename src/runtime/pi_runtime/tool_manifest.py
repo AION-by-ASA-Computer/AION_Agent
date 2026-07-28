@@ -16,6 +16,7 @@ logger = logging.getLogger("aion.pi_tool_manifest")
 _PI_RELAXED_CLIENT_VALIDATION = frozenset(
     {
         "sandbox_write_workspace_file",
+        "sandbox_append_workspace_file",
         "sandbox_edit_workspace_file",
         "sandbox_apply_patch",
         "sandbox_install_npm_packages",

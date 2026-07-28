@@ -190,7 +190,7 @@ The sandbox MCP server already exposes everything required:
 |---|---|---|
 | `sandbox_read_file_chunk` | `(relative_path, offset_lines=0, max_lines=500, max_bytes=0)` | Claude-Code-style slice reader — **primary** retrieval path |
 | `sandbox_grep_content` | `(pattern, relative_root="workspace", fixed_string=False, glob_filter="*", max_matches=200, …)` | Find the relevant span without loading the file |
-| `sandbox_read_text_file` | `(relative_path, max_bytes=500000)` | Whole-file read, use sparingly |
+| `sandbox_read_text_file` | `(relative_path, max_bytes=0)` | Whole-file read up to `AION_SANDBOX_READ_TEXT_MAX_BYTES` (default 2MB); omit `max_bytes` |
 
 Callers must pass `relative_root="derived"` to grep the store; the default is
 `workspace`. Document this in the pointer text.

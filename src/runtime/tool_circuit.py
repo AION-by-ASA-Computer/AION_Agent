@@ -14,6 +14,7 @@ _FAIL_COUNTS: Dict[str, int] = {}
 _CIRCUIT_TOOLS = frozenset(
     {
         "sandbox_write_workspace_file",
+        "sandbox_append_workspace_file",
         "sandbox_edit_workspace_file",
         "sandbox_apply_patch",
     }
