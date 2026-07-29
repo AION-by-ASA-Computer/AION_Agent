@@ -525,7 +525,7 @@ _MCP_POOL_ENV_DEFAULTS: dict[str, str] = {
     "AION_MCP_STARTUP_WARM_PROFILES": "aion_std,generic_assistant",
     "AION_MCP_STARTUP_WARM_ALL": "0",
     "AION_MCP_STARTUP_WARM_USER_ID": "default",
-    "AION_MCP_POOL_IDLE_SEC": "0",
+    "AION_MCP_POOL_IDLE_SEC": "1800",
     "AION_MCP_USER_POOL_IDLE_CLEANUP": "0",
     "AION_MCP_WARM_TIMEOUT_SEC": "10",
     "AION_MCP_LIST_TOOLS_TIMEOUT_SEC": "30",
@@ -594,7 +594,24 @@ _TOOL_RUNTIME_ENV_DEFAULTS: dict[str, str] = {
     "AION_LLM_CALL_AUDIT": "0",
 }
 
-_DEPRECATED_ENV_REMOVE: tuple[str, ...] = ("AION_ARTIFACT_STRATEGY",)
+_DEPRECATED_ENV_REMOVE: tuple[str, ...] = (
+    "AION_ARTIFACT_STRATEGY",
+    "AION_CRON_DB_PATH",
+)
+
+_TOOL_OFFLOAD_ENV_DEFAULTS: dict[str, str] = {
+    "AION_TOOL_OFFLOAD_ENABLED": "1",
+    "AION_TOOL_OFFLOAD_MIN_CHARS": "8000",
+    "AION_TOOL_OFFLOAD_PREVIEW_CHARS": "1500",
+    "AION_TOOL_OFFLOAD_EXCLUDE": "web_search,sandbox_read_file_chunk",
+    "AION_TOOL_OFFLOAD_MAX_TOTAL_MB": "64",
+    "AION_TOOL_LEDGER_ENABLED": "1",
+    "AION_TOOL_LEDGER_MAX_ROWS": "60",
+    "AION_TOOL_LEDGER_MAX_CHARS": "3000",
+    "AION_TOOL_OFFLOAD_CLEANUP_ENABLED": "1",
+    "AION_TOOL_OFFLOAD_CLEANUP_GRACE_DAYS": "7",
+    "AION_TOOL_OFFLOAD_CLEANUP_INTERVAL_SEC": "3600",
+}
 
 _DEEP_RESEARCH_ENV_DEFAULTS: dict[str, str] = {
     "AION_DEEP_RESEARCH_ENABLED": "1",
@@ -1019,6 +1036,36 @@ def _remove_deprecated_env_keys(env_path: Path, *, dry_run: bool, report: Report
             report.log_fail(f"Deprecated env: failed to remove {dep} from .env")
 
 
+def _ensure_tool_offload_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+    """Context offloading + tool ledger defaults (enabled by default in AionSettings)."""
+    if not env_path.is_file():
+        report.log_ok("Tool offload env defaults: .env assente, skip")
+        return 0
+    entries = _parse_env_simple(env_path)
+    keys_file = {k for k, _, _ in entries if k}
+    missing = [(k, v) for k, v in _TOOL_OFFLOAD_ENV_DEFAULTS.items() if k not in keys_file]
+    if not missing:
+        report.log_ok("Tool offload env defaults: chiavi già presenti")
+        return 0
+    if dry_run:
+        report.log_ok(
+            f"Tool offload env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+        )
+        return 0
+    block = (
+        "\n# --- Tool offload + ledger (append da upgrade-aion) ---\n"
+        + "\n".join(f"{k}={v}" for k, v in missing)
+        + "\n"
+    )
+    try:
+        env_path.write_text(env_path.read_text(encoding="utf-8").rstrip() + "\n" + block, encoding="utf-8")
+    except Exception as e:
+        report.log_fail(f"Tool offload env defaults: scrittura fallita: {e}")
+        return 3
+    report.log_ok(f"Tool offload env defaults: aggiunte {len(missing)} chiavi")
+    return 0
+
+
 def _ensure_tool_runtime_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
     """Tool-first delivery, vLLM tool-arg floor, doom loop, LLM call audit defaults."""
     if not env_path.is_file():
@@ -1381,6 +1428,16 @@ def _docker_upgrade(args, report: Report) -> int:
     )
     if rc != 0:
         return rc
+    rc = _ensure_tool_runtime_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
+    if rc != 0:
+        return rc
+    rc = _ensure_tool_offload_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
+    if rc != 0:
+        return rc
     _warn_public_orchestration_secret(Path(args.env_file), report=report)
     rc = _ensure_deep_research_env_keys(
         Path(args.env_file), dry_run=args.dry_run, report=report
@@ -1649,6 +1706,16 @@ def main() -> int:
         if rc != 0:
             return rc
         rc = _ensure_plan_mode_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
+        if rc != 0:
+            return rc
+        rc = _ensure_tool_runtime_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
+        if rc != 0:
+            return rc
+        rc = _ensure_tool_offload_env_keys(
             Path(args.env_file), dry_run=args.dry_run, report=report
         )
         if rc != 0:

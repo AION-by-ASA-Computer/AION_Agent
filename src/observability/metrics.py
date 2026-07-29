@@ -278,6 +278,11 @@ aion_mcp_server_healthy = Gauge(
     ["mcp_server"],
 )
 
+aion_mcp_pool_workers = Gauge(
+    "aion_mcp_pool_workers",
+    "Number of persistent MCP stdio workers in the in-process pool",
+)
+
 
 _meter_provider = None
 

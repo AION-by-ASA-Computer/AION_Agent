@@ -461,7 +461,7 @@ catena, oltre ai test unitari già elencati per fase):
 | ---- | ------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------ |
 | 1    | Fase 0 (fix bug)                | Molto basso                  | Nessuno, fix diretto                                                                       |
 | 2    | Fase 1 (soft-delete)            | Medio (tocca query multiple) | Nessun flag nuovo: il comportamento osservabile resta identico, cambia solo la persistenza |
-| 3    | Fase 2 (ledger in mid-turn)     | Basso                        | Eredita `AION_TOOL_LEDGER_ENABLED`/`AION_TOOL_OFFLOAD_ENABLED` già esistenti (default off) |
+| 3    | Fase 2 (ledger in mid-turn)     | Basso                        | Eredita `AION_TOOL_LEDGER_ENABLED`/`AION_TOOL_OFFLOAD_ENABLED` (default on) |
 | 4    | Fase 3 (circuit breaker nativo) | Basso                        | Nuovo flag `AION_TOOL_CIRCUIT_BREAKER_ENABLED` (default off finché non validato)           |
 | 5    | Fase 4 (cleanup offload)        | Basso                        | Nessun flag — ma decidere subito/differito (vedi domanda sotto)                            |
 | 6    | Fase 5 (lock registry)          | Medio (concorrenza)          | Nessun flag, ma deploy su staging con carico concorrente prima di produzione               |
