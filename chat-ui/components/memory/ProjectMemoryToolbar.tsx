@@ -135,7 +135,7 @@ export function ProjectMemoryToolbar({
         {variant === "panel" ? (
           <div className="rounded-xl border border-border/70 bg-card/60 p-3 shadow-sm">
             <label className="flex flex-col gap-1.5">
-              <span className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              <span className="text-[0.786em] font-medium uppercase tracking-wide text-muted-foreground">
                 {t("memory_project.label")}
               </span>
               <span className="focus-within:ring-ring/50 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 focus-within:ring-2">
@@ -150,7 +150,7 @@ export function ProjectMemoryToolbar({
             ) : null}
             <div className="mt-2 flex flex-wrap items-center gap-2">
               {current?.role ? (
-                <span className="rounded-md bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">
+                <span className="rounded-md bg-muted px-2 py-0.5 text-[0.714em] text-muted-foreground">
                   {t("memory_project.your_role")}:{" "}
                   <span className="font-mono text-foreground">{current.role}</span>
                 </span>
@@ -161,7 +161,7 @@ export function ProjectMemoryToolbar({
         ) : (
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-[10px] text-muted-foreground">{t("memory_project.label")}</span>
+              <span className="text-[0.714em] text-muted-foreground">{t("memory_project.label")}</span>
               <span className="focus-within:ring-ring/50 flex h-7 min-w-0 items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 focus-within:ring-1">
                 <Database size={12} className="shrink-0 text-primary" aria-hidden />
                 <span className="min-w-0 flex-1">{projectSelect}</span>
@@ -171,7 +171,7 @@ export function ProjectMemoryToolbar({
           </div>
         )}
         {loadError ? (
-          <p className="text-[10px] text-destructive truncate" title={loadError}>
+          <p className="text-[0.714em] text-destructive truncate" title={loadError}>
             {loadError}
           </p>
         ) : null}

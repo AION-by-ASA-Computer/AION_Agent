@@ -54,7 +54,7 @@ export function ProjectSelector({
 
   return (
     <label className={cn("flex min-w-0 flex-col gap-0.5", className)}>
-      <span className={cn("text-muted-foreground", compact ? "text-[10px]" : "text-[11px]")}>
+      <span className={cn("text-muted-foreground", compact ? "text-[0.714em]" : "text-[0.786em]")}>
         Project
       </span>
       <span
@@ -67,7 +67,7 @@ export function ProjectSelector({
         <select
           className={cn(
             "min-w-0 flex-1 bg-transparent text-foreground outline-none",
-            compact ? "text-[11px]" : "text-xs"
+            compact ? "text-[0.786em]" : "text-xs"
           )}
           value={value}
           onChange={(e) => onChange(e.target.value)}
@@ -85,7 +85,7 @@ export function ProjectSelector({
         </select>
       </span>
       {loadError ? (
-        <span className="text-[10px] text-destructive truncate" title={loadError}>
+        <span className="text-[0.714em] text-destructive truncate" title={loadError}>
           {loadError}
         </span>
       ) : null}

@@ -15,6 +15,10 @@ RUNTIME_ENV_NAME = "runtime.env"
 META_NAME = "runtime.env.meta.json"
 META_VERSION = 1
 
+# Keys that live in runtime.env after admin/first-setup and must never be dropped
+# when .env still has the template default (e.g. AION_FIRST_SETUP_COMPLETE=0).
+RUNTIME_STICKY_KEYS = frozenset({"AION_FIRST_SETUP_COMPLETE"})
+
 
 def get_repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
@@ -195,6 +199,14 @@ def reconcile_runtime_env(
         info = overrides.get(key, {})
         source = info.get("source", "legacy")
 
+        if key in RUNTIME_STICKY_KEYS and runtime_val and runtime_val != base_val:
+            new_runtime[key] = runtime_val
+            new_overrides[key] = {
+                "source": "admin",
+                "updated_at": info.get("updated_at") or _utc_now(),
+            }
+            continue
+
         if source == "admin":
             new_runtime[key] = runtime_val
             new_overrides[key] = {
@@ -289,7 +301,18 @@ def write_admin_overrides(
     runtime = load_runtime_overrides(data_dir=data)
     meta = _load_meta(meta_path)
     override_meta = _override_entries(meta)
+    base = load_base_env(repo_root=repo_root)
+    seed_base_env_from_process(base)
     desired = diff_against_base(updates, repo_root=repo_root)
+
+    for key in RUNTIME_STICKY_KEYS:
+        rt_val = runtime.get(key)
+        if not rt_val or rt_val == base.get(key):
+            continue
+        incoming = updates.get(key)
+        if incoming is not None and incoming != rt_val:
+            continue
+        desired[key] = rt_val
 
     for key in list(runtime.keys()):
         if key not in desired:

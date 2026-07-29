@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.memory.navigation_memory_service import (
     delete_drawer,
+    drawer_content_max_chars,
     get_drawer,
     list_drawers,
     list_wings,
@@ -52,7 +53,12 @@ class UpsertDrawerBody(BaseModel):
     session_id: str = Field(..., min_length=1)
     project: str = Field(..., min_length=1)
     room: str = Field(..., min_length=1)
-    content: str = Field(..., min_length=1, max_length=500)
+    content: str = Field(
+        ...,
+        min_length=1,
+        max_length=drawer_content_max_chars(),
+        description="Drawer body (MemPalace); agent guideline is ~500 chars",
+    )
     drawer_id: Optional[str] = Field(None, description="If set, replace this drawer")
 
 
@@ -97,6 +103,7 @@ async def get_drawer_detail(
 async def get_drawers(
     project: str = Query(...),
     session_id: str = Query(...),
+    wing: Optional[str] = Query(None),
     room: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
     _auth: ChatAuthIdentity = Depends(require_chat_auth),
@@ -104,13 +111,13 @@ async def get_drawers(
     slug = sanitize_project_slug(project)
     try:
         items: List[Dict[str, Any]] = await list_drawers(
-            session_id, project_slug=slug, room=room, limit=limit
+            session_id, project_slug=slug, wing=wing, room=room, limit=limit
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {
         "project_slug": slug,
-        "wing": navigation_status(project_slug=slug)["wing"],
+        "wing": wing or navigation_status(project_slug=slug)["wing"],
         "room": room,
         "drawers": items,
     }
@@ -121,6 +128,7 @@ async def search(
     project: str = Query(...),
     session_id: str = Query(...),
     q: str = Query(..., min_length=1),
+    wing: Optional[str] = Query(None),
     room: Optional[str] = Query(None),
     limit: int = Query(10, ge=1, le=50),
     _auth: ChatAuthIdentity = Depends(require_chat_auth),
@@ -128,7 +136,7 @@ async def search(
     slug = sanitize_project_slug(project)
     try:
         hits = await search_drawers(
-            session_id, project_slug=slug, query=q, room=room, limit=limit
+            session_id, project_slug=slug, wing=wing, query=q, room=room, limit=limit
         )
     except Exception as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

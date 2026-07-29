@@ -71,18 +71,32 @@ def sandbox_list_files(subdir: str = "uploads", recursive: bool = False) -> str:
 
 
 @mcp.tool()
-def sandbox_read_text_file(relative_path: str, max_bytes: int = 500000) -> str:
-    """Read a text file under the session (size limit)."""
-    from src.session_workspace import safe_resolve
+def sandbox_read_text_file(relative_path: str, max_bytes: int = 0) -> str:
+    """
+    Read a text file under the session (UTF-8).
 
+    Omit ``max_bytes`` or pass ``0`` for the server default
+    (``AION_SANDBOX_READ_TEXT_MAX_BYTES``, default 2MB). Small values from the
+    model (e.g. 3000) are ignored — use ``sandbox_read_file_chunk`` for partial
+    reads of very large files.
+    """
+    from src.session_workspace import safe_resolve
+    from src.tools.session_fs_tools import read_text_max_bytes
+
+    limit = read_text_max_bytes(max_bytes if max_bytes > 0 else None)
     try:
         p = safe_resolve(_sid(), relative_path, must_exist=True)
     except Exception as e:
         return f"Path error: {e}"
     if not p.is_file():
         return "Not a file."
-    if p.stat().st_size > max_bytes:
-        return f"File too large (max {max_bytes} bytes)."
+    size = p.stat().st_size
+    if size > limit:
+        return (
+            f"File too large ({size} bytes > {limit} max). "
+            "Use sandbox_read_file_chunk(relative_path, offset_lines=0, max_lines=500) "
+            "or raise AION_SANDBOX_READ_TEXT_MAX_BYTES."
+        )
     return p.read_text(encoding="utf-8", errors="replace")
 
 
@@ -104,7 +118,8 @@ def sandbox_write_workspace_file(relative_path: str, content: str) -> str:
     Write a file under the session workspace (path must resolve to workspace/*).
 
     Overwrites if the file exists. Prefer sandbox_edit_workspace_file for small changes
-    on existing files. If the file exists, read it first with sandbox_read_text_file.
+    on existing files. For large payloads, use sandbox_append_workspace_file in chunks
+    or store data in workspace/*.json then a short script. If the file exists, read it first.
     """
     from src.runtime.mcp_tool_args import normalize_workspace_relative_path
     from src.session_workspace import safe_resolve
@@ -122,6 +137,34 @@ def sandbox_write_workspace_file(relative_path: str, content: str) -> str:
         return f"File written successfully to {rel}"
     except Exception as e:
         return f"Error while writing: {e}"
+
+
+@mcp.tool()
+def sandbox_append_workspace_file(relative_path: str, content: str) -> str:
+    """
+    Append text to a file under workspace/ (creates the file if missing).
+
+    Use for large payloads split across multiple tool calls when a single
+    sandbox_write_workspace_file would exceed the model's tool JSON limit.
+    Prefer storing tabular data in workspace/*.json or *.csv, then a short script.
+    """
+    from src.runtime.mcp_tool_args import normalize_workspace_relative_path
+    from src.session_workspace import safe_resolve
+
+    try:
+        rel = normalize_workspace_relative_path(relative_path)
+        if not rel.startswith("workspace/"):
+            return (
+                "Error: path must be under workspace/ (e.g. workspace/data.json). "
+                "Use sandbox_append_workspace_file(relative_path, content)."
+            )
+        p = safe_resolve(_sid(), rel, must_exist=False)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as fh:
+            fh.write(content)
+        return f"Appended {len(content)} chars to {rel} (size={p.stat().st_size})"
+    except Exception as e:
+        return f"Error while appending: {e}"
 
 
 @mcp.tool()
@@ -452,10 +495,8 @@ def sandbox_exec_allowlisted(
 ) -> str:
     """
     Run a subprocess only if listed in AION_FS_POLICY_PATH exec.allowlist (requires exec.enabled=true).
-    **Python** invocations use the **session venv** (``data/sessions/<id>/.venv``) when present —
-    same interpreter as ``sandbox_run_python_file`` / ``sandbox_install_python_packages``.
-    **Not** for running Node/JavaScript files — use ``sandbox_run_node_file``.
-    **Not** for npm install — use ``sandbox_install_npm_packages``. Default policy: exec disabled.
+    **Not** for running Node/JavaScript files â€” use ``sandbox_run_node_file``.
+    **Not** for npm install â€” use ``sandbox_install_npm_packages``. Default policy: exec disabled.
     """
     import json
 
@@ -496,7 +537,7 @@ def sandbox_exec_allowlisted(
 # @mcp.tool()
 def sandbox_execute_python(code: str) -> str:
     """
-    [PERMANENTLY DISABLED] — use sandbox_write_workspace_file + sandbox_run_python_file.
+    [PERMANENTLY DISABLED] â€” use sandbox_write_workspace_file + sandbox_run_python_file.
     """
     return (
         "ERROR: This tool is disabled. Write scripts with "
@@ -507,15 +548,19 @@ def sandbox_execute_python(code: str) -> str:
 @mcp.tool()
 def sandbox_install_python_packages(
     packages: list[str],
-    use_uv: bool = False,
+    use_uv: bool | None = None,
 ) -> str:
     """
     Install PyPI packages into the isolated session venv (``data/sessions/<id>/.venv``).
     Enabled by default (``AION_SANDBOX_ALLOW_PACKAGE_INSTALL=1``). Disabled only when the variable is ``0``.
     Do not ask the user for manual installs: use this tool.
 
+    NOTE: Common libraries like `pandas`, `openpyxl`, `numpy`, `python-docx`, `reportlab`, `pypdf`, `pdfplumber`,
+    `pymupdf` (fitz), `pdf2image`, `Pillow`, and `tabulate` are ALREADY pre-installed in the default python
+    environment. You do NOT need to install them.
+
     - ``packages``: safe names (e.g. ``httpx``, ``pandas``, ``httpx[http2]``); no shell/redirections.
-    - ``use_uv``: if true uses ``uv pip install`` (must be on PATH); otherwise the venv ``pip``.
+    - ``use_uv``: if true/false overrides the environment variable AION_SANDBOX_PIP_USE_UV; if None, uses it.
     Useful env vars: ``AION_SANDBOX_PIP_INDEX_URL``, ``AION_SANDBOX_PIP_TIMEOUT_SEC``, ``AION_SANDBOX_PIP_MAX_PACKAGES``,
     ``AION_SANDBOX_BACKEND`` (``subprocess`` dev / ``container`` Podman prod).
     """
@@ -537,6 +582,11 @@ def sandbox_run_python_file(
     Run ``python -u <relative_path>`` with working directory = session root.
     Uses the **session venv** Python (``.../.venv``) when present or when ``AION_SANDBOX_AUTO_VENV=1`` (default),
     so packages installed with ``sandbox_install_python_packages``. Otherwise the MCP process interpreter.
+    
+    NOTE: Common libraries like `pandas`, `openpyxl`, `numpy`, `python-docx`, `reportlab`, `pypdf`, `pdfplumber`,
+    `pymupdf` (fitz), `pdf2image`, `Pillow`, and `tabulate` are ALREADY pre-installed in the default python
+    environment and inherited by session venvs.
+
     Only accepts paths under ``workspace/*.py``. Extra arguments go in ``extra_args`` (argv after the script).
     No ``result`` field: stdout/stderr and exit code are in the return message.
     """
@@ -583,7 +633,7 @@ def sandbox_run_node_file(
     """
     Run ``node <relative_path>`` with cwd = session root. Accepts only ``workspace/*.js`` (.mjs / .cjs).
     Use for **docx-js** skill. Install deps first with ``sandbox_install_npm_packages(packages=["docx"])``.
-    **Do not** use ``sandbox_exec_allowlisted`` to run Node scripts — use this tool.
+    **Do not** use ``sandbox_exec_allowlisted`` to run Node scripts â€” use this tool.
     For Python use ``sandbox_run_python_file``.
     """
     from src.tools.session_code import SessionSandboxExecutor
@@ -615,3 +665,4 @@ if __name__ == "__main__":
             raise e
 
     asyncio.run(main())
+

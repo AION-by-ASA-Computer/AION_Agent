@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import uuid
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -23,8 +23,8 @@ class ExecutionTask(BaseModel):
     id: str = Field(default_factory=lambda: uuid.uuid4().hex[:12])
     title: str = Field(min_length=1, max_length=512)
     description: str = Field(default="", max_length=16000)
-    depends_on: List[str] = Field(default_factory=list)
-    target_profile: Optional[str] = Field(default=None, max_length=256)
+    depends_on: list[str] = Field(default_factory=list)
+    target_profile: str | None = Field(default=None, max_length=256)
     status: TaskStatus = TaskStatus.PENDING
 
     @model_validator(mode="after")
@@ -36,7 +36,7 @@ class ExecutionTask(BaseModel):
 
 class ExecutionPlan(BaseModel):
     goal: str = Field(min_length=1, max_length=8000)
-    tasks: List[ExecutionTask] = Field(min_length=1, max_length=64)
+    tasks: list[ExecutionTask] = Field(min_length=1, max_length=64)
     version: int = 1
 
     @model_validator(mode="after")
@@ -104,7 +104,7 @@ class ExecutionPlan(BaseModel):
             raise ValueError("tasks deve essere lista, dict o JSON string")
         if len(data) == 0:
             return cls(goal=goal, tasks=[ExecutionTask(title="main", description=goal)])
-        out_tasks: List[ExecutionTask] = []
+        out_tasks: list[ExecutionTask] = []
         for i, row in enumerate(data):
             if not isinstance(row, dict):
                 raise ValueError(f"task[{i}] deve essere un oggetto")

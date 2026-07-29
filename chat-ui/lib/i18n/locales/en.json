@@ -35,9 +35,11 @@
     },
     "appearance": {
       "title": "Appearance",
-      "desc": "Interface theme and application language.",
+      "desc": "Interface theme, text size, and application language.",
       "theme_label": "Theme",
       "theme_desc": "Choose light or dark mode.",
+      "font_scale_label": "Text size",
+      "font_scale_desc": "Adjust text across the app.",
       "language_label": "Interface language"
     },
     "security": {
@@ -353,7 +355,32 @@
       "thinking": "The agent is thinking…",
       "working": "The agent is working…",
       "compacting": "Compacting context…",
-      "compacting_desc": "Compacting short-term memory…"
+      "compacting_desc": "Compacting short-term memory…",
+      "saving_info": "Saving information…",
+      "saving_info_desc": "The agent is saving long-term information…"
+    },
+    "context_budget": {
+      "title": "LLM context",
+      "aria": "Context saturation {{pct}} percent",
+      "gauge_aria": "Context at {{pct}}%. Click for details.",
+      "gauge_idle": "LLM context — click for details",
+      "unavailable": "Context summary is available while a message is being processed.",
+      "trigger": "Compaction threshold {{pct}}%",
+      "messages": "{{count}} messages",
+      "parts": {
+        "system_prompt": "System prompt",
+        "tool_specs": "Tool specs",
+        "skills": "Skills",
+        "web_tools": "Web search/fetch",
+        "tool_results": "Other tools",
+        "user": "User",
+        "assistant": "Assistant",
+        "reasoning": "Reasoning",
+        "compaction": "Compaction",
+        "memory_injections": "Memory/LTM",
+        "system_messages": "System msg",
+        "other": "Other"
+      }
     },
     "generating": {
       "plan": "Generating plan…",
@@ -378,17 +405,22 @@
       "select": "Select Profile",
       "none": "No profile",
       "active_hint": "Tools, skills, and memory sources for this chat.",
-      "customize": "Customize profile & instructions"
+      "customize": "Customize profile & instructions",
+      "favorite_set": "Set as default profile",
+      "favorite_active": "Default profile"
     },
     "agent_mode": {
       "select": "Agent mode",
       "soon": "Soon",
+      "beta": "Beta",
       "normal": "Normal",
       "normal_desc": "Balanced chat — tools and memory as configured.",
       "plan": "Plan",
       "plan_desc": "Break work into steps before executing.",
       "deep_research": "Deep research",
       "deep_research_desc": "Longer research runs with the research panel.",
+      "long_run": "Agent V2",
+      "long_run_desc": "Advanced agent runtime for long deliverables (Excel, multi-step research).",
       "ask": "Ask",
       "ask_desc": "Read-only answers without tool side effects.",
       "debug": "Debug",
@@ -422,6 +454,9 @@
       "tooltip": "Edit message",
       "btn": "Edit"
     },
+    "message": {
+      "archived_context": "Earlier in conversation (not in active agent context)"
+    },
     "error": "Error: {{msg}}",
     "history_load_error": "Could not load conversation history: {{msg}}",
     "session_preparing": "Preparing integrations and tools…",
@@ -439,12 +474,24 @@
       "textarea_placeholder": "Create or select a project to unlock chat..."
     },
     "go_to_source": "Go to source",
+    "project_warning": {
+      "title": "Attention: Missing Project Memory",
+      "desc": "It looks like you are trying to save queries or database schemas, but you haven't created or selected an active project memory.",
+      "action": "Click here to create it"
+    },
     "actions": {
       "copy": "Copy response",
       "copied": "Copied",
       "good": "Good response",
       "bad": "Bad response",
-      "regenerate": "Regenerate response"
+      "regenerate": "Regenerate response",
+      "memorize": "Memorize information",
+      "memorized_prefix": "The agent has memorized: ",
+      "memorize_instruction": "Analyze the following conversation turn (question, thinking and answer) and extract the relevant main information. Save it in the specified project wing. To save in MemPalace, you must EXCLUSIVELY use the 'mempalace_add_drawer' tool to create a drawer in the current project wing. DO NOT use the Knowledge Graph tools (such as 'mempalace_kg_add') under any circumstances. If there are SQL queries, database schemas, or project settings, save them also using the 'sql_memory_save' tool. If the info is already memorized, do not save it again. Respond providing exclusively a single sentence starting directly with the prefix 'The agent has memorized: ' followed by a very short summary of what was memorized and in which wing (or 'The agent detected that the info is already in memory' if it was already recorded). Do not add any introduction before, nor any additional explanations or comments after this prefix.",
+      "feedback_placeholder": "Why didn't you like this message? (Add an optional description)...",
+      "feedback_title": "Feedback on response",
+      "feedback_submit": "Submit",
+      "feedback_cancel": "Cancel"
     },
     "reasoning": {
       "label": "Reasoning",
@@ -540,7 +587,19 @@
     "uploads": "Uploads",
     "derived": "Derived",
     "workspace": "Workspace",
-    "refresh": "Refresh"
+    "tool_results_folder": "Tool results (offload)",
+    "refresh": "Refresh",
+    "tool_results": {
+      "title": "Tool activity",
+      "col_tool": "Tool",
+      "col_target": "Target",
+      "col_size": "Size",
+      "view": "View",
+      "hint": "Select View on a row to read the offloaded tool response.",
+      "loading": "Loading tool output…",
+      "empty_file": "File is empty.",
+      "inline_only": "This call was kept inline in context (below offload threshold) — no separate file was saved."
+    }
   },
   "research": {
     "title": "Research",

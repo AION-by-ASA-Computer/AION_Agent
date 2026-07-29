@@ -53,3 +53,20 @@ def test_apply_scope_overrides_other_project_wing():
         assert out["wing"] == project_wing("am_2_new")
     finally:
         clear_sql_qm_turn_context("sess-wing-2")
+
+
+def test_apply_scope_preserves_global_wing():
+    set_sql_qm_turn_context(
+        user_id="u1",
+        profile_slug="postgres_metadata_assistant",
+        project_slug="vendite",
+        session_id="sess-global-test",
+    )
+    try:
+        out = apply_mempalace_project_scope(
+            "mempalace_add_drawer",
+            {"wing": "wing_user_admin", "room": "general", "content": "x"},
+        )
+        assert out["wing"] == "wing_user_admin"
+    finally:
+        clear_sql_qm_turn_context("sess-global-test")

@@ -7,6 +7,7 @@ import re
 import shutil
 import tempfile
 import unittest
+import unittest.mock
 import uuid
 from pathlib import Path
 
@@ -263,6 +264,37 @@ class TestFnmatchGlob(unittest.TestCase):
             (self.ws / f"f{i}.py").touch()
         results = fnmatch_glob(self.root, self.ws, "*.py", max_paths=5)
         self.assertLessEqual(len([r for r in results if "TRONCATO" not in r]), 5)
+
+
+class TestReadTextMaxBytes(unittest.TestCase):
+    def test_tiny_model_value_uses_default(self):
+        from src.tools.session_fs_tools import read_text_max_bytes
+
+        with unittest.mock.patch.dict(
+            os.environ,
+            {
+                "AION_SANDBOX_READ_TEXT_MAX_BYTES": "2097152",
+                "AION_SANDBOX_READ_TEXT_IGNORE_BELOW": "65536",
+            },
+            clear=False,
+        ):
+            self.assertEqual(read_text_max_bytes(3000), 2_097_152)
+            self.assertEqual(read_text_max_bytes(0), 2_097_152)
+            self.assertEqual(read_text_max_bytes(None), 2_097_152)
+
+    def test_explicit_cap_above_floor(self):
+        from src.tools.session_fs_tools import read_text_max_bytes
+
+        with unittest.mock.patch.dict(
+            os.environ,
+            {
+                "AION_SANDBOX_READ_TEXT_MAX_BYTES": "2097152",
+                "AION_SANDBOX_READ_TEXT_IGNORE_BELOW": "65536",
+            },
+            clear=False,
+        ):
+            self.assertEqual(read_text_max_bytes(120_000), 120_000)
+            self.assertEqual(read_text_max_bytes(5_000_000), 2_097_152)
 
 
 if __name__ == "__main__":

@@ -228,7 +228,7 @@ export const MermaidBlock = memo(function MermaidBlock({ code, isStreaming = fal
         <div className="flex items-center gap-2">
           <span className="font-semibold text-foreground/80">Diagramma Mermaid</span>
           {error && (
-            <span className="flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-[10px] font-medium text-destructive">
+            <span className="flex items-center gap-1 rounded bg-destructive/10 px-1.5 py-0.5 text-[0.714em] font-medium text-destructive">
               <AlertTriangle size={10} />
               <span>Errore</span>
             </span>
@@ -304,7 +304,7 @@ export const MermaidBlock = memo(function MermaidBlock({ code, isStreaming = fal
             {error && (
               <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-3 text-xs text-destructive">
                 <span className="font-semibold block mb-1">Errore di rendering:</span>
-                <pre className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed">
+                <pre className="whitespace-pre-wrap font-mono text-[0.786em] leading-relaxed">
                   {error}
                 </pre>
               </div>

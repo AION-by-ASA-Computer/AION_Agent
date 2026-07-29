@@ -75,3 +75,15 @@ export function mergeChatHistory<T extends MergeableChatMessage>(
   }
   return merged;
 }
+
+/** Upsert a message by id (avoids duplicate React keys after stop/resume). */
+export function upsertChatMessage<T extends MergeableChatMessage>(
+  messages: T[],
+  message: T,
+): T[] {
+  const idx = messages.findIndex((m) => m.id === message.id);
+  if (idx < 0) return [...messages, message];
+  const copy = [...messages];
+  copy[idx] = { ...copy[idx], ...message };
+  return copy;
+}

@@ -118,6 +118,78 @@ def next_pending_task_id(markdown: str) -> Optional[str]:
     return None
 
 
+def _emit_plan_research_budget_sse(
+    controller: "PlanModeController", message: str
+) -> None:
+    """Push plan_phase SSE to the active turn queue (best-effort)."""
+    try:
+        from src.runtime.context import get_context
+
+        ctx = get_context()
+        loop = ctx.get("loop")
+        queue = ctx.get("queue")
+        if loop is None or queue is None:
+            return
+
+        phase_evt = controller.sse_phase("research_budget_reached", message=message)
+        status_evt = {
+            "type": "turn_status",
+            "phase": "plan_research_budget",
+            "message": message,
+        }
+
+        def _put() -> None:
+            try:
+                queue.put_nowait(phase_evt)
+                queue.put_nowait(status_evt)
+            except Exception:
+                pass
+
+        loop.call_soon_threadsafe(_put)
+    except Exception:
+        pass
+
+
+def block_plan_mode_research_tool(tool_name: str) -> Optional[str]:
+    """Soft-block Plan Mode research tools once the per-turn budget is exhausted."""
+    try:
+        from src.runtime.context import get_context
+
+        ctx = get_context()
+        controller = ctx.get("plan_controller")
+        if controller is None:
+            return None
+        allowed, budget_msg = controller.on_research_tool_start(tool_name)
+        if allowed:
+            return None
+        message = budget_msg or controller.research_budget_tool_block()
+        _emit_plan_research_budget_sse(controller, message)
+        return controller.research_budget_tool_block()
+    except Exception as exc:
+        logger.debug("block_plan_mode_research_tool skipped: %s", exc)
+        return None
+
+
+def apply_plan_mode_research_gate(
+    tool_name: str,
+    *,
+    session_id: str,
+    tool_input: dict,
+) -> Optional[str]:
+    """Native-tool gate: returns error text when blocked (and emits tool_error SSE)."""
+    block = block_plan_mode_research_tool(tool_name)
+    if not block:
+        return None
+    try:
+        from src.runtime.native_tool_events import emit_tool_error, emit_tool_start
+
+        call_id = emit_tool_start(session_id, tool_name, tool_input)
+        emit_tool_error(session_id, tool_name, call_id, block)
+    except Exception as exc:
+        logger.debug("apply_plan_mode_research_gate emit failed: %s", exc)
+    return block
+
+
 class PlanModeController:
     """Tracks Plan Mode phases, research budget, and incremental preview SSE."""
 
@@ -152,11 +224,15 @@ class PlanModeController:
 
     def research_budget_reminder(self) -> str:
         return (
-            "<system-reminder>\n"
-            f"Plan Mode research budget reached ({self.budget} tools). "
-            "Stop web_search/web_fetch and finalize the execution plan now.\n"
-            "</system-reminder>"
+            f"Plan Mode research budget reached ({self.budget} read-only tools). "
+            "Stop web_search/web_fetch/skill_search and call **draft_execution_plan** "
+            "now with structured arguments (goal + tasks array). "
+            "Do not start deliverable work in this turn."
         )
+
+    def research_budget_tool_block(self) -> str:
+        """Message returned to the LLM when a research tool is soft-blocked."""
+        return self.research_budget_reminder()
 
     def sse_phase(
         self, phase: PlanPhase, *, message: Optional[str] = None

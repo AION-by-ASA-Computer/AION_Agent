@@ -130,7 +130,7 @@ export function TaskChatView({
               <code className="font-mono text-xs text-muted-foreground">{task.task_id}</code>
               {task.title ? <span className="text-foreground"> — {task.title}</span> : null}
             </div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[0.786em] text-muted-foreground">
               <span
                 className={cn(
                   "rounded-full px-2 py-0.5 font-medium",
@@ -179,7 +179,7 @@ export function TaskChatView({
                   return (
                     <div
                       key={`retry-${item.index}`}
-                      className="my-4 flex items-center gap-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground"
+                      className="my-4 flex items-center gap-3 text-[0.786em] font-medium uppercase tracking-wide text-muted-foreground"
                     >
                       <span className="h-px flex-1 bg-border/60" />
                       Retry #{item.index}

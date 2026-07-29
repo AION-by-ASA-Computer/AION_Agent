@@ -46,7 +46,7 @@ export function ScheduleStatsBar({
         >
           <div className="flex items-center gap-2">
             <Icon className="h-4 w-4 shrink-0 opacity-80" aria-hidden />
-            <span className="text-[10px] font-semibold uppercase tracking-wide opacity-80">
+            <span className="text-[0.714em] font-semibold uppercase tracking-wide opacity-80">
               {label}
             </span>
           </div>

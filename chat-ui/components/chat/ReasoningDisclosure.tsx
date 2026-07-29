@@ -46,7 +46,7 @@ export function ReasoningDisclosure({ content, streaming = false }: Props) {
         <div className="min-h-0 overflow-hidden">
           {text ? (
             <div className="mt-1.5 rounded-lg bg-muted/35 px-3 py-2.5">
-              <div className="whitespace-pre-wrap font-sans text-[13px] leading-relaxed text-muted-foreground">
+              <div className="whitespace-pre-wrap font-sans text-[0.929em] leading-relaxed text-muted-foreground">
                 {text}
               </div>
             </div>

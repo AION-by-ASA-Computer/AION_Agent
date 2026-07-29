@@ -194,6 +194,7 @@ async def fetch_plan_sse_bundle(plan_id: str) -> Optional[Dict[str, Any]]:
         r = await session.execute(
             select(
                 ExecutionPlanRecord.session_id,
+                ExecutionPlanRecord.user_id,
                 ExecutionPlanRecord.status,
                 ExecutionPlanRecord.draft_json,
                 ExecutionPlanRecord.approved_json,
@@ -209,6 +210,7 @@ async def fetch_plan_sse_bundle(plan_id: str) -> Optional[Dict[str, Any]]:
             return None
         (
             sid,
+            user_id,
             status,
             draft_json_s,
             appr_json_s,
@@ -242,6 +244,7 @@ async def fetch_plan_sse_bundle(plan_id: str) -> Optional[Dict[str, Any]]:
                 plan_dict = {}
         return {
             "session_id": str(sid or ""),
+            "user_id": str(user_id or ""),
             "status": str(status or ""),
             "plan_markdown": md,
             "plan": plan_dict,

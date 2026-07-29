@@ -10,7 +10,7 @@ from collections import OrderedDict
 from typing import List, Optional, Dict, Any, Tuple
 
 from sqlalchemy import select
-from . import aion_env  # noqa: F401 — carica `.env` prima di altri moduli locali
+from . import aion_env  # noqa: F401 â€” carica `.env` prima di altri moduli locali
 
 from haystack.tools import Tool
 from src.runtime.aion_agent import (
@@ -205,7 +205,7 @@ def _aion_mcp_tool_run(
 ) -> str:
     """
     Invocazione MCP serializzabile (funzione top-level, non __call__ su istanza).
-    Haystack snapshot/error path chiama Tool.to_dict → serialize_callable.
+    Haystack snapshot/error path chiama Tool.to_dict â†’ serialize_callable.
     """
     import json
     from opentelemetry.propagate import inject
@@ -244,7 +244,7 @@ def _aion_mcp_tool_run(
     # Ensure all preceding text/artifacts from the stream are processed before tool execution
     StreamSync.wait_for_sync(session_id)
 
-    # Re-check stop_event after potentially blocking on StreamSync — cancellation may
+    # Re-check stop_event after potentially blocking on StreamSync â€” cancellation may
     # have been requested during the sync wait.
     if stop_event and stop_event.is_set():
         return format_exception_for_tool(
@@ -324,7 +324,18 @@ def _aion_mcp_tool_run(
         )
 
     def _emit_tool_outcome(*, is_error: bool, body: str) -> str:
-        # SSE/UI first — mid-turn compaction can block 60–90s on the agent thread.
+        from src.runtime.tool_result_postprocess import apply_tool_result_postprocess
+
+        ctx = get_context()
+        profile_slug = (ctx or {}).get("profile_name")
+        processed = apply_tool_result_postprocess(
+            body,
+            session_id=session_id,
+            profile_slug=profile_slug,
+            tool_name=tool_name,
+            event_type="tool_error" if is_error else "tool_end",
+        )
+        # SSE/UI first — mid-turn compaction can block on the agent thread when sync enabled.
         if is_error:
             loop.call_soon_threadsafe(
                 tool_event_bus.put_event,
@@ -333,11 +344,11 @@ def _aion_mcp_tool_run(
                     "type": "tool_error",
                     "id": call_id,
                     "name": tool_name,
-                    "error": body,
+                    "error": processed,
                     "input": tool_input,
                 },
             )
-            return body
+            return processed
         loop.call_soon_threadsafe(
             tool_event_bus.put_event,
             session_id,
@@ -345,11 +356,15 @@ def _aion_mcp_tool_run(
                 "type": "tool_end",
                 "id": call_id,
                 "name": tool_name,
-                "output": body,
+                "output": processed,
                 "input": tool_input,
             },
         )
-        return maybe_compact_after_tool(tool_name=tool_name, result=body)
+        return maybe_compact_after_tool(
+            tool_name=tool_name,
+            result=processed,
+            arguments=tool_input if isinstance(tool_input, dict) else None,
+        )
 
     settlement_err = settle_tool_call(tool_name, kwargs)
     if settlement_err:
@@ -371,6 +386,16 @@ def _aion_mcp_tool_run(
     )
 
     if preflight_err:
+        from .runtime.tool_circuit import (
+            maybe_block_repeat_preflight,
+            record_preflight_failure,
+        )
+
+        circuit_err = maybe_block_repeat_preflight(session_id, tool_name, prepared)
+        if circuit_err:
+            _, normalized = classify_tool_result_text(circuit_err, tool_name)
+            return _emit_tool_outcome(is_error=True, body=normalized or circuit_err)
+        record_preflight_failure(session_id, tool_name, prepared, preflight_err)
         _, normalized = classify_tool_result_text(preflight_err, tool_name)
         return _emit_tool_outcome(is_error=True, body=normalized or preflight_err)
 
@@ -399,6 +424,12 @@ def _aion_mcp_tool_run(
     )
     if sql_gate:
         return _emit_tool_outcome(is_error=True, body=sql_gate)
+
+    from src.runtime.plan_engine import block_plan_mode_research_tool
+
+    plan_research_block = block_plan_mode_research_tool(tool_name)
+    if plan_research_block:
+        return _emit_tool_outcome(is_error=True, body=plan_research_block)
 
     from .runtime.datasource_memory_mode import (
         block_list_tables_if_budget_exceeded,
@@ -654,7 +685,9 @@ def _register_mcp_tool_function(server_name: str, tool_name: str, session_id: st
     fname = f"aion_mcp_x_{h}"
     g = sys.modules[__name__].__dict__
     if fname in g and callable(g[fname]):
-        return g[fname]
+        fn = g[fname]
+        fn.server_name = server_name
+        return fn
     code = compile(
         f"def {fname}(**kwargs):\n"
         f"    return _aion_mcp_tool_run({server_name!r}, {tool_name!r}, {session_id!r}, kwargs)\n",
@@ -662,8 +695,10 @@ def _register_mcp_tool_function(server_name: str, tool_name: str, session_id: st
         "exec",
     )
     exec(code, g)
+    fn = g[fname]
+    fn.server_name = server_name  # pi manifest + invoke bridge
     _MCP_FNAMES_BY_SESSION.setdefault(session_id, set()).add(fname)
-    return g[fname]
+    return fn
 
 
 async def build_mcp_tools(
@@ -710,7 +745,7 @@ async def build_mcp_tools(
             )
             discovered_tools.append(haystack_tool)
 
-        logger.info(f"✅ Discovered {len(discovered_tools)} tools from {name}")
+        logger.info(f"âœ… Discovered {len(discovered_tools)} tools from {name}")
         logger.info(
             "mcp_tools_discovered server=%s count=%d tools=%s",
             name,
@@ -719,7 +754,7 @@ async def build_mcp_tools(
         )
     except Exception as e:
         err = str(e).strip() or type(e).__name__
-        logger.error("❌ Handshake FAILED for %s: %s", name, err)
+        logger.error("âŒ Handshake FAILED for %s: %s", name, err)
         try:
             from .runtime.mcp_health import record_mcp_load_error
 
@@ -757,12 +792,21 @@ def _build_chat_generation_kwargs() -> Tuple[Dict[str, Any], str]:
     Returns (generation_kwargs dict, stable fragment for agent cache key).
     """
     gen_kw: Dict[str, Any] = {}
-    _max_chat = os.getenv("AION_CHAT_MAX_TOKENS", "8192").strip()
+    max_tokens_sig = ""
     try:
-        if _max_chat:
-            gen_kw["max_tokens"] = int(_max_chat)
-    except ValueError:
-        logger.warning("AION_CHAT_MAX_TOKENS non numerico, ignorato")
+        from src.runtime.llm_limits import resolve_chat_max_tokens
+
+        max_t = resolve_chat_max_tokens(long_run=False)
+        gen_kw["max_tokens"] = max_t
+        max_tokens_sig = str(max_t)
+    except Exception:
+        _max_chat = os.getenv("AION_CHAT_MAX_TOKENS", "8192").strip()
+        max_tokens_sig = _max_chat
+        try:
+            if _max_chat:
+                gen_kw["max_tokens"] = int(_max_chat)
+        except ValueError:
+            logger.warning("AION_CHAT_MAX_TOKENS non numerico, ignorato")
 
     extra: Dict[str, Any] = {}
     raw_extra = (os.getenv("AION_VLLM_EXTRA_BODY") or "").strip()
@@ -793,7 +837,7 @@ def _build_chat_generation_kwargs() -> Tuple[Dict[str, Any], str]:
         gen_kw["extra_body"] = extra
 
     sig = json.dumps(extra, sort_keys=True, separators=(",", ":")) if extra else ""
-    cache_sig = f"{_max_chat}\v{sig}"
+    cache_sig = f"{max_tokens_sig}\v{sig}"
     return gen_kw, cache_sig
 
 
@@ -971,7 +1015,7 @@ async def get_agent(
     """
     Agent Factory: Carica il profilo, le skill e i tool MCP dinamicamente.
     Con AION_AGENT_CACHE=1 riusa agente + tool discovery per la stessa tripletta
-    (session_id, profilo, user_id) così i worker MCP restano caldi e non si ripete il log di init.
+    (session_id, profilo, user_id) cosÃ¬ i worker MCP restano caldi e non si ripete il log di init.
     """
     logger.info(
         "agent_build_start profile=%s session=%s user=%s",
@@ -1051,7 +1095,7 @@ async def get_agent(
         plan_mode,
         message_source=message_source,
     )
-    # Env default (e.g. AION_DEFAULT_AGENT_MODE=plan) only for real user turns — not post-approval execution.
+    # Env default (e.g. AION_DEFAULT_AGENT_MODE=plan) only for real user turns â€” not post-approval execution.
     if (message_source or "user_input").strip() in ("user_input",):
         env_default_mode = (
             (os.getenv("AION_DEFAULT_AGENT_MODE") or "normal").strip().lower()
@@ -1149,7 +1193,7 @@ async def _finish_get_agent_build(
 
     # 5. Plan Mode: rimuovi fisicamente i tool mutanti dalla lista passata al LLM.
     # Il blocco avviene a livello di protocollo (il LLM non vede i tool nella sua context window),
-    # non solo per direttiva nel prompt. La lista è configurabile via AION_PLAN_MODE_BLOCKED_TOOLS.
+    # non solo per direttiva nel prompt. La lista Ã¨ configurabile via AION_PLAN_MODE_BLOCKED_TOOLS.
     if resolved_agent_mode == "plan":
         from src.runtime.plan_mode import (
             PLAN_MODE_DRAFT_TOOL_NAMES,
@@ -1179,7 +1223,7 @@ async def _finish_get_agent_build(
             tools = allowed_tools
             if removed_names:
                 logger.info(
-                    "🔒 Plan Mode: rimossi %d tool mutanti dalla lista agente: %s",
+                    "ðŸ”’ Plan Mode: rimossi %d tool mutanti dalla lista agente: %s",
                     len(removed_names),
                     ", ".join(sorted(removed_names)),
                 )
@@ -1199,6 +1243,25 @@ async def _finish_get_agent_build(
             if removed_names:
                 logger.info(
                     "🔒 Deep Research Mode: rimossi %d tool dalla lista agente: %s",
+                    len(removed_names),
+                    ", ".join(sorted(removed_names)),
+                )
+    elif resolved_agent_mode == "long_run":
+        from src.runtime.long_run_mode import long_run_blocked_tool_names
+
+        _blocked_names = long_run_blocked_tool_names()
+        if _blocked_names:
+            allowed_tools = []
+            removed_names = []
+            for t in tools:
+                if getattr(t, "name", None) in _blocked_names:
+                    removed_names.append(t.name)
+                else:
+                    allowed_tools.append(t)
+            tools = allowed_tools
+            if removed_names:
+                logger.info(
+                    "Long Run Mode: removed %d tools from agent list: %s",
                     len(removed_names),
                     ", ".join(sorted(removed_names)),
                 )
@@ -1278,7 +1341,7 @@ async def _finish_get_agent_build(
     llm_timeout = resolve_llm_timeout()
 
     logger.info(
-        f"🚀 Initializing Generator: {llm_model} at {llm_url} Provider: {llm_provider_name} (Timeout: {llm_timeout}s, Mode: {resolved_agent_mode})"
+        f"ðŸš€ Initializing Generator: {llm_model} at {llm_url} Provider: {llm_provider_name} (Timeout: {llm_timeout}s, Mode: {resolved_agent_mode})"
     )
     eb = gen_kw.get("extra_body")
     if isinstance(eb, dict) and eb.get("thinking_token_budget") is not None:
@@ -1308,7 +1371,7 @@ async def _finish_get_agent_build(
 
     provider_loaded = False
     row = None
-    # Se llm_provider_name è specificato, carica il provider dal database
+    # Se llm_provider_name Ã¨ specificato, carica il provider dal database
     if llm_provider_name:
         logger.info("Caricamento provider LLM dal database: %s", llm_provider_name)
         from src.api.llm_providers import LlmProviderPublic
@@ -1332,7 +1395,7 @@ async def _finish_get_agent_build(
         if row:
             if not row.enabled:
                 logger.warning(
-                    "Provider LLM %s è disattivato, uso configurazione env",
+                    "Provider LLM %s Ã¨ disattivato, uso configurazione env",
                     llm_provider_name,
                 )
             else:
@@ -1354,7 +1417,7 @@ async def _finish_get_agent_build(
                         os.getenv("AION_LLM_API_KEY", "placeholder-token")
                     )
 
-                # extra_body è vLLM/OpenAI-specific — va rimosso per provider che non lo supportano
+                # extra_body Ã¨ vLLM/OpenAI-specific â€” va rimosso per provider che non lo supportano
                 provider_gen_kw = None
                 if gen_kw:
                     provider_gen_kw = {
@@ -1455,7 +1518,7 @@ async def _finish_get_agent_build(
                 "Provider LLM %s non trovato, uso configurazione env", llm_provider_name
             )
 
-    # Fallback: crea chat_generator dalla configurazione env se non già caricato dal DB
+    # Fallback: crea chat_generator dalla configurazione env se non giÃ  caricato dal DB
     if not provider_loaded:
         api_key_secret = Secret.from_token(
             os.getenv("AION_LLM_API_KEY", "placeholder-token")
@@ -1645,18 +1708,21 @@ async def _finish_get_agent_build(
 
         @functools.wraps(original_generator_run)
         def telemetry_wrapped_run(*args, **kwargs):
-            from src.runtime.turn_compaction import _turn_runtime
+            from src.runtime.turn_compaction import (
+                resolve_turn_runtime,
+                sync_live_turn_messages,
+            )
 
-            if _turn_runtime is not None:
+            rt = resolve_turn_runtime()
+            if isinstance(rt, dict):
                 try:
-                    rt = _turn_runtime.get()
-                    if isinstance(rt, dict):
-                        loop = rt.get("loop")
-                        queue = rt.get("queue")
-                        if loop and queue:
-                            loop.call_soon_threadsafe(
-                                queue.put_nowait, {"type": "llm_call"}
-                            )
+                    loop = rt.get("loop")
+                    queue = rt.get("queue")
+                    if loop and queue:
+                        sync_live_turn_messages(str(rt.get("session_id") or "") or None)
+                        loop.call_soon_threadsafe(
+                            queue.put_nowait, {"type": "llm_call"}
+                        )
                 except Exception:
                     pass
             return original_generator_run(*args, **kwargs)
@@ -1668,18 +1734,23 @@ async def _finish_get_agent_build(
 
             @functools.wraps(original_generator_run_async)
             async def telemetry_wrapped_run_async(*args, **kwargs):
-                from src.runtime.turn_compaction import _turn_runtime
+                from src.runtime.turn_compaction import (
+                    resolve_turn_runtime,
+                    sync_live_turn_messages,
+                )
 
-                if _turn_runtime is not None:
+                rt = resolve_turn_runtime()
+                if isinstance(rt, dict):
                     try:
-                        rt = _turn_runtime.get()
-                        if isinstance(rt, dict):
-                            loop = rt.get("loop")
-                            queue = rt.get("queue")
-                            if loop and queue:
-                                loop.call_soon_threadsafe(
-                                    queue.put_nowait, {"type": "llm_call"}
-                                )
+                        loop = rt.get("loop")
+                        queue = rt.get("queue")
+                        if loop and queue:
+                            sync_live_turn_messages(
+                                str(rt.get("session_id") or "") or None
+                            )
+                            loop.call_soon_threadsafe(
+                                queue.put_nowait, {"type": "llm_call"}
+                            )
                     except Exception:
                         pass
                 return await original_generator_run_async(*args, **kwargs)

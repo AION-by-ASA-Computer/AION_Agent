@@ -166,7 +166,7 @@ export function SidebarProfileMenu({
 
       <div className="space-y-1 p-1">
         <div className="rounded-lg px-2.5 py-2">
-          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="mb-2 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
             {t("sidebar.profile_menu.appearance")}
           </div>
           <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted/40 p-0.5">

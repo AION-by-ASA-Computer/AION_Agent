@@ -3068,6 +3068,76 @@ async def revoke_api_key(key_id: str):
     return {"status": "revoked"}
 
 
+@router.get("/feedback")
+async def get_feedback_messages():
+    """Retrieve all messages that have a rating (feedback)."""
+    async with get_async_session_maker()() as session:
+        # Fetch assistant messages with ratings
+        q = (
+            select(Message, Conversation)
+            .join(Conversation, Message.conversation_id == Conversation.id)
+            .where(Message.rating.isnot(None))
+            .order_by(Message.created_at.desc())
+        )
+        result = await session.execute(q)
+        items = result.all()
+
+        feedback_list = []
+        for msg, conv in items:
+            # Retrieve the closest preceding user message (the prompt/question)
+            # as requested, to avoid getting the system instructions/tools
+            q_prev = (
+                select(Message)
+                .where(
+                    Message.conversation_id == msg.conversation_id,
+                    Message.seq < msg.seq,
+                    Message.role == "user",
+                )
+                .order_by(Message.seq.desc())
+                .limit(1)
+            )
+            prev_msg = (await session.execute(q_prev)).scalars().first()
+
+            feedback_list.append(
+                {
+                    "message_id": msg.id,
+                    "conversation_id": msg.conversation_id,
+                    "seq": msg.seq,
+                    "role": msg.role,
+                    "content": msg.content,
+                    "rating": msg.rating,
+                    "feedback_comment": msg.feedback_comment,
+                    "created_at": msg.created_at,
+                    "profile_name": msg.profile_name or conv.profile_slug or "default",
+                    "user_id": conv.user_id,
+                    "tenant_id": conv.tenant_id,
+                    "prompt": {
+                        "role": prev_msg.role,
+                        "content": prev_msg.content,
+                        "created_at": prev_msg.created_at,
+                    }
+                    if prev_msg
+                    else None,
+                }
+            )
+        return {"feedback": feedback_list}
+
+
+@router.delete("/feedback/{message_id}")
+async def delete_message_feedback(message_id: str):
+    """Clear/remove user feedback (rating/comment) from a message."""
+    async with get_async_session_maker()() as session:
+        q = select(Message).where(Message.id == message_id).limit(1)
+        result = await session.execute(q)
+        msg = result.scalars().first()
+        if not msg:
+            raise HTTPException(404, "Message not found")
+        msg.rating = None
+        msg.feedback_comment = None
+        await session.commit()
+    return {"success": True, "message_id": message_id}
+
+
 @router.get("/conversations/global")
 async def list_conversations_global(limit: int = 50):
     """List all conversations across all users/tenants."""
@@ -3178,6 +3248,8 @@ async def get_conversation_messages(conv_id: str, include_internal: bool = False
                     "seq": r.seq,
                     "steps": current_steps,
                     "artifacts": current_atts,
+                    "rating": r.rating,
+                    "feedback_comment": r.feedback_comment,
                 }
             )
         return {"messages": data}

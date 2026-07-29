@@ -101,3 +101,87 @@ mcp_servers: []
             assert data_stop["session_id"] == "test-session-123"
 
     asyncio.run(run())
+
+
+def test_feedback_endpoints(monkeypatch, tmp_path):
+    async def run():
+        await _reset_unified_db(monkeypatch, tmp_path)
+
+        # Set up a dummy profile
+        profiles_dir = tmp_path / "config" / "profiles"
+        profiles_dir.mkdir(parents=True, exist_ok=True)
+        dummy_profile_content = """
+name: Generic Assistant
+description: Standard test profile
+instructions: You are a helpful assistant.
+skills:
+  - core_protocol
+mcp_servers: []
+"""
+        with open(profiles_dir / "generic_assistant.yaml", "w", encoding="utf-8") as f:
+            f.write(dummy_profile_content)
+
+        monkeypatch.setattr("src.agent_profile.profile_manager.base_path", profiles_dir)
+        from src.agent_profile import profile_manager
+
+        profile_manager.load_all()
+
+        from src.api.main import app
+        from src.data.history_bridge import UnifiedHistoryBridge
+        from src.data.engine import get_async_session_maker
+
+        # Seed conversation and message
+        bridge = UnifiedHistoryBridge()
+        await bridge.add_message(
+            "conv-test-feedback",
+            "user",
+            "What is the capital of Italy?",
+            user_id="user-1",
+            message_id="msg-user-1",
+        )
+        await bridge.add_message(
+            "conv-test-feedback",
+            "assistant",
+            "The capital of Italy is Rome.",
+            user_id="user-1",
+            message_id="msg-assistant-1",
+        )
+
+        # Explicitly set rating/comment on msg-assistant-1 in the DB
+        async with get_async_session_maker()() as session:
+            from src.data.history_bridge import fetch_message_by_id
+
+            msg = await fetch_message_by_id(session, "msg-assistant-1")
+            assert msg is not None
+            msg.rating = -1
+            msg.feedback_comment = "Incorrect tone"
+            await session.commit()
+
+        # Call get_feedback_messages via FastAPI test client
+        with TestClient(app) as client:
+            # 1. Verify GET /admin/feedback retrieves the seeded feedback
+            res_get = client.get("/admin/feedback")
+            assert res_get.status_code == 200
+            data_get = res_get.json()
+            assert "feedback" in data_get
+            assert len(data_get["feedback"]) == 1
+            item = data_get["feedback"][0]
+            assert item["message_id"] == "msg-assistant-1"
+            assert item["rating"] == -1
+            assert item["feedback_comment"] == "Incorrect tone"
+            assert item["prompt"]["content"] == "What is the capital of Italy?"
+
+            # 2. Verify DELETE /admin/feedback/{message_id} clears the feedback
+            res_del = client.delete("/admin/feedback/msg-assistant-1")
+            assert res_del.status_code == 200
+            data_del = res_del.json()
+            assert data_del["success"] is True
+            assert data_del["message_id"] == "msg-assistant-1"
+
+            # 3. Verify GET /admin/feedback is now empty
+            res_get_after = client.get("/admin/feedback")
+            assert res_get_after.status_code == 200
+            data_get_after = res_get_after.json()
+            assert len(data_get_after["feedback"]) == 0
+
+    asyncio.run(run())

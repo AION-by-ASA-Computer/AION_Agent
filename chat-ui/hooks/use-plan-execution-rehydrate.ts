@@ -21,6 +21,7 @@ type Candidate = {
 
 function statusPriority(status: string): number {
   if (status === "running") return 3;
+  if (status === "paused") return 2;
   if (status === "done") return 2;
   if (status === "error" || status === "cancelled" || status === "interrupted") return 1;
   return 0;

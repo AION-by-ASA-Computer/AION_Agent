@@ -182,7 +182,7 @@ async def _setup_plan_artifact_chunk(
         )
         if not registered:
             logger.warning(
-                "Plan artifact not registered in DB for %s (session %s) — skipping pending SSE",
+                "Plan artifact not registered in DB for %s (session %s) â€” skipping pending SSE",
                 pid,
                 session_id,
             )
@@ -266,7 +266,9 @@ def _handle_haystack_stream_chunk(chunk: Any, *, from_async: bool) -> None:
                 "reasoning_meta_len": len(str(reasoning or "")),
             },
         )
-        _emit_agent_stream_event(ctx, {"type": "stream_end"}, from_async=from_async)
+        _emit_agent_stream_event(
+            ctx, {"type": "stream_end", "finish_reason": fr}, from_async=from_async
+        )
 
     if fr == "length":
         logger.warning("Agent response truncated by model (finish_reason=length).")
@@ -288,12 +290,15 @@ def _handle_haystack_stream_chunk(chunk: Any, *, from_async: bool) -> None:
         sid = ctx.get("session_id")
         if sid:
             StreamSync.mark_busy(sid)
-        try:
-            maybe_compact_after_reasoning(
-                reasoning if isinstance(reasoning, str) else str(reasoning)
-            )
-        except Exception:
-            pass
+        from src.runtime.turn_compaction import mid_turn_reasoning_compaction_enabled
+
+        if mid_turn_reasoning_compaction_enabled():
+            try:
+                maybe_compact_after_reasoning(
+                    reasoning if isinstance(reasoning, str) else str(reasoning)
+                )
+            except Exception:
+                pass
         _emit_agent_stream_event(
             ctx, {"type": "reasoning", "reasoning": reasoning}, from_async=from_async
         )
@@ -328,7 +333,7 @@ def _find_input_end_index(
         target.role.value if hasattr(target.role, "value") else str(target.role)
     )
 
-    # Cerca prima per identità di oggetto (più veloce e sicuro)
+    # Cerca prima per identitÃ  di oggetto (piÃ¹ veloce e sicuro)
     for i in range(len(turn_messages) - 1, -1, -1):
         if turn_messages[i] is target:
             return i
@@ -353,7 +358,7 @@ def _chat_multimodal_attachments_enabled() -> bool:
 
 
 def _chat_multimodal_pdf_embed_enabled() -> bool:
-    """Haystack FileContent → OpenAI 'file' parts; many OpenAI-compat servers (e.g. vLLM) return 501."""
+    """Haystack FileContent â†’ OpenAI 'file' parts; many OpenAI-compat servers (e.g. vLLM) return 501."""
     return os.getenv("AION_CHAT_MULTIMODAL_PDF", "0").strip().lower() in (
         "1",
         "true",
@@ -613,7 +618,7 @@ class AgentPipeline:
                 orp = a.get("original_relative_path", "")
                 on = a.get("original_name") or ""
                 mime = a.get("mime") or ""
-                extra = f" — `{on}`" if on else ""
+                extra = f" â€” `{on}`" if on else ""
                 lines.append(f"- `{rp}`{extra} ({mime})")
                 if orp and orp != rp:
                     lines.append(f"  alias: `{orp}`")
@@ -626,7 +631,7 @@ class AgentPipeline:
                 orp = a.get("original_relative_path", "")
                 on = a.get("original_name") or ""
                 mime = a.get("mime") or ""
-                extra = f" — `{on}`" if on else ""
+                extra = f" â€” `{on}`" if on else ""
                 lines.append(f"- `{rp}`{extra} ({mime})")
                 if orp and orp != rp:
                     lines.append(f"  alias: `{orp}`")
@@ -679,6 +684,12 @@ class AgentPipeline:
         from datetime import datetime, timezone
         import json
 
+        date_enabled = os.getenv("AION_RUNTIME_DATE_CONTEXT", "1").lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
         op_enabled = os.getenv("AION_MEMORY_OPERATIONAL_SUMMARY", "1").lower() in (
             "1",
             "true",
@@ -698,10 +709,21 @@ class AgentPipeline:
             "on",
         )
 
-        if not op_enabled and not manifest_enabled and not orch_ctx_enabled:
+        if (
+            not date_enabled
+            and not op_enabled
+            and not manifest_enabled
+            and not orch_ctx_enabled
+        ):
             return user_input
 
         blocks = []
+
+        # Current date — always first so the model never falls back to training cutoff.
+        if date_enabled:
+            from src.runtime.current_date import current_date_context
+
+            blocks.append(current_date_context().rstrip())
 
         if orch_ctx_enabled:
             try:
@@ -715,13 +737,13 @@ class AgentPipeline:
                 if plans:
                     active = await resolve_active_plan_id(self.session_id)
                     orch_lines = [
-                        "### EXECUTION PLAN (orchestration DB — sidebar Plan)",
+                        "### EXECUTION PLAN (orchestration DB â€” sidebar Plan)",
                         "Plans are **not** `workspace/execution_plan_*.md` files. "
                         "For task state: `list_session_execution_plans`, `get_execution_plan`, `mark_task_completed`.",
                     ]
                     for row in plans:
                         pid = row.get("plan_id", "")
-                        tag = " **← active plan**" if active and pid == active else ""
+                        tag = " **â† active plan**" if active and pid == active else ""
                         orch_lines.append(
                             f"- `{pid}` status={row.get('status')} revision={row.get('revision')}{tag}"
                         )
@@ -739,7 +761,7 @@ class AgentPipeline:
                         if md:
                             excerpt = format_plan_tasks_excerpt(md, max_lines=24)
                             orch_lines.append(
-                                f"\nActive plan `{active}` — use `mark_task_completed(task_id=...)` "
+                                f"\nActive plan `{active}` â€” use `mark_task_completed(task_id=...)` "
                                 f"(plan_id optional) or `get_execution_plan()`:\n{excerpt}"
                             )
                     blocks.append("\n".join(orch_lines))
@@ -872,6 +894,34 @@ class AgentPipeline:
                         )
             except Exception as ex:
                 logger.warning("workspace manifest generation failed: %s", ex)
+
+        # 3. Tool offload files (read-only under derived/tool_results/)
+        try:
+            from src.runtime.tool_offload import offload_enabled
+            from src.runtime.tool_ledger import (
+                offload_paths_for_session,
+                tool_ledger_enabled,
+            )
+
+            if offload_enabled() or tool_ledger_enabled():
+                offload_paths = offload_paths_for_session(self.session_id)
+                if offload_paths:
+                    recent = offload_paths[-12:]
+                    blocks.append(
+                        "### Tool results on disk (offloaded — read-only)\n"
+                        "Full outputs from large tool calls live under "
+                        "`derived/tool_results/`. You **can** read them:\n"
+                        "- `sandbox_read_file_chunk(relative_path="
+                        '"derived/tool_results/<file>.txt", offset_lines=0)`\n'
+                        '- `sandbox_list_files(subdir="tool_results")`\n'
+                        '- `sandbox_grep_content(..., relative_root="derived", '
+                        'glob_filter="tool_results/*.txt")` '
+                        '(do **not** use `relative_root="derived/tool_results"` — invalid)\n'
+                        "Recent offload files:\n"
+                        + "\n".join(f"- `{p}`" for p in recent)
+                    )
+        except Exception as ex:
+            logger.debug("tool offload context block skipped: %s", ex)
 
         if not blocks:
             return user_input
@@ -1044,7 +1094,7 @@ class AgentPipeline:
                     will_compact=False,
                 )
                 logger.warning(
-                    "context_compress db_done session=%s messages=%d total %d→%d",
+                    "context_compress db_done session=%s messages=%d total %dâ†’%d",
                     self.session_id[:8],
                     len(reloaded),
                     before,
@@ -1078,7 +1128,7 @@ class AgentPipeline:
         )
         after = compressor.total_with_overhead(compressed, overhead)
         logger.warning(
-            "context_compress memory_done session=%s messages %d→%d tokens %d→%d",
+            "context_compress memory_done session=%s messages %dâ†’%d tokens %dâ†’%d",
             self.session_id[:8],
             len(messages),
             len(compressed),
@@ -1127,8 +1177,10 @@ class AgentPipeline:
         sql_query_project: Optional[str] = None,
         plan_id: Optional[str] = None,
         plan_execution_task_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         logger.info(">>> [0] ENTERING run_stream for session %s", self.session_id)
+        self._llm_provider_name = (metadata or {}).get("llm_provider_name")
         cancel_checker_task: Optional[asyncio.Task] = None
         from src.runtime.web_search_context import (
             WebSearchRequestContext,
@@ -1275,7 +1327,19 @@ class AgentPipeline:
                 if _msg_src in ("user_input", "scheduled_trigger")
                 else "internal"
             )
-            _plan_meta_json = _plan_turn_metadata_json(plan_id, plan_execution_task_id)
+            _merged_meta = {}
+            if metadata:
+                _merged_meta.update(metadata)
+            if plan_id or plan_execution_task_id:
+                _merged_meta.update(
+                    {
+                        "plan_id": (plan_id or "").strip() or None,
+                        "plan_task_id": (plan_execution_task_id or "").strip() or None,
+                    }
+                )
+            _plan_meta_json = (
+                json.dumps(_merged_meta, ensure_ascii=False) if _merged_meta else None
+            )
 
             try:
                 await history_manager.upsert_message_content(
@@ -1564,7 +1628,46 @@ class AgentPipeline:
                     tool_event_bus.unsubscribe(self.session_id, tool_q)
 
             tool_listener_task = asyncio.create_task(listen_tool_events())
-            gen_kw = generation_kwargs_for_agent(self.agent, reasoning_effort)
+            from src.runtime.harness_flags import (
+                harness_v2_provider,
+                harness_v2_turn,
+            )
+            from src.runtime.context_builder import refresh_agent_turn_context
+            from src.runtime.provider_adapter import merge_generation_kwargs
+            from src.runtime.turn.model import (
+                end_turn,
+                start_turn,
+                turn_new_messages_from_haystack,
+            )
+
+            if harness_v2_provider():
+                gen_kw = merge_generation_kwargs(
+                    agent=self.agent,
+                    reasoning_effort=reasoning_effort,
+                )
+            else:
+                gen_kw = generation_kwargs_for_agent(self.agent, reasoning_effort)
+
+            # Always refresh system prompt so cached agents get the current date
+            # and any profile changes.  The harness_v2_injections flag used to
+            # gate this, but that left agents built before the flag was enabled
+            # running with a stale system prompt (wrong year, missing mode, etc.).
+            from src.runtime.user_language import (
+                load_user_ui_language,
+                resolve_compaction_language,
+            )
+
+            _db_lang = await load_user_ui_language(self.user_id)
+            _turn_user_lang = resolve_compaction_language(self.user_id, _db_lang)
+            refresh_agent_turn_context(
+                self.agent,
+                profile_name=self.profile_name,
+                user_id=self.user_id,
+                user_lang=_turn_user_lang,
+                agent_mode=effective_agent_mode,
+            )
+
+            _harness_turn = None
 
             if prompt_debug_enabled():
                 _prompt_snapshot = build_prompt_snapshot(
@@ -1597,6 +1700,10 @@ class AgentPipeline:
                 )
 
             async def _run_agent_async(msgs: List[ChatMessage]) -> Any:
+                nonlocal _harness_turn
+                current_msgs = list(msgs)
+                if harness_v2_turn():
+                    _harness_turn = start_turn(self.session_id, len(msgs))
                 _turn_pid = (
                     plan_controller.plan_id if plan_controller is not None else None
                 )
@@ -1606,6 +1713,7 @@ class AgentPipeline:
                     queue,
                     stop_event,
                     turn_plan_id=_turn_pid,
+                    plan_controller=plan_controller,
                 )
                 set_turn_runtime(
                     session_id=self.session_id,
@@ -1615,6 +1723,7 @@ class AgentPipeline:
                     agent=self.agent,
                     profile_name=self.profile_name,
                     user_id=self.user_id,
+                    preflight_messages=current_msgs,
                 )
                 _agent_debug_log(
                     "H3",
@@ -1626,50 +1735,89 @@ class AgentPipeline:
                         "agent_mode": effective_agent_mode,
                     },
                 )
+                recovery_attempt = 0
                 try:
-                    res = await self.agent.run_async(
-                        msgs,
-                        streaming_callback=haystack_agent_streaming_callback_async,
-                        generation_kwargs=gen_kw,
-                    )
-                    _agent_debug_log(
-                        "H1",
-                        "_run_agent_async:return",
-                        "agent_run_ok",
-                        {
-                            "session_id": self.session_id[:12],
-                            "result_type": type(res).__name__,
-                        },
-                    )
-                    return res
-                except Exception as e:
-                    _agent_debug_log(
-                        "H1",
-                        "_run_agent_async:except",
-                        "agent_run_exception",
-                        {
-                            "session_id": self.session_id[:12],
-                            "exc_type": type(e).__name__,
-                            "exc_msg": str(e)[:500],
-                            "stop_event": bool(stop_event.is_set()),
-                        },
-                    )
-                    if not stop_event.is_set():
-                        logger.error("Agent.run_async failed: %s", e)
-                        logger.error(traceback.format_exc())
-                        payload = litellm_error_to_sse(e)
-                        logger.info(
-                            "LLM error classified: code=%s exc_type=%s",
-                            payload.get("code"),
-                            payload.get("exc_type"),
-                        )
-                        queue.put_nowait(payload)
+                    while True:
+                        try:
+                            res = await self.agent.run_async(
+                                current_msgs,
+                                streaming_callback=haystack_agent_streaming_callback_async,
+                                generation_kwargs=gen_kw,
+                            )
+                            _agent_debug_log(
+                                "H1",
+                                "_run_agent_async:return",
+                                "agent_run_ok",
+                                {
+                                    "session_id": self.session_id[:12],
+                                    "result_type": type(res).__name__,
+                                    "recovery_attempts": recovery_attempt,
+                                },
+                            )
+                            return res
+                        except Exception as e:
+                            _agent_debug_log(
+                                "H1",
+                                "_run_agent_async:except",
+                                "agent_run_exception",
+                                {
+                                    "session_id": self.session_id[:12],
+                                    "exc_type": type(e).__name__,
+                                    "exc_msg": str(e)[:500],
+                                    "stop_event": bool(stop_event.is_set()),
+                                    "recovery_attempt": recovery_attempt,
+                                },
+                            )
+                            if stop_event.is_set():
+                                return None
+                            from src.runtime.context_recovery import (
+                                attempt_context_recovery,
+                                should_attempt_context_recovery,
+                            )
+
+                            if should_attempt_context_recovery(e, recovery_attempt):
+                                recovered = attempt_context_recovery(
+                                    agent=self.agent,
+                                    messages=current_msgs,
+                                    exc=e,
+                                    attempt=recovery_attempt + 1,
+                                    queue=queue,
+                                    loop=loop,
+                                )
+                                if recovered is not None:
+                                    recovery_attempt += 1
+                                    current_msgs = recovered
+                                    logger.warning(
+                                        "context_recovery retry %s session=%s",
+                                        recovery_attempt,
+                                        self.session_id[:8],
+                                    )
+                                    continue
+                            logger.error("Agent.run_async failed: %s", e)
+                            logger.error(traceback.format_exc())
+                            payload = litellm_error_to_sse(e)
+                            logger.info(
+                                "LLM error classified: code=%s exc_type=%s",
+                                payload.get("code"),
+                                payload.get("exc_type"),
+                            )
+                            queue.put_nowait(payload)
+                            return None
                 finally:
-                    clear_turn_runtime()
+                    if harness_v2_turn() and _harness_turn is not None:
+                        end_turn(self.session_id)
+                    clear_turn_runtime(self.session_id)
+                    try:
+                        from src.runtime.tool_circuit import reset_session_circuit
+
+                        reset_session_circuit(self.session_id)
+                    except Exception:
+                        pass
                     clear_context()
                     queue.put_nowait({"type": "done"})
 
             def _run_agent_sync(msgs: List[ChatMessage]) -> Any:
+                current_msgs = list(msgs)
                 _turn_pid = (
                     plan_controller.plan_id if plan_controller is not None else None
                 )
@@ -1679,6 +1827,7 @@ class AgentPipeline:
                     queue,
                     stop_event,
                     turn_plan_id=_turn_pid,
+                    plan_controller=plan_controller,
                 )
                 set_turn_runtime(
                     session_id=self.session_id,
@@ -1688,6 +1837,7 @@ class AgentPipeline:
                     agent=self.agent,
                     profile_name=self.profile_name,
                     user_id=self.user_id,
+                    preflight_messages=current_msgs,
                 )
                 _agent_debug_log(
                     "H3",
@@ -1699,67 +1849,132 @@ class AgentPipeline:
                         "agent_mode": effective_agent_mode,
                     },
                 )
+                recovery_attempt = 0
                 try:
-                    res = self.agent.run(
-                        msgs,
-                        streaming_callback=haystack_agent_streaming_callback,
-                        generation_kwargs=gen_kw,
-                    )
-                    _agent_debug_log(
-                        "H1",
-                        "_run_agent_sync:return",
-                        "agent_run_ok",
-                        {
-                            "session_id": self.session_id[:12],
-                            "result_type": type(res).__name__,
-                        },
-                    )
-                    return res
-                except Exception as e:
-                    _agent_debug_log(
-                        "H1",
-                        "_run_agent_sync:except",
-                        "agent_run_exception",
-                        {
-                            "session_id": self.session_id[:12],
-                            "exc_type": type(e).__name__,
-                            "exc_msg": str(e)[:500],
-                            "stop_event": bool(stop_event.is_set()),
-                        },
-                    )
-                    if not stop_event.is_set():
-                        logger.error("Agent.run crashed in thread: %s", e)
-                        logger.error(traceback.format_exc())
-                        payload = litellm_error_to_sse(e)
-                        logger.info(
-                            "LLM error classified: code=%s exc_type=%s",
-                            payload.get("code"),
-                            payload.get("exc_type"),
-                        )
-                        loop.call_soon_threadsafe(queue.put_nowait, payload)
+                    while True:
+                        try:
+                            res = self.agent.run(
+                                current_msgs,
+                                streaming_callback=haystack_agent_streaming_callback,
+                                generation_kwargs=gen_kw,
+                            )
+                            _agent_debug_log(
+                                "H1",
+                                "_run_agent_sync:return",
+                                "agent_run_ok",
+                                {
+                                    "session_id": self.session_id[:12],
+                                    "result_type": type(res).__name__,
+                                    "recovery_attempts": recovery_attempt,
+                                },
+                            )
+                            return res
+                        except Exception as e:
+                            _agent_debug_log(
+                                "H1",
+                                "_run_agent_sync:except",
+                                "agent_run_exception",
+                                {
+                                    "session_id": self.session_id[:12],
+                                    "exc_type": type(e).__name__,
+                                    "exc_msg": str(e)[:500],
+                                    "stop_event": bool(stop_event.is_set()),
+                                    "recovery_attempt": recovery_attempt,
+                                },
+                            )
+                            if stop_event.is_set():
+                                return None
+                            from src.runtime.context_recovery import (
+                                attempt_context_recovery,
+                                should_attempt_context_recovery,
+                            )
+
+                            if should_attempt_context_recovery(e, recovery_attempt):
+                                recovered = attempt_context_recovery(
+                                    agent=self.agent,
+                                    messages=current_msgs,
+                                    exc=e,
+                                    attempt=recovery_attempt + 1,
+                                    queue=queue,
+                                    loop=loop,
+                                )
+                                if recovered is not None:
+                                    recovery_attempt += 1
+                                    current_msgs = recovered
+                                    logger.warning(
+                                        "context_recovery retry %s session=%s",
+                                        recovery_attempt,
+                                        self.session_id[:8],
+                                    )
+                                    continue
+                            logger.error("Agent.run crashed in thread: %s", e)
+                            logger.error(traceback.format_exc())
+                            payload = litellm_error_to_sse(e)
+                            logger.info(
+                                "LLM error classified: code=%s exc_type=%s",
+                                payload.get("code"),
+                                payload.get("exc_type"),
+                            )
+                            loop.call_soon_threadsafe(queue.put_nowait, payload)
+                            return None
                 finally:
-                    clear_turn_runtime()
+                    clear_turn_runtime(self.session_id)
                     clear_context()
                     loop.call_soon_threadsafe(queue.put_nowait, {"type": "done"})
 
             # 5. Main stream loop
             logger.info(">>> [5] Starting agent thread...")
             agent_messages = list(messages)
-            from src.runtime.agent_exec import run_agent_turn
-
-            agent_task = asyncio.create_task(
-                run_agent_turn(
-                    agent_messages,
-                    sync_runner=_run_agent_sync,
-                    async_runner=_run_agent_async,
-                )
+            set_turn_runtime(
+                session_id=self.session_id,
+                loop=loop,
+                queue=queue,
+                stop_event=stop_event,
+                agent=self.agent,
+                profile_name=self.profile_name,
+                user_id=self.user_id,
+                preflight_messages=agent_messages,
             )
+            from src.runtime.agent_exec import run_agent_turn
+            from src.runtime.pi_runtime.pi_turn_runner import run_pi_agent_turn
+
+            if effective_agent_mode == "long_run":
+                agent_task = asyncio.create_task(
+                    run_pi_agent_turn(
+                        session_id=self.session_id,
+                        profile_name=self.profile_name,
+                        user_id=self.user_id,
+                        user_message=augmented_user or user_input,
+                        preflight_messages=agent_messages,
+                        queue=queue,
+                        stop_event=stop_event,
+                        loop=loop,
+                        llm_provider_name=getattr(self, "_llm_provider_name", None),
+                        agent_tools=list(getattr(self.agent, "tools", None) or []),
+                        reasoning_effort=reasoning_effort,
+                    )
+                )
+            else:
+                agent_task = asyncio.create_task(
+                    run_agent_turn(
+                        agent_messages,
+                        sync_runner=_run_agent_sync,
+                        async_runner=_run_agent_async,
+                    )
+                )
 
             async def _cancel_checker() -> None:
                 try:
                     while not agent_task.done():
                         await asyncio.sleep(0.5)
                         if await redis_consume_stream_cancel(self.session_id):
+                            from src.runtime.turn_diagnostics import log_turn_stop
+
+                            log_turn_stop(
+                                self.session_id,
+                                "user_cancelled",
+                                location="agent_pipeline:cancel_checker",
+                            )
                             logger.info(
                                 "Cancel requested for session %s, setting stop_event",
                                 self.session_id,
@@ -1800,6 +2015,7 @@ class AgentPipeline:
                 budget=TurnBudget.load(
                     message_source=_msg_src,
                     reasoning_effort=reasoning_effort,
+                    agent_mode=effective_agent_mode,
                 ),
             )
             max_reasoning_chars = turn_guards.max_reasoning_chars
@@ -1923,7 +2139,13 @@ class AgentPipeline:
                     )
 
             logger.info(">>> [6] Entering stream loop...")
-            _use_stream_loop_v2 = _gs().stream_loop_v2
+            from src.runtime.harness_flags import stream_loop_legacy
+
+            _use_stream_loop_v2 = not stream_loop_legacy() and (
+                _gs().stream_loop_v2
+                or os.getenv("AION_STREAM_LOOP_V2", "1").strip().lower()
+                in ("1", "true", "yes", "on")
+            )
             try:
                 if _use_stream_loop_v2:
                     from src.runtime.stream.loop import StreamLoop
@@ -2118,7 +2340,32 @@ class AgentPipeline:
                                 break
 
                             if chunk.get("type") == "llm_call":
+                                reasoning_chars = 0
+                                reasoning_events = 0
+                                reasoning_guard_logged = False
+                                reasoning_no_tool_warned = False
                                 _llm_steps_done += 1
+                                try:
+                                    from src.runtime.turn_compaction import (
+                                        try_build_context_budget_event,
+                                    )
+
+                                    budget_evt = try_build_context_budget_event(
+                                        phase="llm_call",
+                                        session_id=self.session_id,
+                                    )
+                                    if budget_evt:
+                                        yield _track_sse(budget_evt)
+                                except Exception:
+                                    pass
+                                continue
+
+                            if ctype in (
+                                "context_budget",
+                                "context_compacting",
+                                "context_recovery",
+                            ):
+                                yield _track_sse(chunk)
                                 continue
 
                             if chunk.get("type") == "token":
@@ -2268,8 +2515,8 @@ class AgentPipeline:
                                 reasoning_piece = chunk.get("reasoning") or ""
                                 if reasoning_piece:
                                     last_progress_at = loop.time()
-                                reasoning_events += 1
-                                reasoning_chars += len(reasoning_piece)
+                                    reasoning_events += 1
+                                    reasoning_chars += len(reasoning_piece)
                                 # Chunk di reasoning possono essere molto frammentati:
                                 # interrompiamo solo se supera ENTRAMBI i budget.
                                 over_events = (
@@ -2280,10 +2527,18 @@ class AgentPipeline:
                                     max_reasoning_chars > 0
                                     and reasoning_chars > max_reasoning_chars
                                 )
+                                min_chars_for_event_guard = max(
+                                    6000,
+                                    int(max_reasoning_chars * 0.4)
+                                    if max_reasoning_chars > 0
+                                    else 6000,
+                                )
+                                hard_stop_reasoning = over_chars or (
+                                    over_events
+                                    and reasoning_chars >= min_chars_for_event_guard
+                                )
                                 # #region agent log
-                                if not reasoning_guard_logged and (
-                                    over_events or over_chars
-                                ):
+                                if not reasoning_guard_logged and hard_stop_reasoning:
                                     reasoning_guard_logged = True
                                     _agent_debug_log(
                                         "H1",
@@ -2304,7 +2559,7 @@ class AgentPipeline:
                                         },
                                     )
                                 # #endregion
-                                if reasoning_hard_stop and (over_events or over_chars):
+                                if reasoning_hard_stop and hard_stop_reasoning:
                                     stop_event.set()
                                     stop_reason = "reasoning_budget"
                                     msg = (
@@ -2351,7 +2606,7 @@ class AgentPipeline:
                                             "phase": "reasoning_guard",
                                             "message": (
                                                 "Molto reasoning senza tool: esegui la query o un tool "
-                                                "rilevante (SQL, memoria, OpenMetadata, …) oppure rispondi."
+                                                "rilevante (SQL, memoria, OpenMetadata, â€¦) oppure rispondi."
                                             ),
                                         }
                                     )
@@ -2397,7 +2652,7 @@ class AgentPipeline:
                                                 stop_reason = "plan_mark_already_used"
                                                 _block_msg = (
                                                     "mark_task_completed was already called this turn. "
-                                                    "STOP — do not call more tools."
+                                                    "STOP â€” do not call more tools."
                                                 )
                                                 yield _track_sse(
                                                     {
@@ -2408,39 +2663,13 @@ class AgentPipeline:
                                                 break
                                         except Exception:
                                             pass
-                                    if plan_controller is not None:
-                                        _allowed, _budget_msg = (
-                                            plan_controller.on_research_tool_start(_tn)
+                                    if (
+                                        plan_controller is not None
+                                        and plan_controller.is_research_tool(_tn)
+                                    ):
+                                        yield _track_sse(
+                                            plan_controller.sse_phase("researching")
                                         )
-                                        if not _allowed:
-                                            yield _track_sse(
-                                                plan_controller.sse_phase(
-                                                    "research_budget_reached",
-                                                    message=_budget_msg,
-                                                )
-                                            )
-                                            yield _track_sse(
-                                                {
-                                                    "type": "turn_status",
-                                                    "phase": "plan_research_budget",
-                                                    "tool": _tn,
-                                                    "message": _budget_msg or "",
-                                                }
-                                            )
-                                            stop_event.set()
-                                            stop_reason = "plan_research_budget"
-                                            logger.warning(
-                                                "Plan Mode research budget hard-stop session=%s tool=%s",
-                                                self.session_id[:8],
-                                                _tn,
-                                            )
-                                            yield _track_sse(
-                                                {
-                                                    "type": "error",
-                                                    "content": _budget_msg or "",
-                                                }
-                                            )
-                                            break
                                     if _tn.startswith("mempalace_"):
                                         yield _track_sse(
                                             {
@@ -2448,8 +2677,8 @@ class AgentPipeline:
                                                 "phase": "mempalace",
                                                 "tool": _tn,
                                                 "message": (
-                                                    f"MemPalace · {_tn} "
-                                                    f"({tool_calls}/{max_tool_calls or '∞'})"
+                                                    f"MemPalace Â· {_tn} "
+                                                    f"({tool_calls}/{max_tool_calls or 'âˆž'})"
                                                 ),
                                             }
                                         )
@@ -2621,8 +2850,8 @@ class AgentPipeline:
                                         from src.runtime.exploration_tracker import (
                                             record_exploration_tool,
                                         )
-                                        from src.runtime.datasource_memory_mode import (
-                                            maybe_append_same_turn_reminder,
+                                        from src.runtime.tool_result_postprocess import (
+                                            apply_tool_result_postprocess,
                                         )
 
                                         _tool_out = evt.get("output") or evt.get(
@@ -2636,12 +2865,12 @@ class AgentPipeline:
                                             profile_slug=self.profile_name,
                                         )
                                         if evt.get("type") == "tool_end":
-                                            _tool_out = maybe_append_same_turn_reminder(
+                                            _tool_out = apply_tool_result_postprocess(
+                                                _tool_out,
                                                 session_id=self.session_id,
                                                 profile_slug=self.profile_name,
                                                 tool_name=str(evt.get("name") or ""),
                                                 event_type="tool_end",
-                                                output=_tool_out,
                                             )
                                             evt["output"] = _tool_out
                                         _tenant_qm = (
@@ -2726,7 +2955,7 @@ class AgentPipeline:
                                                 "artifact": {
                                                     "identifier": aid,
                                                     "type": a_type,
-                                                    "title": f"📄 Artifact: {saved_path}",
+                                                    "title": f"ðŸ“„ Artifact: {saved_path}",
                                                     "auto_execute": False,
                                                 },
                                             }
@@ -2744,7 +2973,7 @@ class AgentPipeline:
                                             "artifact": {
                                                 "identifier": aid,
                                                 "type": a_type,
-                                                "title": f"📄 Artifact: {saved_path}",
+                                                "title": f"ðŸ“„ Artifact: {saved_path}",
                                                 "path": saved_path,
                                                 "saved": True,
                                                 "version": 1,
@@ -2768,11 +2997,12 @@ class AgentPipeline:
                                         "type": "turn_outcome",
                                         "code": "plan_task_completed",
                                         "message": (
-                                            "Task marked completed. Turn interrupted — "
+                                            "Task marked completed. Turn interrupted â€” "
                                             "the server will continue with the next task."
                                         ),
                                     }
                                     yield _track_sse(outcome)
+                                    break
                                 elif (
                                     evt.get("type") == "tool_end"
                                     and evt.get("name") == "sandbox_edit_workspace_file"
@@ -2826,7 +3056,7 @@ class AgentPipeline:
                                                 "artifact": {
                                                     "identifier": aid,
                                                     "type": a_type,
-                                                    "title": f"✏️ Edit: {saved_path}",
+                                                    "title": f"âœï¸ Edit: {saved_path}",
                                                     "auto_execute": False,
                                                 },
                                             }
@@ -2844,7 +3074,7 @@ class AgentPipeline:
                                                 "artifact": {
                                                     "identifier": aid,
                                                     "type": a_type,
-                                                    "title": f"✏️ Edit: {saved_path}",
+                                                    "title": f"âœï¸ Edit: {saved_path}",
                                                     "path": saved_path,
                                                     "saved": True,
                                                     "version": 1,
@@ -2902,6 +3132,13 @@ class AgentPipeline:
                                         )
 
                                 yield _track_sse(chunk)
+
+                # Belt-and-suspenders: if stop_event was set by a user cancel but
+                # stop_reason was never updated (e.g. the cancel arrived before the
+                # error chunk landed), mark it now so downstream classifiers can
+                # suppress the scary "no final answer" warning.
+                if stop_event.is_set() and stop_reason == "completed":
+                    stop_reason = "user_cancelled"
 
                 drain_sec = float(os.getenv("AION_AGENT_DRAIN_TIMEOUT_SEC", "0"))
                 if stop_event.is_set() and stop_reason != "completed" and drain_sec > 0:
@@ -2973,18 +3210,29 @@ class AgentPipeline:
 
                 # Applica il matching dell'indice dell'ultimo messaggio di input per ottenere solo i messaggi nuovi
                 if raw_list and messages:
-                    idx = _find_input_end_index(messages, raw_list)
-                    if idx >= 0:
-                        new_messages = raw_list[idx + 1 :]
+                    if _harness_turn is not None:
+                        new_messages = turn_new_messages_from_haystack(
+                            _harness_turn, raw_list
+                        )
                     else:
-                        # Fallback di sicurezza basato sulla lunghezza se non troviamo il messaggio di input
-                        new_messages = raw_list[len(messages) :]
+                        idx = _find_input_end_index(messages, raw_list)
+                        if idx >= 0:
+                            new_messages = raw_list[idx + 1 :]
+                        else:
+                            # Fallback di sicurezza basato sulla lunghezza se non troviamo il messaggio di input
+                            new_messages = raw_list[len(messages) :]
                 else:
                     new_messages = raw_list
 
                 turn_new_messages = list(new_messages) if new_messages else []
 
-                if new_messages:
+                if new_messages and _use_stream_loop_v2 and assistant_message_persisted:
+                    logger.debug(
+                        "Skipping legacy Haystack message persistence "
+                        "(stream_loop_v2 already flushed assistant %s)",
+                        assistant_message_id,
+                    )
+                elif new_messages:
                     for i, msg in enumerate(new_messages):
                         content = chat_message_text(msg)
                         raw_role = (
@@ -3014,7 +3262,7 @@ class AgentPipeline:
                             tool_name = msg.meta.get("tool_name")
                             tool_call_id = msg.meta.get("tool_call_id")
 
-                        # Se è l'ultimo messaggio assistant del turno, usiamo l'assistant_message_id sincronizzato
+                        # Se Ã¨ l'ultimo messaggio assistant del turno, usiamo l'assistant_message_id sincronizzato
                         mid = None
                         if (
                             role == "assistant"
@@ -3057,6 +3305,25 @@ class AgentPipeline:
                                 )
                                 if mid == assistant_message_id and role == "assistant":
                                     assistant_message_persisted = True
+                            elif (
+                                _use_stream_loop_v2
+                                and role == "assistant"
+                                and assistant_message_id
+                            ):
+                                await history_manager.upsert_message_content(
+                                    self.session_id,
+                                    assistant_message_id,
+                                    role,
+                                    content,
+                                    profile_name=self.profile_name,
+                                    user_id=self.user_id,
+                                    tool_name=tool_name,
+                                    tool_call_id=tool_call_id,
+                                    reasoning=reasoning,
+                                    timeline_json=tl_json,
+                                    metadata_json=_plan_meta_json,
+                                )
+                                assistant_message_persisted = True
                             else:
                                 await history_manager.add_message(
                                     self.session_id,
@@ -3085,6 +3352,7 @@ class AgentPipeline:
             except asyncio.TimeoutError:
                 _turn_status = "timeout"
                 _turn_error_type = "TimeoutError"
+                stop_reason = "turn_timeout"
                 logger.error("Turn timeout for session %s", self.session_id)
                 yield {"type": "error", "content": "Operation timed out."}
             except asyncio.CancelledError:
@@ -3098,6 +3366,21 @@ class AgentPipeline:
                 logger.error(">>> [FATAL] Error in run_stream: %s", e, exc_info=True)
                 yield {"type": "error", "content": str(e)}
             finally:
+                if effective_agent_mode == "long_run":
+                    try:
+                        from src.runtime.pi_runtime.pi_turn_runner import (
+                            sync_pi_messages_to_history,
+                        )
+
+                        await sync_pi_messages_to_history(
+                            self.session_id,
+                            self.profile_name,
+                            self.user_id,
+                            assistant_message_id,
+                            history_manager,
+                        )
+                    except Exception as sync_exc:
+                        logger.debug("Pi post-turn sync skipped: %s", sync_exc)
                 try:
                     from src.runtime.sql_query_memory_context import (
                         clear_sql_qm_turn_context,
@@ -3241,7 +3524,7 @@ class AgentPipeline:
                             yield _track_sse(
                                 plan_controller.sse_phase(
                                     "finalizing",
-                                    message="Structuring the execution plan…",
+                                    message="Structuring the execution planâ€¦",
                                 )
                             )
                         _turn_pid = _resolve_turn_plan_id(plan_controller, None)

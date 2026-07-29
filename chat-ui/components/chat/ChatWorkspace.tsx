@@ -4,11 +4,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, mem
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
-import { MermaidBlock } from "@/components/chat/MermaidBlock";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -30,8 +29,10 @@ import {
   drainSessionEventsLoop,
   fetchProfiles,
   fetchSessionCharts,
+  fetchToolLedger,
   listSessionFilesSubdir,
   type SessionFileRow,
+  type ToolLedgerEntry,
   openSessionEventsStream,
   postChatStream,
   waitForChatPrepare,
@@ -47,6 +48,7 @@ import {
   updateConversationProfile,
   updateConversationTitle,
   patchMessageTimeline,
+  rateMessage,
   saveAssistantMessage,
   saveChatMessage,
   fetchKhubFileContent,
@@ -81,16 +83,28 @@ import {
   applyHistoryToMessages,
   useConversationTranscriptRefs,
 } from "@/lib/use-conversation-transcript";
-import type { ChatChunk, TurnSegment, TurnState, WebSourceCard } from "@/lib/sse/types";
+import { upsertChatMessage } from "@/lib/merge-chat-history";
+import {
+  fetchCurrentUser,
+  readDefaultProfileSlug,
+  readStoredDefaultProfileSlug,
+  resolveDefaultProfileSlug,
+  syncDefaultProfileSlug,
+  writeStoredDefaultProfileSlug,
+} from "@/lib/api/user-preferences";
+import type { ChatChunk, TurnSegment, TurnState, WebSourceCard, ContextBudgetState } from "@/lib/sse/types";
+import { webSearchSourceRows } from "@/lib/sse/webToolParse";
+import { isToolOffloadSessionPath } from "@/lib/session-file-paths";
 
 import { ChatHeader } from "@/components/layout/ChatHeader";
+import { ContextBudgetBar, ContextBudgetGauge } from "@/components/chat/ContextBudgetBar";
 import { useShellActions, useSidebarOpen } from "@/lib/shell/shell-context";
 import { cn } from "@/lib/cn";
 import { DeepResearchPanel } from "@/components/research/DeepResearchPanel";
 import { PlanExecutionChatBanner } from "@/components/plan/PlanExecutionChatBanner";
 import { PlanPanel } from "@/components/plan/PlanPanel";
 import { TaskChatView } from "@/components/plan/TaskChatView";
-import { cancelPlanExecution, rememberWatchedPlanExecution } from "@/lib/api/plan-execution";
+import { cancelPlanExecution, pausePlanExecution, rememberWatchedPlanExecution, resumePlanExecution } from "@/lib/api/plan-execution";
 import { usePlanDockState } from "@/hooks/use-plan-dock-state";
 import { usePlanExecutionProgress } from "@/hooks/use-plan-execution-progress";
 import { usePlanExecutionRehydrate } from "@/hooks/use-plan-execution-rehydrate";
@@ -117,6 +131,8 @@ import {
 import { WebSourcesBar } from "@/components/chat/WebResearchViews";
 import { TurnTimeline, AgentWorkingShimmer } from "@/components/chat/TurnTimeline";
 import { MessageActions } from "@/components/chat/MessageActions";
+import { useAutoResizeTextarea } from "@/lib/hooks/use-auto-resize-textarea";
+import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
 import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
 import { extractAssistantCopyText } from "@/lib/extract-message-text";
 import {
@@ -130,7 +146,7 @@ import { SessionCharts } from "@/components/chat/SessionCharts";
 import type { DockTab } from "@/lib/layout/dock-tab";
 
 type PlanPendingChunk = ChatChunk & { type: "orchestration_plan_pending" };
-type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research";
+type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research" | "long_run";
 type LiveArtifactMessage = {
   id: string;
   title: string;
@@ -141,6 +157,34 @@ type LiveArtifactMessage = {
 };
 type ChatMessageArtifact = ChatHistoryArtifact | LiveArtifactMessage;
 
+function isMemorizationMessage(content: string): boolean {
+  const prefixes = [
+    "L'agente ha memorizzato:",
+    "The agent has memorized:",
+    "El agente ha memorizado:",
+    "L'agent a mémorisé:",
+    "Der Agent hat gespeichert:",
+    "L'agente ha memorizzato",
+    "The agent has memorized",
+    "El agente ha memorizado",
+    "L'agent a mémorisé",
+    "Der Agent hat gespeichert",
+    "L'agente ha rilevato",
+    "The agent detected",
+    "El agente detectó",
+    "L'agent a détecté",
+    "Der Agent hat festgestellt",
+    "L'agente ha vericato",
+    "L'agente ha verificato",
+    "The agent verified",
+    "El agente verificó",
+    "L'agent a vérifié",
+    "Der Agent hat verifiziert"
+  ];
+  const cleaned = content.trim();
+  return prefixes.some(p => cleaned.includes(p));
+}
+
 type ChatViewState = { kind: "main" } | { kind: "task"; taskId: string };
 
 type ChatMessage = {
@@ -150,6 +194,7 @@ type ChatMessage = {
   metadata?: {
     plan_id?: string;
     plan_task_id?: string;
+    memorized_message_id?: string;
   };
   reasoning?: string;
   steps?: ChatHistoryStep[];
@@ -159,6 +204,10 @@ type ChatMessage = {
   webSources?: WebSourceCard[];
   /** Persisted or live interleaved timeline (preferred over flat fields for display). */
   segments?: TurnSegment[];
+  rating?: MessageRating | null;
+  feedbackComment?: string | null;
+  /** Archived by compaction — visible in UI, excluded from LLM context. */
+  archived?: boolean;
 };
 
 function parseWebHostInput(raw: string): string | null {
@@ -210,29 +259,23 @@ function historyMessageFromApi(m: ChatHistoryMessage): ChatMessage {
   if (m.steps) {
     for (const step of m.steps) {
       if (step.name === "web_search" && step.output) {
-        try {
-          const data = JSON.parse(step.output);
-          const rows = Array.isArray(data?.results) ? data.results : [];
-          if (rows.length > 0) {
-            webSources = webSources || [];
-            const seen = new Set(webSources.map((c) => c.url));
-            let idx = webSources.length;
-            for (const row of rows) {
-              const r = row as Record<string, unknown>;
-              const url = String(r?.url ?? "").trim();
-              if (!url || seen.has(url)) continue;
-              seen.add(url);
-              idx += 1;
-              webSources.push({
-                index: idx,
-                title: String(r?.title || url).slice(0, 500),
-                url,
-                provider: r?.provider != null ? String(r.provider) : undefined,
-              });
-            }
+        const rows = webSearchSourceRows(step.output);
+        if (rows.length > 0) {
+          webSources = webSources || [];
+          const seen = new Set(webSources.map((c) => c.url));
+          let idx = webSources.length;
+          for (const row of rows) {
+            const url = row.url.trim();
+            if (!url || seen.has(url)) continue;
+            seen.add(url);
+            idx += 1;
+            webSources.push({
+              index: idx,
+              title: row.title.slice(0, 500),
+              url,
+              provider: row.provider,
+            });
           }
-        } catch {
-          // ignore malformed step output
         }
       }
     }
@@ -248,6 +291,9 @@ function historyMessageFromApi(m: ChatHistoryMessage): ChatMessage {
     webSources,
     segments: m.timeline && m.timeline.length > 0 ? (m.timeline as TurnSegment[]) : undefined,
     metadata: m.metadata,
+    rating: m.rating as MessageRating | undefined,
+    feedbackComment: m.feedback_comment,
+    archived: Boolean(m.archived),
   };
 }
 
@@ -312,15 +358,16 @@ function planChunkFromRecord(value: unknown): PlanPendingChunk | null {
 
 
 
-function formatTextWithCitations(text: string): string {
+function formatTextWithCitations(text: string, messageId?: string): string {
   if (!text) return text;
   // split by code blocks to avoid replacing inside them
   const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
   for (let i = 0; i < parts.length; i++) {
     // even indices are outside code blocks
     if (i % 2 === 0) {
+      const prefix = messageId ? `source-${messageId}` : "source";
       // replace [1], [2], etc. avoiding negative lookbehinds for Safari compat
-      parts[i] = parts[i].replace(/(^|[^\[])\[(\d+)\](?!\(|\])/g, "$1[[$2]](#source-$2)");
+      parts[i] = parts[i].replace(/(^|[^\[])\[(\d+)\](?!\(|\])/g, `$1[[$2]](#${prefix}-$2)`);
       // Clean double brackets and URL-encode spaces in file paths for markdown link compatibility
       parts[i] = parts[i].replace(/\[\[?([^\]]+)\]\]?\(([^)]+)\)/g, (match, label, url) => {
         const cleanUrl = url.trim().startsWith("#") ? url.trim() : url.trim().replace(/ /g, "%20");
@@ -358,6 +405,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const showPromptDebug = AION_PROMPT_DEBUG_UI_ENABLED;
   const chatStreamDebug = AION_CHAT_STREAM_DEBUG_ENABLED;
   const COMPOSER_MIN_HEIGHT = 110;
+  const COMPOSER_TEXTAREA_MIN = 48;
+  const COMPOSER_TEXTAREA_DEFAULT_MAX = 200;
   const userId = useStoredUserId();
   const token = useStoredToken();
   const shellActions = useShellActions();
@@ -422,22 +471,29 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   // States for session files (moved from left sidebar to files panel on the right)
   const [sessionFiles, setSessionFiles] = useState<SessionFileRow[]>([]);
+  const [toolLedgerEntries, setToolLedgerEntries] = useState<ToolLedgerEntry[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
   const fetchSessionFiles = useCallback(async () => {
     if (!conversationId || conversationId === "default") {
       setSessionFiles([]);
+      setToolLedgerEntries([]);
       return;
     }
     setLoadingFiles(true);
     try {
-      const [uploads, derived, workspace, rootFiles] = await Promise.all([
+      const [uploads, derived, workspace, rootFiles, ledger] = await Promise.all([
         listSessionFilesSubdir(conversationId, userId, "uploads", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "derived", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "workspace", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "", token).catch(() => []),
+        fetchToolLedger(conversationId, userId, token).catch(() => ({
+          enabled: false,
+          entries: [] as ToolLedgerEntry[],
+        })),
       ]);
       setSessionFiles([...uploads, ...derived, ...workspace, ...rootFiles]);
+      setToolLedgerEntries(ledger.entries);
     } catch (err) {
       console.error("Errore recupero file di sessione:", err);
     } finally {
@@ -448,6 +504,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   useEffect(() => {
     fetchSessionFiles();
   }, [fetchSessionFiles]);
+
+  useEffect(() => {
+    if (dockTab === "artifacts") {
+      void fetchSessionFiles();
+    }
+  }, [dockTab, fetchSessionFiles, token]);
 
 
 
@@ -484,7 +546,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       return (
         <a
           href={href}
-          className="inline-flex items-center justify-center min-w-5 h-5 ml-0.5 px-1 text-[10px] font-semibold transition-all duration-300 bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded-full text-primary align-super no-underline shadow-sm"
+          className="inline-flex items-center justify-center min-w-5 h-5 ml-0.5 px-1 text-[0.714em] font-semibold transition-all duration-300 bg-primary/10 hover:bg-primary hover:text-primary-foreground rounded-full text-primary align-super no-underline shadow-sm"
           title={t("chat.go_to_source")}
           onClick={(e) => {
             e.preventDefault();
@@ -556,29 +618,65 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editInput, setEditInput] = useState("");
   const [messageRatings, setMessageRatings] = useState<Record<string, MessageRating>>({});
+  const [activeCommentBoxId, setActiveCommentBoxId] = useState<string | null>(null);
 
   useEffect(() => {
     setMessageRatings(loadMessageRatings());
   }, []);
 
-  const handleMessageRate = useCallback((messageId: string, rating: MessageRating | null) => {
-    if (rating == null) {
-      clearMessageRating(messageId);
-      setMessageRatings((prev) => {
-        const next = { ...prev };
-        delete next[messageId];
-        return next;
-      });
-      return;
-    }
-    const next = toggleMessageRating(messageId, rating);
+  const handleMessageRate = useCallback(async (messageId: string, rating: MessageRating | null) => {
     setMessageRatings((prev) => {
       const copy = { ...prev };
-      if (next == null) delete copy[messageId];
-      else copy[messageId] = next;
+      if (rating == null) delete copy[messageId];
+      else copy[messageId] = rating;
       return copy;
     });
-  }, []);
+
+    if (rating === -1) {
+      setActiveCommentBoxId(messageId);
+    } else {
+      setActiveCommentBoxId(null);
+    }
+
+    if (rating == null) {
+      clearMessageRating(messageId);
+    } else {
+      toggleMessageRating(messageId, rating);
+    }
+
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...m, rating: rating }
+          : m
+      )
+    );
+
+    try {
+      const msg = messages.find((m) => m.id === messageId);
+      const comment = msg?.feedbackComment || null;
+      await rateMessage(conversationId, messageId, rating, comment, userId, token);
+    } catch (e) {
+      console.error("Error rating message:", e);
+    }
+  }, [conversationId, userId, token, messages]);
+
+  const handleMessageComment = useCallback(async (messageId: string, comment: string) => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === messageId
+          ? { ...m, feedbackComment: comment }
+          : m
+      )
+    );
+
+    try {
+      const rating = messageRatings[messageId] ?? null;
+      await rateMessage(conversationId, messageId, rating, comment, userId, token);
+    } catch (e) {
+      console.error("Error saving comment:", e);
+    }
+  }, [conversationId, userId, token, messageRatings]);
 
   const lastUserMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -610,6 +708,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [profile, setProfile] = useState("aion_std");
+  const [favoriteProfileSlug, setFavoriteProfileSlug] = useState<string | null>(() =>
+    readStoredDefaultProfileSlug(),
+  );
+  const favoriteProfileSlugRef = useRef(favoriteProfileSlug);
+  favoriteProfileSlugRef.current = favoriteProfileSlug;
   const [sqlQueryProject, setSqlQueryProject] = useState(() =>
     typeof window !== "undefined" ? readStoredSqlProject() : "default"
   );
@@ -649,6 +752,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   );
 
   const [projectCreateOpen, setProjectCreateOpen] = useState(false);
+  const [isSavingInfo, setIsSavingInfo] = useState(false);
+  const [memorizingMessageId, setMemorizingMessageId] = useState<string | null>(null);
+  const [projectWarningModalOpen, setProjectWarningModalOpen] = useState(false);
 
   // States for available SQL QueryMemory projects
   const [sqlProjects, setSqlProjects] = useState<SqlProject[]>([]);
@@ -853,6 +959,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, [conversationId, messages.length, userId, token]);
 
+  const handleSetFavoriteProfile = useCallback(async (slug: string) => {
+    setFavoriteProfileSlug(slug);
+    writeStoredDefaultProfileSlug(slug);
+    handleProfileChange(slug);
+    if (token) {
+      const ok = await syncDefaultProfileSlug(token, slug);
+      if (!ok) {
+        console.error("Error saving default profile to user metadata");
+      }
+    }
+  }, [token, handleProfileChange]);
+
   const handleProjectChange = useCallback((newProject: string) => {
     const proj = newProject.trim();
     setSqlQueryProject(proj);
@@ -889,6 +1007,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [isPlusOpen, setIsPlusOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAgentModeOpen, setIsAgentModeOpen] = useState(false);
+  const [contextBudgetOpen, setContextBudgetOpen] = useState(false);
+  const [lastContextBudget, setLastContextBudget] = useState<ContextBudgetState | null>(null);
   const [isToolsViewSubOpen, setIsToolsViewSubOpen] = useState(false);
   const [isWebSearchSubOpen, setIsWebSearchSubOpen] = useState(false);
   const [isThinkingSubOpen, setIsThinkingSubOpen] = useState(false);
@@ -906,7 +1026,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         return stored;
       }
     }
-    return "full";
+    return "partial";
   });
 
   const handleToolsViewChange = useCallback((view: "hidden" | "partial" | "full") => {
@@ -980,6 +1100,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [streaming, setStreaming] = useState(false);
   const [streamRecovery, setStreamRecovery] = useState(false);
   const streamRecoveryRef = useRef(false);
+  const [activeMessageId, setActiveMessageId] = useState<string | null>(null);
 
   useEffect(() => {
     if (dockTab !== "none") {
@@ -1055,6 +1176,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       }
     }
   }, [turnVisual, adoptResearchSession]);
+
+  useEffect(() => {
+    if (turnVisual?.contextBudget) {
+      setLastContextBudget(turnVisual.contextBudget);
+    }
+  }, [turnVisual?.contextBudget]);
 
   const {
     planChunk,
@@ -1142,14 +1269,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [input, setInput] = useState("");
-  const [composerHeight, setComposerHeight] = useState(COMPOSER_MIN_HEIGHT);
+  const [composerTextMax, setComposerTextMax] = useState(COMPOSER_TEXTAREA_DEFAULT_MAX);
   const [composerResizing, setComposerResizing] = useState(false);
   const composerContainerRef = useRef<HTMLDivElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const composerHeightRef = useRef(COMPOSER_MIN_HEIGHT);
-  const composerPendingHeightRef = useRef(COMPOSER_MIN_HEIGHT);
-  const composerRafRef = useRef<number | null>(null);
-  const composerResizeStartRef = useRef({ y: 0, height: COMPOSER_MIN_HEIGHT });
+  const composerResizeStartRef = useRef({ y: 0, textMax: COMPOSER_TEXTAREA_DEFAULT_MAX });
+  useAutoResizeTextarea(composerTextareaRef, input, {
+    minHeight: COMPOSER_TEXTAREA_MIN,
+    maxHeight: composerTextMax,
+  });
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   const handleFilesDropped = useCallback((files: File[]) => {
@@ -1170,6 +1298,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const streamingRef = useRef(false);
   /** Ignora stream-status Redis residuo subito dopo fine turno (stessa tab). */
   const streamFinishedAtRef = useRef(0);
+  /** Abort in-flight SSE recovery when the client starts or stops a stream. */
+  const recoveryAbortRef = useRef<AbortController | null>(null);
+  /** Bumped on each client-owned POST /chat/stream so recovery cannot wipe its turnVisual. */
+  const clientStreamGenRef = useRef(0);
   const activeConversationRef = useRef(conversationId);
   const {
     historyLoadEpochRef,
@@ -1495,7 +1627,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   );
 
   const mainFeedMessages = useMemo(() => {
-    let list = visibleMessages.filter((m) => m.role !== "internal");
+    let list = visibleMessages.filter((m) => m.role !== "internal" && !m.metadata?.memorized_message_id);
     if (planExecAdoptRunId && planExecutionProgress?.tasks?.length) {
       const planMsgIds = allPlanExecutionMessageIds(planExecutionProgress.tasks);
       if (planMsgIds.size) {
@@ -1545,6 +1677,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const showMainTurnVisual = Boolean(
     turnVisual &&
     chatView.kind === "main" &&
+    !memorizingMessageId &&
     !(
       planExecAdoptRunId &&
       recoveryAssistantId &&
@@ -1587,6 +1720,23 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, [planExecAdoptRunId, userId, token]);
 
+  const handleResumePlanExecution = useCallback(async () => {
+    const rid = (planExecAdoptRunId || "").trim();
+    if (!rid) return;
+    try {
+      const out = await resumePlanExecution(rid, userId, token);
+      if (out?.run_id) {
+        adoptPlanExecution(
+          out.run_id,
+          out.plan_id || planExecAdoptPlanId || "",
+          { rehydrate: true, status: out.status },
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [planExecAdoptRunId, planExecAdoptPlanId, userId, token, adoptPlanExecution]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && chatView.kind === "task") {
@@ -1605,6 +1755,44 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, [searchParams, planExecutionProgress?.tasks]);
 
+  // Grace period (ms) after an explicit user stop before stream-recovery may restart.
+  const STREAM_FINISHED_GRACE_MS = 8000;
+
+  const abortStreamRecovery = useCallback(() => {
+    recoveryAbortRef.current?.abort();
+    recoveryAbortRef.current = null;
+    streamRecoveryRef.current = false;
+    setStreamRecovery(false);
+  }, []);
+
+  const stopActiveStream = useCallback(async () => {
+    // Mark the moment of stop so recovery maybeStart() can enforce the grace period.
+    streamFinishedAtRef.current = Date.now();
+    abortStreamRecovery();
+    abortRef.current?.abort();
+    abortRef.current = null;
+    streamingRef.current = false;
+    setStreaming(false);
+    setStreamRecovery(false);
+    streamRecoveryRef.current = false;
+    setRecoveryAssistantId(null);
+    setActiveMessageId(null);
+    setTurnVisual(null);
+    clearActiveStreamMarker(conversationId);
+    const planRunId = (planExecAdoptRunId || "").trim();
+    if (planRunId && planExecutionProgress?.status === "running") {
+      await pausePlanExecution(planRunId, userId, token).catch(() => undefined);
+    }
+    await chatStop(conversationId, userId, token).catch(() => undefined);
+    for (let i = 0; i < 30; i++) {
+      const st = await fetchStreamStatus(conversationId, userId, token).catch(() => ({
+        active: false,
+      }));
+      if (!st.active) break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }, [conversationId, userId, token, abortStreamRecovery, planExecAdoptRunId, planExecutionProgress?.status]);
+
   const runChatRequest = useCallback(
     async (
       message: string,
@@ -1616,8 +1804,24 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         deepResearchModeOverride?: boolean;
         /** Hide orchestration system prompts from the chat transcript. */
         showUserBubble?: boolean;
+        metadata?: Record<string, any>;
       },
     ) => {
+      const marker = readActiveStreamMarker(conversationId);
+      if (streamingRef.current || streamRecoveryRef.current || marker) {
+        await stopActiveStream();
+      } else {
+        const st = await fetchStreamStatus(conversationId, userId, token).catch(() => ({
+          active: false,
+        }));
+        if (st.active) {
+          await stopActiveStream();
+        }
+      }
+
+      abortStreamRecovery();
+      const streamGen = ++clientStreamGenRef.current;
+
       const effectiveAgentMode = opts?.agentModeOverride ?? agentMode;
       const effectivePlanMode =
         opts?.planModeOverride !== undefined
@@ -1629,6 +1833,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           : effectiveAgentMode === "deep_research";
       let uidMsg = crypto.randomUUID();
       let aid = crypto.randomUUID();
+      setActiveMessageId(aid);
 
       const hasPendingFiles = pendingFiles.length > 0;
       const uploads = await uploadSessionFiles(conversationId, userId, pendingFiles, token);
@@ -1710,6 +1915,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               ? sqlQueryProject.trim()
               : undefined,
             llm_provider_name: selectedProvider || undefined,
+            metadata: opts?.metadata,
           },
           token,
           abortRef.current.signal
@@ -1893,8 +2099,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             state.error.includes("approvazione sidebar")),
         );
         let assistantText = strippedContent;
-        if (!assistantText.trim() && state.error && !isPlanGuardError) {
-          assistantText = t("chat.error", { msg: state.error });
+        const streamError =
+          state.error && !isPlanGuardError ? state.error : null;
+        if (!assistantText.trim() && streamError) {
+          assistantText = t("chat.error", { msg: streamError });
+        } else if (assistantText.trim() && streamError) {
+          assistantText = `${assistantText}\n\n---\n${t("chat.error", { msg: streamError })}`;
         }
         const reasoningUnavailable =
           thinkingEnabled && !sawReasoning && assistantText.trim().length > 0 && !state.error;
@@ -1904,9 +2114,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         {
           const persistedSegments = segmentsForPersist(state.segments);
           if (activeConversationRef.current === conversationId) {
-            setMessages((m) => [
-              ...m,
-              {
+            setMessages((m) =>
+              upsertChatMessage(m, {
                 id: aid,
                 role: "assistant",
                 content: assistantText,
@@ -1916,8 +2125,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 segments: persistedSegments.length ? persistedSegments : undefined,
                 reasoningUnavailable,
                 webSources: state.webSourceCards.length ? state.webSourceCards : undefined,
-              },
-            ]);
+              }),
+            );
           }
         }
 
@@ -1934,7 +2143,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           const rows = await listSessionFilesSubdir(conversationId, userId, sub, token);
           for (const row of rows) {
             const rp = row.relative_path;
-            if (!rp || seenFilesRef.current.has(rp)) continue;
+            if (!rp || seenFilesRef.current.has(rp) || isToolOffloadSessionPath(rp)) continue;
             seenFilesRef.current.add(rp);
             newLinks.push({ rp, label: row.name || rp });
           }
@@ -1997,9 +2206,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             const completedSteps = turnSteps(state);
             const completedArtifacts = turnArtifacts(state);
             const partialSegments = segmentsForPersist(state.segments);
-            setMessages((m) => [
-              ...m,
-              {
+            setMessages((m) =>
+              upsertChatMessage(m, {
                 id: aid,
                 role: "assistant",
                 content: contentToSave,
@@ -2007,8 +2215,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 steps: completedSteps.length ? completedSteps : undefined,
                 artifacts: completedArtifacts.length ? completedArtifacts : undefined,
                 segments: partialSegments.length ? partialSegments : undefined,
-              },
-            ]);
+              }),
+            );
 
             void refreshThreads();
           }
@@ -2017,6 +2225,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         const msg = e instanceof Error ? e.message : String(e);
         setMessages((m) => [...m, { id: crypto.randomUUID(), role: "assistant", content: `❌ ${msg}` }]);
       } finally {
+        if (streamGen !== clientStreamGenRef.current) return;
         streamingRef.current = false;
         markStreamConversation(null);
         streamFinishedAtRef.current = Date.now();
@@ -2024,6 +2233,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         setStreamRecovery(false);
         streamRecoveryRef.current = false;
         setRecoveryAssistantId(null);
+        setActiveMessageId(null);
         setTurnVisual(null);
         clearActiveStreamMarker(conversationId);
         abortRef.current = null;
@@ -2052,15 +2262,88 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       chatStreamDebug,
       adoptResearchSession,
       selectedProvider,
+      stopActiveStream,
+      abortStreamRecovery,
     ]
   );
 
+  const handleMemorize = useCallback(async (msgId: string) => {
+    const msgIdx = messages.findIndex((msg) => msg.id === msgId);
+    if (msgIdx === -1) return;
+
+    const clickedMsg = messages[msgIdx];
+
+    // Find the preceding user message (the question)
+    let userQuestion = "";
+    for (let i = msgIdx - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        userQuestion = messages[i].content;
+        break;
+      }
+    }
+
+    let assistantThinking = clickedMsg.reasoning || "";
+    let assistantResponse = clickedMsg.content || "";
+
+    if (clickedMsg.segments && clickedMsg.segments.length > 0) {
+      const thinkingParts: string[] = [];
+      const responseParts: string[] = [];
+      for (const seg of clickedMsg.segments) {
+        if (seg.kind === "reasoning" && seg.content) {
+          thinkingParts.push(seg.content);
+        } else if (seg.kind === "text" && seg.content) {
+          responseParts.push(seg.content);
+        }
+      }
+      if (thinkingParts.length > 0) {
+        assistantThinking = thinkingParts.join("\n").trim();
+      }
+      if (responseParts.length > 0) {
+        assistantResponse = responseParts.join("\n").trim();
+      }
+    }
+
+    const turnDetails = [
+      `[Domanda Utente]\n${userQuestion.trim()}`,
+      assistantThinking.trim() ? `[Thinking Agente]\n${assistantThinking.trim()}` : "",
+      `[Risposta Agente]\n${assistantResponse.trim()}`
+    ].filter(Boolean).join("\n\n");
+
+    const hasNoActiveProject = !sqlQueryProject || sqlQueryProject === "default";
+    if (hasNoActiveProject) {
+      setProjectWarningModalOpen(true);
+      return;
+    }
+
+    setMemorizingMessageId(msgId);
+    setIsSavingInfo(true);
+    try {
+      const activeProject = sqlQueryProject;
+      const projectWingName = `wing_proj_${activeProject}`;
+
+      const instruction = t("chat.actions.memorize_instruction");
+      const prompt = `${instruction}\n\n[Active Project Context]\nActive SQL QueryMemory project slug: "${activeProject}"\nMemPalace project wing: "${projectWingName}"\n\n[Conversation Turn to Memorize]\n${turnDetails}`;
+      await runChatRequest(prompt, {
+        message_source: "internal_trigger",
+        showUserBubble: false,
+        metadata: { memorized_message_id: msgId },
+      });
+    } catch (err) {
+      console.error("[aion-chat-ui] error during memorization:", err);
+    } finally {
+      setIsSavingInfo(false);
+      setMemorizingMessageId(null);
+    }
+  }, [messages, sqlQueryProject, runChatRequest, t]);
+
   const handleSaveEdit = useCallback(async (msgId: string) => {
     const newText = editInput.trim();
-    if (!newText || streaming) return;
+    if (!newText) return;
+    if (streaming || streamRecoveryRef.current) {
+      await stopActiveStream();
+    }
 
     setEditingMessageId(null);
-    setStreaming(true);
 
     try {
       const res = await fetch(`${apiBase()}/chat-ui/conversations/${conversationId}/messages/${msgId}`, {
@@ -2085,21 +2368,20 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       await runChatRequest(newText);
     } catch (err) {
       console.error("Error editing message:", err);
-    } finally {
-      setStreaming(false);
     }
-  }, [conversationId, editInput, streaming, userId, token, runChatRequest]);
+  }, [conversationId, editInput, streaming, userId, token, runChatRequest, stopActiveStream]);
 
   const handleRegenerate = useCallback(async () => {
-    if (streaming || !lastUserMessageId) return;
+    if (!lastUserMessageId) return;
+    if (streaming || streamRecoveryRef.current) {
+      await stopActiveStream();
+    }
 
     const lastUserMsg = messages.find((msg) => msg.id === lastUserMessageId);
     if (!lastUserMsg) return;
 
     const userText = lastUserMsg.content.trim();
     if (!userText) return;
-
-    setStreaming(true);
 
     try {
       const res = await fetch(`${apiBase()}/chat-ui/conversations/${conversationId}/messages/${lastUserMessageId}`, {
@@ -2124,10 +2406,20 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       await runChatRequest(userText);
     } catch (err) {
       console.error("Error regenerating response:", err);
-    } finally {
-      setStreaming(false);
     }
-  }, [conversationId, lastUserMessageId, messages, streaming, userId, token, runChatRequest]);
+  }, [conversationId, lastUserMessageId, messages, streaming, userId, token, runChatRequest, stopActiveStream]);
+
+  useEffect(() => {
+    if (!token) return;
+    void fetchCurrentUser(token)
+      .then((user) => {
+        const slug = readDefaultProfileSlug(user?.metadata);
+        if (!slug) return;
+        setFavoriteProfileSlug(slug);
+        writeStoredDefaultProfileSlug(slug);
+      })
+      .catch((err: unknown) => console.error("default profile fetch", err));
+  }, [token]);
 
   useEffect(() => {
     fetchProfiles(userId, token)
@@ -2139,7 +2431,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             if (matched) {
               return matched.slug || matched.name;
             }
-            return p[0].slug || p[0].name;
+            return resolveDefaultProfileSlug(p, favoriteProfileSlugRef.current);
           });
         }
       })
@@ -2153,8 +2445,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   useEffect(() => {
     if (!conversationId) return;
 
-    // Reset immediato a "aion_std" (o primo profilo abilitato) per le nuove chat / fallback
-    const defaultProfile = profiles.some((x) => x.slug === "aion_std") ? "aion_std" : (profiles[0]?.slug || "aion_std");
+    setContextBudgetOpen(false);
+    setLastContextBudget(null);
+
+    // Reset immediato al profilo predefinito utente (o fallback) per le nuove chat
+    const defaultProfile = resolveDefaultProfileSlug(profiles, favoriteProfileSlugRef.current);
     setProfile(defaultProfile);
     setSqlQueryProject(readStoredSqlProject());
     setConversationTitle(null);
@@ -2205,7 +2500,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               meta.agent_mode === "plan" ||
               meta.agent_mode === "ask" ||
               meta.agent_mode === "debug" ||
-              meta.agent_mode === "deep_research"
+              meta.agent_mode === "deep_research" ||
+              meta.agent_mode === "long_run"
             ) {
               setAgentMode(meta.agent_mode as AgentMode);
               localStorage.setItem("aion_agent_mode", meta.agent_mode);
@@ -2271,6 +2567,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         });
 
         const hist = result.ok ? result.messages : [];
+        const ratingsMap: Record<string, MessageRating> = {};
+        hist.forEach((m) => {
+          if (m.rating === 1 || m.rating === -1) {
+            ratingsMap[m.id] = m.rating as MessageRating;
+          }
+        });
+        setMessageRatings((prev) => ({ ...prev, ...ratingsMap }));
 
         // 1. Sincronizza Agent DB table hint da cronologia (disabilitato)
         /*
@@ -2380,11 +2683,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     if (streamingRef.current && !streamRecoveryRef.current) return;
 
     let cancelled = false;
+    const recoveryAc = new AbortController();
+    recoveryAbortRef.current = recoveryAc;
 
-    const finishRecovery = async () => {
+    const finishRecovery = async (recoveryGen: number) => {
+      if (recoveryGen !== clientStreamGenRef.current) {
+        streamRecoveryRef.current = false;
+        setStreamRecovery(false);
+        return;
+      }
       streamRecoveryRef.current = false;
       setStreamRecovery(false);
       setRecoveryAssistantId(null);
+      setActiveMessageId(null);
       streamingRef.current = false;
       setStreaming(false);
       setTurnVisual(null);
@@ -2413,26 +2724,55 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     };
 
     const runSseRecovery = async () => {
+      if (streamingRef.current && !streamRecoveryRef.current) return;
+      const recoveryGen = clientStreamGenRef.current;
       streamRecoveryRef.current = true;
       setStreamRecovery(true);
-      streamingRef.current = true;
-      setStreaming(true);
+      if (!streamingRef.current) {
+        streamingRef.current = true;
+        setStreaming(true);
+      }
 
-      while (!cancelled && activeConversationRef.current === conversationId) {
+      while (
+        !cancelled &&
+        !recoveryAc.signal.aborted &&
+        activeConversationRef.current === conversationId &&
+        recoveryGen === clientStreamGenRef.current
+      ) {
         let state = newTurn();
         setTurnVisual(state);
 
         try {
-          const sseStream = await getChatStreamReconnect(conversationId, userId, token);
-          if (cancelled || activeConversationRef.current !== conversationId) break;
+          const sseStream = await getChatStreamReconnect(
+            conversationId,
+            userId,
+            token,
+            recoveryAc.signal,
+          );
+          if (
+            cancelled ||
+            recoveryAc.signal.aborted ||
+            activeConversationRef.current !== conversationId ||
+            recoveryGen !== clientStreamGenRef.current
+          ) {
+            break;
+          }
 
           if (sseStream) {
             await consumeChatStream(sseStream, (chunk) => {
-              if (cancelled || activeConversationRef.current !== conversationId) return;
+              if (
+                cancelled ||
+                recoveryAc.signal.aborted ||
+                activeConversationRef.current !== conversationId ||
+                recoveryGen !== clientStreamGenRef.current
+              ) {
+                return;
+              }
               if (chunk.type === "turn_started") {
                 const uid = String(chunk.user_message_id || "");
                 const asst = String(chunk.assistant_message_id || "");
                 setRecoveryAssistantId(asst || null);
+                setActiveMessageId(asst || null);
                 writeActiveStreamMarker(conversationId, {
                   assistantMessageId: asst,
                   userMessageId: uid,
@@ -2444,10 +2784,23 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             });
           }
         } catch (err) {
+          if (
+            (err instanceof DOMException && err.name === "AbortError") ||
+            (err instanceof Error && err.name === "AbortError")
+          ) {
+            break;
+          }
           console.error("[aion-chat-ui] SSE reconnect stream error:", err);
         }
 
-        if (cancelled || activeConversationRef.current !== conversationId) break;
+        if (
+          cancelled ||
+          recoveryAc.signal.aborted ||
+          activeConversationRef.current !== conversationId ||
+          recoveryGen !== clientStreamGenRef.current
+        ) {
+          break;
+        }
         const status = await fetchStreamStatus(conversationId, userId, token);
         if (!status.active) {
           break;
@@ -2455,19 +2808,36 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
-      if (!cancelled && activeConversationRef.current === conversationId) {
-        await finishRecovery();
+      if (
+        !cancelled &&
+        !recoveryAc.signal.aborted &&
+        activeConversationRef.current === conversationId
+      ) {
+        await finishRecovery(recoveryGen);
+      } else {
+        streamRecoveryRef.current = false;
+        setStreamRecovery(false);
       }
     };
 
     const maybeStart = async () => {
+      // Skip recovery if we just stopped intentionally (grace period not yet elapsed).
+      if (Date.now() - streamFinishedAtRef.current < STREAM_FINISHED_GRACE_MS) return;
+      if (cancelled || recoveryAc.signal.aborted) return;
+      if (streamingRef.current && !streamRecoveryRef.current) return;
+
       const marker = readActiveStreamMarker(conversationId);
       const status = await fetchStreamStatus(conversationId, userId, token);
-      if (cancelled || (streamingRef.current && !streamRecoveryRef.current)) return;
-      if (status.active || marker || planExecAdoptRunId) {
-        await runSseRecovery();
-      } else if (marker) {
+      if (cancelled || recoveryAc.signal.aborted) return;
+      if (streamingRef.current && !streamRecoveryRef.current) return;
+
+      // Stale sessionStorage marker after stop/reload — trust Redis stream-status.
+      if (!status.active && marker && !planExecAdoptRunId) {
         clearActiveStreamMarker(conversationId);
+        return;
+      }
+      if (status.active || planExecAdoptRunId) {
+        await runSseRecovery();
       }
     };
 
@@ -2482,6 +2852,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
     return () => {
       cancelled = true;
+      recoveryAc.abort();
+      if (recoveryAbortRef.current === recoveryAc) {
+        recoveryAbortRef.current = null;
+      }
       document.removeEventListener("visibilitychange", onVis);
     };
   }, [conversationId, userId, token, refreshThreads, planExecAdoptRunId]);
@@ -2524,7 +2898,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const send = async () => {
     const t = input.trim();
-    if (!t || streaming) return;
+    if (!t) return;
+    if (streaming || streamRecoveryRef.current) {
+      await stopActiveStream();
+    }
     if (isProjectRequiredButMissing) {
       setProjectCreateOpen(true);
       return;
@@ -2554,50 +2931,22 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   };
 
   const stop = () => {
-    abortRef.current?.abort();
-    void chatStop(conversationId, userId, token).catch(() => {
-      /* ignore network errors */
-    });
+    void stopActiveStream();
   };
 
   useEffect(() => {
-    composerHeightRef.current = composerHeight;
-    if (composerContainerRef.current) {
-      composerContainerRef.current.style.height = `${composerHeight}px`;
-    }
-  }, [composerHeight]);
-
-  useEffect(() => {
     if (!composerResizing) return;
-    function flushComposerHeight() {
-      composerRafRef.current = null;
-      const nextHeight = composerPendingHeightRef.current;
-      composerHeightRef.current = nextHeight;
-      if (composerContainerRef.current) {
-        composerContainerRef.current.style.height = `${nextHeight}px`;
-      }
-    }
     function onMouseMove(e: MouseEvent) {
-      const maxHeight = Math.max(COMPOSER_MIN_HEIGHT, Math.floor(window.innerHeight * 0.55));
+      const maxCap = Math.max(COMPOSER_TEXTAREA_MIN, Math.floor(window.innerHeight * 0.45));
       const dy = composerResizeStartRef.current.y - e.clientY;
-      const nextHeight = Math.min(Math.max(composerResizeStartRef.current.height + dy, COMPOSER_MIN_HEIGHT), maxHeight);
-      composerPendingHeightRef.current = nextHeight;
-      if (composerRafRef.current === null) {
-        composerRafRef.current = window.requestAnimationFrame(flushComposerHeight);
-      }
+      const next = Math.min(
+        maxCap,
+        Math.max(COMPOSER_TEXTAREA_MIN, composerResizeStartRef.current.textMax + dy)
+      );
+      setComposerTextMax(next);
     }
     function onMouseUp() {
       setComposerResizing(false);
-      if (composerRafRef.current !== null) {
-        window.cancelAnimationFrame(composerRafRef.current);
-        composerRafRef.current = null;
-      }
-      const nextHeight = composerPendingHeightRef.current;
-      composerHeightRef.current = nextHeight;
-      if (composerContainerRef.current) {
-        composerContainerRef.current.style.height = `${nextHeight}px`;
-      }
-      setComposerHeight(composerHeightRef.current);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       window.removeEventListener("mousemove", onMouseMove);
@@ -2606,10 +2955,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mouseup", onMouseUp);
     return () => {
-      if (composerRafRef.current !== null) {
-        window.cancelAnimationFrame(composerRafRef.current);
-        composerRafRef.current = null;
-      }
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
       window.removeEventListener("mousemove", onMouseMove);
@@ -2620,13 +2965,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const startComposerResize = useCallback(
     (e: React.MouseEvent<HTMLButtonElement>) => {
       e.preventDefault();
-      composerResizeStartRef.current = { y: e.clientY, height: composerHeightRef.current };
-      composerPendingHeightRef.current = composerHeightRef.current;
+      composerResizeStartRef.current = { y: e.clientY, textMax: composerTextMax };
       document.body.style.cursor = "ns-resize";
       document.body.style.userSelect = "none";
       setComposerResizing(true);
     },
-    []
+    [composerTextMax]
   );
 
   const tabsToRender = useMemo(() => {
@@ -2735,6 +3079,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         <ArtifactsPanel
           items={dockArtifacts}
           sessionFiles={sessionFiles}
+          toolLedgerEntries={toolLedgerEntries}
           loadingFiles={loadingFiles}
           onRefreshFiles={fetchSessionFiles}
           conversationId={conversationId}
@@ -2839,10 +3184,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }),
   );
   const contextCompacting = Boolean(turnVisual?.contextCompacting);
+  const contextBudget = turnVisual?.contextBudget ?? lastContextBudget;
   const showAgentWorkingShimmer = Boolean(
     streaming &&
     turnVisual &&
-    !contextCompacting &&
     !hasVisibleAssistantText &&
     !hasVisibleReasoning &&
     !hasRunningTool &&
@@ -3024,7 +3369,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         key={m.id}
                         data-message-id={m.id}
                         className={cn(
-                          "group relative mr-auto w-full max-w-[min(92%,48rem)] flex flex-col px-5 text-[15px] leading-relaxed text-foreground",
+                          "group relative mr-auto w-full max-w-[min(92%,48rem)] flex flex-col px-5 chat-font text-foreground",
                           afterUser ? "pt-0.5 pb-2" : "py-3",
                         )}
                       >
@@ -3072,6 +3417,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   progress={planExecutionProgress}
                   onOpenTask={openPlanTaskView}
                   onOpenAllTasks={() => setDockTab("plan")}
+                  onResume={handleResumePlanExecution}
                 />
               ) : null}
               {chatView.kind === "main" && !showEmptyState
@@ -3094,11 +3440,17 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       className={cn(
                         "group relative w-full flex flex-col transition-opacity",
                         turnGapClass,
+                        m.archived && "opacity-[0.88]",
                       )}
                     >
+                      {m.archived ? (
+                        <p className="mb-1 px-5 text-[0.643em] font-medium uppercase tracking-wide text-muted-foreground/70">
+                          {t("chat.message.archived_context")}
+                        </p>
+                      ) : null}
                       <div
                         className={cn(
-                          "w-full px-5 text-[15px] leading-relaxed",
+                          "w-full px-5 chat-font",
                           m.role === "user"
                             ? cn(
                               "ml-auto max-w-[min(92%,42rem)] sm:max-w-[min(70%,42rem)] rounded-3xl text-foreground [&_a]:text-foreground [&_code]:bg-background [&_code]:text-foreground",
@@ -3114,11 +3466,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       >
                         {m.role === "internal" ? (
                           <>
-                            <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <div className="mb-2 text-[0.786em] font-semibold uppercase tracking-wide text-muted-foreground">
                               {t("chat.plan.execution")}
                             </div>
                             {m.content?.trim() ? (
-                              <div className="prose-chat text-sm text-muted-foreground">
+                              <div className="prose-chat text-muted-foreground">
                                 <InternalMessageMarkdown
                                   content={m.content.trim()}
                                   streaming={streaming}
@@ -3129,7 +3481,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                             ) : null}
                           </>
                         ) : null}
-                        {m.role === "assistant" &&
+                        {m.role === "assistant" && m.content && isMemorizationMessage(m.content) ? (
+                          <div className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto">
+                            <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                            <div className="flex-1">
+                              <InternalMessageMarkdown
+                                content={m.content.trim()}
+                                streaming={streaming}
+                                renderMarkdownLink={renderMarkdownLink}
+                                formatTextWithCitations={formatTextWithCitations}
+                              />
+                            </div>
+                          </div>
+                        ) : m.role === "assistant" &&
                           (m.reasoning || (m.steps && m.steps.length > 0) || (m.artifacts && m.artifacts.length > 0) || m.content) ? (
                           <div className={cn(afterUser ? "mb-2" : "mb-3")}>
                             <TurnTimeline
@@ -3163,6 +3527,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               isPlanArtifact={isPlanArtifact}
                               renderMarkdownLink={renderMarkdownLink}
                               formatTextWithCitations={formatTextWithCitations}
+                              messageId={m.id}
                             />
                           </div>
                         ) : null}
@@ -3185,7 +3550,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   <Paperclip size={13} className="text-muted-foreground" />
                                   <span className="font-medium truncate max-w-[200px]">{title}</span>
                                   {mime && (
-                                    <span className="text-[10px] text-muted-foreground uppercase px-1.5 py-0.5 bg-muted/50 rounded">
+                                    <span className="text-[0.714em] text-muted-foreground uppercase px-1.5 py-0.5 bg-muted/50 rounded">
                                       {mime.split("/")[1] || mime}
                                     </span>
                                   )}
@@ -3208,7 +3573,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   }
                                 }}
                                 placeholder={t("chat.edit.placeholder")}
-                                className="focus-ring min-h-[80px] flex-1 w-full resize-none rounded-[20px] border-0 bg-transparent px-4 py-3 text-[15px] leading-relaxed text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
+                                className="focus-ring chat-font min-h-[80px] flex-1 w-full resize-none rounded-[20px] border-0 bg-transparent px-4 py-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
                               />
                             </div>
                             <div className="flex justify-end gap-2 text-xs">
@@ -3239,10 +3604,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           </div>
                         ) : null}
                         {m.role === "assistant" && m.webSources && m.webSources.length > 0 ? (
-                          <WebSourcesBar cards={m.webSources} />
+                          <WebSourcesBar cards={m.webSources} messageId={m.id} />
                         ) : null}
                         {m.role === "assistant" && m.reasoningUnavailable ? (
-                          <p className="mt-2 border-t border-border pt-2 text-[11px] leading-snug text-muted-foreground">
+                          <p className="mt-2 border-t border-border pt-2 text-[0.786em] leading-snug text-muted-foreground">
                             {t("chat.edit.no_reasoning", { level: "min" })}
                           </p>
                         ) : null}
@@ -3250,7 +3615,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
                       {m.role === "user" && !streaming && editingMessageId !== m.id ? (
                         <div className="mt-1 flex justify-end gap-1 pr-2">
-                          {isLastUser ? (
+                          {isLastUser && !m.archived ? (
                             <button
                               type="button"
                               onClick={() => handleStartEdit(m)}
@@ -3268,8 +3633,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         </div>
                       ) : null}
 
-                      {m.role === "assistant" && !streaming ? (
-                        <div className="mt-0.5 flex justify-start pl-1">
+                      {m.role === "assistant" && !streaming && !isMemorizationMessage(m.content) ? (
+                        <div className="mt-0.5 flex flex-col items-start justify-start pl-1 w-full">
                           <MessageActions
                             messageId={m.id}
                             copyText={extractAssistantCopyText(m)}
@@ -3284,9 +3649,100 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               m.id === lastAssistantMessageId &&
                               messages[messages.length - 1]?.id === m.id
                             }
+                            onMemorize={() => handleMemorize(m.id)}
                           />
+                          {activeCommentBoxId === m.id && (
+                            <div className="mt-3 w-full max-w-xl p-4 sm:p-5 rounded-2xl bg-card border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.08)] flex flex-col gap-4 relative">
+                              {/* Header */}
+                              <div className="flex items-center justify-between shrink-0">
+                                <div className="flex items-center gap-2 font-bold text-xs text-rose-400">
+                                  <ThumbsDown className="w-4 h-4 text-rose-500 fill-current" />
+                                  {t("chat.actions.feedback_title")}
+                                </div>
+                                <button
+                                  onClick={() => setActiveCommentBoxId(null)}
+                                  className="p-1 text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-lg transition-colors cursor-pointer"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+
+                              {/* Textarea Wrapper */}
+                              <div className="relative w-full">
+                                <textarea
+                                  id={`feedback-textarea-${m.id}`}
+                                  placeholder={t("chat.actions.feedback_placeholder")}
+                                  className="w-full min-h-[85px] text-xs bg-black/40 border border-white/10 hover:border-white/20 focus:border-rose-500 rounded-xl p-3 pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-rose-500/30 resize-none transition-all placeholder:text-muted-foreground/75"
+                                  defaultValue={m.feedbackComment ?? ""}
+                                  onKeyDown={(e) => {
+                                    if (e.key === "Enter" && !e.shiftKey) {
+                                      e.preventDefault();
+                                      const text = (e.target as HTMLTextAreaElement).value;
+                                      handleMessageComment(m.id, text);
+                                      setActiveCommentBoxId(null);
+                                    }
+                                  }}
+                                />
+                              </div>
+
+                              {/* Footer Actions */}
+                              <div className="flex items-center justify-end gap-2 shrink-0">
+                                <button
+                                  onClick={() => {
+                                    handleMessageRate(m.id, null);
+                                    setActiveCommentBoxId(null);
+                                  }}
+                                  className="px-4 py-1.5 text-xs font-semibold rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-gray-300 transition-all cursor-pointer"
+                                >
+                                  {t("chat.actions.feedback_cancel")}
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const el = document.getElementById(`feedback-textarea-${m.id}`) as HTMLTextAreaElement;
+                                    if (el) {
+                                      handleMessageComment(m.id, el.value);
+                                    }
+                                    setActiveCommentBoxId(null);
+                                  }}
+                                  className="px-5 py-1.5 text-xs font-bold rounded-full bg-rose-500 hover:bg-rose-600 text-white transition-all shadow-md shadow-rose-500/20 cursor-pointer"
+                                >
+                                  {t("chat.actions.feedback_submit")}
+                                </button>
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ) : null}
+
+                      {memorizingMessageId === m.id && streaming ? (
+                        <div className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
+                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary mt-0.5" />
+                          <div className="flex-1">
+                            <div className="font-semibold">{t("chat.agent_status.saving_info")}</div>
+                            <div className="text-xs text-muted-foreground">{t("chat.agent_status.saving_info_desc")}</div>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {(() => {
+                        const memorizationMsgs = messages.filter(
+                          (msg) => msg.metadata?.memorized_message_id === m.id
+                        );
+                        if (memorizationMsgs.length === 0) return null;
+                        return memorizationMsgs.map((mm) => (
+                          <div key={mm.id} className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
+                            <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                            <div className="flex-1">
+                              <InternalMessageMarkdown
+                                content={mm.content.trim()}
+                                streaming={streaming}
+                                renderMarkdownLink={renderMarkdownLink}
+                                formatTextWithCitations={formatTextWithCitations}
+                              />
+                            </div>
+                          </div>
+                        ));
+                      })()}
                     </div>
                   );
                 })
@@ -3302,32 +3758,35 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 </div>
               ) : null}
               {showMainTurnVisual && turnVisual ? (
-                <div className="mr-auto mt-0.5 w-full max-w-4xl min-h-[3.5rem] bg-transparent px-5 pt-0 pb-3 text-[15px] leading-relaxed text-foreground">
-                  {showContextCompactingShimmer ? (
+                <div className="mr-auto mt-0.5 w-full max-w-4xl min-h-[3.5rem] bg-transparent px-5 pt-0 pb-3 chat-font text-foreground">
+                  {isSavingInfo ? (
                     <StatusProgressCard
                       className="mb-3"
                       icon={Database}
-                      title={t("chat.agent_status.compacting")}
-                      subtitle={t("chat.agent_status.compacting_desc")}
+                      title={t("chat.agent_status.saving_info")}
+                      subtitle={t("chat.agent_status.saving_info_desc")}
                     />
                   ) : showAgentWorkingShimmer ? (
                     <AgentWorkingShimmer label={agentWorkingLabel} />
                   ) : null}
 
-                  <TurnTimeline
-                    key={streamEpoch}
-                    segments={turnVisual.segments}
-                    toolsView={toolsView}
-                    streaming={streaming}
-                    conversationId={conversationId}
-                    token={token}
-                    isPlanArtifact={isPlanArtifact}
-                    renderMarkdownLink={renderMarkdownLink}
-                    formatTextWithCitations={formatTextWithCitations}
-                  />
+                  {!isSavingInfo && (
+                    <TurnTimeline
+                      key={streamEpoch}
+                      segments={turnVisual.segments}
+                      toolsView={toolsView}
+                      streaming={streaming}
+                      conversationId={conversationId}
+                      token={token}
+                      isPlanArtifact={isPlanArtifact}
+                      renderMarkdownLink={renderMarkdownLink}
+                      formatTextWithCitations={formatTextWithCitations}
+                      messageId={activeMessageId || undefined}
+                    />
+                  )}
 
-                  {streaming && turnVisual.webSourceCards.length > 0 ? (
-                    <WebSourcesBar cards={turnVisual.webSourceCards} />
+                  {streaming && !isSavingInfo && turnVisual.webSourceCards.length > 0 ? (
+                    <WebSourcesBar cards={turnVisual.webSourceCards} messageId={activeMessageId || undefined} />
                   ) : null}
                 </div>
               ) : null}
@@ -3358,12 +3817,29 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
           <div className="relative z-20 min-w-0 shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
             <div className="mx-auto w-full min-w-0 max-w-3xl">
+              {showContextCompactingShimmer ? (
+                <StatusProgressCard
+                  className="mb-3 border-amber-500/30 bg-amber-500/5"
+                  icon={Database}
+                  title={t("chat.agent_status.compacting")}
+                  subtitle={t("chat.agent_status.compacting_desc")}
+                />
+              ) : null}
+              {contextBudgetOpen ? (
+                contextBudget ? (
+                  <ContextBudgetBar budget={contextBudget} className="mb-3" />
+                ) : (
+                  <div className="mb-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-[0.786em] text-muted-foreground">
+                    {t("chat.context_budget.unavailable")}
+                  </div>
+                )
+              ) : null}
               {pendingFiles.length > 0 && (
                 <div className="mb-3 flex flex-wrap gap-2">
                   {pendingFiles.map((f) => (
                     <span
                       key={f.name}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-3 py-1.5 text-[12px] font-medium text-foreground backdrop-blur-sm"
+                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-3 py-1.5 text-[0.857em] font-medium text-foreground backdrop-blur-sm"
                     >
                       {f.name}
                       <button
@@ -3404,7 +3880,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       : "border-border hover:border-border/80 focus-within:ring-primary/30",
                   composerResizing ? "" : "transition-colors"
                 )}
-                style={{ height: composerHeight }}
+                style={{ minHeight: COMPOSER_MIN_HEIGHT }}
               >
                 <button
                   type="button"
@@ -3413,7 +3889,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   className="focus-ring absolute left-0 top-0 z-10 h-4 w-full -translate-y-1/2 cursor-ns-resize bg-transparent"
                 />
                 {(webRestrictHosts.length > 0 || !webSearchEnabled) && (
-                  <div className="flex flex-wrap gap-2 px-3 pt-1 text-[11px] text-muted-foreground" aria-live="polite">
+                  <div className="flex flex-wrap gap-2 px-3 pt-1 text-[0.786em] text-muted-foreground" aria-live="polite">
                     {!webSearchEnabled ? (
                       <span className="rounded-full border border-amber-500/40 bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-200">
                         {t("chat.web_search.disabled")}
@@ -3426,25 +3902,25 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     ) : null}
                   </div>
                 )}
-                <div className="min-h-0 flex-1 overflow-hidden">
-                <textarea
-                  ref={composerTextareaRef}
-                  value={input}
-                  disabled={streaming || isProjectRequiredButMissing}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Tab" && e.shiftKey) {
-                      e.preventDefault();
-                      handleAgentModeChange(agentMode === "plan" ? "normal" : "plan");
-                    } else if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      void send();
-                    }
-                  }}
-                  placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
-                  className="focus-ring box-border h-full min-h-0 min-w-0 max-w-full w-full resize-none overflow-x-hidden overflow-y-auto break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-[15px] leading-relaxed text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
-                  rows={1}
-                />
+                <div className="min-h-0 shrink-0">
+                  <textarea
+                    ref={composerTextareaRef}
+                    value={input}
+                    disabled={streaming || isProjectRequiredButMissing}
+                    onChange={(e) => setInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Tab" && e.shiftKey) {
+                        e.preventDefault();
+                        handleAgentModeChange(agentMode === "plan" ? "normal" : "plan");
+                      } else if (e.key === "Enter" && !e.shiftKey) {
+                        e.preventDefault();
+                        void send();
+                      }
+                    }}
+                    placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
+                    className="focus-ring chat-font box-border min-h-[48px] min-w-0 max-w-full w-full resize-none overflow-x-hidden break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
+                    rows={1}
+                  />
                 </div>
                 <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-2 pb-1">
                   <input
@@ -3547,7 +4023,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   onMouseEnter={() => setIsToolsViewSubOpen(true)}
                                   className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                 >
-                                  <div className="px-2 py-1 text-[10px] font-semibold text-muted-foreground border-b border-border/45 mb-1">
+                                  <div className="px-2 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
                                     {t("chat.tools.select_view")}
                                   </div>
                                   <div className="space-y-0.5">
@@ -3651,7 +4127,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   onMouseEnter={() => setIsWebSearchSubOpen(true)}
                                   className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                 >
-                                  <div className="border-b border-border/45 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                                  <div className="border-b border-border/45 px-2 py-1 text-[0.714em] font-semibold text-muted-foreground">
                                     {t("chat.web_search.global")}
                                   </div>
                                   <div className="space-y-0.5 p-0.5">
@@ -3733,7 +4209,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   onMouseEnter={() => setIsThinkingSubOpen(true)}
                                   className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                                 >
-                                  <div className="border-b border-border/45 px-2 py-1 text-[10px] font-semibold text-muted-foreground">
+                                  <div className="border-b border-border/45 px-2 py-1 text-[0.714em] font-semibold text-muted-foreground">
                                     {t("chat.thinking.label")}
                                   </div>
                                   <div className="space-y-0.5 p-0.5">
@@ -3853,14 +4329,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           setIsAgentModeOpen(false);
                         }}
                         className={cn(
-                          "focus-ring inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[11px] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                          "focus-ring inline-flex h-7 max-w-[9rem] items-center gap-1 rounded-full border px-2.5 text-[0.786em] font-medium transition-colors sm:max-w-[10rem]",
                           isProfileOpen
                             ? "border-primary/45 bg-primary/10 text-primary"
                             : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                         )}
                       >
                         <User size={12} className="shrink-0" aria-hidden />
-                        <span className="max-w-[6.5rem] truncate sm:max-w-[9rem]">
+                        <span className="max-w-[5.5rem] truncate sm:max-w-[7.5rem]">
                           {activeProfileName || t("chat.profile.label")}
                         </span>
                         <ChevronDown size={10} className="opacity-70" aria-hidden />
@@ -3868,16 +4344,17 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
                       {isProfileOpen && (
                         <div className="absolute bottom-full left-0 mb-2 z-50 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
                             {t("chat.profile.select")}
                           </div>
-                          <p className="px-2.5 py-1 text-[10px] leading-snug text-muted-foreground">
+                          <p className="px-2.5 py-1 text-[0.714em] leading-snug text-muted-foreground">
                             {t("chat.profile.active_hint")}
                           </p>
                           <div className="max-h-52 overflow-y-auto p-0.5">
                             {profiles.map((p) => {
                               const slug = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
                               const isSelected = p.slug === profile || p.name === profile;
+                              const isFavorite = favoriteProfileSlug === slug;
                               return (
                                 <ComposerOptionRow
                                   key={p.name}
@@ -3888,6 +4365,37 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                     handleProfileChange(slug);
                                     setIsProfileOpen(false);
                                   }}
+                                  trailing={
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleSetFavoriteProfile(slug);
+                                      }}
+                                      className={cn(
+                                        "focus-ring rounded p-0.5 transition-colors",
+                                        isFavorite
+                                          ? "text-amber-500 hover:text-amber-600"
+                                          : "text-muted-foreground/50 hover:text-amber-500",
+                                      )}
+                                      aria-label={
+                                        isFavorite
+                                          ? t("chat.profile.favorite_active")
+                                          : t("chat.profile.favorite_set")
+                                      }
+                                      title={
+                                        isFavorite
+                                          ? t("chat.profile.favorite_active")
+                                          : t("chat.profile.favorite_set")
+                                      }
+                                    >
+                                      <Star
+                                        size={12}
+                                        className={cn(isFavorite && "fill-current")}
+                                        aria-hidden
+                                      />
+                                    </button>
+                                  }
                                 />
                               );
                             })}
@@ -3938,6 +4446,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         if (mode === "deep_research") setDockTab("research");
                       }}
                     />
+
+                    <ContextBudgetGauge
+                      pct={contextBudget?.pct ?? 0}
+                      triggerPct={
+                        contextBudget && contextBudget.maxPrompt > 0
+                          ? Math.min(100, (contextBudget.trigger / contextBudget.maxPrompt) * 100)
+                          : 92
+                      }
+                      unavailable={!contextBudget}
+                      active={contextBudgetOpen}
+                      onClick={() => setContextBudgetOpen((open) => !open)}
+                    />
                   </div>
 
                   {/* Altri controlli a destra */}
@@ -3947,7 +4467,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         type="button"
                         onClick={() => setMcpPendingOpen(true)}
                         className={cn(
-                          "focus-ring flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-medium",
+                          "focus-ring flex items-center gap-1 rounded-full border px-2.5 py-1 text-[0.786em] font-medium",
                           mcpRuntimeErrors.length > 0
                             ? "border-red-500/50 bg-red-500/15 text-red-800 dark:text-red-200"
                             : "border-amber-500/50 bg-amber-500/15 text-amber-800 dark:text-amber-200"
@@ -3981,7 +4501,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   </div>
                 </div>
               </div>
-              <div className="mt-3 text-center text-[12px] font-medium text-muted-foreground">
+              <div className="mt-3 text-center text-[0.857em] font-medium text-muted-foreground">
                 {t("chat.footer_hint")}
               </div>
             </div>
@@ -3999,6 +4519,53 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           handleProjectChange(slug);
         }}
       />
+      {projectWarningModalOpen ? (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm transition-all"
+          role="presentation"
+          onClick={() => setProjectWarningModalOpen(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-border bg-background p-6 shadow-xl"
+            role="dialog"
+            aria-modal="true"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-3">
+              <div className="rounded-full bg-warning/10 p-2 text-warning">
+                <AlertTriangle className="size-6 text-amber-500" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-foreground">
+                  {t("chat.project_warning.title")}
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
+                  {t("chat.project_warning.desc")}
+                </p>
+                <div className="mt-4 flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setProjectWarningModalOpen(false)}
+                    className="rounded-lg border border-border/60 bg-muted/10 px-3 py-1.5 text-xs text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all duration-200"
+                  >
+                    {t("cancel") || "Annulla"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProjectWarningModalOpen(false);
+                      setProjectCreateOpen(true);
+                    }}
+                    className="rounded-lg bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-all duration-200"
+                  >
+                    {t("chat.project_warning.action")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {webRestrictModalOpen ? (
         <div
           className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm transition-all"
@@ -4188,7 +4755,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   <div className="font-medium text-red-700 dark:text-red-300">{p.display_name}</div>
                   <p className="mt-1 text-xs text-muted-foreground">{p.message}</p>
                   {p.error ? (
-                    <p className="mt-1 break-all font-mono text-[10px] text-red-600/90 dark:text-red-400/90">{p.error}</p>
+                    <p className="mt-1 break-all font-mono text-[0.714em] text-red-600/90 dark:text-red-400/90">{p.error}</p>
                   ) : null}
                 </li>
               ))}
@@ -4228,32 +4795,7 @@ const InternalMessageMarkdown = memo(function InternalMessageMarkdown({
 }) {
   const components = useMemo(() => ({
     a: renderMarkdownLink,
-    pre: ({ children, ...props }: any) => {
-      const codeElement = Array.isArray(children) ? children[0] : children;
-      if (codeElement && codeElement.props && codeElement.props.className) {
-        const match = /language-(\w+)/.exec(codeElement.props.className || "");
-        if (match && match[1] === "mermaid") {
-          return codeElement;
-        }
-      }
-      return <pre {...props}>{children}</pre>;
-    },
-    code: ({ className, children, ...props }: any) => {
-      const match = /language-(\w+)/.exec(className || "");
-      const lang = match ? match[1] : "";
-      const isInline = !match;
-      const codeContent = String(children).replace(/\n$/, "");
-
-      if (!isInline && lang === "mermaid") {
-        return <MermaidBlock code={codeContent} isStreaming={streaming} />;
-      }
-
-      return (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    }
+    ...markdownCodeComponents({ streaming }),
   }), [streaming, renderMarkdownLink]);
 
   return (
@@ -4284,32 +4826,7 @@ const UserMessageMarkdown = memo(function UserMessageMarkdown({
         <table {...props} />
       </div>
     ),
-    pre: ({ children, ...props }: any) => {
-      const codeElement = Array.isArray(children) ? children[0] : children;
-      if (codeElement && codeElement.props && codeElement.props.className) {
-        const match = /language-(\w+)/.exec(codeElement.props.className || "");
-        if (match && match[1] === "mermaid") {
-          return codeElement;
-        }
-      }
-      return <pre {...props}>{children}</pre>;
-    },
-    code: ({ className, children, ...props }: any) => {
-      const match = /language-(\w+)/.exec(className || "");
-      const lang = match ? match[1] : "";
-      const isInline = !match;
-      const codeContent = String(children).replace(/\n$/, "");
-
-      if (!isInline && lang === "mermaid") {
-        return <MermaidBlock code={codeContent} isStreaming={false} />;
-      }
-
-      return (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    },
+    ...markdownCodeComponents(),
     a: renderMarkdownLink
   }), [renderMarkdownLink]);
 

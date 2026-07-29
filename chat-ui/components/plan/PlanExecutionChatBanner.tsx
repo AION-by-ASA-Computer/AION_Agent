@@ -26,10 +26,12 @@ export function PlanExecutionChatBanner({
   progress,
   onOpenTask,
   onOpenAllTasks,
+  onResume,
 }: {
   progress: PlanExecutionProgressState;
   onOpenTask?: (taskId: string) => void;
   onOpenAllTasks?: () => void;
+  onResume?: () => void;
 }) {
   const tasks = progress.tasks || [];
   const doneCount = countCompletedPlanTasks(tasks);
@@ -38,20 +40,30 @@ export function PlanExecutionChatBanner({
   const finished = progress.done || progress.status === "done";
   const failed = progress.status === "error";
   const cancelled = progress.status === "cancelled";
+  const paused = progress.status === "paused";
+  const interrupted = progress.status === "interrupted";
+  const resumable = paused || cancelled || interrupted || failed;
   const current = resolveCurrentPlanTask(tasks, progress.progress);
   const running =
     !finished &&
     !failed &&
     !cancelled &&
+    !paused &&
+    !interrupted &&
     (progress.progress?.phase === "task_start" || current?.status === "running");
 
-  const headline = finished
-    ? failed
-      ? "Esecuzione piano non riuscita"
+  const headline =
+    paused
+      ? "Esecuzione piano in pausa"
       : cancelled
         ? "Esecuzione piano annullata"
-        : "Piano completato"
-    : progress.label || "Esecuzione piano in corso…";
+        : interrupted
+          ? "Esecuzione piano interrotta"
+          : finished
+            ? failed
+              ? "Esecuzione piano non riuscita"
+              : "Piano completato"
+            : progress.label || "Esecuzione piano in corso…";
 
   const summaryLine = finished
     ? progress.error || progress.label || headline
@@ -105,7 +117,7 @@ export function PlanExecutionChatBanner({
         </div>
       </div>
 
-      {(current || finished) && (
+      {(current || finished || resumable) && (
         <button
           type="button"
           disabled={!clickable}
@@ -123,7 +135,7 @@ export function PlanExecutionChatBanner({
           <span className="min-w-0 flex-1">
             <span className="block text-sm text-foreground">{summaryLine}</span>
             {finished && progress.progress?.deliverable_path ? (
-              <span className="mt-1 block font-mono text-[11px] text-muted-foreground">
+              <span className="mt-1 block font-mono text-[0.786em] text-muted-foreground">
                 {progress.progress.deliverable_path}
               </span>
             ) : null}
@@ -131,6 +143,16 @@ export function PlanExecutionChatBanner({
           {clickable ? <ChevronRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /> : null}
         </button>
       )}
+
+      {resumable && typeof onResume === "function" ? (
+        <button
+          type="button"
+          onClick={onResume}
+          className="mt-3 w-full rounded-xl border border-primary/40 bg-primary/10 px-3 py-2.5 text-sm font-medium text-primary hover:bg-primary/15"
+        >
+          Riprendi esecuzione piano
+        </button>
+      ) : null}
     </div>
   );
 }

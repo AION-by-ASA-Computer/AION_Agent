@@ -140,10 +140,16 @@ def build_transcript_from_rows(rows: Sequence[CompactionTranscriptRow]) -> str:
 
 
 def format_compaction_block(summary_text: str, *, source_messages: int = 0) -> str:
-    head = COMPACTION_MARKER
-    if source_messages > 0:
-        head += f" ({source_messages} turni precedenti)"
-    return f"{head}\n{summary_text.strip()}"
+    """Pi-style structured summary; COMPACTION_MARKER kept for DB/history detection."""
+    body = summary_text.strip()
+    if not body:
+        body = "(empty summary)"
+    suffix = f" ({source_messages} prior turns)" if source_messages > 0 else ""
+    return (
+        "The conversation history before this point was compacted into the following "
+        f"summary{suffix}:\n\n<summary>\n{body}\n</summary>\n\n"
+        f"{COMPACTION_MARKER}"
+    )
 
 
 LAST_ASSISTANT_SECTION = "## Ultima risposta assistant"
@@ -512,25 +518,174 @@ def truncate_messages_to_prompt_budget(
     return out
 
 
-def estimate_agent_overhead_tokens(agent: object) -> int:
-    floor = overhead_floor_tokens()
+_SKILL_TOOL_NAMES = frozenset({"skill_view", "skill_search", "skill_list"})
+_WEB_TOOL_NAMES = frozenset({"web_search", "web_fetch_page"})
+_MEMORY_INJECTION_MARKERS = (
+    "<ltm",
+    "[memory",
+    "<aion_memory",
+    "mempalace",
+    "mem palace",
+)
+
+
+def _message_role_str(message: ChatMessage) -> str:
+    role = getattr(message, "role", None)
+    return str(role.value if hasattr(role, "value") else role or "user").lower()
+
+
+def _is_compaction_text(text: str) -> bool:
+    return COMPACTION_MARKER in text or CONTEXT_SUMMARY_MARKER in text
+
+
+def _is_memory_injection_text(text: str) -> bool:
+    low = (text or "").lower()
+    return any(marker in low for marker in _MEMORY_INJECTION_MARKERS)
+
+
+def estimate_overhead_breakdown(agent: object) -> Dict[str, int]:
+    """Split fixed agent overhead into system prompt vs tool JSON specs."""
+    parts = {"system_prompt": overhead_floor_tokens(), "tool_specs": 0}
     try:
         sp = getattr(agent, "system_prompt", None) or ""
-        floor += count_tokens(sp if isinstance(sp, str) else str(sp))
+        parts["system_prompt"] += count_tokens(sp if isinstance(sp, str) else str(sp))
         tools = getattr(agent, "tools", None) or []
         for tool in tools:
             spec = getattr(tool, "tool_spec", None)
             if spec is not None:
                 try:
-                    floor += count_tokens(json.dumps(spec, ensure_ascii=False))
+                    parts["tool_specs"] += count_tokens(
+                        json.dumps(spec, ensure_ascii=False)
+                    )
                 except (TypeError, ValueError):
-                    floor += count_tokens(str(spec)[:16_000])
+                    parts["tool_specs"] += count_tokens(str(spec)[:16_000])
             else:
-                floor += count_tokens(getattr(tool, "name", "") or "")
-                floor += count_tokens(getattr(tool, "description", "") or "")
+                parts["tool_specs"] += count_tokens(getattr(tool, "name", "") or "")
+                parts["tool_specs"] += count_tokens(
+                    getattr(tool, "description", "") or ""
+                )
+    except Exception as exc:
+        logger.debug("estimate_overhead_breakdown: %s", exc)
+    return parts
+
+
+def classify_message_tokens(message: ChatMessage) -> Dict[str, int]:
+    """Token counts per UI bucket for a single Haystack ChatMessage."""
+    role = _message_role_str(message)
+    text = chat_message_text(message)
+    meta = getattr(message, "meta", None) or {}
+
+    if role == "tool":
+        tool_name = str(meta.get("tool_name") or "").lower()
+        if tool_name in _SKILL_TOOL_NAMES or "AION skill assets" in text:
+            key = "skills"
+        elif tool_name in _WEB_TOOL_NAMES:
+            key = "web_tools"
+        else:
+            key = "tool_results"
+        return {key: count_tokens(text)}
+
+    if role == "assistant":
+        buckets: Dict[str, int] = {}
+        if _is_compaction_text(text):
+            buckets["compaction"] = count_tokens(text)
+        else:
+            buckets["assistant"] = count_tokens(text)
+        reasoning = meta.get("reasoning") or meta.get("reasoning_content")
+        if reasoning:
+            rs = str(reasoning)
+            if rs.strip():
+                buckets["reasoning"] = count_tokens(rs)
+        return buckets
+
+    if role == "user":
+        if _is_compaction_text(text):
+            return {"compaction": count_tokens(text)}
+        if _is_memory_injection_text(text):
+            return {"memory_injections": count_tokens(text)}
+        return {"user": count_tokens(text)}
+
+    if role == "system":
+        return {"system_messages": count_tokens(text)}
+
+    return {"other": count_tokens(text)}
+
+
+def estimate_context_breakdown(
+    agent: object, messages: List[ChatMessage]
+) -> Dict[str, int]:
+    """Aggregate token buckets for overhead + transcript messages."""
+    overhead = estimate_overhead_breakdown(agent)
+    parts: Dict[str, int] = {
+        "system_prompt": overhead["system_prompt"],
+        "tool_specs": overhead["tool_specs"],
+    }
+    for msg in messages:
+        for key, n in classify_message_tokens(msg).items():
+            parts[key] = parts.get(key, 0) + n
+    return parts
+
+
+_CONTEXT_BUDGET_PART_ORDER = (
+    "system_prompt",
+    "tool_specs",
+    "skills",
+    "web_tools",
+    "tool_results",
+    "user",
+    "assistant",
+    "reasoning",
+    "compaction",
+    "memory_injections",
+    "system_messages",
+    "other",
+)
+
+
+def build_context_budget_event(
+    agent: object,
+    messages: List[ChatMessage],
+    *,
+    phase: str = "turn",
+) -> Dict[str, Any]:
+    """SSE payload for chat-ui context saturation bar."""
+    comp = get_default_compressor()
+    parts_map = estimate_context_breakdown(agent, messages)
+    total = sum(parts_map.values())
+    max_prompt = comp.max_prompt_tokens()
+    trigger = comp.compress_trigger_tokens()
+    max_denom = max(max_prompt, 1)
+    parts: List[Dict[str, Any]] = []
+    for key in _CONTEXT_BUDGET_PART_ORDER:
+        tok = int(parts_map.get(key) or 0)
+        if tok <= 0:
+            continue
+        parts.append(
+            {
+                "key": key,
+                "tokens": tok,
+                "pct": round(tok * 100.0 / max_denom, 1),
+            }
+        )
+    return {
+        "type": "context_budget",
+        "phase": phase,
+        "total": total,
+        "max_prompt": max_prompt,
+        "trigger": trigger,
+        "message_count": len(messages),
+        "pct": round(total * 100.0 / max_denom, 1),
+        "parts": parts,
+    }
+
+
+def estimate_agent_overhead_tokens(agent: object) -> int:
+    try:
+        parts = estimate_overhead_breakdown(agent)
+        return int(parts["system_prompt"]) + int(parts["tool_specs"])
     except Exception as exc:
         logger.debug("estimate_agent_overhead_tokens: %s", exc)
-    return floor
+        return overhead_floor_tokens()
 
 
 def estimate_full_prompt_tokens(

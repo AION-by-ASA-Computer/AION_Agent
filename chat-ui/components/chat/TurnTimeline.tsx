@@ -7,6 +7,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { FileText, ListTodo } from "lucide-react";
 
+import { coalesceTurnSegments } from "@/lib/sse/coalesceTurnSegments";
 import type { TurnSegment } from "@/lib/sse/types";
 import { useT } from "@/lib/i18n/use-t";
 import type { ToolsViewMode } from "@/components/chat/WebResearchViews";
@@ -18,7 +19,7 @@ import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
 import { artifactLanguage } from "@/lib/artifacts";
 import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 import { sessionDownloadUrl } from "@/lib/api/aion";
-import { MermaidBlock } from "@/components/chat/MermaidBlock";
+import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
 
 type Props = {
   segments: TurnSegment[];
@@ -32,7 +33,8 @@ type Props = {
   ? A
   : never
   : never;
-  formatTextWithCitations?: (text: string) => string;
+  formatTextWithCitations?: (text: string, messageId?: string) => string;
+  messageId?: string;
 };
 
 export function TurnTimeline({
@@ -44,16 +46,18 @@ export function TurnTimeline({
   isPlanArtifact,
   renderMarkdownLink,
   formatTextWithCitations = (t) => t,
+  messageId,
 }: Props) {
   const t = useT();
-  if (!segments.length) return null;
+  const displaySegments = coalesceTurnSegments(segments);
+  if (!displaySegments.length) return null;
 
-  const lastSeg = segments[segments.length - 1];
+  const lastSeg = displaySegments[displaySegments.length - 1];
 
   return (
     <div className="space-y-2.5">
-      {segments.map((seg, idx) => {
-        const isLast = idx === segments.length - 1;
+      {displaySegments.map((seg, idx) => {
+        const isLast = idx === displaySegments.length - 1;
         if (seg.kind === "generating") {
           const Icon = seg.target === "plan" ? ListTodo : FileText;
           const scriptLike = isScriptLikeTitle(seg.title);
@@ -212,7 +216,7 @@ export function TurnTimeline({
                 streaming={streaming}
                 isLast={isLast}
                 renderMarkdownLink={renderMarkdownLink}
-                formatTextWithCitations={formatTextWithCitations}
+                formatTextWithCitations={(txt: string) => formatTextWithCitations(txt, messageId)}
               />
             </div>
           );
@@ -220,9 +224,9 @@ export function TurnTimeline({
         return null;
       })}
       {streaming &&
-        segments.length > 0 &&
+        displaySegments.length > 0 &&
         lastSeg?.kind === "reasoning" &&
-        !segments.some((s) => s.kind === "tool" && s.status === "running") ? (
+        !displaySegments.some((s) => s.kind === "tool" && s.status === "running") ? (
         <ShimmerText className="mt-1 text-sm">{t("chat.agent_status.working")}</ShimmerText>
       ) : null}
     </div>
@@ -231,7 +235,7 @@ export function TurnTimeline({
 
 /** Shimmer label while the agent has not started visible output yet. */
 export function AgentWorkingShimmer({ label }: { label: string }) {
-  return <ShimmerText className="py-2 text-[15px] leading-relaxed">{label}</ShimmerText>;
+  return <ShimmerText className="py-2 leading-relaxed">{label}</ShimmerText>;
 }
 
 const TextSegment = memo(function TextSegment({
@@ -253,32 +257,7 @@ const TextSegment = memo(function TextSegment({
         <table {...props} />
       </div>
     ),
-    pre: ({ children, ...props }: any) => {
-      const codeElement = Array.isArray(children) ? children[0] : children;
-      if (codeElement && codeElement.props && codeElement.props.className) {
-        const match = /language-(\w+)/.exec(codeElement.props.className || "");
-        if (match && match[1] === "mermaid") {
-          return codeElement;
-        }
-      }
-      return <pre {...props}>{children}</pre>;
-    },
-    code: ({ className, children, ...props }: any) => {
-      const match = /language-(\w+)/.exec(className || "");
-      const lang = match ? match[1] : "";
-      const isInline = !match;
-      const codeContent = String(children).replace(/\n$/, "");
-
-      if (!isInline && lang === "mermaid") {
-        return <MermaidBlock code={codeContent} isStreaming={streaming && isLast} />;
-      }
-
-      return (
-        <code className={className} {...props}>
-          {children}
-        </code>
-      );
-    },
+    ...markdownCodeComponents({ streaming: streaming && isLast }),
     ...(renderMarkdownLink ? { a: renderMarkdownLink } : {}),
   }), [streaming, isLast, renderMarkdownLink]);
 

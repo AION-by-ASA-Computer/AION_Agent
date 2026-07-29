@@ -226,7 +226,9 @@
       "thinking": "L'agent réfléchit…",
       "working": "L'agent travaille…",
       "compacting": "Compactage du contexte…",
-      "compacting_desc": "Compactage de la mémoire à court terme…"
+      "compacting_desc": "Compactage de la mémoire à court terme…",
+      "saving_info": "Enregistrement des informations…",
+      "saving_info_desc": "L'agent enregistre les informations à long terme…"
     },
     "tools": {
       "attach_file": "Joindre un Fichier",
@@ -270,6 +272,25 @@
       "textarea_placeholder": "Créez ou sélectionnez un projet pour débloquer le chat..."
     },
     "go_to_source": "Aller à la source",
+    "project_warning": {
+      "title": "Attention: Mémoire de Projet Manquante",
+      "desc": "Il semble que vous essayiez de sauvegarder des requêtes ou des schémas de base de données, mais vous n'avez pas créé ou sélectionné une mémoire de projet active.",
+      "action": "Cliquez ici pour la créer"
+    },
+    "actions": {
+      "copy": "Copier la réponse",
+      "copied": "Copié",
+      "good": "Bonne réponse",
+      "bad": "Mauvaise réponse",
+      "regenerate": "Régénérer la réponse",
+      "memorize": "Mémoriser l'information",
+      "memorized_prefix": "L'agent a mémorisé: ",
+      "memorize_instruction": "Analysez le tour de conversation suivant (question, réflexion et réponse) et extragez les informations clés pertinentes. Mémorisez-les dans la wing de projet spécifiée. Pour enregistrer dans MemPalace, vous devez utiliser EXCLUSIVEMENT l'outil 'mempalace_add_drawer' pour créer un drawer dans la wing de projet courante. N'utilisez sous aucun prétexte les outils du Knowledge Graph (comme 'mempalace_kg_add'). S'il y a des requêtes SQL, des schémas de base de données ou des paramètres de projet, mémorisez-les également à l'aide de l'outil 'sql_memory_save'. Si les informations sont déjà enregistrées, ne les mémorisez pas à nouveau. Répondez en fournissant exclusivement une seule phrase commençant directement par le préfixe 'L'agent a mémorisé: ' suivi d'un très court résumé de ce qui a été mémorisé et dans quelle wing (ou 'L'agent a détecté que les informations sont déjà en mémoire' si elles étaient déjà enregistrées). N'y ajoutez aucune introduction avant, ni aucune explication ou commentaire supplémentaire après ce préfixe.",
+      "feedback_placeholder": "Pourquoi n'avez-vous pas aimé ce message ? (Ajoutez une description facultative)...",
+      "feedback_title": "Commentaires sur la réponse",
+      "feedback_submit": "Envoyer",
+      "feedback_cancel": "Annuler"
+    },
     "plan": {
       "task": {
         "starting": "Démarrage"

@@ -77,6 +77,48 @@ def test_chat_ui_history_preserves_steps_artifacts_and_reasoning(monkeypatch, tm
     asyncio.run(run())
 
 
+def test_chat_ui_history_collapses_stream_loop_fragments(monkeypatch, tmp_path):
+    async def run():
+        await _reset_unified_db(monkeypatch, tmp_path)
+        bridge = UnifiedHistoryBridge()
+        await bridge.add_message(
+            "conv-frag", "user", "Run", user_id="u1", message_id="user-1"
+        )
+        await bridge.add_message(
+            "conv-frag",
+            "assistant",
+            "Canonical answer with full timeline.",
+            user_id="u1",
+            reasoning="Reasoning block",
+            message_id="assistant-main",
+        )
+        await bridge.add_step(
+            "conv-frag",
+            name="skill_view",
+            type="tool",
+            input="{}",
+            output="ok",
+            message_id="assistant-main",
+        )
+        await bridge.add_message(
+            "conv-frag",
+            "assistant",
+            "Partial duplicate snippet.",
+            user_id="u1",
+            message_id="assistant-frag",
+        )
+
+        payload = await get_conversation_messages_chat_ui(
+            "conv-frag", x_aion_user_id="u1"
+        )
+        assistants = [m for m in payload["messages"] if m["role"] == "assistant"]
+        assert len(assistants) == 1
+        assert assistants[0]["id"] == "assistant-main"
+        assert assistants[0]["steps"][0]["name"] == "skill_view"
+
+    asyncio.run(run())
+
+
 def test_chat_ui_history_shows_empty_assistant_with_steps(monkeypatch, tmp_path):
     async def run():
         await _reset_unified_db(monkeypatch, tmp_path)

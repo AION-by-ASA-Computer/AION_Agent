@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   mergeChatHistory,
   preferRicherMessage,
+  upsertChatMessage,
   type MergeableChatMessage,
 } from "./merge-chat-history";
 
@@ -35,5 +36,15 @@ describe("mergeChatHistory", () => {
     const server = msg("x", "full answer from server");
     const picked = preferRicherMessage(local, server);
     expect(picked.content).toBe("full answer from server");
+  });
+});
+
+describe("upsertChatMessage", () => {
+  it("replaces existing id instead of appending duplicate", () => {
+    const existing = msg("aid-1", "partial");
+    const updated = msg("aid-1", "final answer");
+    const out = upsertChatMessage([existing], updated);
+    expect(out).toHaveLength(1);
+    expect(out[0].content).toBe("final answer");
   });
 });

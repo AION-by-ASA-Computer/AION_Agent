@@ -12,6 +12,23 @@ export type ChatChunk =
     tokens?: number;
     trigger?: number;
   }
+  | {
+    type: "context_recovery";
+    attempt?: number;
+    message?: string;
+    tokens_before?: number;
+    tokens_after?: number;
+  }
+  | {
+    type: "context_budget";
+    phase?: string;
+    total?: number;
+    max_prompt?: number;
+    trigger?: number;
+    message_count?: number;
+    pct?: number;
+    parts?: Array<{ key: string; tokens: number; pct: number }>;
+  }
   | { type: "token"; content?: string | null }
   | { type: "reasoning"; reasoning?: unknown }
   | { type: "error"; content?: string }
@@ -154,6 +171,22 @@ export type TurnSegment =
   | StatusSegment
   | GeneratingSegment;
 
+export type ContextBudgetPart = {
+  key: string;
+  tokens: number;
+  pct: number;
+};
+
+export type ContextBudgetState = {
+  phase?: string;
+  total: number;
+  maxPrompt: number;
+  trigger: number;
+  messageCount: number;
+  pct: number;
+  parts: ContextBudgetPart[];
+};
+
 export type TurnState = {
   assistantContent: string;
   reasoning: string;
@@ -178,6 +211,8 @@ export type TurnState = {
   webSourceCards: WebSourceCard[];
   /** True while backend compresses STM before agent.run. */
   contextCompacting: boolean;
+  /** Latest context window saturation snapshot from backend. */
+  contextBudget: ContextBudgetState | null;
 };
 
 export function initialTurnState(): TurnState {
@@ -202,5 +237,6 @@ export function initialTurnState(): TurnState {
     finalReceived: false,
     webSourceCards: [],
     contextCompacting: false,
+    contextBudget: null,
   };
 }

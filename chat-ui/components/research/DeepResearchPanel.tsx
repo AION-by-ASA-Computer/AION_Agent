@@ -420,7 +420,7 @@ export function DeepResearchPanel({
     <div className="flex h-full flex-col gap-4 p-4 text-sm">
       <div className="space-y-2 rounded-lg border border-violet-500/30 bg-violet-500/5 p-3">
         <label className="text-xs font-medium text-violet-300">{t("research.deep_research")}</label>
-        <p className="text-[11px] leading-relaxed text-muted-foreground">
+        <p className="text-[0.786em] leading-relaxed text-muted-foreground">
           {t("research.description")}
         </p>
         <textarea
@@ -475,13 +475,13 @@ export function DeepResearchPanel({
               return (
                 <li key={j.session_id} className="rounded-lg border border-violet-500/20 bg-card/60 p-3">
                   <div className="flex items-start justify-between gap-2">
-                    <p className="font-medium line-clamp-3 text-[13px] leading-snug">{j.query}</p>
-                    <span className="shrink-0 rounded-full bg-violet-500/15 px-2 py-0.5 text-[10px] text-violet-300">
+                    <p className="font-medium line-clamp-3 text-[0.929em] leading-snug">{j.query}</p>
+                    <span className="shrink-0 rounded-full bg-violet-500/15 px-2 py-0.5 text-[0.714em] text-violet-300">
                       {statusLabel(j.status, t)}
                     </span>
                   </div>
                   <p className="mt-1.5 text-xs text-violet-200/90">{progressSummary(j, t)}</p>
-                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[10px] text-muted-foreground">
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[0.714em] text-muted-foreground">
                     {j.started_at ? <span>⏱ {formatElapsed(j.started_at, j.completed_at)}</span> : null}
                     {j.progress?.round != null ? (
                       <span>{t("research.round", { round: j.progress.round })}</span>
@@ -513,7 +513,7 @@ export function DeepResearchPanel({
                           <li
                             key={`${act.ts ?? idx}-${label.slice(0, 40)}`}
                             className={cn(
-                              "flex gap-2 text-[11px] leading-snug",
+                              "flex gap-2 text-[0.786em] leading-snug",
                               isLatest ? "text-foreground" : "text-muted-foreground"
                             )}
                           >
@@ -521,7 +521,7 @@ export function DeepResearchPanel({
                             <span className="min-w-0 flex-1">
                               <span className="block">{label}</span>
                               {act.ts ? (
-                                <span className="text-[10px] opacity-60">{formatTime(act.ts)}</span>
+                                <span className="text-[0.714em] opacity-60">{formatTime(act.ts)}</span>
                               ) : null}
                             </span>
                           </li>
@@ -555,7 +555,7 @@ export function DeepResearchPanel({
           </ul>
         </section>
       ) : (
-        <p className="rounded-lg border border-dashed border-border/60 p-3 text-[11px] text-muted-foreground">
+        <p className="rounded-lg border border-dashed border-border/60 p-3 text-[0.786em] text-muted-foreground">
           {t("research.empty_panel_p1")}{" "}
           <code className="text-violet-300">AION Research</code>{" "}
           {t("research.empty_panel_p2")}
@@ -579,7 +579,7 @@ export function DeepResearchPanel({
                   onClick={() => openReport(p.id, token)}
                 >
                   <span className="line-clamp-2 block">{p.query || p.id}</span>
-                  <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                  <span className="mt-0.5 block text-[0.714em] text-muted-foreground">
                     {statusLabel(p.status || "done", t)}
                     {p.source_count != null ? ` · ${t("research.sources", { count: p.source_count })}` : ""}
                     {p.duration != null && p.duration > 0

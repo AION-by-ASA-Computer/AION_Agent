@@ -180,6 +180,7 @@ async def get_conversation_messages(
     conversation_id: str,
     limit: int = Query(50, ge=1, le=1000),
     include_internal: bool = Query(False),
+    include_archived: bool = Query(False),
     ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_READ)),
 ):
     _require_unified()
@@ -197,6 +198,8 @@ async def get_conversation_messages(
             .order_by(Message.seq.asc())
             .limit(limit)
         )
+        if not include_archived:
+            q = q.where(Message.archived_at.is_(None))
         rows = (await session.execute(q)).scalars().all()
 
     out = []

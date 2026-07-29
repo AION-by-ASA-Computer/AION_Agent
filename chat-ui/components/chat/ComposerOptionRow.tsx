@@ -10,7 +10,9 @@ export function ComposerOptionRow({
   selected,
   disabled,
   badge,
+  badgeTone = "muted",
   icon,
+  trailing,
   onClick,
 }: {
   label: string;
@@ -18,9 +20,24 @@ export function ComposerOptionRow({
   selected?: boolean;
   disabled?: boolean;
   badge?: string;
+  badgeTone?: "muted" | "beta";
   icon?: React.ReactNode;
+  trailing?: React.ReactNode;
   onClick?: () => void;
 }) {
+  const badgeEl = badge ? (
+    <span
+      className={cn(
+        "rounded px-1.5 py-0.5 text-[0.643em] font-semibold",
+        badgeTone === "beta"
+          ? "border border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300"
+          : "border border-border/60 bg-muted/40 text-muted-foreground",
+      )}
+    >
+      {badge}
+    </span>
+  ) : null;
+
   if (disabled) {
     return (
       <div className="flex w-full items-start justify-between gap-2 rounded-lg px-2.5 py-2 text-left opacity-55">
@@ -28,14 +45,10 @@ export function ComposerOptionRow({
           <div className="flex items-center gap-1.5">
             {icon}
             <span className="text-xs font-semibold text-muted-foreground">{label}</span>
-            {badge ? (
-              <span className="rounded border border-border/60 bg-muted/40 px-1.5 py-0.5 text-[9px] font-semibold text-muted-foreground">
-                {badge}
-              </span>
-            ) : null}
+            {badgeEl}
           </div>
           {description ? (
-            <p className="mt-0.5 pl-0 text-[10px] leading-snug text-muted-foreground/80">{description}</p>
+            <p className="mt-0.5 pl-0 text-[0.714em] leading-snug text-muted-foreground/80">{description}</p>
           ) : null}
         </div>
       </div>
@@ -57,11 +70,12 @@ export function ComposerOptionRow({
         <div className="flex items-center gap-1.5">
           {icon}
           <span className="text-xs font-semibold">{label}</span>
+          {badgeEl}
         </div>
         {description ? (
           <p
             className={cn(
-              "mt-0.5 text-[10px] leading-snug",
+              "mt-0.5 text-[0.714em] leading-snug",
               selected ? "text-primary/80" : "text-muted-foreground",
             )}
           >
@@ -69,7 +83,10 @@ export function ComposerOptionRow({
           </p>
         ) : null}
       </div>
-      {selected ? <Check size={12} className="mt-0.5 shrink-0" aria-hidden /> : null}
+      <div className="mt-0.5 flex shrink-0 items-center gap-1">
+        {trailing}
+        {selected ? <Check size={12} aria-hidden /> : null}
+      </div>
     </button>
   );
 }

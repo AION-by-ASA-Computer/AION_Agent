@@ -46,7 +46,7 @@ def test_format_inject_block():
         "default",
         [(0.9, "Use testate_ordini for orders", "wing_proj_default", "entry_points")],
     )
-    assert "MemPalace navigazione" in block
+    assert "MemPalace navigation" in block
     assert "wing_proj_default" in block
 
 

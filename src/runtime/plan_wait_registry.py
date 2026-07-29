@@ -52,6 +52,64 @@ async def set_pending(
         return False
 
 
+def _default_pending_ttl_sec() -> int:
+    raw = (os.getenv("AION_ORCH_PLAN_WAIT_TIMEOUT_SEC") or "600").strip()
+    try:
+        return max(1, int(float(raw)) + 60)
+    except ValueError:
+        return 660
+
+
+async def rehydrate_plan_pending(plan_id: str, *, session_id: str) -> bool:
+    """Rebuild Redis pending state from orchestration DB (after restart / LocalFallback loss)."""
+    pid = (plan_id or "").strip()
+    sid = (session_id or "").strip()
+    if not pid or not sid:
+        return False
+    try:
+        from src.runtime import orchestration_db as odb
+
+        bundle = await odb.fetch_plan_sse_bundle(pid)
+        if not bundle:
+            return False
+        if str(bundle.get("session_id") or "").strip() != sid:
+            return False
+        status = str(bundle.get("status") or "").strip().lower()
+        if status not in ("draft_pending",):
+            return False
+        user_id = str(bundle.get("user_id") or "ui").strip() or "ui"
+        draft = {
+            "plan_markdown": bundle.get("plan_markdown") or "",
+            "plan_json": bundle.get("plan") or {},
+            "todos": bundle.get("todos") or [],
+            "annotations": bundle.get("annotations") or {},
+            "revision": int(bundle.get("revision") or 1),
+        }
+        ok = await set_pending(
+            pid,
+            session_id=sid,
+            user_id=user_id,
+            draft=draft,
+            ttl_sec=_default_pending_ttl_sec(),
+        )
+        if ok:
+            logger.info(
+                "plan_wait rehydrated pending from DB plan_id=%s session=%s redis=%s",
+                pid,
+                sid,
+                redis_url_for_logs(),
+            )
+        return ok
+    except Exception as exc:
+        logger.warning(
+            "plan_wait rehydrate failed plan_id=%s session=%s: %s",
+            pid,
+            sid,
+            exc,
+        )
+        return False
+
+
 async def wait_for_resolution(
     plan_id: str, *, poll_sec: float, timeout_sec: float
 ) -> Dict[str, Any]:
@@ -112,6 +170,18 @@ async def resolve_plan(
             redis_url_for_logs(),
         )
         return {"ok": False, "error": "redis_unavailable", "detail": str(e)}
+    if not raw:
+        if await rehydrate_plan_pending(plan_id, session_id=session_id):
+            try:
+                raw = await r.get(key)
+            except Exception as e:
+                logger.exception(
+                    "resolve_plan: Redis GET retry failed plan_id=%s session=%s redis=%s",
+                    plan_id,
+                    session_id,
+                    redis_url_for_logs(),
+                )
+                return {"ok": False, "error": "redis_unavailable", "detail": str(e)}
     if not raw:
         return {
             "ok": False,

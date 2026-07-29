@@ -26,6 +26,10 @@ _ARG_ALIASES: Dict[str, Dict[str, tuple[str, ...]]] = {
         "relative_path": ("path", "file", "file_path", "filepath", "target_path"),
         "content": ("body", "text", "data"),
     },
+    "sandbox_append_workspace_file": {
+        "relative_path": ("path", "file", "file_path", "filepath", "target_path"),
+        "content": ("body", "text", "data"),
+    },
     "sandbox_read_text_file": {
         "relative_path": ("path", "file", "file_path", "filepath"),
     },
@@ -56,6 +60,7 @@ _ARG_ALIASES: Dict[str, Dict[str, tuple[str, ...]]] = {
 _REQUIRED: Dict[str, tuple[str, ...]] = {
     "sandbox_edit_workspace_file": ("relative_path", "old_string", "new_string"),
     "sandbox_write_workspace_file": ("relative_path", "content"),
+    "sandbox_append_workspace_file": ("relative_path", "content"),
     "sandbox_apply_patch": ("patch_text",),
     "sandbox_install_npm_packages": ("packages",),
     "sandbox_run_python_file": ("relative_path",),
@@ -99,7 +104,7 @@ def normalize_workspace_relative_path(path: str) -> str:
         return p
     while p.startswith("workspace/workspace/"):
         p = p[len("workspace/") :]
-    if p.startswith("workspace/"):
+    if p.startswith(("workspace/", "uploads/", "derived/", "unpacked/")):
         return p
     return f"workspace/{p}"
 
@@ -107,6 +112,7 @@ def normalize_workspace_relative_path(path: str) -> str:
 _WORKSPACE_PATH_TOOLS = frozenset(
     {
         "sandbox_write_workspace_file",
+        "sandbox_append_workspace_file",
         "sandbox_edit_workspace_file",
         "sandbox_read_text_file",
         "sandbox_run_python_file",
@@ -154,7 +160,13 @@ def _missing_required(tool_name: str, args: Dict[str, Any]) -> list[str]:
     return missing
 
 
-def _preflight_error(tool_name: str, args: Dict[str, Any], missing: list[str]) -> str:
+def _preflight_error(
+    tool_name: str,
+    args: Dict[str, Any],
+    missing: list[str],
+    *,
+    error_code: str = "missing_arguments",
+) -> str:
     hints = {
         "sandbox_edit_workspace_file": (
             "Esempio: relative_path='workspace/script.py', "
@@ -164,8 +176,13 @@ def _preflight_error(tool_name: str, args: Dict[str, Any], missing: list[str]) -
         "sandbox_write_workspace_file": (
             "Example: relative_path='workspace/script.js', content='full file body'. "
             "Prefer sandbox_edit_workspace_file when the file already exists. "
-            "If arguments were empty, vLLM/Qwen may have truncated tool JSON to '{' only — "
-            "retry with a MINIMAL script (<60 lines) or lower reasoning effort."
+            "For large datasets: write workspace/<slug>_data.json incrementally "
+            "(sandbox_append_workspace_file), then a SHORT script (<60 lines) that reads it. "
+            "If arguments were empty, vLLM/Qwen truncated tool JSON — retry smaller or use append."
+        ),
+        "sandbox_append_workspace_file": (
+            "Example: relative_path='workspace/wc2026_matches.json', content='{\"matches\":[]}'. "
+            "Call multiple times to append chunks. Never embed full tables in one Python script string."
         ),
         "sandbox_apply_patch": (
             "Example: patch_text with *** Begin Patch ... *** End Patch envelope."
@@ -174,7 +191,7 @@ def _preflight_error(tool_name: str, args: Dict[str, Any], missing: list[str]) -
     return json.dumps(
         {
             "ok": False,
-            "error": "missing_arguments",
+            "error": error_code,
             "tool": tool_name,
             "missing": missing,
             "received_keys": sorted(k for k in args if k not in _RESERVED_KEYS),
@@ -252,7 +269,13 @@ def prepare_mcp_tool_arguments(
         args["relative_path"] = normalize_workspace_relative_path(before)
     missing = _missing_required(tool_name, args)
     if missing:
-        return raw, _preflight_error(tool_name, args, missing)
+        error_code = "missing_arguments"
+        base_tool = (tool_name or "").split("-")[-1].strip().lower()
+        if base_tool == "sandbox_write_workspace_file" and "content" in missing:
+            error_code = "tool_args_truncated"
+        if base_tool == "sandbox_append_workspace_file" and "content" in missing:
+            error_code = "tool_args_truncated"
+        return raw, _preflight_error(tool_name, args, missing, error_code=error_code)
     # Ripristina chiavi riservate (es. _trace_context) per il downstream.
     for k in _RESERVED_KEYS:
         if k in raw:

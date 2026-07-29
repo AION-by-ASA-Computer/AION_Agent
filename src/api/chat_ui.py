@@ -27,6 +27,7 @@ from src.data.message_roles import (
     looks_like_raw_plan_content,
     is_empty_technical_message,
 )
+from src.chat_turn_history import collapse_redundant_assistant_fragments
 from src.khub_auth import khub_token_manager
 from src.runtime.timeline_reconstruct import (
     parse_timeline_json,
@@ -243,10 +244,15 @@ def _is_plan_tagged_internal(row: Message, nr: str, meta: Dict[str, Any]) -> boo
 async def get_conversation_messages_chat_ui(
     conv_id: str,
     include_plan_internal: bool = False,
+    include_archived: bool = True,
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
     x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
 ):
-    """Retrieve full message history for a conversation including reasoning, tools and artifacts (chat-ui compat)."""
+    """Retrieve full message history for chat-ui (display). Includes archived rows by default.
+
+    The LLM/agent path uses ``history_manager.get_window()`` which excludes
+    ``archived_at`` messages — only this replay endpoint returns the full transcript.
+    """
     _check_internal_secret(x_chat_ui_secret)
     _require_unified()
     user_id = (x_aion_user_id or "").strip() or "default"
@@ -266,8 +272,9 @@ async def get_conversation_messages_chat_ui(
             .where(Message.conversation_id == conv_id)
             .order_by(Message.seq.asc())
         )
+        if not include_archived:
+            q_msg = q_msg.where(Message.archived_at.is_(None))
         msgs = (await session.execute(q_msg)).scalars().all()
-        last_msg_id = msgs[-1].id if msgs else None
 
         # Fetch Steps
         q_steps = (
@@ -295,6 +302,13 @@ async def get_conversation_messages_chat_ui(
         for a in atts:
             mid = a.message_id or "orphan"
             atts_by_msg.setdefault(mid, []).append(_serialize_attachment_row(a))
+
+        msgs = collapse_redundant_assistant_fragments(
+            msgs,
+            steps_by_msg=steps_by_msg,
+            atts_by_msg=atts_by_msg,
+        )
+        last_msg_id = msgs[-1].id if msgs else None
 
         data = []
 
@@ -342,7 +356,14 @@ async def get_conversation_messages_chat_ui(
                 "seq": r.seq,
                 "steps": current_steps,
                 "artifacts": current_atts,
+                "rating": r.rating,
+                "feedback_comment": r.feedback_comment,
             }
+            if getattr(r, "archived_at", None) is not None:
+                row["archived"] = True
+                reason = getattr(r, "archived_reason", None)
+                if reason:
+                    row["archived_reason"] = reason
             if meta:
                 row["metadata"] = meta
             if nr == "assistant":
@@ -539,6 +560,11 @@ class MessageTimelinePatchBody(BaseModel):
     timeline: List[Dict[str, Any]]
 
 
+class MessageRateBody(BaseModel):
+    rating: Optional[int] = None
+    comment: Optional[str] = None
+
+
 class StepItem(BaseModel):
     step_id: Optional[str] = None
     name: str
@@ -656,6 +682,33 @@ async def patch_message_timeline_chat_ui(
         if not msg or msg.conversation_id != conv_id:
             raise HTTPException(404, "Message not found")
         msg.timeline_json = json.dumps(body.timeline, ensure_ascii=False)
+        await session.commit()
+    return {"updated": True, "message_id": message_id}
+
+
+@router.post("/conversations/{conv_id}/messages/{message_id}/rate")
+async def rate_message_chat_ui(
+    conv_id: str,
+    message_id: str,
+    body: MessageRateBody,
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
+    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+):
+    """Save user rating and comments for a message."""
+    _check_internal_secret(x_chat_ui_secret)
+    _require_unified()
+    user_id = (x_aion_user_id or "").strip() or "default"
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
+
+    async with get_async_session_maker()() as session:
+        conv = await session.get(Conversation, conv_id)
+        if not conv or conv.tenant_id != tenant or conv.user_id != user_id:
+            raise HTTPException(404, "Conversation not found")
+        msg = await fetch_message_by_id(session, message_id)
+        if not msg or msg.conversation_id != conv_id:
+            raise HTTPException(404, "Message not found")
+        msg.rating = body.rating
+        msg.feedback_comment = body.comment
         await session.commit()
     return {"updated": True, "message_id": message_id}
 
