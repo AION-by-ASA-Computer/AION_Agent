@@ -140,7 +140,8 @@ def build_plan_mode_system_prompt() -> str:
         plan_output = (
             "3. **Register the plan** — Call **`draft_execution_plan`** once with structured arguments:\n"
             "   - `goal`: verifiable objective (string)\n"
-            "   - `tasks`: **required** JSON array of `{id, title, depends_on[]}` — ids **`task_01`**, `task_02`, …\n"
+            "   - `tasks`: **required** JSON array of `{id, title, description, depends_on[]}` — ids **`task_01`**, `task_02`, …\n"
+            "   - Each `description` ≥ 40 chars: what to do, what NOT to do (out-of-scope), expected output / Done when.\n"
             "   - **Minimum 6 atomic tasks** for non-trivial work (strategic, multi-file, or multi-domain requests).\n"
             "   - **Never** a single catch-all task titled `main` or one task that hides many steps.\n"
             "   The tool writes the plan to the sidebar. In chat write only a **2–3 line summary**.\n"

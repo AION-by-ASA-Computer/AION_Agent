@@ -131,16 +131,31 @@ To ensure plan execution state survives browser refreshes or conversation switch
 3. loadWatchedPlanExecutions(conversationId)
    └─ Retrieves watched run IDs stored in localStorage.
 4. pickBestRun()
-   └─ Merges and ranks candidates: Running (priority 3) > Done (priority 2) > Terminated/Interrupted (priority 1).
+   └─ Merges and ranks candidates: Running (priority 3) > Paused/Done (priority 2) > Terminated/Interrupted/Cancelled/Error (priority 1).
 5. adoptPlanExecution(best.runId, best.planId)
    └─ Restores UI state, activates the Plan panel tab, and mounts the active run.
 6. fetchOrchestrationPlan(planId)
    └─ Fetches plan markdown from the database to restore the Plan sidebar tasks list.
+7. Resume (optional): `POST /plan-execution/resume/{run_id}` from chat banner when status is `paused`, `cancelled`, `interrupted`, or `error`.
 ```
 
 ---
 
-## 7. Storage and Database Layout
+## 7. Pause, resume, and per-task brief
+
+| Action | API / UX | Run status |
+|--------|----------|------------|
+| Stop composer during plan run | `POST /plan-execution/pause/{run_id}` | `paused` (resumable) |
+| Cancel plan execution | `POST /plan-execution/cancel/{run_id}` | `cancelled` (resumable) |
+| Resume | `POST /plan-execution/resume/{run_id}` | `running` |
+| Task failure after 2 retries | handler pauses (no auto-mark) | `paused`, checkbox unchecked |
+| Server restart orphan | disk recovery | `interrupted` (resumable) |
+
+Each execution turn receives a **task brief** via `build_plan_execution_reminder`: goal, current task description, out-of-scope next tasks, handoff, Done when, and mandatory exit after `mark_task_completed`.
+
+---
+
+## 8. Storage and Database Layout
 
 1. **Approved Plans (`execution_plans` table)**:
    Persisted in the database. The markdown content of approved plans is the source of truth for the list of tasks shown in the Plan sidebar.

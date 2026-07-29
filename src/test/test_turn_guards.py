@@ -51,6 +51,27 @@ def test_turn_guards_reasoning_effort(monkeypatch):
     assert g_max.max_reasoning_events == 480
 
 
+def test_reasoning_hard_stop_requires_chars_for_event_only_guard():
+    """Fragmented reasoning chunks should not hard-stop on events alone."""
+    max_chars = 20000
+    max_events = 480
+    reasoning_chars = 5540
+    reasoning_events = 481
+    over_events = reasoning_events > max_events
+    over_chars = reasoning_chars > max_chars
+    min_chars_for_event_guard = max(6000, int(max_chars * 0.4))
+    hard_stop = over_chars or (
+        over_events and reasoning_chars >= min_chars_for_event_guard
+    )
+    assert not hard_stop
+
+    reasoning_chars_high = 12000
+    hard_stop_high = over_chars or (
+        over_events and reasoning_chars_high >= min_chars_for_event_guard
+    )
+    assert hard_stop_high
+
+
 def test_dynamic_thinking_token_budget(monkeypatch):
     from src.runtime.reasoning_effort import merge_generation_kwargs
 

@@ -4,7 +4,7 @@ description: "Tool-first file delivery for AION (sandbox write/edit/patch tools)
 tags: [core, protocol, code]
 status: verified
 source: curated
-version: 8
+version: 9
 ---
 
 # Artifact Protocol
@@ -35,6 +35,19 @@ version: 8
 4. `sandbox_run_node_file(relative_path="workspace/create_doc.js")`.
 
 If `skill_search("docx")` returns nothing, **still proceed** with docx-js via write tool (see `core_protocol`).
+
+## Data-heavy deliverables (web → workspace → output)
+
+When the deliverable is built from **external data** (web search, fetch, APIs):
+
+```
+web_search / web_fetch_page  →  workspace/<slug>_data.csv|.json  →  sandbox_run_python_file  →  workspace/<output>.xlsx
+```
+
+1. **Early skeleton** — create `workspace/<slug>_data.*` with headers and first rows as soon as data exists.
+2. **Incremental commits** — each research slice updates the data file before the next slice (see `incremental_execution_protocol`).
+3. **Final artifact** — generate `.xlsx` / `.docx` via sandbox tools; do not paste tables in chat.
+4. **Office skill** — `skill_view("xlsx")` (or docx/pdf) when you start **writing** the deliverable, not during initial web scout.
 
 ## Rules
 

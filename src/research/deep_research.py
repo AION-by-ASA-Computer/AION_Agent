@@ -12,29 +12,15 @@ import json
 import logging
 import re
 import time
-from datetime import datetime
 from typing import Callable, Dict, List, Optional, Set
 
 from src.research.research_utils import strip_thinking, is_low_quality
 from src.research.goal_based_extractor import EXTRACTOR_PROMPT
 from src.research.llm_bridge import complete_messages
 from src.research.search_bridge import fetch_webpage_content, search_web
+from src.runtime.current_date import current_date_context  # noqa: F401 – re-exported
 
 logger = logging.getLogger(__name__)
-
-
-def current_date_context() -> str:
-    """Preamble that grounds query-generation/planning LLMs in the real current
-    date. Without it the model falls back to its training-cutoff year and emits
-    queries like "best Python tutorials 2025" when the year is actually 2026.
-    System TZ-local so it matches what the user sees. Portable strftime only."""
-    now = datetime.now().astimezone()
-    return (
-        f"Today's date is {now.strftime('%B %d, %Y')} ({now.strftime('%Y-%m-%d')}). "
-        f"When a search query needs a year or refers to 'latest'/'current'/"
-        f"'this year', use {now.strftime('%Y')} or relative wording — never a "
-        f"year inferred from training data.\n\n"
-    )
 
 
 # ---------------------------------------------------------------------------

@@ -38,10 +38,20 @@ async def test_run_draft_execution_plan_registers_pending(monkeypatch):
     )
 
     msg = await ot.run_draft_execution_plan(
-        "Build a course",
+        "Build a comprehensive course on distributed systems",
         [
-            {"id": "task_01", "title": "Outline", "depends_on": []},
-            {"id": "task_02", "title": "Draft chapter 1", "depends_on": ["task_01"]},
+            {
+                "id": "task_01",
+                "title": "Outline",
+                "description": "Create chapter outline only. Do NOT write full chapters. Done when: outline file exists.",
+                "depends_on": [],
+            },
+            {
+                "id": "task_02",
+                "title": "Draft chapter 1",
+                "description": "Write chapter 1 from outline. Do NOT draft chapter 2+. Done when: chapter file saved.",
+                "depends_on": ["task_01"],
+            },
         ],
         session_id="sess-1",
         user_id="u1",
@@ -75,10 +85,20 @@ async def test_run_draft_execution_plan_reuses_turn_plan_id(monkeypatch):
     set_context("sess-1", None, None, None, turn_plan_id="execution_plan_turn99")
     try:
         await ot.run_draft_execution_plan(
-            "Goal",
+            "Goal with enough characters for validation",
             [
-                {"id": "task_01", "title": "Step one", "depends_on": []},
-                {"id": "task_02", "title": "Step two", "depends_on": ["task_01"]},
+                {
+                    "id": "task_01",
+                    "title": "Step one",
+                    "description": "Do step one only. Do NOT do step two. Done when: artifact saved to workspace.",
+                    "depends_on": [],
+                },
+                {
+                    "id": "task_02",
+                    "title": "Step two",
+                    "description": "Do step two using step one output. Do NOT start step three. Done when: file updated.",
+                    "depends_on": ["task_01"],
+                },
             ],
             session_id="sess-1",
             user_id="u1",
@@ -90,10 +110,24 @@ async def test_run_draft_execution_plan_reuses_turn_plan_id(monkeypatch):
 
 
 @pytest.mark.anyio
+async def test_run_draft_execution_plan_requires_description():
+    with pytest.raises(ValueError, match="description"):
+        await ot.run_draft_execution_plan(
+            "Goal with enough characters for validation",
+            [
+                {"id": "task_01", "title": "Outline", "depends_on": []},
+                {"id": "task_02", "title": "Draft", "depends_on": ["task_01"]},
+            ],
+            session_id="sess-1",
+            user_id="u1",
+        )
+
+
+@pytest.mark.anyio
 async def test_run_draft_execution_plan_requires_tasks():
     with pytest.raises(ValueError, match="tasks is required"):
         await ot.run_draft_execution_plan(
-            "Goal only",
+            "Goal only but long enough for validation",
             None,
             session_id="sess-1",
             user_id="u1",

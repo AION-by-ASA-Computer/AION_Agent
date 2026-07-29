@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -29,8 +29,10 @@ import {
   drainSessionEventsLoop,
   fetchProfiles,
   fetchSessionCharts,
+  fetchToolLedger,
   listSessionFilesSubdir,
   type SessionFileRow,
+  type ToolLedgerEntry,
   openSessionEventsStream,
   postChatStream,
   waitForChatPrepare,
@@ -81,16 +83,28 @@ import {
   applyHistoryToMessages,
   useConversationTranscriptRefs,
 } from "@/lib/use-conversation-transcript";
-import type { ChatChunk, TurnSegment, TurnState, WebSourceCard } from "@/lib/sse/types";
+import { upsertChatMessage } from "@/lib/merge-chat-history";
+import {
+  fetchCurrentUser,
+  readDefaultProfileSlug,
+  readStoredDefaultProfileSlug,
+  resolveDefaultProfileSlug,
+  syncDefaultProfileSlug,
+  writeStoredDefaultProfileSlug,
+} from "@/lib/api/user-preferences";
+import type { ChatChunk, TurnSegment, TurnState, WebSourceCard, ContextBudgetState } from "@/lib/sse/types";
+import { webSearchSourceRows } from "@/lib/sse/webToolParse";
+import { isToolOffloadSessionPath } from "@/lib/session-file-paths";
 
 import { ChatHeader } from "@/components/layout/ChatHeader";
+import { ContextBudgetBar, ContextBudgetGauge } from "@/components/chat/ContextBudgetBar";
 import { useShellActions, useSidebarOpen } from "@/lib/shell/shell-context";
 import { cn } from "@/lib/cn";
 import { DeepResearchPanel } from "@/components/research/DeepResearchPanel";
 import { PlanExecutionChatBanner } from "@/components/plan/PlanExecutionChatBanner";
 import { PlanPanel } from "@/components/plan/PlanPanel";
 import { TaskChatView } from "@/components/plan/TaskChatView";
-import { cancelPlanExecution, rememberWatchedPlanExecution } from "@/lib/api/plan-execution";
+import { cancelPlanExecution, pausePlanExecution, rememberWatchedPlanExecution, resumePlanExecution } from "@/lib/api/plan-execution";
 import { usePlanDockState } from "@/hooks/use-plan-dock-state";
 import { usePlanExecutionProgress } from "@/hooks/use-plan-execution-progress";
 import { usePlanExecutionRehydrate } from "@/hooks/use-plan-execution-rehydrate";
@@ -132,7 +146,7 @@ import { SessionCharts } from "@/components/chat/SessionCharts";
 import type { DockTab } from "@/lib/layout/dock-tab";
 
 type PlanPendingChunk = ChatChunk & { type: "orchestration_plan_pending" };
-type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research";
+type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research" | "long_run";
 type LiveArtifactMessage = {
   id: string;
   title: string;
@@ -192,6 +206,8 @@ type ChatMessage = {
   segments?: TurnSegment[];
   rating?: MessageRating | null;
   feedbackComment?: string | null;
+  /** Archived by compaction — visible in UI, excluded from LLM context. */
+  archived?: boolean;
 };
 
 function parseWebHostInput(raw: string): string | null {
@@ -243,29 +259,23 @@ function historyMessageFromApi(m: ChatHistoryMessage): ChatMessage {
   if (m.steps) {
     for (const step of m.steps) {
       if (step.name === "web_search" && step.output) {
-        try {
-          const data = JSON.parse(step.output);
-          const rows = Array.isArray(data?.results) ? data.results : [];
-          if (rows.length > 0) {
-            webSources = webSources || [];
-            const seen = new Set(webSources.map((c) => c.url));
-            let idx = webSources.length;
-            for (const row of rows) {
-              const r = row as Record<string, unknown>;
-              const url = String(r?.url ?? "").trim();
-              if (!url || seen.has(url)) continue;
-              seen.add(url);
-              idx += 1;
-              webSources.push({
-                index: idx,
-                title: String(r?.title || url).slice(0, 500),
-                url,
-                provider: r?.provider != null ? String(r.provider) : undefined,
-              });
-            }
+        const rows = webSearchSourceRows(step.output);
+        if (rows.length > 0) {
+          webSources = webSources || [];
+          const seen = new Set(webSources.map((c) => c.url));
+          let idx = webSources.length;
+          for (const row of rows) {
+            const url = row.url.trim();
+            if (!url || seen.has(url)) continue;
+            seen.add(url);
+            idx += 1;
+            webSources.push({
+              index: idx,
+              title: row.title.slice(0, 500),
+              url,
+              provider: row.provider,
+            });
           }
-        } catch {
-          // ignore malformed step output
         }
       }
     }
@@ -283,6 +293,7 @@ function historyMessageFromApi(m: ChatHistoryMessage): ChatMessage {
     metadata: m.metadata,
     rating: m.rating as MessageRating | undefined,
     feedbackComment: m.feedback_comment,
+    archived: Boolean(m.archived),
   };
 }
 
@@ -460,22 +471,29 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   // States for session files (moved from left sidebar to files panel on the right)
   const [sessionFiles, setSessionFiles] = useState<SessionFileRow[]>([]);
+  const [toolLedgerEntries, setToolLedgerEntries] = useState<ToolLedgerEntry[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(false);
 
   const fetchSessionFiles = useCallback(async () => {
     if (!conversationId || conversationId === "default") {
       setSessionFiles([]);
+      setToolLedgerEntries([]);
       return;
     }
     setLoadingFiles(true);
     try {
-      const [uploads, derived, workspace, rootFiles] = await Promise.all([
+      const [uploads, derived, workspace, rootFiles, ledger] = await Promise.all([
         listSessionFilesSubdir(conversationId, userId, "uploads", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "derived", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "workspace", token).catch(() => []),
         listSessionFilesSubdir(conversationId, userId, "", token).catch(() => []),
+        fetchToolLedger(conversationId, userId, token).catch(() => ({
+          enabled: false,
+          entries: [] as ToolLedgerEntry[],
+        })),
       ]);
       setSessionFiles([...uploads, ...derived, ...workspace, ...rootFiles]);
+      setToolLedgerEntries(ledger.entries);
     } catch (err) {
       console.error("Errore recupero file di sessione:", err);
     } finally {
@@ -486,6 +504,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   useEffect(() => {
     fetchSessionFiles();
   }, [fetchSessionFiles]);
+
+  useEffect(() => {
+    if (dockTab === "artifacts") {
+      void fetchSessionFiles();
+    }
+  }, [dockTab, fetchSessionFiles, token]);
 
 
 
@@ -684,6 +708,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [profile, setProfile] = useState("aion_std");
+  const [favoriteProfileSlug, setFavoriteProfileSlug] = useState<string | null>(() =>
+    readStoredDefaultProfileSlug(),
+  );
+  const favoriteProfileSlugRef = useRef(favoriteProfileSlug);
+  favoriteProfileSlugRef.current = favoriteProfileSlug;
   const [sqlQueryProject, setSqlQueryProject] = useState(() =>
     typeof window !== "undefined" ? readStoredSqlProject() : "default"
   );
@@ -930,6 +959,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, [conversationId, messages.length, userId, token]);
 
+  const handleSetFavoriteProfile = useCallback(async (slug: string) => {
+    setFavoriteProfileSlug(slug);
+    writeStoredDefaultProfileSlug(slug);
+    handleProfileChange(slug);
+    if (token) {
+      const ok = await syncDefaultProfileSlug(token, slug);
+      if (!ok) {
+        console.error("Error saving default profile to user metadata");
+      }
+    }
+  }, [token, handleProfileChange]);
+
   const handleProjectChange = useCallback((newProject: string) => {
     const proj = newProject.trim();
     setSqlQueryProject(proj);
@@ -966,6 +1007,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [isPlusOpen, setIsPlusOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAgentModeOpen, setIsAgentModeOpen] = useState(false);
+  const [contextBudgetOpen, setContextBudgetOpen] = useState(false);
+  const [lastContextBudget, setLastContextBudget] = useState<ContextBudgetState | null>(null);
   const [isToolsViewSubOpen, setIsToolsViewSubOpen] = useState(false);
   const [isWebSearchSubOpen, setIsWebSearchSubOpen] = useState(false);
   const [isThinkingSubOpen, setIsThinkingSubOpen] = useState(false);
@@ -983,7 +1026,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         return stored;
       }
     }
-    return "full";
+    return "partial";
   });
 
   const handleToolsViewChange = useCallback((view: "hidden" | "partial" | "full") => {
@@ -1134,6 +1177,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, [turnVisual, adoptResearchSession]);
 
+  useEffect(() => {
+    if (turnVisual?.contextBudget) {
+      setLastContextBudget(turnVisual.contextBudget);
+    }
+  }, [turnVisual?.contextBudget]);
+
   const {
     planChunk,
     planMountKey,
@@ -1249,6 +1298,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const streamingRef = useRef(false);
   /** Ignora stream-status Redis residuo subito dopo fine turno (stessa tab). */
   const streamFinishedAtRef = useRef(0);
+  /** Abort in-flight SSE recovery when the client starts or stops a stream. */
+  const recoveryAbortRef = useRef<AbortController | null>(null);
+  /** Bumped on each client-owned POST /chat/stream so recovery cannot wipe its turnVisual. */
+  const clientStreamGenRef = useRef(0);
   const activeConversationRef = useRef(conversationId);
   const {
     historyLoadEpochRef,
@@ -1667,6 +1720,23 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, [planExecAdoptRunId, userId, token]);
 
+  const handleResumePlanExecution = useCallback(async () => {
+    const rid = (planExecAdoptRunId || "").trim();
+    if (!rid) return;
+    try {
+      const out = await resumePlanExecution(rid, userId, token);
+      if (out?.run_id) {
+        adoptPlanExecution(
+          out.run_id,
+          out.plan_id || planExecAdoptPlanId || "",
+          { rehydrate: true, status: out.status },
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  }, [planExecAdoptRunId, planExecAdoptPlanId, userId, token, adoptPlanExecution]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape" && chatView.kind === "task") {
@@ -1685,6 +1755,44 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, [searchParams, planExecutionProgress?.tasks]);
 
+  // Grace period (ms) after an explicit user stop before stream-recovery may restart.
+  const STREAM_FINISHED_GRACE_MS = 8000;
+
+  const abortStreamRecovery = useCallback(() => {
+    recoveryAbortRef.current?.abort();
+    recoveryAbortRef.current = null;
+    streamRecoveryRef.current = false;
+    setStreamRecovery(false);
+  }, []);
+
+  const stopActiveStream = useCallback(async () => {
+    // Mark the moment of stop so recovery maybeStart() can enforce the grace period.
+    streamFinishedAtRef.current = Date.now();
+    abortStreamRecovery();
+    abortRef.current?.abort();
+    abortRef.current = null;
+    streamingRef.current = false;
+    setStreaming(false);
+    setStreamRecovery(false);
+    streamRecoveryRef.current = false;
+    setRecoveryAssistantId(null);
+    setActiveMessageId(null);
+    setTurnVisual(null);
+    clearActiveStreamMarker(conversationId);
+    const planRunId = (planExecAdoptRunId || "").trim();
+    if (planRunId && planExecutionProgress?.status === "running") {
+      await pausePlanExecution(planRunId, userId, token).catch(() => undefined);
+    }
+    await chatStop(conversationId, userId, token).catch(() => undefined);
+    for (let i = 0; i < 30; i++) {
+      const st = await fetchStreamStatus(conversationId, userId, token).catch(() => ({
+        active: false,
+      }));
+      if (!st.active) break;
+      await new Promise((r) => setTimeout(r, 150));
+    }
+  }, [conversationId, userId, token, abortStreamRecovery, planExecAdoptRunId, planExecutionProgress?.status]);
+
   const runChatRequest = useCallback(
     async (
       message: string,
@@ -1699,6 +1807,21 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         metadata?: Record<string, any>;
       },
     ) => {
+      const marker = readActiveStreamMarker(conversationId);
+      if (streamingRef.current || streamRecoveryRef.current || marker) {
+        await stopActiveStream();
+      } else {
+        const st = await fetchStreamStatus(conversationId, userId, token).catch(() => ({
+          active: false,
+        }));
+        if (st.active) {
+          await stopActiveStream();
+        }
+      }
+
+      abortStreamRecovery();
+      const streamGen = ++clientStreamGenRef.current;
+
       const effectiveAgentMode = opts?.agentModeOverride ?? agentMode;
       const effectivePlanMode =
         opts?.planModeOverride !== undefined
@@ -1976,8 +2099,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             state.error.includes("approvazione sidebar")),
         );
         let assistantText = strippedContent;
-        if (!assistantText.trim() && state.error && !isPlanGuardError) {
-          assistantText = t("chat.error", { msg: state.error });
+        const streamError =
+          state.error && !isPlanGuardError ? state.error : null;
+        if (!assistantText.trim() && streamError) {
+          assistantText = t("chat.error", { msg: streamError });
+        } else if (assistantText.trim() && streamError) {
+          assistantText = `${assistantText}\n\n---\n${t("chat.error", { msg: streamError })}`;
         }
         const reasoningUnavailable =
           thinkingEnabled && !sawReasoning && assistantText.trim().length > 0 && !state.error;
@@ -1987,9 +2114,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         {
           const persistedSegments = segmentsForPersist(state.segments);
           if (activeConversationRef.current === conversationId) {
-            setMessages((m) => [
-              ...m,
-              {
+            setMessages((m) =>
+              upsertChatMessage(m, {
                 id: aid,
                 role: "assistant",
                 content: assistantText,
@@ -1999,8 +2125,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 segments: persistedSegments.length ? persistedSegments : undefined,
                 reasoningUnavailable,
                 webSources: state.webSourceCards.length ? state.webSourceCards : undefined,
-              },
-            ]);
+              }),
+            );
           }
         }
 
@@ -2017,7 +2143,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           const rows = await listSessionFilesSubdir(conversationId, userId, sub, token);
           for (const row of rows) {
             const rp = row.relative_path;
-            if (!rp || seenFilesRef.current.has(rp)) continue;
+            if (!rp || seenFilesRef.current.has(rp) || isToolOffloadSessionPath(rp)) continue;
             seenFilesRef.current.add(rp);
             newLinks.push({ rp, label: row.name || rp });
           }
@@ -2080,9 +2206,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             const completedSteps = turnSteps(state);
             const completedArtifacts = turnArtifacts(state);
             const partialSegments = segmentsForPersist(state.segments);
-            setMessages((m) => [
-              ...m,
-              {
+            setMessages((m) =>
+              upsertChatMessage(m, {
                 id: aid,
                 role: "assistant",
                 content: contentToSave,
@@ -2090,8 +2215,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 steps: completedSteps.length ? completedSteps : undefined,
                 artifacts: completedArtifacts.length ? completedArtifacts : undefined,
                 segments: partialSegments.length ? partialSegments : undefined,
-              },
-            ]);
+              }),
+            );
 
             void refreshThreads();
           }
@@ -2100,6 +2225,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         const msg = e instanceof Error ? e.message : String(e);
         setMessages((m) => [...m, { id: crypto.randomUUID(), role: "assistant", content: `❌ ${msg}` }]);
       } finally {
+        if (streamGen !== clientStreamGenRef.current) return;
         streamingRef.current = false;
         markStreamConversation(null);
         streamFinishedAtRef.current = Date.now();
@@ -2136,6 +2262,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       chatStreamDebug,
       adoptResearchSession,
       selectedProvider,
+      stopActiveStream,
+      abortStreamRecovery,
     ]
   );
 
@@ -2210,10 +2338,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const handleSaveEdit = useCallback(async (msgId: string) => {
     const newText = editInput.trim();
-    if (!newText || streaming) return;
+    if (!newText) return;
+    if (streaming || streamRecoveryRef.current) {
+      await stopActiveStream();
+    }
 
     setEditingMessageId(null);
-    setStreaming(true);
 
     try {
       const res = await fetch(`${apiBase()}/chat-ui/conversations/${conversationId}/messages/${msgId}`, {
@@ -2238,21 +2368,20 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       await runChatRequest(newText);
     } catch (err) {
       console.error("Error editing message:", err);
-    } finally {
-      setStreaming(false);
     }
-  }, [conversationId, editInput, streaming, userId, token, runChatRequest]);
+  }, [conversationId, editInput, streaming, userId, token, runChatRequest, stopActiveStream]);
 
   const handleRegenerate = useCallback(async () => {
-    if (streaming || !lastUserMessageId) return;
+    if (!lastUserMessageId) return;
+    if (streaming || streamRecoveryRef.current) {
+      await stopActiveStream();
+    }
 
     const lastUserMsg = messages.find((msg) => msg.id === lastUserMessageId);
     if (!lastUserMsg) return;
 
     const userText = lastUserMsg.content.trim();
     if (!userText) return;
-
-    setStreaming(true);
 
     try {
       const res = await fetch(`${apiBase()}/chat-ui/conversations/${conversationId}/messages/${lastUserMessageId}`, {
@@ -2277,10 +2406,20 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       await runChatRequest(userText);
     } catch (err) {
       console.error("Error regenerating response:", err);
-    } finally {
-      setStreaming(false);
     }
-  }, [conversationId, lastUserMessageId, messages, streaming, userId, token, runChatRequest]);
+  }, [conversationId, lastUserMessageId, messages, streaming, userId, token, runChatRequest, stopActiveStream]);
+
+  useEffect(() => {
+    if (!token) return;
+    void fetchCurrentUser(token)
+      .then((user) => {
+        const slug = readDefaultProfileSlug(user?.metadata);
+        if (!slug) return;
+        setFavoriteProfileSlug(slug);
+        writeStoredDefaultProfileSlug(slug);
+      })
+      .catch((err: unknown) => console.error("default profile fetch", err));
+  }, [token]);
 
   useEffect(() => {
     fetchProfiles(userId, token)
@@ -2292,7 +2431,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             if (matched) {
               return matched.slug || matched.name;
             }
-            return p[0].slug || p[0].name;
+            return resolveDefaultProfileSlug(p, favoriteProfileSlugRef.current);
           });
         }
       })
@@ -2306,8 +2445,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   useEffect(() => {
     if (!conversationId) return;
 
-    // Reset immediato a "aion_std" (o primo profilo abilitato) per le nuove chat / fallback
-    const defaultProfile = profiles.some((x) => x.slug === "aion_std") ? "aion_std" : (profiles[0]?.slug || "aion_std");
+    setContextBudgetOpen(false);
+    setLastContextBudget(null);
+
+    // Reset immediato al profilo predefinito utente (o fallback) per le nuove chat
+    const defaultProfile = resolveDefaultProfileSlug(profiles, favoriteProfileSlugRef.current);
     setProfile(defaultProfile);
     setSqlQueryProject(readStoredSqlProject());
     setConversationTitle(null);
@@ -2358,7 +2500,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               meta.agent_mode === "plan" ||
               meta.agent_mode === "ask" ||
               meta.agent_mode === "debug" ||
-              meta.agent_mode === "deep_research"
+              meta.agent_mode === "deep_research" ||
+              meta.agent_mode === "long_run"
             ) {
               setAgentMode(meta.agent_mode as AgentMode);
               localStorage.setItem("aion_agent_mode", meta.agent_mode);
@@ -2540,8 +2683,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     if (streamingRef.current && !streamRecoveryRef.current) return;
 
     let cancelled = false;
+    const recoveryAc = new AbortController();
+    recoveryAbortRef.current = recoveryAc;
 
-    const finishRecovery = async () => {
+    const finishRecovery = async (recoveryGen: number) => {
+      if (recoveryGen !== clientStreamGenRef.current) {
+        streamRecoveryRef.current = false;
+        setStreamRecovery(false);
+        return;
+      }
       streamRecoveryRef.current = false;
       setStreamRecovery(false);
       setRecoveryAssistantId(null);
@@ -2574,22 +2724,50 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     };
 
     const runSseRecovery = async () => {
+      if (streamingRef.current && !streamRecoveryRef.current) return;
+      const recoveryGen = clientStreamGenRef.current;
       streamRecoveryRef.current = true;
       setStreamRecovery(true);
-      streamingRef.current = true;
-      setStreaming(true);
+      if (!streamingRef.current) {
+        streamingRef.current = true;
+        setStreaming(true);
+      }
 
-      while (!cancelled && activeConversationRef.current === conversationId) {
+      while (
+        !cancelled &&
+        !recoveryAc.signal.aborted &&
+        activeConversationRef.current === conversationId &&
+        recoveryGen === clientStreamGenRef.current
+      ) {
         let state = newTurn();
         setTurnVisual(state);
 
         try {
-          const sseStream = await getChatStreamReconnect(conversationId, userId, token);
-          if (cancelled || activeConversationRef.current !== conversationId) break;
+          const sseStream = await getChatStreamReconnect(
+            conversationId,
+            userId,
+            token,
+            recoveryAc.signal,
+          );
+          if (
+            cancelled ||
+            recoveryAc.signal.aborted ||
+            activeConversationRef.current !== conversationId ||
+            recoveryGen !== clientStreamGenRef.current
+          ) {
+            break;
+          }
 
           if (sseStream) {
             await consumeChatStream(sseStream, (chunk) => {
-              if (cancelled || activeConversationRef.current !== conversationId) return;
+              if (
+                cancelled ||
+                recoveryAc.signal.aborted ||
+                activeConversationRef.current !== conversationId ||
+                recoveryGen !== clientStreamGenRef.current
+              ) {
+                return;
+              }
               if (chunk.type === "turn_started") {
                 const uid = String(chunk.user_message_id || "");
                 const asst = String(chunk.assistant_message_id || "");
@@ -2606,10 +2784,23 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             });
           }
         } catch (err) {
+          if (
+            (err instanceof DOMException && err.name === "AbortError") ||
+            (err instanceof Error && err.name === "AbortError")
+          ) {
+            break;
+          }
           console.error("[aion-chat-ui] SSE reconnect stream error:", err);
         }
 
-        if (cancelled || activeConversationRef.current !== conversationId) break;
+        if (
+          cancelled ||
+          recoveryAc.signal.aborted ||
+          activeConversationRef.current !== conversationId ||
+          recoveryGen !== clientStreamGenRef.current
+        ) {
+          break;
+        }
         const status = await fetchStreamStatus(conversationId, userId, token);
         if (!status.active) {
           break;
@@ -2617,19 +2808,36 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
 
-      if (!cancelled && activeConversationRef.current === conversationId) {
-        await finishRecovery();
+      if (
+        !cancelled &&
+        !recoveryAc.signal.aborted &&
+        activeConversationRef.current === conversationId
+      ) {
+        await finishRecovery(recoveryGen);
+      } else {
+        streamRecoveryRef.current = false;
+        setStreamRecovery(false);
       }
     };
 
     const maybeStart = async () => {
+      // Skip recovery if we just stopped intentionally (grace period not yet elapsed).
+      if (Date.now() - streamFinishedAtRef.current < STREAM_FINISHED_GRACE_MS) return;
+      if (cancelled || recoveryAc.signal.aborted) return;
+      if (streamingRef.current && !streamRecoveryRef.current) return;
+
       const marker = readActiveStreamMarker(conversationId);
       const status = await fetchStreamStatus(conversationId, userId, token);
-      if (cancelled || (streamingRef.current && !streamRecoveryRef.current)) return;
-      if (status.active || marker || planExecAdoptRunId) {
-        await runSseRecovery();
-      } else if (marker) {
+      if (cancelled || recoveryAc.signal.aborted) return;
+      if (streamingRef.current && !streamRecoveryRef.current) return;
+
+      // Stale sessionStorage marker after stop/reload — trust Redis stream-status.
+      if (!status.active && marker && !planExecAdoptRunId) {
         clearActiveStreamMarker(conversationId);
+        return;
+      }
+      if (status.active || planExecAdoptRunId) {
+        await runSseRecovery();
       }
     };
 
@@ -2644,6 +2852,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
     return () => {
       cancelled = true;
+      recoveryAc.abort();
+      if (recoveryAbortRef.current === recoveryAc) {
+        recoveryAbortRef.current = null;
+      }
       document.removeEventListener("visibilitychange", onVis);
     };
   }, [conversationId, userId, token, refreshThreads, planExecAdoptRunId]);
@@ -2686,7 +2898,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const send = async () => {
     const t = input.trim();
-    if (!t || streaming) return;
+    if (!t) return;
+    if (streaming || streamRecoveryRef.current) {
+      await stopActiveStream();
+    }
     if (isProjectRequiredButMissing) {
       setProjectCreateOpen(true);
       return;
@@ -2716,10 +2931,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   };
 
   const stop = () => {
-    abortRef.current?.abort();
-    void chatStop(conversationId, userId, token).catch(() => {
-      /* ignore network errors */
-    });
+    void stopActiveStream();
   };
 
   useEffect(() => {
@@ -2867,6 +3079,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         <ArtifactsPanel
           items={dockArtifacts}
           sessionFiles={sessionFiles}
+          toolLedgerEntries={toolLedgerEntries}
           loadingFiles={loadingFiles}
           onRefreshFiles={fetchSessionFiles}
           conversationId={conversationId}
@@ -2971,10 +3184,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }),
   );
   const contextCompacting = Boolean(turnVisual?.contextCompacting);
+  const contextBudget = turnVisual?.contextBudget ?? lastContextBudget;
   const showAgentWorkingShimmer = Boolean(
     streaming &&
     turnVisual &&
-    !contextCompacting &&
     !hasVisibleAssistantText &&
     !hasVisibleReasoning &&
     !hasRunningTool &&
@@ -3204,6 +3417,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   progress={planExecutionProgress}
                   onOpenTask={openPlanTaskView}
                   onOpenAllTasks={() => setDockTab("plan")}
+                  onResume={handleResumePlanExecution}
                 />
               ) : null}
               {chatView.kind === "main" && !showEmptyState
@@ -3226,8 +3440,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       className={cn(
                         "group relative w-full flex flex-col transition-opacity",
                         turnGapClass,
+                        m.archived && "opacity-[0.88]",
                       )}
                     >
+                      {m.archived ? (
+                        <p className="mb-1 px-5 text-[0.643em] font-medium uppercase tracking-wide text-muted-foreground/70">
+                          {t("chat.message.archived_context")}
+                        </p>
+                      ) : null}
                       <div
                         className={cn(
                           "w-full px-5 chat-font",
@@ -3395,7 +3615,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
                       {m.role === "user" && !streaming && editingMessageId !== m.id ? (
                         <div className="mt-1 flex justify-end gap-1 pr-2">
-                          {isLastUser ? (
+                          {isLastUser && !m.archived ? (
                             <button
                               type="button"
                               onClick={() => handleStartEdit(m)}
@@ -3546,13 +3766,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       title={t("chat.agent_status.saving_info")}
                       subtitle={t("chat.agent_status.saving_info_desc")}
                     />
-                  ) : showContextCompactingShimmer ? (
-                    <StatusProgressCard
-                      className="mb-3"
-                      icon={Database}
-                      title={t("chat.agent_status.compacting")}
-                      subtitle={t("chat.agent_status.compacting_desc")}
-                    />
                   ) : showAgentWorkingShimmer ? (
                     <AgentWorkingShimmer label={agentWorkingLabel} />
                   ) : null}
@@ -3604,6 +3817,23 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
           <div className="relative z-20 min-w-0 shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
             <div className="mx-auto w-full min-w-0 max-w-3xl">
+              {showContextCompactingShimmer ? (
+                <StatusProgressCard
+                  className="mb-3 border-amber-500/30 bg-amber-500/5"
+                  icon={Database}
+                  title={t("chat.agent_status.compacting")}
+                  subtitle={t("chat.agent_status.compacting_desc")}
+                />
+              ) : null}
+              {contextBudgetOpen ? (
+                contextBudget ? (
+                  <ContextBudgetBar budget={contextBudget} className="mb-3" />
+                ) : (
+                  <div className="mb-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-[0.786em] text-muted-foreground">
+                    {t("chat.context_budget.unavailable")}
+                  </div>
+                )
+              ) : null}
               {pendingFiles.length > 0 && (
                 <div className="mb-3 flex flex-wrap gap-2">
                   {pendingFiles.map((f) => (
@@ -4099,14 +4329,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           setIsAgentModeOpen(false);
                         }}
                         className={cn(
-                          "focus-ring inline-flex h-8 max-w-full items-center gap-1.5 rounded-full border px-3 text-[0.786em] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99]",
+                          "focus-ring inline-flex h-7 max-w-[9rem] items-center gap-1 rounded-full border px-2.5 text-[0.786em] font-medium transition-colors sm:max-w-[10rem]",
                           isProfileOpen
                             ? "border-primary/45 bg-primary/10 text-primary"
                             : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
                         )}
                       >
                         <User size={12} className="shrink-0" aria-hidden />
-                        <span className="max-w-[6.5rem] truncate sm:max-w-[9rem]">
+                        <span className="max-w-[5.5rem] truncate sm:max-w-[7.5rem]">
                           {activeProfileName || t("chat.profile.label")}
                         </span>
                         <ChevronDown size={10} className="opacity-70" aria-hidden />
@@ -4124,6 +4354,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                             {profiles.map((p) => {
                               const slug = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
                               const isSelected = p.slug === profile || p.name === profile;
+                              const isFavorite = favoriteProfileSlug === slug;
                               return (
                                 <ComposerOptionRow
                                   key={p.name}
@@ -4134,6 +4365,37 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                     handleProfileChange(slug);
                                     setIsProfileOpen(false);
                                   }}
+                                  trailing={
+                                    <button
+                                      type="button"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        void handleSetFavoriteProfile(slug);
+                                      }}
+                                      className={cn(
+                                        "focus-ring rounded p-0.5 transition-colors",
+                                        isFavorite
+                                          ? "text-amber-500 hover:text-amber-600"
+                                          : "text-muted-foreground/50 hover:text-amber-500",
+                                      )}
+                                      aria-label={
+                                        isFavorite
+                                          ? t("chat.profile.favorite_active")
+                                          : t("chat.profile.favorite_set")
+                                      }
+                                      title={
+                                        isFavorite
+                                          ? t("chat.profile.favorite_active")
+                                          : t("chat.profile.favorite_set")
+                                      }
+                                    >
+                                      <Star
+                                        size={12}
+                                        className={cn(isFavorite && "fill-current")}
+                                        aria-hidden
+                                      />
+                                    </button>
+                                  }
                                 />
                               );
                             })}
@@ -4183,6 +4445,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       onAfterSelect={(mode) => {
                         if (mode === "deep_research") setDockTab("research");
                       }}
+                    />
+
+                    <ContextBudgetGauge
+                      pct={contextBudget?.pct ?? 0}
+                      triggerPct={
+                        contextBudget && contextBudget.maxPrompt > 0
+                          ? Math.min(100, (contextBudget.trigger / contextBudget.maxPrompt) * 100)
+                          : 92
+                      }
+                      unavailable={!contextBudget}
+                      active={contextBudgetOpen}
+                      onClick={() => setContextBudgetOpen((open) => !open)}
                     />
                   </div>
 

@@ -156,6 +156,7 @@ class StreamLoop:
 
         # Inner counters mirroring turn_guards.state
         self.is_streaming: bool = False
+        self._last_finish_reason: Optional[str] = None
         self.reasoning_chars: int = 0
         self.reasoning_events: int = 0
         self.tool_events: int = 0
@@ -167,6 +168,13 @@ class StreamLoop:
         self.last_progress_at: float = g.state.last_progress_at
         self.reasoning_guard_logged: bool = g.state.reasoning_guard_logged
         self.reasoning_no_tool_warned: bool = g.state.reasoning_no_tool_warned
+
+    def reset_reasoning_window(self) -> None:
+        """Reset per-LLM-call reasoning budget (not cumulative across tool rounds)."""
+        self.reasoning_chars = 0
+        self.reasoning_events = 0
+        self.reasoning_guard_logged = False
+        self.reasoning_no_tool_warned = False
 
     # ------------------------------------------------------------------
     # Flush Assistant = force persist assistant stream content & timeline (JSON)
@@ -228,8 +236,22 @@ class StreamLoop:
                     self._demux.feed(chunk)
 
                 if ctype == "llm_call":
+                    self.reset_reasoning_window()
                     self.llm_calls += 1
                     self._llm_steps_done = self.llm_calls
+                    try:
+                        from src.runtime.turn_compaction import (
+                            try_build_context_budget_event,
+                        )
+
+                        budget_evt = try_build_context_budget_event(
+                            phase="llm_call",
+                            session_id=self.session_id,
+                        )
+                        if budget_evt:
+                            yield self._track_sse(budget_evt)
+                    except Exception:
+                        pass
                     continue
 
                 # --- Hard-stop budget guards ---
@@ -260,6 +282,7 @@ class StreamLoop:
 
                 # --- LLM / generic errors ---
                 if ctype in ("error", "context_length_error", "llm_error"):
+                    _error_content = str(chunk.get("content") or "").lower()
                     _agent_debug_log(
                         "H1",
                         "stream_loop:queue_error",
@@ -269,6 +292,14 @@ class StreamLoop:
                             "content": str(chunk.get("content") or "")[:300],
                         },
                     )
+                    # Detect user-initiated cancellation so downstream classifiers
+                    # can suppress the scary "no final answer" warning.
+                    if (
+                        "cancel" in _error_content
+                        or "session cancelled" in _error_content
+                        or "stopped by user" in _error_content
+                    ):
+                        self.stop_reason = "user_cancelled"
                     yield self._track_sse(chunk)
                     break
 
@@ -280,13 +311,29 @@ class StreamLoop:
 
                 # --- Reasoning events ---
                 if ctype == "reasoning":
+                    should_break = False
                     async for evt in self._handle_reasoning(chunk):
-                        yield evt
+                        if isinstance(evt, _BreakSignal):
+                            should_break = True
+                        else:
+                            yield evt
+                    if should_break:
+                        break
                     continue
 
                 # --- Stream end ---
                 if ctype == "stream_end":
                     self.is_streaming = False
+                    self._last_finish_reason = chunk.get("finish_reason")
+                    yield self._track_sse(chunk)
+                    continue
+
+                # --- Context budget / compaction (queued from preflight or mid-turn) ---
+                if ctype in (
+                    "context_budget",
+                    "context_compacting",
+                    "context_recovery",
+                ):
                     yield self._track_sse(chunk)
                     continue
 
@@ -403,8 +450,8 @@ class StreamLoop:
         reasoning_piece = chunk.get("reasoning") or ""
         if reasoning_piece:
             self.last_progress_at = self.loop.time()
-        self.reasoning_events += 1
-        self.reasoning_chars += len(reasoning_piece)
+            self.reasoning_events += 1
+            self.reasoning_chars += len(reasoning_piece)
 
         over_events = (
             self.max_reasoning_events > 0
@@ -414,8 +461,19 @@ class StreamLoop:
             self.max_reasoning_chars > 0
             and self.reasoning_chars > self.max_reasoning_chars
         )
+        # vLLM/Qwen reasoning streams as many tiny chunks; stop on events only when
+        # enough text accumulated (chars alone still triggers immediately).
+        min_chars_for_event_guard = max(
+            6000,
+            int(self.max_reasoning_chars * 0.4)
+            if self.max_reasoning_chars > 0
+            else 6000,
+        )
+        hard_stop_reasoning = over_chars or (
+            over_events and self.reasoning_chars >= min_chars_for_event_guard
+        )
 
-        if not self.reasoning_guard_logged and (over_events or over_chars):
+        if not self.reasoning_guard_logged and hard_stop_reasoning:
             self.reasoning_guard_logged = True
             _agent_debug_log(
                 "H1",
@@ -432,9 +490,13 @@ class StreamLoop:
                 },
             )
 
-        if self.reasoning_hard_stop and (over_events or over_chars):
-            self.stop_event.set()
-            self.stop_reason = "reasoning_budget"
+        if self.reasoning_hard_stop and hard_stop_reasoning:
+            self._request_stop(
+                "reasoning_budget",
+                location="stream_loop:reasoning_guard",
+                over_events=over_events,
+                over_chars=over_chars,
+            )
             msg = (
                 "Interrotto automaticamente: reasoning loop oltre soglia "
                 f"(events={self.reasoning_events}/{self.max_reasoning_events}, "
@@ -442,7 +504,7 @@ class StreamLoop:
             )
             logger.warning("Hard-stop reasoning guard: %s", msg)
             yield self._track_sse({"type": "error", "content": msg})
-            # Caller checks stop_reason to break
+            yield _BreakSignal()
             return
 
         _chars_gate = (
@@ -515,8 +577,11 @@ class StreamLoop:
         self.last_progress_at = self.loop.time()
 
         if self.max_tool_events > 0 and self.tool_events > self.max_tool_events:
-            self.stop_event.set()
-            self.stop_reason = "tool_events_limit"
+            self._request_stop(
+                "tool_events_limit",
+                location="stream_loop:tool_events",
+                max_tool_events=self.max_tool_events,
+            )
             msg = (
                 "Interrotto automaticamente: troppi eventi tool nel turno "
                 f"({self.tool_events}/{self.max_tool_events})."
@@ -530,6 +595,27 @@ class StreamLoop:
 
         # --- tool_start ---
         if evt.get("type") == "tool_start":
+            from src.runtime.tool_protocol import should_skip_tools_for_truncation
+
+            if should_skip_tools_for_truncation(
+                getattr(self, "_last_finish_reason", None)
+            ):
+                yield self._track_sse(
+                    {
+                        "type": "tool_event",
+                        "event": {
+                            "type": "tool_end",
+                            "name": evt.get("name"),
+                            "result": (
+                                "[AION] Tool skipped: prior LLM output was truncated "
+                                "(finish_reason=length). Continue in the next step."
+                            ),
+                            "error": True,
+                        },
+                    }
+                )
+                return
+
             self.tool_calls += 1
             _tn = str(evt.get("name") or "")
 
@@ -540,8 +626,10 @@ class StreamLoop:
 
                     _mo = get_context().get("mark_once")
                     if isinstance(_mo, dict) and _mo.get("used"):
-                        self.stop_event.set()
-                        self.stop_reason = "plan_mark_already_used"
+                        self._request_stop(
+                            "plan_mark_already_used",
+                            location="stream_loop:mark_once",
+                        )
                         _block_msg = (
                             "mark_task_completed was already called this turn. "
                             "STOP — do not call more tools."
@@ -552,30 +640,12 @@ class StreamLoop:
                 except Exception:
                     pass
 
-            # plan_controller research budget
-            if self.plan_controller is not None:
-                _allowed, _budget_msg = self.plan_controller.on_research_tool_start(_tn)
-                if not _allowed:
-                    yield self._track_sse(
-                        self.plan_controller.sse_phase(
-                            "research_budget_reached", message=_budget_msg
-                        )
-                    )
-                    yield self._track_sse(
-                        {
-                            "type": "turn_status",
-                            "phase": "plan_research_budget",
-                            "tool": _tn,
-                            "message": _budget_msg or "",
-                        }
-                    )
-                    self.stop_event.set()
-                    self.stop_reason = "plan_research_budget"
-                    yield self._track_sse(
-                        {"type": "error", "content": _budget_msg or ""}
-                    )
-                    yield _BreakSignal()
-                    return
+            # plan_controller: research budget enforced in main._aion_mcp_tool_run (soft block).
+            if (
+                self.plan_controller is not None
+                and self.plan_controller.is_research_tool(_tn)
+            ):
+                yield self._track_sse(self.plan_controller.sse_phase("researching"))
 
             # MemPalace status notification
             if _tn.startswith("mempalace_"):
@@ -606,8 +676,12 @@ class StreamLoop:
                 )
 
             if self.max_tool_calls > 0 and self.tool_calls > self.max_tool_calls:
-                self.stop_event.set()
-                self.stop_reason = "tool_calls_limit"
+                self._request_stop(
+                    "tool_calls_limit",
+                    location="stream_loop:tool_calls",
+                    tool_calls=self.tool_calls,
+                    max_tool_calls=self.max_tool_calls,
+                )
                 msg = (
                     "Interrotto automaticamente: troppi tool call nel turno "
                     f"({self.tool_calls}/{self.max_tool_calls})."
@@ -624,8 +698,11 @@ class StreamLoop:
             )
             if _doom:
                 if doom_loop_action() == "stop":
-                    self.stop_event.set()
-                    self.stop_reason = "doom_loop"
+                    self._request_stop(
+                        "doom_loop",
+                        location="stream_loop:doom_loop",
+                        detail=str(_doom)[:200],
+                    )
                     yield {"type": "error", "content": _doom}
                     yield _BreakSignal()
                     return
@@ -724,8 +801,8 @@ class StreamLoop:
                 import src.runtime.db_navigation_mempalace_hooks  # noqa: F401
                 import src.runtime.exploration_tracker  # noqa: F401
                 from src.runtime.exploration_tracker import record_exploration_tool
-                from src.runtime.datasource_memory_mode import (
-                    maybe_append_same_turn_reminder,
+                from src.runtime.tool_result_postprocess import (
+                    apply_tool_result_postprocess,
                 )
 
                 _tool_out = evt.get("output") or evt.get("error")
@@ -737,12 +814,12 @@ class StreamLoop:
                     profile_slug=self.profile_name,
                 )
                 if evt.get("type") == "tool_end":
-                    _tool_out = maybe_append_same_turn_reminder(
+                    _tool_out = apply_tool_result_postprocess(
+                        _tool_out,
                         session_id=self.session_id,
                         profile_slug=self.profile_name,
                         tool_name=str(evt.get("name") or ""),
                         event_type="tool_end",
-                        output=_tool_out,
                     )
                     evt["output"] = _tool_out
                 _tenant_qm = (
@@ -786,8 +863,10 @@ class StreamLoop:
             and evt.get("name") == "mark_task_completed"
             and self._msg_src == "internal_trigger"
         ):
-            self.stop_event.set()
-            self.stop_reason = "plan_task_completed"
+            self._request_stop(
+                "plan_task_completed",
+                location="stream_loop:mark_task_completed",
+            )
             outcome: Dict[str, Any] = {
                 "type": "turn_outcome",
                 "code": "plan_task_completed",
@@ -797,6 +876,8 @@ class StreamLoop:
                 ),
             }
             yield self._track_sse(outcome)
+            yield _BreakSignal()
+            return
 
         # --- sandbox_write_workspace_file tool_end ---
         elif (
@@ -1031,6 +1112,17 @@ class StreamLoop:
                 evt["tokens_out"] = out_tokens
             except Exception as e:
                 logger.warning("Failed to count tool tokens: %s", e)
+            try:
+                from src.runtime.turn_compaction import try_build_context_budget_event
+
+                budget_evt = try_build_context_budget_event(
+                    phase="tool",
+                    session_id=self.session_id,
+                )
+                if budget_evt:
+                    yield self._track_sse(budget_evt)
+            except Exception:
+                pass
             self.turn_persist.queue_tool_step(evt)
             if self.assistant_message_id:
                 await self.turn_persist.persist_pending_turn_records(
@@ -1116,11 +1208,32 @@ class StreamLoop:
     # Private: budget guard checker
     # ------------------------------------------------------------------
 
+    def _request_stop(
+        self, reason: str, *, location: str = "stream_loop", **metrics: Any
+    ) -> None:
+        from src.runtime.turn_diagnostics import log_turn_stop
+
+        self.stop_event.set()
+        self.stop_reason = reason
+        snapshot: Dict[str, Any] = {
+            "llm_calls": self.llm_calls,
+            "tool_calls": self.tool_calls,
+            "tool_events": self.tool_events,
+            "stream_events": self.stream_events,
+            "reasoning_chars": self.reasoning_chars,
+        }
+        snapshot.update(metrics)
+        log_turn_stop(self.session_id, reason, location=location, **snapshot)
+
     def _check_budget_guards(self, ctype: str) -> Optional[Dict[str, Any]]:
         """Return an error event if any hard-stop budget is exceeded, else None."""
         if self.max_stream_events > 0 and self.stream_events > self.max_stream_events:
-            self.stop_event.set()
-            self.stop_reason = "stream_events_limit"
+            self._request_stop(
+                "stream_events_limit",
+                location="stream_loop:budget_guards",
+                stream_events=self.stream_events,
+                max_stream_events=self.max_stream_events,
+            )
             return {
                 "type": "error",
                 "content": (
@@ -1132,8 +1245,12 @@ class StreamLoop:
             self.max_control_events > 0
             and self.control_events > self.max_control_events
         ):
-            self.stop_event.set()
-            self.stop_reason = "control_events_limit"
+            self._request_stop(
+                "control_events_limit",
+                location="stream_loop:budget_guards",
+                control_events=self.control_events,
+                max_control_events=self.max_control_events,
+            )
             return {
                 "type": "error",
                 "content": (
@@ -1142,8 +1259,12 @@ class StreamLoop:
                 ),
             }
         if self.max_output_events > 0 and self.output_events > self.max_output_events:
-            self.stop_event.set()
-            self.stop_reason = "output_events_limit"
+            self._request_stop(
+                "output_events_limit",
+                location="stream_loop:budget_guards",
+                output_events=self.output_events,
+                max_output_events=self.max_output_events,
+            )
             return {
                 "type": "error",
                 "content": (
@@ -1152,8 +1273,12 @@ class StreamLoop:
                 ),
             }
         if self.max_output_chars > 0 and self.output_chars > self.max_output_chars:
-            self.stop_event.set()
-            self.stop_reason = "output_chars_limit"
+            self._request_stop(
+                "output_chars_limit",
+                location="stream_loop:budget_guards",
+                output_chars=self.output_chars,
+                max_output_chars=self.max_output_chars,
+            )
             return {
                 "type": "error",
                 "content": (
@@ -1165,8 +1290,12 @@ class StreamLoop:
             self.no_progress_timeout > 0
             and (self.loop.time() - self.last_progress_at) > self.no_progress_timeout
         ):
-            self.stop_event.set()
-            self.stop_reason = "no_progress_timeout"
+            self._request_stop(
+                "no_progress_timeout",
+                location="stream_loop:budget_guards",
+                idle_sec=round(self.loop.time() - self.last_progress_at, 1),
+                no_progress_timeout=self.no_progress_timeout,
+            )
             return {
                 "type": "error",
                 "content": (

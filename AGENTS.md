@@ -122,6 +122,8 @@ Tests live in `src/test/`. Many require a running backend and `.env` loaded.
 - Production: `docker compose up -d --build` with `.env` from `.env.example` (see DEPLOY DOCKER section)
 - Dev compose (`docker-compose.dev.yml`): backend + chat-ui + redis with hot reload
   and the same `*_std` → runtime sync at boot as production.
+- Redis only (`docker-compose.redis.yml`): `docker compose -f docker-compose.redis.yml up -d`,
+  then uvicorn + pnpm locally with `AION_REDIS_URL=redis://127.0.0.1:6379/0`.
 - Production Dockerfiles live in `docker/` (multi-stage, uv-based). The root
   `Dockerfile` is a legacy single-stage build kept for backward compatibility.
 - Caddy reverse proxy handles path-based routing and auto-TLS in production.

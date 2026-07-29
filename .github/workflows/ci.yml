@@ -43,7 +43,7 @@ jobs:
 
       - name: Lint (Ruff)
         run: |
-          uv pip install ruff
+          uv pip install 'ruff==0.16.0'
           uv run ruff check --config ruff.toml src/
           uv run ruff format --check --config ruff.toml src/
 

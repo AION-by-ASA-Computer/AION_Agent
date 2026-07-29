@@ -66,6 +66,8 @@ async def finalize_turn_outcome(
     record_turn_outcome(turn_outcome)
     if not final_text and turn_outcome.get("code") == "plan_created":
         final_text = str(turn_outcome.get("suggested_final_text") or "").strip()
+    elif not final_text and turn_outcome.get("suggested_final_text"):
+        final_text = str(turn_outcome.get("suggested_final_text") or "").strip()
     warn = turn_outcome.get("user_visible_warning")
     sse_chunk: Optional[Dict[str, Any]] = None
     if warn:

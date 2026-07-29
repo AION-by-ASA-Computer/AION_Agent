@@ -1,0 +1,35 @@
+# AION Agent — solo Redis (sviluppo locale)
+#
+# Avvia Redis persistente per Plan Mode HITL (wait registry), pause/resume piani,
+# stream cancel, code sessione — senza backend/chat-ui in Docker.
+#
+# Avvio:   docker compose -f docker-compose.redis.yml up -d
+# Stop:    docker compose -f docker-compose.redis.yml down
+# Logs:    docker compose -f docker-compose.redis.yml logs -f redis
+# Stato:   docker compose -f docker-compose.redis.yml ps
+#
+# Backend locale (uvicorn / pnpm dev): nel .env
+#   AION_REDIS_URL=redis://127.0.0.1:6379/0
+#
+# Verifica: redis-cli -h 127.0.0.1 ping  →  PONG
+
+name: aion-redis
+
+services:
+  redis:
+    image: redis:7.4-alpine
+    container_name: aion-redis-dev
+    command: redis-server --appendonly yes
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - redis_standalone_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  redis_standalone_data:

@@ -244,10 +244,15 @@ def _is_plan_tagged_internal(row: Message, nr: str, meta: Dict[str, Any]) -> boo
 async def get_conversation_messages_chat_ui(
     conv_id: str,
     include_plan_internal: bool = False,
+    include_archived: bool = True,
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
     x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
 ):
-    """Retrieve full message history for a conversation including reasoning, tools and artifacts (chat-ui compat)."""
+    """Retrieve full message history for chat-ui (display). Includes archived rows by default.
+
+    The LLM/agent path uses ``history_manager.get_window()`` which excludes
+    ``archived_at`` messages — only this replay endpoint returns the full transcript.
+    """
     _check_internal_secret(x_chat_ui_secret)
     _require_unified()
     user_id = (x_aion_user_id or "").strip() or "default"
@@ -267,6 +272,8 @@ async def get_conversation_messages_chat_ui(
             .where(Message.conversation_id == conv_id)
             .order_by(Message.seq.asc())
         )
+        if not include_archived:
+            q_msg = q_msg.where(Message.archived_at.is_(None))
         msgs = (await session.execute(q_msg)).scalars().all()
 
         # Fetch Steps
@@ -352,6 +359,11 @@ async def get_conversation_messages_chat_ui(
                 "rating": r.rating,
                 "feedback_comment": r.feedback_comment,
             }
+            if getattr(r, "archived_at", None) is not None:
+                row["archived"] = True
+                reason = getattr(r, "archived_reason", None)
+                if reason:
+                    row["archived_reason"] = reason
             if meta:
                 row["metadata"] = meta
             if nr == "assistant":

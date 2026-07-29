@@ -128,6 +128,30 @@ def classify_turn_outcome(
         1 for m in msg_summary if m.get("role") == "assistant" and m.get("tools")
     )
 
+    # User-initiated cancel: never surface a scary warning to the chat UI.
+    if stop_reason and "cancel" in stop_reason.lower():
+        return {
+            "code": "user_cancelled",
+            "session_id": session_id,
+            "profile": profile,
+            "stop_reason": stop_reason,
+            "final_text_len": final_len,
+            "reasoning_len": reasoning_len,
+            "tool_calls": tool_calls_count,
+            "tool_events": tool_events_count,
+            "new_messages_count": len(new_messages)
+            if isinstance(new_messages, list)
+            else 0,
+            "assistant_text_msgs": 0,
+            "tool_only_assistant": 0,
+            "message_summary": [],
+            "context": context_stats or {},
+            "max_agent_steps": max_agent_steps,
+            "llm_steps": llm_steps,
+            "user_visible_warning": None,
+            "suggested_final_text": None,
+        }
+
     code = "ok"
     suggested_final_text: Optional[str] = None
     if final_len == 0 and reasoning_len > 200 and tool_calls_count == 0:
@@ -140,6 +164,12 @@ def classify_turn_outcome(
         )
     elif final_len == 0 and tool_calls_count > 0:
         code = "tools_without_final_answer"
+        if stop_reason == "reasoning_budget":
+            suggested_final_text = (
+                "Il turno è stato interrotto dal guard-rail sul reasoning (troppi chunk "
+                "di pensiero in un singolo step LLM). I tool sono stati eseguiti: "
+                "riprova con «Continua» o chiedi un riepilogo dei risultati già raccolti."
+            )
     elif final_len == 0 and new_msg_count > 0 and assistant_text_msgs == 0:
         code = "persisted_no_visible_text"
     elif final_len == 0:
@@ -206,6 +236,49 @@ def classify_turn_outcome(
         "user_visible_warning": warning,
         "suggested_final_text": suggested_final_text,
     }
+
+
+def turn_debug_verbose() -> bool:
+    return os.getenv("AION_TURN_DEBUG_VERBOSE", "0").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def log_turn_stop(
+    session_id: str,
+    reason: str,
+    *,
+    location: str = "",
+    **metrics: Any,
+) -> None:
+    """Structured log + JSONL when diagnostics enabled — every hard/agent stop."""
+    sid = (session_id or "")[:12]
+    msg = (
+        f"turn_stop session={sid} reason={reason} location={location or '?'}"
+        f" metrics={json.dumps(metrics, default=str)[:2000]}"
+    )
+    logger.warning(msg)
+    if turn_debug_verbose():
+        logger.info(msg)
+    append_jsonl(
+        turn_log_path(),
+        {
+            "kind": "turn_stop",
+            "session_id": session_id,
+            "reason": reason,
+            "location": location,
+            "metrics": metrics,
+        },
+    )
+    agent_debug_log(
+        "H2",
+        location or "turn:stop",
+        reason,
+        {"session_id": session_id, **metrics},
+    )
 
 
 def record_turn_outcome(record: Dict[str, Any]) -> None:

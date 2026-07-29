@@ -82,6 +82,10 @@ docker compose -f docker-compose.dev.yml up
 # chat-ui  -> http://localhost:8003 (next dev via chat-ui/ bind mount)
 # redis    -> 127.0.0.1:6379
 
+# Solo Redis (backend/chat-ui in locale con uvicorn + pnpm dev):
+docker compose -f docker-compose.redis.yml up -d
+# .env: AION_REDIS_URL=redis://127.0.0.1:6379/0
+
 # In parallel, when needed:
 cd admin-ui && npm run dev   # http://localhost:3870
 cd website  && npm run start # http://localhost:3000
@@ -108,6 +112,7 @@ docker/
 
 docker-compose.yml         # production: caddy + 4 apps + redis
 docker-compose.dev.yml     # dev: backend + chat-ui + redis (with hot reload)
+docker-compose.redis.yml   # dev: solo Redis (stack locale uvicorn/pnpm)
 .dockerignore              # excludes .venv, node_modules, data/, *.db, build/
 .env.docker.example        # Docker-specific env template (DOMAIN + AION_* overrides)
 ```

@@ -33,6 +33,16 @@ class WebSearchExecutor:
     ) -> str:
         sid = get_current_session_id()
         inp = {"query": query, "max_results": max_results, "language": language}
+        from src.runtime.plan_engine import apply_plan_mode_research_gate
+
+        blocked = apply_plan_mode_research_gate(
+            "web_search", session_id=sid, tool_input=inp
+        )
+        if blocked:
+            return json.dumps(
+                {"error": "plan_research_budget", "message": blocked, "results": []},
+                ensure_ascii=False,
+            )
         call_id = emit_tool_start(sid, "web_search", inp)
         try:
             if not get_web_search_request_context().enabled:
@@ -49,15 +59,31 @@ class WebSearchExecutor:
         except Exception as e:
             emit_tool_error(sid, "web_search", call_id, str(e))
             raise
-        out = maybe_compact_after_tool(tool_name="web_search", result=out)
         emit_tool_end(sid, "web_search", call_id, out)
-        return out
+        return maybe_compact_after_tool(
+            tool_name="web_search", result=out, arguments=inp
+        )
 
 
 class WebFetchPageExecutor:
     def __call__(self, url: str, prefer_stealth: bool = False) -> str:
         sid = get_current_session_id()
         inp = {"url": url, "prefer_stealth": prefer_stealth}
+        from src.runtime.plan_engine import apply_plan_mode_research_gate
+
+        blocked = apply_plan_mode_research_gate(
+            "web_fetch_page", session_id=sid, tool_input=inp
+        )
+        if blocked:
+            return json.dumps(
+                {
+                    "error": "plan_research_budget",
+                    "message": blocked,
+                    "url": url,
+                    "text": "",
+                },
+                ensure_ascii=False,
+            )
         call_id = emit_tool_start(sid, "web_fetch_page", inp)
         try:
             if not get_web_search_request_context().enabled:
@@ -75,9 +101,10 @@ class WebFetchPageExecutor:
         except Exception as e:
             emit_tool_error(sid, "web_fetch_page", call_id, str(e))
             raise
-        out = maybe_compact_after_tool(tool_name="web_fetch_page", result=out)
         emit_tool_end(sid, "web_fetch_page", call_id, out)
-        return out
+        return maybe_compact_after_tool(
+            tool_name="web_fetch_page", result=out, arguments=inp
+        )
 
 
 def _profile_slug(profile: Optional["AgentProfile"]) -> str:
@@ -93,8 +120,9 @@ def build_web_search_tool(
     return Tool(
         name="web_search",
         description=(
-            "Web search (Tavily / Brave / SearXNG) in base alla configurazione server. "
-            "Returns JSON with results[{title,url,snippet,provider}]. Use concise queries."
+            "Web search (Tavily / Brave / SearXNG). Returns TOON or JSON with "
+            "results[{title,url,snippet,provider}]. Use short natural-language queries; "
+            "prefer fetching a known URL with web_fetch_page over repeated searches."
         ),
         function=WebSearchExecutor(),
         parameters={
@@ -103,7 +131,7 @@ def build_web_search_tool(
                 "query": {"type": "string", "description": "Search query"},
                 "max_results": {
                     "type": "integer",
-                    "description": "Max results (1–20, default da env)",
+                    "description": "Max results (1–20, default 8 from AION_WEB_SEARCH_MAX_RESULTS)",
                 },
                 "language": {
                     "type": "string",
@@ -122,8 +150,10 @@ def build_web_fetch_page_tool(
     return Tool(
         name="web_fetch_page",
         description=(
-            "Scarica il contenuto testuale di una singola pagina HTTP(S). "
-            "Prefer URLs already obtained from web_search. Returns JSON with a text field."
+            "Scarica il contenuto testuale di una singola pagina HTTP(S) "
+            "(Scrapling Fetcher, fallback httpx + trafilatura/bs4). "
+            "Output grandi vanno su disco con AION_TOOL_OFFLOAD_ENABLED. "
+            "Returns TOON or JSON with text."
         ),
         function=WebFetchPageExecutor(),
         parameters={

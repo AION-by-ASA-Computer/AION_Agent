@@ -93,6 +93,36 @@ def test_write_content_only_infers_docx_script_path():
     assert args["content"] == body
 
 
+def test_write_truncated_content_returns_tool_args_truncated():
+    args, err = prepare_mcp_tool_arguments(
+        "sandbox_write_workspace_file",
+        {"relative_path": "workspace/big.py"},
+    )
+    assert err is not None
+    data = json.loads(err)
+    assert data["error"] == "tool_args_truncated"
+    assert "append" in data.get("hint", "").lower()
+
+
+def test_append_workspace_requires_content():
+    args, err = prepare_mcp_tool_arguments(
+        "sandbox_append_workspace_file",
+        {"relative_path": "workspace/data.json"},
+    )
+    assert err is not None
+    data = json.loads(err)
+    assert data["error"] == "tool_args_truncated"
+
+
+def test_append_workspace_ok():
+    args, err = prepare_mcp_tool_arguments(
+        "sandbox_append_workspace_file",
+        {"relative_path": "data.json", "content": '{"rows":[]}'},
+    )
+    assert err is None
+    assert args["relative_path"] == "workspace/data.json"
+
+
 def test_trace_context_preserved():
     args, err = prepare_mcp_tool_arguments(
         "sandbox_edit_workspace_file",

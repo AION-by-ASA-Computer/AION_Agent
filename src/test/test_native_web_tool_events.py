@@ -25,6 +25,7 @@ def test_web_search_executor_emits_tool_start_end(monkeypatch):
         session_id = "test-native-web-tool-events"
         loop = asyncio.get_running_loop()
         sub_q = tool_event_bus.subscribe(session_id)
+        monkeypatch.setenv("AION_TOOL_RESULT_FORMAT", "json")
 
         try:
             monkeypatch.setattr(
@@ -84,7 +85,8 @@ def test_agent_forward_propagates_via_copy_context_like_haystack_tool_invoker():
         clear_context()
 
 
-def test_run_web_fetch_page_rejects_pdf_url_by_path():
+def test_run_web_fetch_page_rejects_pdf_url_by_path(monkeypatch):
+    monkeypatch.setenv("AION_TOOL_RESULT_FORMAT", "json")
     raw = run_web_fetch_page("https://example.org/guidelines/document.pdf")
     data = json.loads(raw)
     assert data.get("error") == "pdf_not_text_extractable"

@@ -17,7 +17,7 @@ from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.identity import sanitize_user_id
 from src.main import get_agent, set_event_loop
 from src.runtime.reasoning_effort import effective_reasoning_effort
-from src.runtime.redis_client import redis_set_stream_cancel
+from src.runtime.redis_client import redis_clear_stream_cancel, redis_set_stream_cancel
 from src.api.web_search_params import normalize_web_search_restrict_hosts
 
 logger = logging.getLogger("aion.v1.chat")
@@ -88,7 +88,14 @@ async def _run_pipeline_in_background(
                 body.web_search_restrict_hosts
             ),
             sql_query_project=sql_project_resolved,
-            metadata=body.metadata,
+            metadata={
+                **(body.metadata or {}),
+                **(
+                    {"llm_provider_name": body.llm_provider_name}
+                    if body.llm_provider_name
+                    else {}
+                ),
+            },
         ):
             event_data = {"event": "message", "data": json.dumps(chunk)}
             run.history.append(event_data)
@@ -119,6 +126,50 @@ async def _run_pipeline_in_background(
         for q in list(run.queues):
             await q.put(None)
         _background_runs.pop(conversation_id, None)
+
+
+async def _stop_background_run(
+    conversation_id: str,
+    *,
+    timeout: float = 30.0,
+) -> None:
+    """Cancel an in-flight background pipeline and wait for teardown."""
+    cid = (conversation_id or "").strip()
+    if not cid:
+        return
+    run = _background_runs.get(cid)
+    if not run or run.is_done:
+        return
+
+    await redis_set_stream_cancel(cid)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + max(0.5, timeout)
+    while not run.is_done and loop.time() < deadline:
+        await asyncio.sleep(0.05)
+
+    if run.is_done:
+        return
+
+    logger.warning(
+        "Background chat run %s did not stop within %.1fs; cancelling task",
+        cid[:8],
+        timeout,
+    )
+    if run.task and not run.task.done():
+        run.task.cancel()
+        try:
+            await run.task
+        except asyncio.CancelledError:
+            pass
+        except Exception as exc:
+            logger.debug("background run task cancel: %s", exc)
+    _background_runs.pop(cid, None)
+    try:
+        from src.runtime.redis_client import redis_clear_stream_active
+
+        await redis_clear_stream_active(cid)
+    except Exception:
+        pass
 
 
 def _prepare_dedupe_key(conversation_id: str, profile: str, user_id: str) -> str:
@@ -354,6 +405,15 @@ async def chat_stop(
     if not cid:
         raise HTTPException(400, detail="conversation_id or session_id required")
     await redis_set_stream_cancel(cid)
+    await _stop_background_run(cid, timeout=15.0)
+    try:
+        from src.runtime.long_run_mode import long_run_enabled
+        from src.runtime.pi_runtime.pi_client import PiWorkerClient
+
+        if long_run_enabled():
+            await PiWorkerClient().abort_session(cid)
+    except Exception:
+        pass
     return {"ok": True, "conversation_id": cid, "session_id": cid}
 
 
@@ -378,6 +438,24 @@ async def chat_stream(
         deep_research_mode=body.deep_research_mode,
         message_source=body.message_source,
     )
+
+    if resolved_agent_mode == "long_run":
+        from src.runtime.long_run_mode import long_run_enabled
+        from src.runtime.pi_runtime.pi_client import pi_worker_healthy
+
+        if not long_run_enabled():
+            raise HTTPException(
+                status_code=503,
+                detail="Long Run mode is disabled (set AION_LONG_RUN_ENABLED=1).",
+            )
+        if not await pi_worker_healthy():
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "Pi worker is not reachable. Start services/pi-long-run "
+                    "(AION_PI_WORKER_URL)."
+                ),
+            )
 
     sql_project_resolved = (body.sql_query_project or "").strip() or None
     conversation_project: str | None = None
@@ -524,11 +602,15 @@ async def chat_stream(
     if body.turn_attachments:
         turn_att = [a.model_dump() for a in body.turn_attachments]
 
-    # Check if a background run is already active
-    run = (
-        _background_runs.get(body.conversation_id) if not _project_access_err else None
-    )
-    if not run and not _project_access_err:
+    # Stop any in-flight turn before starting a new one (client abort is not enough).
+    if not _project_access_err:
+        await _stop_background_run(body.conversation_id, timeout=45.0)
+        # /chat/stop (or _stop_background_run) leaves a cancel flag that would
+        # be consumed by the new run's cancel checker — clear before starting.
+        await redis_clear_stream_cancel(body.conversation_id)
+
+    run: Optional[BackgroundChatRun] = None
+    if not _project_access_err:
         run = BackgroundChatRun(body.conversation_id)
         _background_runs[body.conversation_id] = run
         run.task = asyncio.create_task(
