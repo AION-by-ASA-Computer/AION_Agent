@@ -148,7 +148,10 @@ def _truncate_web_tool_json(text: str, tool_name: str, cap: int) -> Optional[str
     if raw.startswith("```toon"):
         key = (tool_name or "").strip().lower()
         if key == "web_search":
-            from src.runtime.toon_encode import format_web_search_toon, parse_web_tool_payload
+            from src.runtime.toon_encode import (
+                format_web_search_toon,
+                parse_web_tool_payload,
+            )
 
             data = parse_web_tool_payload(raw, key)
             if isinstance(data, dict):
