@@ -95,7 +95,10 @@ class PiWorkerClient:
             ) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
-                    if stop_event is not None and getattr(stop_event, "is_set", lambda: False)():
+                    if (
+                        stop_event is not None
+                        and getattr(stop_event, "is_set", lambda: False)()
+                    ):
                         logger.info(
                             "Pi stream_prompt stop_event session=%s after_chunks=%d",
                             session_id[:8],

@@ -118,7 +118,9 @@ def next_pending_task_id(markdown: str) -> Optional[str]:
     return None
 
 
-def _emit_plan_research_budget_sse(controller: "PlanModeController", message: str) -> None:
+def _emit_plan_research_budget_sse(
+    controller: "PlanModeController", message: str
+) -> None:
     """Push plan_phase SSE to the active turn queue (best-effort)."""
     try:
         from src.runtime.context import get_context

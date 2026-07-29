@@ -251,9 +251,7 @@ def run_web_search(
         )
     tavily_domains = tavily_safe_include_domains(patterns) if patterns else []
     if site_domains:
-        tavily_domains = list(
-            dict.fromkeys(site_domains + tavily_domains)
-        )[:300]
+        tavily_domains = list(dict.fromkeys(site_domains + tavily_domains))[:300]
 
     max_r = max_results or int(os.getenv("AION_WEB_SEARCH_MAX_RESULTS", "8"))
     max_r = max(1, min(max_r, 20))
@@ -507,7 +505,12 @@ def run_web_fetch_page(url: str, *, prefer_stealth: bool = False) -> str:
                 return _pdf_not_text_extractable_payload(u)
             text, mode = _extract_main_text(html, url=u, max_chars=max_chars)
             return _serialize_tool_payload(
-                {"url": u, "mode": f"scrapling_stealthy+{mode}", "chars": len(text), "text": text},
+                {
+                    "url": u,
+                    "mode": f"scrapling_stealthy+{mode}",
+                    "chars": len(text),
+                    "text": text,
+                },
                 tool="web_fetch_page",
             )
         except Exception as e:

@@ -25,10 +25,15 @@ _PI_RELAXED_CLIENT_VALIDATION = frozenset(
 )
 
 
-def relax_pi_tool_parameters(tool_name: str, parameters: Dict[str, Any]) -> Dict[str, Any]:
+def relax_pi_tool_parameters(
+    tool_name: str, parameters: Dict[str, Any]
+) -> Dict[str, Any]:
     """Relax Pi-side required fields; enforce on AION bridge via prepare_mcp_tool_arguments."""
     base = (tool_name or "").split("-")[-1].strip().lower()
-    if tool_name not in _PI_RELAXED_CLIENT_VALIDATION and base not in _PI_RELAXED_CLIENT_VALIDATION:
+    if (
+        tool_name not in _PI_RELAXED_CLIENT_VALIDATION
+        and base not in _PI_RELAXED_CLIENT_VALIDATION
+    ):
         return parameters
     if not isinstance(parameters, dict):
         return {"type": "object", "properties": {}, "additionalProperties": True}
@@ -134,7 +139,9 @@ def write_tool_manifest(session_id: str, manifest: List[Dict[str, Any]]) -> Path
     agent_dir = Path(pi_session_dir(session_id))
     agent_dir.mkdir(parents=True, exist_ok=True)
     path = agent_dir / "tool_manifest.json"
-    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     return path
 
 

@@ -139,7 +139,9 @@ def classify_turn_outcome(
             "reasoning_len": reasoning_len,
             "tool_calls": tool_calls_count,
             "tool_events": tool_events_count,
-            "new_messages_count": len(new_messages) if isinstance(new_messages, list) else 0,
+            "new_messages_count": len(new_messages)
+            if isinstance(new_messages, list)
+            else 0,
             "assistant_text_msgs": 0,
             "tool_only_assistant": 0,
             "message_summary": [],

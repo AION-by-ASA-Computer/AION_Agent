@@ -266,7 +266,9 @@ def _handle_haystack_stream_chunk(chunk: Any, *, from_async: bool) -> None:
                 "reasoning_meta_len": len(str(reasoning or "")),
             },
         )
-        _emit_agent_stream_event(ctx, {"type": "stream_end", "finish_reason": fr}, from_async=from_async)
+        _emit_agent_stream_event(
+            ctx, {"type": "stream_end", "finish_reason": fr}, from_async=from_async
+        )
 
     if fr == "length":
         logger.warning("Agent response truncated by model (finish_reason=length).")
@@ -707,7 +709,12 @@ class AgentPipeline:
             "on",
         )
 
-        if not date_enabled and not op_enabled and not manifest_enabled and not orch_ctx_enabled:
+        if (
+            not date_enabled
+            and not op_enabled
+            and not manifest_enabled
+            and not orch_ctx_enabled
+        ):
             return user_input
 
         blocks = []
@@ -906,10 +913,10 @@ class AgentPipeline:
                         "`derived/tool_results/`. You **can** read them:\n"
                         "- `sandbox_read_file_chunk(relative_path="
                         '"derived/tool_results/<file>.txt", offset_lines=0)`\n'
-                        "- `sandbox_list_files(subdir=\"tool_results\")`\n"
-                        "- `sandbox_grep_content(..., relative_root=\"derived\", "
+                        '- `sandbox_list_files(subdir="tool_results")`\n'
+                        '- `sandbox_grep_content(..., relative_root="derived", '
                         'glob_filter="tool_results/*.txt")` '
-                        "(do **not** use `relative_root=\"derived/tool_results\"` — invalid)\n"
+                        '(do **not** use `relative_root="derived/tool_results"` — invalid)\n'
                         "Recent offload files:\n"
                         + "\n".join(f"- `{p}`" for p in recent)
                     )
@@ -2656,7 +2663,10 @@ class AgentPipeline:
                                                 break
                                         except Exception:
                                             pass
-                                    if plan_controller is not None and plan_controller.is_research_tool(_tn):
+                                    if (
+                                        plan_controller is not None
+                                        and plan_controller.is_research_tool(_tn)
+                                    ):
                                         yield _track_sse(
                                             plan_controller.sse_phase("researching")
                                         )

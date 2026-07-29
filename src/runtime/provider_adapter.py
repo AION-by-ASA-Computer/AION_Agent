@@ -101,7 +101,9 @@ def repair_orphan_tool_results(messages: List[Dict[str, Any]]) -> List[Dict[str,
     return out
 
 
-def skip_incomplete_assistant_turns(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+def skip_incomplete_assistant_turns(
+    messages: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
     if not messages:
         return messages
     last = messages[-1]

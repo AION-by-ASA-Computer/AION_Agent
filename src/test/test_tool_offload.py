@@ -64,8 +64,12 @@ def test_offload_above_threshold_writes_file(session_id, monkeypatch):
     assert "[AION offload]" in out.text
     assert "sandbox_read_file_chunk" in out.text
     assert 'relative_root="derived"' in out.text
-    assert "glob_filter=\"tool_results/*.txt\"" in out.text
-    assert "derived/tool_results\"" not in out.text.split("grep")[1] if "grep" in out.text else True
+    assert 'glob_filter="tool_results/*.txt"' in out.text
+    assert (
+        'derived/tool_results"' not in out.text.split("grep")[1]
+        if "grep" in out.text
+        else True
+    )
     assert out.text[:200].count("x") <= 60
 
 
@@ -124,7 +128,9 @@ def test_process_tool_result_fallback_truncate(session_id, monkeypatch):
 def test_offload_excludes_sandbox_read_file_chunk(session_id, monkeypatch):
     monkeypatch.setenv("AION_TOOL_OFFLOAD_ENABLED", "1")
     monkeypatch.setenv("AION_TOOL_OFFLOAD_MIN_CHARS", "10")
-    monkeypatch.setenv("AION_TOOL_OFFLOAD_EXCLUDE", "web_search,sandbox_read_file_chunk")
+    monkeypatch.setenv(
+        "AION_TOOL_OFFLOAD_EXCLUDE", "web_search,sandbox_read_file_chunk"
+    )
     big = "chunk " * 2000
     out = offload_tool_result(
         big,
@@ -143,7 +149,7 @@ def test_smart_preview_prefers_match_section(session_id, monkeypatch):
     monkeypatch.setenv("AION_TOOL_LEDGER_ENABLED", "0")
     intro = "Group A intro and standings table. " * 40
     payload = (
-        f"```toon\nurl: \"https://en.wikipedia.org/wiki/Group_A\"\ntext: |\n"
+        f'```toon\nurl: "https://en.wikipedia.org/wiki/Group_A"\ntext: |\n'
         f"{intro}All times listed are local. Mexico beat South Africa 2–1 in the opener.\n"
         + ("more text " * 80)
         + "\n```"

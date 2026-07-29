@@ -548,9 +548,7 @@ def estimate_overhead_breakdown(agent: object) -> Dict[str, int]:
     parts = {"system_prompt": overhead_floor_tokens(), "tool_specs": 0}
     try:
         sp = getattr(agent, "system_prompt", None) or ""
-        parts["system_prompt"] += count_tokens(
-            sp if isinstance(sp, str) else str(sp)
-        )
+        parts["system_prompt"] += count_tokens(sp if isinstance(sp, str) else str(sp))
         tools = getattr(agent, "tools", None) or []
         for tool in tools:
             spec = getattr(tool, "tool_spec", None)

@@ -249,7 +249,7 @@ def build_plan_execution_reminder(
             done_when,
             "",
             "## Exit (mandatory)",
-            f"1. When Done when is satisfied, call `mark_task_completed(task_id=\"{ntid}\")`.",
+            f'1. When Done when is satisfied, call `mark_task_completed(task_id="{ntid}")`.',
             "2. Immediately STOP — zero more tool calls after mark_task_completed.",
             "3. Do NOT start the next task in this turn (the server schedules it).",
             "</system-reminder>",
@@ -269,11 +269,11 @@ def build_plan_execution_trigger(
         return (
             f"Execute plan task `{tid}` only. "
             "Follow the system-reminder brief (scope, out-of-scope, Done when, Exit). "
-            f"When Done when is met, call mark_task_completed(task_id=\"{tid}\") and STOP."
+            f'When Done when is met, call mark_task_completed(task_id="{tid}") and STOP.'
         )
     return (
         f"Retry plan task `{tid}` only. "
         "Complete the Done when criteria from the system-reminder before marking. "
         f"Do NOT call mark_task_completed unless the task is truly complete. "
-        f"When done, call mark_task_completed(task_id=\"{tid}\") and STOP immediately."
+        f'When done, call mark_task_completed(task_id="{tid}") and STOP immediately.'
     )

@@ -41,7 +41,9 @@ def read_text_max_bytes(requested: int | None = None) -> int:
     workspace scripts. Values below ``AION_SANDBOX_READ_TEXT_IGNORE_BELOW`` are
     treated as "use server default".
     """
-    default = int(os.environ.get("AION_SANDBOX_READ_TEXT_MAX_BYTES", str(2 * 1024 * 1024)))
+    default = int(
+        os.environ.get("AION_SANDBOX_READ_TEXT_MAX_BYTES", str(2 * 1024 * 1024))
+    )
     default = max(4096, default)
     ignore_below = int(os.environ.get("AION_SANDBOX_READ_TEXT_IGNORE_BELOW", "65536"))
     ignore_below = max(0, ignore_below)

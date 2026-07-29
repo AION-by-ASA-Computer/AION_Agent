@@ -91,9 +91,7 @@ async def _invoke_mcp_tool(
     if list_block:
         return list_block
 
-    prepared = apply_sql_query_project_scope(
-        tool_name, prepared, session_id=session_id
-    )
+    prepared = apply_sql_query_project_scope(tool_name, prepared, session_id=session_id)
 
     raw = await mcp_manager.call_tool_pooled(
         session_id,

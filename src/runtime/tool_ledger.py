@@ -93,7 +93,9 @@ def next_ledger_seq(session_id: str) -> int:
     return max(int(e.get("seq") or 0) for e in entries) + 1
 
 
-def extract_target_hint(tool_name: str, arguments: Optional[Dict[str, Any]] = None) -> str:
+def extract_target_hint(
+    tool_name: str, arguments: Optional[Dict[str, Any]] = None
+) -> str:
     """Short label for ledger (never full argument blobs)."""
     args = arguments or {}
     keys = ("url", "relative_path", "path", "query", "pattern", "command", "skill")

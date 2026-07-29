@@ -27,7 +27,9 @@ def test_tools_to_pi_manifest_handles_callable_without_name():
     class DelegationTool:
         server_name = "aion_subagents"
 
-    manifest = tools_to_pi_manifest("sess-2", [_Tool("delegate_to_subagent", DelegationTool())])
+    manifest = tools_to_pi_manifest(
+        "sess-2", [_Tool("delegate_to_subagent", DelegationTool())]
+    )
     assert manifest == []
 
 
@@ -60,7 +62,10 @@ def test_relax_pi_tool_parameters_drops_required_for_sandbox_write():
 def test_tools_to_pi_manifest_relaxes_sandbox_write_schema():
     params = {
         "type": "object",
-        "properties": {"relative_path": {"type": "string"}, "content": {"type": "string"}},
+        "properties": {
+            "relative_path": {"type": "string"},
+            "content": {"type": "string"},
+        },
         "required": ["relative_path", "content"],
     }
     tool = _Tool("sandbox_write_workspace_file")

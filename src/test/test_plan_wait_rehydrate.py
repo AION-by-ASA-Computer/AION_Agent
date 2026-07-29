@@ -20,12 +20,24 @@ async def test_resolve_plan_rehydrates_from_db(monkeypatch):
     plan = ExecutionPlan.from_goal_and_tasks(
         "Test goal for rehydrate",
         [
-            {"id": "task_01", "title": "First", "description": "Do first thing", "depends_on": []},
-            {"id": "task_02", "title": "Second", "description": "Do second thing", "depends_on": ["task_01"]},
+            {
+                "id": "task_01",
+                "title": "First",
+                "description": "Do first thing",
+                "depends_on": [],
+            },
+            {
+                "id": "task_02",
+                "title": "Second",
+                "description": "Do second thing",
+                "depends_on": ["task_01"],
+            },
         ],
     )
     plan_dict = json.loads(plan.model_dump_json())
-    draft_md = "# Execution Plan\n\n## Goal\nTest\n\n## Tasks\n- [ ] `task_01` **First**"
+    draft_md = (
+        "# Execution Plan\n\n## Goal\nTest\n\n## Tasks\n- [ ] `task_01` **First**"
+    )
 
     async def _fake_bundle(pid: str):
         assert pid == plan_id
@@ -83,7 +95,13 @@ async def test_rehydrate_plan_pending_skips_wrong_session(monkeypatch):
 async def test_set_pending_then_resolve_without_rehydrate():
     plan_id = uuid.uuid4().hex
     session_id = "thread-direct-01"
-    draft = {"plan_markdown": "# Plan", "plan_json": {}, "todos": [], "annotations": {}, "revision": 1}
+    draft = {
+        "plan_markdown": "# Plan",
+        "plan_json": {},
+        "todos": [],
+        "annotations": {},
+        "revision": 1,
+    }
     ok = await set_pending(
         plan_id,
         session_id=session_id,

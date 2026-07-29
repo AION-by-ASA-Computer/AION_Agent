@@ -282,9 +282,7 @@ async def build_turn_context(
                 user_input,
                 session_id=pipeline.session_id,
                 profile_skills=prof.skills if prof else None,
-                critical_skills=prof._resolved_critical_skill_names()
-                if prof
-                else None,
+                critical_skills=prof._resolved_critical_skill_names() if prof else None,
             )
             if _structured_injections():
                 augmented_user = _layer_inject(
@@ -619,11 +617,15 @@ async def build_turn_context(
     )
     if reloaded_from_db:
         if harness_v2_messages():
-            user_for_llm = _user_input_raw if _structured_injections() else augmented_user
+            user_for_llm = (
+                _user_input_raw if _structured_injections() else augmented_user
+            )
             built = build_llm_messages(
                 messages,
                 user_text=user_for_llm,
-                inject_layers=_prompt_inject_layers if _structured_injections() else None,
+                inject_layers=_prompt_inject_layers
+                if _structured_injections()
+                else None,
                 attachments_block=attach_block if _structured_injections() else "",
             )
             user_turn = built.messages[-1] if built.messages else None

@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import json
 
-from src.runtime.toon_encode import encode_toon, format_web_fetch_toon, format_web_search_toon, parse_web_tool_payload
+from src.runtime.toon_encode import (
+    encode_toon,
+    format_web_fetch_toon,
+    format_web_search_toon,
+    parse_web_tool_payload,
+)
 
 
 def test_web_search_toon_tabular_results():

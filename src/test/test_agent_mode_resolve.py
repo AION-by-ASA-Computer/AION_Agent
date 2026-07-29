@@ -33,6 +33,4 @@ def test_long_run_when_enabled(monkeypatch):
 
 def test_internal_trigger_forces_normal_even_for_long_run(monkeypatch):
     monkeypatch.setenv("AION_LONG_RUN_ENABLED", "1")
-    assert (
-        resolve_agent_mode("long_run", message_source="internal_trigger") == "normal"
-    )
+    assert resolve_agent_mode("long_run", message_source="internal_trigger") == "normal"

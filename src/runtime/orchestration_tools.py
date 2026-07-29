@@ -524,7 +524,9 @@ async def run_draft_execution_plan(
     if not g:
         raise ValueError("goal is required")
     if len(g) < 20:
-        raise ValueError("goal must be at least 20 characters and describe a verifiable outcome")
+        raise ValueError(
+            "goal must be at least 20 characters and describe a verifiable outcome"
+        )
     if tasks is None:
         raise ValueError(
             "tasks is required: JSON array with at least 2 atomic tasks "

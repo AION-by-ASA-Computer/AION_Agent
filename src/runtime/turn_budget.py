@@ -40,7 +40,9 @@ class TurnBudget:
                 turn_timeout=lr.turn_timeout,
                 max_tool_calls=lr.max_tool_calls,
                 max_tool_events=lr.max_tool_events,
-                max_stream_events=int(os.getenv("AION_STREAM_EVENTS_MAX_PER_TURN", "0")),
+                max_stream_events=int(
+                    os.getenv("AION_STREAM_EVENTS_MAX_PER_TURN", "0")
+                ),
                 no_progress_timeout=lr.no_progress_timeout,
                 max_reasoning_chars=base["max_reasoning_chars"],
                 max_reasoning_events=base["max_reasoning_events"],
@@ -117,8 +119,12 @@ class TurnBudget:
 
         if effort == "min":
             return {
-                "max_reasoning_chars": int(os.getenv("AION_REASONING_MIN_CHARS", "2000")),
-                "max_reasoning_events": int(os.getenv("AION_REASONING_MIN_EVENTS", "30")),
+                "max_reasoning_chars": int(
+                    os.getenv("AION_REASONING_MIN_CHARS", "2000")
+                ),
+                "max_reasoning_events": int(
+                    os.getenv("AION_REASONING_MIN_EVENTS", "30")
+                ),
             }
         if effort == "max":
             return {

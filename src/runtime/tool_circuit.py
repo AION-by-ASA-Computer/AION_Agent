@@ -52,7 +52,9 @@ def _max_repeat() -> int:
         return 3
 
 
-def _failure_key(session_id: str, tool_name: str, args: Dict[str, Any], error_code: str) -> str:
+def _failure_key(
+    session_id: str, tool_name: str, args: Dict[str, Any], error_code: str
+) -> str:
     rel = str(args.get("relative_path") or "").strip() or "(no-path)"
     return f"{session_id}|{tool_name}|{rel}|{error_code}"
 

@@ -30,7 +30,9 @@ def test_resolve_chat_max_tokens_long_run_override(monkeypatch, fresh_settings):
     assert resolve_chat_max_tokens(long_run=True) == 24576
 
 
-def test_resolve_chat_max_tokens_long_run_falls_back_to_chat(monkeypatch, fresh_settings):
+def test_resolve_chat_max_tokens_long_run_falls_back_to_chat(
+    monkeypatch, fresh_settings
+):
     monkeypatch.setenv("AION_CHAT_MAX_TOKENS", "16384")
     monkeypatch.delenv("AION_LONG_RUN_MAX_TOKENS", raising=False)
     get_settings.cache_clear()

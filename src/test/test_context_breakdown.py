@@ -78,8 +78,12 @@ def test_get_turn_messages_uses_live_messages_cache(monkeypatch):
         ChatMessage.from_user("before"),
         ChatMessage.from_assistant("after tool"),
     ]
-    monkeypatch.setattr(tc, "_turn_runtime", contextvars.ContextVar("rt_test", default=None))
-    monkeypatch.setattr(tc, "_agent_exec_ctx", contextvars.ContextVar("exec_test", default=None))
+    monkeypatch.setattr(
+        tc, "_turn_runtime", contextvars.ContextVar("rt_test", default=None)
+    )
+    monkeypatch.setattr(
+        tc, "_agent_exec_ctx", contextvars.ContextVar("exec_test", default=None)
+    )
     tc._TURN_RUNTIME_REGISTRY.clear()
     set_turn_runtime(
         session_id="sess",
@@ -113,8 +117,12 @@ def test_context_budget_reads_registry_without_contextvar(monkeypatch):
         ),
     ]
     live[-1].meta["tool_name"] = "web_fetch_page"
-    monkeypatch.setattr(tc, "_turn_runtime", contextvars.ContextVar("rt_empty", default=None))
-    monkeypatch.setattr(tc, "_agent_exec_ctx", contextvars.ContextVar("exec_empty", default=None))
+    monkeypatch.setattr(
+        tc, "_turn_runtime", contextvars.ContextVar("rt_empty", default=None)
+    )
+    monkeypatch.setattr(
+        tc, "_agent_exec_ctx", contextvars.ContextVar("exec_empty", default=None)
+    )
     tc._TURN_RUNTIME_REGISTRY.clear()
     set_turn_runtime(
         session_id="cross-task",
@@ -141,8 +149,12 @@ def test_context_budget_merges_runtime_deltas_into_parts(monkeypatch):
     import src.runtime.turn_compaction as tc
 
     agent = _FakeAgent()
-    monkeypatch.setattr(tc, "_turn_runtime", contextvars.ContextVar("rt_empty", default=None))
-    monkeypatch.setattr(tc, "_agent_exec_ctx", contextvars.ContextVar("exec_empty", default=None))
+    monkeypatch.setattr(
+        tc, "_turn_runtime", contextvars.ContextVar("rt_empty", default=None)
+    )
+    monkeypatch.setattr(
+        tc, "_agent_exec_ctx", contextvars.ContextVar("exec_empty", default=None)
+    )
     tc._TURN_RUNTIME_REGISTRY.clear()
     set_turn_runtime(
         session_id="delta-sess",

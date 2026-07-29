@@ -54,7 +54,7 @@ def build_long_run_system_prompt() -> str:
         "- Context compaction runs automatically; do not repeat full fetch dumps in prose.\n"
         "- Large tool results may be **offloaded** to `derived/tool_results/` with an "
         "`[AION offload]` pointer in context. Re-read with `sandbox_read_file_chunk` "
-        "(offset_lines/max_lines) or `sandbox_grep_content` (relative_root=\"derived\"). "
+        '(offset_lines/max_lines) or `sandbox_grep_content` (relative_root="derived"). '
         "Do not re-fetch URLs that already appear in the tool trace ledger.\n"
     )
 

@@ -99,7 +99,9 @@ def encode_toon(data: Any, *, indent: int = 0) -> str:
             return _encode_tabular_array("items", data, indent - 1 if indent else 0)
         lines = []
         for i, item in enumerate(data):
-            lines.append(f"{pad}- {_format_scalar(item) if not isinstance(item, (dict, list)) else ''}".rstrip())
+            lines.append(
+                f"{pad}- {_format_scalar(item) if not isinstance(item, (dict, list)) else ''}".rstrip()
+            )
             if isinstance(item, (dict, list)):
                 lines.append(encode_toon(item, indent=indent + 1))
         return "\n".join(lines)
@@ -186,7 +188,11 @@ def parse_web_search_toon(raw: str) -> Optional[Dict[str, Any]]:
             while i < len(lines):
                 line = lines[i]
                 trimmed = line.strip()
-                if section and re.match(r"^[a-zA-Z_][\w]*:\s", trimmed) and not line.startswith("  "):
+                if (
+                    section
+                    and re.match(r"^[a-zA-Z_][\w]*:\s", trimmed)
+                    and not line.startswith("  ")
+                ):
                     break
                 if not section and not line.startswith("  "):
                     break
@@ -197,7 +203,10 @@ def parse_web_search_toon(raw: str) -> Optional[Dict[str, Any]]:
                     break
                 i += 1
             rows = [
-                {fields[idx]: cells[idx] if idx < len(cells) else "" for idx in range(len(fields))}
+                {
+                    fields[idx]: cells[idx] if idx < len(cells) else ""
+                    for idx in range(len(fields))
+                }
                 for cells in _parse_tabular_rows("\n".join(section), len(fields))
             ]
             out["results"] = rows
@@ -344,26 +353,6 @@ def _parse_tabular_rows(blob: str, field_count: int) -> List[List[str]]:
         rows.append(cells)
         pos += consumed
     return rows
-    cells: List[str] = []
-    cur = ""
-    in_quotes = False
-    for idx, ch in enumerate(line):
-        if ch == '"':
-            if in_quotes and idx + 1 < len(line) and line[idx + 1] == '"':
-                cur += '"'
-                continue
-            in_quotes = not in_quotes
-            continue
-        if ch == "," and not in_quotes:
-            cells.append(_parse_toon_scalar(cur))
-            cur = ""
-            if len(cells) >= field_count - 1:
-                cells.append(_parse_toon_scalar(line[idx + 1 :]))
-                return cells
-            continue
-        cur += ch
-    cells.append(_parse_toon_scalar(cur))
-    return cells
 
 
 def parse_tool_result_payload(

@@ -44,6 +44,7 @@ def _drop_turn_lock(session_id: str) -> None:
     if sid:
         _TURN_RUNTIME_LOCKS.pop(sid, None)
 
+
 try:
     import contextvars
 
@@ -143,8 +144,6 @@ def tool_result_max_chars_for(tool_name: str) -> int:
 
 def _truncate_web_tool_json(text: str, tool_name: str, cap: int) -> Optional[str]:
     """Shrink web tool JSON/TOON without breaking structure (chat-ui parses JSON events)."""
-    import json
-
     raw = str(text or "").strip()
     if raw.startswith("```toon"):
         key = (tool_name or "").strip().lower()
@@ -165,7 +164,11 @@ def _truncate_web_tool_json(text: str, tool_name: str, cap: int) -> Optional[str
                             if isinstance(val, str) and len(val) > per:
                                 row[field] = val[:per] + "…"
                     out = format_web_search_toon(data)
-                    while len(out) > cap and isinstance(results, list) and len(results) > 1:
+                    while (
+                        len(out) > cap
+                        and isinstance(results, list)
+                        and len(results) > 1
+                    ):
                         results.pop()
                         data["results"] = results
                         out = format_web_search_toon(data)
@@ -182,8 +185,12 @@ def _truncate_web_tool_json(text: str, tool_name: str, cap: int) -> Optional[str
             if line.startswith("text:") or line.strip() == "text: |":
                 break
             head.append(line)
-        body_budget = max(120, cap - sum(len(l) + 1 for l in head) - len(note) - 8)
-        trimmed = "\n".join(head + ["text: |", raw[raw.find("text:") :][:body_budget] + note, "```"])
+        body_budget = max(
+            120, cap - sum(len(head_line) + 1 for head_line in head) - len(note) - 8
+        )
+        trimmed = "\n".join(
+            head + ["text: |", raw[raw.find("text:") :][:body_budget] + note, "```"]
+        )
         return trimmed[:cap]
 
     try:
@@ -523,7 +530,9 @@ def _merge_budget_deltas_into_payload(
     legacy_extra = int(rt.get("extra_tokens") or 0)
     accounted = sum(int(v) for v in bd.values())
     if legacy_extra > accounted:
-        bd["tool_results"] = int(bd.get("tool_results") or 0) + (legacy_extra - accounted)
+        bd["tool_results"] = int(bd.get("tool_results") or 0) + (
+            legacy_extra - accounted
+        )
     if not bd:
         return payload
 
@@ -534,7 +543,9 @@ def _merge_budget_deltas_into_payload(
         if tok <= 0:
             continue
         if key in parts_by_key:
-            parts_by_key[key]["tokens"] = int(parts_by_key[key].get("tokens") or 0) + tok
+            parts_by_key[key]["tokens"] = (
+                int(parts_by_key[key].get("tokens") or 0) + tok
+            )
         else:
             parts_by_key[key] = {"key": key, "tokens": tok, "pct": 0.0}
 
@@ -636,11 +647,7 @@ def mechanical_shrink_conversation(
     Replace oldest tool-result bodies with a short placeholder.
     Returns (new_convo, count_shrunk).
     """
-    tool_indices = [
-        i
-        for i, m in enumerate(convo)
-        if _message_role_str(m) == "tool"
-    ]
+    tool_indices = [i for i, m in enumerate(convo) if _message_role_str(m) == "tool"]
     if len(tool_indices) <= keep_recent_tools:
         return list(convo), 0
 
@@ -686,7 +693,11 @@ def emergency_compact_messages(
     max_prompt = compressor.max_prompt_tokens()
     target = int(max_prompt * (0.70 if aggressive else 0.82))
 
-    keep_tools = 1 if aggressive else max(1, int(os.getenv("AION_MECHANICAL_COMPACT_KEEP_TOOLS", "3")))
+    keep_tools = (
+        1
+        if aggressive
+        else max(1, int(os.getenv("AION_MECHANICAL_COMPACT_KEEP_TOOLS", "3")))
+    )
     working_convo = list(convo)
     total_shrunk = 0
 
@@ -741,13 +752,13 @@ def _append_ledger_offload_context(transcript: str, session_id: str) -> str:
         ledger = render_ledger_table(sid) or ""
         offload_block = "\n".join(offload_paths_for_session(sid)[:40])
         if offload_block:
-            ledger = (
-                f"{ledger}\n\n<offloaded-results>\n{offload_block}\n</offloaded-results>"
-            )
+            ledger = f"{ledger}\n\n<offloaded-results>\n{offload_block}\n</offloaded-results>"
         trace_lines = ledger_summary_lines(sid)
         if trace_lines:
             ledger = (
-                f"{ledger}\n\n<tool-trace>\n" + "\n".join(trace_lines) + "\n</tool-trace>"
+                f"{ledger}\n\n<tool-trace>\n"
+                + "\n".join(trace_lines)
+                + "\n</tool-trace>"
             )
     if not ledger:
         return transcript
@@ -802,7 +813,9 @@ def _sync_compact_head_tail(
         summary = complete_text_sync(
             compaction_summary_prompt(),
             transcript,
-            max_tokens=int(os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "8192")),
+            max_tokens=int(
+                os.getenv("AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS", "8192")
+            ),
             timeout=float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_TIMEOUT", "90")),
         )
     except Exception as exc:
@@ -986,7 +999,9 @@ def compact_agent_messages_in_place() -> bool:
     )
 
     summary_blocks = [
-        m for m in data["messages"] if "compacted into the following" in chat_message_text(m)
+        m
+        for m in data["messages"]
+        if "compacted into the following" in chat_message_text(m)
     ]
     if summary_blocks:
         _schedule_db_persist(rt, summary_blocks[0], compressor.keep_last)
@@ -1068,7 +1083,10 @@ def _web_tool_compact_threshold(agent: Any) -> int:
     except ValueError:
         ratio = 0.55
     try:
-        max_prompt = int(getattr(agent, "max_prompt_tokens", None) or os.getenv("AION_CONTEXT_WINDOW", "131072"))
+        max_prompt = int(
+            getattr(agent, "max_prompt_tokens", None)
+            or os.getenv("AION_CONTEXT_WINDOW", "131072")
+        )
     except ValueError:
         max_prompt = 131072
     return int(max_prompt * ratio)
@@ -1170,7 +1188,11 @@ def maybe_compact_after_tool(
             if tname in ("web_search", "web_fetch_page"):
                 exec_ctx = _agent_exec_ctx.get() if _agent_exec_ctx else None
                 state = getattr(exec_ctx, "state", None) if exec_ctx else None
-                data = getattr(state, "_data", None) or getattr(state, "data", None) if state else None
+                data = (
+                    getattr(state, "_data", None) or getattr(state, "data", None)
+                    if state
+                    else None
+                )
                 messages = data.get("messages") if isinstance(data, dict) else None
                 agent = (rt or {}).get("agent") if isinstance(rt, dict) else None
                 if (

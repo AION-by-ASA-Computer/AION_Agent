@@ -178,7 +178,9 @@ def attempt_context_recovery(
 
     rt = _turn_runtime_dict()
     if rt is not None:
-        rt["context_recovery_attempts"] = int(rt.get("context_recovery_attempts") or 0) + 1
+        rt["context_recovery_attempts"] = (
+            int(rt.get("context_recovery_attempts") or 0) + 1
+        )
         rt["extra_tokens"] = 0
         rt["last_compact_at"] = 0.0
 

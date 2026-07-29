@@ -156,11 +156,7 @@ def _prune_store_if_needed(session_id: str) -> None:
         store = safe_resolve(session_id, TOOL_RESULTS_REL, must_exist=True)
     except (FileNotFoundError, ValueError):
         return
-    files = [
-        p
-        for p in store.iterdir()
-        if p.is_file() and not p.name.startswith("_")
-    ]
+    files = [p for p in store.iterdir() if p.is_file() and not p.name.startswith("_")]
     total = sum(p.stat().st_size for p in files)
     if total <= cap_bytes:
         return
@@ -194,7 +190,7 @@ def _build_pointer_text(
         f"path={rel_path}\n"
         "Retrieve: sandbox_read_file_chunk(relative_path="
         f'"{rel_path}", offset_lines=0, max_lines=500)\n'
-        "List: sandbox_list_files(subdir=\"tool_results\")\n"
+        'List: sandbox_list_files(subdir="tool_results")\n'
         "Search scores: sandbox_grep_content(pattern=r'\\d+[-–]\\d+', "
         f'relative_root="derived", glob_filter="tool_results/*.txt")\n'
         "Note: offloaded pages are few long lines — use offset_lines=0 or grep, "
