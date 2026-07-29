@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from src.research.search_bridge import (
-    _parse_search_results,
-    _parse_web_fetch_payload,
+from src.research.search_bridge import _parse_search_results
+from src.runtime.toon_encode import (
+    format_web_fetch_toon,
+    format_web_search_toon,
+    parse_web_tool_payload,
 )
-from src.runtime.toon_encode import format_web_fetch_toon, format_web_search_toon
 
 
 def test_parse_search_results_toon_payload():
@@ -49,7 +50,7 @@ def test_parse_web_fetch_payload_toon_multiline():
             "text": "Line one\nLine two",
         }
     )
-    data = _parse_web_fetch_payload(raw)
+    data = parse_web_tool_payload(raw, "web_fetch_page")
     assert data is not None
     assert data["url"] == "https://example.com/page"
     assert data["text"] == "Line one\nLine two"

@@ -158,13 +158,17 @@ def _parse_toon_scalar(value: str) -> str:
     return v
 
 
-def parse_web_search_toon(raw: str) -> Optional[Dict[str, Any]]:
-    """Parse web_search TOON (subset) back to a JSON-like dict for truncation."""
+def _strip_toon_fence(raw: str) -> str:
     text = (raw or "").strip()
     if text.startswith("```toon"):
         text = re.sub(r"^```toon\s*", "", text)
         text = re.sub(r"\s*```$", "", text)
-    text = text.strip()
+    return text.strip()
+
+
+def parse_web_search_toon(raw: str) -> Optional[Dict[str, Any]]:
+    """Parse web_search TOON (subset) back to a JSON-like dict for truncation."""
+    text = _strip_toon_fence(raw)
     if not text:
         return None
 
@@ -211,6 +215,66 @@ def parse_web_search_toon(raw: str) -> Optional[Dict[str, Any]]:
     if not out.get("query") and not out.get("error") and not out.get("results"):
         return None
     return out
+
+
+def parse_web_fetch_toon(raw: str) -> Optional[Dict[str, Any]]:
+    """Parse web_fetch_page TOON back to a JSON-like dict."""
+    text = _strip_toon_fence(raw)
+    if not text:
+        return None
+
+    out: Dict[str, Any] = {}
+    scalar_keys = frozenset({"url", "mode", "error", "hint", "source"})
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        kv = re.match(r"^([a-zA-Z_][\w]*):\s*(.*)$", line)
+        if kv:
+            key, val = kv.group(1), kv.group(2)
+            if key == "text" and val.strip() == "|":
+                i += 1
+                block: List[str] = []
+                while i < len(lines) and lines[i].startswith("  "):
+                    block.append(lines[i][2:])
+                    i += 1
+                out["text"] = "\n".join(block)
+                continue
+            if key == "text":
+                out["text"] = _parse_toon_scalar(val)
+            elif key == "chars":
+                parsed = _parse_toon_scalar(val)
+                try:
+                    out["chars"] = int(parsed)
+                except (TypeError, ValueError):
+                    out["chars"] = parsed
+            elif key in scalar_keys:
+                out[key] = _parse_toon_scalar(val)
+        i += 1
+    return out or None
+
+
+def parse_web_tool_payload(raw: str, tool: str) -> Optional[Dict[str, Any]]:
+    """Parse web_search / web_fetch_page tool output (TOON or JSON).
+
+    Shared by turn compaction, deep research, and any code that must read
+    structured data from native web tool results.
+    """
+    text = (raw or "").strip()
+    if not text:
+        return None
+    key = (tool or "").strip().lower()
+    if text.startswith("```toon"):
+        if key == "web_search":
+            return parse_web_search_toon(text)
+        if key in ("web_fetch_page", "web_fetch"):
+            return parse_web_fetch_toon(text)
+        return None
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _consume_csv_row(buf: str, field_count: int) -> Optional[tuple[List[str], int]]:
@@ -302,14 +366,17 @@ def _parse_tabular_rows(blob: str, field_count: int) -> List[List[str]]:
     return cells
 
 
-def parse_tool_result_payload(raw: str) -> Optional[Dict[str, Any]]:
+def parse_tool_result_payload(
+    raw: str, tool: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """Parse a native tool result payload when structured access is required."""
+    if tool:
+        parsed = parse_web_tool_payload(raw, tool)
+        if parsed is not None:
+            return parsed
     text = (raw or "").strip()
-    if not text:
+    if not text or text.startswith("```toon"):
         return None
-    if text.startswith("```toon"):
-        text = re.sub(r"^```toon\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-        return None  # TOON is one-way for agent context; UI keeps JSON from events
     try:
         data = json.loads(text)
     except json.JSONDecodeError:

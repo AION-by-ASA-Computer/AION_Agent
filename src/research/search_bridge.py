@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 from typing import Any, Dict, List, Optional
@@ -12,6 +11,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from src.runtime.native_tools.web_providers import run_web_fetch_page, run_web_search
+from src.runtime.toon_encode import parse_web_tool_payload
 
 logger = logging.getLogger(__name__)
 
@@ -24,87 +24,6 @@ _OG_IMAGE_RE2 = re.compile(
     re.I,
 )
 _TITLE_RE = re.compile(r"<title[^>]*>([^<]+)</title>", re.I)
-
-
-def _strip_toon_fence(raw: str) -> str:
-    text = (raw or "").strip()
-    if text.startswith("```toon"):
-        text = re.sub(r"^```toon\s*", "", text)
-        text = re.sub(r"\s*```$", "", text)
-    return text.strip()
-
-
-def _parse_toon_scalar(value: str) -> str:
-    v = (value or "").strip()
-    if v.startswith('"') and v.endswith('"'):
-        try:
-            return json.loads(v)
-        except json.JSONDecodeError:
-            return v[1:-1]
-    return v
-
-
-def _parse_web_fetch_payload(raw: str) -> Optional[Dict[str, Any]]:
-    """Parse web_fetch_page JSON or TOON payload for deep research."""
-    text = (raw or "").strip()
-    if not text:
-        return None
-    if text.startswith("```toon"):
-        text = _strip_toon_fence(text)
-        out: Dict[str, Any] = {}
-        lines = text.splitlines()
-        i = 0
-        while i < len(lines):
-            line = lines[i]
-            if re.match(r"^text:\s*\|\s*$", line.strip()):
-                i += 1
-                block: List[str] = []
-                while i < len(lines):
-                    if lines[i].startswith("  "):
-                        block.append(lines[i][2:])
-                        i += 1
-                        continue
-                    break
-                out["text"] = "\n".join(block)
-                continue
-            kv = re.match(r"^([a-zA-Z_][\w]*):\s*(.*)$", line)
-            if kv:
-                key, val = kv.group(1), kv.group(2)
-                if key == "text" and val == "|":
-                    i += 1
-                    block = []
-                    while i < len(lines):
-                        if lines[i].startswith("  "):
-                            block.append(lines[i][2:])
-                            i += 1
-                            continue
-                        break
-                    out["text"] = "\n".join(block)
-                    continue
-                out[key] = _parse_toon_scalar(val)
-            i += 1
-        return out or None
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
-
-
-def _parse_web_search_payload(raw: str) -> Optional[Dict[str, Any]]:
-    """Parse web_search JSON or TOON payload for deep research."""
-    text = (raw or "").strip()
-    if not text:
-        return None
-    if text.startswith("```toon"):
-        from src.runtime.toon_encode import parse_web_search_toon
-
-        return parse_web_search_toon(text)
-    try:
-        data = json.loads(text)
-    except json.JSONDecodeError:
-        return None
-    return data if isinstance(data, dict) else None
 
 
 def _rows_from_search_payload(data: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -139,7 +58,7 @@ def _rows_from_search_payload(data: Optional[Dict[str, Any]]) -> List[Dict[str, 
 
 
 def _parse_search_results(raw: str) -> List[Dict[str, Any]]:
-    return _rows_from_search_payload(_parse_web_search_payload(raw))
+    return _rows_from_search_payload(parse_web_tool_payload(raw, "web_search"))
 
 
 async def search_web(query: str, *, max_results: int = 10) -> List[Dict[str, Any]]:
@@ -170,7 +89,7 @@ def _extract_title(html: str) -> str:
 async def fetch_webpage_content(url: str, *, timeout: float = 25.0) -> Dict[str, Any]:
     """Fetch page text + optional OG image for research extraction."""
     raw = await asyncio.to_thread(run_web_fetch_page, url)
-    data = _parse_web_fetch_payload(raw)
+    data = parse_web_tool_payload(raw, "web_fetch_page")
     if not isinstance(data, dict):
         return {
             "success": False,
