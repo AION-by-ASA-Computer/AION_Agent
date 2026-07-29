@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import re
 from typing import Any, Dict, List, Optional
@@ -12,6 +11,7 @@ from urllib.parse import urljoin, urlparse
 import httpx
 
 from src.runtime.native_tools.web_providers import run_web_fetch_page, run_web_search
+from src.runtime.toon_encode import parse_web_tool_payload
 
 logger = logging.getLogger(__name__)
 
@@ -26,17 +26,17 @@ _OG_IMAGE_RE2 = re.compile(
 _TITLE_RE = re.compile(r"<title[^>]*>([^<]+)</title>", re.I)
 
 
-def _parse_search_results(raw: str) -> List[Dict[str, Any]]:
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
+def _rows_from_search_payload(data: Optional[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not isinstance(data, dict):
         return []
-    if isinstance(data, dict) and data.get("error"):
+    if data.get("error"):
         logger.warning("web_search error: %s", data.get("error"))
         if data.get("details"):
             logger.warning("web_search details: %s", data.get("details"))
+        if data.get("message"):
+            logger.warning("web_search message: %s", data.get("message"))
         return []
-    rows = data.get("results") if isinstance(data, dict) else None
+    rows = data.get("results")
     if not isinstance(rows, list):
         return []
     out: List[Dict[str, Any]] = []
@@ -51,10 +51,14 @@ def _parse_search_results(raw: str) -> List[Dict[str, Any]]:
                 "url": url,
                 "title": row.get("title") or "",
                 "snippet": row.get("snippet") or "",
-                "provider": row.get("provider") or "aion",
+                "provider": row.get("provider") or data.get("provider_used") or "aion",
             }
         )
     return out
+
+
+def _parse_search_results(raw: str) -> List[Dict[str, Any]]:
+    return _rows_from_search_payload(parse_web_tool_payload(raw, "web_search"))
 
 
 async def search_web(query: str, *, max_results: int = 10) -> List[Dict[str, Any]]:
@@ -85,9 +89,8 @@ def _extract_title(html: str) -> str:
 async def fetch_webpage_content(url: str, *, timeout: float = 25.0) -> Dict[str, Any]:
     """Fetch page text + optional OG image for research extraction."""
     raw = await asyncio.to_thread(run_web_fetch_page, url)
-    try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
+    data = parse_web_tool_payload(raw, "web_fetch_page")
+    if not isinstance(data, dict):
         return {
             "success": False,
             "url": url,

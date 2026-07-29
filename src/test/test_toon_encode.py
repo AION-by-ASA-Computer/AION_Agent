@@ -8,6 +8,7 @@ from src.runtime.toon_encode import (
     encode_toon,
     format_web_fetch_toon,
     format_web_search_toon,
+    parse_web_tool_payload,
 )
 
 
@@ -54,3 +55,38 @@ def test_encode_toon_roundtrip_shape():
     text = encode_toon(payload)
     assert "items[2]{id,name}" in text
     assert "1,Ada" in text
+
+
+def test_parse_web_tool_payload_search_toon():
+    raw = format_web_search_toon(
+        {
+            "query": "test",
+            "provider_used": "tavily",
+            "results": [
+                {
+                    "title": "A",
+                    "url": "https://a.org",
+                    "snippet": "snippet",
+                    "provider": "tavily",
+                }
+            ],
+        }
+    )
+    data = parse_web_tool_payload(raw, "web_search")
+    assert data is not None
+    assert data["query"] == "test"
+    assert len(data["results"]) == 1
+
+
+def test_parse_web_tool_payload_fetch_toon():
+    raw = format_web_fetch_toon(
+        {
+            "url": "https://example.com",
+            "mode": "httpx_raw",
+            "text": "hello",
+        }
+    )
+    data = parse_web_tool_payload(raw, "web_fetch_page")
+    assert data is not None
+    assert data["url"] == "https://example.com"
+    assert data["text"] == "hello"
