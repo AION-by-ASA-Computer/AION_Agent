@@ -75,7 +75,19 @@ def test_context_compress_enabled_false(monkeypatch):
 def test_stream_loop_v2_default(monkeypatch):
     monkeypatch.delenv("AION_STREAM_LOOP_V2", raising=False)
     s = _fresh(monkeypatch)
-    assert s.stream_loop_v2 is False
+    assert s.stream_loop_v2 is True
+
+
+def test_tool_offload_enabled_default(monkeypatch):
+    monkeypatch.delenv("AION_TOOL_OFFLOAD_ENABLED", raising=False)
+    s = _fresh(monkeypatch)
+    assert s.tool_offload_enabled is True
+
+
+def test_tool_ledger_enabled_default(monkeypatch):
+    monkeypatch.delenv("AION_TOOL_LEDGER_ENABLED", raising=False)
+    s = _fresh(monkeypatch)
+    assert s.tool_ledger_enabled is True
 
 
 def test_otel_enabled_default(monkeypatch):

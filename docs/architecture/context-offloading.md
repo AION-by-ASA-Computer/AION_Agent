@@ -413,17 +413,17 @@ material saving. Ship only after L1–L3 are stable.
 
 ## Environment variables
 
-Add to `.env.example` under the compaction block, all defaults chosen so that
-**nothing changes until explicitly enabled**.
+Add to `.env.example` under the compaction block. **L1 offload and L2 ledger are on by default**
+(see `AionSettings`); Pi custom compaction remains opt-in.
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `AION_TOOL_OFFLOAD_ENABLED` | `0` | Master gate for L1 |
+| `AION_TOOL_OFFLOAD_ENABLED` | `1` | Master gate for L1 |
 | `AION_TOOL_OFFLOAD_MIN_CHARS` | `8000` | Offload threshold |
 | `AION_TOOL_OFFLOAD_PREVIEW_CHARS` | `1500` | Preview kept in context |
 | `AION_TOOL_OFFLOAD_EXCLUDE` | `web_search` | Comma-separated tool denylist |
 | `AION_TOOL_OFFLOAD_MAX_TOTAL_MB` | `64` | Per-session store cap |
-| `AION_TOOL_LEDGER_ENABLED` | `0` | Master gate for L2 |
+| `AION_TOOL_LEDGER_ENABLED` | `1` | Master gate for L2 |
 | `AION_TOOL_LEDGER_MAX_ROWS` | `60` | Rows rendered before collapsing |
 | `AION_TOOL_LEDGER_MAX_CHARS` | `3000` | Hard cap on injected table |
 | `AION_PI_CUSTOM_COMPACTION` | `0` | Master gate for L3 |

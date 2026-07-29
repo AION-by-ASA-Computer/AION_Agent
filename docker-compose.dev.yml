@@ -80,6 +80,10 @@ services:
       - --reload
       - --reload-exclude
       - data/sessions
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     depends_on:
       redis:
         condition: service_healthy

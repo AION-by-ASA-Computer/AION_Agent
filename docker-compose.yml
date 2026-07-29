@@ -125,6 +125,10 @@ services:
       timeout: 10s
       retries: 8
       start_period: 90s
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
 
     depends_on:
       redis:

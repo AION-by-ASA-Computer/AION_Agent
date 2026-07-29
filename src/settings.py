@@ -62,7 +62,7 @@ class AionSettings(BaseSettings):
         False, description="Enable plan-tag text parser for XML-based plan output."
     )
     stream_loop_v2: bool = Field(
-        False,
+        True,
         description="Enable v2 streaming loop with improved back-pressure handling.",
     )
     plan_finalizer_timeout_sec: float = Field(
@@ -72,7 +72,7 @@ class AionSettings(BaseSettings):
         24, description="Hard cap on tool calls per agent turn."
     )
     tool_offload_enabled: bool = Field(
-        False, description="Offload large tool results to session disk."
+        True, description="Offload large tool results to session disk."
     )
     tool_offload_min_chars: int = Field(
         8000, description="Min chars before tool result offload."
@@ -88,7 +88,7 @@ class AionSettings(BaseSettings):
         description="Comma-separated tool names excluded from offload.",
     )
     tool_ledger_enabled: bool = Field(
-        False, description="Persist per-session tool call ledger (JSONL)."
+        True, description="Persist per-session tool call ledger (JSONL)."
     )
     tool_ledger_max_rows: int = Field(
         60, description="Max rows in ledger table render."
@@ -172,6 +172,13 @@ class AionSettings(BaseSettings):
     )
     mcp_list_tools_timeout_sec: float = Field(
         30.0, description="Timeout (s) for listing tools from an MCP server."
+    )
+    mcp_pool_idle_sec: int = Field(
+        1800,
+        description=(
+            "Seconds of inactivity before pooled MCP stdio workers are shut down "
+            "(0 = never; not recommended in production)."
+        ),
     )
     mcp_session_scoped_servers: str = Field(
         "session_sandbox,promo_render,ocr,ocr_mcp,skills_hub,memory,aion_subagents",
