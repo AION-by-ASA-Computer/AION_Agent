@@ -2,6 +2,7 @@ packages:
   - 'admin-ui'
   - 'chat-ui'
   - 'website'
+  - 'services/pi-long-run'
 allowBuilds:
   '@swc/core': true
   core-js: true

@@ -380,6 +380,19 @@ async def redis_consume_stream_cancel(conversation_id: str) -> bool:
     return False
 
 
+async def redis_clear_stream_cancel(conversation_id: str) -> None:
+    """Drop any pending cancel flag (e.g. after /chat/stop before a new /chat/stream)."""
+    cid = (conversation_id or "").strip()
+    if not cid:
+        return
+    r = get_redis()
+    key = redis_namespace_key("cancel", cid)
+    try:
+        await r.delete(key)
+    except Exception as e:
+        _handle_redis_error("cancel flag clear", e)
+
+
 def _stream_active_key(conversation_id: str) -> str:
     return redis_namespace_key("stream_active", conversation_id)
 

@@ -35,6 +35,16 @@ class AionSettings(BaseSettings):
     chat_max_tokens: int = Field(
         8192, description="Max response tokens per chat turn (AION_CHAT_MAX_TOKENS)."
     )
+    long_run_max_tokens: Optional[int] = Field(
+        None,
+        description=(
+            "Max response tokens for Long Run (Pi). When unset, uses chat_max_tokens."
+        ),
+    )
+    context_window: int = Field(
+        131072,
+        description="Model context window in tokens (AION_CONTEXT_WINDOW).",
+    )
     default_reasoning_effort: str = Field(
         "",
         description=(
@@ -52,7 +62,7 @@ class AionSettings(BaseSettings):
         False, description="Enable plan-tag text parser for XML-based plan output."
     )
     stream_loop_v2: bool = Field(
-        False,
+        True,
         description="Enable v2 streaming loop with improved back-pressure handling.",
     )
     plan_finalizer_timeout_sec: float = Field(
@@ -60,6 +70,49 @@ class AionSettings(BaseSettings):
     )
     tool_calls_max_per_turn: int = Field(
         24, description="Hard cap on tool calls per agent turn."
+    )
+    tool_offload_enabled: bool = Field(
+        True, description="Offload large tool results to session disk."
+    )
+    tool_offload_min_chars: int = Field(
+        8000, description="Min chars before tool result offload."
+    )
+    tool_offload_preview_chars: int = Field(
+        1500, description="Preview chars kept in LLM context after offload."
+    )
+    tool_offload_max_total_mb: float = Field(
+        64.0, description="Max total MB of offloaded tool results per session."
+    )
+    tool_offload_exclude: str = Field(
+        "web_search,sandbox_read_file_chunk",
+        description="Comma-separated tool names excluded from offload.",
+    )
+    tool_ledger_enabled: bool = Field(
+        True, description="Persist per-session tool call ledger (JSONL)."
+    )
+    tool_ledger_max_rows: int = Field(
+        60, description="Max rows in ledger table render."
+    )
+    tool_ledger_max_chars: int = Field(
+        3000, description="Max chars when rendering ledger into context."
+    )
+    tool_circuit_breaker_enabled: bool = Field(
+        False,
+        description="Block repeated identical sandbox preflight failures per session.",
+    )
+    tool_circuit_breaker_max: int = Field(
+        3, description="Identical preflight failures before circuit opens."
+    )
+    tool_offload_cleanup_enabled: bool = Field(
+        True,
+        description="Run periodic cleanup of offloads for archived conversations.",
+    )
+    tool_offload_cleanup_grace_days: int = Field(
+        7,
+        description="Days after conversation archive before offloads are deleted.",
+    )
+    tool_offload_cleanup_interval_sec: int = Field(
+        3600, description="Seconds between offload cleanup job runs."
     )
     stream_events_max_per_turn: int = Field(
         0, description="Cap on SSE stream events per turn (0 = unlimited)."
@@ -120,6 +173,13 @@ class AionSettings(BaseSettings):
     mcp_list_tools_timeout_sec: float = Field(
         30.0, description="Timeout (s) for listing tools from an MCP server."
     )
+    mcp_pool_idle_sec: int = Field(
+        1800,
+        description=(
+            "Seconds of inactivity before pooled MCP stdio workers are shut down "
+            "(0 = never; not recommended in production)."
+        ),
+    )
     mcp_session_scoped_servers: str = Field(
         "session_sandbox,promo_render,ocr,ocr_mcp,skills_hub,memory,aion_subagents",
         description=(
@@ -157,6 +217,13 @@ class AionSettings(BaseSettings):
     @field_validator("stm_token_budget", mode="before")
     @classmethod
     def _coerce_stm_token_budget(cls, v):
+        if v is None or (isinstance(v, str) and v.strip() == ""):
+            return None
+        return v
+
+    @field_validator("long_run_max_tokens", mode="before")
+    @classmethod
+    def _coerce_long_run_max_tokens(cls, v):
         if v is None or (isinstance(v, str) and v.strip() == ""):
             return None
         return v

@@ -24,7 +24,7 @@ flowchart TD
     F --> G["persist_stm_compaction\nDELETE old rows + INSERT summary block"]
     G --> H[Reload STM window]
     H --> I[Agent LLM loop]
-    I --> J{"Tool call or reasoning\nexceeds 85% budget?"}
+    I --> J{"Tool call exceeds\n92% budget?"}
     J -->|No| K[Continue loop]
     J -->|Yes| L[Mid-turn compaction\nturn_compaction.py]
     L --> M[Compact in-place on Haystack State]
@@ -93,20 +93,25 @@ Runs **inside** the agent loop, between an LLM step and the next, triggered by c
 | Hook | When | What it does |
 |---|---|---|
 | `maybe_compact_after_tool()` | After every tool call | Truncates tool output + calls `compact_agent_messages_in_place()` |
-| `maybe_compact_after_reasoning()` | After every reasoning chunk | Updates token estimate + calls `compact_agent_messages_in_place()` |
+| `maybe_compact_after_reasoning()` | After every reasoning chunk (if `AION_CONTEXT_COMPRESS_MID_TURN_REASONING=1`) | Updates token estimate + calls `compact_agent_messages_in_place()` |
+
+By default **reasoning-triggered** mid-turn compaction is **off** (`AION_CONTEXT_COMPRESS_MID_TURN_REASONING=0`) so reasoning streams do not block the agent thread.
 
 ### `compact_agent_messages_in_place()` — how it works
 
 Operates directly on the **Haystack agent State** object (accessed via `ContextVar`):
 
-1. **Debounce** — enforces a minimum interval between consecutive mid-turn compactions (`AION_CONTEXT_COMPRESS_MID_TURN_MIN_SEC`, default 8 s).
+1. **Debounce** — enforces a minimum interval between consecutive mid-turn compactions (`AION_CONTEXT_COMPRESS_MID_TURN_MIN_SEC`, default 15 s).
 2. **Token check** — calculates `total = msg_tokens + overhead`.
-3. **Mid-turn threshold** — `mid_trigger = max_prompt × threshold_ratio` (default 85%).
+3. **Mid-turn threshold** — `mid_trigger = max_prompt × threshold_ratio` (default 92%).
 4. **Guard** — if `total < mid_trigger AND total < compress_trigger` → skip.
-5. **Summarization** — synchronous LLM call (`complete_text_sync()`, timeout 90 s) produces a summary of the head.
-6. **In-place replacement** — `data["messages"] = system_msgs + [summary_msg] + tail`.
-7. **Async DB persist** — schedules `_schedule_db_persist()` via `asyncio.run_coroutine_threadsafe`.
-8. **SSE event** — emits `context_compacting` on the turn queue.
+5. **Sync guard** — if `AION_CONTEXT_COMPRESS_MID_TURN_SYNC=0` (default), skip the blocking LLM summarization on the agent thread.
+6. **Summarization** — when sync is enabled, synchronous LLM call (`complete_text_sync()`, timeout 90 s) produces a summary of the head.
+7. **In-place replacement** — `data["messages"] = system_msgs + [summary_msg] + tail` (summary uses `<summary>` XML via `format_compaction_block()`).
+8. **Async DB persist** — schedules `_schedule_db_persist()` via `asyncio.run_coroutine_threadsafe`.
+9. **SSE event** — emits `context_compacting` on the turn queue.
+
+With `AION_HARNESS_V2_COMPACTION=1`, head/tail splits use `find_valid_cut_index()` so tool call/result pairs are never split.
 
 ### Tool output truncation
 
@@ -124,10 +129,17 @@ Exception: `mempalace_*` tools and outputs smaller than 800 chars **do not trigg
 | Env var | Default | Meaning |
 |---|---|---|
 | `AION_CONTEXT_COMPRESS_MID_TURN` | `1` | Enable mid-turn compaction |
-| `AION_CONTEXT_COMPRESS_MID_TURN_RATIO` | `0.85` | Threshold as fraction of `max_prompt` |
-| `AION_CONTEXT_COMPRESS_MID_TURN_MIN_SEC` | `8` | Minimum seconds between compactions (debounce) |
+| `AION_CONTEXT_COMPRESS_MID_TURN_RATIO` | `0.92` | Threshold as fraction of `max_prompt` |
+| `AION_CONTEXT_COMPRESS_MID_TURN_MIN_SEC` | `15` | Minimum seconds between compactions (debounce) |
+| `AION_CONTEXT_COMPRESS_MID_TURN_SYNC` | `0` | Blocking LLM summarization on agent thread |
+| `AION_CONTEXT_COMPRESS_MID_TURN_REASONING` | `0` | Compact after each reasoning chunk |
 | `AION_CONTEXT_COMPRESS_MID_TURN_TIMEOUT` | `90` | LLM call timeout for mid-turn summary |
 | `AION_TOOL_RESULT_MAX_CHARS` | `24000` | Max chars per tool result before truncation |
+| `AION_TOOL_WEB_FETCH_MAX_CHARS` | `6000` | Lower cap for `web_fetch_page` tool result in agent context |
+| `AION_TOOL_WEB_SEARCH_MAX_CHARS` | `4000` | Lower cap for `web_search` tool result in agent context |
+| `AION_MECHANICAL_COMPACT_KEEP_TOOLS` | `3` | Full tool outputs kept during mechanical mid-turn shrink |
+| `AION_CONTEXT_RECOVERY` | `1` | Auto compact + retry on context overflow |
+| `AION_CONTEXT_RECOVERY_MAX` | `2` | Max automatic retries per turn |
 
 ---
 

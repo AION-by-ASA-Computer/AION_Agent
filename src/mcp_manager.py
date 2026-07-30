@@ -853,6 +853,21 @@ class MCPManager:
             else:
                 metrics.aion_mcp_server_healthy.labels(mcp_server=name).set(0)
 
+    def pool_size(self) -> int:
+        return len(self._pool)
+
+    def _pool_idle_sec(self) -> float:
+        try:
+            from .settings import get_settings
+
+            return float(get_settings().mcp_pool_idle_sec)
+        except Exception:
+            pass
+        try:
+            return float(os.getenv("AION_MCP_POOL_IDLE_SEC", "1800"))
+        except ValueError:
+            return 1800.0
+
     def _ensure_cleanup_task(self):
         """Avvia il task di cleanup se non è già attivo e se c'è un loop in esecuzione."""
         if self._cleanup_task is not None and not self._cleanup_task.done():
@@ -866,10 +881,29 @@ class MCPManager:
 
     async def _periodic_cleanup(self):
         """Spegne i worker MCP inattivi oltre AION_MCP_POOL_IDLE_SEC (0 = disabilitato)."""
+        warn_threshold = 400
+        try:
+            warn_threshold = max(50, int(os.getenv("AION_MCP_POOL_WARN_SIZE", "400")))
+        except ValueError:
+            pass
         while True:
             await asyncio.sleep(60)
             try:
-                idle_sec = float(os.getenv("AION_MCP_POOL_IDLE_SEC", "0"))
+                idle_sec = self._pool_idle_sec()
+                pool_n = self.pool_size()
+                try:
+                    from .observability import metrics
+
+                    metrics.aion_mcp_pool_workers.set(pool_n)
+                except Exception:
+                    pass
+                if pool_n >= warn_threshold:
+                    logger.warning(
+                        "MCP pool size=%d (idle_cleanup_sec=%s); risk of FD exhaustion — "
+                        "archive idle conversations or lower AION_MCP_STARTUP_WARM_PROFILES",
+                        pool_n,
+                        int(idle_sec) if idle_sec > 0 else "off",
+                    )
                 if idle_sec <= 0:
                     continue
                 now = asyncio.get_event_loop().time()

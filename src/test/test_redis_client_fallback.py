@@ -29,3 +29,18 @@ def test_redis_drain_degrades_once_on_connection_error(monkeypatch):
         assert out2 == []
 
     asyncio.run(run())
+
+
+def test_redis_clear_stream_cancel_drops_stale_flag():
+    import src.runtime.redis_client as rc
+
+    async def run():
+        rc._client = rc._LocalFallback()
+        cid = "conv-stale-cancel"
+        await rc.redis_set_stream_cancel(cid)
+        assert await rc.redis_consume_stream_cancel(cid) is True
+        await rc.redis_set_stream_cancel(cid)
+        await rc.redis_clear_stream_cancel(cid)
+        assert await rc.redis_consume_stream_cancel(cid) is False
+
+    asyncio.run(run())

@@ -20,8 +20,9 @@ cryptography>=48.0.1
 uuid6>=2025.0.1
 alembic>=1.13
 greenlet>=3.0.0
-mcp[cli]>=1.23.0
-fastmcp>=3.2.0
+# MCP 2.x breaks AION handshake (inputSchema -> input_schema) and agent_db @app.list_tools().
+mcp[cli]>=1.23.0,<2.0.0
+fastmcp>=3.2.0,<4.0.0
 mcp-haystack>=0.1.0
 tiktoken>=0.7.0
 apscheduler>=3.11.3
@@ -39,6 +40,7 @@ Pillow>=12.3.0
 pytesseract
 playwright>=1.49.0
 beautifulsoup4>=4.12.0
+trafilatura>=2.0.0
 markdown>=3.8.1
 anthropic-haystack
 google-genai-haystack

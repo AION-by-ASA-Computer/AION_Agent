@@ -30,4 +30,8 @@ def set_web_search_request_context(ctx: WebSearchRequestContext) -> Token:
 
 
 def reset_web_search_request_context(token: Token) -> None:
-    _ctx.reset(token)
+    try:
+        _ctx.reset(token)
+    except ValueError:
+        # Token may belong to a different asyncio Task (e.g. cancel mid-stream).
+        _ctx.set(None)

@@ -5,7 +5,10 @@ import {
   isFilePreviewTool,
   isScriptLikeTitle,
 } from "./filePreviewTools";
+import { coalesceTurnSegments } from "./coalesceTurnSegments";
 import { initialTurnState } from "./types";
+import { webSearchSourceRows } from "./webToolParse";
+import { toolOutputLooksLikeError } from "./toolOutputParse";
 
 /** Legacy <plan> token stripping — off when tool-first Plan Mode is default. */
 const PLAN_TEXT_PARSER_ENABLED =
@@ -169,6 +172,42 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
     return next;
   }
 
+  if (cType === "context_recovery") {
+    next.contextCompacting = true;
+    next.error = null;
+    return next;
+  }
+
+  if (cType === "context_budget") {
+    const raw = chunk as {
+      phase?: string;
+      total?: number;
+      max_prompt?: number;
+      trigger?: number;
+      message_count?: number;
+      pct?: number;
+      parts?: Array<{ key?: string; tokens?: number; pct?: number }>;
+    };
+    const maxPrompt = Number(raw.max_prompt) || 1;
+    const total = Number(raw.total) || 0;
+    next.contextBudget = {
+      phase: raw.phase,
+      total,
+      maxPrompt,
+      trigger: Number(raw.trigger) || 0,
+      messageCount: Number(raw.message_count) || 0,
+      pct: Number(raw.pct) || Math.round((total * 100) / maxPrompt),
+      parts: (raw.parts || [])
+        .map((p) => ({
+          key: String(p.key || "other"),
+          tokens: Number(p.tokens) || 0,
+          pct: Number(p.pct) || 0,
+        }))
+        .filter((p) => p.tokens > 0),
+    };
+    return next;
+  }
+
   if (cType === "token") {
     const piece = coerceTokenPiece(chunk.content);
     next.assistantContent += piece;
@@ -292,7 +331,8 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
     } else if (et === "tool_end") {
       const id = resolveToolId(next, ev, name);
       const cur = next.toolSteps[id] || { id, name, input: ev.input ?? {} };
-      const output = String(ev.output ?? "");
+      const output = String(ev.output ?? ev.result ?? "");
+      const isError = toolOutputLooksLikeError(output);
       const tokens_in = typeof ev.tokens_in === "number" ? ev.tokens_in : undefined;
       const tokens_out = typeof ev.tokens_out === "number" ? ev.tokens_out : undefined;
       const toolSeg: any = {
@@ -301,38 +341,43 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
         name: cur.name || name,
         input: cur.input ?? ev.input,
         output,
-        status: "done",
+        status: isError ? "error" : "done",
+        isError,
         tokens_in,
         tokens_out,
         masked: ev.masked || (cur as any).masked,
       };
       next.segments = upsertToolSegment(next.segments, toolSeg);
-      next.toolSteps[id] = { ...cur, output, status: "done", tokens_in, tokens_out, masked: ev.masked || (cur as any).masked } as any;
+      next.toolSteps[id] = {
+        ...cur,
+        output,
+        status: isError ? "error" : "done",
+        isError,
+        tokens_in,
+        tokens_out,
+        masked: ev.masked || (cur as any).masked,
+      } as any;
       if (!next.toolOrder.includes(id)) next.toolOrder.push(id);
       delete next.activeToolKeyByName[name];
       if (typeof ev.id === "string") delete next.activeToolKeyById[ev.id];
 
       if (name === "web_search") {
-        try {
-          const data = JSON.parse(output) as { results?: unknown[] };
-          const rows = Array.isArray(data?.results) ? data.results : [];
+        const rows = webSearchSourceRows(output);
+        if (rows.length > 0) {
           const seen = new Set(next.webSourceCards.map((c) => c.url));
           let idx = next.webSourceCards.length;
           for (const row of rows) {
-            const r = row as Record<string, unknown>;
-            const url = String(r?.url ?? "").trim();
+            const url = row.url.trim();
             if (!url || seen.has(url)) continue;
             seen.add(url);
             idx += 1;
             next.webSourceCards.push({
               index: idx,
-              title: String(r?.title || url).slice(0, 500),
+              title: row.title.slice(0, 500),
               url,
-              provider: r?.provider != null ? String(r.provider) : undefined,
+              provider: row.provider,
             });
           }
-        } catch {
-          /* ignore */
         }
       }
     } else if (et === "tool_error") {
@@ -677,7 +722,8 @@ function segmentsFromHistoryMessage(msg: {
 
 /** Normalize live segments before persisting to API (no running tools, no large buffers). */
 export function segmentsForPersist(segments: TurnSegment[]): TurnSegment[] {
-  return segments
+  return coalesceTurnSegments(
+    segments
     .filter(
       (seg) =>
         seg.kind !== "generating" &&
@@ -697,7 +743,8 @@ export function segmentsForPersist(segments: TurnSegment[]): TurnSegment[] {
         return { ...seg, buffer: "" };
       }
       return seg;
-    });
+    }),
+  );
 }
 
 function tryParseJson(raw: string | null | undefined): unknown {

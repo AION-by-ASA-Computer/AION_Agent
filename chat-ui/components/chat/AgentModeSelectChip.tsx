@@ -5,6 +5,7 @@ import {
   BookOpen,
   Bug,
   ChevronDown,
+  Clock,
   HelpCircle,
   MessageSquare,
   Sparkles,
@@ -17,7 +18,7 @@ import { useT } from "@/lib/i18n/use-t";
 
 const MODE_META: Record<
   AgentMode,
-  { labelKey: string; descKey: string; icon: typeof MessageSquare; soon?: boolean }
+  { labelKey: string; descKey: string; icon: typeof MessageSquare; soon?: boolean; beta?: boolean }
 > = {
   normal: {
     labelKey: "chat.agent_mode.normal",
@@ -33,6 +34,12 @@ const MODE_META: Record<
     labelKey: "chat.agent_mode.deep_research",
     descKey: "chat.agent_mode.deep_research_desc",
     icon: BookOpen,
+  },
+  long_run: {
+    labelKey: "chat.agent_mode.long_run",
+    descKey: "chat.agent_mode.long_run_desc",
+    icon: Clock,
+    beta: true,
   },
   ask: {
     labelKey: "chat.agent_mode.ask",
@@ -80,7 +87,9 @@ export function AgentModeSelectChip({
       ? "border-orange-500/40 bg-orange-500/10 text-orange-500"
       : mode === "deep_research"
         ? "border-violet-500/40 bg-violet-500/10 text-violet-500"
-        : open || mode !== "normal"
+        : mode === "long_run"
+          ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+          : open || mode !== "normal"
           ? "border-primary/40 bg-primary/10 text-primary"
           : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground";
 
@@ -90,7 +99,7 @@ export function AgentModeSelectChip({
         type="button"
         onClick={() => onOpenChange(!open)}
         className={cn(
-          "focus-ring inline-flex h-8 max-w-[10.5rem] items-center gap-1.5 rounded-full border px-3 text-[0.786em] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] sm:max-w-[12rem]",
+          "focus-ring inline-flex h-7 max-w-[9rem] items-center gap-1 rounded-full border px-2.5 text-[0.786em] font-medium transition-colors sm:max-w-[10rem]",
           chipClass,
         )}
       >
@@ -115,7 +124,14 @@ export function AgentModeSelectChip({
                   description={t(m.descKey)}
                   selected={mode === key}
                   disabled={m.soon}
-                  badge={m.soon ? t("chat.agent_mode.soon") : undefined}
+                  badge={
+                    m.beta
+                      ? t("chat.agent_mode.beta")
+                      : m.soon
+                        ? t("chat.agent_mode.soon")
+                        : undefined
+                  }
+                  badgeTone={m.beta ? "beta" : "muted"}
                   icon={<ModeIcon size={12} className="shrink-0 opacity-80" />}
                   onClick={() => {
                     if (m.soon) return;

@@ -21,7 +21,13 @@ import {
 } from "lucide-react";
 import { useT } from "@/lib/i18n/use-t";
 import { StreamingContentPreview } from "@/components/dock/StreamingContentPreview";
-import { sessionDownloadUrl, type SessionFileRow } from "@/lib/api/aion";
+import { ToolResultsPanel } from "@/components/dock/ToolResultsPanel";
+import { filterUserVisibleSessionFiles } from "@/lib/session-file-paths";
+import {
+  sessionDownloadUrl,
+  type SessionFileRow,
+  type ToolLedgerEntry,
+} from "@/lib/api/aion";
 
 export type DockArtifactItem = {
   key: string;
@@ -196,6 +202,7 @@ function getFileIconConfig(item: {
 export function ArtifactsPanel({
   items,
   sessionFiles = [],
+  toolLedgerEntries = [],
   loadingFiles = false,
   onRefreshFiles,
   conversationId,
@@ -203,6 +210,7 @@ export function ArtifactsPanel({
 }: {
   items: DockArtifactItem[];
   sessionFiles?: SessionFileRow[];
+  toolLedgerEntries?: ToolLedgerEntry[];
   loadingFiles?: boolean;
   onRefreshFiles?: () => void;
   conversationId?: string;
@@ -216,7 +224,6 @@ export function ArtifactsPanel({
     derived: true,
     workspace: true,
   });
-
   const toggleFolder = (folder: string) => {
     setExpandedFolders((prev) => ({
       ...prev,
@@ -260,7 +267,9 @@ export function ArtifactsPanel({
     }
   };
 
-  if (!filteredItems.length && !sessionFiles.length) {
+  const visibleSessionFiles = filterUserVisibleSessionFiles(sessionFiles);
+
+  if (!filteredItems.length && !visibleSessionFiles.length && !toolLedgerEntries.length) {
     return (
       <div className="p-4 flex flex-col items-center justify-center gap-2 text-center text-muted-foreground select-none">
         <File size={24} className="opacity-40" />
@@ -271,17 +280,17 @@ export function ArtifactsPanel({
     );
   }
 
-  const rootFiles = sessionFiles.filter((f) => {
+  const rootFiles = visibleSessionFiles.filter((f) => {
     const rel = f.relative_path || "";
     return !rel.includes("/");
   });
-  const uploadsFiles = sessionFiles.filter((f) => f.relative_path?.startsWith("uploads/"));
-  const derivedFiles = sessionFiles.filter((f) => f.relative_path?.startsWith("derived/"));
-  const workspaceFiles = sessionFiles.filter((f) => f.relative_path?.startsWith("workspace/"));
+  const uploadsFiles = visibleSessionFiles.filter((f) => f.relative_path?.startsWith("uploads/"));
+  const derivedFiles = visibleSessionFiles.filter((f) => f.relative_path?.startsWith("derived/"));
+  const workspaceFiles = visibleSessionFiles.filter((f) => f.relative_path?.startsWith("workspace/"));
 
   const renderFolder = (
     folderKey: "root" | "uploads" | "derived" | "workspace",
-    files: SessionFileRow[]
+    files: SessionFileRow[],
   ) => {
     const isExpanded = expandedFolders[folderKey];
     const folderTitle = t(`artifacts.${folderKey}`);
@@ -374,7 +383,7 @@ export function ArtifactsPanel({
                       </div>
                     </div>
 
-                    {downloadUrl && (
+                    {downloadUrl ? (
                       <a
                         href={downloadUrl}
                         target="_blank"
@@ -384,7 +393,7 @@ export function ArtifactsPanel({
                       >
                         <DownloadIcon size={13} />
                       </a>
-                    )}
+                    ) : null}
                   </div>
                 );
               })
@@ -397,6 +406,14 @@ export function ArtifactsPanel({
 
   return (
     <div className="space-y-4 p-3">
+      {toolLedgerEntries.length > 0 ? (
+        <ToolResultsPanel
+          entries={toolLedgerEntries}
+          conversationId={conversationId}
+          token={token}
+        />
+      ) : null}
+
       {/* Session Files Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1 py-1 border-b border-border/15 pb-2 mb-3">
@@ -417,7 +434,7 @@ export function ArtifactsPanel({
           )}
         </div>
         
-        {loadingFiles && sessionFiles.length === 0 ? (
+        {loadingFiles && visibleSessionFiles.length === 0 ? (
           <p className="text-[0.786em] text-muted-foreground/50 text-center py-4 animate-pulse select-none">Caricamento...</p>
         ) : (
           <div className="space-y-2.5">

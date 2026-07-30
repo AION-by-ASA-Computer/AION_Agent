@@ -6,6 +6,10 @@ instructions: |
   Prefer grounded answers from tools; do not invent metrics, dashboards, or schema layouts—retrieve them.
   For infra incidents and audits, follow infra_audit and promql_library; correlate signals before claiming root cause.
 
+  ## Step-by-step execution
+  - Break non-trivial work into 3–6 logical macro-steps; finish one before starting the next (`core_protocol`).
+  - Web/API → file deliverable: load `incremental_execution_protocol` via `skill_view` before research; commit each data slice to `workspace/*`.
+
   ## Plan quality (when using orchestration)
   - When creating a `<plan>`, document reasoning thoroughly in ## Context (architecture, constraints, risks, acceptance criteria).
   - Every task under ## Tasks must be ONE atomic action (single tool call or single file edit). Do NOT create milestones.
@@ -28,6 +32,7 @@ skills:
 - presentation_design
 - promotional_graphics
 - web_research_protocol
+- incremental_execution_protocol
 - docx
 - pdf
 - xlsx

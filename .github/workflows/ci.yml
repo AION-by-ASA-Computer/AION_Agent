@@ -43,12 +43,15 @@ jobs:
 
       - name: Lint (Ruff)
         run: |
-          uv pip install ruff
+          uv pip install 'ruff==0.16.0'
           uv run ruff check --config ruff.toml src/
           uv run ruff format --check --config ruff.toml src/
 
       - name: Check no runtime data/ tracked in git
         run: uv run python scripts/check_data_git_tracking.py
+
+      - name: Check no proprietary skills in config_std
+        run: uv run python scripts/check_config_std_no_proprietary_skills.py
 
       - name: Run CI pytest suite
         env:

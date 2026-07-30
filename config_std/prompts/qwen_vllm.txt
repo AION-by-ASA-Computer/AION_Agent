@@ -6,7 +6,7 @@ Never call write with only `content` — vLLM often omits the path and the turn 
 
 For Word/docx: use `relative_path=workspace/create_doc.js` and keep the script compact (under ~80 lines).
 If the script is large, write a minimal version first, run it, then extend with `sandbox_edit_workspace_file`.
-
-Do not invent tool names such as `aion_artifact`, `artifact`, or `create_file` — they are not registered tools.
+For tabular data (Excel/CSV sources): persist rows in `workspace/<slug>_data.json` via
+`sandbox_write_workspace_file` / `sandbox_append_workspace_file` — never embed all rows inside one Python script.
 
 If a tool returns missing_arguments or truncation, retry with a shorter file body or split across steps.

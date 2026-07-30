@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from src.a2a.plan_markdown import (
@@ -110,7 +111,9 @@ def format_mark_task_result(
         "STOP this turn now — do not start the next task until the following execution turn.",
     ]
     if next_tid:
-        parts.append(f"Next pending task: `{next_tid}`.")
+        parts.append(
+            f"The server will run `{next_tid}` in the next execution turn — do not start it now."
+        )
     parts.append(
         f'Full markdown: get_execution_plan(plan_id="{plan_id}"). '
         f'To edit the plan: update_execution_plan(plan_id="{plan_id}", plan_markdown=...).'
@@ -312,6 +315,7 @@ async def setup_execution_plan_from_markdown(
             "Approve Plan may fail until Redis recovers. redis=%s",
             redis_url_for_logs(),
         )
+        return False
 
     tool_event_bus.put_event(
         sid,
@@ -468,6 +472,42 @@ async def run_update_execution_plan(
     )
 
 
+def _validate_draft_task_entries(tasks: Any) -> Any:
+    raw = tasks
+    if isinstance(raw, str):
+        raw = json.loads(raw.strip())
+    if not isinstance(raw, list):
+        raise ValueError("tasks must be a JSON array of task objects")
+    for i, row in enumerate(raw, 1):
+        if not isinstance(row, dict):
+            raise ValueError(
+                f"tasks[{i}] must be an object with id, title, description, depends_on"
+            )
+        desc = str(row.get("description") or "").strip()
+        if len(desc) < 40:
+            raise ValueError(
+                f"tasks[{i}] (`{row.get('id', '?')}`) requires description (min 40 chars): "
+                "what to do, what NOT to do, expected output / Done when"
+            )
+    return raw
+
+
+def _materialize_plan_markdown(plan: ExecutionPlan, goal: str) -> str:
+    from src.runtime.plan_execution import infer_deliverable_path
+
+    markdown = plan_to_markdown(plan)
+    deliverable = infer_deliverable_path(f"## Goal\n{goal.strip()}\n") or ""
+    if deliverable:
+        markdown = re.sub(
+            r"(## Deliverable\n)(.*?)(\n## Tasks)",
+            rf"\1`{deliverable}`\n\3",
+            markdown,
+            count=1,
+            flags=re.DOTALL,
+        )
+    return markdown
+
+
 async def run_draft_execution_plan(
     goal: str,
     tasks: str | list | None = None,
@@ -483,6 +523,10 @@ async def run_draft_execution_plan(
     g = (goal or "").strip()
     if not g:
         raise ValueError("goal is required")
+    if len(g) < 20:
+        raise ValueError(
+            "goal must be at least 20 characters and describe a verifiable outcome"
+        )
     if tasks is None:
         raise ValueError(
             "tasks is required: JSON array with at least 2 atomic tasks "
@@ -496,6 +540,7 @@ async def run_draft_execution_plan(
             "split milestones into task_01, task_02, …"
         )
 
+    tasks = _validate_draft_task_entries(tasks)
     plan = ExecutionPlan.from_goal_and_tasks(g, tasks)
     plan_dict_probe = json.loads(plan.model_dump_json())
     from src.a2a.plan_markdown import is_degenerate_plan_json
@@ -511,7 +556,7 @@ async def run_draft_execution_plan(
         or str(ctx.get("turn_plan_id") or "").strip()
         or new_execution_plan_id()
     )
-    markdown = plan_to_markdown(plan)
+    markdown = _materialize_plan_markdown(plan, g)
     await setup_execution_plan_from_markdown(
         markdown,
         plan_id=resolved_pid,
@@ -756,8 +801,7 @@ def build_orchestration_haystack_tools(session_id: str, user_id: str) -> List[An
             "draft_execution_plan",
             (
                 "Create execution plan in sidebar (HITL) from goal and structured tasks. "
-                "Prefer `<plan>` tag in Plan Mode; use this tool only when a plan must be created via tool call. "
-                "Wait for user approval before mutating tasks."
+                "Primary path in Plan Mode tool-first. Wait for user approval before execution."
             ),
             draft_execution_plan_fn,
             parameters={
@@ -765,14 +809,17 @@ def build_orchestration_haystack_tools(session_id: str, user_id: str) -> List[An
                 "properties": {
                     "goal": {
                         "type": "string",
-                        "description": "Verifiable plan objective",
+                        "description": "Verifiable plan objective (min 20 chars)",
                     },
                     "tasks": {
                         "type": "string",
-                        "description": "JSON task array or task markdown lines (optional)",
+                        "description": (
+                            "Required JSON array: [{id, title, description, depends_on[]}]. "
+                            "Each description ≥40 chars: scope, out-of-scope, expected output / Done when."
+                        ),
                     },
                 },
-                "required": ["goal"],
+                "required": ["goal", "tasks"],
             },
         ),
         _orch_tool(

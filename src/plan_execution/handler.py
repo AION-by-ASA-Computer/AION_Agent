@@ -16,6 +16,41 @@ logger = logging.getLogger("aion.plan_execution")
 _handler: Optional["PlanExecutionHandler"] = None
 
 
+async def _get_agent_for_execution(
+    profile_name: str,
+    *,
+    session_id: str,
+    user_id: str,
+):
+    from src.main import get_agent
+
+    return await get_agent(
+        profile_name,
+        session_id=session_id,
+        user_id=user_id,
+        agent_mode="normal",
+    )
+
+
+def _make_plan_execution_pipeline(
+    agent,
+    session_id: str,
+    profile_name: str,
+    *,
+    user_id: str,
+    agent_mode: str = "normal",
+):
+    from src.agent_pipeline import AgentPipeline
+
+    return AgentPipeline(
+        agent,
+        session_id,
+        profile_name,
+        user_id=user_id,
+        agent_mode=agent_mode,
+    )
+
+
 def plan_execution_data_dir() -> Path:
     raw = (os.getenv("AION_PLAN_EXECUTION_DATA_DIR") or "data/plan_execution").strip()
     p = Path(raw)
@@ -122,6 +157,10 @@ def _tool_activity_label(tool_name: str, status: str, detail: str) -> str:
         base = "Editing file nel workspace"
     elif tn == "mark_task_completed":
         base = "Segno task completed"
+    elif tn == "web_search":
+        base = "Web search"
+    elif tn == "web_fetch_page":
+        base = "Fetching web page"
     elif tn.startswith("mempalace_"):
         base = "Querying MemPalace"
     elif "grep" in tn or "search" in tn or "ripgrep" in tn:
@@ -273,13 +312,24 @@ class PlanExecutionHandler:
                     entry,
                     on_progress=on_progress,
                 )
+                if entry.get("status") == "paused":
+                    return
                 entry["result"] = summary
                 entry["deliverable_path"] = deliverable
                 entry["status"] = "done"
                 self._save_result(run_id, entry)
             except asyncio.CancelledError:
-                entry["status"] = "cancelled"
-                entry["result"] = "Plan execution cancelled."
+                if entry.get("_pause_intent"):
+                    entry["status"] = "paused"
+                    entry["result"] = (
+                        "Plan execution paused. Resume from the Plan panel to continue."
+                    )
+                else:
+                    entry["status"] = "cancelled"
+                    entry["result"] = (
+                        "Plan execution cancelled. Resume from the Plan panel to continue."
+                    )
+                entry.pop("_pause_intent", None)
                 self._save_result(run_id, entry)
                 raise
             except Exception as exc:
@@ -333,6 +383,7 @@ class PlanExecutionHandler:
         from src.runtime import orchestration_db as odb
         from src.runtime.plan_engine import next_pending_task_id
         from src.runtime.plan_execution import (
+            build_plan_execution_trigger,
             infer_deliverable_path,
             task_title_from_markdown,
         )
@@ -347,16 +398,12 @@ class PlanExecutionHandler:
 
         on_progress({"phase": "starting", "plan_id": plan_id})
 
-        from src.main import get_agent
-        from src.agent_pipeline import AgentPipeline
-
-        agent, resolved_profile = await get_agent(
+        agent, resolved_profile = await _get_agent_for_execution(
             profile_name,
             session_id=chat_session_id or stored_sess or "plan-exec",
             user_id=owner,
-            agent_mode="normal",
         )
-        pipe = AgentPipeline(
+        pipe = _make_plan_execution_pipeline(
             agent,
             chat_session_id or stored_sess or "plan-exec",
             resolved_profile,
@@ -409,15 +456,9 @@ class PlanExecutionHandler:
                             "message": f"task `{task_id}` — nuovo tentativo ({attempt + 1}/2)",
                         }
                     )
-                trigger = (
-                    f"Execute ONLY task `{task_id}`."
-                    if attempt == 0
-                    else (
-                        f"Execute ONLY task `{task_id}`. "
-                        "You MUST call mark_task_completed with this task_id before ending the turn."
-                    )
-                )
+                trigger = build_plan_execution_trigger(task_id, attempt=attempt)
                 sub_completed = False
+                turn_finished = False
                 async for chunk in pipe.run_stream(
                     trigger,
                     message_source="internal_trigger",
@@ -426,6 +467,8 @@ class PlanExecutionHandler:
                 ):
                     if entry.get("_cancel"):
                         raise asyncio.CancelledError()
+                    if turn_finished:
+                        continue
                     if chunk.get("type") == "turn_started":
                         task_user_id = (
                             chunk.get("user_message_id") or ""
@@ -451,7 +494,7 @@ class PlanExecutionHandler:
                                 "tasks": list(entry.get("tasks") or []),
                             }
                         )
-                    if chunk.get("type") == "tool_event":
+                    if chunk.get("type") == "tool_event" and not turn_finished:
                         evt = chunk.get("event") or {}
                         et = str(evt.get("type") or "")
                         if et in ("tool_start", "tool_end", "tool_error"):
@@ -475,6 +518,7 @@ class PlanExecutionHandler:
                         and chunk.get("code") == "plan_task_completed"
                     ):
                         sub_completed = True
+                        turn_finished = True
                 if sub_completed:
                     break
 
@@ -498,7 +542,7 @@ class PlanExecutionHandler:
 
             if not sub_completed:
                 logger.warning(
-                    "Plan execution run=%s plan=%s: task `%s` not completed after retry — skipping.",
+                    "Plan execution run=%s plan=%s: task `%s` not completed after retry — paused.",
                     run_id,
                     plan_id,
                     task_id,
@@ -510,28 +554,23 @@ class PlanExecutionHandler:
                         "task_id": task_id,
                         "index": index,
                         "total": total,
-                        "message": f"task `{task_id}` not completed after retry — skipped",
+                        "message": f"task `{task_id}` not completed after retry — paused",
                     }
                 )
-                # Mark the task done in the DB so the loop advances rather than looping forever.
-                try:
-                    from src.runtime.orchestration_tools import run_mark_task_completed
-
-                    await run_mark_task_completed(
-                        plan_id,
-                        task_id,
-                        session_id=chat_session_id or stored_sess or "plan-exec",
-                        user_id=owner,
-                    )
-                except Exception as mark_exc:  # noqa: BLE001
-                    logger.warning(
-                        "Could not auto-mark task %s done after retry failure: %s",
-                        task_id,
-                        mark_exc,
-                    )
+                entry["status"] = "paused"
+                entry["result"] = (
+                    f"Plan execution paused: task `{task_id}` was not completed. "
+                    "Resume from the Plan panel to continue."
+                )
+                self._save_result(run_id, entry)
+                return entry.get("result") or "", infer_deliverable_path(approved_md)
 
             rec_after = await odb.fetch_plan_record(plan_id)
             rev = int(rec_after.get("revision") or 1) if rec_after else 1
+            for t in entry.get("tasks") or []:
+                if t.get("task_id") == task_id:
+                    t["status"] = "done"
+                    break
             on_progress(
                 {
                     "phase": "task_done",
@@ -733,7 +772,18 @@ class PlanExecutionHandler:
     def cancel_plan_execution(self, run_id: str) -> bool:
         entry = self._active_tasks.get(run_id)
         if not entry or entry.get("status") != "running":
-            return False
+            data = self.load_json(run_id)
+            if not data or data.get("status") == "running":
+                return False
+            data["status"] = "cancelled"
+            data["result"] = (
+                "Plan execution cancelled. Resume from the Plan panel to continue."
+            )
+            data["completed_at"] = time.time()
+            path = plan_execution_data_dir() / f"{run_id}.json"
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            return True
+        entry.pop("_pause_intent", None)
         entry["_cancel"] = True
         task = entry.get("task")
         if task and not task.done():
@@ -742,7 +792,146 @@ class PlanExecutionHandler:
         if future and not future.done():
             future.cancel()
         entry["status"] = "cancelled"
+        entry["result"] = (
+            "Plan execution cancelled. Resume from the Plan panel to continue."
+        )
+        self._save_result(run_id, entry)
         return True
+
+    def pause_plan_execution(self, run_id: str) -> bool:
+        entry = self._active_tasks.get(run_id)
+        if not entry or entry.get("status") != "running":
+            return False
+        entry["_pause_intent"] = True
+        entry["_cancel"] = True
+        task = entry.get("task")
+        if task and not task.done():
+            task.cancel()
+        future = entry.get("future")
+        if future and not future.done():
+            future.cancel()
+        return True
+
+    def resume_plan_execution(self, run_id: str) -> dict:
+        entry = self._active_tasks.get(run_id)
+        if entry is None:
+            data = self.load_json(run_id) or {}
+            if not data:
+                raise ValueError("plan execution run not found")
+            entry = {
+                "plan_id": data.get("plan_id"),
+                "profile_name": data.get("profile_name") or "aion_std",
+                "status": data.get("status"),
+                "progress": data.get("progress") or {},
+                "activities": list(data.get("activities") or []),
+                "tasks": list(data.get("tasks") or []),
+                "result": data.get("result"),
+                "deliverable_path": data.get("deliverable_path"),
+                "started_at": data.get("started_at") or time.time(),
+                "owner": data.get("owner") or "default",
+                "chat_session_id": data.get("chat_session_id") or "",
+                "task": None,
+                "future": None,
+                "_cancel": False,
+            }
+            self._active_tasks[run_id] = entry
+
+        st = (entry.get("status") or "").strip()
+        if st == "running":
+            return {
+                "run_id": run_id,
+                "status": "running",
+                "plan_id": entry.get("plan_id", ""),
+                "ui_event": "plan_execution_resumed",
+            }
+        if st not in ("paused", "cancelled", "interrupted", "error"):
+            raise RuntimeError(f"cannot resume plan execution from status `{st}`")
+
+        pid = (entry.get("plan_id") or "").strip()
+        if not pid:
+            raise ValueError("plan_id missing on run")
+
+        entry["_cancel"] = False
+        entry.pop("_pause_intent", None)
+        entry["status"] = "running"
+        entry.pop("completed_at", None)
+
+        def on_progress(event: dict) -> None:
+            payload = dict(event)
+            payload["ts"] = time.time()
+            payload["label"] = _progress_label(payload)
+            entry["progress"] = payload
+            activities: List[dict] = entry.setdefault("activities", [])
+            activities.append(payload)
+            if len(activities) > 100:
+                entry["activities"] = activities[-100:]
+            self._notify_stream(run_id)
+            if payload.get("phase") == "task_start" and payload.get("task_id"):
+                tasks = entry.setdefault("tasks", [])
+                tid = str(payload["task_id"])
+                if not any(t.get("task_id") == tid for t in tasks):
+                    tasks.append(
+                        {
+                            "task_id": tid,
+                            "title": payload.get("title") or "",
+                            "status": "running",
+                        }
+                    )
+            if payload.get("phase") == "task_done" and payload.get("task_id"):
+                tid = str(payload["task_id"])
+                for t in entry.get("tasks") or []:
+                    if t.get("task_id") == tid:
+                        t["status"] = "done"
+            self._persist_running(run_id, entry)
+
+        async def _run() -> None:
+            try:
+                summary, deliverable = await self._run_plan_loop(
+                    run_id,
+                    pid,
+                    entry,
+                    on_progress=on_progress,
+                )
+                if entry.get("status") == "paused":
+                    return
+                entry["result"] = summary
+                entry["deliverable_path"] = deliverable
+                entry["status"] = "done"
+                self._save_result(run_id, entry)
+            except asyncio.CancelledError:
+                if entry.get("_pause_intent"):
+                    entry["status"] = "paused"
+                    entry["result"] = (
+                        "Plan execution paused. Resume from the Plan panel to continue."
+                    )
+                else:
+                    entry["status"] = "cancelled"
+                    entry["result"] = (
+                        "Plan execution cancelled. Resume from the Plan panel to continue."
+                    )
+                entry.pop("_pause_intent", None)
+                self._save_result(run_id, entry)
+                raise
+            except Exception as exc:
+                logger.error(
+                    "Plan execution resume failed run=%s plan=%s: %s",
+                    run_id,
+                    pid,
+                    exc,
+                    exc_info=True,
+                )
+                entry["status"] = "error"
+                entry["result"] = str(exc)
+                on_progress({"phase": "error", "message": str(exc)})
+                self._save_result(run_id, entry)
+
+        self._schedule_background_coro(entry, _run())
+        return {
+            "run_id": run_id,
+            "status": "running",
+            "plan_id": pid,
+            "ui_event": "plan_execution_resumed",
+        }
 
     def get_result(self, run_id: str) -> Optional[str]:
         entry = self._active_tasks.get(run_id)
@@ -895,7 +1084,7 @@ class PlanExecutionHandler:
         data["status"] = "interrupted"
         data["result"] = (
             "Plan execution interrupted (server restart or lost session). "
-            "Re-approve or restart from the Plan panel."
+            "Resume from the Plan panel to continue."
         )
         data["completed_at"] = time.time()
         try:

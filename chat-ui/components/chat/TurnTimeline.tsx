@@ -7,6 +7,7 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { FileText, ListTodo } from "lucide-react";
 
+import { coalesceTurnSegments } from "@/lib/sse/coalesceTurnSegments";
 import type { TurnSegment } from "@/lib/sse/types";
 import { useT } from "@/lib/i18n/use-t";
 import type { ToolsViewMode } from "@/components/chat/WebResearchViews";
@@ -48,14 +49,15 @@ export function TurnTimeline({
   messageId,
 }: Props) {
   const t = useT();
-  if (!segments.length) return null;
+  const displaySegments = coalesceTurnSegments(segments);
+  if (!displaySegments.length) return null;
 
-  const lastSeg = segments[segments.length - 1];
+  const lastSeg = displaySegments[displaySegments.length - 1];
 
   return (
     <div className="space-y-2.5">
-      {segments.map((seg, idx) => {
-        const isLast = idx === segments.length - 1;
+      {displaySegments.map((seg, idx) => {
+        const isLast = idx === displaySegments.length - 1;
         if (seg.kind === "generating") {
           const Icon = seg.target === "plan" ? ListTodo : FileText;
           const scriptLike = isScriptLikeTitle(seg.title);
@@ -222,9 +224,9 @@ export function TurnTimeline({
         return null;
       })}
       {streaming &&
-        segments.length > 0 &&
+        displaySegments.length > 0 &&
         lastSeg?.kind === "reasoning" &&
-        !segments.some((s) => s.kind === "tool" && s.status === "running") ? (
+        !displaySegments.some((s) => s.kind === "tool" && s.status === "running") ? (
         <ShimmerText className="mt-1 text-sm">{t("chat.agent_status.working")}</ShimmerText>
       ) : null}
     </div>

@@ -545,14 +545,27 @@ class SessionSandboxExecutor:
             )
         if proc.returncode != 0:
             hint = ""
-            if (
-                "cannot find module" in combined.lower()
-                or "module not found" in combined.lower()
-            ):
+            low = combined.lower()
+            if "cannot find module" in low or "module not found" in low:
                 hint = (
                     '\nHINT: install deps with sandbox_install_npm_packages(packages=["docx"]), '
                     "then sandbox_run_node_file again. Do not use sandbox_exec_allowlisted for Node. "
                     "Alternative: python-docx via sandbox_install_python_packages + sandbox_run_python_file."
+                )
+            elif "unknown-layout" in low or "unknown layout" in low:
+                hint = (
+                    '\nHINT: pres.layout must be a string literal, e.g. pres.layout = "LAYOUT_WIDE". '
+                    'Never pptxgen.LAYOUT_* or pres.layout(). See skill_view("pptx") canvas contract.'
+                )
+            elif "addbg" in low and "not a function" in low:
+                hint = (
+                    '\nHINT: slide.addBg() does not exist — use slide.background = { color: "RRGGBB" } '
+                    "or setSlideBg() from scripts/pptxgenjs/canvas.js."
+                )
+            elif "createslide" in low and "not a function" in low:
+                hint = (
+                    "\nHINT: use pres.addSlide(), not createSlide(). "
+                    "Run node scripts/pptxgenjs/lint_deck_script.js on the builder first."
                 )
             return f"Error:\n{combined}{hint}"
         return f"OK\n{combined}"
