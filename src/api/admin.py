@@ -2091,7 +2091,7 @@ def build_remote_bridge_registry_config(
         env[env_var] = "${" + env_var + "}"
     # Se auth_type è "none": nessun header di autorizzazione, nessuna variabile d'ambiente OAuth.
 
-    return {
+    config: Dict[str, Any] = {
         "type": "remote-bridge",
         "command": "node",
         "args": args,
@@ -2100,6 +2100,9 @@ def build_remote_bridge_registry_config(
         "aion_market_install": "remote",
         "description": description,
     }
+    if auth_type != "none":
+        config["auth_env_var"] = env_var
+    return config
 
 
 async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -> str:

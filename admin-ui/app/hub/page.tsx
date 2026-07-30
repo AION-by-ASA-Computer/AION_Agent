@@ -87,6 +87,7 @@ export default function MCPHub() {
     client_id: string;
     client_secret: string;
     scopes: string[];
+    client_id_source?: string;
   }>({
     provider: "generic",
     authorization_server: "",
@@ -250,6 +251,7 @@ export default function MCPHub() {
       client_id: oauth.client_id || "",
       client_secret: oauth.client_secret || "",
       scopes: oauth.scopes || [],
+      client_id_source: oauth.client_id_source || "",
     });
 
     void loadPolicyPreview(name, policy?.credential_mode);
@@ -1270,6 +1272,11 @@ export default function MCPHub() {
                           <p className="text-[11px] text-gray-400 leading-relaxed">
                             If this remote MCP server requires OAuth, authentication is performed by each end user via the <span className="font-semibold text-white">My Integrations</span> section in chat-ui. The admin does not need to authenticate: ensure the policy is set to <span className="font-mono text-indigo-300">per_user</span> and the server exposes standard discovery endpoints.
                           </p>
+                          {oauthConfig.client_id_source === "dynamic_registration" && oauthConfig.client_id ? (
+                            <p className="text-[10px] text-amber-300/90 mt-2 font-medium">
+                              Client ID obtained via automatic dynamic registration (RFC 7591). Disable with <span className="font-mono">AION_MCP_OAUTH_DYNAMIC_REGISTRATION=0</span> to require a manually configured client.
+                            </p>
+                          ) : null}
                         </div>
                       </div>
                     </>

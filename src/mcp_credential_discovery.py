@@ -512,6 +512,20 @@ def _extract_remote_bridge_token_key(cfg: dict) -> Optional[str]:
     return None
 
 
+def resolve_remote_bridge_auth_env_var(cfg: dict) -> Optional[str]:
+    """Preferisce auth_env_var esplicito nel registry; fallback su parsing args CLI."""
+    explicit = (cfg.get("auth_env_var") or "").strip()
+    if explicit:
+        return explicit
+    token_key = _extract_remote_bridge_token_key(cfg)
+    if token_key:
+        logger.warning(
+            "remote-bridge: auth_env_var dedotto dal parsing CLI args; "
+            "configurare auth_env_var esplicito nel registry"
+        )
+    return token_key
+
+
 def discover_mcp_credentials(
     server_slug: str,
     server_config: Optional[Dict[str, Any]] = None,
@@ -593,7 +607,7 @@ def discover_mcp_credentials(
         schema = final_res.get("credential_schema") or []
 
         if cfg.get("type") == "remote-bridge":
-            token_key = _extract_remote_bridge_token_key(cfg)
+            token_key = resolve_remote_bridge_auth_env_var(cfg)
             if token_key:
                 db_key = token_key
                 if "__" in token_key:
