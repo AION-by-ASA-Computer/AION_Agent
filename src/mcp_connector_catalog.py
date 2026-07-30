@@ -185,6 +185,27 @@ def oauth_config_from_connector(connector: Dict[str, Any] | None) -> Dict[str, A
     return out
 
 
+def oauth_admin_client_credentials_required(oauth_cfg: Dict[str, Any] | None) -> bool:
+    """True se l'admin deve registrare client_id/secret (es. GitHub, SharePoint, Gmail)."""
+    cfg = oauth_cfg or {}
+    if cfg.get("client_credentials_required"):
+        return True
+    auth_ref = str(
+        cfg.get("authorization_endpoint") or cfg.get("authorization_server") or ""
+    ).lower()
+    return "login.microsoftonline.com" in auth_ref
+
+
+def oauth_admin_credentials_configured(oauth_cfg: Dict[str, Any] | None) -> bool:
+    """False se mancano client_id o client_secret richiesti dall'admin."""
+    if not oauth_admin_client_credentials_required(oauth_cfg):
+        return True
+    cfg = oauth_cfg or {}
+    client_id = str(cfg.get("client_id") or "").strip()
+    client_secret = str(cfg.get("client_secret") or "").strip()
+    return bool(client_id and client_secret)
+
+
 _ENTRA_TENANT_IN_REMOTE_URL = re.compile(
     r"/tenants/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
 )

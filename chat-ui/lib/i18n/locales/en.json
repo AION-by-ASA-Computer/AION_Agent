@@ -326,7 +326,8 @@
     "oauth_unknown_error": "Unknown error",
     "oauth_callback_missing_slug": "OAuth callback error: missing integration identifier.",
     "oauth_callback_state_mismatch": "OAuth security check failed: state mismatch.",
-    "oauth_exchange_error": "OAuth token exchange failed"
+    "oauth_exchange_error": "OAuth token exchange failed",
+    "admin_setup_required": "Some integrations are not available yet. Ask your administrator to configure the client ID and client secret correctly in MCP Hub."
   },
   "header": {
     "toggle_sidebar": {

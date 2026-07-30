@@ -33,6 +33,9 @@ export function IntegrationsPanel() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [featureEnabled, setFeatureEnabled] = useState(true);
   const [featureHint, setFeatureHint] = useState<string | null>(null);
+  const [adminSetupPending, setAdminSetupPending] = useState<Array<{ server_slug: string; display_name: string }>>(
+    [],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,6 +56,9 @@ export function IntegrationsPanel() {
       }
       const data = await res.json();
       setIntegrations(data.integrations || []);
+      setAdminSetupPending(
+        Array.isArray(data.admin_setup_pending) ? data.admin_setup_pending : [],
+      );
       if (data.credentials_feature_enabled === false) {
         setFeatureEnabled(false);
       }
@@ -219,6 +225,12 @@ export function IntegrationsPanel() {
         {fetchError ? (
           <div className="mb-4 rounded-2xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {fetchError}
+          </div>
+        ) : null}
+
+        {adminSetupPending.length > 0 ? (
+          <div className="mb-4 rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            {t("integrationsPage.admin_setup_required")}
           </div>
         ) : null}
 

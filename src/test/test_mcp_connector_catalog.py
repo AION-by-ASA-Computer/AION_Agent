@@ -5,6 +5,8 @@ from src.mcp_connector_catalog import (
     extract_entra_tenant_id_from_remote_url,
     infer_connector_id_for_registry_name,
     load_mcp_connector_catalog,
+    oauth_admin_credentials_configured,
+    oauth_admin_client_credentials_required,
     oauth_config_from_connector,
     resolve_oauth_url_templates,
 )
@@ -95,3 +97,17 @@ def test_sharepoint_oauth_resolves_tenant_from_remote_url():
     assert tenant in resolved["token_url"]
     assert tenant in resolved["resource"]
     assert "{tenant_id}" not in resolved["authorization_endpoint"]
+
+
+def test_oauth_admin_credentials_required_for_github_catalog():
+    catalog = load_mcp_connector_catalog()
+    row = _connector_by_id(catalog, "github")
+    oauth = oauth_config_from_connector(row)
+    assert oauth_admin_client_credentials_required(oauth) is True
+    assert oauth_admin_credentials_configured(oauth) is False
+    assert oauth_admin_credentials_configured({**oauth, "client_id": "id", "client_secret": "sec"}) is True
+
+
+def test_oauth_admin_credentials_not_required_without_flag():
+    assert oauth_admin_client_credentials_required({}) is False
+    assert oauth_admin_credentials_configured({}) is True

@@ -5,6 +5,7 @@ import type { IntegrationPolicyRow } from "@/lib/mcpIntegrationPolicy";
 import { modeLabel, policyBadges } from "@/lib/mcpIntegrationPolicy";
 import type { McpIntegrityIssue } from "@/components/McpIntegrityBanner";
 import { cn } from "@/lib/cn";
+import { oauthAdminSetupPending } from "@/lib/mcpOAuthSetup";
 
 type RegistryConfig = {
   description?: string;
@@ -17,6 +18,7 @@ type Props = {
   name: string;
   config: RegistryConfig;
   policy?: IntegrationPolicyRow;
+  connector?: Record<string, unknown> | null;
   issues?: McpIntegrityIssue[];
   loading?: boolean;
   onEdit: () => void;
@@ -52,6 +54,7 @@ export function McpInstalledCard({
   name,
   config,
   policy,
+  connector,
   issues = [],
   loading,
   onEdit,
@@ -61,6 +64,7 @@ export function McpInstalledCard({
 }: Props) {
   const badges = policyBadges(policy);
   const hasIssues = issues.length > 0;
+  const awaitingAdminOAuth = oauthAdminSetupPending(policy?.oauth_config, connector, config);
   const connectorId = policy?.aion_connector_id || config.aion_connector_id;
   const displayName = policy?.display_name && policy.display_name !== name ? policy.display_name : null;
   const typeMeta = installTypeMeta(config.type);
@@ -74,7 +78,9 @@ export function McpInstalledCard({
         "glass-card group flex flex-col rounded-2xl border bg-[#121212]/80 shadow-xl backdrop-blur-sm transition-all duration-200",
         hasIssues
           ? "border-amber-500/30 hover:border-amber-500/50"
-          : "border-white/5 hover:border-blue-500/50",
+          : awaitingAdminOAuth
+            ? "border-sky-500/30 hover:border-sky-500/50"
+            : "border-white/5 hover:border-blue-500/50",
       )}
     >
       <div className="flex-1 space-y-4 p-6">
@@ -84,10 +90,18 @@ export function McpInstalledCard({
               "rounded-xl border p-3 transition-colors",
               hasIssues
                 ? "border-amber-500/20 bg-amber-500/10 group-hover:bg-amber-500/15"
-                : "border-blue-500/20 bg-blue-500/10 group-hover:bg-blue-500/20",
+                : awaitingAdminOAuth
+                  ? "border-sky-500/20 bg-sky-500/10 group-hover:bg-sky-500/15"
+                  : "border-blue-500/20 bg-blue-500/10 group-hover:bg-blue-500/20",
             )}
           >
-            <HeaderIcon className={cn("h-6 w-6", hasIssues ? "text-amber-400" : header.className)} aria-hidden />
+            <HeaderIcon
+              className={cn(
+                "h-6 w-6",
+                hasIssues ? "text-amber-400" : awaitingAdminOAuth ? "text-sky-400" : header.className,
+              )}
+              aria-hidden
+            />
           </div>
           <div className="flex max-w-[55%] flex-col items-end gap-1.5">
             {config.is_base ? (
@@ -97,6 +111,10 @@ export function McpInstalledCard({
             ) : hasIssues ? (
               <span className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-amber-300">
                 Attenzione
+              </span>
+            ) : awaitingAdminOAuth ? (
+              <span className="rounded-lg border border-sky-500/20 bg-sky-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-sky-300">
+                Attesa configurazione
               </span>
             ) : (
               <span className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
@@ -136,6 +154,12 @@ export function McpInstalledCard({
             ) : null}
           </div>
         )}
+
+        {awaitingAdminOAuth ? (
+          <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 px-3 py-2 text-[11px] text-sky-200/90">
+            Configura client ID e client secret OAuth in Hub prima di abilitare l&apos;accesso in chat-ui.
+          </div>
+        ) : null}
 
         {hasIssues ? (
           <div className="space-y-1 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-200/90">

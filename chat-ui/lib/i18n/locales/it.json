@@ -326,7 +326,8 @@
     "oauth_unknown_error": "Errore sconosciuto",
     "oauth_callback_missing_slug": "Errore callback OAuth: identificativo integrazione mancante.",
     "oauth_callback_state_mismatch": "Controllo di sicurezza OAuth fallito: state non corrispondente.",
-    "oauth_exchange_error": "Errore scambio token OAuth"
+    "oauth_exchange_error": "Errore scambio token OAuth",
+    "admin_setup_required": "Alcune integrazioni non sono ancora disponibili. Chiedi all'amministratore di configurare correttamente client ID e client secret in MCP Hub."
   },
   "header": {
     "toggle_sidebar": {

@@ -143,24 +143,34 @@ async def list_available_integrations(
     )
 
     result: List[Dict[str, Any]] = []
+    admin_setup_pending: List[Dict[str, str]] = []
     for r in rows:
         # Filtra server rimossi dal registry (eliminati dall'admin in Hub)
         if r.server_slug not in registry_slugs:
             continue
-        result.append(
-            await integration_row_to_public_dict(
-                r,
-                user_id=user_id,
-                tenant_id=tenant,
-                anonymous=anonymous,
-                pref_map=pref_map,
-                hints_map=hints_map,
-            )
+        pub = await integration_row_to_public_dict(
+            r,
+            user_id=user_id,
+            tenant_id=tenant,
+            anonymous=anonymous,
+            pref_map=pref_map,
+            hints_map=hints_map,
         )
+        if pub.get("has_oauth") and not pub.get("admin_oauth_configured", True):
+            admin_setup_pending.append(
+                {
+                    "server_slug": r.server_slug,
+                    "display_name": str(r.display_name or r.server_slug),
+                }
+            )
+            continue
+        pub.pop("admin_oauth_configured", None)
+        result.append(pub)
 
     resp = {
         "integrations": result,
         "credentials_feature_enabled": credentials_feature_enabled(),
+        "admin_setup_pending": admin_setup_pending,
     }
 
     # Store in response cache (skip for anonymous)

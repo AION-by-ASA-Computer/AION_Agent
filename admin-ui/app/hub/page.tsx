@@ -174,6 +174,7 @@ export default function MCPHub() {
     fetchSettings();
     void fetchIntegrations();
     void fetchIntegrity();
+    void ensureConnectorCatalog();
   }, [fetchIntegrations, fetchIntegrity]);
 
   useEffect(() => {
@@ -1141,12 +1142,18 @@ export default function MCPHub() {
               const slugIssues = integrityIssues.filter(
                 (i) => i.server_slug === name || i.from_slug === name,
               );
+              const connector = matchConnectorRow(
+                name,
+                config.aion_connector_id || integrationBySlug[name]?.aion_connector_id || undefined,
+                connectorRows as Record<string, unknown>[],
+              );
               return (
                 <McpInstalledCard
                   key={name}
                   name={name}
                   config={config}
                   policy={integrationBySlug[name]}
+                  connector={connector}
                   issues={slugIssues}
                   loading={loading}
                   onEdit={() => void openEditConfig(name, config)}

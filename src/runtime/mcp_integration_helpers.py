@@ -16,8 +16,12 @@ from src.data.models import McpServerConfig, UserMcpCredential, UserMcpPreferenc
 from src.mcp_connector_catalog import (
     connector_requires_oauth,
     load_mcp_connector_catalog,
+    merge_oauth_config,
+    oauth_admin_credentials_configured,
+    oauth_config_from_connector,
     oauth_ui_metadata_from_connector,
     resolve_connector_row_for_mcp_server,
+    resolve_oauth_url_templates,
 )
 from src.runtime.credential_store import (
     list_credentials_hints,
@@ -211,6 +215,20 @@ async def integration_row_to_public_dict(
             }
     except Exception:
         pass
+
+    try:
+        remote_for_oauth = str(oauth_cfg.get("remote_url") or reg_cfg.get("remote_url") or "")
+        oauth_cfg = resolve_oauth_url_templates(
+            merge_oauth_config(
+                oauth_cfg,
+                oauth_config_from_connector(connector_row),
+                catalog_overrides=True,
+            ),
+            remote_url=remote_for_oauth,
+        )
+    except Exception:
+        pass
+
     schema = [
         s for s in schema if s.get("key") and not str(s["key"]).startswith("AION_USER_")
     ]
@@ -247,6 +265,8 @@ async def integration_row_to_public_dict(
     )
     if has_oauth:
         schema = strip_oauth_token_fields_from_schema(schema)
+
+    admin_oauth_configured = (not has_oauth) or oauth_admin_credentials_configured(oauth_cfg)
 
     oauth_provider = str(oauth_cfg.get("provider") or oauth_meta["provider"])
     oauth_display_name = str(
@@ -348,6 +368,7 @@ async def integration_row_to_public_dict(
         or oauth_cfg.get("auth_url"),
         "oauth_client_id": oauth_cfg.get("client_id"),
         "oauth_scopes": oauth_cfg.get("scopes") or [],
+        "admin_oauth_configured": admin_oauth_configured,
         "is_configured": configured if show_form else (org_managed or mode == "none"),
         "org_managed": org_managed,
         "user_enabled": user_enabled,
@@ -423,6 +444,8 @@ async def list_pending_for_profile(
             anonymous=anonymous,
             pref_map=pref_map,
         )
+        if not pub.get("admin_oauth_configured", True):
+            continue
         if not pub["user_enabled"]:
             continue
         mode = pub["credential_mode"]

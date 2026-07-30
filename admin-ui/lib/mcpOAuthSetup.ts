@@ -56,3 +56,48 @@ export function connectorOAuthSetupHints(
     scopes,
   };
 }
+
+type OAuthConfigLike = {
+  client_id?: string;
+  client_secret?: string;
+  authorization_server?: string;
+  token_url?: string;
+  client_credentials_required?: boolean;
+};
+
+/** True se l'admin deve registrare client_id/secret (GitHub, SharePoint, Gmail, …). */
+export function oauthAdminClientCredentialsRequired(
+  oauthConfig: OAuthConfigLike | undefined,
+  connector?: Record<string, unknown> | null,
+): boolean {
+  if (oauthConfig?.client_credentials_required) return true;
+  const hints = connectorOAuthSetupHints(connector);
+  if (hints.needsAdminCredentials) return true;
+  const authRef = String(oauthConfig?.authorization_server || oauthConfig?.token_url || "").toLowerCase();
+  return authRef.includes("login.microsoftonline.com");
+}
+
+/** False se mancano client_id o client_secret richiesti dall'admin. */
+export function oauthAdminCredentialsConfigured(
+  oauthConfig: OAuthConfigLike | undefined,
+  connector?: Record<string, unknown> | null,
+): boolean {
+  if (!oauthAdminClientCredentialsRequired(oauthConfig, connector)) return true;
+  const clientId = String(oauthConfig?.client_id || "").trim();
+  const clientSecret = String(oauthConfig?.client_secret || "").trim();
+  return Boolean(clientId && clientSecret);
+}
+
+export function oauthAdminSetupPending(
+  oauthConfig: OAuthConfigLike | undefined,
+  connector?: Record<string, unknown> | null,
+  config?: { type?: string },
+): boolean {
+  const hints = connectorOAuthSetupHints(connector);
+  const usesOAuth =
+    hints.usesOAuth ||
+    config?.type === "remote-bridge" ||
+    Boolean(oauthConfig?.authorization_server || oauthConfig?.token_url);
+  if (!usesOAuth) return false;
+  return !oauthAdminCredentialsConfigured(oauthConfig, connector);
+}
