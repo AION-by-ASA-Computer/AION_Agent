@@ -195,6 +195,15 @@ celerybeat.pid
 .env.docker
 # Config locale (ignorata, popolata da config_std/ tramite setup)
 config/
+# Skill proprietarie di terze parti (solo locale, vedi config_proprietary/README.md)
+config_proprietary/skills/
+# Office skills — mai sotto config_std/ (parte del repo OSS)
+config_std/skills/docx/
+config_std/skills/pdf/
+config_std/skills/pptx/
+config_std/skills/xlsx/
+# config_std pubblica solo skill flat .md; i pacchetti vanno in config/ o config_proprietary/
+config_std/skills/*/
 # MCP server locale (ignorata, popolata da mcp_servers_std/ tramite setup)
 mcp_servers/
 .envrc

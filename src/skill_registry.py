@@ -11,6 +11,9 @@ import frontmatter
 
 logger = logging.getLogger("aion.skills")
 
+# Companion markdown files merged into skill_view body for package skills.
+_SKILL_PACKAGE_COMPANIONS: Dict[str, tuple[str, ...]] = {}
+
 
 class SkillRegistry:
     """Carica skill da config/skills e da data/skills/generated con merge per versione."""
@@ -141,7 +144,26 @@ class SkillRegistry:
 
     def get_skill_full(self, name: str) -> Optional[str]:
         s = self._skills.get(name)
-        return s["body"] if s else None
+        if not s:
+            return None
+        body = s["body"]
+        companions = _SKILL_PACKAGE_COMPANIONS.get(name)
+        if not companions:
+            return body
+        root = self.get_skill_package_root(name)
+        if not root:
+            return body
+        parts: List[str] = [body]
+        for filename in companions:
+            path = root / filename
+            if not path.is_file():
+                fb = self.curated_fallback_dir / name / filename
+                path = fb if fb.is_file() else path
+            if not path.is_file():
+                continue
+            parts.append(f"\n\n---\n\n## Package reference: `{filename}`\n\n")
+            parts.append(path.read_text(encoding="utf-8"))
+        return "".join(parts)
 
     def get_skill(self, name: str) -> Optional[str]:
         """Alias retro-compatibile → body completo."""
@@ -179,6 +201,10 @@ class SkillRegistry:
             scripts = root / "scripts"
             if scripts.is_dir():
                 return scripts
+            # Flat package at config/skills/<name>/scripts when SKILL.md path was nested wrongly.
+            canonical = self.curated_dir / name / "scripts"
+            if canonical.is_dir():
+                return canonical
         fallback_pkg = self.curated_fallback_dir / name
         fb_scripts = fallback_pkg / "scripts"
         if fb_scripts.is_dir():

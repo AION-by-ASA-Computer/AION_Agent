@@ -77,6 +77,49 @@ def _save_marker(session_id: str, slug: str, payload: Dict[str, Any]) -> None:
     mp.write_text(json.dumps(payload, indent=0), encoding="utf-8")
 
 
+def _merge_tree_missing_only(src: Path, dst: Path) -> int:
+    """Copy files from src into dst only when the target path does not exist."""
+    added = 0
+    for item in src.rglob("*"):
+        if not item.is_file():
+            continue
+        rel = item.relative_to(src)
+        target = dst / rel
+        if target.is_file():
+            continue
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(item, target)
+        added += 1
+    return added
+
+
+def _merge_fallback_scripts(slug: str, primary_src: Path, dst: Path) -> int:
+    """Supplement session scripts from config_std / config_proprietary when needed."""
+    added = 0
+    fb_std = skill_registry.curated_fallback_dir / slug / "scripts"
+    if fb_std.is_dir() and fb_std.resolve() != primary_src.resolve():
+        added += _merge_tree_missing_only(fb_std, dst)
+    repo = skill_registry.curated_fallback_dir.parent.parent
+    prop = repo / "config_proprietary" / "skills" / slug / "scripts"
+    if prop.is_dir() and prop.resolve() != primary_src.resolve():
+        added += _merge_tree_missing_only(prop, dst)
+    return added
+
+
+def _seed_pptx_npm(session_id: str) -> str:
+    """Install pptxgenjs into session workspace (Anthropic-aligned create path)."""
+    try:
+        from src.tools.session_npm import install_npm_packages
+
+        npm_out = install_npm_packages(session_id, ["pptxgenjs"])
+        if npm_out.startswith("OK:"):
+            return " pptxgenjs seeded in workspace/node_modules."
+        return f" pptxgenjs install: {npm_out[:200]}"
+    except Exception as e:
+        logger.warning("pptx npm seed failed session=%s: %s", session_id[:8], e)
+        return f" pptxgenjs seed failed: {e}"
+
+
 def materialize_skill_scripts(
     session_id: str, slug: str, *, force: bool = False
 ) -> MaterializeResult:
@@ -98,7 +141,7 @@ def materialize_skill_scripts(
             return MaterializeResult(
                 "no_scripts",
                 f"Skill office '{slug}' senza directory scripts/ sul server "
-                "(eseguire sync_config).",
+                "(sync config_proprietary → config/ con scripts/sync_proprietary_config.py).",
                 [],
             )
         return MaterializeResult(
@@ -109,17 +152,19 @@ def materialize_skill_scripts(
 
     ensure_session_dirs(session_id)
     dst = session_root(session_id) / "scripts"
-    fp = _fingerprint_dir(src)
-    prev = _load_marker(session_id, slug)
-    if not force and prev and prev.get("fingerprint") == fp:
-        sentinels = _sentinel_paths_for_slug(slug, dst)
-        return MaterializeResult(
-            "skipped",
-            f"Scripts already materialized per '{slug}' (unchanged).",
-            sentinels,
-        )
-
     dst.mkdir(parents=True, exist_ok=True)
+    prev = _load_marker(session_id, slug)
+    if not force and prev:
+        _merge_fallback_scripts(slug, src, dst)
+        if prev.get("fingerprint") == _fingerprint_dir(dst):
+            sentinels = _sentinel_paths_for_slug(slug, dst)
+            npm_note = _seed_pptx_npm(session_id) if slug == "pptx" else ""
+            return MaterializeResult(
+                "skipped",
+                f"Scripts already materialized per '{slug}' (unchanged).{npm_note}",
+                sentinels,
+            )
+
     for item in src.iterdir():
         target = dst / item.name
         if item.is_dir():
@@ -127,6 +172,9 @@ def materialize_skill_scripts(
         else:
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(item, target)
+
+    _merge_fallback_scripts(slug, src, dst)
+    fp = _fingerprint_dir(dst)
 
     _save_marker(
         session_id,
@@ -144,9 +192,10 @@ def materialize_skill_scripts(
         slug,
         sum(1 for _ in dst.rglob("*") if _.is_file()),
     )
+    npm_note = _seed_pptx_npm(session_id) if slug == "pptx" else ""
     return MaterializeResult(
         "copied",
-        f"Scripts materialized for '{slug}' in scripts/ (session).",
+        f"Scripts materialized for '{slug}' in scripts/ (session).{npm_note}",
         sentinels,
     )
 
@@ -190,6 +239,11 @@ def format_materialize_footer(result: MaterializeResult, slug: str = "") -> str:
             lines.append(
                 "Dopo unpack usa `workspace/unpacked/` come output dir; "
                 "leggi XML con `sandbox_read_text_file` / `sandbox_grep_content` (relative_root=workspace)."
+            )
+        if slug == "pptx":
+            lines.append(
+                "pptxgenjs: `scripts/pptxgenjs/canvas.js` (bindLayout W/H) · "
+                "preflight: `node scripts/pptxgenjs/lint_deck_script.js workspace/build_deck.js`"
             )
     elif result.status == "no_scripts":
         lines.append(

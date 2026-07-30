@@ -1,0 +1,7 @@
+# Skill packages with third-party proprietary licenses (not redistributed in git).
+# Copy packages under skills/<name>/ locally; see README.md.
+skills:
+  - docx
+  - pdf
+  - pptx
+  - xlsx

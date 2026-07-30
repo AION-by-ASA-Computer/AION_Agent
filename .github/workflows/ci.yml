@@ -50,6 +50,9 @@ jobs:
       - name: Check no runtime data/ tracked in git
         run: uv run python scripts/check_data_git_tracking.py
 
+      - name: Check no proprietary skills in config_std
+        run: uv run python scripts/check_config_std_no_proprietary_skills.py
+
       - name: Run CI pytest suite
         env:
           AION_CHAT_PASSWORD_AUTH: "0"

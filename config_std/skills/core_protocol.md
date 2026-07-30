@@ -48,6 +48,7 @@ In Plan Mode: only `<plan>` in that turn; file tools after approval.
 | Multi-file project, architecture, needs approval | **Plan Mode** + `orchestration_protocol` |
 | Open-ended long research report | **`trigger_research`** (deep research) |
 | Single file deliverable from web/API data (normal mode) | **`incremental_execution_protocol`** |
+| Native `.pptx` / `.docx` / `.xlsx` file (not HTML) | **`skill_view`** on `pptx` / `docx` / `xlsx` — not `presentation_design` |
 | Simple Q&A, no file | Thinking contract + tools as needed |
 
 Plan Mode **limits research in the planning turn**; incremental execution **does not** cap total tools — it requires **workspace commits between slices**.
