@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { apiFetch } from "@/lib/api/headers"
 import { UserPlus, Settings2, Trash2, Save, X, Cpu, Search, Check, Plus, Layers, ShieldCheck, Sparkles, Star, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Download, Upload, Terminal, FileText, Code2 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { PageToast, ToastState } from "@/components/PageToast";
 import { BlockMarkdownEditor } from "@/components/BlockMarkdownEditor";
 import { HeaderDropdown } from "@/components/HeaderDropdown";
+import { matchConnectorRow } from "@/lib/mcpConnectorUi";
+import { type IntegrationPolicyRow } from "@/lib/mcpIntegrationPolicy";
+import { oauthAdminSetupPending } from "@/lib/mcpOAuthSetup";
 
 /** Canonical profile key for API paths (backend resolves slug only). */
 function profileSlug(p: { slug?: string; name?: string }): string {
@@ -24,6 +27,11 @@ export default function Profiles() {
 
   const [availableSkills, setAvailableSkills] = useState<Record<string, { description: string; tags: string[] }>>({});
   const [availableMCPs, setAvailableMCPs] = useState<Record<string, string>>({});
+  const [registryBySlug, setRegistryBySlug] = useState<
+    Record<string, { type?: string; aion_connector_id?: string; description?: string }>
+  >({});
+  const [integrationBySlug, setIntegrationBySlug] = useState<Record<string, IntegrationPolicyRow>>({});
+  const [connectorRows, setConnectorRows] = useState<Record<string, unknown>[]>([]);
   const [skillTooltip, setSkillTooltip] = useState<{ name: string; x: number; y: number; height?: number } | null>(null);
   const [mcpTooltip, setMcpTooltip] = useState<{ name: string; x: number; y: number; height?: number } | null>(null);
 
@@ -45,29 +53,61 @@ export default function Profiles() {
 
   const fetchMetadata = async () => {
     try {
-      const [skillsRes, mcpRes, nativeToolsRes] = await Promise.all([
+      const [skillsRes, mcpRes, nativeToolsRes, integrationsRes, catalogRes] = await Promise.all([
         apiFetch(`${apiBase()}/admin/skills`),
         apiFetch(`${apiBase()}/admin/registry`),
-        apiFetch(`${apiBase()}/admin/native-tools`)
+        apiFetch(`${apiBase()}/admin/native-tools`),
+        apiFetch(`${apiBase()}/admin/mcp-integrations`),
+        apiFetch(`${apiBase()}/admin/mcp/connector-catalog`),
       ]);
       const skillsMap: Record<string, { description: string; tags: string[] }> = await skillsRes.json();
       const mcp: Record<string, any> = await mcpRes.json();
       const nativeTools = await nativeToolsRes.json();
       const mcpMap: Record<string, string> = {};
+      const registryMap: typeof registryBySlug = {};
       for (const [key, cfg] of Object.entries(mcp)) {
-        mcpMap[key] = (cfg as any)?.description || "";
+        const row = cfg as { description?: string; type?: string; aion_connector_id?: string };
+        mcpMap[key] = row?.description || "";
+        registryMap[key] = row;
       }
       if (nativeTools && nativeTools.bundles) {
         for (const [key, bundle] of Object.entries(nativeTools.bundles)) {
           mcpMap[key] = (bundle as any)?.description || "";
         }
       }
+      if (integrationsRes.ok) {
+        const integrationsData = await integrationsRes.json();
+        const policyMap: Record<string, IntegrationPolicyRow> = {};
+        for (const row of (integrationsData.integrations || []) as IntegrationPolicyRow[]) {
+          policyMap[row.server_slug] = row;
+        }
+        setIntegrationBySlug(policyMap);
+      }
+      if (catalogRes.ok) {
+        const catalogData = await catalogRes.json();
+        setConnectorRows(Array.isArray(catalogData.connectors) ? catalogData.connectors : []);
+      }
       setAvailableSkills(skillsMap);
       setAvailableMCPs(mcpMap);
+      setRegistryBySlug(registryMap);
     } catch (e) {
       console.error("Failed to fetch available metadata", e);
     }
   };
+
+  const mcpAwaitingAdminSetup = useCallback(
+    (slug: string) => {
+      const cfg = registryBySlug[slug];
+      const policy = integrationBySlug[slug];
+      const connector = matchConnectorRow(
+        slug,
+        cfg?.aion_connector_id || policy?.aion_connector_id || undefined,
+        connectorRows,
+      );
+      return oauthAdminSetupPending(policy?.oauth_config, connector, cfg);
+    },
+    [registryBySlug, integrationBySlug, connectorRows],
+  );
 
   const fetchProfiles = async () => {
     try {
@@ -186,10 +226,20 @@ export default function Profiles() {
 
     setLoading(true);
     try {
+      const blockedMcps = (selectedProfile.mcp_servers || []).filter((slug: string) =>
+        mcpAwaitingAdminSetup(slug),
+      );
+      const payload = { ...selectedProfile };
+      if (blockedMcps.length > 0) {
+        payload.mcp_servers = (selectedProfile.mcp_servers || []).filter(
+          (slug: string) => !mcpAwaitingAdminSetup(slug),
+        );
+      }
+
       const res = await apiFetch(`${apiBase()}/admin/profiles`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(selectedProfile)
+        body: JSON.stringify(payload)
       });
       if (!res.ok) throw new Error("Error during save");
 
@@ -200,9 +250,17 @@ export default function Profiles() {
         localStorage.setItem("aion_last_selected_profile", savedSlug);
       }
 
+      if (blockedMcps.length > 0) {
+        setToast({
+          message: `Profilo salvato. Rimossi MCP non configurati: ${blockedMcps.join(", ")}. Completa OAuth in MCP Hub.`,
+          variant: "warning",
+        });
+      } else {
+        setToast({ message: "Profile saved successfully!", variant: "success" });
+      }
+
       await fetchProfiles();
       await handleEdit(savedSlug);
-      setToast({ message: "Profile saved successfully!", variant: "success" });
     } catch (e: any) {
       setToast({ message: "Save failed: " + e.message, variant: "error" });
     } finally {
@@ -244,6 +302,15 @@ export default function Profiles() {
   };
 
   const toggleMCP = (mcp: string) => {
+    const isConnected = (selectedProfile?.mcp_servers || []).includes(mcp);
+    if (mcpAwaitingAdminSetup(mcp) && !isConnected) {
+      setToast({
+        message:
+          "Questo MCP è in attesa di configurazione OAuth in MCP Hub (client ID/secret). Completa la configurazione prima di collegarlo a un profilo.",
+        variant: "warning",
+      });
+      return;
+    }
     setSelectedProfile((prev: any) => {
       if (!prev) return prev;
       const current = prev.mcp_servers || [];
@@ -281,7 +348,18 @@ export default function Profiles() {
       const descMatch = desc.toLowerCase().includes(search);
       return nameMatch || descMatch;
     })
+    .filter(m => {
+      if (mcpAwaitingAdminSetup(m)) {
+        return (selectedProfile?.mcp_servers || []).includes(m);
+      }
+      return true;
+    })
     .filter(m => !showSelectedMCPsOnly || (selectedProfile?.mcp_servers || []).includes(m));
+
+  const profileHasBlockedMcps = useMemo(
+    () => (selectedProfile?.mcp_servers || []).some((slug: string) => mcpAwaitingAdminSetup(slug)),
+    [selectedProfile?.mcp_servers, mcpAwaitingAdminSetup],
+  );
 
   const handleExport = async (profile: any) => {
     if (!profile) return;
@@ -641,6 +719,16 @@ export default function Profiles() {
                     </div>
                   </div>
 
+                  {profileHasBlockedMcps ? (
+                    <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200/90">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                      <span>
+                        Alcuni MCP collegati sono in attesa di configurazione OAuth in MCP Hub. Rimuovili dal
+                        profilo o completa client ID/secret prima di usarli in chat.
+                      </span>
+                    </div>
+                  ) : null}
+
                   {/* MCP Search Box */}
                   <div className="relative mb-4">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
@@ -702,26 +790,42 @@ export default function Profiles() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {filteredMCPs.map((m) => {
                           const isConnected = (selectedProfile.mcp_servers || []).includes(m);
+                          const awaitingSetup = mcpAwaitingAdminSetup(m);
                           return (
                             <div
                               key={m}
                               onClick={() => toggleMCP(m)}
                               onMouseEnter={(e) => {
                                 const desc = availableMCPs[m];
-                                if (!desc) return;
+                                if (!desc && !awaitingSetup) return;
                                 const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                                 setMcpTooltip({ name: m, x: rect.left + rect.width / 2, y: rect.top, height: rect.height });
                               }}
                               onMouseLeave={() => setMcpTooltip(null)}
-                              className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all
-                              ${isConnected
-                                  ? 'bg-emerald-950/20 border-emerald-800 text-emerald-200'
-                                  : 'bg-transparent border-slate-800 hover:border-slate-700 text-slate-500'
+                              className={`flex items-center justify-between p-2.5 rounded-lg border transition-all
+                              ${awaitingSetup
+                                  ? isConnected
+                                    ? "cursor-pointer border-amber-700/60 bg-amber-950/20 text-amber-200"
+                                    : "cursor-not-allowed border-slate-800/80 bg-slate-900/40 text-slate-600 opacity-60"
+                                  : "cursor-pointer"
+                                }
+                              ${!awaitingSetup && isConnected
+                                  ? "bg-emerald-950/20 border-emerald-800 text-emerald-200"
+                                  : !awaitingSetup
+                                    ? "bg-transparent border-slate-800 hover:border-slate-700 text-slate-500"
+                                    : ""
                                 }
                             `}
                             >
                               <span className="text-xs font-mono truncate">{m}</span>
-                              {isConnected && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                              <div className="flex shrink-0 items-center gap-1">
+                                {awaitingSetup ? (
+                                  <span className="text-[9px] font-bold uppercase tracking-wider text-amber-400/90">
+                                    Attesa config
+                                  </span>
+                                ) : null}
+                                {isConnected && <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden />}
+                              </div>
                             </div>
                           );
                         })}
