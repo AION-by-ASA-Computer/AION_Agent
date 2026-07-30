@@ -2349,7 +2349,9 @@ class RemoteInstallBody(BaseModel):
 
 
 class RemoteProbeBody(BaseModel):
-    url: str = Field(..., min_length=8, description="URL del server MCP remoto da validare")
+    url: str = Field(
+        ..., min_length=8, description="URL del server MCP remoto da validare"
+    )
 
 
 @router.post("/mcp/probe-remote")
@@ -2367,9 +2369,7 @@ async def probe_remote_mcp(body: RemoteProbeBody):
     try:
         probe = await asyncio.to_thread(probe_remote_url_sync, url, {})
     except Exception as exc:
-        raise HTTPException(
-            status_code=502, detail=f"Probe fallito: {exc}"
-        ) from exc
+        raise HTTPException(status_code=502, detail=f"Probe fallito: {exc}") from exc
     return {"ok": True, "url": url, "probe": probe}
 
 

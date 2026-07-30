@@ -210,14 +210,17 @@ async def integration_row_to_public_dict(
                 or "generic",
                 "authorization_server": oauth_cfg.get("authorization_server")
                 or discovered.remote_oauth_server,
-                "token_url": oauth_cfg.get("token_url") or discovered.remote_oauth_token_url,
+                "token_url": oauth_cfg.get("token_url")
+                or discovered.remote_oauth_token_url,
                 "scopes": oauth_cfg.get("scopes") or [],
             }
     except Exception:
         pass
 
     try:
-        remote_for_oauth = str(oauth_cfg.get("remote_url") or reg_cfg.get("remote_url") or "")
+        remote_for_oauth = str(
+            oauth_cfg.get("remote_url") or reg_cfg.get("remote_url") or ""
+        )
         oauth_cfg = resolve_oauth_url_templates(
             merge_oauth_config(
                 oauth_cfg,
@@ -234,15 +237,16 @@ async def integration_row_to_public_dict(
     ]
 
     _is_remote_bridge = reg_cfg.get("type") == "remote-bridge"
-    remote_auth_type = (
-        discovered.remote_auth_type if discovered is not None else None
+    remote_auth_type = discovered.remote_auth_type if discovered is not None else None
+    remote_url = str(oauth_cfg.get("remote_url") or reg_cfg.get("remote_url") or "")
+    connector_id = (
+        str(
+            getattr(r, "aion_connector_id", None)
+            or reg_cfg.get("aion_connector_id")
+            or ""
+        ).strip()
+        or None
     )
-    remote_url = str(
-        oauth_cfg.get("remote_url") or reg_cfg.get("remote_url") or ""
-    )
-    connector_id = str(
-        getattr(r, "aion_connector_id", None) or reg_cfg.get("aion_connector_id") or ""
-    ).strip() or None
     discovered_provider = (
         discovered.remote_oauth_provider if discovered is not None else None
     )
@@ -266,7 +270,9 @@ async def integration_row_to_public_dict(
     if has_oauth:
         schema = strip_oauth_token_fields_from_schema(schema)
 
-    admin_oauth_configured = (not has_oauth) or oauth_admin_credentials_configured(oauth_cfg)
+    admin_oauth_configured = (not has_oauth) or oauth_admin_credentials_configured(
+        oauth_cfg
+    )
 
     oauth_provider = str(oauth_cfg.get("provider") or oauth_meta["provider"])
     oauth_display_name = str(

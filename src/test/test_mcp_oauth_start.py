@@ -11,7 +11,7 @@ import pytest
 
 from src.api.auth_login import ChatAuthIdentity
 from src.api.v1 import mcp_integrations as mod
-from src.test.mcp_oauth_test_helpers import insert_mcp_server_config, oauth_db
+from src.test.mcp_oauth_test_helpers import insert_mcp_server_config
 
 
 def test_generate_pkce_pair() -> None:
@@ -85,7 +85,9 @@ async def test_oauth_start_skips_dynamic_registration_when_disabled(
         client = AsyncMock()
         client_cls.return_value.__aenter__.return_value = client
         client.post = AsyncMock()
-        result = await mod.oauth_start(server_slug="remote-svc", redirect_uri=None, auth=auth)
+        result = await mod.oauth_start(
+            server_slug="remote-svc", redirect_uri=None, auth=auth
+        )
 
     client.post.assert_not_called()
     assert "authorization_url" in result
@@ -100,7 +102,9 @@ def test_apply_catalog_oauth_defaults_for_gmail() -> None:
     }
     out = mod._apply_catalog_oauth_defaults({}, "gmail", reg_cfg)
     assert out["authorization_server"] == "https://accounts.google.com"
-    assert out["authorization_endpoint"] == "https://accounts.google.com/o/oauth2/v2/auth"
+    assert (
+        out["authorization_endpoint"] == "https://accounts.google.com/o/oauth2/v2/auth"
+    )
     assert out["token_url"] == "https://oauth2.googleapis.com/token"
     assert out.get("client_credentials_required") is True
     assert any("gmail.readonly" in s for s in out.get("scopes", []))
@@ -155,5 +159,7 @@ async def test_oauth_start_rejects_microsoft_without_client_id(oauth_db: str) ->
     )
     auth = ChatAuthIdentity(via="chat_token", identifier="alice", user_row_id="1")
     with pytest.raises(Exception) as exc:
-        await mod.oauth_start(server_slug="microsoft_sharepoint", redirect_uri=None, auth=auth)
+        await mod.oauth_start(
+            server_slug="microsoft_sharepoint", redirect_uri=None, auth=auth
+        )
     assert "client ID" in str(exc.value.detail)

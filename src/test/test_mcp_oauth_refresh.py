@@ -10,7 +10,7 @@ import pytest
 
 from src.runtime import credential_store as cs
 from src.runtime.oauth_token_exchange import OAuthTokenExchangeError
-from src.test.mcp_oauth_test_helpers import insert_mcp_server_config, oauth_db
+from src.test.mcp_oauth_test_helpers import insert_mcp_server_config
 
 
 def _expired() -> datetime:
@@ -47,12 +47,15 @@ async def test_refresh_success_updates_access_token(oauth_db: str) -> None:
         "refresh_token": "refresh-rotated",
     }
 
-    with patch(
-        "src.runtime.oauth_token_exchange.exchange_refresh_token",
-        new=AsyncMock(return_value=token_data),
-    ), patch(
-        "src.runtime.mcp_credential_invalidate.invalidate_mcp_credentials_runtime",
-        new=AsyncMock(),
+    with (
+        patch(
+            "src.runtime.oauth_token_exchange.exchange_refresh_token",
+            new=AsyncMock(return_value=token_data),
+        ),
+        patch(
+            "src.runtime.mcp_credential_invalidate.invalidate_mcp_credentials_runtime",
+            new=AsyncMock(),
+        ),
     ):
         token = await cs.get_credential("alice", "clickup", "OAUTH_TOKEN")
 
@@ -74,16 +77,19 @@ async def test_refresh_keeps_refresh_token_when_provider_does_not_rotate(
     await cs.set_credential(
         "alice", "clickup", "OAUTH_TOKEN", "old", expires_at=_expired()
     )
-    await cs.set_credential(
-        "alice", "clickup", "OAUTH_REFRESH_TOKEN", "refresh-stable"
-    )
+    await cs.set_credential("alice", "clickup", "OAUTH_REFRESH_TOKEN", "refresh-stable")
 
-    with patch(
-        "src.runtime.oauth_token_exchange.exchange_refresh_token",
-        new=AsyncMock(return_value={"access_token": "new-access", "expires_in": 3600}),
-    ), patch(
-        "src.runtime.mcp_credential_invalidate.invalidate_mcp_credentials_runtime",
-        new=AsyncMock(),
+    with (
+        patch(
+            "src.runtime.oauth_token_exchange.exchange_refresh_token",
+            new=AsyncMock(
+                return_value={"access_token": "new-access", "expires_in": 3600}
+            ),
+        ),
+        patch(
+            "src.runtime.mcp_credential_invalidate.invalidate_mcp_credentials_runtime",
+            new=AsyncMock(),
+        ),
     ):
         token = await cs.get_credential("alice", "clickup", "OAUTH_TOKEN")
 

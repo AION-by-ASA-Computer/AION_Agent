@@ -9,10 +9,13 @@ from __future__ import annotations
 import os
 import re
 import time
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
 from .mcp_server_files import read_mcp_server_files, resolve_mcp_server_dir
+
+logger = logging.getLogger("aion.mcp_credential_discovery")
 
 # ---------------------------------------------------------------------------
 # TTL cache for probe_remote_url_sync – avoids re-probing the same URL
@@ -380,9 +383,7 @@ def _fetch_protected_resource_metadata(
                 )
             )
         )
-    urls_to_try.append(
-        f"{remote_url.rstrip('/')}/.well-known/oauth-protected-resource"
-    )
+    urls_to_try.append(f"{remote_url.rstrip('/')}/.well-known/oauth-protected-resource")
     for well_known_url in urls_to_try:
         try:
             res = requests.get(well_known_url, timeout=timeout)

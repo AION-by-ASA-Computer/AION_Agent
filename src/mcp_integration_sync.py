@@ -222,9 +222,7 @@ def validate_policy_vs_registry(
     warnings: List[str] = []
     env = server_config.get("env") if isinstance(server_config.get("env"), dict) else {}
     schema_keys = _schema_env_keys(credential_schema)
-    env_scope = (
-        {k: env[k] for k in schema_keys if k in env} if schema_keys else env
-    )
+    env_scope = {k: env[k] for k in schema_keys if k in env} if schema_keys else env
     if credential_mode == "per_user":
         literal_keys = schema_keys if schema_keys else None
         if _env_has_literal_secrets(env, only_keys=literal_keys):
@@ -243,8 +241,7 @@ def validate_policy_vs_registry(
             ]
             if bad or not _env_uses_per_user_placeholders(env_scope):
                 if not any(
-                    w.startswith("Modalità per_utente ma il registry")
-                    for w in warnings
+                    w.startswith("Modalità per_utente ma il registry") for w in warnings
                 ):
                     warnings.append(
                         "Modalità per_utente: applica env suggerito con placeholder "

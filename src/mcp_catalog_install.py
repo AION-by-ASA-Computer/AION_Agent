@@ -155,7 +155,9 @@ async def install_mcp_from_catalog(connector_id: str) -> Dict[str, Any]:
     default_mode = connector.get("default_credential_mode")
     row = await sync_mcp_server_config_from_registry(
         slug,
-        credential_mode=default_mode if default_mode in ("none", "org_shared", "per_user") else None,
+        credential_mode=default_mode
+        if default_mode in ("none", "org_shared", "per_user")
+        else None,
     )
     from .mcp_integration_sync import build_integration_preview
 

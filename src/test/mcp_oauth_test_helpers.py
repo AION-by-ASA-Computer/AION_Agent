@@ -71,6 +71,7 @@ async def _insert_mcp_server_config(
         )
         await session.commit()
 
+
 async def insert_mcp_server_config(
     server_slug: str,
     *,

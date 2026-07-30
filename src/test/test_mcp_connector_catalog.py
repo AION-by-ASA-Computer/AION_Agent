@@ -62,7 +62,10 @@ def test_google_gmail_oauth_config_from_catalog():
     row = _connector_by_id(catalog, "gmail")
     assert row is not None
     oauth = oauth_config_from_connector(row)
-    assert oauth["authorization_endpoint"] == "https://accounts.google.com/o/oauth2/v2/auth"
+    assert (
+        oauth["authorization_endpoint"]
+        == "https://accounts.google.com/o/oauth2/v2/auth"
+    )
     assert oauth["token_url"] == "https://oauth2.googleapis.com/token"
     assert oauth.get("client_credentials_required") is True
     assert "gmail.readonly" in oauth["scopes"][0]
@@ -105,7 +108,12 @@ def test_oauth_admin_credentials_required_for_github_catalog():
     oauth = oauth_config_from_connector(row)
     assert oauth_admin_client_credentials_required(oauth) is True
     assert oauth_admin_credentials_configured(oauth) is False
-    assert oauth_admin_credentials_configured({**oauth, "client_id": "id", "client_secret": "sec"}) is True
+    assert (
+        oauth_admin_credentials_configured(
+            {**oauth, "client_id": "id", "client_secret": "sec"}
+        )
+        is True
+    )
 
 
 def test_oauth_admin_credentials_not_required_without_flag():

@@ -13,7 +13,7 @@ from src.api.v1 import mcp_integrations as mod
 from src.api.v1.mcp_integrations import OAuthCallbackBody
 from src.runtime import credential_store as cs
 from src.runtime.oauth_token_exchange import OAuthTokenExchangeError
-from src.test.mcp_oauth_test_helpers import insert_mcp_server_config, oauth_db
+from src.test.mcp_oauth_test_helpers import insert_mcp_server_config
 
 
 @pytest.mark.asyncio
@@ -42,12 +42,15 @@ async def test_oauth_callback_success(oauth_db: str) -> None:
         "expires_in": 3600,
     }
 
-    with patch(
-        "src.runtime.oauth_token_exchange.exchange_authorization_code",
-        new=AsyncMock(return_value=token_data),
-    ), patch(
-        "src.runtime.mcp_credential_invalidate.invalidate_mcp_credentials_runtime",
-        new=AsyncMock(),
+    with (
+        patch(
+            "src.runtime.oauth_token_exchange.exchange_authorization_code",
+            new=AsyncMock(return_value=token_data),
+        ),
+        patch(
+            "src.runtime.mcp_credential_invalidate.invalidate_mcp_credentials_runtime",
+            new=AsyncMock(),
+        ),
     ):
         result = await mod.oauth_callback(body=body, auth=auth)
 
@@ -96,8 +99,6 @@ async def test_oauth_callback_redirect_invalid_state(oauth_db: str) -> None:
 
 @pytest.mark.asyncio
 async def test_oauth_callback_redirect_success(oauth_db: str) -> None:
-    from datetime import timedelta
-
     await insert_mcp_server_config(
         "clickup",
         oauth_config={"token_url": "https://auth.example.com/oauth/token"},
@@ -114,12 +115,15 @@ async def test_oauth_callback_redirect_success(oauth_db: str) -> None:
 
     token_data = {"access_token": "access-xyz", "expires_in": 3600}
 
-    with patch(
-        "src.runtime.oauth_token_exchange.exchange_authorization_code",
-        new=AsyncMock(return_value=token_data),
-    ), patch(
-        "src.runtime.mcp_credential_invalidate.invalidate_mcp_credentials_runtime",
-        new=AsyncMock(),
+    with (
+        patch(
+            "src.runtime.oauth_token_exchange.exchange_authorization_code",
+            new=AsyncMock(return_value=token_data),
+        ),
+        patch(
+            "src.runtime.mcp_credential_invalidate.invalidate_mcp_credentials_runtime",
+            new=AsyncMock(),
+        ),
     ):
         result = await mod.oauth_callback_redirect(
             code="auth-code", state=state, request=MagicMock()

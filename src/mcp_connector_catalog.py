@@ -279,9 +279,7 @@ def merge_oauth_config(
             continue
         if key == "authorize_params":
             if catalog_overrides:
-                merged["authorize_params"] = (
-                    dict(val) if isinstance(val, dict) else {}
-                )
+                merged["authorize_params"] = dict(val) if isinstance(val, dict) else {}
             else:
                 existing = merged.get("authorize_params")
                 if not isinstance(existing, dict) or not existing:

@@ -69,7 +69,7 @@ def build_suggested_env_yaml_block(
         env_key = str(field.get("registry_env_key") or field.get("key") or "").strip()
         placeholder = field.get("env_placeholder")
         if env_key and placeholder:
-            lines.append(f"  {env_key}: \"{placeholder}\"")
+            lines.append(f'  {env_key}: "{placeholder}"')
     return "\n".join(lines)
 
 
@@ -137,15 +137,19 @@ async def migrate_credentials_to_slug(
         migrated = merged = deleted = 0
         for row in old_rows:
             existing = (
-                await session.execute(
-                    select(UserMcpCredential).where(
-                        UserMcpCredential.user_id == row.user_id,
-                        UserMcpCredential.tenant_id == row.tenant_id,
-                        UserMcpCredential.server_slug == new_slug,
-                        UserMcpCredential.credential_key == row.credential_key,
+                (
+                    await session.execute(
+                        select(UserMcpCredential).where(
+                            UserMcpCredential.user_id == row.user_id,
+                            UserMcpCredential.tenant_id == row.tenant_id,
+                            UserMcpCredential.server_slug == new_slug,
+                            UserMcpCredential.credential_key == row.credential_key,
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if existing is None:
                 row.server_slug = new_slug
                 migrated += 1
@@ -173,14 +177,18 @@ async def migrate_credentials_to_slug(
         )
         for pref in old_prefs:
             existing_pref = (
-                await session.execute(
-                    select(UserMcpPreference).where(
-                        UserMcpPreference.user_id == pref.user_id,
-                        UserMcpPreference.tenant_id == pref.tenant_id,
-                        UserMcpPreference.server_slug == new_slug,
+                (
+                    await session.execute(
+                        select(UserMcpPreference).where(
+                            UserMcpPreference.user_id == pref.user_id,
+                            UserMcpPreference.tenant_id == pref.tenant_id,
+                            UserMcpPreference.server_slug == new_slug,
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if existing_pref is None:
                 pref.server_slug = new_slug
             else:
@@ -229,13 +237,11 @@ async def find_migratable_credential_slugs(
     catalog = load_mcp_connector_catalog()
     async with get_async_session_maker()() as session:
         cred_slugs = (
-            await session.execute(
-                select(UserMcpCredential.server_slug).distinct()
-            )
-        ).scalars().all()
-        policies = (
-            await session.execute(select(McpServerConfig))
-        ).scalars().all()
+            (await session.execute(select(UserMcpCredential.server_slug).distinct()))
+            .scalars()
+            .all()
+        )
+        policies = (await session.execute(select(McpServerConfig))).scalars().all()
     policy_by_slug = {p.server_slug: p for p in policies}
     from src.mcp_manager import mcp_manager
 
@@ -289,9 +295,7 @@ async def scan_mcp_integrity() -> Dict[str, Any]:
     issues: List[Dict[str, Any]] = []
 
     async with get_async_session_maker()() as session:
-        policies = (
-            await session.execute(select(McpServerConfig))
-        ).scalars().all()
+        policies = (await session.execute(select(McpServerConfig))).scalars().all()
         cred_slug_rows = (
             await session.execute(
                 select(
@@ -456,7 +460,9 @@ async def scan_mcp_integrity() -> Dict[str, Any]:
             )
 
     severity_rank = {"error": 0, "warning": 1, "info": 2}
-    issues.sort(key=lambda i: (severity_rank.get(i["severity"], 9), i.get("server_slug", "")))
+    issues.sort(
+        key=lambda i: (severity_rank.get(i["severity"], 9), i.get("server_slug", ""))
+    )
 
     return {
         "ok": not any(i["severity"] == "error" for i in issues),
@@ -473,12 +479,16 @@ async def scan_mcp_integrity() -> Dict[str, Any]:
 async def _credential_mode_for_slug(server_slug: str) -> str:
     async with get_async_session_maker()() as session:
         row = (
-            await session.execute(
-                select(McpServerConfig).where(
-                    McpServerConfig.server_slug == server_slug
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == server_slug
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
     if row and getattr(row, "credential_mode", None):
         return str(row.credential_mode)
     return "per_user"
@@ -491,18 +501,14 @@ async def repair_mcp_integrity_issue(issue: Dict[str, Any]) -> Dict[str, Any]:
     if repair == "purge_credentials" and slug:
         async with get_async_session_maker()() as session:
             res = await session.execute(
-                delete(UserMcpCredential).where(
-                    UserMcpCredential.server_slug == slug
-                )
+                delete(UserMcpCredential).where(UserMcpCredential.server_slug == slug)
             )
             await session.commit()
         return {"ok": True, "deleted": int(res.rowcount or 0)}
     if repair == "purge_preferences" and slug:
         async with get_async_session_maker()() as session:
             res = await session.execute(
-                delete(UserMcpPreference).where(
-                    UserMcpPreference.server_slug == slug
-                )
+                delete(UserMcpPreference).where(UserMcpPreference.server_slug == slug)
             )
             await session.commit()
         return {"ok": True, "deleted": int(res.rowcount or 0)}

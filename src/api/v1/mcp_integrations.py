@@ -472,8 +472,7 @@ async def _resolve_oauth_config_for_server(
                 or "generic"
             )
             oauth_cfg["authorization_server"] = (
-                oauth_cfg.get("authorization_server")
-                or discovered.remote_oauth_server
+                oauth_cfg.get("authorization_server") or discovered.remote_oauth_server
             )
             oauth_cfg["token_url"] = (
                 oauth_cfg.get("token_url") or discovered.remote_oauth_token_url
@@ -692,25 +691,25 @@ async def oauth_start(
                         ):
                             oauth_cfg["token_url"] = as_meta["token_endpoint"]
                             modified = True
-                        if not oauth_cfg.get(
+                        if not oauth_cfg.get("authorization_endpoint") and as_meta.get(
                             "authorization_endpoint"
-                        ) and as_meta.get("authorization_endpoint"):
+                        ):
                             oauth_cfg["authorization_endpoint"] = as_meta[
                                 "authorization_endpoint"
                             ]
                             modified = True
-                        if not oauth_cfg.get(
+                        if not oauth_cfg.get("registration_endpoint") and as_meta.get(
                             "registration_endpoint"
-                        ) and as_meta.get("registration_endpoint"):
+                        ):
                             oauth_cfg["registration_endpoint"] = as_meta[
                                 "registration_endpoint"
                             ]
                             modified = True
 
                     # ─── Dynamic Client Registration (RFC 7591) ──
-                    reg_endpoint = oauth_cfg.get(
-                        "registration_endpoint"
-                    ) or (as_meta or {}).get("registration_endpoint")
+                    reg_endpoint = oauth_cfg.get("registration_endpoint") or (
+                        as_meta or {}
+                    ).get("registration_endpoint")
                     if (
                         _oauth_dynamic_registration_enabled()
                         and reg_endpoint

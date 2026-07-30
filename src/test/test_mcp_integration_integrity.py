@@ -35,7 +35,9 @@ def integrity_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> str:
 
 
 def test_enrich_credential_schema_per_user_placeholder():
-    schema = [{"key": "API_TOKEN", "label": "Token", "type": "password", "required": True}]
+    schema = [
+        {"key": "API_TOKEN", "label": "Token", "type": "password", "required": True}
+    ]
     out = enrich_credential_schema_with_env_placeholders(
         schema, "my-mcp-server", credential_mode="per_user"
     )
@@ -44,11 +46,15 @@ def test_enrich_credential_schema_per_user_placeholder():
 
 
 def test_build_suggested_env_yaml_block():
-    schema = [{"key": "API_TOKEN", "label": "Token", "type": "password", "required": True}]
+    schema = [
+        {"key": "API_TOKEN", "label": "Token", "type": "password", "required": True}
+    ]
     enriched = enrich_credential_schema_with_env_placeholders(
         schema, "clickup", credential_mode="per_user"
     )
-    yaml = build_suggested_env_yaml_block("clickup", enriched, credential_mode="per_user")
+    yaml = build_suggested_env_yaml_block(
+        "clickup", enriched, credential_mode="per_user"
+    )
     assert 'API_TOKEN: "${AION_USER_CLICKUP__API_TOKEN}"' in yaml
     assert yaml.startswith("env:")
 
@@ -100,8 +106,9 @@ async def test_migrate_credentials_merges_duplicate_keys(integrity_db: str) -> N
     async with get_async_session_maker()() as session:
         rows = (
             await session.execute(
-                select(UserMcpCredential.server_slug, UserMcpCredential.credential_key)
-                .where(UserMcpCredential.user_id.in_(["demo", "admin"]))
+                select(
+                    UserMcpCredential.server_slug, UserMcpCredential.credential_key
+                ).where(UserMcpCredential.user_id.in_(["demo", "admin"]))
             )
         ).all()
         orphan_count = (

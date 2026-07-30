@@ -285,9 +285,7 @@ async def _delete_oauth_credentials(
     *,
     tenant_id: str = "default",
 ) -> None:
-    await delete_credential(
-        user_id, server_slug, "OAUTH_TOKEN", tenant_id=tenant_id
-    )
+    await delete_credential(user_id, server_slug, "OAUTH_TOKEN", tenant_id=tenant_id)
     await delete_credential(
         user_id, server_slug, "OAUTH_REFRESH_TOKEN", tenant_id=tenant_id
     )
