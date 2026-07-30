@@ -90,3 +90,70 @@ async def test_oauth_start_skips_dynamic_registration_when_disabled(
     client.post.assert_not_called()
     assert "authorization_url" in result
     mod._oauth_pending.pop(result["state"], None)
+
+
+def test_apply_catalog_oauth_defaults_for_gmail() -> None:
+    reg_cfg = {
+        "type": "remote-bridge",
+        "remote_url": "https://gmailmcp.googleapis.com/mcp/v1",
+        "aion_connector_id": "gmail",
+    }
+    out = mod._apply_catalog_oauth_defaults({}, "gmail", reg_cfg)
+    assert out["authorization_server"] == "https://accounts.google.com"
+    assert out["authorization_endpoint"] == "https://accounts.google.com/o/oauth2/v2/auth"
+    assert out["token_url"] == "https://oauth2.googleapis.com/token"
+    assert out.get("client_credentials_required") is True
+    assert any("gmail.readonly" in s for s in out.get("scopes", []))
+
+
+def test_apply_catalog_oauth_defaults_for_github() -> None:
+    reg_cfg = {
+        "type": "remote-bridge",
+        "remote_url": "https://api.githubcopilot.com/mcp",
+        "aion_connector_id": "github",
+    }
+    out = mod._apply_catalog_oauth_defaults(
+        {
+            "authorization_server": "https://api.githubcopilot.com",
+            "token_url": "https://api.githubcopilot.com/token",
+        },
+        "github",
+        reg_cfg,
+    )
+    assert out["authorization_endpoint"] == "https://github.com/login/oauth/authorize"
+    assert out["token_url"] == "https://github.com/login/oauth/access_token"
+    assert out.get("resource") == "https://api.githubcopilot.com/mcp"
+
+
+def test_apply_catalog_oauth_defaults_for_sharepoint_resolves_tenant() -> None:
+    tenant = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    reg_cfg = {
+        "type": "remote-bridge",
+        "remote_url": (
+            f"https://agent365.svc.cloud.microsoft/agents/tenants/{tenant}"
+            "/servers/mcp_SharePointRemoteServer"
+        ),
+        "aion_connector_id": "microsoft_sharepoint",
+    }
+    out = mod._apply_catalog_oauth_defaults({}, "microsoft_sharepoint", reg_cfg)
+    assert tenant in out["authorization_endpoint"]
+    assert out.get("client_credentials_required") is True
+
+
+@pytest.mark.asyncio
+async def test_oauth_start_rejects_microsoft_without_client_id(oauth_db: str) -> None:
+    tenant = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
+    await insert_mcp_server_config(
+        "microsoft_sharepoint",
+        oauth_config={
+            "authorization_endpoint": (
+                f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize"
+            ),
+            "token_url": f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token",
+            "client_credentials_required": True,
+        },
+    )
+    auth = ChatAuthIdentity(via="chat_token", identifier="alice", user_row_id="1")
+    with pytest.raises(Exception) as exc:
+        await mod.oauth_start(server_slug="microsoft_sharepoint", redirect_uri=None, auth=auth)
+    assert "client ID" in str(exc.value.detail)

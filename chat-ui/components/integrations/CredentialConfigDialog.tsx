@@ -6,6 +6,7 @@ import { Plug, Plus, X } from "lucide-react";
 import type { CredentialField, Integration } from "@/components/integrations/types";
 import { apiBase } from "@/lib/config";
 import { jsonHeaders } from "@/lib/api/aion";
+import { oauthManagedFieldKeys, oauthProviderDisplayName } from "@/lib/integrations/oauthLabels";
 import { useT } from "@/lib/i18n/use-t";
 
 const inputClass =
@@ -30,6 +31,9 @@ export function CredentialConfigDialog({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const oauthManaged = oauthManagedFieldKeys();
+  const providerLabel = oauthProviderDisplayName(integration);
+
   const hasOAuthToken = useMemo(
     () => integration.credentials_hints.some((h) => h.key === "OAUTH_TOKEN" && !h.is_expired),
     [integration.credentials_hints],
@@ -45,12 +49,14 @@ export function CredentialConfigDialog({
     const out: CredentialField[] = [];
     for (const f of integration.credential_schema) {
       if (!f.key || seen.has(f.key)) continue;
+      if (integration.has_oauth && oauthManaged.has(f.key)) continue;
       seen.add(f.key);
       out.push(f);
     }
     for (const c of customFields) {
       const key = normalizeKey(c.key);
       if (!key || seen.has(key)) continue;
+      if (integration.has_oauth && oauthManaged.has(key)) continue;
       seen.add(key);
       out.push({
         key,
@@ -60,18 +66,10 @@ export function CredentialConfigDialog({
       });
     }
     return out;
-  }, [integration.credential_schema, customFields]);
+  }, [integration.credential_schema, integration.has_oauth, customFields, oauthManaged]);
 
   function getOAuthButtonText() {
-    const provider = integration.oauth_provider || "oauth2";
-    const map: Record<string, string> = {
-      google: t("integrationsPage.oauth_login_google"),
-      github: t("integrationsPage.oauth_login_github"),
-      microsoft: t("integrationsPage.oauth_login_microsoft"),
-      auth0: t("integrationsPage.oauth_login_auth0"),
-    };
-    const label = provider.charAt(0).toUpperCase() + provider.slice(1);
-    return map[provider.toLowerCase()] || t("integrationsPage.oauth_login_generic", { provider: label });
+    return t("integrationsPage.oauth_login_service", { service: providerLabel });
   }
 
   async function handleOAuthLogin() {
@@ -162,6 +160,9 @@ export function CredentialConfigDialog({
     }
   }
 
+  const oauthOnly = integration.has_oauth && formFields.length === 0;
+  const showSaveButton = !oauthOnly && formFields.length > 0;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4 backdrop-blur-[2px]">
       <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-border/80 bg-background/95 shadow-2xl backdrop-blur-xl">
@@ -202,11 +203,13 @@ export function CredentialConfigDialog({
           <div className="space-y-5">
             {integration.has_oauth ? (
               <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-center">
-                <h3 className="mb-2 text-sm font-semibold">{t("integrationsPage.oauth_title")}</h3>
+                <h3 className="mb-2 text-sm font-semibold">
+                  {t("integrationsPage.oauth_title_service", { service: providerLabel })}
+                </h3>
                 {hasOAuthToken ? (
                   <>
                     <p className="mb-4 text-xs font-medium text-emerald-600 dark:text-emerald-400">
-                      {t("integrationsPage.oauth_connected")}
+                      {t("integrationsPage.oauth_connected_service", { service: providerLabel })}
                     </p>
                     <button
                       type="button"
@@ -220,7 +223,7 @@ export function CredentialConfigDialog({
                 ) : (
                   <>
                     <p className="mb-4 text-xs text-muted-foreground">
-                      {t("integrationsPage.oauth_intro")}
+                      {t("integrationsPage.oauth_intro_service", { service: providerLabel })}
                     </p>
                     <button
                       type="button"
@@ -331,9 +334,9 @@ export function CredentialConfigDialog({
               onClick={onClose}
               className="focus-ring rounded-xl border border-border/70 px-4 py-2 text-sm font-medium transition hover:bg-muted"
             >
-              {t("integrationsPage.cancel")}
+              {oauthOnly && hasOAuthToken ? t("integrationsPage.close") : t("integrationsPage.cancel")}
             </button>
-            {(!integration.has_oauth || formFields.length > 0) && (
+            {showSaveButton ? (
               <button
                 type="button"
                 onClick={() => void save()}
@@ -342,7 +345,7 @@ export function CredentialConfigDialog({
               >
                 {saving ? t("integrationsPage.saving") : t("integrationsPage.save")}
               </button>
-            )}
+            ) : null}
           </div>
         </div>
       </div>

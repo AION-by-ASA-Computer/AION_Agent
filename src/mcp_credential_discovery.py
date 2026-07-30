@@ -273,15 +273,7 @@ def extract_url_from_www_authenticate(www_auth: str, param_name: str) -> Optiona
 
 
 def detect_oauth_provider(url: str = "") -> str:
-    url_lower = url.lower()
-    if "google" in url_lower:
-        return "google"
-    if "github" in url_lower:
-        return "github"
-    if "microsoft" in url_lower or "microsoftonline" in url_lower:
-        return "microsoft"
-    if "auth0" in url_lower:
-        return "auth0"
+    """Fallback tecnico per discovery senza catalogo; non usare per etichette UI."""
     return "generic"
 
 
@@ -290,6 +282,144 @@ def get_url_origin(url: str) -> str:
 
     parsed = urlparse(url)
     return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def authorization_server_metadata_urls(issuer: str) -> List[str]:
+    """URL RFC 8414 / OIDC da provare per un authorization server (issuer può avere path)."""
+    from urllib.parse import urlparse, urlunparse
+
+    issuer = (issuer or "").strip().rstrip("/")
+    if not issuer:
+        return []
+    parsed = urlparse(issuer)
+    urls = [
+        f"{issuer}/.well-known/oauth-authorization-server",
+        f"{issuer}/.well-known/openid-configuration",
+    ]
+    if parsed.path and parsed.path != "/":
+        urls.extend(
+            [
+                urlunparse(
+                    (
+                        parsed.scheme,
+                        parsed.netloc,
+                        "/.well-known/oauth-authorization-server"
+                        + parsed.path.rstrip("/"),
+                        "",
+                        "",
+                        "",
+                    )
+                ),
+                urlunparse(
+                    (
+                        parsed.scheme,
+                        parsed.netloc,
+                        "/.well-known/openid-configuration",
+                        "",
+                        "",
+                        "",
+                    )
+                ),
+            ]
+        )
+    return urls
+
+
+def fetch_authorization_server_metadata(
+    issuer: str, *, timeout: float = 5.0
+) -> Dict[str, Any]:
+    import requests
+
+    for meta_url in authorization_server_metadata_urls(issuer):
+        try:
+            res = requests.get(meta_url, timeout=timeout)
+            if res.status_code == 200:
+                doc = res.json()
+                if isinstance(doc, dict) and doc:
+                    return doc
+        except Exception:
+            continue
+    return {}
+
+
+_MCP_INITIALIZE_PROBE = {
+    "jsonrpc": "2.0",
+    "id": 1,
+    "method": "initialize",
+    "params": {
+        "protocolVersion": "2024-11-05",
+        "capabilities": {},
+        "clientInfo": {"name": "aion-oauth-probe", "version": "1"},
+    },
+}
+
+
+def _resource_metadata_from_www_authenticate(www_auth: str) -> Optional[str]:
+    return extract_url_from_www_authenticate(www_auth, "resource_metadata")
+
+
+def _fetch_protected_resource_metadata(
+    remote_url: str, *, timeout: float = 5.0
+) -> Dict[str, Any]:
+    """RFC 9728: well-known + probe 401 (GET/POST) per estrarre authorization_servers."""
+    import requests
+    from urllib.parse import urlparse, urlunparse
+
+    parsed_url = urlparse(remote_url)
+    urls_to_try: List[str] = []
+    if parsed_url.netloc:
+        urls_to_try.append(
+            urlunparse(
+                (
+                    parsed_url.scheme,
+                    parsed_url.netloc,
+                    "/.well-known/oauth-protected-resource",
+                    "",
+                    "",
+                    "",
+                )
+            )
+        )
+    urls_to_try.append(
+        f"{remote_url.rstrip('/')}/.well-known/oauth-protected-resource"
+    )
+    for well_known_url in urls_to_try:
+        try:
+            res = requests.get(well_known_url, timeout=timeout)
+            if res.status_code == 200:
+                doc = res.json()
+                if isinstance(doc, dict) and doc.get("authorization_servers"):
+                    return doc
+        except Exception:
+            continue
+
+    headers = {
+        "Accept": "application/json, text/event-stream",
+        "Content-Type": "application/json",
+    }
+    for method, kwargs in (
+        ("GET", {}),
+        ("POST", {"json": _MCP_INITIALIZE_PROBE}),
+    ):
+        try:
+            res = requests.request(
+                method, remote_url, headers=headers, timeout=timeout, **kwargs
+            )
+            if res.status_code != 401:
+                continue
+            rm_url = _resource_metadata_from_www_authenticate(
+                res.headers.get("WWW-Authenticate") or ""
+            )
+            if not rm_url:
+                continue
+            meta_res = requests.get(rm_url, timeout=timeout)
+            if meta_res.status_code == 200:
+                doc = meta_res.json()
+                if isinstance(doc, dict) and doc.get("authorization_servers"):
+                    return doc
+        except Exception:
+            continue
+    return {}
 
 
 def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
@@ -331,18 +461,8 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
                         auth_servers = doc.get("authorization_servers") or []
                         issuer = auth_servers[0] if auth_servers else ""
                         if issuer:
-                            token_url = None
-                            try:
-                                wk_url = f"{issuer.rstrip('/')}/.well-known/oauth-authorization-server"
-                                wk_res = requests.get(wk_url, timeout=5.0)
-                                if wk_res.status_code != 200:
-                                    wk_url = f"{issuer.rstrip('/')}/.well-known/openid-configuration"
-                                    wk_res = requests.get(wk_url, timeout=5.0)
-                                if wk_res.status_code == 200:
-                                    token_url = wk_res.json().get("token_endpoint")
-                            except Exception:
-                                pass
-
+                            as_meta = fetch_authorization_server_metadata(issuer)
+                            token_url = as_meta.get("token_endpoint")
                             provider = detect_oauth_provider(issuer)
                             return {
                                 "type": "oauth2",
@@ -353,7 +473,7 @@ def probe_remote_url_sync(url: str, meta: Dict[str, Any]) -> Dict[str, Any]:
                                 "oauth_provider": provider,
                                 "oauth_server": issuer,
                                 "oauth_token_url": token_url
-                                or f"{issuer.rstrip('/')}/token",
+                                or f"{issuer.rstrip('/')}/access_token",
                                 "credential_schema": [
                                     {
                                         "key": "OAUTH_TOKEN",

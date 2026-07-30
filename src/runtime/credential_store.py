@@ -240,13 +240,24 @@ async def _load_oauth_config_for_server(server_slug: str) -> Dict[str, Any]:
 def _enrich_oauth_config_from_discovery(
     server_slug: str, oauth_cfg: Dict[str, Any]
 ) -> Dict[str, Any]:
-    if oauth_cfg.get("token_url"):
-        return oauth_cfg
     try:
+        from src.mcp_connector_catalog import (
+            load_mcp_connector_catalog,
+            merge_oauth_config,
+            oauth_config_from_connector,
+            resolve_connector_row_for_mcp_server,
+        )
         from src.mcp_credential_discovery import discover_mcp_credentials
         from src.mcp_manager import mcp_manager
 
         reg_cfg = mcp_manager.get_server_config(server_slug) or {}
+        catalog = load_mcp_connector_catalog()
+        row = resolve_connector_row_for_mcp_server(server_slug, reg_cfg, catalog)
+        oauth_cfg = merge_oauth_config(
+            oauth_cfg, oauth_config_from_connector(row), catalog_overrides=True
+        )
+        if oauth_cfg.get("token_url"):
+            return oauth_cfg
         discovered = discover_mcp_credentials(server_slug, reg_cfg)
         if discovered and discovered.remote_auth_type == "oauth2":
             merged = dict(oauth_cfg)

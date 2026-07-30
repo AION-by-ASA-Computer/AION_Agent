@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import re
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Dict, List, Literal, Optional, Set, Tuple
 
 from sqlalchemy import select
 
@@ -15,8 +15,13 @@ from .data.engine import get_async_session_maker
 from .data.ids import new_uuid7_str
 from .data.models import McpServerConfig
 from .mcp_connector_catalog import (
+    connector_requires_oauth,
     load_mcp_connector_catalog,
+    merge_oauth_config,
+    oauth_config_from_connector,
+    oauth_ui_metadata_from_connector,
     resolve_connector_row_for_mcp_server,
+    resolve_oauth_url_templates,
 )
 from .mcp_credential_discovery import (
     CredentialDiscoveryResult,
@@ -24,6 +29,7 @@ from .mcp_credential_discovery import (
     merge_schema_sources,
 )
 from .mcp_manager import mcp_manager
+from .runtime.mcp_integration_helpers import strip_oauth_token_fields_from_schema
 
 CredentialMode = Literal["none", "org_shared", "per_user"]
 
@@ -124,8 +130,12 @@ def suggest_registry_env_for_org_shared(schema: List[Dict[str, Any]]) -> Dict[st
     return out
 
 
-def _env_has_literal_secrets(env: Dict[str, Any]) -> bool:
-    for v in (env or {}).values():
+def _env_has_literal_secrets(
+    env: Dict[str, Any], *, only_keys: Optional[Set[str]] = None
+) -> bool:
+    for k, v in (env or {}).items():
+        if only_keys is not None and k not in only_keys:
+            continue
         if v is None:
             continue
         s = str(v).strip()
@@ -137,6 +147,12 @@ def _env_has_literal_secrets(env: Dict[str, Any]) -> bool:
             continue
         return True
     return False
+
+
+def _schema_env_keys(schema: Optional[List[Dict[str, Any]]]) -> Set[str]:
+    if not schema:
+        return set()
+    return {str(f.get("key") or "").strip() for f in schema if f.get("key")}
 
 
 def _env_uses_per_user_placeholders(env: Dict[str, Any]) -> bool:
@@ -200,16 +216,41 @@ def validate_policy_vs_registry(
     server_slug: str,
     server_config: Dict[str, Any],
     credential_mode: str,
+    *,
+    credential_schema: Optional[List[Dict[str, Any]]] = None,
 ) -> List[str]:
     warnings: List[str] = []
     env = server_config.get("env") if isinstance(server_config.get("env"), dict) else {}
+    schema_keys = _schema_env_keys(credential_schema)
+    env_scope = (
+        {k: env[k] for k in schema_keys if k in env} if schema_keys else env
+    )
     if credential_mode == "per_user":
-        if _env_has_literal_secrets(env):
+        literal_keys = schema_keys if schema_keys else None
+        if _env_has_literal_secrets(env, only_keys=literal_keys):
             warnings.append(
-                "Modalità per_utente ma il registry contiene ancora valori non-placeholder in env. "
+                "Modalità per_utente ma il registry contiene ancora valori non-placeholder "
+                "in env per le chiavi dello schema credenziali. "
                 "Rimuovi i segreti globali o applica env suggerito."
             )
-        if env and not _env_uses_per_user_placeholders(env):
+        if schema_keys:
+            bad = [
+                k
+                for k in schema_keys
+                if k in env
+                and str(env.get(k) or "").strip()
+                and not _AION_USER_RE.match(str(env.get(k) or "").strip())
+            ]
+            if bad or not _env_uses_per_user_placeholders(env_scope):
+                if not any(
+                    w.startswith("Modalità per_utente ma il registry")
+                    for w in warnings
+                ):
+                    warnings.append(
+                        "Modalità per_utente: applica env suggerito con placeholder "
+                        "${AION_USER_*} per le chiavi dello schema."
+                    )
+        elif env and not _env_uses_per_user_placeholders(env):
             warnings.append(
                 "Modalità per_utente: applica env suggerito con placeholder ${AION_USER_*}."
             )
@@ -265,14 +306,18 @@ def build_integration_preview(
         )
         mode = credential_mode or infer_credential_mode(cfg, connector_row, discovery)
         if discovery.config_file_auth and not discovery.has_env_auth and mode == "none":
-            warnings_list = validate_policy_vs_registry(server_slug, cfg, mode)
+            warnings_list = validate_policy_vs_registry(
+                server_slug, cfg, mode, credential_schema=schema
+            )
             warnings_list.append(
                 "Il server sembra usare un file di configurazione locale (es. config.toml / XDG) "
                 "senza variabili d'ambiente per le credenziali. Valuta org_shared con volume "
                 "sulla home MCP isolata per utente, oppure un server che espone env (MCP_EMAIL_*)."
             )
         else:
-            warnings_list = validate_policy_vs_registry(server_slug, cfg, mode)
+            warnings_list = validate_policy_vs_registry(
+                server_slug, cfg, mode, credential_schema=schema
+            )
         if discovery.has_env_auth and not schema:
             warnings_list.append(
                 "Discovery ha trovato env ma schema vuoto — verificare installazione."
@@ -330,6 +375,51 @@ def apply_credential_mode_flags(
     return m, m == "per_user"
 
 
+def _remote_bridge_uses_oauth(
+    raw_cfg: Dict[str, Any],
+    discovery: CredentialDiscoveryResult,
+    connector_row: Optional[Dict[str, Any]],
+) -> bool:
+    if raw_cfg.get("type") != "remote-bridge":
+        return False
+    if connector_requires_oauth(connector_row):
+        return True
+    if discovery.remote_auth_type == "oauth2":
+        return True
+    return False
+
+
+def _build_remote_bridge_oauth_cfg(
+    raw_cfg: Dict[str, Any],
+    discovery: CredentialDiscoveryResult,
+    *,
+    connector_row: Optional[Dict[str, Any]],
+    connector_id: Optional[str],
+    display_name: Optional[str],
+    existing: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    oauth_cfg = dict(existing or {})
+    remote_url = str(raw_cfg.get("remote_url") or oauth_cfg.get("remote_url") or "")
+    oauth_cfg["remote_url"] = remote_url
+    meta = oauth_ui_metadata_from_connector(
+        connector_row,
+        fallback_provider=str(oauth_cfg.get("provider") or connector_id or ""),
+        fallback_display_name=str(
+            oauth_cfg.get("oauth_display_name") or display_name or ""
+        ),
+    )
+    oauth_cfg["provider"] = meta["provider"]
+    oauth_cfg["oauth_display_name"] = meta["oauth_display_name"]
+    oauth_cfg = merge_oauth_config(
+        oauth_cfg, oauth_config_from_connector(connector_row), catalog_overrides=True
+    )
+    if discovery.remote_oauth_token_url and not oauth_cfg.get("token_url"):
+        oauth_cfg["token_url"] = discovery.remote_oauth_token_url
+    if discovery.remote_oauth_server and not oauth_cfg.get("authorization_server"):
+        oauth_cfg["authorization_server"] = discovery.remote_oauth_server
+    return resolve_oauth_url_templates(oauth_cfg, remote_url=remote_url)
+
+
 async def sync_mcp_server_config_from_registry(
     server_slug: str,
     *,
@@ -349,6 +439,8 @@ async def sync_mcp_server_config_from_registry(
         discovered_schema=discovery.schema,
     )
     mode = credential_mode or infer_credential_mode(raw_cfg, connector_row, discovery)
+    if _remote_bridge_uses_oauth(raw_cfg, discovery, connector_row):
+        schema = strip_oauth_token_fields_from_schema(schema)
     meta = _display_meta_from_connector(connector_row, server_slug)
     connector_id = (
         raw_cfg.get("aion_connector_id") or meta.get("aion_connector_id") or ""
@@ -392,10 +484,20 @@ async def sync_mcp_server_config_from_registry(
                     )
                 except Exception:
                     oauth_cfg = {}
-                if not oauth_cfg.get("remote_url"):
-                    oauth_cfg["remote_url"] = raw_cfg.get("remote_url", "")
-                    oauth_cfg["provider"] = oauth_cfg.get("provider") or "generic"
-                    row.oauth_config_json = json.dumps(oauth_cfg)
+                oauth_cfg = _build_remote_bridge_oauth_cfg(
+                    raw_cfg,
+                    discovery,
+                    connector_row=connector_row,
+                    connector_id=connector_id,
+                    display_name=row.display_name or meta.get("display_name"),
+                    existing=oauth_cfg,
+                )
+                row.oauth_config_json = json.dumps(oauth_cfg)
+                if _remote_bridge_uses_oauth(raw_cfg, discovery, connector_row):
+                    current_schema = json.loads(row.credential_schema_json or "[]")
+                    cleaned = strip_oauth_token_fields_from_schema(current_schema)
+                    if cleaned != current_schema:
+                        row.credential_schema_json = json.dumps(cleaned)
                 # Auto-abilita i server remote-bridge esistenti ancora disabilitati
                 if not row.is_enabled_for_users:
                     row.is_enabled_for_users = True
@@ -409,8 +511,13 @@ async def sync_mcp_server_config_from_registry(
         else:
             oauth_cfg = {}
             if raw_cfg.get("type") == "remote-bridge":
-                oauth_cfg["remote_url"] = raw_cfg.get("remote_url", "")
-                oauth_cfg["provider"] = "generic"
+                oauth_cfg = _build_remote_bridge_oauth_cfg(
+                    raw_cfg,
+                    discovery,
+                    connector_row=connector_row,
+                    connector_id=connector_id,
+                    display_name=meta.get("display_name"),
+                )
             # I server remote-bridge vengono abilitati per gli utenti automaticamente
             # perché l'admin li ha installati esplicitamente per la configurazione per-utente
             auto_enabled = raw_cfg.get("type") == "remote-bridge"
@@ -430,7 +537,19 @@ async def sync_mcp_server_config_from_registry(
             session.add(row)
         await session.commit()
         await session.refresh(row)
-        return row
+
+    if connector_id:
+        from src.runtime.mcp_integration_integrity import (
+            auto_migrate_credentials_for_connector,
+        )
+
+        mcp_manager.load_registry()
+        await auto_migrate_credentials_for_connector(
+            server_slug,
+            connector_id,
+            registry_slugs=set(mcp_manager.get_all_servers()),
+        )
+    return row
 
 
 async def sync_all_mcp_server_configs_from_registry() -> Dict[str, Any]:
@@ -506,6 +625,7 @@ def merge_suggested_env_into_registry(
     credential_mode: str,
     *,
     preserve_existing_keys: bool = True,
+    force_replace_schema_env: bool = False,
     credential_schema: Optional[List[Dict[str, Any]]] = None,
     env_override: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
@@ -535,7 +655,10 @@ def merge_suggested_env_into_registry(
         preview_warnings = preview.get("warnings") or []
     cfg = mcp_manager.get_server_config(server_slug) or {}
     env = dict(cfg.get("env") or {})
-    if preserve_existing_keys:
+    if force_replace_schema_env and suggested:
+        for k, v in suggested.items():
+            env[k] = v
+    elif preserve_existing_keys:
         for k, v in suggested.items():
             if k not in env or not str(env.get(k) or "").strip():
                 env[k] = v
@@ -545,7 +668,7 @@ def merge_suggested_env_into_registry(
     cfg_after = mcp_manager.get_server_config(server_slug) or {}
     cfg_after = {**cfg_after, "env": env}
     policy_warnings = validate_policy_vs_registry(
-        server_slug, cfg_after, credential_mode
+        server_slug, cfg_after, credential_mode, credential_schema=schema
     )
     all_warnings = list(preview_warnings) + policy_warnings
     return {
@@ -563,6 +686,7 @@ async def apply_integration_config(
     credential_schema: Optional[List[Dict[str, Any]]] = None,
     env_override: Optional[Dict[str, Any]] = None,
     apply_suggested_env: bool = False,
+    force_replace_schema_env: bool = False,
     schema_override: bool = False,
     registry_patch: Optional[Dict[str, Any]] = None,
     is_enabled_for_users: Optional[bool] = None,
@@ -605,6 +729,7 @@ async def apply_integration_config(
             mode,
             credential_schema=credential_schema if schema_override else None,
             env_override=env_override,
+            force_replace_schema_env=force_replace_schema_env,
         )
         if not env_result.get("ok"):
             return env_result

@@ -4,6 +4,7 @@ import { Plug, Unplug } from "lucide-react";
 
 import type { Integration } from "@/components/integrations/types";
 import { cn } from "@/lib/cn";
+import { oauthProviderDisplayName } from "@/lib/integrations/oauthLabels";
 import { useT } from "@/lib/i18n/use-t";
 
 export function IntegrationCard({
@@ -28,12 +29,19 @@ export function IntegrationCard({
     (h) => h.key === "OAUTH_TOKEN" && !h.is_expired,
   );
   const isConnected = integration.is_configured || hasOAuthToken;
+  const isDisabled = integration.user_enabled === false;
+  const providerLabel = oauthProviderDisplayName(integration);
+  const oauthConnectLabel =
+    integration.has_oauth && !isConnected
+      ? t("integrationsPage.oauth_connect_service", { service: providerLabel })
+      : connectLabel;
 
   return (
     <article
       className={cn(
         "overflow-hidden rounded-2xl border shadow-sm backdrop-blur-sm transition hover:shadow-md",
-        isConnected
+        isDisabled && "opacity-60",
+        isConnected && !isDisabled
           ? "border-emerald-500/20 bg-gradient-to-br from-emerald-500/6 to-card/40"
           : "border-border/70 bg-card/35",
       )}
@@ -43,7 +51,7 @@ export function IntegrationCard({
           <div
             className={cn(
               "flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border",
-              isConnected
+              isConnected && !isDisabled
                 ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                 : "border-border/60 bg-muted/50 text-muted-foreground",
             )}
@@ -58,18 +66,24 @@ export function IntegrationCard({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-base font-semibold text-foreground">{integration.display_name}</h3>
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 text-[0.714em] font-bold uppercase",
-                  isConnected
-                    ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
-                    : "bg-amber-500/15 text-amber-800 dark:text-amber-300",
-                )}
-              >
-                {isConnected
-                  ? t("integrationsPage.badge_connected")
-                  : t("integrationsPage.badge_pending_short")}
-              </span>
+              {isDisabled ? (
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[0.714em] font-bold uppercase text-muted-foreground">
+                  {t("integrationsPage.badge_disabled")}
+                </span>
+              ) : (
+                <span
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[0.714em] font-bold uppercase",
+                    isConnected
+                      ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                      : "bg-amber-500/15 text-amber-800 dark:text-amber-300",
+                  )}
+                >
+                  {isConnected
+                    ? t("integrationsPage.badge_connected")
+                    : t("integrationsPage.badge_pending_short")}
+                </span>
+              )}
             </div>
             {integration.description ? (
               <p className="mt-0.5 text-sm text-muted-foreground">{integration.description}</p>
@@ -78,22 +92,24 @@ export function IntegrationCard({
               <p className="mt-2 text-[0.786em] text-muted-foreground">{orgManagedLabel}</p>
             ) : null}
             {integration.credential_mode === "per_user" && !integration.org_managed ? (
-              <p className="mt-2 text-[0.786em] text-muted-foreground">{perUserHint}</p>
+              <p className="mt-2 text-[0.786em] text-muted-foreground">
+                {isDisabled ? t("integrationsPage.disabled_hint") : perUserHint}
+              </p>
             ) : null}
-            {isConnected ? (
+            {isConnected && !isDisabled ? (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {integration.has_oauth && hasOAuthToken ? (
                   <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[0.714em] font-semibold text-emerald-800 dark:text-emerald-300">
-                    {t("integrationsPage.oauth_connected")}
+                    {t("integrationsPage.oauth_connected_service", { service: providerLabel })}
                   </span>
                 ) : null}
                 {integration.has_oauth && !hasOAuthToken && !integration.is_configured ? (
                   <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-[0.714em] font-semibold text-amber-800 dark:text-amber-300">
-                    {t("integrationsPage.oauth_required")}
+                    {t("integrationsPage.oauth_required_service", { service: providerLabel })}
                   </span>
                 ) : null}
                 {integration.credentials_hints
-                  .filter((h) => h.key !== "OAUTH_TOKEN")
+                  .filter((h) => h.key !== "OAUTH_TOKEN" && h.key !== "OAUTH_REFRESH_TOKEN")
                   .map((h) => (
                     <span
                       key={h.key}
@@ -113,21 +129,26 @@ export function IntegrationCard({
           </div>
         </div>
 
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <div className="flex shrink-0 flex-col items-end gap-2 sm:flex-row sm:items-center">
           {integration.can_disable && onTogglePreference ? (
-            <label className="flex items-center gap-2 rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={integration.user_enabled !== false}
-                onChange={(e) => onTogglePreference(integration.server_slug, e.target.checked)}
-              />
-              {t("integrationsPage.toggle_active")}
+            <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-xs">
+              <span className="text-muted-foreground">{t("integrationsPage.toggle_active")}</span>
+              <span className="relative inline-flex h-5 w-9 shrink-0 items-center">
+                <input
+                  type="checkbox"
+                  className="peer sr-only"
+                  checked={integration.user_enabled !== false}
+                  onChange={(e) => onTogglePreference(integration.server_slug, e.target.checked)}
+                />
+                <span className="absolute inset-0 rounded-full bg-muted transition peer-checked:bg-primary" />
+                <span className="absolute left-0.5 h-4 w-4 rounded-full bg-background shadow transition peer-checked:translate-x-4" />
+              </span>
             </label>
           ) : null}
           {!integration.org_managed &&
           integration.credential_mode !== "none" &&
           integration.user_enabled !== false ? (
-            <>
+            <div className="flex flex-wrap items-center justify-end gap-2">
               {integration.has_oauth && hasOAuthToken && onDisconnectOAuth ? (
                 <button
                   type="button"
@@ -148,9 +169,9 @@ export function IntegrationCard({
                     : "bg-primary text-primary-foreground shadow-sm hover:bg-primary/90",
                 )}
               >
-                {connectLabel}
+                {oauthConnectLabel}
               </button>
-            </>
+            </div>
           ) : null}
         </div>
       </div>

@@ -92,6 +92,7 @@ async def exchange_authorization_code(
     code_verifier: Optional[str] = None,
     client_id: Optional[str] = None,
     client_secret: Optional[str] = None,
+    resource: Optional[str] = None,
 ) -> Dict[str, Any]:
     payload: Dict[str, str] = {
         "grant_type": "authorization_code",
@@ -100,6 +101,8 @@ async def exchange_authorization_code(
     }
     if code_verifier:
         payload["code_verifier"] = code_verifier
+    if resource:
+        payload["resource"] = resource
     return await exchange_token(
         token_url,
         payload,

@@ -9,12 +9,13 @@ type Props = {
   value: CredentialSchemaField[];
   onChange: (fields: CredentialSchemaField[]) => void;
   className?: string;
+  showEnvPlaceholders?: boolean;
 };
 
 const inputClass =
   "w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-gray-600 focus:border-indigo-500/70 outline-none";
 
-export function CredentialSchemaEditor({ value, onChange, className }: Props) {
+export function CredentialSchemaEditor({ value, onChange, className, showEnvPlaceholders = true }: Props) {
   function updateAt(index: number, patch: Partial<CredentialSchemaField>) {
     const next = value.map((f, i) => (i === index ? { ...f, ...patch } : f));
     onChange(next);
@@ -60,8 +61,9 @@ export function CredentialSchemaEditor({ value, onChange, className }: Props) {
           {value.map((field, index) => (
             <div
               key={`${field.key}-${index}`}
-              className="grid gap-2 rounded-lg border border-white/10 bg-black/30 p-3 sm:grid-cols-[1fr_1fr_auto_auto_auto]"
+              className="rounded-lg border border-white/10 bg-black/30 p-3 space-y-2"
             >
+              <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto_auto]">
               <div>
                 <label className="mb-0.5 block text-[10px] text-gray-500">Chiave</label>
                 <input
@@ -112,6 +114,12 @@ export function CredentialSchemaEditor({ value, onChange, className }: Props) {
               >
                 <Trash2 className="h-4 w-4" />
               </button>
+              </div>
+              {showEnvPlaceholders && field.env_placeholder ? (
+                <p className="text-[10px] font-mono text-emerald-400/80 bg-black/40 rounded px-2 py-1 border border-white/5">
+                  env: {field.registry_env_key || field.key}: &quot;{field.env_placeholder}&quot;
+                </p>
+              ) : null}
             </div>
           ))}
         </div>

@@ -4,6 +4,9 @@ export type CredentialField = {
   type: "text" | "password" | "oauth";
   required: boolean;
   description?: string;
+  /** Placeholder per env registry: ${AION_USER_SLUG__KEY} */
+  env_placeholder?: string;
+  registry_env_key?: string;
 };
 
 export type Integration = {
@@ -20,9 +23,11 @@ export type Integration = {
   is_remote_bridge?: boolean;
   remote_url?: string;
   oauth_provider?: string;
+  oauth_display_name?: string;
   oauth_authorization_server?: string;
   oauth_client_id?: string;
   oauth_scopes?: string[];
+  aion_connector_id?: string | null;
   is_configured: boolean;
   user_enabled?: boolean;
   can_disable?: boolean;

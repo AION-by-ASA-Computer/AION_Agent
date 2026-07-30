@@ -1,0 +1,370 @@
+# Catalogo MCP curato (source of truth in config_std/).
+# Copiato in config/ da scripts/sync_config.py; override locale: mcp_connector_catalog.local.yaml
+#
+# Campi per connettori remoti OAuth (allineati a Cursor, Claude Desktop, VS Code Copilot):
+#   install_type: remote
+#   remote_url: URL endpoint MCP hosted (HTTP/SSE/streamable)
+#   auth_type: oauth2 | api-key | basic | none
+#     oauth2 → OAuth in chat-ui (nessun campo PAT); etichetta da title / oauth_provider
+#   oauth: (opzionale) endpoint statici quando il server non espone MCP OAuth discovery
+#     authorization_server, authorization_endpoint, token_url, scopes, authorize_params
+#     client_credentials_required: true → admin deve configurare client_id/secret in Hub
+#     setup_doc_url: (opzionale) guida configurazione provider
+#     admin_setup_hint: (opzionale) testo mostrato in Admin → MCP Hub
+#   oauth_provider: (opzionale) id tecnico provider; default: id connettore
+#   featured_remote: true  → mostrato in Hub marketplace e preset modal
+#   remote_url_template: true → URL contiene placeholder (es. {tenant_id}); install manuale
+#   default_credential_mode: per_user
+
+version: 1
+connectors:
+  # --- Remote OAuth hosted (ufficiali) ----------------------------------------
+
+  - id: notion
+    title: Notion
+    category: knowledge
+    install_type: remote
+    remote_url: https://mcp.notion.com/mcp
+    auth_type: oauth2
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      Server MCP ufficiale Notion (hosted). OAuth PKCE per utente; pagine, database e ricerca.
+      Alternativa stdio: @makenotion/notion-mcp-server con integration token.
+    tags: [notion, wiki, docs, oauth]
+    mcp_name_hints: [notion, makenotion]
+    official_doc_url: https://developers.notion.com/docs/mcp
+    mcp_upstream_docs_url: https://developers.notion.com/docs/mcp
+    registry_search_hint: notion mcp remote
+    approval_status: aion_recommended
+    agent_guidance: |
+      Usa i tool di ricerca/lista per ottenere ID pagine e database prima di create/update.
+      I campi strutturati del tool hanno priorità sul Markdown libero.
+
+  - id: clickup
+    title: ClickUp
+    category: project_management
+    install_type: remote
+    remote_url: https://mcp.clickup.com/mcp
+    auth_type: oauth2
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      Server MCP ufficiale ClickUp. Solo OAuth (nessuna API key nel flusso hosted).
+      Task, liste, spazi e commenti via linguaggio naturale.
+    tags: [clickup, project, tasks, oauth]
+    mcp_name_hints: [clickup, click-up]
+    official_doc_url: https://developer.clickup.com/docs/mcp
+    registry_search_hint: clickup mcp
+    approval_status: aion_recommended
+
+  - id: linear
+    title: Linear
+    category: project_management
+    install_type: remote
+    remote_url: https://mcp.linear.app/mcp
+    auth_type: oauth2
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      Server MCP ufficiale Linear per issue, progetti e cicli. Endpoint read-only opzionale:
+      https://mcp.linear.app/mcp/readonly
+    tags: [linear, issues, oauth]
+    mcp_name_hints: [linear]
+    official_doc_url: https://linear.app/docs/mcp
+    registry_search_hint: linear mcp
+    approval_status: aion_recommended
+
+  - id: atlassian
+    title: Atlassian (Jira & Confluence)
+    category: project_management
+    install_type: remote
+    remote_url: https://mcp.atlassian.com/v1/mcp/authv2
+    auth_type: oauth2
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      Server MCP ufficiale Atlassian (OAuth 2.1). Jira, Confluence e risorse cloud Atlassian.
+    tags: [jira, confluence, atlassian, oauth]
+    mcp_name_hints: [atlassian, jira, confluence]
+    official_doc_url: https://developer.atlassian.com/cloud/mcp/
+    registry_search_hint: atlassian jira mcp
+    approval_status: aion_recommended
+
+  - id: github
+    title: GitHub
+    category: development
+    install_type: remote
+    remote_url: https://api.githubcopilot.com/mcp
+    auth_type: oauth2
+    oauth_provider: github
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      Server MCP GitHub Copilot (remoto). Richiede licenza Copilot e OAuth App o GitHub App
+      con client ID/secret configurati dall'amministratore in Hub. Alternativa: PAT per utente.
+    tags: [github, git, oauth]
+    mcp_name_hints: [github, github-copilot]
+    oauth:
+      authorization_server: https://github.com/login/oauth
+      authorization_endpoint: https://github.com/login/oauth/authorize
+      token_url: https://github.com/login/oauth/access_token
+      resource: https://api.githubcopilot.com/mcp
+      client_credentials_required: true
+      setup_doc_url: https://github.com/github/github-mcp-server/blob/main/docs/host-integration.md
+      admin_setup_hint: >
+        Crea una GitHub OAuth App o GitHub App, aggiungi il redirect URI AION (sotto) come callback,
+        poi incolla Client ID e Secret nei campi OAuth in Hub. Il server remoto richiede licenza GitHub Copilot.
+      scopes:
+        - repo
+        - read:user
+        - user:email
+    official_doc_url: https://docs.github.com/en/copilot/how-tos/context/model-context-protocol
+    registry_search_hint: github mcp copilot
+    approval_status: aion_recommended
+
+  - id: gmail
+    title: Gmail (Google)
+    category: productivity
+    install_type: remote
+    remote_url: https://gmailmcp.googleapis.com/mcp/v1
+    auth_type: oauth2
+    oauth_provider: google
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      Server MCP hosted Google per Gmail / Workspace. Richiede client OAuth Web Application
+      in Google Cloud Console (redirect URI AION) configurato dall'amministratore in Hub.
+    tags: [email, google, gmail, workspace, oauth]
+    mcp_name_hints: [gmail, google-mail, google_mail]
+    oauth:
+      authorization_server: https://accounts.google.com
+      authorization_endpoint: https://accounts.google.com/o/oauth2/v2/auth
+      token_url: https://oauth2.googleapis.com/token
+      client_credentials_required: true
+      setup_doc_url: https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server
+      admin_setup_hint: >
+        In Google Cloud: abilita Gmail API e Gmail MCP API, configura OAuth consent screen con gli scope
+        indicati, crea un client OAuth Web application con redirect URI AION, poi incolla Client ID e Secret in Hub.
+      scopes:
+        - https://www.googleapis.com/auth/gmail.readonly
+        - https://www.googleapis.com/auth/gmail.compose
+      authorize_params:
+        access_type: offline
+        prompt: consent
+    official_doc_url: https://developers.google.com/workspace/gmail/api/guides/configure-mcp-server
+    registry_search_hint: gmail mcp google
+    approval_status: aion_recommended
+
+  - id: google_drive
+    title: Google Drive
+    category: productivity
+    install_type: remote
+    remote_url: https://drivemcp.googleapis.com/mcp/v1
+    auth_type: oauth2
+    oauth_provider: google
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      Server MCP hosted Google per Drive. File, cartelle e condivisione via OAuth Workspace.
+    tags: [google, drive, storage, oauth]
+    mcp_name_hints: [google_drive, google-drive, gdrive]
+    oauth:
+      authorization_server: https://accounts.google.com
+      authorization_endpoint: https://accounts.google.com/o/oauth2/v2/auth
+      token_url: https://oauth2.googleapis.com/token
+      client_credentials_required: true
+      setup_doc_url: https://developers.google.com/workspace/guides/configure-mcp-servers
+      admin_setup_hint: >
+        In Google Cloud: abilita Drive API e Drive MCP API, configura OAuth consent screen con gli scope
+        Drive, crea un client OAuth Web application con redirect URI AION, poi incolla Client ID e Secret in Hub.
+      scopes:
+        - https://www.googleapis.com/auth/drive.readonly
+        - https://www.googleapis.com/auth/drive.file
+      authorize_params:
+        access_type: offline
+        prompt: consent
+    official_doc_url: https://developers.google.com/workspace/guides/configure-mcp-servers
+    registry_search_hint: google drive mcp
+    approval_status: aion_recommended
+
+  - id: google_calendar
+    title: Google Calendar
+    category: productivity
+    install_type: remote
+    remote_url: https://calendarmcp.googleapis.com/mcp/v1
+    auth_type: oauth2
+    oauth_provider: google
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      Server MCP hosted Google per Calendar. Eventi e disponibilità via OAuth.
+    tags: [google, calendar, oauth]
+    mcp_name_hints: [google_calendar, google-calendar, gcal]
+    oauth:
+      authorization_server: https://accounts.google.com
+      authorization_endpoint: https://accounts.google.com/o/oauth2/v2/auth
+      token_url: https://oauth2.googleapis.com/token
+      client_credentials_required: true
+      setup_doc_url: https://developers.google.com/workspace/guides/configure-mcp-servers
+      admin_setup_hint: >
+        In Google Cloud: abilita Calendar API e Calendar MCP API, configura OAuth consent screen con gli scope
+        Calendar, crea un client OAuth Web application con redirect URI AION, poi incolla Client ID e Secret in Hub.
+      scopes:
+        - https://www.googleapis.com/auth/calendar.calendarlist.readonly
+        - https://www.googleapis.com/auth/calendar.events.freebusy
+        - https://www.googleapis.com/auth/calendar.events.readonly
+      authorize_params:
+        access_type: offline
+        prompt: consent
+    official_doc_url: https://developers.google.com/workspace/guides/configure-mcp-servers
+    registry_search_hint: google calendar mcp
+    approval_status: aion_recommended
+
+  - id: slack
+    title: Slack
+    category: communication
+    install_type: remote
+    remote_url: https://mcp.slack.com/mcp
+    auth_type: oauth2
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      Server MCP ufficiale Slack. Richiede approvazione admin workspace; canali, messaggi e ricerca.
+    tags: [slack, chat, oauth]
+    mcp_name_hints: [slack]
+    official_doc_url: https://docs.slack.dev/ai/mcp-server/
+    registry_search_hint: slack mcp
+    approval_status: aion_recommended
+
+  - id: hubspot
+    title: HubSpot
+    category: crm
+    install_type: remote
+    remote_url: https://mcp.hubspot.com
+    auth_type: oauth2
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      Server MCP ufficiale HubSpot (OAuth 2.1 + PKCE). CRM, contatti e pipeline.
+    tags: [hubspot, crm, oauth]
+    mcp_name_hints: [hubspot]
+    official_doc_url: https://developers.hubspot.com/docs/apps/developer-platform/build-apps/integrate-with-hubspot-mcp-server
+    registry_search_hint: hubspot mcp
+    approval_status: aion_recommended
+
+  - id: microsoft_sharepoint
+    title: Microsoft SharePoint
+    category: knowledge
+    install_type: remote
+    remote_url: "https://agent365.svc.cloud.microsoft/agents/tenants/{tenant_id}/servers/mcp_SharePointRemoteServer"
+    remote_url_template: true
+    auth_type: oauth2
+    oauth_provider: microsoft
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      MCP SharePoint via Microsoft Agent 365 / Work IQ (preview). Sostituire {tenant_id} con il GUID
+      Entra ID. Richiede licenza M365 Copilot, consenso admin Work IQ e app Entra con client ID in Hub.
+    tags: [microsoft, sharepoint, m365, oauth]
+    mcp_name_hints: [sharepoint, microsoft_sharepoint]
+    oauth:
+      authorization_server: "https://login.microsoftonline.com/{tenant_id}"
+      authorization_endpoint: "https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize"
+      token_url: "https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+      resource: "https://agent365.svc.cloud.microsoft/agents/tenants/{tenant_id}/servers/mcp_SharePointRemoteServer"
+      client_credentials_required: true
+      setup_doc_url: https://learn.microsoft.com/en-us/microsoft-copilot-studio/mcp-sharepoint-work-iq
+      admin_setup_hint: >
+        Registra un'app in Microsoft Entra ID, aggiungi il redirect URI AION (sotto), concedi i permessi
+        Work IQ / SharePoint MCP e incolla Client ID e Secret in Hub. Esegui anche il provisioning
+        tenant Work IQ (script Enable-WorkIQToolsForTenant.ps1) se richiesto dall'admin Microsoft 365.
+      scopes:
+        - openid
+        - profile
+        - offline_access
+    official_doc_url: https://learn.microsoft.com/en-us/microsoft-agent-365/
+    registry_search_hint: sharepoint mcp microsoft
+    approval_status: preview
+
+  - id: microsoft_onedrive
+    title: Microsoft OneDrive
+    category: productivity
+    install_type: remote
+    remote_url: "https://agent365.svc.cloud.microsoft/agents/tenants/{tenant_id}/servers/mcp_ODSPRemoteServer"
+    remote_url_template: true
+    auth_type: oauth2
+    oauth_provider: microsoft
+    featured_remote: true
+    default_credential_mode: per_user
+    description: >
+      MCP OneDrive / ODSP via Microsoft Agent 365 (preview). Sostituire {tenant_id} nel URL.
+      Richiede app Entra con client ID configurato in Hub.
+    tags: [microsoft, onedrive, m365, oauth]
+    mcp_name_hints: [onedrive, microsoft_onedrive, odsp]
+    oauth:
+      authorization_server: "https://login.microsoftonline.com/{tenant_id}"
+      authorization_endpoint: "https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/authorize"
+      token_url: "https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+      resource: "https://agent365.svc.cloud.microsoft/agents/tenants/{tenant_id}/servers/mcp_ODSPRemoteServer"
+      client_credentials_required: true
+      setup_doc_url: https://learn.microsoft.com/en-us/microsoft-agent-365/mcp-server-reference/odspremoteserver
+      admin_setup_hint: >
+        Registra un'app in Microsoft Entra ID, aggiungi il redirect URI AION, concedi permessi Work IQ
+        e incolla Client ID e Secret in Hub. Verifica provisioning Work IQ nel tenant M365.
+      scopes:
+        - openid
+        - profile
+        - offline_access
+    official_doc_url: https://learn.microsoft.com/en-us/microsoft-agent-365/
+    registry_search_hint: onedrive mcp microsoft
+    approval_status: preview
+
+  # --- Stdio / locale (community) ---------------------------------------------
+
+  - id: email_imap
+    title: Email (IMAP / SMTP)
+    category: productivity
+    install_type: stdio
+    description: >
+      Server MCP IMAP/SMTP (es. gabigabogabu/email-mcp-server via Bun). Ogni utente configura
+      credenziali in chat-ui; il processo legge EMAIL_USER, EMAIL_PASSWORD, IMAP_* e SMTP_*.
+    tags: [email, imap, smtp]
+    mcp_name_hints: [email_imap, email-mcp-server, imap-mcp, imap-smtp, imap_smtp, gabigabogabu]
+    integration_hints:
+      - id: n8n
+        label_it: n8n
+        note_it: >
+          Credenziali IMAP spesso già definite in n8n: copia host, utente e password/app-password
+          nei campi sotto (EMAIL_USER = indirizzo, EMAIL_PASSWORD = app password).
+    credential_fields:
+      - { key: EMAIL_USER, label: "Indirizzo email (env EMAIL_USER)", secret: false, required: true }
+      - { key: EMAIL_PASSWORD, label: "Password / app password (env EMAIL_PASSWORD)", secret: true, required: true }
+      - { key: IMAP_HOST, label: "Server IMAP (env IMAP_HOST)", secret: false, required: true }
+      - { key: IMAP_PORT, label: "Porta IMAP (env IMAP_PORT, es. 993)", secret: false, required: true }
+      - { key: SMTP_HOST, label: "Server SMTP (env SMTP_HOST)", secret: false, required: true }
+      - { key: SMTP_PORT, label: "Porta SMTP (env SMTP_PORT, es. 465)", secret: false, required: true }
+    official_doc_url: https://github.com/gabigabogabu/email-mcp-server
+    mcp_upstream_docs_url: https://github.com/gabigabogabu/email-mcp-server/blob/main/README.md
+    registry_search_hint: imap email mcp gabigabogabu
+    required_env:
+      - EMAIL_USER
+      - EMAIL_PASSWORD
+      - IMAP_HOST
+      - IMAP_PORT
+      - SMTP_HOST
+      - SMTP_PORT
+    optional_env: []
+    approval_status: aion_recommended
+    example_registry_block: |
+      # email-mcp-server (Bun/TS, per_user):
+      #   command: bun
+      #   args: ["run", "mcp_servers/email-mcp-server/index.ts"]
+      #   aion_connector_id: email_imap
+      #   env:
+      #     EMAIL_USER: "${AION_USER_EMAIL_MCP_SERVER__EMAIL_USER}"
+      #     EMAIL_PASSWORD: "${AION_USER_EMAIL_MCP_SERVER__EMAIL_PASSWORD}"
+      #     IMAP_HOST: "${AION_USER_EMAIL_MCP_SERVER__IMAP_HOST}"
+      #     IMAP_PORT: "${AION_USER_EMAIL_MCP_SERVER__IMAP_PORT}"
+      #     SMTP_HOST: "${AION_USER_EMAIL_MCP_SERVER__SMTP_HOST}"
+      #     SMTP_PORT: "${AION_USER_EMAIL_MCP_SERVER__SMTP_PORT}"
