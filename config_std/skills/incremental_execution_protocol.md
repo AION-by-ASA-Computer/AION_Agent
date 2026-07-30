@@ -87,8 +87,23 @@ You may use many web tools over the turn; the rule is **persist before changing 
 - Loading `skill_view("xlsx")` (or full office skill) before the first data commit.
 - Starting a new broad search for “complete dataset” when a partial file already exists — **extend the file** instead.
 - **One giant `sandbox_write_workspace_file`** with all match rows embedded in Python — vLLM truncates tool JSON (`tool_args_truncated`). Use `workspace/<slug>_data.json` + `sandbox_append_workspace_file`, then a short `build_xlsx.py` that reads the JSON.
+- **One giant JS/Python deck builder** for `.pptx` — same truncation risk. Use `workspace/deck_data.json` + short `build_deck.js` via `sandbox_run_node_file` (pptxgenjs).
 
-## Example (product catalog → Excel)
+## Example (presentation → .pptx)
+
+```
+user: Build a 10-slide deck on company X from their website
+
+1. skill_view("incremental_execution_protocol")
+2. web_fetch_page → homepage + product pages
+3. sandbox_write → workspace/deck_data.json (titles, bullets, metrics — not in reasoning)
+4. skill_view("pptx") → skill office + scripts + pptxgenjs seeded (se in config_proprietary)
+5. sandbox_write → workspace/build_deck.js (<80 lines, reads deck_data.json; require scripts/pptxgenjs/canvas.js for W/H)
+   OR sandbox_append_workspace_file for build_deck.js in chunks
+6. sandbox_run_node_file → `node scripts/pptxgenjs/lint_deck_script.js workspace/build_deck.js` then build
+7. sandbox_run_node_file → workspace/deck.pptx
+8. markitdown workspace/deck.pptx → content QA
+```
 
 ```
 user: Build an Excel with product name, price, and URL from public shop pages

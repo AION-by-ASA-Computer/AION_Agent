@@ -14,6 +14,19 @@ import sys
 from pathlib import Path
 
 
+def _proprietary_slugs(root: Path) -> frozenset[str]:
+    manifest = root / "config_proprietary" / "manifest.yaml"
+    if not manifest.is_file():
+        return frozenset({"docx", "pdf", "pptx", "xlsx"})
+    try:
+        import yaml  # type: ignore
+
+        data = yaml.safe_load(manifest.read_text(encoding="utf-8")) or {}
+        return frozenset(str(s).strip() for s in (data.get("skills") or []) if str(s).strip())
+    except Exception:
+        return frozenset({"docx", "pdf", "pptx", "xlsx"})
+
+
 def _root() -> Path:
     return Path(__file__).resolve().parents[1]
 
@@ -35,10 +48,15 @@ def sync_packages(
         print(f"[skip] {src_root} not found")
         return 0
     dst_root.mkdir(parents=True, exist_ok=True)
+    blocked = _proprietary_slugs(_root())
     copied = 0
     skipped = 0
     for entry in sorted(src_root.iterdir()):
         if not _is_skill_package_dir(entry):
+            continue
+        if entry.name in blocked:
+            print(f"[blocked] {entry.name} is proprietary — use config_proprietary/, not config_std")
+            skipped += 1
             continue
         dest = dst_root / entry.name
         if dest.is_dir() and not force and _is_skill_package_dir(dest):

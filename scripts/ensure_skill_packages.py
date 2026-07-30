@@ -18,6 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SYNC_CONFIG = ROOT / "scripts" / "sync_config.py"
+SYNC_PROPRIETARY = ROOT / "scripts" / "sync_proprietary_config.py"
 SYNC_MCP = ROOT / "scripts" / "sync_mcp_servers.py"
 
 
@@ -44,6 +45,11 @@ def ensure_skill_packages(
         )
         if rc != 0:
             print("[warn] sync_config --skills-only --force failed", file=sys.stderr)
+
+    if SYNC_PROPRIETARY.is_file():
+        rc = _run([py_exec, str(SYNC_PROPRIETARY), "--force"], dry_run=dry_run)
+        if rc != 0:
+            print("[warn] sync_proprietary_config failed", file=sys.stderr)
 
     if SYNC_MCP.is_file():
         cmd = [py_exec, str(SYNC_MCP)]
