@@ -1132,12 +1132,11 @@ export default function MCPHub() {
             }}
           />
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">
               MCP installati ({filteredInstalledItems.length})
             </h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
             {filteredInstalledItems.map(([name, config]: [string, any]) => {
               const slugIssues = integrityIssues.filter(
                 (i) => i.server_slug === name || i.from_slug === name,
@@ -1163,10 +1162,12 @@ export default function MCPHub() {
             })}
 
             {filteredInstalledItems.length === 0 && (
-              <div className="col-span-full py-16 flex flex-col items-center justify-center text-center bg-[#121212]/30 border border-white/5 rounded-2xl px-4">
-                <Box className="w-8 h-8 text-gray-600 mb-2" />
-                <p className="text-sm font-semibold text-gray-400">No installed MCP found</p>
-                <p className="text-xs text-gray-600 mt-1">No module matches the search criteria.</p>
+              <div className="col-span-full flex flex-col items-center justify-center rounded-3xl border border-white/5 bg-[#121212]/30 px-4 py-20 text-center">
+                <Box className="mb-3 h-12 w-12 text-gray-600" aria-hidden />
+                <p className="text-sm font-semibold text-gray-400">Nessun MCP installato</p>
+                <p className="mt-1 max-w-xs text-xs text-gray-600">
+                  Nessun modulo corrisponde ai criteri di ricerca.
+                </p>
               </div>
             )}
           </div>
@@ -1175,26 +1176,27 @@ export default function MCPHub() {
 
       {/* Config Modal */}
       {editingConfig && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="glass-card bg-[#1a1a1a] border border-white/10 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-8 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 relative">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="flex justify-between items-center border-b border-white/10 pb-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative max-h-[90vh] w-full max-w-2xl space-y-6 overflow-y-auto overflow-x-hidden rounded-2xl border border-border/70 bg-card p-6 shadow-2xl animate-in zoom-in-95 duration-200 sm:p-8">
+            <div className="flex items-center justify-between border-b border-border/70 pb-5">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400">
-                  <Box className="w-5 h-5" />
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground">
+                  <Box className="h-5 w-5" aria-hidden />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white font-mono">{editingConfig.name}</h3>
-                  <p className="text-xs text-gray-400">Configurazione MCP</p>
+                  <h3 className="font-mono text-xl font-semibold text-foreground">{editingConfig.name}</h3>
+                  <p className="text-xs text-muted-foreground">Configurazione MCP</p>
                 </div>
               </div>
-              <button onClick={() => setEditingConfig(null)} className="p-2 text-gray-500 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
-                <X className="w-5 h-5" />
+              <button
+                onClick={() => setEditingConfig(null)}
+                className="focus-ring rounded-xl p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
 
-            <div className="flex gap-1 p-1 rounded-xl bg-black/40 border border-white/10">
+            <div className="flex gap-1 rounded-xl border border-border/70 bg-muted/30 p-1">
               {(
                 [
                   ["chat", "Chat & credenziali"],
@@ -1206,10 +1208,10 @@ export default function MCPHub() {
                   key={tab}
                   type="button"
                   onClick={() => setConfigModalTab(tab)}
-                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
+                  className={`focus-ring flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
                     configModalTab === tab
-                      ? "bg-indigo-600/30 text-white border border-indigo-500/30"
-                      : "text-gray-500 hover:text-gray-300"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   {label}
@@ -1252,16 +1254,16 @@ export default function MCPHub() {
               )}
 
               {configModalTab === "chat" && editingPolicy && (
-                <div className="space-y-4 rounded-2xl border border-indigo-500/25 bg-indigo-500/[0.08] p-4">
-                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-indigo-300/90">
-                    <Users className="w-3.5 h-3.5" />
-                    User availability (chat)
+                <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4">
+                  <div className="aion-section-label flex items-center gap-2">
+                    <Users className="h-3.5 w-3.5" aria-hidden />
+                    Disponibilità utenti (chat)
                   </div>
                   {/* <label className="flex items-center gap-3 cursor-pointer">
                     <input type="checkbox" checked={editingPolicy.enabled} onChange={(e) => setEditingPolicy({ ...editingPolicy, enabled: e.target.checked })} className="rounded border-white/20" />
                     <span className="text-sm text-gray-200">Enable edit in chat-ui for users</span>
                   </label> */}
-                  <div className="flex flex-wrap gap-3 text-sm text-gray-300">
+                  <div className="flex flex-wrap gap-3 text-sm text-foreground">
                     {(["none", "org_shared", "per_user"] as CredentialMode[]).map((m) => (
                       <label key={m} className="flex items-center gap-1.5 cursor-pointer">
                         <input type="radio" name="credential_mode" checked={editingPolicy.mode === m} onChange={() => {
@@ -1287,7 +1289,10 @@ export default function MCPHub() {
                     ))}
                   </div>
                   {editingPolicy.warnings.map((w) => (
-                    <p key={w} className="text-[11px] text-amber-300 flex gap-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{w}</p>
+                    <p key={w} className="flex gap-1 rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      {w}
+                    </p>
                   ))}
                   {editingPolicy.mode === "per_user" && (
                     <>
@@ -1339,7 +1344,7 @@ export default function MCPHub() {
                     </>
                   )
                   }
-                  <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
                     <input type="checkbox" checked={userMayDisable} onChange={(e) => setUserMayDisable(e.target.checked)} />
                     User can disable this integration
                   </label>
@@ -1354,8 +1359,8 @@ export default function MCPHub() {
 
               {configModalTab === "chat" &&
                 connectorFormContext.fields.length > 0 && editingPolicy?.mode === "org_shared" ? (
-                  <div className="space-y-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/90">Organization Credentials</div>
+                  <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4">
+                    <div className="aion-section-label">Credenziali organizzazione</div>
                     {connectorFormContext.fields.map((field) => (
                       <div key={field.key} className="space-y-1.5">
                         <label className="text-xs font-semibold text-gray-200 flex items-center gap-2">

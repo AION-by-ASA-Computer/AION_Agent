@@ -2,6 +2,7 @@
 
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
+import { cn } from "@/lib/cn";
 
 type Props = {
   yaml: string;
@@ -27,22 +28,22 @@ export function McpEnvYamlPanel({ yaml, title = "Snippet env per registry (YAML)
   }
 
   return (
-    <div className={`rounded-xl border border-white/10 bg-black/30 p-3 space-y-2 ${className ?? ""}`}>
+    <div className={cn("space-y-2 rounded-2xl border border-border/70 bg-muted/20 p-3", className)}>
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">{title}</p>
+        <p className="aion-section-label">{title}</p>
         <button
           type="button"
           onClick={() => void copy()}
-          className="flex items-center gap-1 text-[10px] font-bold text-indigo-300 hover:text-indigo-200"
+          className="focus-ring inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[0.714em] font-semibold text-foreground transition hover:bg-muted"
         >
-          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+          {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
           {copied ? "Copiato" : "Copia"}
         </button>
       </div>
-      <pre className="text-[11px] text-emerald-200/90 font-mono whitespace-pre-wrap break-all leading-relaxed bg-black/40 rounded-lg p-3 border border-white/5">
+      <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl border border-border/60 bg-background/60 p-3 font-mono text-[0.786em] leading-relaxed text-foreground">
         {yaml}
       </pre>
-      <p className="text-[10px] text-gray-500">
+      <p className="text-[0.714em] text-muted-foreground">
         Incolla nel blocco <span className="font-mono">env:</span> del registry o usa «Applica env suggerito».
       </p>
     </div>
