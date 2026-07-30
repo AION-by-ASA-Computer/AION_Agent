@@ -11,8 +11,6 @@ from src.skill_registry import skill_registry
 
 
 def test_lint_catches_layout_wide_coords_on_default_16x9(tmp_path):
-    from src.skill_registry import skill_registry
-
     scripts_dir = skill_registry.get_skill_scripts_dir("pptx")
     if not scripts_dir:
         pytest.skip("pptx skill not installed")
@@ -46,8 +44,6 @@ slide.addShape('rect', { x: 0, y: 7.1, w: 10, h: 0.4 });
 
 
 def test_lint_passes_when_layout_matches_coords(tmp_path):
-    from src.skill_registry import skill_registry
-
     scripts_dir = skill_registry.get_skill_scripts_dir("pptx")
     if not scripts_dir:
         pytest.skip("pptx skill not installed")

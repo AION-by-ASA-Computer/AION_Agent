@@ -555,11 +555,11 @@ class SessionSandboxExecutor:
             elif "unknown-layout" in low or "unknown layout" in low:
                 hint = (
                     '\nHINT: pres.layout must be a string literal, e.g. pres.layout = "LAYOUT_WIDE". '
-                    "Never pptxgen.LAYOUT_* or pres.layout(). See skill_view(\"pptx\") canvas contract."
+                    'Never pptxgen.LAYOUT_* or pres.layout(). See skill_view("pptx") canvas contract.'
                 )
             elif "addbg" in low and "not a function" in low:
                 hint = (
-                    "\nHINT: slide.addBg() does not exist — use slide.background = { color: \"RRGGBB\" } "
+                    '\nHINT: slide.addBg() does not exist — use slide.background = { color: "RRGGBB" } '
                     "or setSlideBg() from scripts/pptxgenjs/canvas.js."
                 )
             elif "createslide" in low and "not a function" in low:

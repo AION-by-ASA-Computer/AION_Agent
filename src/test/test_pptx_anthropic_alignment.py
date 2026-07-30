@@ -64,7 +64,9 @@ def test_pptx_materialize_and_build_deck_with_pptxgenjs(tmp_path, monkeypatch):
             {"title": "AION Models", "bullets": ["Quantized LLMs", "Edge inference"]},
         ],
     }
-    (ws / "deck_data.json").write_text(json.dumps(deck_data, ensure_ascii=False), encoding="utf-8")
+    (ws / "deck_data.json").write_text(
+        json.dumps(deck_data, ensure_ascii=False), encoding="utf-8"
+    )
 
     build_js = r"""
 const pptxgen = require("pptxgenjs");
@@ -120,7 +122,11 @@ pres.writeFile({ fileName: out }).then(() => {
     import subprocess
 
     lint = subprocess.run(
-        ["node", str(session_root / "scripts" / "pptxgenjs" / "lint_deck_script.js"), "workspace/build_deck.js"],
+        [
+            "node",
+            str(session_root / "scripts" / "pptxgenjs" / "lint_deck_script.js"),
+            "workspace/build_deck.js",
+        ],
         cwd=str(session_root),
         capture_output=True,
         text=True,
