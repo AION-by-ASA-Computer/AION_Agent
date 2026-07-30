@@ -8,6 +8,7 @@ Env:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import os
@@ -192,6 +193,162 @@ def _credential_lookup_keys(key: str) -> tuple[str, ...]:
     return (k,) + aliases
 
 
+_refresh_locks: dict[tuple[str, str, str], asyncio.Lock] = {}
+
+def _get_refresh_lock(user_id: str, tenant_id: str, server_slug: str) -> asyncio.Lock:
+    import asyncio
+    key = (user_id, tenant_id, server_slug)
+    if key not in _refresh_locks:
+        _refresh_locks[key] = asyncio.Lock()
+    return _refresh_locks[key]
+
+
+async def refresh_oauth_token(
+    user_id: str,
+    server_slug: str,
+    *,
+    tenant_id: str = "default",
+) -> Optional[str]:
+    """Effettua il refresh del token OAuth per un server MCP remoto."""
+    import json
+    from datetime import datetime, timezone, timedelta
+    import httpx
+
+    # 1. Recupera OAUTH_REFRESH_TOKEN
+    refresh_row = await _get_credential_row(
+        user_id, server_slug, "OAUTH_REFRESH_TOKEN", tenant_id=tenant_id
+    )
+    if not refresh_row:
+        logger.info("Nessun OAUTH_REFRESH_TOKEN trovato per %s", server_slug)
+        return None
+
+    # Verifica se anche il refresh token è scaduto
+    now = datetime.now(timezone.utc)
+    if refresh_row.expires_at:
+        exp = refresh_row.expires_at
+        if exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        if exp < now:
+            logger.info("OAUTH_REFRESH_TOKEN scaduto per %s", server_slug)
+            return None
+
+    refresh_token = decrypt_value(refresh_row.value_encrypted)
+
+    # 2. Carica configurazione OAuth
+    oauth_cfg = {}
+    async with get_async_session_maker()() as db_session:
+        from ..data.models import McpServerConfig
+        cfg = (
+            await db_session.execute(
+                select(McpServerConfig).where(McpServerConfig.server_slug == server_slug)
+            )
+        ).scalars().first()
+        if cfg and cfg.oauth_config_json:
+            try:
+                oauth_cfg = json.loads(cfg.oauth_config_json)
+            except Exception:
+                pass
+
+    # Unisci configurazione da mcp_manager
+    try:
+        from ..mcp_manager import mcp_manager
+        reg_cfg = mcp_manager.get_server_config(server_slug) or {}
+    except Exception:
+        reg_cfg = {}
+
+    oauth_section = reg_cfg.get("oauth") or {}
+    if isinstance(oauth_section, dict):
+        for k, v in oauth_section.items():
+            if v:
+                oauth_cfg[k] = v
+
+    # Scoperta automatica dei parametri se manca il token_url
+    if not oauth_cfg.get("token_url"):
+        try:
+            from ..mcp_credential_discovery import discover_mcp_credentials
+            discovered = discover_mcp_credentials(server_slug, reg_cfg)
+            if discovered and discovered.remote_auth_type == "oauth2":
+                if discovered.remote_oauth_token_url:
+                    oauth_cfg["token_url"] = discovered.remote_oauth_token_url
+        except Exception:
+            logger.exception("Rilevamento credenziali fallito per %s", server_slug)
+
+    token_url = oauth_cfg.get("token_url")
+    if not token_url:
+        logger.warning("Impossibile trovare il token_url per il refresh del server %s", server_slug)
+        return None
+
+    client_id = oauth_cfg.get("client_id")
+    client_secret = oauth_cfg.get("client_secret")
+
+    payload = {
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+    }
+    if client_id:
+        payload["client_id"] = client_id
+    if client_secret:
+        payload["client_secret"] = client_secret
+
+    headers = {
+        "Accept": "application/json",
+        "Content-Type": "application/x-www-form-urlencoded",
+    }
+
+    logger.info("Tentativo di refresh del token per server=%s url=%s", server_slug, token_url)
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(token_url, data=payload, headers=headers)
+            resp.raise_for_status()
+            token_data = resp.json()
+    except Exception as e:
+        logger.exception("Chiamata di refresh fallita per %s", server_slug)
+        return None
+
+    access_token = token_data.get("access_token")
+    if not access_token:
+        logger.error("Nessun access_token restituito durante il refresh per %s: %s", server_slug, token_data)
+        return None
+
+    expires_in = token_data.get("expires_in")
+    expires_at = None
+    if expires_in is not None:
+        try:
+            expires_at = datetime.now(timezone.utc) + timedelta(seconds=int(expires_in))
+        except Exception:
+            pass
+
+    # Aggiorna le credenziali
+    await set_credential(
+        user_id,
+        server_slug,
+        "OAUTH_TOKEN",
+        access_token,
+        tenant_id=tenant_id,
+        display_hint=oauth_cfg.get("provider", "oauth2"),
+        expires_at=expires_at,
+    )
+
+    new_refresh_token = token_data.get("refresh_token")
+    if new_refresh_token:
+        await set_credential(
+            user_id,
+            server_slug,
+            "OAUTH_REFRESH_TOKEN",
+            new_refresh_token,
+            tenant_id=tenant_id,
+        )
+
+    # Invalida il runtime per forzare il ricaricamento
+    try:
+        from .mcp_credential_invalidate import invalidate_mcp_credentials_runtime
+        await invalidate_mcp_credentials_runtime(user_id, server_slug, tenant_id=tenant_id)
+    except Exception:
+        logger.exception("Impossibile invalidare le credenziali per %s", server_slug)
+
+    return access_token
+
+
 async def get_credential(
     user_id: str,
     server_slug: str,
@@ -199,24 +356,73 @@ async def get_credential(
     *,
     tenant_id: str = "default",
 ) -> Optional[str]:
+    from datetime import timedelta
     now = datetime.now(timezone.utc)
     for lookup_key in _credential_lookup_keys(key):
         row = await _get_credential_row(
             user_id, server_slug, lookup_key, tenant_id=tenant_id
         )
         if not row:
+            if lookup_key == "OAUTH_TOKEN":
+                lock = _get_refresh_lock(user_id, tenant_id, server_slug)
+                async with lock:
+                    # Riprova a recuperare dopo aver acquisito il lock
+                    row = await _get_credential_row(
+                        user_id, server_slug, lookup_key, tenant_id=tenant_id
+                    )
+                    if row:
+                        if not row.expires_at:
+                            return decrypt_value(row.value_encrypted)
+                        exp = row.expires_at
+                        if exp.tzinfo is None:
+                            exp = exp.replace(tzinfo=timezone.utc)
+                        if exp >= now + timedelta(seconds=30):
+                            return decrypt_value(row.value_encrypted)
+                    refreshed = await refresh_oauth_token(
+                        user_id, server_slug, tenant_id=tenant_id
+                    )
+                    if refreshed:
+                        return refreshed
             continue
         if row.expires_at:
             exp = row.expires_at
             if exp.tzinfo is None:
                 exp = exp.replace(tzinfo=timezone.utc)
-            if exp < now:
+            if exp < now + timedelta(seconds=30):
                 logger.info(
-                    "Credenziale scaduta: user=%s server=%s key=%s",
+                    "Credenziale scaduta o in scadenza: user=%s server=%s key=%s",
                     user_id,
                     server_slug,
                     lookup_key,
                 )
+                if lookup_key == "OAUTH_TOKEN":
+                    lock = _get_refresh_lock(user_id, tenant_id, server_slug)
+                    async with lock:
+                        # Riprova a controllare dopo aver acquisito il lock
+                        row = await _get_credential_row(
+                            user_id, server_slug, lookup_key, tenant_id=tenant_id
+                        )
+                        if row:
+                            if not row.expires_at:
+                                return decrypt_value(row.value_encrypted)
+                            exp = row.expires_at
+                            if exp.tzinfo is None:
+                                exp = exp.replace(tzinfo=timezone.utc)
+                            if exp >= now + timedelta(seconds=30):
+                                return decrypt_value(row.value_encrypted)
+                        refreshed = await refresh_oauth_token(
+                            user_id, server_slug, tenant_id=tenant_id
+                        )
+                        if refreshed:
+                            return refreshed
+                        logger.warning(
+                            "OAUTH_TOKEN scaduto e nessun OAUTH_REFRESH_TOKEN disponibile "
+                            "per user=%s server=%s — l'utente deve rifare il login OAuth "
+                            "nelle integrazioni (assicurarsi che offline_access sia "
+                            "nello scope della richiesta OAuth).",
+                            user_id,
+                            server_slug,
+                        )
                 continue
         if lookup_key != key:
             logger.info(
@@ -353,7 +559,7 @@ async def resolve_user_credential_string(
             if val is not None:
                 return val
         env_name = f"{full_prefix}__{cred_key}"
-        return os.environ.get(env_name, obj)
+        return os.environ.get(env_name, "")
 
     m2 = _USER_CREDENTIAL_SIMPLE_RE.match(obj)
     if m2 and server_slug:
@@ -361,7 +567,7 @@ async def resolve_user_credential_string(
         val = await get_credential(user_id, server_slug, cred_key, tenant_id=tenant_id)
         if val is not None:
             return val
-        return os.environ.get(m2.group(1), obj)
+        return os.environ.get(m2.group(1), "")
 
     if isinstance(obj, str) and "${AION_USER_" in obj:
         logger.warning(

@@ -209,14 +209,25 @@ async def integration_row_to_public_dict(
         r.server_slug, pref_map=pref_map, user_may_disable=user_may_disable
     )
 
-    hints: List[Dict[str, Any]] = []
-    if show_form and credentials_feature_enabled() and not anonymous and user_enabled:
+    # ── Fetch credential hints ────────────────────────────────────────────────
+    # We always fetch ALL hints for the slug when credentials are enabled, even if
+    # show_form is False.  This is needed to correctly detect whether a valid
+    # OAUTH_TOKEN exists for OAuth-only servers (schema may have no required fields
+    # so the "configured" formula would incorrectly return True without a token).
+    all_hints: List[Dict[str, Any]] = []
+    if credentials_feature_enabled() and not anonymous and user_enabled:
         if hints_map is not None:
-            hints = hints_map.get(r.server_slug, [])
+            all_hints = hints_map.get(r.server_slug, [])
         else:
-            hints = await list_credentials_hints(
+            all_hints = await list_credentials_hints(
                 user_id, r.server_slug, tenant_id=tenant_id
             )
+
+    # oauth_hints: credentials with key == "OAUTH_TOKEN" — always relevant.
+    oauth_hints = [h for h in all_hints if h.get("key") == "OAUTH_TOKEN"]
+
+    # hints exposed to the UI form (only when the form is shown).
+    hints: List[Dict[str, Any]] = all_hints if show_form else []
 
     # Include saved credential keys not in admin schema so users can still edit them.
     if show_form and hints:
@@ -275,11 +286,40 @@ async def integration_row_to_public_dict(
         except Exception:
             pass
 
+    _reg_oauth = _reg.get("oauth") or {}
     has_oauth = bool(
         oauth_cfg.get("authorization_server")
         or oauth_cfg.get("auth_url")
         or (remote_auth_type == "oauth2")
+        or oauth_cfg.get("client_id")
+        or _reg_oauth.get("client_id")
     )
+
+    # ── Compute is_configured ─────────────────────────────────────────────────
+    # Base formula: all required credential fields are satisfied.
+    if show_form:
+        is_configured = configured
+    else:
+        # For org_shared or mode==none, credentials are injected at org level.
+        is_configured = org_managed or mode == "none"
+
+    # Extra check for OAuth servers: if the server uses OAuth and no valid
+    # OAUTH_TOKEN exists in the user's saved credentials, the integration is NOT
+    # configured — even if all required text fields are satisfied (e.g. schema is
+    # empty for OAuth-only servers, making `configured` spuriously True).
+    if has_oauth and is_configured and not anonymous and not org_managed:
+        has_valid_oauth_token = any(
+            not h.get("is_expired") for h in oauth_hints
+        )
+        if not has_valid_oauth_token:
+            is_configured = False
+
+    # credentials_hints sent to the UI includes all hints when the form is shown,
+    # plus oauth_hints so the frontend can display the OAuth connection status.
+    ui_hints = hints  # form hints (empty when show_form is False)
+    if not show_form and oauth_hints:
+        # Always surface OAuth hints so the frontend can detect connected/pending.
+        ui_hints = oauth_hints
 
     return {
         "server_slug": r.server_slug,
@@ -298,11 +338,11 @@ async def integration_row_to_public_dict(
         or oauth_cfg.get("auth_url"),
         "oauth_client_id": oauth_cfg.get("client_id"),
         "oauth_scopes": oauth_cfg.get("scopes") or [],
-        "is_configured": configured if show_form else (org_managed or mode == "none"),
+        "is_configured": is_configured,
         "org_managed": org_managed,
         "user_enabled": user_enabled,
         "can_disable": user_may_disable,
-        "credentials_hints": hints if show_form else [],
+        "credentials_hints": ui_hints,
     }
 
 

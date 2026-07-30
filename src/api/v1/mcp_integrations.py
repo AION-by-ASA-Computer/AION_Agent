@@ -648,9 +648,16 @@ async def oauth_start(
     # Riconfigura o scopre gli endpoint se mancano o se è un server remoto
     # (così da aggiornare gli endpoint se il server/tunnel è stato riavviato).
     from src.mcp_manager import mcp_manager as _mgr
-
     _mgr.load_registry()
     reg_cfg = _mgr.get_server_config(server_slug) or {}
+
+    # Merge properties from registry oauth section (such as scope, client_id, client_secret)
+    reg_oauth = reg_cfg.get("oauth") or {}
+    for k, v in reg_oauth.items():
+        if v and oauth_cfg.get(k) != v:
+            oauth_cfg[k] = v
+            modified = True
+
     is_remote = reg_cfg.get("aion_market_install") == "remote" or reg_cfg.get("type") in (
         "sse",
         "remote-bridge",
@@ -809,6 +816,14 @@ async def oauth_start(
                                 oauth_cfg["registration_endpoint"] = reg_endpoint
                                 modified = True
 
+                            # Salva gli scope supportati dal server OAuth per la build
+                            # dinamica dello scope di autorizzazione.
+                            scopes_supported = as_meta.get("scopes_supported")
+                            if isinstance(scopes_supported, list) and scopes_supported:
+                                if oauth_cfg.get("_scopes_supported") != scopes_supported:
+                                    oauth_cfg["_scopes_supported"] = scopes_supported
+                                    modified = True
+
                         # ─── STEP 3: Dynamic Client Registration (RFC 7591) ──
                         reg_endpoint = oauth_cfg.get(
                             "registration_endpoint"
@@ -916,9 +931,28 @@ async def oauth_start(
     if client_id:
         params["client_id"] = client_id
 
-    scope = oauth_cfg.get("scope")
-    if scope:
-        params["scope"] = scope
+    # ─── Build scope dinamico ────────────────────────────────────────────────
+    # Punto di partenza: scope configurato esplicitamente nel registry/DB.
+    # Poi aggiungiamo gli scope "standard" (offline_access per il refresh token,
+    # openid per OIDC) SOLO se il server li dichiara in scopes_supported.
+    # Questo evita di hardcodare scope e rispetta la configurazione per-server.
+    scope_parts: set[str] = set()
+    configured_scope = (oauth_cfg.get("scope") or "").strip()
+    if configured_scope:
+        scope_parts.update(configured_scope.split())
+
+    server_scopes_supported: list[str] = oauth_cfg.get("_scopes_supported") or []
+    for well_known_scope in ("openid", "offline_access"):
+        if well_known_scope in server_scopes_supported:
+            scope_parts.add(well_known_scope)
+
+    if scope_parts:
+        params["scope"] = " ".join(sorted(scope_parts))
+        logger.info(
+            "oauth_start: scope richiesto per slug=%s: %s",
+            server_slug,
+            params["scope"],
+        )
 
     authorization_url = f"{authorization_endpoint}?{urllib.parse.urlencode(params)}"
     logger.info(
@@ -1076,6 +1110,24 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
             refresh_token,
             tenant_id=tenant,
         )
+
+    # Invalida il runtime per forzare il ricaricamento del server MCP con le nuove credenziali
+    try:
+        from src.runtime.mcp_credential_invalidate import (
+            invalidate_mcp_credentials_runtime,
+        )
+
+        await invalidate_mcp_credentials_runtime(
+            user_id, server_slug, tenant_id=tenant
+        )
+    except Exception:
+        logger.exception(
+            "Impossibile invalidare le credenziali runtime per %s", server_slug
+        )
+
+    # Pulisce la cache delle integrazioni in modo che la chiamata GET successiva
+    # dal frontend veda immediatamente lo stato aggiornato.
+    clear_integrations_cache()
 
     return RedirectResponse(
         url=f"{chat_base}/integrations?oauth_status=success&server_slug={server_slug}"

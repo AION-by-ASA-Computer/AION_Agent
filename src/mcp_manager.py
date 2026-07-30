@@ -327,6 +327,7 @@ class MCPStdioWorker:
         self.last_access = asyncio.get_event_loop().time()
         self._is_active = False
         self._container_jail = False
+        self._spawn_credentials: Optional[Dict[str, Any]] = None
 
     def _pool_scope_id(self) -> str:
         sid = (self._chat_session_id or BOOTSTRAP_SESSION_ID).strip()
@@ -440,6 +441,7 @@ class MCPStdioWorker:
                     resolved_server_env = normalize_mcp_email_server_env(
                         resolved_server_env
                     )
+                self._spawn_credentials = resolved_server_env
                 _merge_mcp_subprocess_env(env, resolved_server_env)
             apply_runtime_env_aliases(env, self.server_name, config)
             _adjust_stdio_spawn_env(env, command)
@@ -650,6 +652,32 @@ class MCPStdioWorker:
                 )
             if not self._ready.is_set():
                 self._ready.set()
+
+    async def _resolve_current_credentials(self) -> Dict[str, Any]:
+        config = self._manager.get_server_config(self.server_name)
+        if not config or "env" not in config:
+            return {}
+        lookup_sid = self._chat_session_id or BOOTSTRAP_SESSION_ID
+        if self._pool_user_id:
+            uid = self._pool_user_id
+            tid = self._pool_tenant_id or "default"
+        else:
+            ctx = self._manager._session_ctx.get(
+                lookup_sid, ("generic_assistant", "default", "default")
+            )
+            if len(ctx) == 2:
+                slug, uid = ctx
+                tid = "default"
+            else:
+                slug, uid, tid = ctx
+        from .runtime.credential_store import resolve_mcp_env_for_user
+
+        return await resolve_mcp_env_for_user(
+            config.get("env"),
+            user_id=sanitize_user_id(uid),
+            tenant_id=tid,
+            server_slug=self.server_name,
+        )
 
     async def list_tools(self):
         await self.start()
@@ -1521,6 +1549,34 @@ class MCPManager:
                 ):
                     to_stop.append((sid, sname))
 
+            # Clear warm failures and health load errors for this user/server
+            keys_to_clear = []
+            for (sid, sname) in list(self._warm_failures.keys()):
+                if server_slug and sname != server_slug:
+                    continue
+                if sid == user_pool_key:
+                    keys_to_clear.append((sid, sname))
+                    continue
+                ctx = self._session_ctx.get(sid)
+                if ctx:
+                    if len(ctx) == 2:
+                        _slug, uid = ctx
+                        tid = "default"
+                    else:
+                        _slug, uid, tid = ctx
+                    if (
+                        sanitize_user_id(uid) == safe_uid
+                        and ((tid or "default").strip() or "default") == tenant
+                    ):
+                        keys_to_clear.append((sid, sname))
+            for key in keys_to_clear:
+                self._warm_failures.pop(key, None)
+                try:
+                    from .runtime.mcp_health import clear_mcp_load_errors
+                    clear_mcp_load_errors(key[0], key[1])
+                except Exception:
+                    pass
+
             workers = []
             for key in to_stop:
                 worker = self._pool.pop(key, None)
@@ -1542,6 +1598,26 @@ class MCPManager:
                 )
             stopped += 1
         return stopped
+
+    async def _ensure_worker_credentials_fresh(
+        self, chat_session_id: str, server_name: str
+    ) -> None:
+        """Controlla se le credenziali del worker sono cambiate o scadute/rinnovate e lo riavvia se necessario."""
+        key = self._resolve_pool_key(chat_session_id, server_name)
+        async with self._pool_lock:
+            w = self._pool.get(key)
+        if w is None or w._task is None or w._task.done():
+            return
+        if getattr(w, "_spawn_credentials", None) is None:
+            return
+
+        current = await w._resolve_current_credentials()
+        if w._spawn_credentials != current:
+            logger.info(
+                "Credenziali cambiate o rinnovate per il server %s. Riavvio il worker.",
+                server_name,
+            )
+            await self.restart_worker(chat_session_id, server_name)
 
     async def call_tool_pooled(
         self,
@@ -1566,6 +1642,7 @@ class MCPManager:
                 server_name, chat_session_id=sid or None
             ) as session:
                 return await session.call_tool(name=tool_name, arguments=arguments)
+        await self._ensure_worker_credentials_fresh(sid, server_name)
         w = await self._get_worker(sid, server_name)
         try:
             result = await w.call_tool(tool_name, arguments, chat_session_id=sid)
@@ -1584,6 +1661,7 @@ class MCPManager:
                 server_name, chat_session_id=None
             ) as session:
                 return await session.list_tools()
+        await self._ensure_worker_credentials_fresh(chat_session_id, server_name)
         w = await self._get_worker(chat_session_id, server_name)
         return await w.list_tools()
 
@@ -1620,6 +1698,7 @@ class MCPManager:
             raise ValueError(f"MCP server '{name}' not found in registry")
 
         if chat_session_id and _USE_POOL and self._is_stdio_server(name):
+            await self._ensure_worker_credentials_fresh(chat_session_id, name)
             w = await self._get_worker(chat_session_id, name)
             await w.start()
 
