@@ -8,6 +8,8 @@ export type CredentialSchemaField = {
   type: "text" | "password" | "oauth";
   required: boolean;
   description?: string;
+  env_placeholder?: string;
+  registry_env_key?: string;
 };
 
 export type CredentialSchemaLoose = Array<{
@@ -51,6 +53,7 @@ export type IntegrationPolicyRow = {
   requires_user_credentials: boolean;
   credential_mode: CredentialMode;
   credential_schema: CredentialSchemaLoose;
+  suggested_env_yaml?: string;
   oauth_config?: {
     provider?: string;
     authorization_server?: string;
@@ -58,6 +61,7 @@ export type IntegrationPolicyRow = {
     client_id?: string;
     client_secret?: string;
     scopes?: string[];
+    client_id_source?: string;
   };
   aion_connector_id?: string | null;
   user_may_disable?: boolean;

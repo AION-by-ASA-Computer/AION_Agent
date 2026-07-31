@@ -30,7 +30,10 @@ When `AION_CHAT_UI_INTERNAL_SECRET` is configured, the backend also accepts the 
 | `PATCH` | `/v1/integrations/{server_slug}/preference` | Enables or disables a specific MCP integration for the current user. |
 | `POST` | `/v1/integrations/credentials` | Saves (encrypting via AES-256-GCM) the per-user credentials for an MCP server. |
 | `DELETE` | `/v1/integrations/credentials/{server_slug}/{credential_key}` | Removes a saved credential for the current user. |
-| `POST` | `/v1/integrations/oauth/callback` | Stub (`501`) for future OAuth code/token exchanges. |
+| `GET` | `/v1/integrations/oauth/start` | Starts OAuth 2.0 Authorization Code + PKCE (S256); returns `authorization_url` and `state`. |
+| `GET` | `/v1/integrations/oauth/callback` | Browser redirect callback: exchanges code for tokens and redirects to chat-ui. |
+| `POST` | `/v1/integrations/oauth/callback` | Programmatic code/token exchange (chat-ui legacy path). |
+| `GET` | `/v1/integrations/{server_slug}/oauth-status` | Returns `{ connected: bool }` for the current user. |
 
 ## Endpoint Details
 
@@ -206,20 +209,49 @@ Deletes a specific stored credential key for the MCP server.
 
 ---
 
-### 8. `POST /v1/integrations/oauth/callback`
-Entry point for the OAuth flow callback. Currently implemented as a stub.
+### 8. OAuth flow (`/v1/integrations/oauth/*`)
 
-- **Authentication**: Chat Bearer JWT (requires non-anonymous identity).
-- **Body**:
+Full OAuth 2.0 Authorization Code + PKCE (S256) for remote MCP connectors.
+
+**Start** — `GET /v1/integrations/oauth/start?server_slug=...`
+
+- Discovers authorization server metadata (RFC 9728 / RFC 8414) when needed.
+- Optionally performs Dynamic Client Registration (RFC 7591) when `AION_MCP_OAUTH_DYNAMIC_REGISTRATION=1` (default).
+- Returns `{ "authorization_url": "...", "state": "..." }`.
+
+**Callback (browser)** — `GET /v1/integrations/oauth/callback?code=...&state=...`
+
+- Exchanges the authorization code for `OAUTH_TOKEN` / `OAUTH_REFRESH_TOKEN` (encrypted in DB).
+- Redirects to chat-ui (`AION_CHAT_URL`) with `oauth_status=success|error`.
+
+**Callback (API)** — `POST /v1/integrations/oauth/callback`
+
+- Same token exchange as the GET callback, but returns JSON (`{"ok": true, "server_slug": "..."}`).
+- Body:
   ```json
   {
-    "server_slug": "email-mcp-server",
+    "server_slug": "clickup",
     "code": "auth_code_from_provider",
-    "state": "oauth_state"
+    "state": "oauth_state",
+    "code_verifier": "optional_pkce_verifier",
+    "redirect_uri": "optional_override"
   }
   ```
-- **Response**:
-  - `501 Not Implemented`: Always returns `{"detail": "OAuth token exchange is not implemented for this integration yet."}`.
+
+**Status** — `GET /v1/integrations/{server_slug}/oauth-status`
+
+- Returns `{ "connected": true|false, "server_slug": "..." }`.
+- Expired access tokens with a valid refresh token are renewed automatically (lazy refresh in `credential_store`).
+
+**Token refresh**
+
+- When `OAUTH_TOKEN` expires, the backend attempts `grant_type=refresh_token` before MCP workers start.
+- Configure `AION_OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS` (default `60`) to refresh slightly before expiry.
+- On refresh failure (`invalid_grant`), stored OAuth credentials are deleted and `connected` becomes `false`.
+
+**PKCE state**
+
+- OAuth `state` / `code_verifier` pairs are held in-process (`_oauth_pending`). The API must run with `--workers 1` (documented constraint).
 
 ## References
 

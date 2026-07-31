@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -16,6 +17,22 @@ def _repo_root() -> Path:
 def connector_catalog_path() -> Path:
     """Catalogo opzionale (override tenant). La discovery automatica non dipende da questo file."""
     return _repo_root() / "config" / "mcp_connector_catalog.yaml"
+
+
+def connector_catalog_std_path() -> Path:
+    """Template committato in config_std/ (source of truth)."""
+    return _repo_root() / "config_std" / "mcp_connector_catalog.yaml"
+
+
+def resolve_connector_catalog_path() -> Path | None:
+    """Preferisce config/ locale; fallback su config_std/ se assente."""
+    local = connector_catalog_path()
+    if local.exists():
+        return local
+    std = connector_catalog_std_path()
+    if std.exists():
+        return std
+    return None
 
 
 def infer_connector_id_for_registry_name(
@@ -92,6 +109,193 @@ def resolve_connector_row_for_mcp_server(
     if inferred:
         return _connector_by_id(catalog, inferred)
     return None
+
+
+def connector_auth_type(connector: Dict[str, Any] | None) -> str:
+    if not connector:
+        return ""
+    return str(connector.get("auth_type") or "").strip().lower()
+
+
+def connector_requires_oauth(connector: Dict[str, Any] | None) -> bool:
+    """True se il connettore dichiara ``auth_type: oauth2`` nel catalogo YAML."""
+    return connector_auth_type(connector) == "oauth2"
+
+
+def oauth_ui_metadata_from_connector(
+    connector: Dict[str, Any] | None,
+    *,
+    fallback_provider: str = "",
+    fallback_display_name: str = "",
+) -> Dict[str, str]:
+    """
+    Metadati OAuth per API/UI — fonte primaria: catalogo YAML (``title``, ``oauth_provider``, ``auth_type``).
+    """
+    if connector and connector_requires_oauth(connector):
+        provider = str(
+            connector.get("oauth_provider") or connector.get("id") or ""
+        ).strip()
+        display = str(connector.get("title") or connector.get("id") or "").strip()
+    else:
+        provider = (fallback_provider or "").strip()
+        display = (fallback_display_name or fallback_provider or "").strip()
+    if not display:
+        display = provider or "OAuth"
+    if not provider:
+        provider = "generic"
+    return {"provider": provider, "oauth_display_name": display}
+
+
+def oauth_config_from_connector(connector: Dict[str, Any] | None) -> Dict[str, Any]:
+    """
+    Endpoint OAuth statici dal blocco ``oauth:`` del catalogo YAML.
+
+    Usato per connettori che non espongono MCP OAuth discovery (es. Google Workspace MCP).
+    """
+    if not connector:
+        return {}
+    raw = connector.get("oauth")
+    if not isinstance(raw, dict):
+        return {}
+    out: Dict[str, Any] = {}
+    for key in (
+        "authorization_server",
+        "authorization_endpoint",
+        "token_url",
+        "registration_endpoint",
+        "client_id",
+        "client_secret",
+        "resource",
+    ):
+        val = raw.get(key)
+        if val is not None and str(val).strip():
+            out[key] = str(val).strip()
+    scopes = raw.get("scopes")
+    if isinstance(scopes, list):
+        out["scopes"] = [str(s).strip() for s in scopes if s and str(s).strip()]
+    elif isinstance(scopes, str) and scopes.strip():
+        out["scopes"] = [scopes.strip()]
+    if raw.get("client_credentials_required"):
+        out["client_credentials_required"] = True
+    authorize_params = raw.get("authorize_params")
+    if isinstance(authorize_params, dict) and authorize_params:
+        out["authorize_params"] = {
+            str(k): str(v) for k, v in authorize_params.items() if k and v is not None
+        }
+    return out
+
+
+def oauth_admin_client_credentials_required(oauth_cfg: Dict[str, Any] | None) -> bool:
+    """True se l'admin deve registrare client_id/secret (es. GitHub, SharePoint, Gmail)."""
+    cfg = oauth_cfg or {}
+    if cfg.get("client_credentials_required"):
+        return True
+    auth_ref = str(
+        cfg.get("authorization_endpoint") or cfg.get("authorization_server") or ""
+    ).lower()
+    return "login.microsoftonline.com" in auth_ref
+
+
+def oauth_admin_credentials_configured(oauth_cfg: Dict[str, Any] | None) -> bool:
+    """False se mancano client_id o client_secret richiesti dall'admin."""
+    if not oauth_admin_client_credentials_required(oauth_cfg):
+        return True
+    cfg = oauth_cfg or {}
+    client_id = str(cfg.get("client_id") or "").strip()
+    client_secret = str(cfg.get("client_secret") or "").strip()
+    return bool(client_id and client_secret)
+
+
+_ENTRA_TENANT_IN_REMOTE_URL = re.compile(
+    r"/tenants/([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})"
+)
+
+
+def extract_entra_tenant_id_from_remote_url(remote_url: str) -> str | None:
+    """Estrae il GUID tenant Entra da URL Agent 365 (…/tenants/{id}/servers/…)."""
+    match = _ENTRA_TENANT_IN_REMOTE_URL.search(remote_url or "")
+    return match.group(1) if match else None
+
+
+def resolve_oauth_url_templates(
+    oauth_cfg: Dict[str, Any], *, remote_url: str = ""
+) -> Dict[str, Any]:
+    """Sostituisce ``{tenant_id}`` negli endpoint OAuth usando l'URL MCP installato."""
+    tenant_id = extract_entra_tenant_id_from_remote_url(remote_url)
+    if not tenant_id:
+        return oauth_cfg
+    out = dict(oauth_cfg)
+    for key in (
+        "authorization_server",
+        "authorization_endpoint",
+        "token_url",
+        "resource",
+    ):
+        val = out.get(key)
+        if isinstance(val, str) and "{tenant_id}" in val:
+            out[key] = val.replace("{tenant_id}", tenant_id)
+    return out
+
+
+_CATALOG_OAUTH_OVERRIDE_KEYS = frozenset(
+    {
+        "authorization_server",
+        "authorization_endpoint",
+        "token_url",
+        "registration_endpoint",
+        "scopes",
+        "authorize_params",
+        "client_credentials_required",
+        "resource",
+    }
+)
+_ADMIN_OAUTH_KEYS = frozenset({"client_id", "client_secret"})
+
+
+def merge_oauth_config(
+    base: Dict[str, Any],
+    defaults: Dict[str, Any],
+    *,
+    catalog_overrides: bool = False,
+) -> Dict[str, Any]:
+    """
+    Unisce ``defaults`` in ``base``.
+
+    Con ``catalog_overrides=True`` (catalogo YAML), gli endpoint OAuth del catalogo
+    sostituiscono valori errati già in DB (es. discovery su host MCP remoto).
+    ``client_id`` / ``client_secret`` configurati dall'admin non vengono mai sovrascritti.
+    """
+    if not defaults:
+        return base
+    merged = dict(base)
+    for key, val in defaults.items():
+        if key in _ADMIN_OAUTH_KEYS:
+            if not merged.get(key) and val:
+                merged[key] = val
+            continue
+        if key == "scopes":
+            if catalog_overrides or not merged.get("scopes"):
+                merged["scopes"] = val
+            continue
+        if key == "authorize_params":
+            if catalog_overrides:
+                merged["authorize_params"] = dict(val) if isinstance(val, dict) else {}
+            else:
+                existing = merged.get("authorize_params")
+                if not isinstance(existing, dict) or not existing:
+                    merged["authorize_params"] = (
+                        dict(val) if isinstance(val, dict) else {}
+                    )
+                elif isinstance(val, dict):
+                    for pk, pv in val.items():
+                        existing.setdefault(pk, pv)
+                    merged["authorize_params"] = existing
+            continue
+        if catalog_overrides and key in _CATALOG_OAUTH_OVERRIDE_KEYS:
+            merged[key] = val
+        elif merged.get(key) in (None, ""):
+            merged[key] = val
+    return merged
 
 
 def _parse_runtime_env_alias_entries(raw: Any) -> List[Tuple[str, List[str]]]:
@@ -177,10 +381,14 @@ def apply_runtime_env_aliases(
 
 
 def load_mcp_connector_catalog() -> Dict[str, Any]:
-    """Carica catalogo opzionale da config/mcp_connector_catalog.yaml (può essere vuoto)."""
-    path = connector_catalog_path()
-    if not path.exists():
-        logger.warning("mcp connector catalog missing: %s", path)
+    """Carica catalogo da config/ o, in assenza, da config_std/."""
+    path = resolve_connector_catalog_path()
+    if not path:
+        logger.warning(
+            "mcp connector catalog missing: %s and %s",
+            connector_catalog_path(),
+            connector_catalog_std_path(),
+        )
         return {"version": 1, "connectors": []}
     try:
         import yaml

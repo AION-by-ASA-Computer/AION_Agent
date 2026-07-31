@@ -102,7 +102,16 @@ Lo script `scripts/upgrade-aion.sh` / `upgrade_core.py` invoca il seed in modo n
 
 ## OAuth
 
-L’endpoint `POST /v1/integrations/oauth/callback` è estensibile; al momento restituisce `501` finché non viene implementato lo scambio codice/token per i provider specifici. Le credenziali manuali (testo/password) sono supportate.
+Il flusso OAuth 2.0 (Authorization Code + PKCE S256) è implementato in `src/api/v1/mcp_integrations.py`:
+
+- `GET /v1/integrations/oauth/start` — avvio flow con discovery RFC 9728/8414 e registrazione dinamica client opzionale (`AION_MCP_OAUTH_DYNAMIC_REGISTRATION`, default `1`).
+- `GET /v1/integrations/oauth/callback` — callback browser con redirect verso chat-ui.
+- `POST /v1/integrations/oauth/callback` — scambio codice/token programmatico.
+- `GET /v1/integrations/{slug}/oauth-status` — stato connessione utente.
+
+I token (`OAUTH_TOKEN`, `OAUTH_REFRESH_TOKEN`) sono salvati cifrati in `user_mcp_credentials`. Il refresh automatico avviene in `src/runtime/credential_store.py` quando il token di accesso scade ma il refresh token è ancora valido. Lo scambio HTTP è centralizzato in `src/runtime/oauth_token_exchange.py`.
+
+**Vincolo architetturale**: lo stato PKCE (`_oauth_pending`) è in memoria di processo — il backend deve restare a `--workers 1`.
 
 ## Backup
 

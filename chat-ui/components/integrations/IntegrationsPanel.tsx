@@ -33,6 +33,9 @@ export function IntegrationsPanel() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [featureEnabled, setFeatureEnabled] = useState(true);
   const [featureHint, setFeatureHint] = useState<string | null>(null);
+  const [adminSetupPending, setAdminSetupPending] = useState<Array<{ server_slug: string; display_name: string }>>(
+    [],
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -53,6 +56,9 @@ export function IntegrationsPanel() {
       }
       const data = await res.json();
       setIntegrations(data.integrations || []);
+      setAdminSetupPending(
+        Array.isArray(data.admin_setup_pending) ? data.admin_setup_pending : [],
+      );
       if (data.credentials_feature_enabled === false) {
         setFeatureEnabled(false);
       }
@@ -80,13 +86,17 @@ export function IntegrationsPanel() {
   }, [clearChrome]);
 
   async function togglePreference(slug: string, active: boolean) {
-    const res = await fetch(`${apiBase()}/v1/integrations/${encodeURIComponent(slug)}/preference`, {
-      method: "PATCH",
-      headers: { ...jsonHeaders(userId, token), "Content-Type": "application/json" },
-      body: JSON.stringify({ is_active: active }),
-    });
-    if (!res.ok) throw new Error(await res.text());
-    await load();
+    try {
+      const res = await fetch(`${apiBase()}/v1/integrations/${encodeURIComponent(slug)}/preference`, {
+        method: "PATCH",
+        headers: { ...jsonHeaders(userId, token), "Content-Type": "application/json" },
+        body: JSON.stringify({ is_active: active }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await load();
+    } catch (e: unknown) {
+      setFetchError(e instanceof Error ? e.message : t("integrationsPage.toggle_error"));
+    }
   }
 
   async function disconnectOAuth(slug: string) {
@@ -176,14 +186,19 @@ export function IntegrationsPanel() {
     }
   }, [userId, token, load, t]);
 
-  const { configured, notConfigured } = useMemo(() => {
+  const { configured, notConfigured, disabled } = useMemo(() => {
     const connected: Integration[] = [];
     const pending: Integration[] = [];
+    const off: Integration[] = [];
     for (const intg of integrations) {
+      if (intg.user_enabled === false) {
+        off.push(intg);
+        continue;
+      }
       if (isIntegrationConnected(intg)) connected.push(intg);
       else pending.push(intg);
     }
-    return { configured: connected, notConfigured: pending };
+    return { configured: connected, notConfigured: pending, disabled: off };
   }, [integrations]);
 
   const configuringIntegration = configuringSlug
@@ -213,10 +228,16 @@ export function IntegrationsPanel() {
           </div>
         ) : null}
 
+        {adminSetupPending.length > 0 ? (
+          <div className="mb-4 rounded-2xl border border-border/70 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+            {t("integrationsPage.admin_setup_required")}
+          </div>
+        ) : null}
+
         <IntegrationStatsBar
           total={integrations.length}
           configured={configured.length}
-          pending={notConfigured.length}
+          pending={notConfigured.length + disabled.length}
         />
 
         {configured.length > 0 ? (
@@ -248,6 +269,28 @@ export function IntegrationsPanel() {
             </h2>
             <div className="space-y-3">
               {notConfigured.map((intg) => (
+                <IntegrationCard
+                  key={intg.server_slug}
+                  integration={intg}
+                  onConfigure={() => setConfiguringSlug(intg.server_slug)}
+                  connectLabel={t("integrationsPage.connect")}
+                  orgManagedLabel={t("integrationsPage.org_managed")}
+                  perUserHint={t("integrationsPage.per_user_hint")}
+                  onTogglePreference={(slug, active) => void togglePreference(slug, active)}
+                  onDisconnectOAuth={disconnectOAuth}
+                />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {disabled.length > 0 ? (
+          <section className="mb-8">
+            <h2 className="mb-3 text-[0.786em] font-bold uppercase tracking-wider text-muted-foreground">
+              {t("integrationsPage.section_disabled")}
+            </h2>
+            <div className="space-y-3">
+              {disabled.map((intg) => (
                 <IntegrationCard
                   key={intg.server_slug}
                   integration={intg}

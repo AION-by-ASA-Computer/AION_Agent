@@ -12,6 +12,7 @@ import yaml
 from .mcp_connector_catalog import _connector_by_id, load_mcp_connector_catalog
 from .mcp_integration_sync import sync_mcp_server_config_from_registry
 from .mcp_manager import mcp_manager
+from .mcp_remote_install import build_remote_bridge_registry_config
 
 
 def _slug_from_connector(connector: Dict[str, Any]) -> str:
@@ -87,13 +88,32 @@ def build_registry_config_for_connector(
     connector: Dict[str, Any],
 ) -> Tuple[str, Dict[str, Any]]:
     slug = _slug_from_connector(connector)
-    parsed = _parse_example_registry_block(
-        connector.get("example_registry_block") or ""
-    )
-    if parsed.get("command") or parsed.get("args"):
-        cfg = dict(parsed)
+    install_type = str(connector.get("install_type") or "stdio").strip().lower()
+
+    if install_type == "remote":
+        remote_url = str(connector.get("remote_url") or "").strip()
+        if not remote_url:
+            raise ValueError(
+                f"Connector '{connector.get('id')}' requires remote_url for install_type=remote"
+            )
+        auth_type = str(connector.get("auth_type") or "oauth2").strip().lower()
+        if auth_type not in ("none", "oauth2", "api-key", "basic"):
+            auth_type = "oauth2"
+        cfg = build_remote_bridge_registry_config(
+            remote_url,
+            slug,
+            str(connector.get("description") or "")[:2000],
+            auth_type=auth_type,
+        )
     else:
-        cfg = _default_registry_config(connector, slug)
+        parsed = _parse_example_registry_block(
+            connector.get("example_registry_block") or ""
+        )
+        if parsed.get("command") or parsed.get("args"):
+            cfg = dict(parsed)
+        else:
+            cfg = _default_registry_config(connector, slug)
+
     cfg["aion_connector_id"] = str(
         connector.get("id") or cfg.get("aion_connector_id") or slug
     )
@@ -109,7 +129,19 @@ async def install_mcp_from_catalog(connector_id: str) -> Dict[str, Any]:
     if not connector:
         return {"ok": False, "error": f"Connector '{connector_id}' not in catalog"}
 
-    slug, cfg = build_registry_config_for_connector(connector)
+    if connector.get("remote_url_template"):
+        return {
+            "ok": False,
+            "error": (
+                f"Connector '{connector_id}' uses a URL template — open Remote MCP install "
+                "and substitute placeholders (e.g. {tenant_id}) before installing."
+            ),
+        }
+
+    try:
+        slug, cfg = build_registry_config_for_connector(connector)
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
     mcp_manager.load_registry()
     if slug in mcp_manager._registry and mcp_manager._registry.get(slug, {}).get(
         "is_base"
@@ -120,7 +152,13 @@ async def install_mcp_from_catalog(connector_id: str) -> Dict[str, Any]:
     mcp_manager._rebuild_merged()
     mcp_manager.save_registry()
 
-    row = await sync_mcp_server_config_from_registry(slug)
+    default_mode = connector.get("default_credential_mode")
+    row = await sync_mcp_server_config_from_registry(
+        slug,
+        credential_mode=default_mode
+        if default_mode in ("none", "org_shared", "per_user")
+        else None,
+    )
     from .mcp_integration_sync import build_integration_preview
 
     preview = build_integration_preview(slug)

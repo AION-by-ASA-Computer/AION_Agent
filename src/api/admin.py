@@ -997,6 +997,16 @@ class McpIntegrationAdviseBody(BaseModel):
 def _mcp_integration_to_dict(
     r: McpServerConfig, *, in_registry: bool
 ) -> Dict[str, Any]:
+    from ..runtime.mcp_integration_integrity import (
+        build_suggested_env_yaml_block,
+        enrich_credential_schema_with_env_placeholders,
+    )
+
+    mode = getattr(r, "credential_mode", None) or "none"
+    schema = json.loads(r.credential_schema_json or "[]")
+    schema = enrich_credential_schema_with_env_placeholders(
+        schema, r.server_slug, credential_mode=mode
+    )
     return {
         "id": r.id,
         "server_slug": r.server_slug,
@@ -1006,12 +1016,15 @@ def _mcp_integration_to_dict(
         "category": r.category,
         "is_enabled_for_users": r.is_enabled_for_users,
         "requires_user_credentials": r.requires_user_credentials,
-        "credential_mode": getattr(r, "credential_mode", None) or "none",
+        "credential_mode": mode,
         "aion_connector_id": getattr(r, "aion_connector_id", None),
         "user_may_disable": bool(getattr(r, "user_may_disable", True)),
-        "credential_schema": json.loads(r.credential_schema_json or "[]"),
+        "credential_schema": schema,
         "oauth_config": json.loads(r.oauth_config_json or "{}"),
         "is_in_registry": in_registry,
+        "suggested_env_yaml": build_suggested_env_yaml_block(
+            r.server_slug, schema, credential_mode=mode
+        ),
         "created_at": r.created_at,
         "updated_at": r.updated_at,
     }
@@ -1859,12 +1872,93 @@ async def admin_apply_suggested_env(
 
 @router.delete("/mcp-integrations/{server_slug}")
 async def admin_delete_mcp_integration(server_slug: str):
+    from ..runtime.mcp_integration_integrity import delete_mcp_user_data
+
+    cleanup = await delete_mcp_user_data(server_slug)
     async with get_async_session_maker()() as session:
         await session.execute(
             delete(McpServerConfig).where(McpServerConfig.server_slug == server_slug)
         )
         await session.commit()
-    return {"ok": True}
+    return {"ok": True, "cleanup": cleanup}
+
+
+@router.get("/mcp/integrity")
+async def admin_mcp_integrity():
+    from ..runtime.mcp_integration_integrity import scan_mcp_integrity
+
+    return await scan_mcp_integrity()
+
+
+@router.post("/mcp/integrity/repair")
+async def admin_mcp_integrity_repair(body: Dict[str, Any]):
+    from ..runtime.mcp_integration_integrity import repair_mcp_integrity_issue
+
+    issue = body.get("issue")
+    if not isinstance(issue, dict):
+        raise HTTPException(status_code=400, detail="issue object required")
+    result = await repair_mcp_integrity_issue(issue)
+    if not result.get("ok"):
+        raise HTTPException(
+            status_code=400, detail=result.get("error", "repair failed")
+        )
+    return result
+
+
+@router.post("/mcp/integrity/repair-all")
+async def admin_mcp_integrity_repair_all():
+    from ..runtime.mcp_integration_integrity import (
+        repair_mcp_integrity_issue,
+        scan_mcp_integrity,
+    )
+
+    report = await scan_mcp_integrity()
+    repaired = []
+    failed = []
+    env_repair_slugs: set[str] = set()
+    for issue in report.get("issues", []):
+        repair = issue.get("repair")
+        slug = str(issue.get("server_slug") or "")
+        if repair not in (
+            "purge_credentials",
+            "purge_preferences",
+            "delete_policy",
+            "migrate_credentials",
+            "apply_suggested_env",
+            "sync_from_registry",
+        ):
+            continue
+        if repair == "apply_suggested_env":
+            if not slug or slug in env_repair_slugs:
+                continue
+            env_repair_slugs.add(slug)
+        try:
+            result = await repair_mcp_integrity_issue(issue)
+            if result.get("ok"):
+                repaired.append(
+                    {
+                        "issue": issue.get("code"),
+                        "server_slug": issue.get("server_slug"),
+                        **result,
+                    }
+                )
+            else:
+                failed.append(
+                    {
+                        "issue": issue.get("code"),
+                        "server_slug": issue.get("server_slug"),
+                        "error": result.get("error", "repair failed"),
+                    }
+                )
+        except Exception as exc:
+            failed.append(
+                {
+                    "issue": issue.get("code"),
+                    "server_slug": issue.get("server_slug"),
+                    "error": str(exc),
+                }
+            )
+    return {"repaired": repaired, "failed": failed, "count": len(repaired)}
 
 
 @router.get("/market/search")
@@ -2060,46 +2154,7 @@ async def install_mcp(req: MCPInstallRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def build_remote_bridge_registry_config(
-    url: str,
-    name: str,
-    description: str = "",
-    auth_type: str = "oauth2",
-) -> dict:
-    import re
-
-    slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_").upper()
-
-    args = [
-        "node_modules/mcp-remote/dist/proxy.js",
-        url,
-        # --transport e --transport-type sono gestiti automaticamente da mcp-remote
-    ]
-    env = {}
-
-    if auth_type == "oauth2":
-        env_var = f"AION_USER_{slug}__OAUTH_TOKEN"
-        args.extend(["--header", "Authorization: Bearer ${" + env_var + "}"])
-        env[env_var] = "${" + env_var + "}"
-    elif auth_type == "api-key":
-        env_var = f"AION_USER_{slug}__API_KEY"
-        args.extend(["--header", "Authorization: Bearer ${" + env_var + "}"])
-        env[env_var] = "${" + env_var + "}"
-    elif auth_type == "basic":
-        env_var = f"AION_USER_{slug}__BASIC_AUTH"
-        args.extend(["--header", "Authorization: Basic ${" + env_var + "}"])
-        env[env_var] = "${" + env_var + "}"
-    # Se auth_type è "none": nessun header di autorizzazione, nessuna variabile d'ambiente OAuth.
-
-    return {
-        "type": "remote-bridge",
-        "command": "node",
-        "args": args,
-        "env": env,
-        "remote_url": url,
-        "aion_market_install": "remote",
-        "description": description,
-    }
+from ..mcp_remote_install import build_remote_bridge_registry_config  # noqa: F401 — re-export
 
 
 async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -> str:
@@ -2193,8 +2248,8 @@ async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -
         import asyncio
         from ..mcp_credential_discovery import probe_remote_url_sync
 
-        auth_type = "oauth2"
-        if sse_url:
+        auth_type = str(target.get("auth_type") or "").strip().lower() or "oauth2"
+        if sse_url and not target.get("auth_type"):
             try:
                 meta = target.get("_meta") or {}
                 probe_res = await asyncio.to_thread(
@@ -2214,6 +2269,8 @@ async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -
             sse_url, name, target.get("description") or "", auth_type=auth_type
         )
         config.update(remote_config)
+        if target.get("aion_connector_id"):
+            config["aion_connector_id"] = target["aion_connector_id"]
         mcp_manager._registry_local[name] = config
         mcp_manager._rebuild_merged()
         mcp_manager.save_registry()
@@ -2282,6 +2339,38 @@ async def install_from_github_url(body: GitHubInstallBody):
 class RemoteInstallBody(BaseModel):
     url: str = Field(..., min_length=8, description="URL del server MCP remoto")
     display_name: Optional[str] = None
+    auth_type: Optional[str] = Field(
+        None,
+        description="none | oauth2 | api-key | basic — se assente, rilevato via probe",
+    )
+    connector_id: Optional[str] = Field(
+        None, description="id catalogo connettore (aion_connector_id)"
+    )
+
+
+class RemoteProbeBody(BaseModel):
+    url: str = Field(
+        ..., min_length=8, description="URL del server MCP remoto da validare"
+    )
+
+
+@router.post("/mcp/probe-remote")
+async def probe_remote_mcp(body: RemoteProbeBody):
+    """Valida un endpoint MCP remoto (auth, OAuth discovery) senza installare."""
+    import asyncio
+
+    from ..mcp_credential_discovery import probe_remote_url_sync
+
+    url = body.url.strip()
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise HTTPException(
+            status_code=400, detail="L'URL deve iniziare con http:// o https://"
+        )
+    try:
+        probe = await asyncio.to_thread(probe_remote_url_sync, url, {})
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Probe fallito: {exc}") from exc
+    return {"ok": True, "url": url, "probe": probe}
 
 
 @router.post("/market/install-remote")
@@ -2317,6 +2406,12 @@ async def install_from_remote_url(body: RemoteInstallBody):
         "install_type": "remote",
         "remotes": [{"type": "sse", "url": url}],
     }
+    if body.auth_type:
+        at = body.auth_type.strip().lower()
+        if at in ("none", "oauth2", "api-key", "basic"):
+            target["auth_type"] = at
+    if body.connector_id:
+        target["aion_connector_id"] = body.connector_id.strip()
     try:
         name = await _install_market_record(target, item_id=str(target.get("id") or ""))
     except HTTPException:
@@ -2747,13 +2842,16 @@ async def delete_mcp(name: str):
     if not mcp_manager.delete_server(name):
         raise HTTPException(status_code=404, detail="MCP not found")
     _remove_market_mcp_artifacts(name, cfg)
+    from ..runtime.mcp_integration_integrity import delete_mcp_user_data
+
+    cleanup = await delete_mcp_user_data(name)
     # Pulisci anche la riga McpServerConfig (policy) se presente
     async with get_async_session_maker()() as session:
         await session.execute(
             delete(McpServerConfig).where(McpServerConfig.server_slug == name)
         )
         await session.commit()
-    return {"status": "success"}
+    return {"status": "success", "cleanup": cleanup}
 
 
 @router.get("/plugins")

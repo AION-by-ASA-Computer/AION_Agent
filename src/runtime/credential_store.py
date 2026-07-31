@@ -9,20 +9,25 @@ Env:
 from __future__ import annotations
 
 import base64
+import json
 import logging
 import os
 import re
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import delete, select
 
 from ..data.engine import get_async_session_maker
 from ..data.ids import new_uuid7_str
-from ..data.models import UserMcpCredential
+from ..data.models import McpServerConfig, UserMcpCredential
 
 logger = logging.getLogger("aion.credential_store")
+
+OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = int(
+    os.getenv("AION_OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS", "60")
+)
 
 _USER_CREDENTIAL_RE = re.compile(r"^\$\{(AION_USER_[A-Z0-9_]+)__([A-Z0-9_]+)\}$")
 _USER_CREDENTIAL_SIMPLE_RE = re.compile(r"^\$\{(AION_USER_[A-Z0-9_]+)\}$")
@@ -192,32 +197,252 @@ def _credential_lookup_keys(key: str) -> tuple[str, ...]:
     return (k,) + aliases
 
 
+def _normalize_expiry(expires_at: Optional[datetime]) -> Optional[datetime]:
+    if not expires_at:
+        return None
+    if expires_at.tzinfo is None:
+        return expires_at.replace(tzinfo=timezone.utc)
+    return expires_at
+
+
+def _credential_is_expired(
+    expires_at: Optional[datetime],
+    *,
+    buffer_seconds: int = OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS,
+) -> bool:
+    exp = _normalize_expiry(expires_at)
+    if not exp:
+        return False
+    return exp < (datetime.now(timezone.utc) + timedelta(seconds=buffer_seconds))
+
+
+async def _load_oauth_config_for_server(server_slug: str) -> Dict[str, Any]:
+    async with get_async_session_maker()() as session:
+        cfg = (
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == server_slug
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+    if not cfg or not cfg.oauth_config_json:
+        return {}
+    try:
+        return json.loads(cfg.oauth_config_json)
+    except Exception:
+        return {}
+
+
+def _enrich_oauth_config_from_discovery(
+    server_slug: str, oauth_cfg: Dict[str, Any]
+) -> Dict[str, Any]:
+    try:
+        from src.mcp_connector_catalog import (
+            load_mcp_connector_catalog,
+            merge_oauth_config,
+            oauth_config_from_connector,
+            resolve_connector_row_for_mcp_server,
+        )
+        from src.mcp_credential_discovery import discover_mcp_credentials
+        from src.mcp_manager import mcp_manager
+
+        reg_cfg = mcp_manager.get_server_config(server_slug) or {}
+        catalog = load_mcp_connector_catalog()
+        row = resolve_connector_row_for_mcp_server(server_slug, reg_cfg, catalog)
+        oauth_cfg = merge_oauth_config(
+            oauth_cfg, oauth_config_from_connector(row), catalog_overrides=True
+        )
+        if oauth_cfg.get("token_url"):
+            return oauth_cfg
+        discovered = discover_mcp_credentials(server_slug, reg_cfg)
+        if discovered and discovered.remote_auth_type == "oauth2":
+            merged = dict(oauth_cfg)
+            merged.setdefault(
+                "provider",
+                discovered.remote_oauth_provider or merged.get("provider") or "generic",
+            )
+            merged.setdefault(
+                "authorization_server",
+                discovered.remote_oauth_server or merged.get("authorization_server"),
+            )
+            merged.setdefault(
+                "token_url",
+                discovered.remote_oauth_token_url or merged.get("token_url"),
+            )
+            return merged
+    except Exception:
+        pass
+    return oauth_cfg
+
+
+async def _delete_oauth_credentials(
+    user_id: str,
+    server_slug: str,
+    *,
+    tenant_id: str = "default",
+) -> None:
+    await delete_credential(user_id, server_slug, "OAUTH_TOKEN", tenant_id=tenant_id)
+    await delete_credential(
+        user_id, server_slug, "OAUTH_REFRESH_TOKEN", tenant_id=tenant_id
+    )
+
+
+async def _persist_oauth_tokens(
+    user_id: str,
+    server_slug: str,
+    token_data: Dict[str, Any],
+    oauth_cfg: Dict[str, Any],
+    *,
+    tenant_id: str = "default",
+) -> str:
+    from src.runtime.oauth_token_exchange import token_expires_at
+
+    access_token = str(token_data["access_token"])
+    expires_at = token_expires_at(token_data)
+    await set_credential(
+        user_id,
+        server_slug,
+        "OAUTH_TOKEN",
+        access_token,
+        tenant_id=tenant_id,
+        display_hint=oauth_cfg.get("provider", "oauth2"),
+        expires_at=expires_at,
+    )
+
+    refresh_token = token_data.get("refresh_token")
+    if refresh_token:
+        await set_credential(
+            user_id,
+            server_slug,
+            "OAUTH_REFRESH_TOKEN",
+            str(refresh_token),
+            tenant_id=tenant_id,
+        )
+
+    from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
+
+    await invalidate_mcp_credentials_runtime(user_id, server_slug, tenant_id=tenant_id)
+    return access_token
+
+
+async def persist_oauth_token_response(
+    user_id: str,
+    server_slug: str,
+    token_data: Dict[str, Any],
+    oauth_cfg: Dict[str, Any],
+    *,
+    tenant_id: str = "default",
+) -> str:
+    """Save OAuth access/refresh tokens and restart MCP workers for the user."""
+    return await _persist_oauth_tokens(
+        user_id, server_slug, token_data, oauth_cfg, tenant_id=tenant_id
+    )
+
+
+async def refresh_oauth_access_token(
+    user_id: str,
+    server_slug: str,
+    *,
+    tenant_id: str = "default",
+) -> Optional[str]:
+    """Refresh an expired OAuth access token when a refresh token is available."""
+    refresh_token = await get_credential(
+        user_id,
+        server_slug,
+        "OAUTH_REFRESH_TOKEN",
+        tenant_id=tenant_id,
+        auto_refresh_oauth=False,
+    )
+    if not refresh_token:
+        return None
+
+    oauth_cfg = _enrich_oauth_config_from_discovery(
+        server_slug, await _load_oauth_config_for_server(server_slug)
+    )
+    token_url = oauth_cfg.get("token_url")
+    if not token_url:
+        logger.warning(
+            "OAuth refresh skipped: missing token_url user=%s server=%s",
+            user_id,
+            server_slug,
+        )
+        return None
+
+    from src.runtime.oauth_token_exchange import (
+        OAuthTokenExchangeError,
+        exchange_refresh_token,
+    )
+
+    try:
+        token_data = await exchange_refresh_token(
+            token_url,
+            refresh_token=refresh_token,
+            client_id=oauth_cfg.get("client_id"),
+            client_secret=oauth_cfg.get("client_secret"),
+        )
+    except OAuthTokenExchangeError as exc:
+        logger.warning(
+            "OAuth refresh failed: user=%s server=%s reason=%s",
+            user_id,
+            server_slug,
+            exc,
+        )
+        from src.runtime.mcp_oauth_audit import append_mcp_oauth_audit
+
+        append_mcp_oauth_audit(
+            "oauth_refresh_failed",
+            {
+                "user_id": user_id,
+                "server_slug": server_slug,
+                "tenant_id": tenant_id,
+                "reason": str(exc),
+                "status_code": exc.status_code,
+            },
+        )
+        await _delete_oauth_credentials(user_id, server_slug, tenant_id=tenant_id)
+        return None
+
+    return await _persist_oauth_tokens(
+        user_id, server_slug, token_data, oauth_cfg, tenant_id=tenant_id
+    )
+
+
 async def get_credential(
     user_id: str,
     server_slug: str,
     key: str,
     *,
     tenant_id: str = "default",
+    auto_refresh_oauth: bool = True,
 ) -> Optional[str]:
-    now = datetime.now(timezone.utc)
     for lookup_key in _credential_lookup_keys(key):
         row = await _get_credential_row(
             user_id, server_slug, lookup_key, tenant_id=tenant_id
         )
         if not row:
             continue
-        if row.expires_at:
-            exp = row.expires_at
-            if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=timezone.utc)
-            if exp < now:
-                logger.info(
-                    "Credenziale scaduta: user=%s server=%s key=%s",
-                    user_id,
-                    server_slug,
-                    lookup_key,
+        if _credential_is_expired(row.expires_at):
+            if (
+                auto_refresh_oauth
+                and lookup_key == "OAUTH_TOKEN"
+                and key == "OAUTH_TOKEN"
+            ):
+                refreshed = await refresh_oauth_access_token(
+                    user_id, server_slug, tenant_id=tenant_id
                 )
-                continue
+                if refreshed:
+                    return refreshed
+            logger.info(
+                "Credenziale scaduta: user=%s server=%s key=%s",
+                user_id,
+                server_slug,
+                lookup_key,
+            )
+            continue
         if lookup_key != key:
             logger.info(
                 "Credenziale risolta via alias: richiesta=%s trovata=%s server=%s",
@@ -249,15 +474,9 @@ async def list_credentials_hints(
             .scalars()
             .all()
         )
-    now = datetime.now(timezone.utc)
     res = []
     for r in rows:
-        is_expired = False
-        if r.expires_at:
-            exp = r.expires_at
-            if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=timezone.utc)
-            is_expired = exp < now
+        is_expired = _credential_is_expired(r.expires_at)
         res.append(
             {
                 "key": r.credential_key,
@@ -311,14 +530,9 @@ async def get_all_credentials_for_server(
             .all()
         )
     result: Dict[str, str] = {}
-    now = datetime.now(timezone.utc)
     for r in rows:
-        if r.expires_at:
-            exp = r.expires_at
-            if exp.tzinfo is None:
-                exp = exp.replace(tzinfo=timezone.utc)
-            if exp < now:
-                continue
+        if _credential_is_expired(r.expires_at):
+            continue
         result[r.credential_key] = decrypt_value(r.value_encrypted)
     return result
 

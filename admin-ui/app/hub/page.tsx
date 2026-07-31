@@ -12,10 +12,15 @@ import {
   IntegrationPolicyRow,
   modeLabel,
   normalizeCredentialSchema,
-  policyBadges,
 } from "@/lib/mcpIntegrationPolicy";
 import { McpInstallWizard } from "@/components/McpInstallWizard";
 import { CredentialSchemaEditor } from "@/components/CredentialSchemaEditor";
+import { McpOAuthAdminSetupPanel } from "@/components/McpOAuthAdminSetupPanel";
+import { RemoteMcpInstallModal, type RemoteCatalogPreset } from "@/components/RemoteMcpInstallModal";
+import { McpIntegrityBanner, type McpIntegrityIssue } from "@/components/McpIntegrityBanner";
+import { McpInstalledCard } from "@/components/McpInstalledCard";
+import { McpEnvYamlPanel } from "@/components/McpEnvYamlPanel";
+import { connectorOAuthSetupHints } from "@/lib/mcpOAuthSetup";
 
 function chatUiAdvisorUrl(serverSlug: string): string {
   if (typeof window === "undefined") return "/";
@@ -39,8 +44,11 @@ export default function MCPHub() {
   const [githubDisplayName, setGithubDisplayName] = useState("");
 
   const [remoteInstallOpen, setRemoteInstallOpen] = useState(false);
-  const [remoteUrl, setRemoteUrl] = useState("");
-  const [remoteDisplayName, setRemoteDisplayName] = useState("");
+  const [remoteModalSeed, setRemoteModalSeed] = useState<{
+    url?: string;
+    displayName?: string;
+    connectorId?: string;
+  }>({});
 
   const [activeTab, setActiveTab] = useState<"marketplace" | "installed">("installed");
   const [mcpFilter, setMcpFilter] = useState("all");
@@ -80,6 +88,8 @@ export default function MCPHub() {
     | null
   >(null);
   const [userMayDisable, setUserMayDisable] = useState(true);
+  const [integrityIssues, setIntegrityIssues] = useState<McpIntegrityIssue[]>([]);
+  const [configModalTab, setConfigModalTab] = useState<"chat" | "registry" | "advanced">("chat");
   const [oauthConfig, setOauthConfig] = useState<{
     provider: string;
     authorization_server: string;
@@ -87,6 +97,7 @@ export default function MCPHub() {
     client_id: string;
     client_secret: string;
     scopes: string[];
+    client_id_source?: string;
   }>({
     provider: "generic",
     authorization_server: "",
@@ -95,6 +106,17 @@ export default function MCPHub() {
     client_secret: "",
     scopes: [],
   });
+
+  const fetchIntegrity = useCallback(async () => {
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/mcp/integrity`);
+      if (!res.ok) return;
+      const data = await res.json();
+      setIntegrityIssues(Array.isArray(data.issues) ? data.issues : []);
+    } catch {
+      setIntegrityIssues([]);
+    }
+  }, []);
 
   const fetchIntegrations = useCallback(async () => {
     try {
@@ -151,13 +173,15 @@ export default function MCPHub() {
     fetchRegistry();
     fetchSettings();
     void fetchIntegrations();
-  }, [fetchIntegrations]);
+    void fetchIntegrity();
+    void ensureConnectorCatalog();
+  }, [fetchIntegrations, fetchIntegrity]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const focus = new URLSearchParams(window.location.search).get("focus");
-    if (focus === "integrations") setActiveTab("installed");
-  }, []);
+    if (activeTab === "marketplace") {
+      void ensureConnectorCatalog();
+    }
+  }, [activeTab]);
 
   const fetchSettings = async () => {
     try {
@@ -221,10 +245,22 @@ export default function MCPHub() {
 
   const openEditConfig = async (name: string, config: Record<string, unknown>) => {
     void ensureConnectorCatalog();
-    // Do not sync from registry: the schema may have been configured manually
-    // or via AI wizard. Use sync-from-registry only explicitly from a dedicated button.
-    await fetchIntegrations();
-    const policy = integrationBySlug[name];
+    setConfigModalTab("chat");
+    let policy = integrationBySlug[name];
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/mcp-integrations`);
+      if (res.ok) {
+        const data = await res.json();
+        const map: Record<string, IntegrationPolicyRow> = {};
+        for (const row of (data.integrations || []) as IntegrationPolicyRow[]) {
+          map[row.server_slug] = row;
+        }
+        setIntegrationBySlug(map);
+        policy = map[name] ?? policy;
+      }
+    } catch {
+      /* use cached policy */
+    }
     setUserMayDisable(policy?.user_may_disable !== false);
     setEditingConfig({
       name,
@@ -250,6 +286,7 @@ export default function MCPHub() {
       client_id: oauth.client_id || "",
       client_secret: oauth.client_secret || "",
       scopes: oauth.scopes || [],
+      client_id_source: oauth.client_id_source || "",
     });
 
     void loadPolicyPreview(name, policy?.credential_mode);
@@ -273,13 +310,25 @@ export default function MCPHub() {
     }
 
     if (oauthConfig.authorization_server || oauthConfig.client_id) {
+      const matched = matchConnectorRow(
+        slug,
+        editingConfig?.values?.aion_connector_id as string | undefined,
+        connectorRows as Record<string, unknown>[],
+      );
+      const setupHints = connectorOAuthSetupHints(matched);
+      const catalogOauth = (matched?.oauth || {}) as Record<string, string>;
+      const scopes =
+        oauthConfig.scopes && oauthConfig.scopes.length > 0
+          ? oauthConfig.scopes
+          : setupHints.scopes;
       body.oauth_config = {
         provider: oauthConfig.provider || "generic",
-        authorization_server: oauthConfig.authorization_server,
-        token_url: oauthConfig.token_url,
+        authorization_server:
+          oauthConfig.authorization_server || catalogOauth.authorization_server || "",
+        token_url: oauthConfig.token_url || catalogOauth.token_url || "",
         client_id: oauthConfig.client_id,
         client_secret: oauthConfig.client_secret,
-        scopes: oauthConfig.scopes || [],
+        scopes,
       };
     } else {
       body.oauth_config = {};
@@ -429,7 +478,12 @@ export default function MCPHub() {
       const res = await apiFetch(`${apiBase()}/admin/mcp/${mcpToDelete}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Deletion failed");
       fetchRegistry();
-      setToast({ message: `MCP '${mcpToDelete}' removed successfully!`, variant: "success" });
+      void fetchIntegrations();
+      void fetchIntegrity();
+      setToast({
+        message: `MCP '${mcpToDelete}' rimosso (credenziali utente eliminate).`,
+        variant: "success",
+      });
       setIsDeleteModalOpen(false);
       setMcpToDelete(null);
     } catch (e: any) {
@@ -511,23 +565,36 @@ export default function MCPHub() {
     }
   };
 
-  const handleInstallRemote = async () => {
-    const url = remoteUrl.trim();
-    if (!url) {
-      setToast({ message: "Enter a valid remote URL.", variant: "error" });
+  const openRemoteInstall = useCallback(
+    (seed?: { url?: string; displayName?: string; connectorId?: string }) => {
+      setRemoteModalSeed(seed || {});
+      setRemoteInstallOpen(true);
+    },
+    [],
+  );
+
+  const featuredRemoteConnectors = useMemo(() => {
+    return (connectorRows as RemoteCatalogPreset[]).filter(
+      (c) => c.featured_remote && c.install_type === "remote" && c.remote_url,
+    );
+  }, [connectorRows]);
+
+  const handleInstallFromCatalog = async (connectorId: string, row?: Record<string, unknown>) => {
+    if (row?.remote_url_template) {
+      openRemoteInstall({
+        url: String(row.remote_url || ""),
+        displayName: String(row.title || connectorId),
+        connectorId,
+      });
       return;
     }
-    setInstallingId("remote:manual");
+    setInstallingId(`catalog:${connectorId}`);
     setLoading(true);
     try {
-      const res = await apiFetch(`${apiBase()}/admin/market/install-remote`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          url,
-          display_name: remoteDisplayName.trim() || undefined,
-        }),
-      });
+      const res = await apiFetch(
+        `${apiBase()}/admin/mcp/install-from-catalog?connector_id=${encodeURIComponent(connectorId)}`,
+        { method: "POST" },
+      );
       if (!res.ok) {
         let detail = `HTTP ${res.status}`;
         try {
@@ -542,17 +609,14 @@ export default function MCPHub() {
       }
       const data = await res.json();
       setToast({
-        message: `Remote MCP installed as '${data.name}'.`,
+        message: `Connector '${connectorId}' installed as '${data.server_slug || data.name}'. Users can connect via My Integrations in chat-ui.`,
         variant: "success",
       });
-      setRemoteInstallOpen(false);
-      setRemoteUrl("");
-      setRemoteDisplayName("");
       fetchRegistry();
       setActiveTab("installed");
     } catch (e: unknown) {
       setToast({
-        message: "Remote Installation failed: " + (e instanceof Error ? e.message : String(e)),
+        message: "Catalog install: " + (e instanceof Error ? e.message : String(e)),
         variant: "error",
       });
     } finally {
@@ -770,7 +834,7 @@ export default function MCPHub() {
             </button>
             <button
               type="button"
-              onClick={() => setRemoteInstallOpen(true)}
+              onClick={() => openRemoteInstall()}
               disabled={loading || installingId !== null}
               className="px-5 py-3.5 bg-white/5 hover:bg-white/10 border border-white/15 text-white rounded-xl font-bold text-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
               title="Install from remote URL (HTTP/SSE/Streamable)"
@@ -849,73 +913,118 @@ export default function MCPHub() {
           </div>
         </div>
       )}
-      {remoteInstallOpen && (
-        <div className="fixed inset-0 z-[65] bg-black/75 flex items-center justify-center p-4">
-          <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex justify-between items-start gap-4">
-              <div>
-                <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Globe className="w-5 h-5 text-indigo-400" />
-                  Install from Remote URL
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setRemoteInstallOpen(false)}
-                className="text-gray-500 hover:text-white p-1 cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
-              Remote Endpoint URL
-              <input
-                type="url"
-                value={remoteUrl}
-                onChange={(e) => setRemoteUrl(e.target.value)}
-                placeholder="https://...../mcp"
-                className="mt-1.5 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500/80 outline-none"
-              />
-            </label>
-            <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
-              Display name (optional)
-              <input
-                type="text"
-                value={remoteDisplayName}
-                onChange={(e) => setRemoteDisplayName(e.target.value)}
-                placeholder="..."
-                className="mt-1.5 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500/80 outline-none"
-              />
-            </label>
-            <div className="flex gap-3 justify-end pt-2">
-              <button
-                type="button"
-                onClick={() => setRemoteInstallOpen(false)}
-                className="px-4 py-2 text-sm text-gray-400 hover:text-white cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleInstallRemote()}
-                disabled={installingId !== null || !remoteUrl.trim()}
-                className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold disabled:opacity-50 cursor-pointer flex items-center gap-2"
-              >
-                {installingId === "remote:manual" ? (
-                  <>Installing…</>
-                ) : (
-                  <>
-                    <Download className="w-4 h-4" /> Install
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <RemoteMcpInstallModal
+        open={remoteInstallOpen}
+        onClose={() => setRemoteInstallOpen(false)}
+        presets={featuredRemoteConnectors}
+        initialUrl={remoteModalSeed.url || ""}
+        initialDisplayName={remoteModalSeed.displayName || ""}
+        initialConnectorId={remoteModalSeed.connectorId || ""}
+        installing={installingId === "remote:manual"}
+        onInstallStart={() => setInstallingId("remote:manual")}
+        onInstallEnd={() => setInstallingId(null)}
+        onInstalled={(slug) => {
+          setToast({
+            message: `Remote MCP installed as '${slug}'. Configure per-user OAuth in chat-ui → My Integrations.`,
+            variant: "success",
+          });
+          fetchRegistry();
+          setActiveTab("installed");
+        }}
+      />
       {/* Tab Content: Marketplace */}
       {activeTab === "marketplace" && (
-        <div className="px-6 animate-in fade-in duration-200">
+        <div className="px-6 animate-in fade-in duration-200 space-y-8">
+          {featuredRemoteConnectors.length > 0 && (
+            <section className="space-y-4">
+              <div>
+                <h2 className="text-xs font-bold uppercase tracking-wider text-indigo-300/90 flex items-center gap-2">
+                  <Globe className="w-3.5 h-3.5" />
+                  Curated remote OAuth connectors
+                </h2>
+                <p className="text-xs text-gray-500 mt-1 max-w-2xl">
+                  Official hosted MCP endpoints from the connector catalog.
+                  One-click install — users authenticate in chat-ui → My Integrations.
+                </p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {featuredRemoteConnectors.map((c: Record<string, unknown>) => {
+                  const id = String(c.id || "");
+                  const installingThis = installingId === `catalog:${id}`;
+                  const needsAdminOAuth = Boolean(
+                    (c.oauth as { client_credentials_required?: boolean } | undefined)
+                      ?.client_credentials_required,
+                  );
+                  return (
+                    <div
+                      key={id}
+                      className="glass-card bg-[#121212]/80 border border-indigo-500/20 hover:border-indigo-500/40 rounded-2xl p-5 flex flex-col gap-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-bold text-white">{String(c.title || id)}</h3>
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-indigo-300/80 bg-indigo-500/10 border border-indigo-500/20 px-2 py-0.5 rounded-md">
+                          OAuth
+                        </span>
+                      </div>
+                      <p className="text-xs text-gray-400 line-clamp-3 flex-1">
+                        {String(c.description || "").trim() || String(c.remote_url || "")}
+                      </p>
+                      {needsAdminOAuth ? (
+                        <p className="text-[10px] font-medium text-amber-300/90">
+                          After install: register an OAuth app with the provider and set Client ID/secret in Hub
+                          (see setup guide).
+                        </p>
+                      ) : null}
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {c.official_doc_url ? (
+                          <a
+                            href={String(c.official_doc_url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[10px] text-gray-500 hover:text-indigo-300 flex items-center gap-1"
+                          >
+                            Docs <ExternalLink className="w-3 h-3" />
+                          </a>
+                        ) : null}
+                        {c.remote_url_template ? (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              openRemoteInstall({
+                                url: String(c.remote_url || ""),
+                                displayName: String(c.title || id),
+                                connectorId: id,
+                              })
+                            }
+                            className="ml-auto text-xs font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/25 px-3 py-1.5 rounded-lg hover:bg-indigo-500/20 cursor-pointer"
+                          >
+                            Configure URL
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => void handleInstallFromCatalog(id, c)}
+                            disabled={installingId !== null || loading}
+                            className="ml-auto text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-500 px-3 py-1.5 rounded-lg disabled:opacity-50 cursor-pointer flex items-center gap-1.5"
+                          >
+                            {installingThis ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Download className="w-3.5 h-3.5" />
+                            )}
+                            Install
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          <section className="space-y-4">
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Marketplace search</h2>
           {loading && !githubInstallOpen ? (
             <div className="flex flex-col items-center justify-center text-center py-20 bg-[#121212]/30 border border-white/5 rounded-3xl px-4 min-h-[300px]">
               <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
@@ -1009,134 +1118,63 @@ export default function MCPHub() {
               )}
             </div>
           )}
+          </section>
         </div>
       )}
 
       {/* Tab Content: Installed */}
       {activeTab === "installed" && (
         <section className="space-y-6 px-6 animate-in fade-in duration-200">
+          <McpIntegrityBanner
+            onRepaired={() => {
+              void fetchIntegrations();
+              void fetchIntegrity();
+              fetchRegistry();
+            }}
+          />
           <div className="flex items-center justify-between">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-              Currently Installed Modules ({filteredInstalledItems.length})
+            <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">
+              MCP installati ({filteredInstalledItems.length})
             </h2>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredInstalledItems.map(([name, config]: [string, any]) => (
-              <div key={name} className="glass-card bg-[#121212]/80 border border-white/5 hover:border-white/15 rounded-2xl backdrop-blur-sm transition-all duration-200 shadow-xl group flex flex-col justify-between">
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="space-y-1 min-w-0 pr-2">
-                      <h3 className="font-bold text-lg text-white truncate">{name}</h3>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
-                        <span className="text-[10px] text-green-400 font-bold uppercase tracking-wide">Active</span>
-                        {config.is_base && (
-                          <span className="text-[10px] bg-blue-500/10 text-blue-400 border border-blue-500/20 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                            Built-in
-                          </span>
-                        )}
-                        {config.type === "sse" && (
-                          <span className="text-[10px] bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                            Remote (SSE)
-                          </span>
-                        )}
-                        {config.type === "remote-bridge" && (
-                          <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                            🌐 Remote Bridge
-                          </span>
-                        )}
-                        {config.type === "in_process" && (
-                          <span className="text-[10px] bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 rounded-md font-bold uppercase tracking-wider font-mono">
-                            In-Process
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                    <div className="p-2.5 bg-white/5 border border-white/10 rounded-xl text-gray-400 shrink-0">
-                      {config.type === "sse" || config.type === "remote-bridge" ? (
-                        <Globe className="w-5 h-5 text-blue-400" />
-                      ) : (
-                        <Box className="w-5 h-5 text-gray-300" />
-                      )}
-                    </div>
-                  </div>
-                  <p className="text-sm text-gray-400 line-clamp-2">{config.description || "No description available."}</p>
-                  {policyBadges(integrationBySlug[name]).length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 mt-3">
-                      {policyBadges(integrationBySlug[name]).map((b) => (
-                        <span
-                          key={b}
-                          className="text-[9px] font-bold uppercase tracking-wide text-indigo-300 bg-indigo-500/10 border border-indigo-500/25 px-2 py-0.5 rounded-md"
-                        >
-                          {b}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                  {!config.is_base && (
-                    <p className="text-[10px] text-gray-500 leading-snug mt-3 mb-1">
-                      Unified hub: credentials, chat policies, and env in the Edit configuration button.
-                    </p>
-                  )}
-                </div>
-                <div className="flex gap-3 border-t border-white/5 p-4 bg-black/20 rounded-b-2xl">
-                  <button
-                    onClick={() => void openEditConfig(name, config)}
-                    className="flex-1 py-2.5 bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl text-[11px] font-bold text-white transition-all shadow-md cursor-pointer text-center"
-                  >
-                    EDIT CONFIG
-                  </button>
-                  {config.type === "remote-bridge" && (
-                    <div className="px-3 py-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-[10px] font-bold text-blue-300 flex items-center gap-1" title="OAuth authentication is handled by the end user via chat-ui">
-                      <Users className="w-3.5 h-3.5 shrink-0" />
-                      <span>OAuth user</span>
-                    </div>
-                  )}
-                  {!config.is_base && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => void probeMcp(name)}
-                        disabled={loading}
-                        className="px-3 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded-xl text-[10px] font-bold text-emerald-300 transition-all cursor-pointer"
-                        title="Probe list_tools"
-                      >
-                        PROBE
-                      </button>
-                      {config.type !== "sse" && config.type !== "remote-bridge" && (
-                        <button
-                          type="button"
-                          onClick={() => setWizardTarget({ kind: "server", serverSlug: name, title: name })}
-                          className="px-3 py-2.5 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 rounded-xl text-[11px] font-bold text-indigo-300 transition-all cursor-pointer"
-                          title="Wizard guidato"
-                        >
-                          <Wand2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </>
-                  )}
-                  {!config.is_base ? (
-                    <button
-                      onClick={() => initiateDelete(name)}
-                      className="px-4 py-2.5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 rounded-xl text-[11px] font-bold text-red-400 hover:text-red-300 transition-all cursor-pointer"
-                    >
-                      REMOVE
-                    </button>
-                  ) : (
-                    <div className="px-4 py-2.5 bg-gray-500/10 border border-gray-500/20 rounded-xl text-[11px] font-bold text-gray-500 flex items-center justify-center cursor-not-allowed font-mono">
-                      SYSTEM MCP
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {filteredInstalledItems.map(([name, config]: [string, any]) => {
+              const slugIssues = integrityIssues.filter(
+                (i) => i.server_slug === name || i.from_slug === name,
+              );
+              const connector = matchConnectorRow(
+                name,
+                config.aion_connector_id || integrationBySlug[name]?.aion_connector_id || undefined,
+                connectorRows as Record<string, unknown>[],
+              );
+              return (
+                <McpInstalledCard
+                  key={name}
+                  name={name}
+                  config={config}
+                  policy={integrationBySlug[name]}
+                  connector={connector}
+                  issues={slugIssues}
+                  loading={loading}
+                  onEdit={() => void openEditConfig(name, config)}
+                  onProbe={!config.is_base ? () => void probeMcp(name) : undefined}
+                  onWizard={
+                    !config.is_base && config.type !== "sse" && config.type !== "remote-bridge"
+                      ? () => setWizardTarget({ kind: "server", serverSlug: name, title: name })
+                      : undefined
+                  }
+                  onDelete={!config.is_base ? () => void initiateDelete(name) : undefined}
+                />
+              );
+            })}
 
             {filteredInstalledItems.length === 0 && (
-              <div className="col-span-full py-16 flex flex-col items-center justify-center text-center bg-[#121212]/30 border border-white/5 rounded-2xl px-4">
-                <Box className="w-8 h-8 text-gray-600 mb-2" />
-                <p className="text-sm font-semibold text-gray-400">No installed MCP found</p>
-                <p className="text-xs text-gray-600 mt-1">No module matches the search criteria.</p>
+              <div className="col-span-full flex flex-col items-center justify-center rounded-3xl border border-white/5 bg-[#121212]/30 px-4 py-20 text-center">
+                <Box className="mb-3 h-12 w-12 text-gray-600" aria-hidden />
+                <p className="text-sm font-semibold text-gray-400">Nessun MCP installato</p>
+                <p className="mt-1 max-w-xs text-xs text-gray-600">
+                  Nessun modulo corrisponde ai criteri di ricerca.
+                </p>
               </div>
             )}
           </div>
@@ -1145,26 +1183,51 @@ export default function MCPHub() {
 
       {/* Config Modal */}
       {editingConfig && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-          <div className="glass-card bg-[#1a1a1a] border border-white/10 rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden p-8 space-y-6 shadow-2xl animate-in zoom-in-95 duration-200 relative">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-
-            <div className="flex justify-between items-center border-b border-white/10 pb-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="relative max-h-[90vh] w-full max-w-2xl space-y-6 overflow-y-auto overflow-x-hidden rounded-2xl border border-border/70 bg-card p-6 shadow-2xl animate-in zoom-in-95 duration-200 sm:p-8">
+            <div className="flex items-center justify-between border-b border-border/70 pb-5">
               <div className="flex items-center gap-3">
-                <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400">
-                  <Box className="w-5 h-5" />
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-border/60 bg-muted/50 text-muted-foreground">
+                  <Box className="h-5 w-5" aria-hidden />
                 </div>
                 <div>
-                  <h3 className="text-xl font-bold text-white font-mono">{editingConfig.name}</h3>
-                  <p className="text-xs text-gray-400">MCP Configuration</p>
+                  <h3 className="font-mono text-xl font-semibold text-foreground">{editingConfig.name}</h3>
+                  <p className="text-xs text-muted-foreground">Configurazione MCP</p>
                 </div>
               </div>
-              <button onClick={() => setEditingConfig(null)} className="p-2 text-gray-500 hover:text-white hover:bg-white/5 rounded-xl transition-colors">
-                <X className="w-5 h-5" />
+              <button
+                onClick={() => setEditingConfig(null)}
+                className="focus-ring rounded-xl p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+              >
+                <X className="h-5 w-5" aria-hidden />
               </button>
             </div>
 
+            <div className="flex gap-1 rounded-xl border border-border/70 bg-muted/30 p-1">
+              {(
+                [
+                  ["chat", "Chat & credenziali"],
+                  ["registry", "Registry"],
+                  ["advanced", "Avanzate"],
+                ] as const
+              ).map(([tab, label]) => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setConfigModalTab(tab)}
+                  className={`focus-ring flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                    configModalTab === tab
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
             <div className="space-y-5">
+              {(configModalTab === "chat" || configModalTab === "registry") && (
               <div className="space-y-2">
                 <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Connector Type (Catalog)</label>
                 <select
@@ -1192,21 +1255,22 @@ export default function MCPHub() {
                     Guided form: <span className="font-mono text-white">{String((connectorFormContext.matched as { id?: string }).id)}</span>
                   </p>
                 ) : (
-                  <p className="text-[11px] text-gray-500">No cataloged connector associated: use the JSON at the bottom or choose a type above.</p>
+                  <p className="text-[11px] text-gray-500">Nessun connettore catalogato: usa il JSON in Avanzate o seleziona un tipo sopra.</p>
                 )}
               </div>
+              )}
 
-              {editingPolicy && (
-                <div className="space-y-4 rounded-2xl border border-indigo-500/25 bg-indigo-500/[0.08] p-4">
-                  <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-wider text-indigo-300/90">
-                    <Users className="w-3.5 h-3.5" />
-                    User availability (chat)
+              {configModalTab === "chat" && editingPolicy && (
+                <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4">
+                  <div className="aion-section-label flex items-center gap-2">
+                    <Users className="h-3.5 w-3.5" aria-hidden />
+                    Disponibilità utenti (chat)
                   </div>
                   {/* <label className="flex items-center gap-3 cursor-pointer">
                     <input type="checkbox" checked={editingPolicy.enabled} onChange={(e) => setEditingPolicy({ ...editingPolicy, enabled: e.target.checked })} className="rounded border-white/20" />
                     <span className="text-sm text-gray-200">Enable edit in chat-ui for users</span>
                   </label> */}
-                  <div className="flex flex-wrap gap-3 text-sm text-gray-300">
+                  <div className="flex flex-wrap gap-3 text-sm text-foreground">
                     {(["none", "org_shared", "per_user"] as CredentialMode[]).map((m) => (
                       <label key={m} className="flex items-center gap-1.5 cursor-pointer">
                         <input type="radio" name="credential_mode" checked={editingPolicy.mode === m} onChange={() => {
@@ -1232,7 +1296,10 @@ export default function MCPHub() {
                     ))}
                   </div>
                   {editingPolicy.warnings.map((w) => (
-                    <p key={w} className="text-[11px] text-amber-300 flex gap-1"><AlertTriangle className="w-3.5 h-3.5 shrink-0" />{w}</p>
+                    <p key={w} className="flex gap-1 rounded-xl border border-amber-500/25 bg-amber-500/8 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                      {w}
+                    </p>
                   ))}
                   {editingPolicy.mode === "per_user" && (
                     <>
@@ -1257,25 +1324,34 @@ export default function MCPHub() {
                         </button>
                       )}
                       <button type="button" onClick={() => void applySuggestedEnv()} disabled={loading} className="text-xs font-bold text-indigo-300 underline">
-                        Apply suggested env to registry
+                        Applica env suggerito al registry
                       </button>
 
-                      {/* OAuth info banner — OAuth authentication is delegated to the end user */}
-                      <div className="flex items-start gap-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.06] p-4 mt-3">
-                        <Users className="w-4 h-4 text-blue-300 shrink-0 mt-0.5" />
-                        <div>
-                          <div className="text-[10px] font-bold uppercase tracking-wider text-blue-300 mb-1">
-                            OAuth Authentication — user-managed
-                          </div>
-                          <p className="text-[11px] text-gray-400 leading-relaxed">
-                            If this remote MCP server requires OAuth, authentication is performed by each end user via the <span className="font-semibold text-white">My Integrations</span> section in chat-ui. The admin does not need to authenticate: ensure the policy is set to <span className="font-mono text-indigo-300">per_user</span> and the server exposes standard discovery endpoints.
-                          </p>
-                        </div>
-                      </div>
+                      <McpEnvYamlPanel
+                        yaml={
+                          integrationBySlug[editingConfig.name]?.suggested_env_yaml ||
+                          (editingPolicy.credentialSchema.length > 0
+                            ? `env:\n${editingPolicy.credentialSchema
+                                .filter((f) => f.env_placeholder)
+                                .map((f) => `  ${f.registry_env_key || f.key}: "${f.env_placeholder}"`)
+                                .join("\n")}`
+                            : "")
+                        }
+                      />
+
+                      {(editingConfig?.values?.type === "remote-bridge" ||
+                        oauthConfig.authorization_server ||
+                        connectorFormContext.matched) ? (
+                        <McpOAuthAdminSetupPanel
+                          connector={connectorFormContext.matched}
+                          oauthConfig={oauthConfig}
+                          onChange={(patch) => setOauthConfig((prev) => ({ ...prev, ...patch }))}
+                        />
+                      ) : null}
                     </>
                   )
                   }
-                  <label className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
                     <input type="checkbox" checked={userMayDisable} onChange={(e) => setUserMayDisable(e.target.checked)} />
                     User can disable this integration
                   </label>
@@ -1288,10 +1364,10 @@ export default function MCPHub() {
                 </div >
               )}
 
-              {
+              {configModalTab === "chat" &&
                 connectorFormContext.fields.length > 0 && editingPolicy?.mode === "org_shared" ? (
-                  <div className="space-y-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.06] p-4">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-300/90">Organization Credentials</div>
+                  <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4">
+                    <div className="aion-section-label">Credenziali organizzazione</div>
                     {connectorFormContext.fields.map((field) => (
                       <div key={field.key} className="space-y-1.5">
                         <label className="text-xs font-semibold text-gray-200 flex items-center gap-2">
@@ -1331,8 +1407,10 @@ export default function MCPHub() {
                 ) : null
               }
 
+              {configModalTab === "registry" && (
+              <>
               <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Connection Type</label>
+                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Tipo connessione</label>
                 <select
                   value={editingConfig.values.type ?? "stdio"}
                   onChange={(e) =>
@@ -1419,8 +1497,12 @@ export default function MCPHub() {
                   className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner min-h-[100px]"
                 />
               </div>
+              </>
+              )}
 
-              <details className="rounded-xl border border-white/10 bg-black/20 p-3 group">
+              {configModalTab === "advanced" && (
+              <>
+              <details className="rounded-xl border border-white/10 bg-black/20 p-3 group" open>
                 <summary className="text-xs font-bold text-gray-400 cursor-pointer list-none flex items-center justify-between">
                   <span>Advanced — extra variables (keys not in form only)</span>
                   <span className="text-[10px] text-gray-600 group-open:text-gray-400">JSON</span>
@@ -1470,7 +1552,10 @@ export default function MCPHub() {
                   className="w-full min-h-[120px] mt-3 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-mono"
                 />
               </details>
+              </>
+              )}
 
+              {configModalTab === "advanced" && (
               <div className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${sandboxBackend === "container" ? 'bg-indigo-500/5 border-indigo-500/20' : 'bg-white/5 border-white/10 opacity-80'}`}>
                 <div className="space-y-0.5">
                   <div className="text-sm font-bold text-white flex items-center gap-2">
@@ -1487,7 +1572,8 @@ export default function MCPHub() {
                   {sandboxBackend}
                 </div>
               </div>
-            </div >
+              )}
+            </div>
 
             <div className="flex gap-4 pt-4 border-t border-white/10">
               <button
@@ -1495,13 +1581,13 @@ export default function MCPHub() {
                 disabled={loading}
                 className="flex-1 py-3.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold text-sm transition-all shadow-lg shadow-blue-500/20 disabled:opacity-50 cursor-pointer transform active:scale-98"
               >
-                {loading ? "SAVING..." : "SAVE CONFIGURATION"}
+                {loading ? "Salvataggio…" : "Salva configurazione"}
               </button>
               <button
                 onClick={() => setEditingConfig(null)}
                 className="px-6 py-3.5 bg-white/10 hover:bg-white/15 border border-white/10 rounded-xl font-bold transition-all text-white text-sm cursor-pointer"
               >
-                CANCEL
+                Annulla
               </button>
             </div>
           </div >

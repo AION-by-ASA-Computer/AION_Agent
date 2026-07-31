@@ -13,10 +13,28 @@ from src.agent_profile import profile_manager
 from src.data.engine import get_async_session_maker
 from src.data.ids import new_uuid7_str
 from src.data.models import McpServerConfig, UserMcpCredential, UserMcpPreference
+from src.mcp_connector_catalog import (
+    connector_requires_oauth,
+    load_mcp_connector_catalog,
+    merge_oauth_config,
+    oauth_admin_credentials_configured,
+    oauth_config_from_connector,
+    oauth_ui_metadata_from_connector,
+    resolve_connector_row_for_mcp_server,
+    resolve_oauth_url_templates,
+)
 from src.runtime.credential_store import (
     list_credentials_hints,
     user_credentials_enabled,
 )
+
+_OAUTH_MANAGED_KEYS = frozenset({"OAUTH_TOKEN", "OAUTH_REFRESH_TOKEN"})
+
+
+def strip_oauth_token_fields_from_schema(
+    schema: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    return [s for s in schema if str(s.get("key") or "") not in _OAUTH_MANAGED_KEYS]
 
 
 def credentials_feature_enabled() -> bool:
@@ -157,6 +175,10 @@ async def integration_row_to_public_dict(
         )
 
     schema = json.loads(r.credential_schema_json or "[]")
+    oauth_cfg = json.loads(r.oauth_config_json or "{}")
+    reg_cfg: Dict[str, Any] = {}
+    discovered = None
+    connector_row: Optional[Dict[str, Any]] = None
     try:
         from src.mcp_credential_discovery import (
             discover_mcp_credentials,
@@ -166,9 +188,13 @@ async def integration_row_to_public_dict(
 
         mcp_manager.load_registry()
         reg_cfg = mcp_manager.get_server_config(r.server_slug) or {}
+        catalog = load_mcp_connector_catalog()
+        connector_row = resolve_connector_row_for_mcp_server(
+            r.server_slug, reg_cfg, catalog
+        )
+        discovered = discover_mcp_credentials(r.server_slug, reg_cfg)
         reg_env = reg_cfg.get("env") if isinstance(reg_cfg.get("env"), dict) else {}
         if reg_env:
-            discovered = discover_mcp_credentials(r.server_slug, reg_cfg)
             allowed = {k.strip() for k in reg_env if isinstance(k, str) and k.strip()}
             from_registry = [f for f in discovered.schema if f.get("key") in allowed]
             if from_registry:
@@ -176,28 +202,82 @@ async def integration_row_to_public_dict(
                     catalog_schema=schema,
                     discovered_schema=from_registry,
                 )
+        if discovered and discovered.remote_auth_type == "oauth2":
+            oauth_cfg = {
+                **oauth_cfg,
+                "provider": oauth_cfg.get("provider")
+                or discovered.remote_oauth_provider
+                or "generic",
+                "authorization_server": oauth_cfg.get("authorization_server")
+                or discovered.remote_oauth_server,
+                "token_url": oauth_cfg.get("token_url")
+                or discovered.remote_oauth_token_url,
+                "scopes": oauth_cfg.get("scopes") or [],
+            }
     except Exception:
         pass
+
+    try:
+        remote_for_oauth = str(
+            oauth_cfg.get("remote_url") or reg_cfg.get("remote_url") or ""
+        )
+        oauth_cfg = resolve_oauth_url_templates(
+            merge_oauth_config(
+                oauth_cfg,
+                oauth_config_from_connector(connector_row),
+                catalog_overrides=True,
+            ),
+            remote_url=remote_for_oauth,
+        )
+    except Exception:
+        pass
+
     schema = [
         s for s in schema if s.get("key") and not str(s["key"]).startswith("AION_USER_")
     ]
-    oauth_cfg = json.loads(r.oauth_config_json or "{}")
-    if not oauth_cfg.get("authorization_server") and not oauth_cfg.get("auth_url"):
-        try:
-            from src.mcp_credential_discovery import discover_mcp_credentials
-            from src.mcp_manager import mcp_manager
 
-            reg_cfg = mcp_manager.get_server_config(r.server_slug) or {}
-            discovered = discover_mcp_credentials(r.server_slug, reg_cfg)
-            if discovered and discovered.remote_auth_type == "oauth2":
-                oauth_cfg = {
-                    "provider": discovered.remote_oauth_provider or "generic",
-                    "authorization_server": discovered.remote_oauth_server,
-                    "token_url": discovered.remote_oauth_token_url,
-                    "scopes": [],
-                }
-        except Exception:
-            pass
+    _is_remote_bridge = reg_cfg.get("type") == "remote-bridge"
+    remote_auth_type = discovered.remote_auth_type if discovered is not None else None
+    remote_url = str(oauth_cfg.get("remote_url") or reg_cfg.get("remote_url") or "")
+    connector_id = (
+        str(
+            getattr(r, "aion_connector_id", None)
+            or reg_cfg.get("aion_connector_id")
+            or ""
+        ).strip()
+        or None
+    )
+    discovered_provider = (
+        discovered.remote_oauth_provider if discovered is not None else None
+    )
+    oauth_meta = oauth_ui_metadata_from_connector(
+        connector_row,
+        fallback_provider=str(
+            oauth_cfg.get("provider") or connector_id or discovered_provider or ""
+        ),
+        fallback_display_name=str(
+            oauth_cfg.get("oauth_display_name") or r.display_name or ""
+        ),
+    )
+    has_oauth = bool(
+        connector_requires_oauth(connector_row)
+        or oauth_cfg.get("authorization_server")
+        or oauth_cfg.get("auth_url")
+        or oauth_cfg.get("token_url")
+        or remote_auth_type == "oauth2"
+        or (_is_remote_bridge and remote_auth_type not in (None, "none"))
+    )
+    if has_oauth:
+        schema = strip_oauth_token_fields_from_schema(schema)
+
+    admin_oauth_configured = (not has_oauth) or oauth_admin_credentials_configured(
+        oauth_cfg
+    )
+
+    oauth_provider = str(oauth_cfg.get("provider") or oauth_meta["provider"])
+    oauth_display_name = str(
+        oauth_cfg.get("oauth_display_name") or oauth_meta["oauth_display_name"]
+    )
 
     mode = getattr(r, "credential_mode", None) or "none"
     if mode == "none" and r.requires_user_credentials:
@@ -225,6 +305,8 @@ async def integration_row_to_public_dict(
             hk = str(h.get("key") or "").strip()
             if not hk or hk in schema_keys:
                 continue
+            if has_oauth and hk in _OAUTH_MANAGED_KEYS:
+                continue
             schema.append(
                 {
                     "key": hk,
@@ -247,39 +329,31 @@ async def integration_row_to_public_dict(
             continue
         hint_keys_expanded.add(hk)
         hint_keys_expanded.update(credential_key_aliases(hk))
-    configured = (
-        (not r.requires_user_credentials)
-        or (not req_keys)
-        or all(
-            any(alias in hint_keys_expanded for alias in credential_key_aliases(rk))
-            for rk in req_keys
+    has_valid_oauth_token = any(
+        h.get("key") == "OAUTH_TOKEN" and not h.get("is_expired") for h in hints
+    )
+    if has_oauth and show_form and not req_keys:
+        configured = has_valid_oauth_token
+    else:
+        configured = (
+            (not r.requires_user_credentials)
+            or (not req_keys)
+            or all(
+                any(alias in hint_keys_expanded for alias in credential_key_aliases(rk))
+                for rk in req_keys
+            )
         )
-    )
+        if has_oauth and show_form and req_keys:
+            configured = configured and has_valid_oauth_token
 
-    try:
-        from src.mcp_manager import mcp_manager as _mm
+    if show_form:
+        from src.runtime.mcp_integration_integrity import (
+            enrich_credential_schema_with_env_placeholders,
+        )
 
-        _mm.load_registry()
-        _reg = _mm.get_server_config(r.server_slug) or {}
-        _is_remote_bridge = _reg.get("type") == "remote-bridge"
-    except Exception:
-        _is_remote_bridge = False
-
-    remote_auth_type = None
-    if _is_remote_bridge:
-        try:
-            from src.mcp_credential_discovery import discover_mcp_credentials
-
-            discovered = discover_mcp_credentials(r.server_slug, _reg)
-            remote_auth_type = discovered.remote_auth_type
-        except Exception:
-            pass
-
-    has_oauth = bool(
-        oauth_cfg.get("authorization_server")
-        or oauth_cfg.get("auth_url")
-        or (remote_auth_type == "oauth2")
-    )
+        schema = enrich_credential_schema_with_env_placeholders(
+            schema, r.server_slug, credential_mode=mode
+        )
 
     return {
         "server_slug": r.server_slug,
@@ -292,12 +366,15 @@ async def integration_row_to_public_dict(
         "credential_schema": schema if show_form else [],
         "has_oauth": has_oauth,
         "is_remote_bridge": _is_remote_bridge,
-        "remote_url": oauth_cfg.get("remote_url") or "",
-        "oauth_provider": oauth_cfg.get("provider"),
+        "remote_url": remote_url,
+        "aion_connector_id": connector_id,
+        "oauth_provider": oauth_provider,
+        "oauth_display_name": oauth_display_name,
         "oauth_authorization_server": oauth_cfg.get("authorization_server")
         or oauth_cfg.get("auth_url"),
         "oauth_client_id": oauth_cfg.get("client_id"),
         "oauth_scopes": oauth_cfg.get("scopes") or [],
+        "admin_oauth_configured": admin_oauth_configured,
         "is_configured": configured if show_form else (org_managed or mode == "none"),
         "org_managed": org_managed,
         "user_enabled": user_enabled,
@@ -373,6 +450,8 @@ async def list_pending_for_profile(
             anonymous=anonymous,
             pref_map=pref_map,
         )
+        if not pub.get("admin_oauth_configured", True):
+            continue
         if not pub["user_enabled"]:
             continue
         mode = pub["credential_mode"]
