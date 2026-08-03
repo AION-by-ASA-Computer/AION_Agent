@@ -2670,15 +2670,15 @@ class AgentPipeline:
                                         yield _track_sse(
                                             plan_controller.sse_phase("researching")
                                         )
-                                    if _tn.startswith("mempalace_"):
+                                    if _tn.startswith("memory_"):
                                         yield _track_sse(
                                             {
                                                 "type": "turn_status",
-                                                "phase": "mempalace",
+                                                "phase": "memory",
                                                 "tool": _tn,
                                                 "message": (
-                                                    f"MemPalace Â· {_tn} "
-                                                    f"({tool_calls}/{max_tool_calls or 'âˆž'})"
+                                                    f"Mnemos · {_tn} "
+                                                    f"({tool_calls}/{max_tool_calls or '∞'})"
                                                 ),
                                             }
                                         )
@@ -2845,7 +2845,6 @@ class AgentPipeline:
                                     except Exception as ter_exc:
                                         logger.debug("tool_error_recovery: %s", ter_exc)
                                     try:
-                                        import src.runtime.db_navigation_mempalace_hooks  # noqa: F401
                                         import src.runtime.exploration_tracker  # noqa: F401
                                         from src.runtime.exploration_tracker import (
                                             record_exploration_tool,
@@ -3150,7 +3149,7 @@ class AgentPipeline:
                         logger.error(
                             "agent_task drain timeout after stop_reason=%s session=%s "
                             "(thread may still run MCP tools; consider new chat or raise "
-                            "AION_TOOL_CALLS_MAX_PER_TURN for bulk MemPalace import)",
+                            "AION_TOOL_CALLS_MAX_PER_TURN for bulk memory import)",
                             stop_reason,
                             self.session_id[:12],
                         )
@@ -3164,7 +3163,7 @@ class AgentPipeline:
                                     f"The turn was interrupted ({stop_reason}) but the agent "
                                     f"did not finish within {int(drain_sec)}s (probabili tool MCP "
                                     "ancora in esecuzione). Apri una nuova chat o usa lo script "
-                                    "`scripts/bootstrap_db_navigation_mempalace.py` per import bulk."
+                                    "Use memory_note for structured lessons or the project memory panel."
                                 ),
                             }
                         )

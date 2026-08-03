@@ -13,9 +13,14 @@ function normGroups(groups?: string[] | null): string[] {
   return (groups ?? []).map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 
+export function hasMnemosTools(profile?: ProfileMemorySource | null): boolean {
+  const groups = normGroups(profile?.native_tool_groups);
+  return groups.includes("mnemos");
+}
+
+/** @deprecated use hasMnemosTools */
 export function hasMempalaceMcp(profile?: ProfileMemorySource | null): boolean {
-  const servers = normServers(profile?.mcp_servers);
-  return servers.some((s) => s === "mempalace" || s.includes("mempalace"));
+  return hasMnemosTools(profile);
 }
 
 export function hasSqlQueryMemory(profile?: ProfileMemorySource | null): boolean {
@@ -34,5 +39,5 @@ export function hasSqlQueryMemory(profile?: ProfileMemorySource | null): boolean
 }
 
 export function showProjectMemoryUi(profile?: ProfileMemorySource | null): boolean {
-  return hasMempalaceMcp(profile) || hasSqlQueryMemory(profile);
+  return hasMnemosTools(profile) || hasSqlQueryMemory(profile);
 }

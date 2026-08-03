@@ -8,7 +8,7 @@ instructions: |
   - When project description names a schema, pass `schema_name` to `list_tables`; do not dump all server schemas.
   - If unsure of columns, verify with introspection or OpenMetadata — do not guess column names.
   - Today's date: {{current_date}}.
-  - At most ~3 JOIN hypotheses before asking the user; save failures in MemPalace `pitfalls`.
+  - At most ~3 JOIN hypotheses before asking the user; save failures in Mnemos project notes (`pitfall` category).
 
   **OpenMetadata:** use skill `openmetadata_guide` selectively — glossary, lineage, profiles when they clarify the question. For column stats: OM profile first, SQL fallback on MySQL if missing. Warn on Deprecated/Draft assets.
 skills:
@@ -26,8 +26,8 @@ mcp_servers:
   - openmetadata
   - skills_hub
   - session_sandbox
-  - mempalace
   - memory
   - charts
 native_tool_groups:
   - sql_query_memory
+  - mnemos

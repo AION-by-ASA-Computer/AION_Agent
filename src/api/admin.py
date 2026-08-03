@@ -2041,58 +2041,31 @@ async def delete_query(entry_id: int):
 
 
 @router.get("/memory/facts")
-async def get_mempalace_facts(query: str = ""):
-    """Retrieves project-specific semantic facts from Mempalace."""
+async def get_ltm_facts(
+    query: str = "",
+    scope_type: str = "user",
+    scope_key: str = "default",
+    tenant_id: str = "default",
+):
+    """Retrieve semantic facts from Mnemos LTM."""
+    from src.memory.mnemos.scope import global_scope, project_scope, user_scope
+    from src.memory.mnemos import store
+
     try:
-        # Build parameters for the mempalace server
-        config = mcp_manager.get_server_config("mempalace")
-        if not config:
-            return {
-                "facts": [],
-                "status": "offline",
-                "message": "Server mempalace non configurato",
-            }
-
-        # Get session using the new hybrid context manager
-        async with mcp_manager.session_context("mempalace") as session:
-            # DYNAMIC TOOL DISCOVERY
-            tools_result = await session.list_tools()
-            available_tools = [t.name for t in tools_result.tools]
-
-            tool_to_call = None
-            args = {}
-
-            if query:
-                if "mempalace_search" in available_tools:
-                    tool_to_call = "mempalace_search"
-                    args = {"query": query, "limit": 20}
-
-            if not tool_to_call:
-                if "mempalace_diary_read" in available_tools:
-                    tool_to_call = "mempalace_diary_read"
-                    args = {"agent_name": "AION", "last_n": 50}
-                elif "mempalace_status" in available_tools:
-                    tool_to_call = "mempalace_status"
-
-            if not tool_to_call:
-                return {
-                    "facts": [],
-                    "status": "partial",
-                    "message": "Reading tools not found",
-                }
-
-            res = await session.call_tool(tool_to_call, arguments=args)
-
-            facts_list = []
-            if hasattr(res, "content"):
-                facts_list = [c.text for c in res.content if hasattr(c, "text")]
-            else:
-                facts_list = [str(res)]
-
-            return {"facts": facts_list, "status": "online", "type": "project"}
-
+        if scope_type == "project":
+            scope = project_scope(tenant_id, scope_key)
+        elif scope_type == "global":
+            scope = global_scope(tenant_id)
+        else:
+            scope = user_scope(tenant_id, scope_key)
+        if query.strip():
+            notes = await store.fts_search(scope, query, limit=20, mode="current")
+        else:
+            notes = await store.list_notes(scope, limit=20)
+        facts = [n.content for n in notes]
+        return {"facts": facts, "status": "online", "type": "mnemos"}
     except Exception as e:
-        logger.error(f"Error calling Mempalace: {e}")
+        logger.error("Error calling Mnemos: %s", e)
         return {"facts": [], "status": "error", "message": str(e)}
 
 

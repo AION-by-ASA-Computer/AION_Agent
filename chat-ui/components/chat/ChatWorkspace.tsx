@@ -124,7 +124,7 @@ import { readStoredSqlProject } from "@/components/memory/ProjectMemoryToolbar";
 import { ProjectCreateModal } from "@/components/memory/ProjectCreateModal";
 import { fetchSqlProjects, type SqlProject } from "@/lib/api/query-memory";
 import {
-  hasMempalaceMcp,
+  hasMnemosTools,
   hasSqlQueryMemory,
   showProjectMemoryUi,
 } from "@/lib/memory/profile-capabilities";
@@ -743,7 +743,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     [activeProfileRow]
   );
   const showNavigationMemory = useMemo(
-    () => hasMempalaceMcp(activeProfileRow),
+    () => hasMnemosTools(activeProfileRow),
     [activeProfileRow]
   );
   const showProjectMemory = useMemo(

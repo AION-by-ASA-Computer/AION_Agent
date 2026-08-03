@@ -97,7 +97,6 @@ COPY migrations/       ./migrations/
 COPY scripts/          ./scripts/
 COPY wre[n]/            ./wren/
 COPY alembic.ini       ./
-COPY mempalace.yaml    ./
 COPY docker/backend-entrypoint.sh /usr/local/bin/aion-backend-entrypoint.sh
 
 RUN sed -i 's/\r$//' /usr/local/bin/aion-backend-entrypoint.sh \
@@ -107,14 +106,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/aion-backend-entrypoint.sh \
 
 # Writable runtime directories (mounted as volume in compose, created here as fallback)
 RUN mkdir -p /app/data /app/data/sessions /app/data/profiles \
-    /app/data/skills/generated /app/data/agent_dbs \
-    /app/data/chroma_embedding_cache
-
-# Pre-download Chroma ONNX embeddings (~80MB) so first MemPalace call does not block SSE.
-RUN XDG_CACHE_HOME=/app/data/chroma_embedding_cache \
-    TQDM_DISABLE=1 HF_HUB_DISABLE_PROGRESS_BARS=1 \
-    /opt/venv/bin/python scripts/warmup_chroma_embeddings.py \
-    || echo "WARN: chroma embedding warmup skipped at build time"
+    /app/data/skills/generated /app/data/agent_dbs
 
 EXPOSE 8001
 

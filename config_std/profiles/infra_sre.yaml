@@ -15,7 +15,7 @@ skills:
 - infra_audit
 - promql_library
 - charts_generation
-- mempalace_protocol
+- memory_protocol
 - presentation_design
 - web_research_protocol
 - incremental_execution_protocol
@@ -24,11 +24,11 @@ critical_skills:
 - artifact_protocol
 native_tool_groups:
 - web_research
+- mnemos
 mcp_servers:
 - prometheus
 - charts
 - grafana
 - memory
-- mempalace
 - skills_hub
 - session_sandbox

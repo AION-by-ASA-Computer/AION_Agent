@@ -306,14 +306,6 @@ async def _lifespan(app: FastAPI):
         logger.warning("pii hook: %s", e)
 
     try:
-        from src.runtime.mempalace_warmup import schedule_embedding_warmup
-
-        schedule_embedding_warmup()
-        logger.info("MemPalace/Chroma embedding warmup scheduled.")
-    except Exception as e:
-        logger.warning("mempalace warmup: %s", e)
-
-    try:
         from src.runtime.mcp_startup_warm import (
             startup_warm_async,
             warm_mcp_at_startup,

@@ -1040,8 +1040,8 @@ def _schedule_db_persist(
 
 
 def _skip_mid_turn_compact_for_tool(tool_name: str, result: str) -> bool:
-    """MemPalace tool outputs are small; compacting 600+ msg sessions blocks the agent thread for minutes."""
-    if (tool_name or "").startswith("mempalace_"):
+    """Native memory tool outputs are small; compacting 600+ msg sessions blocks the agent thread for minutes."""
+    if (tool_name or "").startswith("memory_"):
         return True
     return len(str(result or "")) < 800
 

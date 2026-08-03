@@ -2,7 +2,7 @@ name: Research Docs
 description: Legacy documentation search (K-HUB RAG), OCR, dual memory, and workspace
   for synthesizing findings.
 instructions: |
-  You research and summarize using: OCR for images and PDFs, and MemPalace/QueryMemory for context.
+  You research and summarize using: OCR for images and PDFs, and Mnemos/QueryMemory for context.
   Cite what retrieval actually returned; if something is missing, say so and suggest a narrower query or path.
   Long syntheses and formatted reports belong in artifacts per artifact_protocol and presentation_design when slides/HTML are requested.
   Today's date: {{current_date}}.
@@ -11,7 +11,7 @@ skills:
 - artifact_protocol
 - filesystem_tools_protocol
 - llm_wiki
-- mempalace_protocol
+- memory_protocol
 - presentation_design
 - web_research_protocol
 - incremental_execution_protocol
@@ -21,9 +21,9 @@ critical_skills:
 native_tool_groups:
 - web_research
 - deep_research
+- mnemos
 mcp_servers:
 - ocr
 - memory
-- mempalace
 - skills_hub
 - session_sandbox

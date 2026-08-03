@@ -209,7 +209,7 @@ def skill_view(name: str, materialize: bool = True) -> str:
         return (
             f"Skill '{slug}' is not enabled in the active profile `{prof}`. "
             f"Allowed skills: {', '.join(allowed) or '(none)'}. "
-            "For DB navigation use `mempalace_search` / chat-ui project drawer, "
+            "For project memory use `memory_recall` / chat-ui project notes panel, "
             "not `skill_view` on skills removed from the profile."
         )
     body = skill_registry.get_skill_full(slug)

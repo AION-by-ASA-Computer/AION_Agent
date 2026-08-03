@@ -19,3 +19,9 @@ bundles:
       - sql_memory_delete
       - sql_memory_list_projects
       - sql_memory_list_saved
+  mnemos:
+    description: "LTM Mnemos — recall, note, forget (in-process)."
+    tools:
+      - memory_recall
+      - memory_note
+      - memory_forget

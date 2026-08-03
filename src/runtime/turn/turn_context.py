@@ -190,10 +190,16 @@ async def build_turn_context(
         _prof_row.slug if _prof_row else pipeline.profile_name.replace(" ", "_").lower()
     )
 
-    # ------------------------------------------------------------------
-    # 2. LTM wake-up
-    # ------------------------------------------------------------------
-    wake = await ltm_orchestrator.wake_up(pipeline.session_id)
+    _tenant_qm = (
+        _os_qm.getenv("AION_DEFAULT_TENANT_ID") or "default"
+    ).strip() or "default"
+
+    wake = await ltm_orchestrator.wake_up(
+        pipeline.session_id,
+        user_id=pipeline.user_id,
+        tenant_id=_tenant_qm,
+        active_project=_qm_project,
+    )
 
     # ------------------------------------------------------------------
     # 3. STM window
@@ -337,12 +343,12 @@ async def build_turn_context(
         augmented_user,
     )
 
-    # Pre-turn hooks (SQL QM, MemPalace nav, exploration tracker, datasource)
+    # Pre-turn hooks (SQL QM, exploration tracker, datasource)
     from src.runtime.sql_query_memory_context import set_sql_qm_turn_context
+    from src.runtime.mnemos_context import MnemosTurnContext, set_mnemos_turn_context
 
     try:
         import src.runtime.query_memory_hooks  # noqa: F401 — register hooks
-        import src.runtime.db_navigation_mempalace_hooks  # noqa: F401
         import src.runtime.exploration_tracker  # noqa: F401
         import src.runtime.datasource_memory_orchestrator  # noqa: F401
 
@@ -366,7 +372,6 @@ async def build_turn_context(
         )
         mod = pre_turn_ctx.modified_payload or {}
         inject_sql = mod.get("sql_query_memory_inject")
-        inject_nav = mod.get("mempalace_nav_inject")
         inject_explore = mod.get("exploration_reminder")
         inject_turn_reminder = mod.get("turn_state_reminder")
         inject_proj = mod.get("project_context_inject")
@@ -383,9 +388,17 @@ async def build_turn_context(
             sql_cache_schemas=_sql_cache_schemas,
             sql_cache_hit_ids=_sql_cache_ids,
         )
+        set_mnemos_turn_context(
+            MnemosTurnContext(
+                session_id=pipeline.session_id,
+                tenant_id=_tenant_qm,
+                user_id=pipeline.user_id,
+                profile_slug=_qm_profile_slug,
+                project_slug=_qm_project,
+            )
+        )
         _injections = [
             ("sql_query_memory", inject_sql),
-            ("mempalace_nav", inject_nav),
             ("project_context", inject_proj),
             ("session_entity_cache", inject_session),
             ("exploration_reminder", inject_explore),
@@ -448,21 +461,13 @@ async def build_turn_context(
             )
 
             if not datasource_orchestrator_enabled():
-                from src.memory.project_memory_scope import (
-                    project_context_block_async,
-                    should_inject_project_context,
-                )
+                from src.memory.mnemos.scope import sanitize_project_slug
 
-                proj_ctx = await project_context_block_async(
-                    _qm_project,
-                    tenant_id=_tenant_qm,
-                    profile_slug=_qm_profile_slug,
-                )
-                if proj_ctx and should_inject_project_context(
-                    user_input, project_slug=_qm_project
-                ):
+                slug = sanitize_project_slug(_qm_project)
+                if slug and slug != "default":
+                    proj_ctx = f"ACTIVE_PROJECT: {slug}"
                     _prompt_inject_layers.append(
-                        {"key": "project_context", "text": str(proj_ctx)}
+                        {"key": "project_context", "text": proj_ctx}
                     )
                     augmented_user = proj_ctx + "\n\n" + augmented_user
         except Exception as proj_ctx_exc:
@@ -482,7 +487,6 @@ async def build_turn_context(
 
             _hook_keys = {
                 "sql_query_memory",
-                "mempalace_nav",
                 "project_context",
                 "session_entity_cache",
                 "exploration_reminder",

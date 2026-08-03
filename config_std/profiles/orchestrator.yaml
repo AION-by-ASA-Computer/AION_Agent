@@ -37,8 +37,8 @@ critical_skills:
 - orchestration_protocol
 native_tool_groups:
 - web_research
+- mnemos
 mcp_servers:
 - session_sandbox
 - skills_hub
 - memory
-- mempalace

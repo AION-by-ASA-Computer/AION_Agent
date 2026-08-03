@@ -212,8 +212,7 @@ def classify_turn_outcome(
             parts.append(f"Agent step limit reached ({llm_steps}/{max_agent_steps}).")
         parts.append(
             "See `data/diagnostics/turns.jsonl` for details. "
-            "For structured MemPalace import, retry in a new chat or run "
-            "`python scripts/bootstrap_db_navigation_mempalace.py --project <slug>`."
+            "For structured memory import, retry in a new chat or add notes via the project memory panel."
         )
         warning = " ".join(parts)
 

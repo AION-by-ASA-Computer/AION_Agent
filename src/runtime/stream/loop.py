@@ -647,15 +647,15 @@ class StreamLoop:
             ):
                 yield self._track_sse(self.plan_controller.sse_phase("researching"))
 
-            # MemPalace status notification
-            if _tn.startswith("mempalace_"):
+            # Mnemos memory tool status
+            if _tn.startswith("memory_"):
                 yield self._track_sse(
                     {
                         "type": "turn_status",
-                        "phase": "mempalace",
+                        "phase": "memory",
                         "tool": _tn,
                         "message": (
-                            f"MemPalace · {_tn} "
+                            f"Mnemos · {_tn} "
                             f"({self.tool_calls}/{self.max_tool_calls or '∞'})"
                         ),
                     }
@@ -798,7 +798,7 @@ class StreamLoop:
                 logger.debug("tool_error_recovery: %s", ter_exc)
 
             try:
-                import src.runtime.db_navigation_mempalace_hooks  # noqa: F401
+                import src.runtime.exploration_tracker  # noqa: F401
                 import src.runtime.exploration_tracker  # noqa: F401
                 from src.runtime.exploration_tracker import record_exploration_tool
                 from src.runtime.tool_result_postprocess import (
