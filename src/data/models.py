@@ -565,7 +565,7 @@ class OrchestrationAudit(Base):
     )
 
 
-class SecurityScan(Base):
+class Security Scan(Base):
     """Storico delle scansioni di sicurezza statiche (Antivirus)."""
 
     __tablename__ = "security_scans"

@@ -782,7 +782,7 @@
     "note_placeholder": "Nota su una riga (max 500 caratteri)",
     "save": "Salva",
     "empty": "Nessuna nota di progetto. Aggiungine una qui o chiedi all'agente di memorizzare.",
-    "status_line": "{active} attive / {total} totali · {digests} digest pronti · {stale} stale",
+    "status_line": "{{active}} attive / {{total}} totali · {{digests}} digest pronti · {{stale}} stale",
     "status_active": "Attive",
     "status_superseded": "Sostituite",
     "status_all": "Tutti gli stati",
@@ -802,7 +802,7 @@
   },
   "user_memory": {
     "empty": "Nessuna nota personale. Aggiungine una qui o chiedi all'agente di ricordare qualcosa su di te.",
-    "status_line": "{active} attive / {total} totali · {digests} digest pronti · {stale} stale"
+    "status_line": "{{active}} attive / {{total}} totali · {{digests}} digest pronti · {{stale}} stale"
   },
   "project_memory_debug": {
     "tab_overview": "Panoramica",

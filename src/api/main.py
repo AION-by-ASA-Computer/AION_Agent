@@ -357,7 +357,6 @@ async def _lifespan(app: FastAPI):
         logger.warning("tool offload cleanup: %s", e)
 
     try:
-        import os
         from src.runtime.memory_maintenance import memory_maintenance_loop
 
         if os.getenv("AION_MNEMOS_DREAM_ENABLED", "1").strip().lower() in (

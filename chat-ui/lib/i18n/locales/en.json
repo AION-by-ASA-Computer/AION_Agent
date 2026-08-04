@@ -782,7 +782,7 @@
     "note_placeholder": "One-line note (max 500 characters)",
     "save": "Save",
     "empty": "No project notes yet. Add one here or ask the agent to remember a lesson.",
-    "status_line": "{active} active / {total} total · {digests} digests ready · {stale} stale",
+    "status_line": "{{active}} active / {{total}} total · {{digests}} digests ready · {{stale}} stale",
     "status_active": "Active",
     "status_superseded": "Superseded",
     "status_all": "All statuses",
@@ -802,7 +802,7 @@
   },
   "user_memory": {
     "empty": "No personal notes yet. Add one here or ask the agent to remember something about you.",
-    "status_line": "{active} active / {total} total · {digests} digests ready · {stale} stale"
+    "status_line": "{{active}} active / {{total}} total · {{digests}} digests ready · {{stale}} stale"
   },
   "project_memory_debug": {
     "tab_overview": "Overview",
