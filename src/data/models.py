@@ -8,13 +8,15 @@ from typing import Optional
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
+    Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
     func,
-    LargeBinary,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -418,6 +420,12 @@ class LtmNote(Base):
     source_session_id: Mapped[Optional[str]] = mapped_column(String(64))
     source_message_id: Mapped[Optional[str]] = mapped_column(String(64))
     embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    confidence_source: Mapped[Optional[str]] = mapped_column(String(24))
+    valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    valid_to: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_recalled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    recall_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -426,6 +434,10 @@ class LtmNote(Base):
         UniqueConstraint(
             "tenant_id", "scope_type", "scope_key", "seq",
             name="uq_ltm_notes_scope_seq",
+        ),
+        Index(
+            "ix_ltm_notes_scope_status",
+            "tenant_id", "scope_type", "scope_key", "status",
         ),
     )
 

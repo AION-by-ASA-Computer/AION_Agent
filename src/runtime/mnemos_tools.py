@@ -156,9 +156,12 @@ def build_memory_note_tool(
         scope: str = "user",
         category: str = "fact",
         importance: int = 4,
+        supersede_hint: Optional[str] = None,
     ) -> str:
         tenant, uid, _prof, project = _resolve_ctx(session_id, user_id, "")
         inp = {"text": text[:200], "scope": scope, "category": category}
+        if supersede_hint:
+            inp["supersedes_hint"] = supersede_hint[:120]
         call_id = emit_tool_start(session_id, "memory_note", inp)
         try:
             out = _run_async(
@@ -171,6 +174,7 @@ def build_memory_note_tool(
                     importance=importance,
                     active_project_slug=project,
                     source_session_id=session_id,
+                    supersede_hint=supersede_hint,
                 )
             )
             payload = json.dumps(out, ensure_ascii=False)
@@ -207,6 +211,13 @@ def build_memory_note_tool(
                     ],
                 },
                 "importance": {"type": "integer", "minimum": 1, "maximum": 5},
+                "supersede_hint": {
+                    "type": "string",
+                    "description": (
+                        "Brief description of an older fact this note replaces; "
+                        "used to link supersession chains"
+                    ),
+                },
             },
             "required": ["text"],
         },

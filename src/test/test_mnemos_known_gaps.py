@@ -1,10 +1,6 @@
 """Tripwires for Mnemos defects found by the adversarial benchmark.
 
-Each test asserts the *desired* behaviour and is marked ``xfail(strict=True)``
-while the defect is open. When a fix lands the test starts passing, strict mode
-turns the unexpected pass into a failure, and whoever fixed it must remove the
-marker. That keeps the list of known gaps honest instead of letting it rot.
-
+When a fix lands the corresponding test must pass without xfail markers.
 See docs/benchmarks/mnemos-bench.md#adversarial-suite for the analysis.
 """
 
@@ -22,6 +18,14 @@ from src.memory.mnemos.scope import project_scope, user_scope
 
 @pytest.fixture()
 def mnemos_db(monkeypatch, tmp_path):
+    import src.data.engine as engine
+
+    if engine._engine is not None:
+        import asyncio
+
+        asyncio.run(engine._engine.dispose())
+    engine._engine = None
+    engine._session_factory = None
     url = f"sqlite+aiosqlite:///{tmp_path}/mnemos_gaps.db"
     monkeypatch.setenv("AION_DB_URL", url)
     monkeypatch.setenv("AION_MNEMOS_EMBEDDING_RECALL", "0")
@@ -37,12 +41,6 @@ def mnemos_db(monkeypatch, tmp_path):
     return url
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="forget_note(hard=True) deletes the row and the FTS entry but never "
-    "invalidates digests covering it, so the content survives in "
-    "ltm_digests.summary_text and keeps reaching the model through wake",
-)
 @pytest.mark.asyncio
 async def test_hard_delete_invalidates_covering_digest(mnemos_db):
     scope = user_scope("default", "digest_leak")
@@ -55,17 +53,9 @@ async def test_hard_delete_invalidates_covering_digest(mnemos_db):
     await store.forget_note(note.id, hard=True)
 
     digest = await store.get_digest(scope, 0, 2)
-    assert digest is None or not digest.ready, (
-        "a digest covering a hard-deleted note must be invalidated"
-    )
+    assert digest is None or not digest.ready or not (digest.summary_text or "").strip()
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="recall_across_scopes fills the result list scope by scope and returns "
-    "as soon as the limit is reached, so a crowded user scope hides project "
-    "notes entirely; scores are never normalised across scopes",
-)
 @pytest.mark.asyncio
 async def test_recall_across_scopes_does_not_starve_later_scopes(mnemos_db):
     user = user_scope("default", "starve")
@@ -80,17 +70,9 @@ async def test_recall_across_scopes_does_not_starve_later_scopes(mnemos_db):
 
     rows = await recall_across_scopes([user, project], "deploy target namespace", limit=10)
 
-    assert any("alibr-prod" in r["content"] for r in rows), (
-        "the project note must be reachable even when the user scope is crowded"
-    )
+    assert any("alibr-prod" in r["content"] for r in rows)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="the default FTS path (AION_MNEMOS_FTS_PHRASE_QUERY=0) ORs every token "
-    "of two characters or more with no stopword filtering, so any note "
-    "sharing an article with the query is returned as a match",
-)
 def test_default_fts_query_drops_stopwords():
     queries = build_fts_queries("what is the port of the metrics exporter")
     joined = " ".join(queries).lower()

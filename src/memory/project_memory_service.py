@@ -78,10 +78,13 @@ async def search_project_notes(
     project_slug: str,
     query: str,
     limit: int = 20,
+    mode: str = "current",
 ) -> List[Dict[str, Any]]:
+    from src.memory.mnemos.recall import recall
+
     scope = project_scope(tenant_id, project_slug)
-    notes = await store.fts_search(scope, query, limit=limit, mode="current")
-    return [_note_to_dict(n) for n in notes]
+    rows = await recall(scope, query, limit=limit, mode=mode)
+    return rows
 
 
 async def create_project_note(
@@ -135,7 +138,22 @@ async def update_project_note(
     return await _note_dict_by_id(int(out["id"]))
 
 
-async def delete_project_note(note_id: int) -> bool:
+async def delete_project_note(
+    note_id: int,
+    *,
+    tenant_id: str,
+    project_slug: str,
+) -> bool:
+    note = await store.get_note(note_id)
+    if not note:
+        return False
+    slug = sanitize_project_slug(project_slug)
+    if (
+        note.tenant_id != tenant_id
+        or note.scope_type != "project"
+        or note.scope_key != slug
+    ):
+        return False
     return await store.forget_note(note_id, hard=False)
 
 

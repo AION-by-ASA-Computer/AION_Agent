@@ -4,27 +4,44 @@ from __future__ import annotations
 
 import logging
 import os
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from src.skill_registry import skill_registry
 
 from .compress import schedule_compress
 from .format import format_wake_block
-from .recall import recall, recall_across_scopes, recall_across_scopes
+from .recall import recall, recall_across_scopes
 from .scope import (
     default_tenant_id,
     parse_scope_name,
     resolve_scope_for_write,
     resolve_scopes_for_wake,
-    user_scope,
 )
 from . import store
-from .types import MemoryScope
 from .wake import wake, wake_budget
 
 logger = logging.getLogger("aion.memory.mnemos.orchestrator")
 
 _LTM_MIN_IMPORTANCE = int(os.getenv("AION_LTM_MIN_IMPORTANCE", "2"))
+
+
+def _parse_confidence(raw: Any) -> float:
+    try:
+        return max(0.0, min(1.0, float(raw)))
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def _parse_valid_from(raw: Any) -> Optional[datetime]:
+    if not raw:
+        return None
+    if isinstance(raw, datetime):
+        return raw
+    try:
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 class MnemosOrchestrator:
@@ -62,7 +79,11 @@ class MnemosOrchestrator:
         importance: int = 3,
         active_project_slug: Optional[str] = None,
         source_session_id: Optional[str] = None,
+        source_message_id: Optional[str] = None,
         supersede_hint: Optional[str] = None,
+        confidence: float = 1.0,
+        confidence_source: Optional[str] = None,
+        valid_from: Optional[datetime] = None,
     ) -> Dict[str, Any]:
         scope = resolve_scope_for_write(
             tenant_id=tenant_id,
@@ -76,6 +97,10 @@ class MnemosOrchestrator:
             category=category,
             importance=importance,
             source_session_id=source_session_id,
+            source_message_id=source_message_id,
+            confidence=confidence,
+            confidence_source=confidence_source,
+            valid_from=valid_from or datetime.now(timezone.utc),
         )
         if supersede_hint:
             candidates = await store.find_supersede_candidates(
@@ -84,7 +109,7 @@ class MnemosOrchestrator:
             for c in candidates:
                 if c.id != note.id:
                     await store.supersede_note(c.id, note)
-        schedule_compress(scope)
+        schedule_compress(scope, seq=note.seq)
         return {
             "id": note.id,
             "seq": note.seq,
@@ -144,6 +169,7 @@ class MnemosOrchestrator:
         user_id: str,
         active_project_slug: Optional[str] = None,
         source_session_id: Optional[str] = None,
+        source_message_id: Optional[str] = None,
     ) -> int:
         if not data.get("should_persist"):
             return 0
@@ -164,6 +190,9 @@ class MnemosOrchestrator:
             scope_name = parse_scope_name(str(raw.get("scope") or "user"))
             if scope_name == "project" and not active_project_slug:
                 scope_name = "user"
+            conf = _parse_confidence(raw.get("confidence", 1.0))
+            conf_src = str(raw.get("confidence_source") or "extraction")[:24]
+            valid_from = _parse_valid_from(raw.get("valid_from"))
             try:
                 await self.add_note(
                     tenant_id=tenant_id,
@@ -174,7 +203,11 @@ class MnemosOrchestrator:
                     importance=imp,
                     active_project_slug=active_project_slug,
                     source_session_id=source_session_id,
+                    source_message_id=source_message_id,
                     supersede_hint=raw.get("supersedes_hint"),
+                    confidence=conf,
+                    confidence_source=conf_src,
+                    valid_from=valid_from,
                 )
                 saved += 1
             except Exception as e:

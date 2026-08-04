@@ -45,6 +45,9 @@ def _case(
     extra_scope_type: str | None = None,
     extra_scope_notes: list | None = None,
     recall_scope: str | None = None,
+    as_of: str | None = None,
+    hard_delete_index: int | None = None,
+    wake_forbidden_substrings: list[str] | None = None,
     rationale: str = "",
 ) -> dict:
     row: dict = {
@@ -70,6 +73,12 @@ def _case(
         row["extra_scope_notes"] = extra_scope_notes or []
     if recall_scope:
         row["recall_scope"] = recall_scope
+    if as_of:
+        row["as_of"] = as_of
+    if hard_delete_index is not None:
+        row["hard_delete_index"] = hard_delete_index
+    if wake_forbidden_substrings:
+        row["wake_forbidden_substrings"] = wake_forbidden_substrings
     if rationale:
         row["rationale"] = rationale
     return row
@@ -263,6 +272,80 @@ def _temporal_cases() -> list[dict]:
     ]
 
 
+def _as_of_cases() -> list[dict]:
+    return [
+        _case(
+            "asof_lease_past",
+            "as_of_query",
+            "user",
+            [
+                _note("Office lease expires 2026-12-31", valid_from="2025-01-01T00:00:00Z"),
+                _note("Office lease expires 2027-06-30", valid_from="2026-07-01T00:00:00Z"),
+            ],
+            "office lease expiration date",
+            ["2026-12-31"],
+            forbidden_substrings=["2027-06-30"],
+            as_of="2026-03-01T00:00:00Z",
+            rationale="as_of before the second fact's valid_from must surface the earlier lease.",
+        ),
+        _case(
+            "asof_budget_future",
+            "as_of_query",
+            "project",
+            [
+                _note("Q1 budget cap is 120000 EUR", valid_from="2026-01-01T00:00:00Z"),
+                _note("Q2 budget cap is 150000 EUR", valid_from="2026-04-01T00:00:00Z"),
+            ],
+            "budget cap amount",
+            ["120000"],
+            forbidden_substrings=["150000"],
+            as_of="2026-02-15T00:00:00Z",
+        ),
+        _case(
+            "asof_oncall_rotation",
+            "as_of_query",
+            "user",
+            [
+                _note("Primary on-call is Alice", valid_from="2026-01-01T00:00:00Z", valid_to="2026-03-01T00:00:00Z"),
+                _note("Primary on-call is Bob", valid_from="2026-03-01T00:00:00Z"),
+            ],
+            "primary on-call engineer",
+            ["Alice"],
+            forbidden_substrings=["Bob"],
+            as_of="2026-02-20T00:00:00Z",
+        ),
+    ]
+
+
+def _deletion_cases() -> list[dict]:
+    return [
+        _case(
+            "delete_hard_wake",
+            "deletion_completeness",
+            "user",
+            [_note("Secret API token is sk-live-abcdef123456")],
+            "secret API token",
+            [],
+            min_hits=0,
+            hard_delete_index=0,
+            wake_forbidden_substrings=["sk-live-abcdef123456"],
+            rationale="Hard-deleted note must not appear in wake digest text.",
+        ),
+        _case(
+            "delete_hard_recall",
+            "deletion_completeness",
+            "project",
+            [_note("Deprecated endpoint is /api/v1/legacy/users")],
+            "legacy users endpoint",
+            [],
+            min_hits=0,
+            hard_delete_index=0,
+            forbidden_substrings=["/api/v1/legacy/users"],
+            rationale="Hard-deleted note must not be returned by recall.",
+        ),
+    ]
+
+
 # --------------------------------------------------------------------------
 # 4. Contradiction — both notes active, no supersede hint was ever emitted
 # --------------------------------------------------------------------------
@@ -437,6 +520,8 @@ def build_cases() -> list[dict]:
         *_alias_cases(),
         *_paraphrase_cases(),
         *_temporal_cases(),
+        *_as_of_cases(),
+        *_deletion_cases(),
         *_contradiction_cases(),
         *_recency_cases(),
         *_importance_cases(),

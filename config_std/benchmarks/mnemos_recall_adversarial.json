@@ -2,11 +2,13 @@
   "title": "Mnemos recall adversarial benchmark",
   "description": "Adversarial suite targeting known Mnemos weaknesses: alias resolution, true paraphrase, temporal validity, contradiction, ranking signals, cross-scope competition and scale. Failures are work items, not bugs in the dataset.",
   "version": 1,
-  "case_count": 48,
+  "case_count": 53,
   "categories": {
     "alias_coref": 8,
     "true_paraphrase": 8,
     "temporal_validity": 5,
+    "as_of_query": 3,
+    "deletion_completeness": 2,
     "contradiction": 5,
     "recency_rank": 4,
     "importance_rank": 4,
@@ -455,6 +457,121 @@
       "forbidden_substrings": [
         "7 days"
       ]
+    },
+    {
+      "id": "asof_lease_past",
+      "category": "as_of_query",
+      "scope_type": "user",
+      "setup_notes": [
+        {
+          "content": "Office lease expires 2026-12-31",
+          "valid_from": "2025-01-01T00:00:00Z"
+        },
+        {
+          "content": "Office lease expires 2027-06-30",
+          "valid_from": "2026-07-01T00:00:00Z"
+        }
+      ],
+      "query": "office lease expiration date",
+      "expected_substrings": [
+        "2026-12-31"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "2027-06-30"
+      ],
+      "as_of": "2026-03-01T00:00:00Z",
+      "rationale": "as_of before the second fact's valid_from must surface the earlier lease."
+    },
+    {
+      "id": "asof_budget_future",
+      "category": "as_of_query",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Q1 budget cap is 120000 EUR",
+          "valid_from": "2026-01-01T00:00:00Z"
+        },
+        {
+          "content": "Q2 budget cap is 150000 EUR",
+          "valid_from": "2026-04-01T00:00:00Z"
+        }
+      ],
+      "query": "budget cap amount",
+      "expected_substrings": [
+        "120000"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "150000"
+      ],
+      "as_of": "2026-02-15T00:00:00Z"
+    },
+    {
+      "id": "asof_oncall_rotation",
+      "category": "as_of_query",
+      "scope_type": "user",
+      "setup_notes": [
+        {
+          "content": "Primary on-call is Alice",
+          "valid_from": "2026-01-01T00:00:00Z",
+          "valid_to": "2026-03-01T00:00:00Z"
+        },
+        {
+          "content": "Primary on-call is Bob",
+          "valid_from": "2026-03-01T00:00:00Z"
+        }
+      ],
+      "query": "primary on-call engineer",
+      "expected_substrings": [
+        "Alice"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "Bob"
+      ],
+      "as_of": "2026-02-20T00:00:00Z"
+    },
+    {
+      "id": "delete_hard_wake",
+      "category": "deletion_completeness",
+      "scope_type": "user",
+      "setup_notes": [
+        {
+          "content": "Secret API token is sk-live-abcdef123456"
+        }
+      ],
+      "query": "secret API token",
+      "expected_substrings": [],
+      "recall_limit": 5,
+      "min_hits": 0,
+      "hard_delete_index": 0,
+      "wake_forbidden_substrings": [
+        "sk-live-abcdef123456"
+      ],
+      "rationale": "Hard-deleted note must not appear in wake digest text."
+    },
+    {
+      "id": "delete_hard_recall",
+      "category": "deletion_completeness",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Deprecated endpoint is /api/v1/legacy/users"
+        }
+      ],
+      "query": "legacy users endpoint",
+      "expected_substrings": [],
+      "recall_limit": 5,
+      "min_hits": 0,
+      "forbidden_substrings": [
+        "/api/v1/legacy/users"
+      ],
+      "hard_delete_index": 0,
+      "rationale": "Hard-deleted note must not be returned by recall."
     },
     {
       "id": "contra_region",

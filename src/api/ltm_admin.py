@@ -84,7 +84,10 @@ async def ltm_search(
 ) -> List[Dict[str, Any]]:
     scope = _scope(tenant_id, scope_type, scope_key)
     notes = await store.fts_search(scope, q, limit=limit, mode=mode)
-    return [{"id": n.id, "seq": n.seq, "content": n.content, "status": n.status} for n in notes]
+    return [
+        {"id": n.id, "seq": n.seq, "content": n.content, "status": n.status}
+        for n, _ in notes
+    ]
 
 
 @router.get("/digests/zoom")

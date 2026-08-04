@@ -193,6 +193,7 @@ def _cleanup_orphaned_mcp_remotes() -> None:
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     _offload_cleanup_task = None
+    _memory_maintenance_task = None
     try:
         from src.observability.logging import setup_logging
         from src.observability.hooks_emitter import register_observability_hooks
@@ -342,6 +343,7 @@ async def _lifespan(app: FastAPI):
         logger.warning("cron scheduler: %s", e)
 
     _offload_cleanup_task = None
+    _memory_maintenance_task = None
     try:
         from src.runtime.offload_cleanup import offload_cleanup_loop
         from src.settings import get_settings
@@ -353,6 +355,23 @@ async def _lifespan(app: FastAPI):
             logger.info("Tool offload cleanup loop scheduled.")
     except Exception as e:
         logger.warning("tool offload cleanup: %s", e)
+
+    try:
+        import os
+        from src.runtime.memory_maintenance import memory_maintenance_loop
+
+        if os.getenv("AION_MNEMOS_DREAM_ENABLED", "1").strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        ):
+            _memory_maintenance_task = asyncio.create_task(
+                memory_maintenance_loop(), name="mnemos-dream-cycle"
+            )
+            logger.info("Mnemos dream maintenance loop scheduled.")
+    except Exception as e:
+        logger.warning("Mnemos dream maintenance: %s", e)
 
     try:
         from src.mcp_integration_sync import sync_all_mcp_server_configs_from_registry
@@ -393,6 +412,14 @@ async def _lifespan(app: FastAPI):
             pass
         except Exception as e:
             logger.warning("tool offload cleanup shutdown: %s", e)
+    if _memory_maintenance_task is not None:
+        _memory_maintenance_task.cancel()
+        try:
+            await _memory_maintenance_task
+        except asyncio.CancelledError:
+            pass
+        except Exception as e:
+            logger.warning("Mnemos dream maintenance shutdown: %s", e)
     try:
         from src.runtime.cron_scheduler import stop_scheduler
 

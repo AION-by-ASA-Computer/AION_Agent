@@ -3811,6 +3811,8 @@ class AgentPipeline:
                             mode="turn",
                             active_project=_qm_project,
                             profile_slug=self.profile_name,
+                            user_message_id=user_message_id,
+                            assistant_message_id=assistant_message_id,
                         )
                     )
                     try:
@@ -3898,6 +3900,12 @@ class AgentPipeline:
             )
             yield {"type": "error", "content": str(e)}
         finally:
+            try:
+                from src.runtime.mnemos_context import clear_mnemos_turn_context
+
+                clear_mnemos_turn_context(self.session_id)
+            except Exception:
+                pass
             if (
                 "cancel_checker_task" in locals()
                 and cancel_checker_task

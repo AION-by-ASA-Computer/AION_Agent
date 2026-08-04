@@ -13,6 +13,14 @@ from src.memory.mnemos.wake import wake
 
 @pytest.fixture()
 def mnemos_db(monkeypatch, tmp_path):
+    import src.data.engine as engine
+
+    if engine._engine is not None:
+        import asyncio
+
+        asyncio.run(engine._engine.dispose())
+    engine._engine = None
+    engine._session_factory = None
     url = f"sqlite+aiosqlite:///{tmp_path}/mnemos.db"
     monkeypatch.setenv("AION_DB_URL", url)
     init_engine(url)
@@ -78,7 +86,7 @@ async def test_insert_notes_bulk_matches_loop(mnemos_db):
 
     loop_hits = await store.fts_search(scope_loop, "laptops servicenow", limit=10)
     bulk_hits = await store.fts_search(scope_bulk, "laptops servicenow", limit=10)
-    assert {n.content for n in loop_hits} == {n.content for n in bulk_hits}
+    assert {n.content for n, _ in loop_hits} == {n.content for n, _ in bulk_hits}
 
 
 @pytest.mark.asyncio

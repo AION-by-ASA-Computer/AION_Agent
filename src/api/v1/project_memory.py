@@ -20,9 +20,11 @@ from src.memory.project_memory_service import (
     list_project_notes,
     project_memory_status,
     project_wake_preview,
+    search_project_notes,
     update_project_note,
     zoom_project_digest,
 )
+from src.memory.sql_query_memory import sql_query_memory
 
 logger = logging.getLogger(__name__)
 
@@ -71,12 +73,32 @@ class DeleteNoteBody(BaseModel):
     note_id: int = Field(..., ge=1)
 
 
+async def _assert_project_access(
+    project_slug: str,
+    auth: ChatAuthIdentity,
+) -> str:
+    slug = sanitize_project_slug(project_slug)
+    err = await sql_query_memory.check_user_project_access(
+        project_slug=slug,
+        tenant_id=default_tenant_id(),
+        user_id=auth.identifier,
+    )
+    if err:
+        raise HTTPException(status_code=403, detail=err)
+    return slug
+
+
+async def require_project_access(
+    project: str = Query(...),
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
+) -> str:
+    return await _assert_project_access(project, auth)
+
+
 @router.get("/status")
 async def get_status(
-    project: str = Query(...),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    slug: str = Depends(require_project_access),
 ) -> Dict[str, Any]:
-    slug = sanitize_project_slug(project)
     tenant = default_tenant_id()
     try:
         return await project_memory_status(tenant_id=tenant, project_slug=slug)
@@ -87,14 +109,12 @@ async def get_status(
 
 @router.get("/notes", response_model=List[NoteOut])
 async def get_notes(
-    project: str = Query(...),
     category: Optional[str] = Query(None),
     status: str = Query("active"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    slug: str = Depends(require_project_access),
 ) -> List[Dict[str, Any]]:
-    slug = sanitize_project_slug(project)
     if category and category not in NOTE_CATEGORIES:
         raise HTTPException(status_code=400, detail="invalid category")
     tenant = default_tenant_id()
@@ -111,30 +131,26 @@ async def get_notes(
 
 @router.get("/notes/search", response_model=List[NoteOut])
 async def search_notes(
-    project: str = Query(...),
     q: str = Query(..., min_length=1),
     mode: str = Query("current"),
     limit: int = Query(20, ge=1, le=100),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    slug: str = Depends(require_project_access),
 ) -> List[Dict[str, Any]]:
-    slug = sanitize_project_slug(project)
     tenant = default_tenant_id()
-    from src.memory.mnemos import store
-    from src.memory.mnemos.scope import project_scope
-    from src.memory.project_memory_service import _note_to_dict
-
-    scope = project_scope(tenant, slug)
-    notes = await store.fts_search(scope, q, limit=limit, mode=mode)
-    return [_note_to_dict(n) for n in notes]
+    return await search_project_notes(
+        tenant_id=tenant,
+        project_slug=slug,
+        query=q,
+        limit=limit,
+        mode=mode,
+    )
 
 
 @router.get("/notes/{note_id}", response_model=NoteOut)
 async def get_note(
     note_id: int,
-    project: str = Query(...),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    slug: str = Depends(require_project_access),
 ) -> Dict[str, Any]:
-    slug = sanitize_project_slug(project)
     tenant = default_tenant_id()
     try:
         return await get_project_note(
@@ -146,12 +162,10 @@ async def get_note(
 
 @router.get("/digests", response_model=List[DigestOut])
 async def get_digests(
-    project: str = Query(...),
     ready_only: Optional[bool] = Query(None),
     limit: int = Query(500, ge=1, le=1000),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    slug: str = Depends(require_project_access),
 ) -> List[Dict[str, Any]]:
-    slug = sanitize_project_slug(project)
     tenant = default_tenant_id()
     return await list_project_digests(
         tenant_id=tenant,
@@ -163,12 +177,10 @@ async def get_digests(
 
 @router.get("/digests/zoom")
 async def get_digest_zoom(
-    project: str = Query(...),
     lo: int = Query(..., ge=0),
     hi: int = Query(..., gt=0),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    slug: str = Depends(require_project_access),
 ) -> Dict[str, Any]:
-    slug = sanitize_project_slug(project)
     tenant = default_tenant_id()
     return await zoom_project_digest(
         tenant_id=tenant, project_slug=slug, lo=lo, hi=hi
@@ -177,11 +189,9 @@ async def get_digest_zoom(
 
 @router.get("/wake-preview")
 async def get_wake_preview(
-    project: str = Query(...),
     budget: Optional[int] = Query(None, ge=1, le=100),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    slug: str = Depends(require_project_access),
 ) -> Dict[str, Any]:
-    slug = sanitize_project_slug(project)
     tenant = default_tenant_id()
     return await project_wake_preview(
         tenant_id=tenant, project_slug=slug, budget=budget
@@ -190,10 +200,8 @@ async def get_wake_preview(
 
 @router.post("/compress")
 async def post_compress(
-    project: str = Query(...),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    slug: str = Depends(require_project_access),
 ) -> Dict[str, Any]:
-    slug = sanitize_project_slug(project)
     tenant = default_tenant_id()
     try:
         return await compress_project_memory(
@@ -209,7 +217,7 @@ async def post_note(
     body: CreateNoteBody,
     auth: ChatAuthIdentity = Depends(require_chat_auth),
 ) -> Dict[str, Any]:
-    slug = sanitize_project_slug(body.project)
+    slug = await _assert_project_access(body.project, auth)
     if body.category not in NOTE_CATEGORIES:
         raise HTTPException(status_code=400, detail="invalid category")
     tenant = default_tenant_id()
@@ -234,7 +242,7 @@ async def patch_note(
     body: UpdateNoteBody,
     auth: ChatAuthIdentity = Depends(require_chat_auth),
 ) -> Dict[str, Any]:
-    slug = sanitize_project_slug(body.project)
+    slug = await _assert_project_access(body.project, auth)
     tenant = default_tenant_id()
     try:
         return await update_project_note(
@@ -255,9 +263,18 @@ async def patch_note(
 async def remove_note(
     note_id: int,
     body: DeleteNoteBody,
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
 ) -> Dict[str, Any]:
-    ok = await delete_project_note(note_id)
+    from src.memory.mnemos import store
+
+    note = await store.get_note(note_id)
+    if not note or note.scope_type != "project":
+        raise HTTPException(status_code=404, detail="note_not_found")
+    slug = await _assert_project_access(note.scope_key, auth)
+    tenant = default_tenant_id()
+    ok = await delete_project_note(
+        note_id, tenant_id=tenant, project_slug=slug
+    )
     if not ok:
         raise HTTPException(status_code=404, detail="note_not_found")
     return {"ok": True, "note_id": note_id}

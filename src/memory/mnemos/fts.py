@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import logging
-import os
 import re
-from typing import List, Tuple
+from typing import List
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,63 +16,25 @@ _QUOTED_PHRASE_RE = re.compile(r'"([^"]{2,80})"')
 _BACKTICK_PHRASE_RE = re.compile(r"`([^`]{2,80})`")
 
 _FTS_STOPWORDS = frozenset(
-    {
-        "about",
-        "after",
-        "also",
-        "answer",
-        "being",
-        "between",
-        "boxed",
-        "contain",
-        "containing",
-        "could",
-        "does",
-        "each",
-        "excluding",
-        "final",
-        "from",
-        "have",
-        "into",
-        "mark",
-        "more",
-        "only",
-        "order",
-        "other",
-        "our",
-        "phrase",
-        "phrases",
-        "portal",
-        "question",
-        "reply",
-        "separated",
-        "servicenow",
-        "short",
-        "should",
-        "substring",
-        "tell",
-        "than",
-        "that",
-        "their",
-        "them",
-        "there",
-        "these",
-        "they",
-        "this",
-        "those",
-        "through",
-        "using",
-        "what",
-        "when",
-        "where",
-        "which",
-        "while",
-        "with",
-        "within",
-        "working",
-        "would",
-        "your",
-    }
+    """
+    a about above after again against all am an and any are aren't as at be because
+    been before being below between both but by can cannot could couldn't did didn't
+    do does doesn't doing don't down during each few for from further had hadn't has
+    hasn't have haven't having he he'd he'll he's her here here's hers herself him
+    himself his how how's i i'd i'll i'm i've if in into is isn't it it's its itself
+    let's me more most mustn't my myself no nor not of off on once only or other ought
+    our ours ourselves out over own same she she'd she'll she's should shouldn't so some
+    such than that that's the their theirs them themselves then there there's these
+    they they'd they'll they're they've this those through to too under until up very was
+    wasn't we we'd we'll we're we've were weren't what what's when when's where where's
+    which while who who's whom why why's with won't would wouldn't you you'd you'll you're
+    you've your yours yourself yourselves
+    about dopo anche essere stato stata stati state tra fra come dove quando perche perché
+    quale quali quello quella quelli quelle questo questa questi queste sono era erano
+    sono stato stata stati state con senza sopra sotto tutti tutte tutto tutta molto
+    poco piu più meno gia già ancora solo sola soli sole loro nostro nostra nostri nostre
+    vostro vostra vostri vostre loro esso essa essi esse lui lei noi voi
+    """.split()
 )
 
 
@@ -180,69 +141,6 @@ def _term_score(term: str) -> float:
     return score
 
 
-def _escape_fts_query_v2(q: str, *, max_terms: int = 12) -> Tuple[str, str]:
-    """Return (primary_query, fallback_or_query)."""
-    if not (q or "").strip():
-        return '""', '""'
-
-    phrases = _extract_phrases(q)
-    terms = _tokenize_terms(q, phrases=phrases)
-    terms.sort(key=_term_score, reverse=True)
-    terms = terms[:max_terms]
-
-    phrase_part = " AND ".join(_quote_fts_term(p) for p in phrases[:4])
-    term_part = " OR ".join(_quote_fts_term(t) for t in terms)
-
-    if phrase_part and term_part:
-        primary = f"({phrase_part}) AND ({term_part})"
-    elif phrase_part:
-        primary = phrase_part
-    elif term_part:
-        primary = f"({term_part})"
-    else:
-        primary = '""'
-
-    or_bits: List[str] = []
-    for p in phrases[:4]:
-        or_bits.append(_quote_fts_term(p))
-    for t in terms:
-        or_bits.append(_quote_fts_term(t))
-    if not or_bits:
-        fallback = '""'
-    elif len(or_bits) == 1:
-        fallback = or_bits[0]
-    else:
-        fallback = "(" + " OR ".join(or_bits) + ")"
-    return primary, fallback
-
-
-def _escape_fts_query_legacy(q: str, *, max_terms: int = 12) -> str:
-    if not (q or "").strip():
-        return '""'
-    tokens = _FTS_TOKEN_RE.findall(q)
-    if not tokens:
-        return '""'
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for tok in sorted(tokens, key=len, reverse=True):
-        low = tok.lower()
-        if low in seen:
-            continue
-        seen.add(low)
-        ordered.append(tok)
-        if len(ordered) >= max_terms:
-            break
-    quoted = [_quote_fts_term(t) for t in ordered]
-    if len(quoted) == 1:
-        return quoted[0]
-    return "(" + " OR ".join(quoted) + ")"
-
-
-def _escape_fts_query(q: str, *, max_terms: int = 12) -> str:
-    """Build a safe FTS5 query from free text (legacy entry — OR tokens by length)."""
-    return _escape_fts_query_legacy(q, max_terms=max_terms)
-
-
 def build_discriminative_query(q: str, *, max_terms: int = 12) -> str:
     """Strip boilerplate and return space-separated discriminative terms for recall."""
     if not (q or "").strip():
@@ -262,11 +160,38 @@ def build_discriminative_query(q: str, *, max_terms: int = 12) -> str:
 
 
 def build_fts_queries(q: str, *, max_terms: int = 12) -> List[str]:
-    """Return ordered FTS queries to try (primary then OR fallback)."""
-    if os.getenv("AION_MNEMOS_FTS_PHRASE_QUERY", "0") == "1":
-        primary, fallback = _escape_fts_query_v2(q, max_terms=max_terms)
-        if primary == fallback:
-            return [primary] if primary != '""' else []
-        return [item for item in (primary, fallback) if item and item != '""']
-    legacy = _escape_fts_query_legacy(q, max_terms=max_terms)
-    return [legacy] if legacy != '""' else []
+    """Return ordered FTS queries: phrase AND, top-term AND, then OR fallback."""
+    if not (q or "").strip():
+        return []
+
+    phrases = _extract_phrases(q)
+    terms = _tokenize_terms(q, phrases=phrases)
+    terms.sort(key=_term_score, reverse=True)
+    terms = terms[:max_terms]
+
+    queries: List[str] = []
+
+    if phrases:
+        phrase_part = " AND ".join(_quote_fts_term(p) for p in phrases[:4])
+        if phrase_part:
+            queries.append(phrase_part)
+
+    if len(terms) >= 2:
+        top_and = " AND ".join(_quote_fts_term(t) for t in terms[:3])
+        if top_and not in queries:
+            queries.append(top_and)
+
+    or_bits: List[str] = []
+    for p in phrases[:4]:
+        or_bits.append(_quote_fts_term(p))
+    for t in terms:
+        or_bits.append(_quote_fts_term(t))
+    if or_bits:
+        if len(or_bits) == 1:
+            or_query = or_bits[0]
+        else:
+            or_query = "(" + " OR ".join(or_bits) + ")"
+        if or_query not in queries:
+            queries.append(or_query)
+
+    return queries

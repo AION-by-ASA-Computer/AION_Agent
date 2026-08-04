@@ -4,8 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-from typing import List, Optional
+from typing import Dict, List, Optional, Set
 
 from sqlalchemy import select
 
@@ -19,7 +18,8 @@ from .types import MemoryScope
 
 logger = logging.getLogger("aion.memory.mnemos.compress")
 
-_compress_task: Optional[asyncio.Task] = None
+_scope_compress_locks: Dict[tuple[str, str, str], asyncio.Lock] = {}
+_scope_compress_pending: Set[tuple[str, str, str]] = set()
 
 
 def _compression_skill() -> str:
@@ -27,6 +27,13 @@ def _compression_skill() -> str:
         "Compress the block into one line max 500 chars. Reply with JSON: "
         '{"summary": "..."}'
     )
+
+
+def _compress_lock(scope: MemoryScope) -> asyncio.Lock:
+    key = scope.as_tuple()
+    if key not in _scope_compress_locks:
+        _scope_compress_locks[key] = asyncio.Lock()
+    return _scope_compress_locks[key]
 
 
 async def _fetch_block_content(scope: MemoryScope, lo: int, hi: int) -> str:
@@ -82,10 +89,14 @@ async def compress_block(scope: MemoryScope, lo: int, hi: int) -> Optional[str]:
     return summary
 
 
+async def _scope_upper_bound(scope: MemoryScope) -> int:
+    async with get_async_session_maker()() as session:
+        return await store.max_seq(session, scope) + 1
+
+
 async def compress_scope(scope: MemoryScope) -> int:
     """Try to compress all mergeable blocks in scope; returns count compressed."""
-    async with get_async_session_maker()() as session:
-        t = await store.seq_count(session, scope)
+    t = await _scope_upper_bound(scope)
     if t < 2:
         return 0
     compressed = 0
@@ -104,27 +115,54 @@ async def compress_scope(scope: MemoryScope) -> int:
     return compressed
 
 
-def schedule_compress(scope: MemoryScope) -> None:
-    global _compress_task
+async def compress_leaf_block(scope: MemoryScope, seq: int) -> None:
+    """Mark the single-note leaf digest ready (no LLM — block size is 1)."""
+    lo = seq
+    hi = seq + 1
+    existing = await store.get_digest(scope, lo, hi)
+    if existing and existing.ready:
+        return
+    content = await _fetch_block_content(scope, lo, hi)
+    if not content.strip():
+        return
+    summary = content.strip()[:500]
+    await store.upsert_digest(scope, lo, hi, summary, ready=True)
+
+
+def schedule_compress(scope: MemoryScope, *, seq: Optional[int] = None) -> None:
+    key = scope.as_tuple()
+    if key in _scope_compress_pending:
+        return
+    _scope_compress_pending.add(key)
 
     async def _run() -> None:
-        try:
-            n = await compress_scope(scope)
-            if n:
-                logger.info(
-                    "Mnemos compressed %d digest(s) for %s/%s",
-                    n,
-                    scope.scope_type,
-                    scope.scope_key,
-                )
-        except Exception as e:
-            logger.warning("Mnemos compress job failed: %s", e)
+        lock = _compress_lock(scope)
+        if lock.locked():
+            _scope_compress_pending.discard(key)
+            return
+        async with lock:
+            try:
+                if seq is not None:
+                    await compress_leaf_block(scope, seq)
+                else:
+                    n = await compress_scope(scope)
+                    if n:
+                        logger.info(
+                            "Mnemos compressed %d digest(s) for %s/%s",
+                            n,
+                            scope.scope_type,
+                            scope.scope_key,
+                        )
+            except Exception as e:
+                logger.warning("Mnemos compress job failed: %s", e)
+            finally:
+                _scope_compress_pending.discard(key)
 
     try:
         loop = asyncio.get_running_loop()
         loop.create_task(_run())
     except RuntimeError:
-        pass
+        _scope_compress_pending.discard(key)
 
 
 async def compress_all_pending() -> int:

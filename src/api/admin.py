@@ -2062,7 +2062,7 @@ async def get_ltm_facts(
             notes = await store.fts_search(scope, query, limit=20, mode="current")
         else:
             notes = await store.list_notes(scope, limit=20)
-        facts = [n.content for n in notes]
+        facts = [n.content for n, _ in notes] if query.strip() else [n.content for n in notes]
         return {"facts": facts, "status": "online", "type": "mnemos"}
     except Exception as e:
         logger.error("Error calling Mnemos: %s", e)

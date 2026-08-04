@@ -24,6 +24,9 @@ conoscenza duratura come note. Rispondi SOLO con JSON valido.
       "scope": "user | project | global",
       "category": "preference | fact | event | decision | pitfall | task",
       "importance": 3,
+      "confidence": 0.9,
+      "confidence_source": "extraction",
+      "valid_from": null,
       "supersedes_hint": null
     }
   ]
@@ -36,6 +39,9 @@ conoscenza duratura come note. Rispondi SOLO con JSON valido.
 - Mai segreti/password/token/API key.
 - `text` ≤ 500 caratteri, una riga; dividi in più note se serve.
 - `importance` 1–5 — il server scarta sotto `AION_LTM_MIN_IMPORTANCE` (default 2).
+- `confidence` 0–1 — solidità del fatto (1.0 = osservato direttamente, 0.5 = inferenza).
+- `confidence_source`: `extraction` | `user_explicit` | `inference`.
+- `valid_from`: ISO-8601 opzionale — quando il fatto è diventato vero (default: ora).
 - `scope="project"` solo se nel turno è presente un progetto attivo (`ACTIVE_PROJECT`);
   altrimenti `user` per fatti/preferenze dell'utente, `global` per fatti aziendali/prodotto.
 - `category` è un tag informativo.

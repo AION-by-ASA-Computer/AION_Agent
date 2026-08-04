@@ -65,8 +65,7 @@ async def search_user_notes(
 ) -> List[Dict[str, Any]]:
     scope = _user_scope(tenant_id, user_identifier)
     notes = await store.fts_search(scope, query, limit=limit, mode=mode)
-    return [_note_to_dict(n) for n in notes]
-
+    return [_note_to_dict(n) for n, _ in notes]
 
 async def create_user_note(
     *,

@@ -4,16 +4,19 @@ import json
 import os
 import time
 import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from sqlalchemy import text
 
 from src.data.engine import get_async_session_maker
+from src.data.models import LtmNote
 from src.memory.mnemos import store as mnemos_store
 from src.memory.mnemos.recall import recall, recall_across_scopes
 from src.memory.mnemos.scope import project_scope, user_scope
 from src.memory.mnemos.types import MemoryScope
+from src.memory.mnemos.wake import wake, wake_budget
 
 from ..paths import run_artifact_dir
 from ..run_log import RunLogger
@@ -42,6 +45,8 @@ def _normalize_setup_notes(raw: Any) -> List[Dict[str, Any]]:
                 "importance": int(item.get("importance") or 3),
                 "age_days": item.get("age_days"),
                 "supersedes": item.get("supersedes"),
+                "valid_from": item.get("valid_from"),
+                "valid_to": item.get("valid_to"),
             }
         )
     return out
@@ -57,6 +62,17 @@ async def _backdate_note(note_id: int, age_days: float) -> None:
         await session.commit()
 
 
+async def _parse_dt(raw: Any) -> Optional[datetime]:
+    if not raw:
+        return None
+    if isinstance(raw, datetime):
+        return raw
+    try:
+        return datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
 async def _insert_setup_notes(
     scope: MemoryScope,
     specs: List[Dict[str, Any]],
@@ -68,14 +84,25 @@ async def _insert_setup_notes(
         content = spec.get("content") or ""
         if len(content.strip()) < 3:
             continue
+        vf = await _parse_dt(spec.get("valid_from"))
+        vt = await _parse_dt(spec.get("valid_to"))
         note = await mnemos_store.insert_note(
             scope,
             content=content,
             category=str(spec.get("category") or "fact"),
             importance=int(spec.get("importance") or 3),
             source_session_id=run_id,
+            valid_from=vf,
         )
         inserted.append(note)
+        if vt is not None:
+            async with get_async_session_maker()() as session:
+                row = await session.get(LtmNote, note.id)
+                if row:
+                    if vf is not None:
+                        row.valid_from = vf
+                    row.valid_to = vt
+                    await session.commit()
         age = spec.get("age_days")
         if age:
             await _backdate_note(note.id, float(age))
@@ -116,6 +143,8 @@ def _score_recall(
     hits = [s for s in expected_substrings if s.lower() in joined]
     forbidden = [s for s in forbidden_substrings if s.lower() in joined_all]
     ok = len(hits) >= min_hits and not forbidden
+    if ok and min_hits == 0 and not expected_substrings:
+        ok = not forbidden
     if ok:
         reason = "ok"
     elif forbidden:
@@ -247,6 +276,10 @@ async def run_mnemos_bench(
     if title:
         log.line("init", title)
 
+    from src.memory.mnemos.store import ensure_ltm_schema
+
+    await ensure_ltm_schema()
+
     per_case_path = run_artifact_dir(run_id) / "per_case.jsonl"
     if per_case_path.is_file():
         per_case_path.unlink()
@@ -271,9 +304,20 @@ async def run_mnemos_bench(
 
         if filler and filler_before:
             await _insert_filler(scope, filler, run_id=run_id)
-        await _insert_setup_notes(scope, setup_specs, run_id=run_id)
+
+        inserted_notes = await _insert_setup_notes(scope, setup_specs, run_id=run_id)
         if filler and not filler_before:
             await _insert_filler(scope, filler, run_id=run_id)
+        hard_idx = case.get("hard_delete_index")
+        if hard_idx is not None and 0 <= int(hard_idx) < len(inserted_notes):
+            await mnemos_store.forget_note(inserted_notes[int(hard_idx)].id, hard=True)
+            await mnemos_store.upsert_digest(
+                scope,
+                0,
+                max(2, len(inserted_notes)),
+                inserted_notes[int(hard_idx)].content,
+                ready=True,
+            )
 
         extra_scope: Optional[MemoryScope] = None
         extra_scope_type = case.get("extra_scope_type")
@@ -287,6 +331,7 @@ async def run_mnemos_bench(
 
         query = str(case.get("query") or "")
         recall_limit = int(case.get("recall_limit") or 5)
+        as_of = await _parse_dt(case.get("as_of"))
         prefer_hybrid = bool(case.get("prefer_hybrid"))
         prev_hybrid = os.environ.get("AION_MNEMOS_EMBEDDING_RECALL")
         if prefer_hybrid:
@@ -298,17 +343,29 @@ async def run_mnemos_bench(
         try:
             if str(case.get("recall_scope") or "") == "across" and extra_scope is not None:
                 recalled = await recall_across_scopes(
-                    [scope, extra_scope], query, limit=recall_limit
+                    [scope, extra_scope], query, limit=recall_limit, as_of=as_of
                 )
             else:
-                recalled = await recall(scope, query, limit=recall_limit)
+                recalled = await recall(scope, query, limit=recall_limit, as_of=as_of)
+            min_hits_raw = case.get("min_hits")
+            min_hits = int(min_hits_raw) if min_hits_raw is not None else 1
             score_dbg = _score_recall(
                 recalled,
                 expected_substrings=list(case.get("expected_substrings") or []),
                 forbidden_substrings=list(case.get("forbidden_substrings") or []),
-                min_hits=int(case.get("min_hits") or 1),
+                min_hits=min_hits,
                 top_k=case.get("expect_top_k"),
             )
+            wake_forbidden = list(case.get("wake_forbidden_substrings") or [])
+            if wake_forbidden:
+                wake_rows = await wake(scope, wake_budget())
+                wake_text = "\n".join(
+                    f"{r.get('line') or ''} {r.get('summary') or ''} {r.get('content') or ''}"
+                    for r in wake_rows
+                ).lower()
+                if any(s.lower() in wake_text for s in wake_forbidden):
+                    score_dbg["score"] = 0.0
+                    score_dbg["reason"] = "wake_leak"
 
             neg_scope_type = case.get("negative_scope_type")
             if neg_scope_type:

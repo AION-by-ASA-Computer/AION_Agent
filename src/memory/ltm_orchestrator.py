@@ -86,6 +86,8 @@ class LTMOrchestrator:
         active_project: Optional[str] = None,
         profile_slug: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        user_message_id: Optional[str] = None,
+        assistant_message_id: Optional[str] = None,
     ) -> None:
         _ = profile_slug
         if os.getenv("AION_LTM_EXTRACT", "1").lower() in ("0", "false", "no"):
@@ -122,6 +124,7 @@ class LTMOrchestrator:
             user_id=user_id,
             active_project_slug=active_project,
             source_session_id=session_id,
+            source_message_id=assistant_message_id or user_message_id,
         )
 
     def build_augmented_user_text(

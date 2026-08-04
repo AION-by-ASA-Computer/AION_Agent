@@ -13,6 +13,7 @@ def format_note_line(
     created_at: Optional[datetime] = None,
     category: Optional[str] = None,
     scope_label: Optional[str] = None,
+    confidence: Optional[float] = None,
 ) -> str:
     date_s = created_at.strftime("%Y-%m-%d") if created_at else ""
     prefix = f"[#{seq}]"
@@ -22,7 +23,10 @@ def format_note_line(
         prefix += f" ({scope_label})"
     if category:
         prefix += f" {category}:"
-    return f"{prefix} {content.strip()}"
+    body = content.strip()
+    if confidence is not None and confidence < 0.75:
+        body = f"~{body}~"
+    return f"{prefix} {body}"
 
 
 def format_digest_line(

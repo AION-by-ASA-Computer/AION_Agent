@@ -26,6 +26,65 @@ from .types import CONTENT_MAX_CHARS, MemoryScope, NOTE_CATEGORIES
 
 logger = logging.getLogger("aion.memory.mnemos.store")
 
+_LTM_NOTE_OPTIONAL_COLS: tuple[tuple[str, str], ...] = (
+    ("confidence", "REAL NOT NULL DEFAULT 1.0"),
+    ("confidence_source", "VARCHAR(24)"),
+    ("valid_from", "DATETIME"),
+    ("valid_to", "DATETIME"),
+    ("last_recalled_at", "DATETIME"),
+    ("recall_count", "INTEGER NOT NULL DEFAULT 0"),
+)
+
+
+async def ensure_ltm_schema() -> None:
+    """Idempotent schema guard for tests/benchmarks without Alembic."""
+    async with get_async_session_maker()() as session:
+        rows = (await session.execute(text("PRAGMA table_info(ltm_notes)"))).all()
+        existing = {r[1] for r in rows} if rows else set()
+        for name, typedef in _LTM_NOTE_OPTIONAL_COLS:
+            if name not in existing:
+                await session.execute(
+                    text(f"ALTER TABLE ltm_notes ADD COLUMN {name} {typedef}")
+                )
+        await session.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS ix_ltm_notes_scope_status "
+                "ON ltm_notes (tenant_id, scope_type, scope_key, status)"
+            )
+        )
+        await session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS ltm_entities (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    tenant_id VARCHAR(64) NOT NULL,
+                    scope_type VARCHAR(16) NOT NULL,
+                    scope_key VARCHAR(255) NOT NULL,
+                    kind VARCHAR(32) NOT NULL DEFAULT 'generic',
+                    canonical_key VARCHAR(255) NOT NULL,
+                    display_name VARCHAR(255) NOT NULL,
+                    aliases_json TEXT,
+                    first_seen DATETIME,
+                    last_seen DATETIME,
+                    mention_count INTEGER NOT NULL DEFAULT 0
+                )
+                """
+            )
+        )
+        await session.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS ltm_note_entities (
+                    note_id INTEGER NOT NULL,
+                    entity_id INTEGER NOT NULL,
+                    PRIMARY KEY (note_id, entity_id)
+                )
+                """
+            )
+        )
+        await session.commit()
+
+
 _scope_insert_locks: dict[tuple[str, str, str], asyncio.Lock] = {}
 
 
@@ -69,6 +128,21 @@ async def seq_count(session: AsyncSession, scope: MemoryScope) -> int:
         )
     ).scalar_one()
     return int(val or 0)
+
+
+async def max_seq(session: AsyncSession, scope: MemoryScope) -> int:
+    """Highest seq value in scope (may exceed note count after hard deletes)."""
+    tid, st, sk = scope.as_tuple()
+    val = (
+        await session.execute(
+            select(func.coalesce(func.max(LtmNote.seq), -1)).where(
+                LtmNote.tenant_id == tid,
+                LtmNote.scope_type == st,
+                LtmNote.scope_key == sk,
+            )
+        )
+    ).scalar_one()
+    return int(val)
 
 
 async def next_seq(session: AsyncSession, scope: MemoryScope) -> int:
@@ -147,12 +221,17 @@ async def insert_note(
     importance: int = 3,
     source_session_id: Optional[str] = None,
     source_message_id: Optional[str] = None,
+    confidence: float = 1.0,
+    confidence_source: Optional[str] = None,
+    valid_from: Optional[datetime] = None,
     session: Optional[AsyncSession] = None,
 ) -> LtmNote:
+    await ensure_ltm_schema()
     body = _clamp_content(content)
     if len(body) < 3:
         raise ValueError("Note content too short")
     imp = max(1, min(5, int(importance)))
+    conf = max(0.0, min(1.0, float(confidence)))
 
     async def _do(sess: AsyncSession) -> LtmNote:
         seq = await next_seq(sess, scope)
@@ -169,6 +248,10 @@ async def insert_note(
             source_session_id=source_session_id,
             source_message_id=source_message_id,
             embedding=emb,
+            confidence=conf,
+            confidence_source=confidence_source,
+            valid_from=valid_from,
+            recall_count=0,
         )
         sess.add(note)
         await sess.flush()
@@ -278,7 +361,31 @@ async def find_supersede_candidates(
     limit: int = 5,
 ) -> List[LtmNote]:
     hits = await fts_search(scope, hint, limit=limit, mode="current")
-    return [h for h in hits if h.status == "active"]
+    return [note for note, _ in hits if note.status == "active"]
+
+
+async def _purge_digests_covering(
+    session: AsyncSession, scope: MemoryScope, seq: int
+) -> None:
+    """Invalidate and clear digest text for ranges covering seq."""
+    await invalidate_digests_covering(session, scope, seq)
+    tid, st, sk = scope.as_tuple()
+    rows = (
+        await session.execute(
+            select(LtmDigest).where(
+                LtmDigest.tenant_id == tid,
+                LtmDigest.scope_type == st,
+                LtmDigest.scope_key == sk,
+                LtmDigest.range_start_seq <= seq,
+                LtmDigest.range_end_seq > seq,
+            )
+        )
+    ).scalars().all()
+    now = datetime.now(timezone.utc)
+    for d in rows:
+        d.summary_text = ""
+        d.ready = False
+        d.updated_at = now
 
 
 async def forget_note(note_id: int, *, hard: bool = False) -> bool:
@@ -286,15 +393,33 @@ async def forget_note(note_id: int, *, hard: bool = False) -> bool:
         note = await session.get(LtmNote, note_id)
         if not note:
             return False
+        scope = MemoryScope(note.tenant_id, note.scope_type, note.scope_key)
         if hard:
+            await _purge_digests_covering(session, scope, note.seq)
             await fts_delete(session, note_id)
             await session.delete(note)
         else:
             note.status = "superseded"
-            scope = MemoryScope(note.tenant_id, note.scope_type, note.scope_key)
             await invalidate_digests_covering(session, scope, note.seq)
         await session.commit()
         return True
+
+
+async def touch_recall_stats(note_ids: List[int]) -> None:
+    """Update last_recalled_at and recall_count for returned notes."""
+    if not note_ids:
+        return
+    now = datetime.now(timezone.utc)
+    async with get_async_session_maker()() as session:
+        rows = (
+            await session.execute(
+                select(LtmNote).where(LtmNote.id.in_(note_ids))
+            )
+        ).scalars().all()
+        for note in rows:
+            note.last_recalled_at = now
+            note.recall_count = int(note.recall_count or 0) + 1
+        await session.commit()
 
 
 async def invalidate_digests_covering(
@@ -441,16 +566,15 @@ async def fts_search(
     *,
     limit: int = 10,
     mode: str = "current",
-) -> List[LtmNote]:
+    as_of: Optional[datetime] = None,
+) -> List[tuple[LtmNote, float]]:
     tid, st, sk = scope.as_tuple()
     queries = build_fts_queries(query)
     if not queries:
         return []
     async with get_async_session_maker()() as session:
         rows = None
-        fts_q_used = ""
         for fts_q in queries:
-            fts_q_used = fts_q
             try:
                 rows = (
                     await session.execute(
@@ -466,7 +590,13 @@ async def fts_search(
                     LIMIT :lim
                     """
                         ),
-                        {"q": fts_q, "tid": tid, "st": st, "sk": sk, "lim": limit},
+                        {
+                            "q": fts_q,
+                            "tid": tid,
+                            "st": st,
+                            "sk": sk,
+                            "lim": max(limit * 3, limit),
+                        },
                     )
                 ).mappings().all()
             except Exception as exc:
@@ -483,22 +613,61 @@ async def fts_search(
                 break
         if not rows:
             return []
-        out: List[LtmNote] = []
+
+        terminal_by_id: dict[int, LtmNote] = {}
+        best_score: dict[int, float] = {}
         for r in rows:
             nid = int(r["note_id"])
             note = await session.get(LtmNote, nid)
             if not note:
                 continue
+            if not _note_visible(note, mode=mode, as_of=as_of):
+                continue
             if mode == "current" and note.status == "superseded":
                 note = await follow_supersede_chain(note)
-            out.append(note)
-        return out
+            tid_note = note.id
+            score = float(r["score"])
+            if tid_note not in best_score or score < best_score[tid_note]:
+                best_score[tid_note] = score
+                terminal_by_id[tid_note] = note
+
+        ordered = sorted(best_score.items(), key=lambda item: item[1])
+        return [
+            (terminal_by_id[nid], best_score[nid]) for nid, _ in ordered[:limit]
+        ]
+
+
+def _note_visible(
+    note: LtmNote,
+    *,
+    mode: str,
+    as_of: Optional[datetime],
+) -> bool:
+    if mode == "historical":
+        return True
+    ref = as_of or datetime.now(timezone.utc)
+    if ref.tzinfo is None:
+        ref = ref.replace(tzinfo=timezone.utc)
+    valid_from = getattr(note, "valid_from", None)
+    if valid_from is not None:
+        if valid_from.tzinfo is None:
+            valid_from = valid_from.replace(tzinfo=timezone.utc)
+        if as_of is not None and ref < valid_from:
+            return False
+    valid_to = getattr(note, "valid_to", None)
+    if valid_to is not None:
+        if valid_to.tzinfo is None:
+            valid_to = valid_to.replace(tzinfo=timezone.utc)
+        if valid_to <= ref:
+            return False
+    return True
 
 
 async def get_notes_by_ids(
     note_ids: List[int],
     *,
     mode: str = "current",
+    as_of: Optional[datetime] = None,
 ) -> List[LtmNote]:
     if not note_ids:
         return []
@@ -508,10 +677,20 @@ async def get_notes_by_ids(
             .scalars()
             .all()
         )
+        by_id = {n.id: n for n in rows}
         out: List[LtmNote] = []
-        for note in rows:
+        seen: set[int] = set()
+        for nid in note_ids:
+            note = by_id.get(nid)
+            if not note:
+                continue
+            if not _note_visible(note, mode=mode, as_of=as_of):
+                continue
             if mode == "current" and note.status == "superseded":
                 note = await follow_supersede_chain(note)
+            if note.id in seen:
+                continue
+            seen.add(note.id)
             out.append(note)
         return out
 
@@ -522,7 +701,8 @@ async def embedding_search(
     *,
     limit: int = 10,
     mode: str = "current",
-) -> List[LtmNote]:
+    as_of: Optional[datetime] = None,
+) -> List[tuple[LtmNote, float]]:
     """Cosine similarity over stored note embeddings (bounded scan)."""
     import numpy as np
 
@@ -547,6 +727,8 @@ async def embedding_search(
 
     scored: list[tuple[float, LtmNote]] = []
     for note in rows:
+        if not _note_visible(note, mode=mode, as_of=as_of):
+            continue
         vec = bytes_to_embedding(note.embedding)
         if vec is None:
             continue
@@ -554,12 +736,20 @@ async def embedding_search(
         scored.append((sim, note))
     scored.sort(key=lambda item: item[0], reverse=True)
 
-    out: List[LtmNote] = []
-    for _, note in scored[:limit]:
+    terminal_by_id: dict[int, LtmNote] = {}
+    best_sim: dict[int, float] = {}
+    for sim, note in scored:
         if mode == "current" and note.status == "superseded":
             note = await follow_supersede_chain(note)
-        out.append(note)
-    return out
+        tid_note = note.id
+        if tid_note not in best_sim or sim > best_sim[tid_note]:
+            best_sim[tid_note] = sim
+            terminal_by_id[tid_note] = note
+
+    ordered = sorted(best_sim.items(), key=lambda item: item[1], reverse=True)
+    return [
+        (terminal_by_id[nid], best_sim[nid]) for nid, _ in ordered[:limit]
+    ]
 
 
 async def list_digests(

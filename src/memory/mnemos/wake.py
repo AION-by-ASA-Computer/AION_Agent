@@ -24,19 +24,21 @@ async def resolve_block(
         return []
     digest = await store.get_digest(scope, lo, hi)
     if digest and digest.ready and (digest.summary_text or "").strip():
-        return [
-            {
-                "kind": "digest",
-                "lo": lo,
-                "hi": hi,
-                "line": format_digest_line(
-                    range_start=lo,
-                    range_end=hi,
-                    summary=digest.summary_text or "",
-                    scope_label=scope.scope_type,
-                ),
-            }
-        ]
+        active = await store.get_notes_in_range(scope, lo, hi, active_only=True)
+        if active:
+            return [
+                {
+                    "kind": "digest",
+                    "lo": lo,
+                    "hi": hi,
+                    "line": format_digest_line(
+                        range_start=lo,
+                        range_end=hi,
+                        summary=digest.summary_text or "",
+                        scope_label=scope.scope_type,
+                    ),
+                }
+            ]
     if hi - lo == 1:
         notes = await store.get_notes_in_range(scope, lo, hi, active_only=True)
         rows: List[Dict[str, Any]] = []
@@ -64,7 +66,7 @@ async def resolve_block(
 async def wake(scope: MemoryScope, k: int | None = None) -> List[Dict[str, Any]]:
     budget = k if k is not None else wake_budget()
     async with get_async_session_maker()() as session:
-        t = await store.seq_count(session, scope)
+        t = await store.max_seq(session, scope) + 1
     if t <= 0:
         return []
 
