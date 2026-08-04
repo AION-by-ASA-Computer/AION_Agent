@@ -1,0 +1,1105 @@
+{
+  "title": "Mnemos recall adversarial benchmark",
+  "description": "Adversarial suite targeting known Mnemos weaknesses: alias resolution, true paraphrase, temporal validity, contradiction, ranking signals, cross-scope competition and scale. Failures are work items, not bugs in the dataset.",
+  "version": 1,
+  "case_count": 48,
+  "categories": {
+    "alias_coref": 8,
+    "true_paraphrase": 8,
+    "temporal_validity": 5,
+    "contradiction": 5,
+    "recency_rank": 4,
+    "importance_rank": 4,
+    "cross_scope": 5,
+    "scale_recall": 4,
+    "precision_noise": 5
+  },
+  "cases": [
+    {
+      "id": "alias_k8s",
+      "category": "alias_coref",
+      "scope_type": "project",
+      "setup_notes": [
+        "Kubernetes cluster prod-eu-1 hosts the payment service",
+        "Docker Swarm cluster legacy-1 hosts the reporting service",
+        "Nomad cluster batch-1 hosts the ETL service",
+        "OpenShift cluster sandbox-1 hosts the demo service"
+      ],
+      "query": "which k8s cluster runs payments",
+      "expected_substrings": [
+        "prod-eu-1"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Distractors share every generic word; only the alias identifies the target."
+    },
+    {
+      "id": "alias_postgres",
+      "category": "alias_coref",
+      "scope_type": "user",
+      "setup_notes": [
+        "Analytics warehouse runs on PostgreSQL 16 with columnar extensions",
+        "Reporting warehouse runs on MySQL 8 with row storage",
+        "Archive warehouse runs on SQLite with plain files",
+        "Streaming warehouse runs on ClickHouse with merge trees"
+      ],
+      "query": "which version of pg backs the analytics warehouse",
+      "expected_substrings": [
+        "PostgreSQL 16"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Distractors share every generic word; only the alias identifies the target."
+    },
+    {
+      "id": "alias_mfa_expand",
+      "category": "alias_coref",
+      "scope_type": "user",
+      "setup_notes": [
+        "MFA is enforced for every administrative account",
+        "SSO is enforced for every administrative account",
+        "IP allowlisting is enforced for every administrative account",
+        "Session timeout is enforced for every administrative account"
+      ],
+      "query": "is multi-factor authentication mandatory for admins",
+      "expected_substrings": [
+        "MFA"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Distractors share every generic word; only the alias identifies the target."
+    },
+    {
+      "id": "alias_sla_expand",
+      "category": "alias_coref",
+      "scope_type": "project",
+      "setup_notes": [
+        "Service Level Agreement guarantees 99.95 percent monthly uptime",
+        "Internal target guarantees 99.50 percent monthly uptime",
+        "Best effort tier guarantees 95.00 percent monthly uptime",
+        "Free tier guarantees no percent monthly uptime"
+      ],
+      "query": "what uptime does the SLA promise",
+      "expected_substrings": [
+        "99.95"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Distractors share every generic word; only the alias identifies the target."
+    },
+    {
+      "id": "alias_ci_expand",
+      "category": "alias_coref",
+      "scope_type": "project",
+      "setup_notes": [
+        "Continuous Integration pipeline runs on GitHub Actions runner pool",
+        "Deployment pipeline runs on ArgoCD controller pool",
+        "Security scanning pipeline runs on Snyk cloud pool",
+        "Release pipeline runs on Jenkins agent pool"
+      ],
+      "query": "where does CI execute the builds",
+      "expected_substrings": [
+        "GitHub Actions"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Distractors share every generic word; only the alias identifies the target."
+    },
+    {
+      "id": "alias_person_initial",
+      "category": "alias_coref",
+      "scope_type": "user",
+      "setup_notes": [
+        "Maria Rossi is the primary on-call engineer for the platform team",
+        "Luca Bianchi is the primary on-call engineer for the data team",
+        "Anna Verdi is the primary on-call engineer for the mobile team",
+        "Paolo Neri is the primary on-call engineer for the network team"
+      ],
+      "query": "who is M. Rossi on-call for",
+      "expected_substrings": [
+        "Maria Rossi"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Distractors share every generic word; only the alias identifies the target."
+    },
+    {
+      "id": "alias_region_name",
+      "category": "alias_coref",
+      "scope_type": "project",
+      "setup_notes": [
+        "Primary workloads run in eu-west-1 for lowest latency",
+        "Backup workloads run in eu-central-1 for lowest latency",
+        "Batch workloads run in us-east-1 for lowest latency",
+        "Training workloads run in us-west-2 for lowest latency"
+      ],
+      "query": "which Ireland region runs the primary workloads",
+      "expected_substrings": [
+        "eu-west-1"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Distractors share every generic word; only the alias identifies the target."
+    },
+    {
+      "id": "alias_iam_expand",
+      "category": "alias_coref",
+      "scope_type": "user",
+      "setup_notes": [
+        "IAM roles are provisioned through Terraform modules only",
+        "Network rules are provisioned through Ansible playbooks only",
+        "DNS records are provisioned through Pulumi stacks only",
+        "TLS certificates are provisioned through cert-manager only"
+      ],
+      "query": "how is identity and access management provisioned",
+      "expected_substrings": [
+        "Terraform"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Distractors share every generic word; only the alias identifies the target."
+    },
+    {
+      "id": "para_backup_retention",
+      "category": "true_paraphrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "Backups are retained 35 days inside an encrypted vault",
+        "The office printer on the second floor needs a badge tap",
+        "The cafeteria serves the soup of the day at noon",
+        "The bike storage is behind the main entrance of the building"
+      ],
+      "query": "how long do we keep copies of the production database",
+      "expected_substrings": [
+        "35 days"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "prefer_hybrid": true,
+      "rationale": "Query shares zero content tokens with the target; siblings absorb stopword matches."
+    },
+    {
+      "id": "para_deploy_window",
+      "category": "true_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "Deploy window Sunday 02:00-04:00 UTC every week",
+        "The office printer on the second floor needs a badge tap",
+        "The cafeteria serves the soup of the day at noon",
+        "The bike storage is behind the main entrance of the building"
+      ],
+      "query": "when is the release slot scheduled on weekends",
+      "expected_substrings": [
+        "02:00"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "prefer_hybrid": true,
+      "rationale": "Query shares zero content tokens with the target; siblings absorb stopword matches."
+    },
+    {
+      "id": "para_oncall",
+      "category": "true_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "Maria Rossi is primary on-call engineer",
+        "The office printer on the second floor needs a badge tap",
+        "The cafeteria serves the soup of the day at noon",
+        "The bike storage is behind the main entrance of the building"
+      ],
+      "query": "who should be paged during a production outage",
+      "expected_substrings": [
+        "Maria Rossi"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "prefer_hybrid": true,
+      "rationale": "Query shares zero content tokens with the target; siblings absorb stopword matches."
+    },
+    {
+      "id": "para_password",
+      "category": "true_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "Passwords must rotate every 90 days per policy",
+        "The office printer on the second floor needs a badge tap",
+        "The cafeteria serves the soup of the day at noon",
+        "The bike storage is behind the main entrance of the building"
+      ],
+      "query": "credential renewal cadence enforced company wide",
+      "expected_substrings": [
+        "90"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "prefer_hybrid": true,
+      "rationale": "Query shares zero content tokens with the target; siblings absorb stopword matches."
+    },
+    {
+      "id": "para_ratelimit",
+      "category": "true_paraphrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "API rate limit 1200 requests per minute per tenant",
+        "The office printer on the second floor needs a badge tap",
+        "The cafeteria serves the soup of the day at noon",
+        "The bike storage is behind the main entrance of the building"
+      ],
+      "query": "throttling ceiling applied to each customer",
+      "expected_substrings": [
+        "1200"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "prefer_hybrid": true,
+      "rationale": "Query shares zero content tokens with the target; siblings absorb stopword matches."
+    },
+    {
+      "id": "para_encryption",
+      "category": "true_paraphrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "All customer data encrypted at rest with AES-256",
+        "The office printer on the second floor needs a badge tap",
+        "The cafeteria serves the soup of the day at noon",
+        "The bike storage is behind the main entrance of the building"
+      ],
+      "query": "which cipher protects stored records",
+      "expected_substrings": [
+        "AES-256"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "prefer_hybrid": true,
+      "rationale": "Query shares zero content tokens with the target; siblings absorb stopword matches."
+    },
+    {
+      "id": "para_logs",
+      "category": "true_paraphrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "Application logs kept 14 days in hot storage then archived",
+        "The office printer on the second floor needs a badge tap",
+        "The cafeteria serves the soup of the day at noon",
+        "The bike storage is behind the main entrance of the building"
+      ],
+      "query": "how far back can engineers search runtime output",
+      "expected_substrings": [
+        "14"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "prefer_hybrid": true,
+      "rationale": "Query shares zero content tokens with the target; siblings absorb stopword matches."
+    },
+    {
+      "id": "para_severity",
+      "category": "true_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "P1 incident means complete service outage affecting all users",
+        "The office printer on the second floor needs a badge tap",
+        "The cafeteria serves the soup of the day at noon",
+        "The bike storage is behind the main entrance of the building"
+      ],
+      "query": "what qualifies as a sev-one emergency",
+      "expected_substrings": [
+        "P1"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "prefer_hybrid": true,
+      "rationale": "Query shares zero content tokens with the target; siblings absorb stopword matches."
+    },
+    {
+      "id": "temporal_db_choice",
+      "category": "temporal_validity",
+      "scope_type": "user",
+      "setup_notes": [
+        {
+          "content": "Analytics database of choice is MySQL 8",
+          "age_days": 400
+        },
+        {
+          "content": "Analytics database of choice is PostgreSQL 16",
+          "supersedes": 0
+        }
+      ],
+      "query": "analytics database of choice",
+      "expected_substrings": [
+        "PostgreSQL 16"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "MySQL 8"
+      ],
+      "rationale": "Supersede chain must resolve to the current value."
+    },
+    {
+      "id": "temporal_oncall",
+      "category": "temporal_validity",
+      "scope_type": "user",
+      "setup_notes": [
+        {
+          "content": "Primary on-call engineer is Luca Bianchi",
+          "age_days": 300
+        },
+        {
+          "content": "Primary on-call engineer is Maria Rossi",
+          "supersedes": 0
+        }
+      ],
+      "query": "primary on-call engineer",
+      "expected_substrings": [
+        "Maria Rossi"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "Luca Bianchi"
+      ]
+    },
+    {
+      "id": "temporal_three_gen",
+      "category": "temporal_validity",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "API base URL is https://v1.example.com",
+          "age_days": 500
+        },
+        {
+          "content": "API base URL is https://v2.example.com",
+          "age_days": 200,
+          "supersedes": 0
+        },
+        {
+          "content": "API base URL is https://v3.example.com",
+          "supersedes": 1
+        }
+      ],
+      "query": "API base URL",
+      "expected_substrings": [
+        "v3.example.com"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "v1.example.com",
+        "v2.example.com"
+      ],
+      "rationale": "Three-generation chain; only the terminal note is current."
+    },
+    {
+      "id": "temporal_stale_match",
+      "category": "temporal_validity",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Deployment uses Ansible playbooks for rollout",
+          "age_days": 365
+        },
+        {
+          "content": "Deployment now uses ArgoCD GitOps sync",
+          "supersedes": 0
+        }
+      ],
+      "query": "Ansible playbooks rollout deployment",
+      "expected_substrings": [
+        "ArgoCD"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "Ansible"
+      ],
+      "rationale": "Query matches the stale note lexically; chain must redirect."
+    },
+    {
+      "id": "temporal_retention",
+      "category": "temporal_validity",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Log retention is 7 days",
+          "age_days": 250
+        },
+        {
+          "content": "Log retention is 30 days",
+          "supersedes": 0
+        }
+      ],
+      "query": "log retention days",
+      "expected_substrings": [
+        "30 days"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "7 days"
+      ]
+    },
+    {
+      "id": "contra_region",
+      "category": "contradiction",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Primary deploy region is eu-west-1",
+          "age_days": 180
+        },
+        {
+          "content": "Primary deploy region is eu-central-1"
+        }
+      ],
+      "query": "primary deploy region",
+      "expected_substrings": [
+        "eu-central-1"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Both notes are active and contradictory; the newer must win rank 1."
+    },
+    {
+      "id": "contra_db",
+      "category": "contradiction",
+      "scope_type": "user",
+      "setup_notes": [
+        {
+          "content": "Preferred cache layer is Memcached",
+          "age_days": 180
+        },
+        {
+          "content": "Preferred cache layer is Redis"
+        }
+      ],
+      "query": "preferred cache layer",
+      "expected_substrings": [
+        "Redis"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Both notes are active and contradictory; the newer must win rank 1."
+    },
+    {
+      "id": "contra_sla",
+      "category": "contradiction",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Support SLA for P1 tickets is 4 hours",
+          "age_days": 180
+        },
+        {
+          "content": "Support SLA for P1 tickets is 1 hour"
+        }
+      ],
+      "query": "support SLA P1 tickets",
+      "expected_substrings": [
+        "1 hour"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Both notes are active and contradictory; the newer must win rank 1."
+    },
+    {
+      "id": "contra_owner",
+      "category": "contradiction",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Technical owner of the billing service is team Alpha",
+          "age_days": 180
+        },
+        {
+          "content": "Technical owner of the billing service is team Delta"
+        }
+      ],
+      "query": "technical owner billing service",
+      "expected_substrings": [
+        "team Delta"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Both notes are active and contradictory; the newer must win rank 1."
+    },
+    {
+      "id": "contra_language",
+      "category": "contradiction",
+      "scope_type": "user",
+      "setup_notes": [
+        {
+          "content": "Chat interface language preference is English",
+          "age_days": 180
+        },
+        {
+          "content": "Chat interface language preference is Italian"
+        }
+      ],
+      "query": "chat interface language preference",
+      "expected_substrings": [
+        "Italian"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Both notes are active and contradictory; the newer must win rank 1."
+    },
+    {
+      "id": "recency_budget",
+      "category": "recency_rank",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Infrastructure budget approved at 120000 EUR",
+          "age_days": 540
+        },
+        {
+          "content": "Infrastructure budget approved at 180000 EUR"
+        }
+      ],
+      "query": "infrastructure budget approved",
+      "expected_substrings": [
+        "180000"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Identical lexical profile; only created_at separates them."
+    },
+    {
+      "id": "recency_headcount",
+      "category": "recency_rank",
+      "scope_type": "user",
+      "setup_notes": [
+        {
+          "content": "Platform team headcount is 6 engineers",
+          "age_days": 540
+        },
+        {
+          "content": "Platform team headcount is 9 engineers"
+        }
+      ],
+      "query": "platform team headcount engineers",
+      "expected_substrings": [
+        "9 engineers"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Identical lexical profile; only created_at separates them."
+    },
+    {
+      "id": "recency_version",
+      "category": "recency_rank",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Runtime pinned to Python 3.11",
+          "age_days": 540
+        },
+        {
+          "content": "Runtime pinned to Python 3.13"
+        }
+      ],
+      "query": "runtime pinned Python version",
+      "expected_substrings": [
+        "3.13"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Identical lexical profile; only created_at separates them."
+    },
+    {
+      "id": "recency_threshold",
+      "category": "recency_rank",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Alert threshold for error rate is 5 percent",
+          "age_days": 540
+        },
+        {
+          "content": "Alert threshold for error rate is 2 percent"
+        }
+      ],
+      "query": "alert threshold error rate percent",
+      "expected_substrings": [
+        "2 percent"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Identical lexical profile; only created_at separates them."
+    },
+    {
+      "id": "imp_rollback",
+      "category": "importance_rank",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Rollback procedure mentioned casually in a side conversation",
+          "importance": 1
+        },
+        {
+          "content": "Rollback procedure: run scripts/rollback.sh with the snapshot id",
+          "importance": 5
+        }
+      ],
+      "query": "rollback procedure",
+      "expected_substrings": [
+        "scripts/rollback.sh"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Both notes match; importance is the only quality signal available."
+    },
+    {
+      "id": "imp_contact",
+      "category": "importance_rank",
+      "scope_type": "user",
+      "setup_notes": [
+        {
+          "content": "Emergency contact discussed briefly during standup",
+          "importance": 1
+        },
+        {
+          "content": "Emergency contact is secops@company.com available 24x7",
+          "importance": 5
+        }
+      ],
+      "query": "emergency contact",
+      "expected_substrings": [
+        "secops@company.com"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Both notes match; importance is the only quality signal available."
+    },
+    {
+      "id": "imp_credentials",
+      "category": "importance_rank",
+      "scope_type": "project",
+      "setup_notes": [
+        {
+          "content": "Credentials topic raised in a planning meeting",
+          "importance": 1
+        },
+        {
+          "content": "Credentials are stored in Vault path secret/aion/prod",
+          "importance": 5
+        }
+      ],
+      "query": "credentials stored",
+      "expected_substrings": [
+        "secret/aion/prod"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Both notes match; importance is the only quality signal available."
+    },
+    {
+      "id": "imp_policy",
+      "category": "importance_rank",
+      "scope_type": "user",
+      "setup_notes": [
+        {
+          "content": "Data policy mentioned without detail in an email thread",
+          "importance": 1
+        },
+        {
+          "content": "Data policy requires EU-only residency for all customer PII",
+          "importance": 5
+        }
+      ],
+      "query": "data policy",
+      "expected_substrings": [
+        "EU-only residency"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "rationale": "Both notes match; importance is the only quality signal available."
+    },
+    {
+      "id": "cross_deploy",
+      "category": "cross_scope",
+      "scope_type": "user",
+      "setup_notes": [
+        "User note 1 about deploy in a general context",
+        "User note 2 about deploy in a general context",
+        "User note 3 about deploy in a general context",
+        "User note 4 about deploy in a general context",
+        "User note 5 about deploy in a general context",
+        "User note 6 about deploy in a general context",
+        "User note 7 about deploy in a general context",
+        "User note 8 about deploy in a general context",
+        "User note 9 about deploy in a general context",
+        "User note 10 about deploy in a general context",
+        "User note 11 about deploy in a general context",
+        "User note 12 about deploy in a general context"
+      ],
+      "query": "deploy target namespace",
+      "expected_substrings": [
+        "alibr-prod"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "extra_scope_type": "project",
+      "extra_scope_notes": [
+        "Project deploy target is namespace alibr-prod in cluster eu-west"
+      ],
+      "recall_scope": "across",
+      "rationale": "User scope returns a full page of lexical matches; project note must still surface."
+    },
+    {
+      "id": "cross_datasource",
+      "category": "cross_scope",
+      "scope_type": "user",
+      "setup_notes": [
+        "User note 1 about datasource in a general context",
+        "User note 2 about datasource in a general context",
+        "User note 3 about datasource in a general context",
+        "User note 4 about datasource in a general context",
+        "User note 5 about datasource in a general context",
+        "User note 6 about datasource in a general context",
+        "User note 7 about datasource in a general context",
+        "User note 8 about datasource in a general context",
+        "User note 9 about datasource in a general context",
+        "User note 10 about datasource in a general context",
+        "User note 11 about datasource in a general context",
+        "User note 12 about datasource in a general context"
+      ],
+      "query": "datasource DSN connection",
+      "expected_substrings": [
+        "alibr-ro"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "extra_scope_type": "project",
+      "extra_scope_notes": [
+        "Project datasource DSN is postgres://alibr-ro@db/internal"
+      ],
+      "recall_scope": "across",
+      "rationale": "User scope returns a full page of lexical matches; project note must still surface."
+    },
+    {
+      "id": "cross_owner",
+      "category": "cross_scope",
+      "scope_type": "user",
+      "setup_notes": [
+        "User note 1 about owner in a general context",
+        "User note 2 about owner in a general context",
+        "User note 3 about owner in a general context",
+        "User note 4 about owner in a general context",
+        "User note 5 about owner in a general context",
+        "User note 6 about owner in a general context",
+        "User note 7 about owner in a general context",
+        "User note 8 about owner in a general context",
+        "User note 9 about owner in a general context",
+        "User note 10 about owner in a general context",
+        "User note 11 about owner in a general context",
+        "User note 12 about owner in a general context"
+      ],
+      "query": "technical owner contact",
+      "expected_substrings": [
+        "team-platform"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "extra_scope_type": "project",
+      "extra_scope_notes": [
+        "Project technical owner is team-platform@company.com"
+      ],
+      "recall_scope": "across",
+      "rationale": "User scope returns a full page of lexical matches; project note must still surface."
+    },
+    {
+      "id": "cross_runbook",
+      "category": "cross_scope",
+      "scope_type": "user",
+      "setup_notes": [
+        "User note 1 about runbook in a general context",
+        "User note 2 about runbook in a general context",
+        "User note 3 about runbook in a general context",
+        "User note 4 about runbook in a general context",
+        "User note 5 about runbook in a general context",
+        "User note 6 about runbook in a general context",
+        "User note 7 about runbook in a general context",
+        "User note 8 about runbook in a general context",
+        "User note 9 about runbook in a general context",
+        "User note 10 about runbook in a general context",
+        "User note 11 about runbook in a general context",
+        "User note 12 about runbook in a general context"
+      ],
+      "query": "runbook restart location",
+      "expected_substrings": [
+        "docs/runbooks/restart.md"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "extra_scope_type": "project",
+      "extra_scope_notes": [
+        "Project runbook for restart lives at docs/runbooks/restart.md"
+      ],
+      "recall_scope": "across",
+      "rationale": "User scope returns a full page of lexical matches; project note must still surface."
+    },
+    {
+      "id": "cross_quota",
+      "category": "cross_scope",
+      "scope_type": "user",
+      "setup_notes": [
+        "User note 1 about quota in a general context",
+        "User note 2 about quota in a general context",
+        "User note 3 about quota in a general context",
+        "User note 4 about quota in a general context",
+        "User note 5 about quota in a general context",
+        "User note 6 about quota in a general context",
+        "User note 7 about quota in a general context",
+        "User note 8 about quota in a general context",
+        "User note 9 about quota in a general context",
+        "User note 10 about quota in a general context",
+        "User note 11 about quota in a general context",
+        "User note 12 about quota in a general context"
+      ],
+      "query": "quota vCPU memory",
+      "expected_substrings": [
+        "40 vCPU"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "extra_scope_type": "project",
+      "extra_scope_notes": [
+        "Project quota is 40 vCPU and 160 GiB memory"
+      ],
+      "recall_scope": "across",
+      "rationale": "User scope returns a full page of lexical matches; project note must still surface."
+    },
+    {
+      "id": "scale_discriminative",
+      "category": "scale_recall",
+      "scope_type": "project",
+      "setup_notes": [
+        "Node 447 check outcome: the disk controller error, replaced 2026-04-02"
+      ],
+      "query": "the node 447 disk controller error outcome",
+      "expected_substrings": [
+        "disk controller error"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "filler": {
+        "count": 600,
+        "position": "after",
+        "template": "Routine check completed for the service node {i} with the status nominal"
+      },
+      "rationale": "Discriminative token under 600 notes; measures BM25 and latency at scale."
+    },
+    {
+      "id": "scale_semantic",
+      "category": "scale_recall",
+      "scope_type": "project",
+      "setup_notes": [
+        "The rollout was halted because the canary cohort showed elevated latency"
+      ],
+      "query": "why did we stop the gradual release",
+      "expected_substrings": [
+        "canary cohort"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "prefer_hybrid": true,
+      "filler": {
+        "count": 600,
+        "position": "after",
+        "template": "Routine check completed for the service node {i} with the status nominal"
+      },
+      "rationale": "Semantic match beyond the embedding scan window (default 300 notes)."
+    },
+    {
+      "id": "scale_phrase",
+      "category": "scale_recall",
+      "scope_type": "project",
+      "setup_notes": [
+        "Incident INC-2026-9911 root cause was a corrupted migration lock"
+      ],
+      "query": "\"corrupted migration lock\" incident root cause",
+      "expected_substrings": [
+        "INC-2026-9911"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "filler": {
+        "count": 400,
+        "position": "before",
+        "template": "Deployment {i} for the service completed without a root cause finding"
+      },
+      "rationale": "Phrase query against 400 notes sharing the query's common words."
+    },
+    {
+      "id": "scale_common_words",
+      "category": "scale_recall",
+      "scope_type": "project",
+      "setup_notes": [
+        "Service node 288 required a manual restart after the memory leak"
+      ],
+      "query": "which node needed a manual restart for a memory leak",
+      "expected_substrings": [
+        "node 288"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "expect_top_k": 1,
+      "filler": {
+        "count": 500,
+        "position": "after",
+        "template": "Service node {i} restart check completed with no memory issue found"
+      },
+      "rationale": "Target shares almost every token with the filler; BM25 has little to work with."
+    },
+    {
+      "id": "prec_vault",
+      "category": "precision_noise",
+      "scope_type": "project",
+      "setup_notes": [
+        "Production credentials are stored in the Vault path secret/aion/prod"
+      ],
+      "query": "where are the production credentials stored",
+      "expected_substrings": [
+        "secret/aion/prod"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "NOISEMARK"
+      ],
+      "filler": {
+        "count": 40,
+        "position": "after",
+        "template": "NOISEMARK {i} is a note that has none of the terms in it"
+      },
+      "rationale": "Filler shares only stopwords with the query; returning any of it is a precision loss."
+    },
+    {
+      "id": "prec_snapshot",
+      "category": "precision_noise",
+      "scope_type": "project",
+      "setup_notes": [
+        "The rollback snapshot for the billing database is snap-db-4417"
+      ],
+      "query": "what is the rollback snapshot for the billing database",
+      "expected_substrings": [
+        "snap-db-4417"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "NOISEMARK"
+      ],
+      "filler": {
+        "count": 40,
+        "position": "after",
+        "template": "NOISEMARK {i} is a note that has none of the terms in it"
+      },
+      "rationale": "Filler shares only stopwords with the query; returning any of it is a precision loss."
+    },
+    {
+      "id": "prec_contact",
+      "category": "precision_noise",
+      "scope_type": "user",
+      "setup_notes": [
+        "The escalation contact for a security breach is secops@company.com"
+      ],
+      "query": "who is the escalation contact for a security breach",
+      "expected_substrings": [
+        "secops@company.com"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "NOISEMARK"
+      ],
+      "filler": {
+        "count": 40,
+        "position": "after",
+        "template": "NOISEMARK {i} is a note that has none of the terms in it"
+      },
+      "rationale": "Filler shares only stopwords with the query; returning any of it is a precision loss."
+    },
+    {
+      "id": "prec_endpoint",
+      "category": "precision_noise",
+      "scope_type": "project",
+      "setup_notes": [
+        "The metrics exporter for the API is on the port 9464"
+      ],
+      "query": "what is the port of the metrics exporter for the API",
+      "expected_substrings": [
+        "9464"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "NOISEMARK"
+      ],
+      "filler": {
+        "count": 40,
+        "position": "after",
+        "template": "NOISEMARK {i} is a note that has none of the terms in it"
+      },
+      "rationale": "Filler shares only stopwords with the query; returning any of it is a precision loss."
+    },
+    {
+      "id": "prec_window",
+      "category": "precision_noise",
+      "scope_type": "user",
+      "setup_notes": [
+        "The maintenance window for the cluster is on the first Tuesday"
+      ],
+      "query": "when is the maintenance window for the cluster",
+      "expected_substrings": [
+        "first Tuesday"
+      ],
+      "recall_limit": 10,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "NOISEMARK"
+      ],
+      "filler": {
+        "count": 40,
+        "position": "after",
+        "template": "NOISEMARK {i} is a note that has none of the terms in it"
+      },
+      "rationale": "Filler shares only stopwords with the query; returning any of it is a precision loss."
+    }
+  ]
+}

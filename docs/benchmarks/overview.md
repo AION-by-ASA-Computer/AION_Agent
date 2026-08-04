@@ -21,11 +21,16 @@ Benchmarks are **developer tools only** — they validate memory retrieval, agen
 
 | ID | Purpose | Typical runtime |
 |----|---------|-----------------|
-| `mnemos_bench` | Mnemos recall micro-benchmark (smoke: 6 cases, full: 81) | seconds–minutes |
+| `mnemos_bench` | Mnemos recall (smoke: 6, full: 81, adversarial: 48) | seconds–minutes |
 | `general_agent` | Agent pipeline smoke via JSON cases | seconds |
 | `longmemeval_v2_small` | Integration stress test (Mnemos-only ingest + agent) | minutes–hours |
 
 See [mnemos-bench.md](./mnemos-bench.md) for the primary Mnemos validation suite.
+
+The full dataset is a **regression guard** (expected 100%). The adversarial
+dataset is a **work-item tracker**: it targets known weaknesses and currently
+scores around 33%. A rising adversarial score is the signal that memory quality
+is actually improving — the full dataset can no longer show that.
 
 LongMemEval-V2 is documented in [longmemeval-v2.md](./longmemeval-v2.md) — note it measures **Mnemos project-scope retrieval**, not the full AION memory stack (SQL QM, KHUB RAG, Agent DB).
 
@@ -41,6 +46,11 @@ python -m src.benchmarks.cli run \
 python -m src.benchmarks.cli run \
   --benchmark mnemos_bench \
   --dataset config_std/benchmarks/mnemos_recall_full.json
+
+# Mnemos adversarial evaluation (48 cases, expected to fail — see mnemos-bench.md)
+python -m src.benchmarks.cli run \
+  --benchmark mnemos_bench \
+  --dataset config_std/benchmarks/mnemos_recall_adversarial.json
 
 # Hybrid recall (requires embedding service)
 AION_MNEMOS_EMBEDDING_RECALL=1 \

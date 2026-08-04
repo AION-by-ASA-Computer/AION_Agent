@@ -7,8 +7,11 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from sqlalchemy import text
+
+from src.data.engine import get_async_session_maker
 from src.memory.mnemos import store as mnemos_store
-from src.memory.mnemos.recall import recall
+from src.memory.mnemos.recall import recall, recall_across_scopes
 from src.memory.mnemos.scope import project_scope, user_scope
 from src.memory.mnemos.types import MemoryScope
 
@@ -25,24 +28,110 @@ def _scope(scope_type: str, scope_key: str) -> MemoryScope:
     return user_scope(BENCH_TENANT, scope_key)
 
 
+def _normalize_setup_notes(raw: Any) -> List[Dict[str, Any]]:
+    """Accept plain strings (legacy) or dicts with per-note attributes."""
+    out: List[Dict[str, Any]] = []
+    for item in raw or []:
+        if isinstance(item, str):
+            out.append({"content": item, "category": "fact", "importance": 3})
+            continue
+        out.append(
+            {
+                "content": str(item.get("content") or ""),
+                "category": str(item.get("category") or "fact"),
+                "importance": int(item.get("importance") or 3),
+                "age_days": item.get("age_days"),
+                "supersedes": item.get("supersedes"),
+            }
+        )
+    return out
+
+
+async def _backdate_note(note_id: int, age_days: float) -> None:
+    """Rewrite created_at so recency-sensitive ranking can be exercised."""
+    async with get_async_session_maker()() as session:
+        await session.execute(
+            text("UPDATE ltm_notes SET created_at = datetime('now', :delta) WHERE id = :id"),
+            {"delta": f"-{float(age_days)} days", "id": int(note_id)},
+        )
+        await session.commit()
+
+
+async def _insert_setup_notes(
+    scope: MemoryScope,
+    specs: List[Dict[str, Any]],
+    *,
+    run_id: str,
+) -> List[Any]:
+    inserted: List[Any] = []
+    for spec in specs:
+        content = spec.get("content") or ""
+        if len(content.strip()) < 3:
+            continue
+        note = await mnemos_store.insert_note(
+            scope,
+            content=content,
+            category=str(spec.get("category") or "fact"),
+            importance=int(spec.get("importance") or 3),
+            source_session_id=run_id,
+        )
+        inserted.append(note)
+        age = spec.get("age_days")
+        if age:
+            await _backdate_note(note.id, float(age))
+        sup = spec.get("supersedes")
+        if sup is not None and 0 <= int(sup) < len(inserted) - 1:
+            await mnemos_store.supersede_note(inserted[int(sup)].id, note)
+    return inserted
+
+
+async def _insert_filler(
+    scope: MemoryScope,
+    filler: Dict[str, Any],
+    *,
+    run_id: str,
+) -> int:
+    count = int(filler.get("count") or 0)
+    if count <= 0:
+        return 0
+    template = str(filler.get("template") or "Routine log entry {i} no action required")
+    bodies = [template.format(i=i) for i in range(1, count + 1)]
+    return await mnemos_store.insert_notes_bulk(
+        scope, bodies, category="event", importance=1, source_session_id=run_id
+    )
+
+
 def _score_recall(
     rows: List[Dict[str, Any]],
     *,
     expected_substrings: List[str],
     forbidden_substrings: List[str],
     min_hits: int,
+    top_k: Optional[int] = None,
 ) -> Dict[str, Any]:
-    contents = [str(r.get("content") or "") for r in rows]
-    joined = "\n".join(contents).lower()
+    """Expected substrings are checked inside the top_k window; forbidden across all rows."""
+    window = rows if top_k is None else rows[: max(1, int(top_k))]
+    joined = "\n".join(str(r.get("content") or "") for r in window).lower()
+    joined_all = "\n".join(str(r.get("content") or "") for r in rows).lower()
     hits = [s for s in expected_substrings if s.lower() in joined]
-    forbidden = [s for s in forbidden_substrings if s.lower() in joined]
+    forbidden = [s for s in forbidden_substrings if s.lower() in joined_all]
     ok = len(hits) >= min_hits and not forbidden
+    if ok:
+        reason = "ok"
+    elif forbidden:
+        reason = "forbidden_hit"
+    elif top_k is not None and any(
+        s.lower() in joined_all for s in expected_substrings if s.lower() not in joined
+    ):
+        reason = "rank_miss"
+    else:
+        reason = "miss"
     return {
         "score": 1.0 if ok else 0.0,
         "hits": hits,
         "forbidden": forbidden,
         "returned": len(rows),
-        "reason": "ok" if ok else ("forbidden_hit" if forbidden else "miss"),
+        "reason": reason,
     }
 
 
@@ -169,15 +258,31 @@ async def run_mnemos_bench(
         scope_key = f"{run_id}_{case_id}_{uuid.uuid4().hex[:6]}"
         scope = _scope(str(case.get("scope_type") or "user"), scope_key)
 
-        log.line("case", f"[{idx}/{len(cases)}] {case_id} — inserting {len(case.get('setup_notes') or [])} notes…")
+        setup_specs = _normalize_setup_notes(case.get("setup_notes"))
+        filler = case.get("filler") or {}
+        filler_before = str(filler.get("position") or "before") == "before"
 
-        for note in case.get("setup_notes") or []:
-            await mnemos_store.insert_note(
-                scope,
-                content=str(note),
-                category="fact",
-                importance=3,
-                source_session_id=run_id,
+        log.line(
+            "case",
+            f"[{idx}/{len(cases)}] {case_id} — inserting {len(setup_specs)} notes"
+            + (f" + {filler.get('count')} filler" if filler else "")
+            + "…",
+        )
+
+        if filler and filler_before:
+            await _insert_filler(scope, filler, run_id=run_id)
+        await _insert_setup_notes(scope, setup_specs, run_id=run_id)
+        if filler and not filler_before:
+            await _insert_filler(scope, filler, run_id=run_id)
+
+        extra_scope: Optional[MemoryScope] = None
+        extra_scope_type = case.get("extra_scope_type")
+        if extra_scope_type:
+            extra_scope = _scope(str(extra_scope_type), scope_key)
+            await _insert_setup_notes(
+                extra_scope,
+                _normalize_setup_notes(case.get("extra_scope_notes")),
+                run_id=run_id,
             )
 
         query = str(case.get("query") or "")
@@ -191,12 +296,18 @@ async def run_mnemos_bench(
         recalled: List[Dict[str, Any]] = []
         score_dbg: Dict[str, Any] = {"score": 0.0, "reason": "error", "hits": [], "returned": 0}
         try:
-            recalled = await recall(scope, query, limit=recall_limit)
+            if str(case.get("recall_scope") or "") == "across" and extra_scope is not None:
+                recalled = await recall_across_scopes(
+                    [scope, extra_scope], query, limit=recall_limit
+                )
+            else:
+                recalled = await recall(scope, query, limit=recall_limit)
             score_dbg = _score_recall(
                 recalled,
                 expected_substrings=list(case.get("expected_substrings") or []),
                 forbidden_substrings=list(case.get("forbidden_substrings") or []),
                 min_hits=int(case.get("min_hits") or 1),
+                top_k=case.get("expect_top_k"),
             )
 
             neg_scope_type = case.get("negative_scope_type")
@@ -242,7 +353,7 @@ async def run_mnemos_bench(
             "hits": score_dbg["hits"],
             "returned": score_dbg["returned"],
             "scope": f"{scope.scope_type}:{scope.scope_key}",
-            "embedding_recall": os.getenv("AION_MNEMOS_EMBEDDING_RECALL", "0"),
+            "embedding_recall": "1" if prefer_hybrid else hybrid_env,
             "top_result": top_snip,
         }
         rows.append(row)
