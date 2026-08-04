@@ -1,14 +1,16 @@
 ---
 title: Mnemos Bench
 sidebar_position: 2
-description: Dev-only micro-benchmark for Mnemos FTS and hybrid embedding recall.
+description: Dev-only benchmark for Mnemos FTS and hybrid embedding recall — smoke, full regression, and adversarial suites.
 ---
 
 # Mnemos Bench
 
-Mnemos Bench validates **what Mnemos is designed for**: short post-it notes, scoped recall (user / project), and optional hybrid retrieval — not full episodic memory over 100k trajectory chunks.
+Mnemos Bench validates **what Mnemos is designed for**: short post-it notes, scoped recall (user / project), and hybrid retrieval — not full episodic memory over 100k trajectory chunks.
 
 Use this benchmark in CI and during FTS/embedding tuning. For integration stress tests over large corpora, see [longmemeval-v2.md](./longmemeval-v2.md).
+
+Architectural context and phase-by-phase improvements: [Mnemos Architectural Hardening](../memory/mnemos-hardening.md).
 
 ## What it measures
 
@@ -26,10 +28,10 @@ Use this benchmark in CI and during FTS/embedding tuning. For integration stress
 | File | Cases | Use |
 |------|-------|-----|
 | `config_std/benchmarks/mnemos_recall.json` | 6 | CI smoke / quick regression |
-| `config_std/benchmarks/mnemos_recall_full.json` | 81 | Regression guard, expected 100% |
-| `config_std/benchmarks/mnemos_recall_adversarial.json` | 48 | Known weaknesses, currently ~33% |
+| `config_std/benchmarks/mnemos_recall_full.json` | 81 | Regression guard, expected **100%** |
+| `config_std/benchmarks/mnemos_recall_adversarial.json` | 53 | Weakness tracker + post-hardening scorecard |
 
-Regenerate a set after editing its generator:
+Regenerate after editing generators:
 
 ```bash
 python scripts/build_mnemos_recall_full.py
@@ -60,69 +62,46 @@ Each case:
 
 ## Adversarial suite
 
-The full dataset reached 100% and stopped being informative. Worse, it was
-partly measuring the wrong thing: its `semantic_paraphrase` category passed
-12/12 with embeddings **disabled**, which means the queries were reusing the
-notes' own words rather than paraphrasing them.
-
-The adversarial dataset exists to fail. Every category targets a capability we
-believe is weak, and a case that passes is a regression guard rather than a
-celebration.
+The adversarial dataset targets capabilities that are hard to exercise with keyword-only cases. After the hardening programme it serves as a **scorecard**: rising scores mean memory quality is improving.
 
 ### Categories
 
 | Category | Cases | What it tests |
 |----------|-------|----------------|
-| `alias_coref` | 8 | Target identified only by an alias (`k8s` → Kubernetes), with sibling distractors sharing every generic word |
-| `true_paraphrase` | 8 | Query shares **zero** content tokens with the target (enforced by assertion) |
-| `temporal_validity` | 5 | Superseded values must never surface as current, including 3-generation chains |
-| `contradiction` | 5 | Two active contradictory notes, no supersede hint — the newer must rank first |
-| `recency_rank` | 4 | Identical lexical profile, only `created_at` differs |
-| `importance_rank` | 4 | Both notes match, `importance` 5 must outrank `importance` 1 |
-| `cross_scope` | 5 | A project note must survive a user scope full of lexical matches |
-| `scale_recall` | 4 | Target buried under 400–600 filler notes |
-| `precision_noise` | 5 | Filler sharing only stopwords with the query must not be returned |
+| `alias_coref` | 8 | Target identified by alias (`k8s` → Kubernetes), with sibling distractors |
+| `true_paraphrase` | 8 | Query shares **zero** content tokens with the target (assertion-enforced) |
+| `temporal_validity` | 5 | Superseded values must not surface as current |
+| `as_of_query` | 3 | `recall(as_of=…)` must return facts valid at a past date |
+| `deletion_completeness` | 2 | Hard-deleted notes must not appear in recall or wake |
+| `contradiction` | 5 | Two active contradictory notes — ranking must prefer the right one |
+| `recency_rank` | 4 | Only `created_at` differs between matching notes |
+| `importance_rank` | 4 | `importance` 5 must outrank `importance` 1 |
+| `cross_scope` | 5 | Project note must survive a crowded user scope |
+| `scale_recall` | 4 | Target under 400–600 filler notes |
+| `precision_noise` | 5 | Filler sharing only stopwords must not pollute results |
 
-### Baseline (FTS-only, `AION_MNEMOS_EMBEDDING_RECALL=0`)
+### Current scores (post-hardening)
 
-| Category | Score | Reading |
-|----------|-------|---------|
-| `temporal_validity` | 5/5 | Supersede chains resolve correctly — a real strength |
-| `scale_recall` | 4/4 | BM25 holds up to 600 notes, sub-second |
-| `alias_coref` | 5/8 | Partial, and only where a distractor happened to be weaker |
-| `importance_rank` | 2/4 | Coincidental — importance is never read during ranking |
-| `true_paraphrase` | 0/8 | No embedding service means literally zero semantic recall |
-| `contradiction` | 0/5 | Both notes stay active; insertion order decides |
-| `recency_rank` | 0/4 | `created_at` is not a ranking signal |
-| `cross_scope` | 0/5 | Project notes never returned |
-| `precision_noise` | 0/5 | 9 of 10 returned notes are pure noise |
+| Mode | Overall | Key categories |
+|------|---------|----------------|
+| **FTS-only** (`AION_MNEMOS_EMBEDDING_RECALL=0`) | **40/53 (75.5%)** | `precision_noise` 5/5, `cross_scope` 5/5, `recency_rank` 4/4, `true_paraphrase` 0/8 |
+| **Hybrid** (default, embeddings on) | **46/53 (86.8%)** | `true_paraphrase` 8/8, `alias_coref` 7/8, `precision_noise` 0/5 |
 
-### Defects confirmed by the suite
+Hybrid mode requires `AION_EMBEDDING_URL` + `AION_EMBEDDING_MODEL` configured. Use `AION_MNEMOS_EMBED_ON_BULK=1` when running the adversarial suite with hybrid so filler notes receive vectors.
 
-Three findings are specific enough to be pinned by unit tests in
-`src/test/test_mnemos_known_gaps.py`, each marked `xfail(strict=True)` so that a
-fix forces the marker to be removed:
+**Trade-off:** hybrid recall improves paraphrase and alias resolution but can surface semantically similar filler notes (`precision_noise` regression). See [known trade-offs](../memory/mnemos-hardening.md#known-trade-offs).
 
-1. **Hard delete leaks into digests.** `forget_note(hard=True)` removes the row
-   and the FTS entry but never calls `invalidate_digests_covering`, so the
-   content survives in `ltm_digests.summary_text` and keeps reaching the model
-   through wake.
-2. **Cross-scope starvation.** `recall_across_scopes` fills the result list one
-   scope at a time and returns as soon as the limit is reached. With the default
-   `AION_MNEMOS_RECALL_LIMIT=10`, a user scope with ten lexical matches makes
-   project memory unreachable. Scores are never normalised across scopes.
-3. **Stopwords are search terms.** The default query path
-   (`AION_MNEMOS_FTS_PHRASE_QUERY=0`) is `_escape_fts_query_legacy`, which ORs
-   every token of two characters or more with no stopword filtering. Any note
-   sharing an article with the query is returned as a match. The `_FTS_STOPWORDS`
-   list exists but is only consulted by the v2 path, and it contains
-   LongMemEval boilerplate (`boxed`, `servicenow`, `portal`) rather than common
-   English words like `the`, `is`, or `of`.
+### Regression guards
+
+Fixed defects are covered by normal (non-xfail) tests in `src/test/test_mnemos_known_gaps.py`:
+
+1. Hard delete purges covering digests and wake skips stale digest blocks.
+2. Cross-scope recall merges all scopes with global ranking.
+3. FTS queries exclude English/Italian stopwords from the default path.
 
 ### Extra dataset fields
 
-The adversarial suite needs expressiveness the original schema lacked. All of it
-is backward compatible — the 81-case dataset still runs unchanged.
+Backward compatible — the 81-case full dataset runs unchanged.
 
 ```json
 {
@@ -141,17 +120,21 @@ is backward compatible — the 81-case dataset still runs unchanged.
 
 | Field | Effect |
 |-------|--------|
-| `setup_notes[].content` | Note body (a plain string is still accepted) |
-| `setup_notes[].category` / `.importance` | Written through to the note row |
-| `setup_notes[].age_days` | Backdates `created_at` so recency can be exercised |
-| `setup_notes[].supersedes` | Index of an earlier note in the same list to supersede |
-| `expect_top_k` | Expected substrings must appear within the first N results; a hit outside the window reports `rank_miss` |
-| `filler` | `{count, position, template}` — bulk-inserted noise before or after the setup notes |
-| `extra_scope_type` / `extra_scope_notes` | Populate a second scope |
-| `recall_scope: "across"` | Query via `recall_across_scopes` over both scopes |
+| `setup_notes[].content` | Note body (plain string still accepted) |
+| `setup_notes[].category` / `.importance` | Written to the note row |
+| `setup_notes[].age_days` | Backdates `created_at` for recency tests |
+| `setup_notes[].supersedes` | Index of earlier note in the same list to supersede |
+| `setup_notes[].valid_from` / `.valid_to` | Bi-temporal validity (ISO-8601) |
+| `as_of` | Passed to `recall(as_of=…)` |
+| `expect_top_k` | Expected substrings must appear in top N; else `rank_miss` |
+| `filler` | `{count, position, template}` — bulk noise before/after setup |
+| `extra_scope_type` / `extra_scope_notes` | Second scope for cross-scope cases |
+| `recall_scope: "across"` | Uses `recall_across_scopes` |
+| `hard_delete_index` | Hard-delete a setup note before recall/wake check |
+| `wake_forbidden_substrings` | Fail if substring appears in wake output |
+| `min_hits: 0` | Pass on absence of forbidden hits only (deletion cases) |
 
-Forbidden substrings are checked across **all** returned rows, while expected
-substrings are checked inside the `expect_top_k` window.
+Forbidden substrings are checked across **all** returned rows; expected substrings inside the `expect_top_k` window.
 
 ## Run
 
@@ -164,21 +147,27 @@ python -m src.benchmarks.cli run \
   --benchmark mnemos_bench \
   --dataset config_std/benchmarks/mnemos_recall.json
 
-# Full evaluation (81 cases, ~30–90s FTS-only)
+# Full regression (81 cases, must stay 100%)
 python -m src.benchmarks.cli run \
   --benchmark mnemos_bench \
   --dataset config_std/benchmarks/mnemos_recall_full.json
 
-# Adversarial evaluation (48 cases, expected to fail — see above)
+# Adversarial scorecard (53 cases)
 python -m src.benchmarks.cli run \
   --benchmark mnemos_bench \
   --dataset config_std/benchmarks/mnemos_recall_adversarial.json
 
-# Full + hybrid embedding (requires AION_EMBEDDING_* configured)
-AION_MNEMOS_EMBEDDING_RECALL=1 \
+# FTS-only baseline (explicit)
+AION_MNEMOS_EMBEDDING_RECALL=0 \
 python -m src.benchmarks.cli run \
   --benchmark mnemos_bench \
-  --dataset config_std/benchmarks/mnemos_recall_full.json
+  --dataset config_std/benchmarks/mnemos_recall_adversarial.json
+
+# Hybrid (default in .env.example; requires AION_EMBEDDING_*)
+AION_MNEMOS_EMBEDDING_RECALL=1 AION_MNEMOS_EMBED_ON_BULK=1 \
+python -m src.benchmarks.cli run \
+  --benchmark mnemos_bench \
+  --dataset config_std/benchmarks/mnemos_recall_adversarial.json
 
 # Subset for quick iteration
 python -m src.benchmarks.cli run \
@@ -190,17 +179,15 @@ python -m src.benchmarks.cli run \
 
 ```
 [cli] run_id=bench_c35507bb90
-[banner] ════════════════════════════════════════════════════════
-[banner]   Mnemos Bench — recall@k validation (dev CLI)
-[banner]   run_id:    bench_c35507bb90
-...
+[banner]   recall:    hybrid FTS+embedding
 [result]   PASS  fts_keyword_hit  score=1.0  reason=ok  0.26s  hits=['PostgreSQL']
-[done]   6/6 passed  (100.0%)  total 2.7s
-[done]   artifacts → data/benchmarks/runs/bench_c35507bb90/
-[cli] summary: 6/6 passed (100.0%)
+[done]   81/81 passed  (100.0%)  total 6.9s
+[done]   by category:
+[done]     true_paraphrase: 8/8 (100%)
+[cli] summary: 46/53 passed (86.8%)
 ```
 
-Results: `data/benchmarks/runs/<run_id>/` — open `REPORT.md` or `metrics.json` for the full breakdown.
+Results: `data/benchmarks/runs/<run_id>/` — `REPORT.md`, `metrics.json`, `per_case.jsonl`.
 
 ## Adding cases
 

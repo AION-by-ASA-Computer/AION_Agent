@@ -61,7 +61,6 @@ def apply_benchmark_isolation_env(
         "AION_CONTEXT_COMPRESS_ENABLED": "0",
         "AION_STM_MAX_TURNS": "1",
         "AION_MNEMOS_READONLY_TOOLS": "1",
-        "AION_MNEMOS_FTS_PHRASE_QUERY": "1",
         "AION_MNEMOS_RECALL_LIMIT": os.getenv("AION_LME_V2_RECALL_LIMIT", "20"),
         "AION_LME_V2_COMPRESS_SCOPE": "0",
         "AION_LME_V2_SKIP_WAKE": "1",

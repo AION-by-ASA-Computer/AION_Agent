@@ -21,16 +21,17 @@ Benchmarks are **developer tools only** — they validate memory retrieval, agen
 
 | ID | Purpose | Typical runtime |
 |----|---------|-----------------|
-| `mnemos_bench` | Mnemos recall (smoke: 6, full: 81, adversarial: 48) | seconds–minutes |
+| `mnemos_bench` | Mnemos recall (smoke: 6, full: 81, adversarial: 53) | seconds–minutes |
 | `general_agent` | Agent pipeline smoke via JSON cases | seconds |
 | `longmemeval_v2_small` | Integration stress test (Mnemos-only ingest + agent) | minutes–hours |
 
 See [mnemos-bench.md](./mnemos-bench.md) for the primary Mnemos validation suite.
 
 The full dataset is a **regression guard** (expected 100%). The adversarial
-dataset is a **work-item tracker**: it targets known weaknesses and currently
-scores around 33%. A rising adversarial score is the signal that memory quality
-is actually improving — the full dataset can no longer show that.
+dataset is a **scorecard** for memory quality: after hardening it reaches
+**~76% FTS-only** and **~87% hybrid** (53 cases). See
+[mnemos-bench.md](./mnemos-bench.md) and
+[Mnemos Architectural Hardening](../memory/mnemos-hardening.md).
 
 LongMemEval-V2 is documented in [longmemeval-v2.md](./longmemeval-v2.md) — note it measures **Mnemos project-scope retrieval**, not the full AION memory stack (SQL QM, KHUB RAG, Agent DB).
 
@@ -47,13 +48,12 @@ python -m src.benchmarks.cli run \
   --benchmark mnemos_bench \
   --dataset config_std/benchmarks/mnemos_recall_full.json
 
-# Mnemos adversarial evaluation (48 cases, expected to fail — see mnemos-bench.md)
+# Mnemos adversarial scorecard (53 cases — see mnemos-bench.md)
 python -m src.benchmarks.cli run \
   --benchmark mnemos_bench \
   --dataset config_std/benchmarks/mnemos_recall_adversarial.json
 
-# Hybrid recall (requires embedding service)
-AION_MNEMOS_EMBEDDING_RECALL=1 \
+# Hybrid recall is on by default (AION_MNEMOS_EMBEDDING_RECALL=1); requires embedding service
 python -m src.benchmarks.cli run \
   --benchmark mnemos_bench \
   --dataset config_std/benchmarks/mnemos_recall.json
@@ -93,17 +93,22 @@ Official LME results can be exported to `docs/benchmarks/results/`.
 
 ## Mnemos hybrid recall
 
-When `AION_MNEMOS_EMBEDDING_RECALL=1`, `memory_recall` uses **FTS candidates + embedding rerank** (RRF merge). If the embedding service is unreachable or unconfigured, recall **falls back to FTS-only** automatically.
+When `AION_MNEMOS_EMBEDDING_RECALL=1` (default since hardening), `memory_recall` runs **FTS + embedding search** and merges results with RRF, then applies recency and importance boosts. If the embedding service is unreachable or unconfigured, recall **falls back to FTS-only** automatically.
 
-Reuses `AION_EMBEDDING_URL`, `AION_EMBEDDING_MODEL`, `AION_EMBEDDINGS_PROVIDER` (same as SQL Query Memory).
+Reuses `AION_EMBEDDING_URL`, `AION_EMBEDDING_MODEL`, `AION_EMBEDDINGS_PROVIDER` (same as SQL Query Memory). `upgrade-aion` migrates legacy installs from `EMBEDDING_RECALL=0` to `1`.
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `AION_MNEMOS_EMBEDDING_RECALL` | `0` | Enable hybrid FTS+embedding recall |
-| `AION_MNEMOS_EMBED_ON_BULK` | `0` | Embed notes during `insert_notes_bulk` (slow for large ingests) |
+| `AION_MNEMOS_EMBEDDING_RECALL` | `1` | Enable hybrid FTS+embedding recall |
+| `AION_MNEMOS_EMBED_ON_BULK` | `1` | Embed notes during `insert_notes_bulk` (set `0` for huge ingests) |
 | `AION_MNEMOS_EMBEDDING_MIN_SCORE` | `0.25` | Min cosine similarity for embedding candidates |
-| `AION_MNEMOS_EMBEDDING_SCAN_LIMIT` | `300` | Max notes scanned for pure-embedding fallback |
-| `AION_MNEMOS_HYBRID_CANDIDATE_MULT` | `3` | FTS candidate pool multiplier before rerank |
+| `AION_MNEMOS_EMBEDDING_SCAN_LIMIT` | `300` | Max notes scanned per scope for embedding search |
+| `AION_MNEMOS_HYBRID_CANDIDATE_MULT` | `3` | Candidate pool multiplier before RRF |
+| `AION_MNEMOS_RANK_HALF_LIFE_DAYS` | `90` | Recency decay half-life in final ranking |
+| `AION_MNEMOS_RANK_W_RECENCY` | `0.3` | Recency boost weight |
+| `AION_MNEMOS_RANK_W_IMPORTANCE` | `0.2` | Importance boost weight |
+
+See [Mnemos Architectural Hardening](../memory/mnemos-hardening.md) for dream cycle, entity index, and provenance variables.
 
 ## Optuna tuning
 

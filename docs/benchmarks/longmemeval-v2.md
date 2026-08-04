@@ -111,7 +111,6 @@ distillation, and STM pollution for benchmark turns.
 | `AION_LME_V2_COMPRESS_SCOPE` | `0` | Skip digest compression after ingest (recommended) |
 | `AION_LME_V2_AGENT_PROFILE` | `benchmark_memory` | Haystack profile for query phase |
 | `AION_LME_V2_SKIP_IMAGE_QUESTIONS` | `1` | Skip multimodal rows (report `skipped_image`) |
-| `AION_MNEMOS_FTS_PHRASE_QUERY` | `1` | Phrase-aware FTS (enabled by benchmark isolation env) |
 | `AION_MNEMOS_READONLY_TOOLS` | `1` | Expose only `memory_recall` during benchmark |
 
 Mnemos knobs are snapshotted in each run's `config.json` (`AION_LTM_WAKE_MAX_ROWS`, `AION_MNEMOS_RECALL_LIMIT`, etc.).
