@@ -255,7 +255,7 @@ async def run_mnemos_bench(
     if max_cases is not None:
         cases = cases[: int(max_cases)]
 
-    hybrid_env = os.getenv("AION_MNEMOS_EMBEDDING_RECALL", "0")
+    hybrid_env = os.getenv("AION_MNEMOS_EMBEDDING_RECALL", "1")
     await ensure_run(
         run_id,
         benchmark_id="mnemos_bench",

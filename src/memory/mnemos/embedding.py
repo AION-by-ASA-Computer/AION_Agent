@@ -13,11 +13,21 @@ logger = logging.getLogger("aion.memory.mnemos.embedding")
 
 
 def embedding_recall_enabled() -> bool:
-    return os.getenv("AION_MNEMOS_EMBEDDING_RECALL", "0") == "1"
+    return os.getenv("AION_MNEMOS_EMBEDDING_RECALL", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def embed_on_bulk_insert() -> bool:
-    return os.getenv("AION_MNEMOS_EMBED_ON_BULK", "0") == "1"
+    return os.getenv("AION_MNEMOS_EMBED_ON_BULK", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
 
 
 def embedding_min_score() -> float:

@@ -513,6 +513,18 @@ _MEMPALACE_NAV_ENV_DEFAULTS: dict[str, str] = {
     "AION_SQL_QM_PARAMETERIZE": "1",
 }
 
+_MNEMOS_ENV_DEFAULTS: dict[str, str] = {
+    "AION_MNEMOS_EMBEDDING_RECALL": "1",
+    "AION_MNEMOS_EMBED_ON_BULK": "1",
+    "AION_MNEMOS_EMBEDDING_MIN_SCORE": "0.25",
+    "AION_MNEMOS_EMBEDDING_SCAN_LIMIT": "300",
+    "AION_MNEMOS_HYBRID_CANDIDATE_MULT": "3",
+    "AION_MNEMOS_RANK_HALF_LIFE_DAYS": "90",
+    "AION_MNEMOS_RANK_W_RECENCY": "0.3",
+    "AION_MNEMOS_RANK_W_IMPORTANCE": "0.2",
+    "AION_MNEMOS_DREAM_ENABLED": "1",
+}
+
 _MCP_POOL_ENV_DEFAULTS: dict[str, str] = {
     "AION_MCP_POOL": "1",
     "AION_MCP_USER_POOL": "1",
@@ -793,6 +805,53 @@ def _ensure_mempalace_nav_env_keys(
         report.log_fail(f"MemPalace navigation env defaults: scrittura fallita: {e}")
         return 3
     report.log_ok(f"MemPalace navigation env defaults: aggiunte {len(missing)} chiavi")
+    return 0
+
+
+def _ensure_mnemos_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+    """Aggiunge chiavi Mnemos mancanti e migra EMBEDDING_RECALL=0 → 1 (nuovo default)."""
+    if not env_path.is_file():
+        report.log_ok("Mnemos env defaults: .env assente, skip")
+        return 0
+    entries = _parse_env_simple(env_path)
+    keys_file = {k: v for k, v, _ in entries if k}
+    missing = [(k, v) for k, v in _MNEMOS_ENV_DEFAULTS.items() if k not in keys_file]
+    recall_legacy_off = keys_file.get("AION_MNEMOS_EMBEDDING_RECALL") == "0"
+    if not missing and not recall_legacy_off:
+        report.log_ok("Mnemos env defaults: chiavi già presenti")
+        return 0
+    if dry_run:
+        if missing:
+            report.log_ok(
+                f"Mnemos env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
+            )
+        if recall_legacy_off:
+            report.log_ok(
+                "Mnemos env defaults: imposterebbe AION_MNEMOS_EMBEDDING_RECALL=1 (dry-run)"
+            )
+        return 0
+    if missing:
+        block = (
+            "\n# --- Mnemos LTM (append da upgrade-aion) ---\n"
+            + "\n".join(f"{k}={v}" for k, v in missing)
+            + "\n"
+        )
+        try:
+            env_path.write_text(
+                env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+                encoding="utf-8",
+            )
+        except Exception as e:
+            report.log_fail(f"Mnemos env defaults: scrittura fallita: {e}")
+            return 3
+        report.log_ok(f"Mnemos env defaults: aggiunte {len(missing)} chiavi")
+    if recall_legacy_off:
+        if not _rewrite_env_key(env_path, "AION_MNEMOS_EMBEDDING_RECALL", "1"):
+            report.log_fail("Mnemos env defaults: migrazione EMBEDDING_RECALL fallita")
+            return 3
+        report.log_ok(
+            "Mnemos env defaults: AION_MNEMOS_EMBEDDING_RECALL aggiornato 0 → 1"
+        )
     return 0
 
 
@@ -1413,6 +1472,11 @@ def _docker_upgrade(args, report: Report) -> int:
     )
     if rc != 0:
         return rc
+    rc = _ensure_mnemos_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
+    if rc != 0:
+        return rc
     rc = _ensure_skill_lifecycle_env_keys(
         Path(args.env_file), dry_run=args.dry_run, report=report
     )
@@ -1686,6 +1750,11 @@ def main() -> int:
         if rc != 0:
             return rc
         rc = _ensure_mempalace_nav_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
+        if rc != 0:
+            return rc
+        rc = _ensure_mnemos_env_keys(
             Path(args.env_file), dry_run=args.dry_run, report=report
         )
         if rc != 0:
