@@ -1,0 +1,2 @@
+{"trajectory_id": "t1", "summary": "Admin login page shows password hint blue42", "steps": [{"observation": "Login form with hint text blue42 under password field."}]}
+{"trajectory_id": "t2", "summary": "Checkout workflow times out at payment", "steps": [{"observation": "User clicked checkout and payment gateway timed out after 30s."}]}

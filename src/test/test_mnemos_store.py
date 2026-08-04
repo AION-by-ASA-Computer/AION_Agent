@@ -23,7 +23,7 @@ def mnemos_db(monkeypatch, tmp_path):
             conn = await session.connection()
             await conn.run_sync(Base.metadata.create_all)
 
-    asyncio.get_event_loop().run_until_complete(_create())
+    asyncio.run(_create())
     return url
 
 
@@ -43,8 +43,42 @@ async def test_supersede_chain(mnemos_db):
     n1 = await store.insert_note(scope, content="works at company X", category="fact")
     n2 = await store.insert_note(scope, content="works at company Y", category="fact")
     await store.supersede_note(n1.id, n2)
+    n1 = await store.get_note(n1.id)
+    assert n1 is not None
     current = await store.follow_supersede_chain(n1)
     assert current.id == n2.id
+
+
+@pytest.mark.asyncio
+async def test_insert_notes_bulk_matches_loop(mnemos_db):
+    """Bulk insert should produce same row count, seq range, and FTS hits as a loop."""
+    from src.memory.mnemos.scope import project_scope
+
+    contents = [
+        "bulk alpha note about laptops",
+        "bulk beta note about servicenow",
+        "bulk gamma note about incident mobile",
+    ]
+    scope_loop = project_scope("default", "bulk_loop")
+    scope_bulk = project_scope("default", "bulk_bulk")
+
+    for text in contents:
+        await store.insert_note(scope_loop, content=text, importance=3)
+    bulk_count = await store.insert_notes_bulk(
+        scope_bulk, contents, importance=3, source_session_id="bulk_test"
+    )
+
+    assert bulk_count == len(contents)
+    loop_notes = await store.list_notes(scope_loop, limit=100)
+    bulk_notes = await store.list_notes(scope_bulk, limit=100)
+    assert len(loop_notes) == len(bulk_notes) == len(contents)
+    assert sorted(n.seq for n in loop_notes) == sorted(n.seq for n in bulk_notes) == list(
+        range(len(contents))
+    )
+
+    loop_hits = await store.fts_search(scope_loop, "laptops servicenow", limit=10)
+    bulk_hits = await store.fts_search(scope_bulk, "laptops servicenow", limit=10)
+    assert {n.content for n in loop_hits} == {n.content for n in bulk_hits}
 
 
 @pytest.mark.asyncio

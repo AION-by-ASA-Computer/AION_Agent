@@ -60,6 +60,7 @@ json-repair
 opik
 pydantic-settings>=2.0.0
 pymupdf4llm
+# Optional: pip install optuna  (hyperparameter tuning CLI + admin read-only studies)
 
 # Transitive security floors (OSV scanner / CVE remediation)
 idna>=3.15

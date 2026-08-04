@@ -417,6 +417,7 @@ class LtmNote(Base):
     )
     source_session_id: Mapped[Optional[str]] = mapped_column(String(64))
     source_message_id: Mapped[Optional[str]] = mapped_column(String(64))
+    embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -476,6 +477,18 @@ class EvalRun(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     dataset_name: Mapped[str] = mapped_column(String(256), nullable=False)
     profile_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    benchmark_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    config_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metrics_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    log_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

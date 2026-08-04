@@ -11,6 +11,11 @@ from haystack.tools import Tool
 
 from src.memory.mnemos.orchestrator import mnemos_orchestrator
 from src.runtime.mnemos_context import get_mnemos_turn_context
+from src.runtime.native_tool_events import (
+    emit_tool_end,
+    emit_tool_error,
+    emit_tool_start,
+)
 
 
 MNEMOS_BUILTIN_TOOL_NAMES = (
@@ -22,6 +27,15 @@ MNEMOS_BUILTIN_TOOL_NAMES = (
 
 def mnemos_native_tools_enabled() -> bool:
     return os.getenv("AION_MNEMOS_NATIVE_TOOLS", "1").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+
+
+def mnemos_readonly_tools() -> bool:
+    return os.getenv("AION_MNEMOS_READONLY_TOOLS", "0").strip().lower() in (
         "1",
         "true",
         "yes",
@@ -70,44 +84,63 @@ def build_memory_recall_tool(
         query: str,
         scope: str = "auto",
         mode: str = "current",
+        limit: Optional[int] = None,
     ) -> str:
         tenant, uid, _prof, project = _resolve_ctx(session_id, user_id, "")
-        rows = _run_async(
-            mnemos_orchestrator.recall_notes(
-                tenant_id=tenant,
-                user_id=uid,
-                query=query,
-                scope_name=scope,
-                mode=mode,
-                active_project_slug=project,
+        inp = {"query": query, "scope": scope, "mode": mode, "limit": limit}
+        call_id = emit_tool_start(session_id, "memory_recall", inp)
+        try:
+            rows = _run_async(
+                mnemos_orchestrator.recall_notes(
+                    tenant_id=tenant,
+                    user_id=uid,
+                    query=query,
+                    scope_name=scope,
+                    mode=mode,
+                    active_project_slug=project,
+                    limit=limit,
+                )
             )
-        )
-        return json.dumps({"results": rows}, ensure_ascii=False)
+            out = json.dumps({"results": rows}, ensure_ascii=False)
+            emit_tool_end(session_id, "memory_recall", call_id, out[:24000])
+            return out
+        except Exception as exc:
+            emit_tool_error(session_id, "memory_recall", call_id, str(exc))
+            raise
+
+    props: dict[str, Any] = {
+        "query": {"type": "string", "description": "Free-text search query"},
+        "scope": {
+            "type": "string",
+            "enum": ["auto", "user", "project", "global"],
+            "default": "auto",
+            "description": "auto = user + active project (recommended)",
+        },
+        "mode": {
+            "type": "string",
+            "enum": ["current", "historical"],
+            "default": "current",
+        },
+    }
+    if os.getenv("AION_MNEMOS_RECALL_LIMIT_EXPOSED", "1") == "1":
+        props["limit"] = {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 50,
+            "description": "Max notes to return (default from AION_MNEMOS_RECALL_LIMIT)",
+        }
 
     return Tool(
         name="memory_recall",
         description=(
             "Search long-term Mnemos memory notes by text. Default scope=auto searches "
-            "user + active project. Use for stored facts/lessons (e.g. product features). "
+            "user + active project. Use scope=project for benchmark trajectory memory. "
             "Do NOT use for raw chat history (use session_search on memory MCP)."
         ),
         function=memory_recall,
         parameters={
             "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "Free-text search query"},
-                "scope": {
-                    "type": "string",
-                    "enum": ["auto", "user", "project", "global"],
-                    "default": "auto",
-                    "description": "auto = user + active project (recommended)",
-                },
-                "mode": {
-                    "type": "string",
-                    "enum": ["current", "historical"],
-                    "default": "current",
-                },
-            },
+            "properties": props,
             "required": ["query"],
         },
     )
@@ -125,19 +158,27 @@ def build_memory_note_tool(
         importance: int = 4,
     ) -> str:
         tenant, uid, _prof, project = _resolve_ctx(session_id, user_id, "")
-        out = _run_async(
-            mnemos_orchestrator.add_note(
-                tenant_id=tenant,
-                user_id=uid,
-                text=text,
-                scope_name=scope,
-                category=category,
-                importance=importance,
-                active_project_slug=project,
-                source_session_id=session_id,
+        inp = {"text": text[:200], "scope": scope, "category": category}
+        call_id = emit_tool_start(session_id, "memory_note", inp)
+        try:
+            out = _run_async(
+                mnemos_orchestrator.add_note(
+                    tenant_id=tenant,
+                    user_id=uid,
+                    text=text,
+                    scope_name=scope,
+                    category=category,
+                    importance=importance,
+                    active_project_slug=project,
+                    source_session_id=session_id,
+                )
             )
-        )
-        return json.dumps(out, ensure_ascii=False)
+            payload = json.dumps(out, ensure_ascii=False)
+            emit_tool_end(session_id, "memory_note", call_id, payload[:24000])
+            return payload
+        except Exception as exc:
+            emit_tool_error(session_id, "memory_note", call_id, str(exc))
+            raise
 
     return Tool(
         name="memory_note",
@@ -178,8 +219,15 @@ def build_memory_forget_tool(
     _ = session_id, user_id, profile
 
     def memory_forget(note_id: int) -> str:
-        ok = _run_async(mnemos_orchestrator.forget(note_id, hard=False))
-        return json.dumps({"ok": ok, "note_id": note_id}, ensure_ascii=False)
+        call_id = emit_tool_start(session_id, "memory_forget", {"note_id": note_id})
+        try:
+            ok = _run_async(mnemos_orchestrator.forget(note_id, hard=False))
+            payload = json.dumps({"ok": ok, "note_id": note_id}, ensure_ascii=False)
+            emit_tool_end(session_id, "memory_forget", call_id, payload)
+            return payload
+        except Exception as exc:
+            emit_tool_error(session_id, "memory_forget", call_id, str(exc))
+            raise
 
     return Tool(
         name="memory_forget",
@@ -200,8 +248,8 @@ def load_mnemos_tools(
 ) -> List[Tool]:
     if not mnemos_native_tools_enabled() or not profile_wants_mnemos(profile):
         return []
-    return [
-        build_memory_recall_tool(session_id, user_id, profile),
-        build_memory_note_tool(session_id, user_id, profile),
-        build_memory_forget_tool(session_id, user_id, profile),
-    ]
+    tools: List[Tool] = [build_memory_recall_tool(session_id, user_id, profile)]
+    if not mnemos_readonly_tools():
+        tools.append(build_memory_note_tool(session_id, user_id, profile))
+        tools.append(build_memory_forget_tool(session_id, user_id, profile))
+    return tools

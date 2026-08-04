@@ -14,7 +14,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.data.engine import get_async_session_maker
 from src.data.models import LtmDigest, LtmNote
 
-from .fts import _escape_fts_query, fts_delete, fts_insert
+from .embedding import (
+    bytes_to_embedding,
+    cosine_similarity,
+    embed_on_bulk_insert,
+    embedding_scan_limit,
+    maybe_embed_text,
+)
+from .fts import build_fts_queries, fts_delete, fts_insert
 from .types import CONTENT_MAX_CHARS, MemoryScope, NOTE_CATEGORIES
 
 logger = logging.getLogger("aion.memory.mnemos.store")
@@ -40,6 +47,12 @@ def _clamp_content(text: str) -> str:
     if len(t) > CONTENT_MAX_CHARS:
         return t[: CONTENT_MAX_CHARS - 3] + "..."
     return t
+
+
+async def _embedding_blob_for_content(body: str, *, allow: bool = True) -> bytes | None:
+    if not allow:
+        return None
+    return await maybe_embed_text(body)
 
 
 async def seq_count(session: AsyncSession, scope: MemoryScope) -> int:
@@ -72,6 +85,60 @@ async def next_seq(session: AsyncSession, scope: MemoryScope) -> int:
     return int(val) + 1
 
 
+async def insert_notes_bulk(
+    scope: MemoryScope,
+    contents: Sequence[str],
+    *,
+    category: str = "fact",
+    importance: int = 3,
+    source_session_id: Optional[str] = None,
+) -> int:
+    """Insert many notes in one transaction (benchmark ingest). Returns count."""
+    bodies = [_clamp_content(c) for c in contents if len(_clamp_content(c)) >= 3]
+    if not bodies:
+        return 0
+    imp = max(1, min(5, int(importance)))
+    cat = _normalize_category(category)
+
+    async with _insert_lock(scope):
+        async with get_async_session_maker()() as sess:
+            start_seq = await next_seq(sess, scope)
+            notes: List[LtmNote] = []
+            embed_notes = embed_on_bulk_insert()
+            for offset, body in enumerate(bodies):
+                emb = await _embedding_blob_for_content(body, allow=embed_notes)
+                note = LtmNote(
+                    tenant_id=scope.tenant_id,
+                    scope_type=scope.scope_type,
+                    scope_key=scope.scope_key,
+                    seq=start_seq + offset,
+                    content=body,
+                    category=cat,
+                    importance=imp,
+                    status="active",
+                    source_session_id=source_session_id,
+                    embedding=emb,
+                )
+                sess.add(note)
+                notes.append(note)
+            await sess.flush()
+            for note in notes:
+                await fts_insert(
+                    sess,
+                    note_id=note.id,
+                    tenant_id=scope.tenant_id,
+                    scope_type=scope.scope_type,
+                    scope_key=scope.scope_key,
+                    content=note.content,
+                )
+            if notes:
+                await invalidate_digests_covering(
+                    sess, scope, start_seq + len(notes) - 1
+                )
+            await sess.commit()
+            return len(notes)
+
+
 async def insert_note(
     scope: MemoryScope,
     *,
@@ -89,6 +156,7 @@ async def insert_note(
 
     async def _do(sess: AsyncSession) -> LtmNote:
         seq = await next_seq(sess, scope)
+        emb = await _embedding_blob_for_content(body)
         note = LtmNote(
             tenant_id=scope.tenant_id,
             scope_type=scope.scope_type,
@@ -100,6 +168,7 @@ async def insert_note(
             status="active",
             source_session_id=source_session_id,
             source_message_id=source_message_id,
+            embedding=emb,
         )
         sess.add(note)
         await sess.flush()
@@ -374,12 +443,19 @@ async def fts_search(
     mode: str = "current",
 ) -> List[LtmNote]:
     tid, st, sk = scope.as_tuple()
-    fts_q = _escape_fts_query(query)
+    queries = build_fts_queries(query)
+    if not queries:
+        return []
     async with get_async_session_maker()() as session:
-        rows = (
-            await session.execute(
-                text(
-                    """
+        rows = None
+        fts_q_used = ""
+        for fts_q in queries:
+            fts_q_used = fts_q
+            try:
+                rows = (
+                    await session.execute(
+                        text(
+                            """
                     SELECT note_id, bm25(ltm_notes_fts) AS score
                     FROM ltm_notes_fts
                     WHERE ltm_notes_fts MATCH :q
@@ -389,10 +465,24 @@ async def fts_search(
                     ORDER BY score
                     LIMIT :lim
                     """
-                ),
-                {"q": fts_q, "tid": tid, "st": st, "sk": sk, "lim": limit},
-            )
-        ).mappings().all()
+                        ),
+                        {"q": fts_q, "tid": tid, "st": st, "sk": sk, "lim": limit},
+                    )
+                ).mappings().all()
+            except Exception as exc:
+                logger.warning(
+                    "Mnemos FTS search failed scope=%s:%s query=%r escaped=%r: %s",
+                    st,
+                    sk,
+                    query[:120],
+                    fts_q[:120],
+                    exc,
+                )
+                rows = None
+            if rows:
+                break
+        if not rows:
+            return []
         out: List[LtmNote] = []
         for r in rows:
             nid = int(r["note_id"])
@@ -403,6 +493,73 @@ async def fts_search(
                 note = await follow_supersede_chain(note)
             out.append(note)
         return out
+
+
+async def get_notes_by_ids(
+    note_ids: List[int],
+    *,
+    mode: str = "current",
+) -> List[LtmNote]:
+    if not note_ids:
+        return []
+    async with get_async_session_maker()() as session:
+        rows = list(
+            (await session.execute(select(LtmNote).where(LtmNote.id.in_(note_ids))))
+            .scalars()
+            .all()
+        )
+        out: List[LtmNote] = []
+        for note in rows:
+            if mode == "current" and note.status == "superseded":
+                note = await follow_supersede_chain(note)
+            out.append(note)
+        return out
+
+
+async def embedding_search(
+    scope: MemoryScope,
+    query_vec,
+    *,
+    limit: int = 10,
+    mode: str = "current",
+) -> List[LtmNote]:
+    """Cosine similarity over stored note embeddings (bounded scan)."""
+    import numpy as np
+
+    if query_vec is None:
+        return []
+    tid, st, sk = scope.as_tuple()
+    scan_lim = embedding_scan_limit()
+    async with get_async_session_maker()() as session:
+        q = (
+            select(LtmNote)
+            .where(
+                LtmNote.tenant_id == tid,
+                LtmNote.scope_type == st,
+                LtmNote.scope_key == sk,
+                LtmNote.status == "active",
+                LtmNote.embedding.is_not(None),
+            )
+            .order_by(LtmNote.seq.desc())
+            .limit(scan_lim)
+        )
+        rows = list((await session.execute(q)).scalars().all())
+
+    scored: list[tuple[float, LtmNote]] = []
+    for note in rows:
+        vec = bytes_to_embedding(note.embedding)
+        if vec is None:
+            continue
+        sim = cosine_similarity(np.asarray(query_vec, dtype=np.float32), vec)
+        scored.append((sim, note))
+    scored.sort(key=lambda item: item[0], reverse=True)
+
+    out: List[LtmNote] = []
+    for _, note in scored[:limit]:
+        if mode == "current" and note.status == "superseded":
+            note = await follow_supersede_chain(note)
+        out.append(note)
+    return out
 
 
 async def list_digests(
