@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Layers, Map, SearchCode } from "lucide-react";
+import { Bug, Layers, Map, SearchCode, User } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
-import { NavigationMemoryPanel } from "@/components/navigation-memory/NavigationMemoryPanel";
+import { ProjectMemoryDebugPanel } from "@/components/project-memory/ProjectMemoryDebugPanel";
+import { ProjectMemoryNotesPanel } from "@/components/project-memory/ProjectMemoryNotesPanel";
+import { UserMemoryNotesPanel } from "@/components/user-memory/UserMemoryNotesPanel";
 import { QueryMemoryPanel } from "@/components/query-memory/QueryMemoryPanel";
 import { ProjectMemoryToolbar } from "@/components/memory/ProjectMemoryToolbar";
 
-type MemorySubTab = "query" | "navigation";
+type MemorySubTab = "query" | "notes" | "user" | "debug";
 
 type Props = {
   userId: string;
@@ -34,13 +36,15 @@ export function MemoryDockPanel({
   const t = useT();
   const [subTab, setSubTab] = useState<MemorySubTab>("query");
 
-  const showSegments = showSqlQueryMemory && showNavigationMemory;
+  const mnemosTabCount = showNavigationMemory ? 3 : 0;
+  const tabCount = (showSqlQueryMemory ? 1 : 0) + mnemosTabCount;
+  const showSegments = tabCount > 1;
 
   useEffect(() => {
     if (showSqlQueryMemory && !showNavigationMemory) {
       setSubTab("query");
     } else if (!showSqlQueryMemory && showNavigationMemory) {
-      setSubTab("navigation");
+      setSubTab("notes");
     }
   }, [showSqlQueryMemory, showNavigationMemory]);
 
@@ -63,11 +67,19 @@ export function MemoryDockPanel({
 
   const activeHint = useMemo(() => {
     if (subTab === "query") return t("memory_dock.hint_query");
-    return t("memory_dock.hint_navigation");
+    if (subTab === "user") return t("memory_dock.hint_user");
+    if (subTab === "debug") return t("memory_dock.hint_debug");
+    return t("memory_dock.hint_notes");
   }, [subTab, t]);
 
-  const sectionTitle =
-    subTab === "query" ? t("memory_dock.tab_query") : t("memory_dock.tab_navigation");
+  const sectionTitle = useMemo(() => {
+    if (subTab === "query") return t("memory_dock.tab_query");
+    if (subTab === "user") return t("memory_dock.tab_user");
+    if (subTab === "debug") return t("memory_dock.tab_debug");
+    return t("memory_dock.tab_notes");
+  }, [subTab, t]);
+
+  const showProjectToolbar = subTab === "query" || subTab === "notes" || subTab === "debug";
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
@@ -89,14 +101,18 @@ export function MemoryDockPanel({
           </div>
         </div>
 
-        <ProjectMemoryToolbar
-          variant="panel"
-          userId={userId}
-          token={token}
-          profileSlug={profileSlug}
-          value={projectSlug}
-          onChange={onProjectChange}
-        />
+        {showProjectToolbar ? (
+          <ProjectMemoryToolbar
+            variant="panel"
+            userId={userId}
+            token={token}
+            profileSlug={profileSlug}
+            value={projectSlug}
+            onChange={onProjectChange}
+          />
+        ) : (
+          <p className="mt-1 text-xs text-muted-foreground">{t("memory_dock.user_scope_hint")}</p>
+        )}
 
         {showSegments ? (
           <div
@@ -104,8 +120,18 @@ export function MemoryDockPanel({
             role="tablist"
             aria-label={t("memory_dock.title")}
           >
-            {segmentBtn("query", t("memory_dock.tab_query"), SearchCode)}
-            {segmentBtn("navigation", t("memory_dock.tab_navigation"), Map)}
+            {showSqlQueryMemory
+              ? segmentBtn("query", t("memory_dock.tab_query"), SearchCode)
+              : null}
+            {showNavigationMemory
+              ? segmentBtn("notes", t("memory_dock.tab_notes"), Map)
+              : null}
+            {showNavigationMemory
+              ? segmentBtn("user", t("memory_dock.tab_user"), User)
+              : null}
+            {showNavigationMemory
+              ? segmentBtn("debug", t("memory_dock.tab_debug"), Bug)
+              : null}
           </div>
         ) : (
           <p className="mt-3 text-xs font-medium text-foreground">{sectionTitle}</p>
@@ -125,15 +151,30 @@ export function MemoryDockPanel({
             onProjectChange={onProjectChange}
           />
         ) : null}
-        {subTab === "navigation" && showNavigationMemory ? (
-          <NavigationMemoryPanel
+        {subTab === "notes" && showNavigationMemory ? (
+          <ProjectMemoryNotesPanel
             embedded
             userId={userId}
             sessionId={sessionId}
             token={token}
             projectSlug={projectSlug}
-            profileSlug={profileSlug}
-            onProjectChange={onProjectChange}
+            memoryScope="project"
+          />
+        ) : null}
+        {subTab === "user" && showNavigationMemory ? (
+          <UserMemoryNotesPanel
+            embedded
+            userId={userId}
+            sessionId={sessionId}
+            token={token}
+          />
+        ) : null}
+        {subTab === "debug" && showNavigationMemory ? (
+          <ProjectMemoryDebugPanel
+            embedded
+            userId={userId}
+            token={token}
+            projectSlug={projectSlug}
           />
         ) : null}
         {!showSqlQueryMemory && !showNavigationMemory ? (

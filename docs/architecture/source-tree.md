@@ -106,13 +106,15 @@ The memory runtime coordinates data persistence, both semantic (LTM) and short-t
 
 | File | Pattern | Description |
 |------|---------|-------------|
-| [ltm_orchestrator.py](src/memory/ltm_orchestrator.py) | Long-term memory orchestrator | Asynchronously extracts relevant conversation fragments and indexes them semantically on a vector store. |
+| [ltm_orchestrator.py](src/memory/ltm_orchestrator.py) | Long-term memory orchestrator | Post-turn extraction into Mnemos notes; bridges wake/recall and legacy MemPalace navigation hooks. |
 | [stm_consolidator.py](src/memory/stm_consolidator.py) | Short-term memory consolidation | Cleans up and compacts recent conversation turns. |
 | [context_compressor.py](src/memory/context_compressor.py) | Context compression | Manages the compression of overall tokens to be sent to the LLM. |
 | [llm_extract.py](src/memory/llm_extract.py) | Entity structuring via LLM | Performs targeted HTTP calls to the LLM to extract semantic keys in JSON format. |
 | [navigation_memory_service.py](src/memory/navigation_memory_service.py) | Database navigation tracking | Stores information related to tables, joins, and entities explored by the agent. |
 | [project_memory_scope.py](src/memory/project_memory_scope.py) | Memory scope isolation | Isolates semantic memory data per tenant/project. |
-| [mempalace_manager.py](src/memory/mempalace_manager.py) | MemPalace MCP Bridge | Manages the integration of LTM with the MemPalace archive. |
+| [project_memory_service.py](src/memory/project_memory_service.py) | Project-scoped Mnemos CRUD | REST-backed project notes with membership checks. |
+| **`src/memory/mnemos/`** | Native LTM backend | Store, FTS, hybrid recall (RRF), compress/digest, dream cycle, entity index (optional). See [Mnemos docs](../memory/mnemos-hardening.md). |
+| [mempalace_manager.py](src/memory/mempalace_manager.py) | MemPalace MCP Bridge | Legacy LTM archive and ERP navigation wings (`wing_proj_*`). |
 
 #### `src/learning/` — Evolutionary Features (Experimental)
 

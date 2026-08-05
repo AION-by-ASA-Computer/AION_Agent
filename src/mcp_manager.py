@@ -20,7 +20,6 @@ from .mcp_connector_catalog import apply_runtime_env_aliases
 from .identity import sanitize_user_id
 from .session_workspace import data_root
 from .security.container_runtime import sandbox_container_mode_enabled
-from .runtime.mempalace_warmup import apply_shared_embedding_cache_env
 from .khub_auth import khub_token_manager
 from .mcp_registry_io import companion_json_path, load_registry_file
 from src.observability import metrics
@@ -419,11 +418,6 @@ class MCPStdioWorker:
                 env["MCP_REMOTE_URL"] = config["remote_url"]
 
             _apply_mcp_home_isolation(env, uid)
-            if self.server_name == "mempalace":
-                apply_shared_embedding_cache_env(env)
-                from .memory.project_memory_scope import apply_mempalace_palace_env
-
-                apply_mempalace_palace_env(env, tid)
             if "env" in config:
                 from .runtime.credential_store import resolve_mcp_env_for_user
 
@@ -559,23 +553,7 @@ class MCPStdioWorker:
                                         inject_sid, ctx
                                     )
                                 try:
-                                    if self.server_name == "mempalace":
-                                        from .runtime.mempalace_tool_scope import (
-                                            apply_mempalace_project_scope,
-                                            mempalace_write_blocked_message,
-                                        )
-
-                                        blocked = mempalace_write_blocked_message(
-                                            tool_name
-                                        )
-                                        if blocked:
-                                            if not fut.cancelled():
-                                                fut.set_exception(RuntimeError(blocked))
-                                            continue
-                                        raw_args = apply_mempalace_project_scope(
-                                            tool_name, raw_args
-                                        )
-                                    elif (
+                                    if (
                                         self.server_name in ("odoo", "odoo_mcp_server")
                                         and tool_name == "get_document_attachments"
                                     ):
@@ -1578,12 +1556,6 @@ class MCPManager:
             from .runtime.context import get_current_session_id
 
             sid = (get_current_session_id() or sid or "").strip()
-        if server_name == "mempalace":
-            from .runtime.mempalace_tool_scope import mempalace_write_blocked_message
-
-            blocked = mempalace_write_blocked_message(tool_name)
-            if blocked:
-                raise RuntimeError(blocked)
         if not _USE_POOL or not self._is_stdio_server(server_name):
             async with self.session_context(
                 server_name, chat_session_id=sid or None
@@ -1804,11 +1776,6 @@ class MCPManager:
             env["AION_CURRENT_USER_ID"] = uid
             env["AION_CURRENT_TENANT_ID"] = tid
             _apply_mcp_home_isolation(env, uid)
-            if name == "mempalace":
-                apply_shared_embedding_cache_env(env)
-                from .memory.project_memory_scope import apply_mempalace_palace_env
-
-                apply_mempalace_palace_env(env, tid)
             if "env" in config:
                 from .runtime.credential_store import resolve_mcp_env_for_user
 
@@ -1889,16 +1856,6 @@ class SerializableMCPTool:
             # that don't expect it as a tool parameter.
             prepared = dict(kwargs)
             prepared.pop("_trace_context", None)
-            if self.server_name == "mempalace":
-                from .runtime.mempalace_tool_scope import (
-                    apply_mempalace_project_scope,
-                    mempalace_write_blocked_message,
-                )
-
-                blocked = mempalace_write_blocked_message(self.tool_name)
-                if blocked:
-                    raise RuntimeError(blocked)
-                prepared = apply_mempalace_project_scope(self.tool_name, prepared)
             if self.server_name in ("memory", "query_memory"):
                 from .runtime.sql_query_project_scope import (
                     apply_sql_query_project_scope,
@@ -1943,10 +1900,6 @@ class SerializableMCPTool:
             else:
                 raw = await _invoke()
             text = _format_mcp_tool_result(raw)
-            if self.server_name == "mempalace":
-                from .runtime.mempalace_tool_scope import enrich_mempalace_tool_result
-
-                text = enrich_mempalace_tool_result(self.tool_name, text)
             return text
 
         if loop.is_closed():

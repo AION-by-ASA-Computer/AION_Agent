@@ -1,0 +1,36 @@
+{
+  "name": "smoke_agent",
+  "description": "Minimal agent regression cases for CI and harness smoke tests.",
+  "cases": [
+    {
+      "id": "greet",
+      "input_text": "Reply with exactly: pong",
+      "expected_output": "pong",
+      "eval_type": "contains"
+    },
+    {
+      "id": "math_simple",
+      "input_text": "What is 2+2? Reply with only the number.",
+      "expected_output": "4",
+      "eval_type": "contains"
+    },
+    {
+      "id": "identity",
+      "input_text": "Say hello in one word.",
+      "expected_output": "hello",
+      "eval_type": "contains"
+    },
+    {
+      "id": "negative",
+      "input_text": "Name the capital of France in one word.",
+      "expected_output": "Paris",
+      "eval_type": "contains"
+    },
+    {
+      "id": "format",
+      "input_text": "Output the word OK in uppercase only.",
+      "expected_output": "OK",
+      "eval_type": "contains"
+    }
+  ]
+}

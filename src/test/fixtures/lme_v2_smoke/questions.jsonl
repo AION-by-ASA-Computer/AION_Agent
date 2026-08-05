@@ -1,0 +1,3 @@
+{"question_id": "q1", "question": "What is the admin password hint?", "answer": "blue42", "ability": "static"}
+{"question_id": "q2", "question": "Which workflow step fails on timeout?", "answer": "checkout", "ability": "workflow"}
+{"question_id": "q3", "question": "What premise is wrong on this site?", "answer": "free shipping", "ability": "premise"}

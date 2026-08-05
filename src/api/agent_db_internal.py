@@ -1,5 +1,5 @@
 """
-Internal HTTP hooks for the Agent DB MCP subprocess (LTM sync via MemPalace MCP).
+Internal HTTP hooks for the Agent DB MCP subprocess (LTM sync via Mnemos).
 
 Set AION_AGENT_DB_LTM_SYNC_URL (e.g. http://127.0.0.1:8000/internal/agent-db/sync-drawer)
 and AION_AGENT_DB_INTERNAL_SECRET (same value in MCP env and API env).
@@ -13,7 +13,8 @@ import os
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from .ltm_admin import _call, _validate_wing_room
+from src.memory.mnemos.orchestrator import mnemos_orchestrator
+from src.memory.mnemos.scope import default_tenant_id
 
 logger = logging.getLogger("aion.api.agent_db_internal")
 
@@ -23,7 +24,8 @@ router = APIRouter(tags=["internal-agent-db"])
 class StructuredDrawerBody(BaseModel):
     wing: str = Field(default="structured_data", max_length=64)
     room: str = Field(..., min_length=1, max_length=80)
-    content: str = Field(..., min_length=10, max_length=20000)
+    content: str = Field(..., min_length=10, max_length=500)
+    scope: str = Field(default="global")
 
 
 def _require_secret(x_secret: str | None) -> None:
@@ -43,15 +45,21 @@ async def agent_db_sync_drawer(
     x_aion_agent_db_secret: str | None = Header(None, alias="X-AION-Agent-DB-Secret"),
 ):
     _require_secret(x_aion_agent_db_secret)
-    _validate_wing_room(body.wing, body.room)
+    category = (
+        body.room
+        if body.room in {"preference", "fact", "event", "decision", "pitfall", "task"}
+        else "fact"
+    )
     try:
-        text = await _call(
-            "mempalace_add_drawer",
-            {"wing": body.wing, "room": body.room, "content": body.content},
+        out = await mnemos_orchestrator.add_note(
+            tenant_id=default_tenant_id(),
+            user_id="agent_db",
+            text=body.content[:500],
+            scope_name=body.scope or "global",
+            category=category,
+            importance=3,
         )
-    except HTTPException:
-        raise
     except Exception as e:
-        logger.warning("mempalace_add_drawer failed: %s", e)
+        logger.warning("Mnemos sync note failed: %s", e)
         raise HTTPException(status_code=502, detail=str(e)) from e
-    return {"ok": True, "text": text}
+    return {"ok": True, "note": out}

@@ -89,7 +89,7 @@ flowchart TB
 | **Agent Factory** | `src/main.py` | Exports the `get_agent()` function, responsible for assembling the agent, retrieving the profile, and dynamically registering MCP tools. |
 | **Pipeline** | `src/agent_pipeline.py` | Manages `AgentPipeline`, which orchestrates asynchronous execution (`run_stream`), tool call management, event tracking, and turn budget control. |
 | **Runtime & Logic** | `src/runtime/` | Redis client and in-process fallback (`redis_client.py`), system hooks management (`hooks.py`), slash commands routing (`slash.py`), planning engines (`plan_engine.py`, `plan_mode.py`), and profile synchronization. |
-| **Memory & LTM** | `src/memory/` | STM context compression (`context_compressor.py`), LTM extraction and integration with MemPalace v3 (`ltm_orchestrator.py`), and project memory scoping. |
+| **Memory & LTM** | `src/memory/` | STM context compression, **Mnemos** native LTM (`src/memory/mnemos/`), LTM extraction (`ltm_orchestrator.py`), MemPalace navigation bridge (ERP profiles), and project memory scoping. |
 | **Security** | `src/security/` | PII/personal data redaction (`pii_redactor.py`), smart approvals for destructive or shell tools (`approval_manager.py`), and session sandbox isolation (`session_runner.py`, `container_runtime.py`). |
 
 ## Typical startup

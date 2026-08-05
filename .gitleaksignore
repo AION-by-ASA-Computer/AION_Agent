@@ -1,0 +1,4 @@
+# False positives: Haystack Secret.from_token(token) where token is a local
+# variable from resolve_llm_credentials() — not a hardcoded secret.
+81f9e53854c4048fb3d65c8136eeb5bf72ffc5a5:src/memory/llm_extract.py:generic-api-key:231
+81f9e53854c4048fb3d65c8136eeb5bf72ffc5a5:src/memory/llm_extract.py:generic-api-key:294

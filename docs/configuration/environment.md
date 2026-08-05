@@ -84,10 +84,16 @@ These variables **enable/disable** advanced features:
 | `AION_MEMPALACE_PALACE_PATH` | *(auto)* | Root palace; default `data/mempalace/{tenant_id}/` → `MEMPALACE_PALACE_PATH` |
 | `AION_LTM_MIN_IMPORTANCE` | `2` | LTM extraction: ignore drawer with `importance` below threshold |
 | `AION_LTM_EXTRACT` | `1` | Enable `extract_and_persist` post-turn (equivalent to MemPalace hook) |
+| `AION_MNEMOS_EMBEDDING_RECALL` | `1` | Hybrid FTS + embedding RRF for Mnemos recall (falls back to FTS if embedding service unavailable) |
+| `AION_MNEMOS_EMBED_ON_BULK` | `1` | Embed notes during bulk ingest (set `0` for very large one-shot imports) |
+| `AION_MNEMOS_DREAM_ENABLED` | `1` | Nightly dream cycle: compress, contradictions, confidence decay, embedding backfill |
+| `AION_MNEMOS_ENTITY_RECALL` | `0` | Optional entity-alias RRF signal (enable when alias resolution is insufficient) |
 | `AION_AGENT_MIN_REASONING_CHARS_WITHOUT_TOOL` | `6000` | SSE `turn_status` if many reasoning characters without tool (0=off) |
 | `AION_AGENT_MAX_REASONING_WITHOUT_TOOL` | `0` | Optional: threshold on SSE reasoning chunk (0=ignore; prefer chars) |
 | `AION_REASONING_HARD_STOP` | `0` | If `1`, interrupts the turn when it exceeds **both** `AION_REASONING_MAX_*` (not recommended: empty response) |
 | `AION_SQL_QM_PARAMETERIZE` | `1` | Literals → `?` before save SQL QueryMemory |
+
+Mnemos LTM has additional knobs (ranking weights, dream schedule, embedding scan limits). See [Mnemos Architectural Hardening](../memory/mnemos-hardening.md#environment-variables) and `.env.example`.
 
 ### 🔵 Observability and Telemetry Variables (V3)
 

@@ -143,22 +143,22 @@ async def delete_memory_entry(id: int) -> str:
 
 
 @mcp.tool()
-def session_search(
+async def session_search(
     query: str,
     limit: int = 5,
     since_days: int = 30,
-    summarize: bool = True,
+    summarize: bool = False,
 ) -> str:
     """
     [CHAT HISTORY SEARCH ONLY] Full-text search (FTS5) on past conversations
     persisted in the unified DB (``aion.db`` / ``AION_UNIFIED_DB``).
     Use when the user asks what was said/discussed in past sessions
     (e.g. "what did we discuss yesterday?", "remember when I said X?").
-    Do NOT use for PromQL queries (use `search_known_query`) or
-    structured facts/preferences (use `mempalace_search`).
-    With summarize=True synthesizes matches using the configured model.
+    Do NOT use for product facts or Mnemos notes (use native `memory_recall`).
+    Do NOT use for PromQL queries (use `search_known_query`).
+    With summarize=True synthesizes matches using the configured model (slower).
     """
-    rows = history_manager.fts_search_blocking(
+    rows = await history_manager.fts_search(
         query, limit=limit * 3, since_days=since_days
     )
     if not rows:
@@ -174,7 +174,7 @@ def session_search(
         rid = r.get("id") or r.get("rowid")
         if rid is None:
             continue
-        ctx = history_manager.get_turn_context_blocking(str(rid), window=2)
+        ctx = await history_manager.get_turn_context(str(rid), window=2)
         matches.append(
             {
                 "session_id": sid,
@@ -209,7 +209,7 @@ def session_search(
         )
     try:
         return (
-            complete_text_sync(system, user_prompt, max_tokens=800, timeout=60.0)
+            complete_text_sync(system, user_prompt, max_tokens=800, timeout=30.0)
             or user_prompt[:4000]
         )
     except Exception as e:

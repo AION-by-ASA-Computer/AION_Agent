@@ -161,8 +161,8 @@ def _tool_activity_label(tool_name: str, status: str, detail: str) -> str:
         base = "Web search"
     elif tn == "web_fetch_page":
         base = "Fetching web page"
-    elif tn.startswith("mempalace_"):
-        base = "Querying MemPalace"
+    elif tn.startswith("memory_"):
+        base = "Querying Mnemos memory"
     elif "grep" in tn or "search" in tn or "ripgrep" in tn:
         base = "Searching codebase"
     elif "prometheus" in tn or "promql" in tn:

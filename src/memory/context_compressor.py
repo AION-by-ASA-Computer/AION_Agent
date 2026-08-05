@@ -524,7 +524,7 @@ _MEMORY_INJECTION_MARKERS = (
     "<ltm",
     "[memory",
     "<aion_memory",
-    "mempalace",
+    "mnemos",
     "mem palace",
 )
 

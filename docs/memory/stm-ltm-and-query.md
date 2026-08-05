@@ -8,6 +8,10 @@ description: Why three separate memory systems, data flows, and architectural tr
 
 This document explains **why** the system has three separate memory systems and how they interact with each other.
 
+:::info Mnemos (LTM v2)
+Standard profiles use **Mnemos** — an in-process LTM backend on `data/aion.db` with hybrid FTS + embedding recall, bi-temporal notes, and a nightly dream cycle. See [Mnemos Long-Term Memory](./mnemos.md) and the [architectural hardening report](./mnemos-hardening.md). MemPalace MCP remains for ERP navigation wings on metadata profiles.
+:::
+
 ## Why three separate memory systems?
 
 The system implements **three memory levels** with distinct responsibilities:
@@ -15,7 +19,7 @@ The system implements **three memory levels** with distinct responsibilities:
 ```mermaid
 flowchart LR
     subgraph Memory Systems
-        STM[STM\nSQLite] --> LTM[LTM\nMemPalace/MCP]
+        STM[STM\nSQLite] --> LTM[LTM\nMnemos + MemPalace nav]
         STM --> QM[QueryMemory\nPromQL Cache\nSQLite Embeddings]
     end
 

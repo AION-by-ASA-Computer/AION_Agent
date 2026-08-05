@@ -28,11 +28,6 @@ memory:
   args: ["-u", "query_memory/server.py"]
   description: "Database di conoscenza e cache query verificate"
 
-mempalace:
-  command: "python"
-  args: ["-m", "mempalace.mcp_server"]
-  description: "Memoria a lungo termine gerarchica (facts & context)"
-
 code:
   command: "python"
   args: ["-u", "code_executor/server.py"]

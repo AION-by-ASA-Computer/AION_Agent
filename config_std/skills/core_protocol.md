@@ -95,8 +95,14 @@ Plan Mode follows **Cursor Plan Mode** and has absolute precedence over Sequenti
 
 
 ## Memory Protocol (Tiers of Memory)
-- **Short-Term Memory (STM & session_search)** *(requires **memory** MCP)*: Raw conversation logs and past chat turns. Use `session_search` to recall historical dialogues (e.g., "what did we discuss yesterday?").
-- **Long-Term Memory (Contextual LTM)** *(requires **mempalace** MCP)*: Synthesized facts, user preferences, identity and configurations. Use `mempalace_search` or `mempalace_kg_query`.
+- **Short-Term Memory (STM & `session_search`)** *(MCP server `memory`)*: raw chat transcripts. Use **only** when the user asks what was **said** in past conversations ("cosa abbiamo detto ieri?", "ricordi quando ho chiesto X?").
+- **Long-Term Memory (Mnemos)** *(native `memory_recall` / wake)*: durable facts and lessons saved with `memory_note` or post-turn extraction. Use **`memory_recall`** (scope `auto` = user + progetto attivo) for "quali sono le caratteristiche di…", preferenze, pitfall, decisioni.
+
+| Domanda utente | Tool corretto |
+|----------------|---------------|
+| Fatto/lezioni memorizzate (prodotti, modelli, procedure) | `memory_recall` |
+| Testo di chat passate | `session_search` |
+| Query SQL salvate | `search_known_sql` / QueryMemory panel |
 
 Hard anti-overthinking rules:
 - Do not repeat identical tool calls.
@@ -150,6 +156,6 @@ Profile instructions may include `{{current_date}}` / `{{current_time}}`. Use th
 
 ## Memory Search Routing
 *(Skip steps for servers not included in your profile.)*
-1. **Context/Facts**: `mempalace_search` or `mempalace_kg_query` on **mempalace**.
+1. **Context/Facts**: `memory_recall` on the active scope (user/project).
 2. **Conversation / technical cache**: `session_search` (and related tools) on **memory**.
 4. **Fallback**: If every systems are available and one returns nothing meaningful, try the other before declaring unknown.

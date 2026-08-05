@@ -33,7 +33,7 @@ To verify that the agent responds correctly:
 3. **Analyze the results**:
    - If the command ends successfully, the agent has passed the threshold.
    - If it fails (exit code 1), a regression was detected.
-   - You can see historical details in the database via the `/admin/eval/runs` endpoint.
+   - Historical run details are stored under `data/benchmarks/runs/` (CLI harness; see `docs/benchmarks/overview.md`).
 
 ## 3. Automatic Optimization (Optuna)
 

@@ -2,7 +2,7 @@ import optuna
 import os
 import time
 import asyncio
-from src.eval.cli import run_evaluation
+from src.benchmarks.general_agent import run_evaluation
 
 
 def aion_agent_objective(trial):
@@ -17,7 +17,7 @@ def aion_agent_objective(trial):
     stm_max_turns = trial.suggest_int("stm_max_turns", 5, 20)
 
     # 2. Setup environment overrides for the trial
-    os.environ["AION_MAX_TOKENS"] = str(max_tokens)
+    os.environ["AION_CHAT_MAX_TOKENS"] = str(max_tokens)
     os.environ["AION_TEMPERATURE"] = str(temperature)
     os.environ["AION_TOP_P"] = str(top_p)
     os.environ["AION_STM_MAX_TURNS"] = str(stm_max_turns)

@@ -218,6 +218,9 @@ def main() -> int:
                     up_mod._ensure_mempalace_nav_env_keys(
                         out_path, dry_run=False, report=rep
                     )
+                    up_mod._ensure_mnemos_env_keys(
+                        out_path, dry_run=False, report=rep
+                    )
                     up_mod._ensure_skill_view_env_keys(
                         out_path, dry_run=False, report=rep
                     )

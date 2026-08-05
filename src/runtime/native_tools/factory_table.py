@@ -225,6 +225,30 @@ def build_sql_memory_list_saved_tool(
     return _build_sql_memory_tool("sql_memory_list_saved", session_id, user_id, profile)
 
 
+def build_memory_recall_tool(
+    session_id: str, user_id: str, profile: Optional["AgentProfile"] = None
+) -> Tool:
+    from src.runtime.mnemos_tools import build_memory_recall_tool as _b
+
+    return _b(session_id, user_id, profile)
+
+
+def build_memory_note_tool(
+    session_id: str, user_id: str, profile: Optional["AgentProfile"] = None
+) -> Tool:
+    from src.runtime.mnemos_tools import build_memory_note_tool as _b
+
+    return _b(session_id, user_id, profile)
+
+
+def build_memory_forget_tool(
+    session_id: str, user_id: str, profile: Optional["AgentProfile"] = None
+) -> Tool:
+    from src.runtime.mnemos_tools import build_memory_forget_tool as _b
+
+    return _b(session_id, user_id, profile)
+
+
 def build_trigger_research_tool(
     session_id: str, user_id: str, profile: Optional["AgentProfile"] = None
 ) -> Tool:
@@ -358,6 +382,9 @@ NATIVE_TOOL_FACTORIES: Dict[str, NativeToolBuilder] = {
     "sql_memory_delete": build_sql_memory_delete_tool,
     "sql_memory_list_projects": build_sql_memory_list_projects_tool,
     "sql_memory_list_saved": build_sql_memory_list_saved_tool,
+    "memory_recall": build_memory_recall_tool,
+    "memory_note": build_memory_note_tool,
+    "memory_forget": build_memory_forget_tool,
     "trigger_research": build_trigger_research_tool,
     "manage_research": build_manage_research_tool,
 }

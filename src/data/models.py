@@ -8,13 +8,15 @@ from typing import Optional
 from sqlalchemy import (
     Boolean,
     DateTime,
+    Float,
     ForeignKey,
+    Index,
     Integer,
+    LargeBinary,
     String,
     Text,
     UniqueConstraint,
     func,
-    LargeBinary,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -99,6 +101,9 @@ class Conversation(Base):
     )
     archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     message_count: Mapped[int] = mapped_column(Integer, default=0)
+    project_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True
+    )
     metadata_json: Mapped[str] = mapped_column("metadata", Text, default="{}")
     tags_json: Mapped[str] = mapped_column("tags", Text, default="[]")
 
@@ -296,8 +301,8 @@ class TenantQueryMemorySettings(Base):
     )
 
 
-class SqlQueryProject(Base):
-    __tablename__ = "sql_query_projects"
+class Project(Base):
+    __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tenant_id: Mapped[str] = mapped_column(
@@ -306,8 +311,8 @@ class SqlQueryProject(Base):
     slug: Mapped[str] = mapped_column(String(128), nullable=False)
     display_name: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
-    datasource_key: Mapped[str] = mapped_column(
-        String(128), nullable=False, default="default"
+    datasource_key: Mapped[Optional[str]] = mapped_column(
+        String(128), nullable=True, default="default"
     )
     profile_slug: Mapped[Optional[str]] = mapped_column(String(256))
     scope_mode: Mapped[str] = mapped_column(
@@ -319,7 +324,7 @@ class SqlQueryProject(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "slug", name="uq_sql_query_project_tenant_slug"),
+        UniqueConstraint("tenant_id", "slug", name="uq_projects_tenant_slug"),
     )
 
     members: Mapped[list["SqlQueryProjectMember"]] = relationship(
@@ -334,7 +339,7 @@ class SqlQueryProjectMember(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("sql_query_projects.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
     user_identifier: Mapped[str] = mapped_column(String(256), nullable=False)
     role: Mapped[str] = mapped_column(
@@ -345,9 +350,7 @@ class SqlQueryProjectMember(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    project: Mapped["SqlQueryProject"] = relationship(
-        "SqlQueryProject", back_populates="members"
-    )
+    project: Mapped["Project"] = relationship("Project", back_populates="members")
 
     __table_args__ = (
         UniqueConstraint(
@@ -361,7 +364,7 @@ class CachedSqlQuery(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     project_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("sql_query_projects.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False
     )
     tenant_id: Mapped[str] = mapped_column(
         String(64), nullable=False, default="default"
@@ -396,6 +399,93 @@ class CachedSqlQuery(Base):
     )
 
 
+class LtmNote(Base):
+    __tablename__ = "ltm_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default"
+    )
+    scope_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(String(500), nullable=False)
+    category: Mapped[str] = mapped_column(String(32), nullable=False, default="fact")
+    importance: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    superseded_by: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("ltm_notes.id", ondelete="SET NULL"), nullable=True
+    )
+    source_session_id: Mapped[Optional[str]] = mapped_column(String(64))
+    source_message_id: Mapped[Optional[str]] = mapped_column(String(64))
+    embedding: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=1.0)
+    confidence_source: Mapped[Optional[str]] = mapped_column(String(24))
+    valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    valid_to: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_recalled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
+    recall_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "scope_type",
+            "scope_key",
+            "seq",
+            name="uq_ltm_notes_scope_seq",
+        ),
+        Index(
+            "ix_ltm_notes_scope_status",
+            "tenant_id",
+            "scope_type",
+            "scope_key",
+            "status",
+        ),
+    )
+
+
+class LtmDigest(Base):
+    __tablename__ = "ltm_digests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default"
+    )
+    scope_type: Mapped[str] = mapped_column(String(16), nullable=False)
+    scope_key: Mapped[str] = mapped_column(String(256), nullable=False)
+    level: Mapped[int] = mapped_column(Integer, nullable=False)
+    range_start_seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    range_end_seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    summary_text: Mapped[Optional[str]] = mapped_column(String(500))
+    ready: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "scope_type",
+            "scope_key",
+            "range_start_seq",
+            "range_end_seq",
+            name="uq_ltm_digests_scope_range",
+        ),
+    )
+
+
+# Backward-compatible alias for SQL QueryMemory imports
+SqlQueryProject = Project
+
+
 class TrustedPath(Base):
     __tablename__ = "trusted_paths"
     path: Mapped[str] = mapped_column(String(1024), primary_key=True)
@@ -409,6 +499,18 @@ class EvalRun(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     dataset_name: Mapped[str] = mapped_column(String(256), nullable=False)
     profile_name: Mapped[str] = mapped_column(String(256), nullable=False)
+    benchmark_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    config_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metrics_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    log_path: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

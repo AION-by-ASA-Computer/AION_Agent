@@ -1,0 +1,86 @@
+{
+  "title": "Mnemos recall micro-benchmark",
+  "description": "Dev-only validation for Mnemos FTS and hybrid embedding recall",
+  "cases": [
+    {
+      "id": "fts_keyword_hit",
+      "scope_type": "user",
+      "setup_notes": [
+        "User prefers PostgreSQL over MySQL for analytics workloads",
+        "Team lunch is scheduled every Friday at noon",
+        "Incident Mobile filter is available on the ServiceNow portal"
+      ],
+      "query": "database preference PostgreSQL",
+      "expected_substrings": ["PostgreSQL"],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "fts_phrase_filter",
+      "scope_type": "project",
+      "setup_notes": [
+        "menu_options: Incident Mobile, Incident Portal, My Open Incidents",
+        "catalog_options: Dell XPS 15, Lenovo ThinkPad",
+        "traj=abc step=1 url=/incidents action=open Filters"
+      ],
+      "query": "\"Incident Mobile\" Filters portal",
+      "expected_substrings": ["Incident Mobile"],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "scope_isolation_user",
+      "scope_type": "user",
+      "setup_notes": [
+        "Secret user token ALPHA-42 only in user scope"
+      ],
+      "query": "ALPHA-42 secret token",
+      "expected_substrings": ["ALPHA-42"],
+      "recall_limit": 3,
+      "min_hits": 1,
+      "negative_scope_type": "project",
+      "negative_notes": [
+        "Unrelated project note about billing dashboards"
+      ],
+      "negative_query": "ALPHA-42"
+    },
+    {
+      "id": "semantic_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "The deployment window for production is Sunday 02:00-04:00 UTC",
+        "Coffee machine is on the second floor"
+      ],
+      "query": "when can we deploy to production",
+      "expected_substrings": ["Sunday", "02:00"],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "short_discriminative_token",
+      "scope_type": "project",
+      "setup_notes": [
+        "Class Price State columns visible in the laptop catalog table",
+        "Navigation chrome and skip links on every page"
+      ],
+      "query": "Class Price State laptop catalog",
+      "expected_substrings": ["Class", "Price"],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "noise_rejection",
+      "scope_type": "user",
+      "setup_notes": [
+        "Customer ID 998877 is linked to contract C-2024-11",
+        "Generic portal working phrases answer boxed"
+      ],
+      "query": "contract C-2024-11 customer",
+      "expected_substrings": ["C-2024-11"],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": ["boxed"]
+    }
+  ]
+}

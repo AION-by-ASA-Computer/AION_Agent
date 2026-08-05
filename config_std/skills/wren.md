@@ -18,13 +18,13 @@ Load **`wren skills get usage`** before the first data question in a session.
 
 ## Mandatory flow (data questions)
 
-1. **SEARCH** — `sql_memory_search` + `mempalace_search` (AION QueryMemory + MemPalace).
+1. **SEARCH** — `sql_memory_search` + `memory_recall` (QueryMemory + Mnemos).
 2. **Context** — `sandbox_exec_allowlisted(["wren", "context", "show"], timeout_sec=60)`; on first turn in session also `["wren", "context", "instructions"]`.
 3. **Recall** (optional) — `["wren", "memory", "recall", "-q", "<question>", "--limit", "3"]`.
 4. **Execute** — SQL against **MDL model names** from `context show`, not raw database schema qualifiers (`public.*`, etc.):
    - `sandbox_exec_allowlisted(["wren", "--sql", "<SELECT ...>", "-o", "table"], timeout_sec=180)`
    - Complex JOINs: `["wren", "dry-plan", "--sql", "<SQL>"]` first.
-5. **Persist** — `sql_memory_save` + `mempalace_add_drawer` when you verified a new reusable path.
+5. **Persist** — `sql_memory_save` + `memory_note` when you verified a new reusable path.
 6. **Answer** — concise, data-backed.
 
 On Wren-enabled profiles, do **not** use raw toolbox SQL tools (`toolbox-postgres`, `execute_sql`, `list_tables`) unless the profile explicitly lists them.

@@ -1,0 +1,1488 @@
+{
+  "title": "Mnemos recall full benchmark",
+  "description": "Comprehensive dev validation for Mnemos FTS and hybrid embedding recall across realistic note patterns",
+  "version": 1,
+  "case_count": 81,
+  "categories": {
+    "fts_keyword": 10,
+    "fts_phrase": 8,
+    "scope_isolation": 8,
+    "semantic_paraphrase": 12,
+    "short_token": 6,
+    "noise_rejection": 6,
+    "disambiguation": 8,
+    "numeric_id": 6,
+    "url_context": 6,
+    "dense_corpus": 6,
+    "multi_hit": 5
+  },
+  "cases": [
+    {
+      "id": "kw_postgres",
+      "category": "fts_keyword",
+      "scope_type": "user",
+      "setup_notes": [
+        "User prefers PostgreSQL over MySQL for analytics workloads",
+        "Lunch at noon on Fridays"
+      ],
+      "query": "database preference PostgreSQL",
+      "expected_substrings": [
+        "PostgreSQL"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "kw_kubernetes",
+      "category": "fts_keyword",
+      "scope_type": "project",
+      "setup_notes": [
+        "Production cluster runs on Kubernetes 1.29 in eu-west-1",
+        "Staging still on docker-compose"
+      ],
+      "query": "kubernetes production cluster version",
+      "expected_substrings": [
+        "Kubernetes",
+        "1.29"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "kw_stripe",
+      "category": "fts_keyword",
+      "scope_type": "user",
+      "setup_notes": [
+        "Billing integration uses Stripe webhook endpoint /hooks/stripe",
+        "PayPal deprecated last quarter"
+      ],
+      "query": "payment stripe webhook",
+      "expected_substrings": [
+        "Stripe"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "kw_pagerduty",
+      "category": "fts_keyword",
+      "scope_type": "project",
+      "setup_notes": [
+        "On-call rotation synced from PagerDuty schedule PLATFORM",
+        "Backup contact is ops-hotline@company.com"
+      ],
+      "query": "on-call pagerduty platform",
+      "expected_substrings": [
+        "PagerDuty"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "kw_redis",
+      "category": "fts_keyword",
+      "scope_type": "user",
+      "setup_notes": [
+        "Session cache stored in Redis DB 2 with 30min TTL",
+        "Memcached removed from legacy stack"
+      ],
+      "query": "session cache redis TTL",
+      "expected_substrings": [
+        "Redis"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "kw_grafana",
+      "category": "fts_keyword",
+      "scope_type": "project",
+      "setup_notes": [
+        "Dashboards live in Grafana folder SRE-Core",
+        "Kibana only used for logs"
+      ],
+      "query": "grafana dashboards SRE",
+      "expected_substrings": [
+        "Grafana"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "kw_saml",
+      "category": "fts_keyword",
+      "scope_type": "user",
+      "setup_notes": [
+        "SSO login via SAML IdP Okta prod tenant",
+        "Local accounts disabled for staff"
+      ],
+      "query": "SSO SAML Okta login",
+      "expected_substrings": [
+        "SAML",
+        "Okta"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "kw_terraform",
+      "category": "fts_keyword",
+      "scope_type": "project",
+      "setup_notes": [
+        "IaC managed with Terraform Cloud workspace aion-prod",
+        "Manual console changes forbidden"
+      ],
+      "query": "infrastructure terraform cloud",
+      "expected_substrings": [
+        "Terraform"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "kw_jira",
+      "category": "fts_keyword",
+      "scope_type": "user",
+      "setup_notes": [
+        "Sprint board JIRA project KEY=PLAT",
+        "Linear trial ended"
+      ],
+      "query": "sprint board jira PLAT",
+      "expected_substrings": [
+        "JIRA",
+        "PLAT"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "kw_openapi",
+      "category": "fts_keyword",
+      "scope_type": "project",
+      "setup_notes": [
+        "Public API spec published as OpenAPI 3.1 at /docs/openapi.json",
+        "SOAP gateway retired"
+      ],
+      "query": "API OpenAPI specification",
+      "expected_substrings": [
+        "OpenAPI"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "ph_incident_mobile",
+      "category": "fts_phrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "menu_options: Incident Mobile, Incident Portal, My Open Incidents",
+        "traj=t1 step=2 url=/incidents action=open Filters"
+      ],
+      "query": "\"Incident Mobile\" Filters portal",
+      "expected_substrings": [
+        "Incident Mobile"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "ph_dell_xps",
+      "category": "fts_phrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "catalog_options: Dell XPS 15, Lenovo ThinkPad X1",
+        "Price filter max 1500 EUR"
+      ],
+      "query": "\"Dell XPS\" laptop catalog",
+      "expected_substrings": [
+        "Dell XPS"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "ph_my_open",
+      "category": "fts_phrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "menu_options: All Incidents, My Open Incidents, Assigned to me",
+        "User role: fulfiller"
+      ],
+      "query": "\"My Open Incidents\" filter list",
+      "expected_substrings": [
+        "My Open Incidents"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "ph_service_catalog",
+      "category": "fts_phrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "Page title: Service Catalog - Request something",
+        "Category Hardware visible"
+      ],
+      "query": "\"Service Catalog\" request hardware",
+      "expected_substrings": [
+        "Service Catalog"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "ph_change_advisory",
+      "category": "fts_phrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "CAB meeting notes: Change Advisory Board meets Thursdays",
+        "Emergency changes need VP approval"
+      ],
+      "query": "\"Change Advisory Board\" meeting",
+      "expected_substrings": [
+        "Change Advisory Board"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "ph_data_residency",
+      "category": "fts_phrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "Policy: Data Residency EU-only for customer PII",
+        "US shard is analytics only"
+      ],
+      "query": "\"Data Residency\" EU customer PII",
+      "expected_substrings": [
+        "Data Residency"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "ph_zero_trust",
+      "category": "fts_phrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "Architecture principle: Zero Trust network access for all VPN users",
+        "Legacy flat network decommissioned"
+      ],
+      "query": "\"Zero Trust\" VPN access",
+      "expected_substrings": [
+        "Zero Trust"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "ph_runbook_restart",
+      "category": "fts_phrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "runbook: Restart API pods Runbook v3.2 after memory leak alert",
+        "Do not restart during backup window"
+      ],
+      "query": "\"Restart API pods\" runbook",
+      "expected_substrings": [
+        "Restart API pods"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "scope_user_secret",
+      "category": "scope_isolation",
+      "scope_type": "user",
+      "setup_notes": [
+        "Secret user token ALPHA-42 for staging API"
+      ],
+      "query": "ALPHA-42 secret token",
+      "expected_substrings": [
+        "ALPHA-42"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "negative_scope_type": "project",
+      "negative_notes": [
+        "Unrelated billing dashboard config"
+      ],
+      "negative_query": "ALPHA-42 secret token"
+    },
+    {
+      "id": "scope_user_pii",
+      "category": "scope_isolation",
+      "scope_type": "user",
+      "setup_notes": [
+        "Personal phone +39-333-1234567 only for on-call contact"
+      ],
+      "query": "phone on-call contact",
+      "expected_substrings": [
+        "333-1234567"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "negative_scope_type": "project",
+      "negative_notes": [
+        "Project wiki homepage content"
+      ],
+      "negative_query": "phone on-call contact"
+    },
+    {
+      "id": "scope_user_salary",
+      "category": "scope_isolation",
+      "scope_type": "user",
+      "setup_notes": [
+        "Salary band L4 approved for user giuseppe 2026"
+      ],
+      "query": "salary band giuseppe L4",
+      "expected_substrings": [
+        "L4"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "negative_scope_type": "project",
+      "negative_notes": [
+        "Office seating plan floor 2"
+      ],
+      "negative_query": "salary band giuseppe L4"
+    },
+    {
+      "id": "scope_proj_api_key",
+      "category": "scope_isolation",
+      "scope_type": "project",
+      "setup_notes": [
+        "Project API key sk-proj-ALIBR-9f2a for alibr integration"
+      ],
+      "query": "sk-proj-ALIBR API key",
+      "expected_substrings": [
+        "sk-proj-ALIBR"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "negative_scope_type": "user",
+      "negative_notes": [
+        "User hobby: weekend hiking trails"
+      ],
+      "negative_query": "sk-proj-ALIBR API key"
+    },
+    {
+      "id": "scope_proj_webhook",
+      "category": "scope_isolation",
+      "scope_type": "project",
+      "setup_notes": [
+        "Webhook signing secret whsec_alibr_prod_88 for alibr"
+      ],
+      "query": "webhook secret alibr prod",
+      "expected_substrings": [
+        "whsec_alibr"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "negative_scope_type": "user",
+      "negative_notes": [
+        "User prefers dark mode in chat"
+      ],
+      "negative_query": "webhook secret alibr prod"
+    },
+    {
+      "id": "scope_proj_datasource",
+      "category": "scope_isolation",
+      "scope_type": "project",
+      "setup_notes": [
+        "Datasource DSN postgres://alibr-ro@db/internal for read-only queries"
+      ],
+      "query": "datasource alibr read-only postgres",
+      "expected_substrings": [
+        "alibr-ro"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "negative_scope_type": "user",
+      "negative_notes": [
+        "User lunch preference vegetarian"
+      ],
+      "negative_query": "datasource alibr read-only postgres"
+    },
+    {
+      "id": "scope_proj_deploy",
+      "category": "scope_isolation",
+      "scope_type": "project",
+      "setup_notes": [
+        "Deploy target namespace alibr-prod in cluster eu-west"
+      ],
+      "query": "deploy namespace alibr-prod",
+      "expected_substrings": [
+        "alibr-prod"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "negative_scope_type": "user",
+      "negative_notes": [
+        "User timezone Europe/Rome"
+      ],
+      "negative_query": "deploy namespace alibr-prod"
+    },
+    {
+      "id": "scope_proj_owner",
+      "category": "scope_isolation",
+      "scope_type": "project",
+      "setup_notes": [
+        "Technical owner for alibr project: team-platform@company.com"
+      ],
+      "query": "technical owner alibr platform team",
+      "expected_substrings": [
+        "team-platform"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "negative_scope_type": "user",
+      "negative_notes": [
+        "User favorite IDE VS Code"
+      ],
+      "negative_query": "technical owner alibr platform team"
+    },
+    {
+      "id": "sem_deploy_window",
+      "category": "semantic_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "Production deploy window Sunday 02:00-04:00 UTC",
+        "Coffee on floor 2"
+      ],
+      "query": "when can we deploy to production",
+      "expected_substrings": [
+        "Sunday",
+        "02:00"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_oncall_contact",
+      "category": "semantic_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "Primary on-call engineer is Maria Rossi for platform team",
+        "Secondary is ops rotation"
+      ],
+      "query": "who do I call for production emergencies",
+      "expected_substrings": [
+        "Maria Rossi"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_password_policy",
+      "category": "semantic_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "Passwords must be rotated every 90 days per security policy",
+        "MFA required for admin roles"
+      ],
+      "query": "how often must I change my password",
+      "expected_substrings": [
+        "90 days"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_backup_retention",
+      "category": "semantic_paraphrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "Database backups retained for 35 days in encrypted vault",
+        "Weekly full plus daily incremental"
+      ],
+      "query": "how long are database backups kept",
+      "expected_substrings": [
+        "35 days"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_rate_limit",
+      "category": "semantic_paraphrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "API rate limit 1200 requests per minute per tenant",
+        "Burst allowance 200 extra"
+      ],
+      "query": "what is the API throttling limit per tenant",
+      "expected_substrings": [
+        "1200"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_support_sla",
+      "category": "semantic_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "Premium support SLA response within 1 hour for P1 tickets",
+        "P2 within 4 business hours"
+      ],
+      "query": "how fast does premium support respond to critical issues",
+      "expected_substrings": [
+        "1 hour"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_data_export",
+      "category": "semantic_paraphrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "GDPR export requests fulfilled within 30 calendar days",
+        "Legal review required for bulk export"
+      ],
+      "query": "deadline for customer data export under GDPR",
+      "expected_substrings": [
+        "30"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_maintenance",
+      "category": "semantic_paraphrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "Monthly maintenance first Tuesday 22:00-23:00 CET",
+        "Customers notified 7 days ahead"
+      ],
+      "query": "when is the scheduled monthly downtime",
+      "expected_substrings": [
+        "Tuesday",
+        "22:00"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_approval_flow",
+      "category": "semantic_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "Production changes need approval from change manager and QA sign-off",
+        "Hotfix path exists for P1"
+      ],
+      "query": "what approvals are needed before production release",
+      "expected_substrings": [
+        "change manager",
+        "QA"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_log_retention",
+      "category": "semantic_paraphrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "Application logs kept 14 days in hot storage then archived",
+        "Audit logs 7 years"
+      ],
+      "query": "how long are application logs available for search",
+      "expected_substrings": [
+        "14 days"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_incident_severity",
+      "category": "semantic_paraphrase",
+      "scope_type": "user",
+      "setup_notes": [
+        "P1 incident means complete service outage affecting all users",
+        "P2 is partial degradation"
+      ],
+      "query": "definition of a P1 production incident",
+      "expected_substrings": [
+        "complete service outage"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "sem_encryption_rest",
+      "category": "semantic_paraphrase",
+      "scope_type": "project",
+      "setup_notes": [
+        "All customer data encrypted at rest with AES-256",
+        "Keys rotated annually"
+      ],
+      "query": "what encryption protects stored customer data",
+      "expected_substrings": [
+        "AES-256"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "prefer_hybrid": true
+    },
+    {
+      "id": "short_class_price",
+      "category": "short_token",
+      "scope_type": "project",
+      "setup_notes": [
+        "Class Price State columns in laptop catalog table",
+        "Navigation chrome on every page"
+      ],
+      "query": "Class Price State laptop catalog",
+      "expected_substrings": [
+        "Class",
+        "Price"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "short_state_code",
+      "category": "short_token",
+      "scope_type": "project",
+      "setup_notes": [
+        "US State NY and CA ship free over 50 USD",
+        "International shipping varies"
+      ],
+      "query": "State NY CA shipping free",
+      "expected_substrings": [
+        "NY",
+        "CA"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "short_ssd",
+      "category": "short_token",
+      "scope_type": "project",
+      "setup_notes": [
+        "Storage option SSD 1TB available on XPS line",
+        "HDD discontinued"
+      ],
+      "query": "SSD 1TB storage option",
+      "expected_substrings": [
+        "SSD",
+        "1TB"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "short_api_v2",
+      "category": "short_token",
+      "scope_type": "project",
+      "setup_notes": [
+        "API version v2 deprecated on 2026-12-31",
+        "v3 is current"
+      ],
+      "query": "API v2 deprecation date",
+      "expected_substrings": [
+        "v2",
+        "2026"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "short_rto",
+      "category": "short_token",
+      "scope_type": "user",
+      "setup_notes": [
+        "Disaster recovery RTO target 4 hours for core services",
+        "RPO 15 minutes"
+      ],
+      "query": "recovery time objective RTO hours",
+      "expected_substrings": [
+        "RTO",
+        "4 hours"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "short_mfa",
+      "category": "short_token",
+      "scope_type": "user",
+      "setup_notes": [
+        "MFA enforced for admin and billing roles",
+        "Optional for read-only"
+      ],
+      "query": "MFA required roles admin billing",
+      "expected_substrings": [
+        "MFA",
+        "admin"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "noise_contract",
+      "category": "noise_rejection",
+      "scope_type": "user",
+      "setup_notes": [
+        "Customer ID 998877 linked to contract C-2024-11",
+        "Generic portal working phrases answer boxed"
+      ],
+      "query": "contract C-2024-11 customer",
+      "expected_substrings": [
+        "C-2024-11"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "boxed"
+      ]
+    },
+    {
+      "id": "noise_ticket",
+      "category": "noise_rejection",
+      "scope_type": "project",
+      "setup_notes": [
+        "Ticket INC1044552 assigned to network team",
+        "Portal navigation skip links on all pages"
+      ],
+      "query": "incident INC1044552 network",
+      "expected_substrings": [
+        "INC1044552"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "skip links"
+      ]
+    },
+    {
+      "id": "noise_version",
+      "category": "noise_rejection",
+      "scope_type": "user",
+      "setup_notes": [
+        "Release version 4.8.2 deployed to production",
+        "Mark your answer in boxed format for exams"
+      ],
+      "query": "release 4.8.2 production",
+      "expected_substrings": [
+        "4.8.2"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "boxed"
+      ]
+    },
+    {
+      "id": "noise_uuid",
+      "category": "noise_rejection",
+      "scope_type": "project",
+      "setup_notes": [
+        "Resource UUID a1b2c3d4-e5f6-7890-abcd-ef1234567890 in eu-west",
+        "Working portal phrases answer template"
+      ],
+      "query": "resource a1b2c3d4-e5f6",
+      "expected_substrings": [
+        "a1b2c3d4"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "portal phrases"
+      ]
+    },
+    {
+      "id": "noise_email",
+      "category": "noise_rejection",
+      "scope_type": "user",
+      "setup_notes": [
+        "Escalation email secops@company.com for breaches",
+        "Answer should be short phrases separated by commas"
+      ],
+      "query": "escalation secops email breaches",
+      "expected_substrings": [
+        "secops@company.com"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "short phrases"
+      ]
+    },
+    {
+      "id": "noise_ip",
+      "category": "noise_rejection",
+      "scope_type": "project",
+      "setup_notes": [
+        "Bastion host 10.20.30.40 allows SSH from VPN only",
+        "ServiceNow portal filter dropdown labels"
+      ],
+      "query": "bastion 10.20.30.40 SSH VPN",
+      "expected_substrings": [
+        "10.20.30.40"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1,
+      "forbidden_substrings": [
+        "ServiceNow"
+      ]
+    },
+    {
+      "id": "disamb_customer_acme",
+      "category": "disambiguation",
+      "scope_type": "project",
+      "setup_notes": [
+        "Customer Acme Corp account tier Enterprise renewal 2026-07",
+        "Customer Beta Ltd account tier Standard renewal 2026-03",
+        "Customer Gamma SA account tier Enterprise renewal 2025-11",
+        "Customer Delta Inc account tier Starter trial ends 2026-01",
+        "Customer Epsilon GmbH account tier Enterprise renewal 2026-09",
+        "Customer Zeta LLC account tier Standard renewal 2026-05",
+        "Customer Eta PLC account tier Enterprise support phone +44-20-7946",
+        "Customer Theta NV account tier Standard NPS score 42"
+      ],
+      "query": "Acme Corp Enterprise renewal 2026",
+      "expected_substrings": [
+        "Acme",
+        "Enterprise",
+        "2026-07"
+      ],
+      "recall_limit": 8,
+      "min_hits": 2
+    },
+    {
+      "id": "disamb_server_prod",
+      "category": "disambiguation",
+      "scope_type": "project",
+      "setup_notes": [
+        "server prod-api-01 memory alert 92 percent",
+        "server prod-api-02 memory alert 45 percent",
+        "server staging-api-01 cpu alert 78 percent",
+        "server prod-db-01 disk alert 88 percent",
+        "server prod-cache-01 evictions high",
+        "server prod-api-03 memory alert 91 percent",
+        "server dev-api-01 unused last 30 days",
+        "server prod-worker-07 queue backlog"
+      ],
+      "query": "prod-api memory alert above 90",
+      "expected_substrings": [
+        "prod-api-01",
+        "92"
+      ],
+      "recall_limit": 8,
+      "min_hits": 2
+    },
+    {
+      "id": "disamb_region",
+      "category": "disambiguation",
+      "scope_type": "user",
+      "setup_notes": [
+        "Preference: deploy primary region eu-west-1 for latency",
+        "Preference: DR region eu-central-1 for failover",
+        "Preference: analytics bucket in us-east-1",
+        "Preference: CDN edge eu-west-1 and us-east-1",
+        "Preference: logs archive eu-south-1",
+        "Preference: ML training us-west-2"
+      ],
+      "query": "primary deploy region eu-west-1 latency",
+      "expected_substrings": [
+        "eu-west-1",
+        "primary region"
+      ],
+      "recall_limit": 8,
+      "min_hits": 2
+    },
+    {
+      "id": "disamb_team",
+      "category": "disambiguation",
+      "scope_type": "project",
+      "setup_notes": [
+        "team Alpha owns payments microservice",
+        "team Beta owns auth microservice",
+        "team Gamma owns notifications service",
+        "team Delta owns data pipeline",
+        "team Epsilon owns mobile apps",
+        "team Zeta owns internal tools"
+      ],
+      "query": "team owns notifications service",
+      "expected_substrings": [
+        "Gamma",
+        "notifications"
+      ],
+      "recall_limit": 8,
+      "min_hits": 2
+    },
+    {
+      "id": "disamb_env",
+      "category": "disambiguation",
+      "scope_type": "project",
+      "setup_notes": [
+        "env staging URL https://staging.example.com/api",
+        "env production URL https://api.example.com/v1",
+        "env dev URL http://localhost:8001",
+        "env QA URL https://qa.example.com/api",
+        "env demo URL https://demo.example.com"
+      ],
+      "query": "production API base URL api.example.com",
+      "expected_substrings": [
+        "api.example.com",
+        "production"
+      ],
+      "recall_limit": 8,
+      "min_hits": 2
+    },
+    {
+      "id": "disamb_language",
+      "category": "disambiguation",
+      "scope_type": "user",
+      "setup_notes": [
+        "preference UI language Italian for chat client",
+        "preference UI language English for admin panel",
+        "preference date format DD/MM/YYYY",
+        "preference timezone Europe/Rome",
+        "preference number format 1.234,56"
+      ],
+      "query": "chat UI language Italian",
+      "expected_substrings": [
+        "Italian",
+        "chat"
+      ],
+      "recall_limit": 8,
+      "min_hits": 2
+    },
+    {
+      "id": "disamb_skill",
+      "category": "disambiguation",
+      "scope_type": "project",
+      "setup_notes": [
+        "skill prometheus_query validates PromQL before execution",
+        "skill grafana_dashboard lists folders and panels",
+        "skill sql_query_memory caches validated SELECT statements",
+        "skill khub_rag searches company knowledge base",
+        "skill mempalace_navigation explores agent DB wings"
+      ],
+      "query": "sql_query_memory caches validated SELECT",
+      "expected_substrings": [
+        "sql_query_memory",
+        "SELECT"
+      ],
+      "recall_limit": 8,
+      "min_hits": 2
+    },
+    {
+      "id": "disamb_alert",
+      "category": "disambiguation",
+      "scope_type": "user",
+      "setup_notes": [
+        "alert HighErrorRate fires when 5xx above 2 percent 5m",
+        "alert DiskAlmostFull fires at 85 percent usage",
+        "alert CertificateExpiry fires 14 days before expiry",
+        "alert QueueLag fires when depth above 10000",
+        "alert LoginFailureSpike fires on brute force pattern"
+      ],
+      "query": "alert certificate expires 14 days before",
+      "expected_substrings": [
+        "CertificateExpiry",
+        "14 days"
+      ],
+      "recall_limit": 8,
+      "min_hits": 2
+    },
+    {
+      "id": "num_ticket",
+      "category": "numeric_id",
+      "scope_type": "project",
+      "setup_notes": [
+        "Incident INC-2026-8842 root cause memory leak in worker",
+        "INC-2026-8841 was DNS issue"
+      ],
+      "query": "incident INC-2026-8842 memory leak",
+      "expected_substrings": [
+        "INC-2026-8842"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "num_order",
+      "category": "numeric_id",
+      "scope_type": "user",
+      "setup_notes": [
+        "Order ORD-55102 shipped via DHL tracking 1234567890",
+        "ORD-55101 cancelled"
+      ],
+      "query": "order ORD-55102 DHL tracking",
+      "expected_substrings": [
+        "ORD-55102"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "num_vlan",
+      "category": "numeric_id",
+      "scope_type": "project",
+      "setup_notes": [
+        "VLAN 2048 assigned to production Kubernetes nodes",
+        "VLAN 2049 for management"
+      ],
+      "query": "VLAN production kubernetes 2048",
+      "expected_substrings": [
+        "2048"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "num_port",
+      "category": "numeric_id",
+      "scope_type": "project",
+      "setup_notes": [
+        "Metrics exporter listens on port 9464 on all pods",
+        "Health check port 8080"
+      ],
+      "query": "metrics exporter port 9464",
+      "expected_substrings": [
+        "9464"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "num_iban",
+      "category": "numeric_id",
+      "scope_type": "user",
+      "setup_notes": [
+        "Vendor payment IBAN IT60X0542811101000000123456 for invoices",
+        "Old IBAN deprecated"
+      ],
+      "query": "vendor IBAN IT60X0542811101",
+      "expected_substrings": [
+        "IT60X0542811101"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "num_build",
+      "category": "numeric_id",
+      "scope_type": "project",
+      "setup_notes": [
+        "CI build 18429 promoted to production on 2026-03-01",
+        "Build 18428 failed tests"
+      ],
+      "query": "build 18429 promoted production",
+      "expected_substrings": [
+        "18429"
+      ],
+      "recall_limit": 5,
+      "min_hits": 1
+    },
+    {
+      "id": "url_incidents",
+      "category": "url_context",
+      "scope_type": "project",
+      "setup_notes": [
+        "traj=t99 step=4 url=/incidents/list action=open Filters dropdown",
+        "goal: find incident filters"
+      ],
+      "query": "url /incidents Filters dropdown",
+      "expected_substrings": [
+        "/incidents",
+        "Filters"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "url_catalog",
+      "category": "url_context",
+      "scope_type": "project",
+      "setup_notes": [
+        "traj=t12 step=2 url=/catalog/laptops thought=compare SSD options",
+        "catalog_options: XPS, ThinkPad"
+      ],
+      "query": "catalog laptops SSD url",
+      "expected_substrings": [
+        "/catalog/laptops",
+        "SSD"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "url_admin_users",
+      "category": "url_context",
+      "scope_type": "project",
+      "setup_notes": [
+        "traj=admin step=1 url=/admin/users action=search role=admin",
+        "only admins see this page"
+      ],
+      "query": "admin users page search role",
+      "expected_substrings": [
+        "/admin/users",
+        "admin"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "url_api_health",
+      "category": "url_context",
+      "scope_type": "project",
+      "setup_notes": [
+        "traj=mon step=0 url=/api/health outcome=200 OK latency 12ms",
+        "synthetic probe every 30s"
+      ],
+      "query": "health check endpoint latency",
+      "expected_substrings": [
+        "/api/health",
+        "200"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "url_docs",
+      "category": "url_context",
+      "scope_type": "user",
+      "setup_notes": [
+        "Bookmark docs path /memory/mnemos on internal docs site",
+        "Old wiki deprecated"
+      ],
+      "query": "mnemos memory documentation path",
+      "expected_substrings": [
+        "memory/mnemos",
+        "internal docs"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "url_grafana",
+      "category": "url_context",
+      "scope_type": "project",
+      "setup_notes": [
+        "traj=dash step=3 url=/grafana/d/sre-core/latency thought=spike at 14:00",
+        "dashboard SRE-Core latency"
+      ],
+      "query": "grafana dashboard latency spike",
+      "expected_substrings": [
+        "sre-core",
+        "latency"
+      ],
+      "recall_limit": 5,
+      "min_hits": 2
+    },
+    {
+      "id": "dense_runbook_rollback",
+      "category": "dense_corpus",
+      "scope_type": "project",
+      "setup_notes": [
+        "Team standup every Monday at 09:30 in room B12",
+        "Coffee machine refill requested for floor 2 pantry",
+        "Parking lot gate code rotates on the first of each month",
+        "Office Wi-Fi SSID is AION-CORP guest password at reception",
+        "HR policy: submit PTO requests two weeks in advance",
+        "Printer on floor 3 requires badge tap before release",
+        "Cafeteria menu: soup and salad bar on Wednesdays",
+        "Fire drill scheduled quarterly, follow green exit signs",
+        "VPN client must be updated to version 5.4.2 or later",
+        "Expense reports due by Friday 17:00 Europe/Rome",
+        "Meeting room Maple seats 8 people with HDMI adapter",
+        "Slack channel #platform-alerts is for production incidents only",
+        "Badge access to server room requires manager approval",
+        "Annual security training completion tracked in LMS portal",
+        "Desk booking system opens reservations at 08:00 daily",
+        "Guest Wi-Fi voucher expires after 24 hours",
+        "Elevator maintenance window Sunday 06:00-08:00",
+        "Lost badge report to reception desk immediately",
+        "Kitchen dishwasher load before leaving office",
+        "Bike storage registration form on intranet home page",
+        "Target note: RUNBOOK rollback database migration 2026-02-15 use snapshot snap-db-9921"
+      ],
+      "query": "runbook snap-db-9921",
+      "expected_substrings": [
+        "RUNBOOK",
+        "snap-db-9921"
+      ],
+      "recall_limit": 10,
+      "min_hits": 2
+    },
+    {
+      "id": "dense_vendor_acme",
+      "category": "dense_corpus",
+      "scope_type": "project",
+      "setup_notes": [
+        "Team standup every Monday at 09:30 in room B12",
+        "Coffee machine refill requested for floor 2 pantry",
+        "Parking lot gate code rotates on the first of each month",
+        "Office Wi-Fi SSID is AION-CORP guest password at reception",
+        "HR policy: submit PTO requests two weeks in advance",
+        "Printer on floor 3 requires badge tap before release",
+        "Cafeteria menu: soup and salad bar on Wednesdays",
+        "Fire drill scheduled quarterly, follow green exit signs",
+        "VPN client must be updated to version 5.4.2 or later",
+        "Expense reports due by Friday 17:00 Europe/Rome",
+        "Meeting room Maple seats 8 people with HDMI adapter",
+        "Slack channel #platform-alerts is for production incidents only",
+        "Badge access to server room requires manager approval",
+        "Annual security training completion tracked in LMS portal",
+        "Desk booking system opens reservations at 08:00 daily",
+        "Guest Wi-Fi voucher expires after 24 hours",
+        "Elevator maintenance window Sunday 06:00-08:00",
+        "Lost badge report to reception desk immediately",
+        "Kitchen dishwasher load before leaving office",
+        "Bike storage registration form on intranet home page",
+        "Target note: Preferred vendor Acme Supplies contract VND-8821 renewal Q3"
+      ],
+      "query": "acme supplies vnd-8821",
+      "expected_substrings": [
+        "Acme Supplies",
+        "VND-8821"
+      ],
+      "recall_limit": 10,
+      "min_hits": 2
+    },
+    {
+      "id": "dense_feature_flag",
+      "category": "dense_corpus",
+      "scope_type": "project",
+      "setup_notes": [
+        "Team standup every Monday at 09:30 in room B12",
+        "Coffee machine refill requested for floor 2 pantry",
+        "Parking lot gate code rotates on the first of each month",
+        "Office Wi-Fi SSID is AION-CORP guest password at reception",
+        "HR policy: submit PTO requests two weeks in advance",
+        "Printer on floor 3 requires badge tap before release",
+        "Cafeteria menu: soup and salad bar on Wednesdays",
+        "Fire drill scheduled quarterly, follow green exit signs",
+        "VPN client must be updated to version 5.4.2 or later",
+        "Expense reports due by Friday 17:00 Europe/Rome",
+        "Meeting room Maple seats 8 people with HDMI adapter",
+        "Slack channel #platform-alerts is for production incidents only",
+        "Badge access to server room requires manager approval",
+        "Annual security training completion tracked in LMS portal",
+        "Desk booking system opens reservations at 08:00 daily",
+        "Guest Wi-Fi voucher expires after 24 hours",
+        "Elevator maintenance window Sunday 06:00-08:00",
+        "Lost badge report to reception desk immediately",
+        "Kitchen dishwasher load before leaving office",
+        "Bike storage registration form on intranet home page",
+        "Target note: Feature flag ff-checkout-v2 enabled 10 percent canary cohort"
+      ],
+      "query": "ff-checkout-v2 canary",
+      "expected_substrings": [
+        "ff-checkout-v2",
+        "canary"
+      ],
+      "recall_limit": 10,
+      "min_hits": 2
+    },
+    {
+      "id": "dense_compliance_soc2",
+      "category": "dense_corpus",
+      "scope_type": "project",
+      "setup_notes": [
+        "Team standup every Monday at 09:30 in room B12",
+        "Coffee machine refill requested for floor 2 pantry",
+        "Parking lot gate code rotates on the first of each month",
+        "Office Wi-Fi SSID is AION-CORP guest password at reception",
+        "HR policy: submit PTO requests two weeks in advance",
+        "Printer on floor 3 requires badge tap before release",
+        "Cafeteria menu: soup and salad bar on Wednesdays",
+        "Fire drill scheduled quarterly, follow green exit signs",
+        "VPN client must be updated to version 5.4.2 or later",
+        "Expense reports due by Friday 17:00 Europe/Rome",
+        "Meeting room Maple seats 8 people with HDMI adapter",
+        "Slack channel #platform-alerts is for production incidents only",
+        "Badge access to server room requires manager approval",
+        "Annual security training completion tracked in LMS portal",
+        "Desk booking system opens reservations at 08:00 daily",
+        "Guest Wi-Fi voucher expires after 24 hours",
+        "Elevator maintenance window Sunday 06:00-08:00",
+        "Lost badge report to reception desk immediately",
+        "Kitchen dishwasher load before leaving office",
+        "Bike storage registration form on intranet home page",
+        "Target note: SOC2 audit evidence bucket s3://compliance-evidence-2026"
+      ],
+      "query": "soc2 compliance-evidence",
+      "expected_substrings": [
+        "SOC2",
+        "compliance-evidence"
+      ],
+      "recall_limit": 10,
+      "min_hits": 2
+    },
+    {
+      "id": "dense_oncall_runbook",
+      "category": "dense_corpus",
+      "scope_type": "project",
+      "setup_notes": [
+        "Team standup every Monday at 09:30 in room B12",
+        "Coffee machine refill requested for floor 2 pantry",
+        "Parking lot gate code rotates on the first of each month",
+        "Office Wi-Fi SSID is AION-CORP guest password at reception",
+        "HR policy: submit PTO requests two weeks in advance",
+        "Printer on floor 3 requires badge tap before release",
+        "Cafeteria menu: soup and salad bar on Wednesdays",
+        "Fire drill scheduled quarterly, follow green exit signs",
+        "VPN client must be updated to version 5.4.2 or later",
+        "Expense reports due by Friday 17:00 Europe/Rome",
+        "Meeting room Maple seats 8 people with HDMI adapter",
+        "Slack channel #platform-alerts is for production incidents only",
+        "Badge access to server room requires manager approval",
+        "Annual security training completion tracked in LMS portal",
+        "Desk booking system opens reservations at 08:00 daily",
+        "Guest Wi-Fi voucher expires after 24 hours",
+        "Elevator maintenance window Sunday 06:00-08:00",
+        "Lost badge report to reception desk immediately",
+        "Kitchen dishwasher load before leaving office",
+        "Bike storage registration form on intranet home page",
+        "Target note: Oncall runbook step 7 restart pod aion-api if OOMKilled"
+      ],
+      "query": "step 7 oomkilled",
+      "expected_substrings": [
+        "step 7",
+        "OOMKilled"
+      ],
+      "recall_limit": 10,
+      "min_hits": 2
+    },
+    {
+      "id": "dense_customer_sla",
+      "category": "dense_corpus",
+      "scope_type": "project",
+      "setup_notes": [
+        "Team standup every Monday at 09:30 in room B12",
+        "Coffee machine refill requested for floor 2 pantry",
+        "Parking lot gate code rotates on the first of each month",
+        "Office Wi-Fi SSID is AION-CORP guest password at reception",
+        "HR policy: submit PTO requests two weeks in advance",
+        "Printer on floor 3 requires badge tap before release",
+        "Cafeteria menu: soup and salad bar on Wednesdays",
+        "Fire drill scheduled quarterly, follow green exit signs",
+        "VPN client must be updated to version 5.4.2 or later",
+        "Expense reports due by Friday 17:00 Europe/Rome",
+        "Meeting room Maple seats 8 people with HDMI adapter",
+        "Slack channel #platform-alerts is for production incidents only",
+        "Badge access to server room requires manager approval",
+        "Annual security training completion tracked in LMS portal",
+        "Desk booking system opens reservations at 08:00 daily",
+        "Guest Wi-Fi voucher expires after 24 hours",
+        "Elevator maintenance window Sunday 06:00-08:00",
+        "Lost badge report to reception desk immediately",
+        "Kitchen dishwasher load before leaving office",
+        "Bike storage registration form on intranet home page",
+        "Target note: Customer Contoso SLA 99.95 percent uptime credits tier B"
+      ],
+      "query": "contoso 99.95",
+      "expected_substrings": [
+        "Contoso",
+        "99.95"
+      ],
+      "recall_limit": 10,
+      "min_hits": 2
+    },
+    {
+      "id": "multi_filter_labels",
+      "category": "multi_hit",
+      "scope_type": "project",
+      "setup_notes": [
+        "Filters dropdown labels: Open, Closed, My Open Incidents, Unassigned",
+        "Page Incidents list ServiceNow"
+      ],
+      "query": "Filters Open Closed My Open Incidents",
+      "expected_substrings": [
+        "Open",
+        "Closed",
+        "My Open Incidents"
+      ],
+      "recall_limit": 8,
+      "min_hits": 3
+    },
+    {
+      "id": "multi_contact",
+      "category": "multi_hit",
+      "scope_type": "user",
+      "setup_notes": [
+        "Emergency contact Maria Rossi phone +39-02-1234567 email maria@company.com",
+        "HR contact separate"
+      ],
+      "query": "emergency Maria Rossi phone email",
+      "expected_substrings": [
+        "Maria Rossi",
+        "+39-02",
+        "maria@company.com"
+      ],
+      "recall_limit": 5,
+      "min_hits": 3
+    },
+    {
+      "id": "multi_version",
+      "category": "multi_hit",
+      "scope_type": "project",
+      "setup_notes": [
+        "Stack Python 3.13 FastAPI 0.115 PostgreSQL 16 Redis 7",
+        "Legacy Python 3.9 decommissioned"
+      ],
+      "query": "Python 3.13 FastAPI PostgreSQL version",
+      "expected_substrings": [
+        "Python 3.13",
+        "FastAPI",
+        "PostgreSQL 16"
+      ],
+      "recall_limit": 8,
+      "min_hits": 3
+    },
+    {
+      "id": "multi_endpoints",
+      "category": "multi_hit",
+      "scope_type": "project",
+      "setup_notes": [
+        "POST /v1/chat streams SSE tokens",
+        "GET /v1/health returns status",
+        "GET /v1/profiles lists agents"
+      ],
+      "query": "chat SSE profiles health endpoints",
+      "expected_substrings": [
+        "/v1/chat",
+        "/v1/health",
+        "/v1/profiles"
+      ],
+      "recall_limit": 10,
+      "min_hits": 3
+    },
+    {
+      "id": "multi_regions",
+      "category": "multi_hit",
+      "scope_type": "user",
+      "setup_notes": [
+        "Offices in Milan Italy, Munich Germany, Austin USA",
+        "Remote-first company"
+      ],
+      "query": "offices Milan Munich Austin locations",
+      "expected_substrings": [
+        "Milan",
+        "Munich",
+        "Austin"
+      ],
+      "recall_limit": 8,
+      "min_hits": 3
+    }
+  ]
+}

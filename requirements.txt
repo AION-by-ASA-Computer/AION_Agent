@@ -28,7 +28,6 @@ tiktoken>=0.7.0
 apscheduler>=3.11.3
 python-frontmatter>=1.1.0
 croniter>=2.0.0
-mempalace>=3.5.0,<4.0
 redis>=5.0
 boto3>=1.34
 botocore>=1.34
@@ -61,6 +60,7 @@ json-repair
 opik
 pydantic-settings>=2.0.0
 pymupdf4llm
+# Optional: pip install optuna  (hyperparameter tuning CLI + admin read-only studies)
 
 # Transitive security floors (OSV scanner / CVE remediation)
 idna>=3.15

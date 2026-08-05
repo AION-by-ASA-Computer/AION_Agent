@@ -1,30 +1,15 @@
-"""Project scope hints from DB metadata (no hardcoded slugs)."""
+"""Project scope tests (Mnemos era)."""
 
 from __future__ import annotations
 
-from src.memory.project_memory_scope import (
-    project_context_block,
-    project_scope_hint_from_meta,
-)
+from src.memory.mnemos.scope import project_scope, sanitize_project_slug
 
 
-def test_scope_from_description() -> None:
-    hint = project_scope_hint_from_meta(
-        "aion_am",
-        display_name="Asset Manager",
-        description="Navigazione DB Asset Manager, schema finance.",
-    )
-    assert "finance" in hint
-    assert "aion_am" in hint
+def test_project_scope_key() -> None:
+    scope = project_scope("default", "finance_app")
+    assert scope.scope_type == "project"
+    assert scope.scope_key == "finance_app"
 
 
-def test_scope_fallback_display_name() -> None:
-    hint = project_scope_hint_from_meta("vendite", display_name="Vendite EU")
-    assert "Vendite EU" in hint
-    assert "vendite" in hint
-
-
-def test_scope_generic_without_meta() -> None:
-    hint = project_scope_hint_from_meta("custom_proj")
-    assert "custom_proj" in hint
-    assert "wing_proj_custom_proj" in project_context_block("custom_proj")
+def test_sanitize_slug() -> None:
+    assert sanitize_project_slug("Finance-App") == "finance-app"

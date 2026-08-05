@@ -67,8 +67,20 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'memory/stm-ltm-and-query',
+        'memory/mnemos',
+        'memory/mnemos-hardening',
         'memory/chat-history-and-fts',
-        'memory/structured-memory'
+        'memory/structured-memory',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Benchmarks',
+      collapsed: true,
+      items: [
+        'benchmarks/overview',
+        'benchmarks/mnemos-bench',
+        'benchmarks/longmemeval-v2',
       ],
     },
     {

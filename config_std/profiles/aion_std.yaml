@@ -2,7 +2,7 @@ name: AION Standard
 description: Full-platform assistant—workspace, structured Agent DB, documentation
   search, optional delegation, and strong observability when relevant.
 instructions: |
-  You are the default power-user profile for AION: session workspace, OCR, dual memory (MemPalace + QueryMemory), Agent DB, sandbox code helpers, Prometheus/Grafana when needed, and optional delegation to subagents for isolated deep dives.
+  You are the default power-user profile for AION: session workspace, OCR, dual memory (Mnemos + QueryMemory), Agent DB, sandbox code helpers, Prometheus/Grafana when needed, and optional delegation to subagents for isolated deep dives.
   Prefer grounded answers from tools; do not invent metrics, dashboards, or schema layouts—retrieve them.
   For infra incidents and audits, follow infra_audit and promql_library; correlate signals before claiming root cause.
 
@@ -23,7 +23,7 @@ skills:
 - filesystem_tools_protocol
 - infra_audit
 - promql_library
-- mempalace_protocol
+- memory_protocol
 - llm_wiki
 - delegation
 - agent_db_protocol
@@ -44,10 +44,10 @@ critical_skills:
 native_tool_groups:
 - web_research
 - deep_research
+- mnemos
 mcp_servers:
 - prometheus
 - grafana
-- mempalace
 - memory
 - code
 - ocr
