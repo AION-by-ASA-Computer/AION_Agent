@@ -10,7 +10,7 @@ from haystack.tools import Tool
 if TYPE_CHECKING:
     from src.agent_profile import AgentProfile
 
-from src.runtime.context import get_current_session_id
+from src.runtime.context import get_context, get_current_session_id
 from src.runtime.native_tool_events import (
     emit_tool_end,
     emit_tool_error,
@@ -45,7 +45,13 @@ class WebSearchExecutor:
             )
         call_id = emit_tool_start(sid, "web_search", inp)
         try:
-            if not get_web_search_request_context().enabled:
+            fwd = get_context()
+            ws_enabled = fwd.get("web_search_enabled")
+            if ws_enabled is None:
+                ws_enabled = get_web_search_request_context().enabled
+            elif not isinstance(ws_enabled, bool):
+                ws_enabled = bool(ws_enabled)
+            if not ws_enabled:
                 out = json.dumps(
                     {
                         "error": "web_search_disabled_by_user",
@@ -86,7 +92,13 @@ class WebFetchPageExecutor:
             )
         call_id = emit_tool_start(sid, "web_fetch_page", inp)
         try:
-            if not get_web_search_request_context().enabled:
+            fwd = get_context()
+            ws_enabled = fwd.get("web_search_enabled")
+            if ws_enabled is None:
+                ws_enabled = get_web_search_request_context().enabled
+            elif not isinstance(ws_enabled, bool):
+                ws_enabled = bool(ws_enabled)
+            if not ws_enabled:
                 out = json.dumps(
                     {
                         "error": "web_search_disabled_by_user",

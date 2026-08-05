@@ -1393,6 +1393,7 @@ class AgentPipeline:
                 set_sql_qm_turn_context,
             )
 
+            conv_proj: Optional[str] = None
             _qm_project = (
                 sql_query_project
                 or _os_qm.getenv("AION_SQL_QM_DEFAULT_PROJECT")
@@ -1432,7 +1433,10 @@ class AgentPipeline:
                     verify_user_project_access,
                 )
 
-                if profile_has_memory_capability_by_slug(_qm_profile_slug):
+                _explicit_sql_project = bool((sql_query_project or "").strip())
+                if (
+                    _explicit_sql_project or conv_proj
+                ) and profile_has_memory_capability_by_slug(_qm_profile_slug):
                     _acc_err = await verify_user_project_access(
                         project_slug=_qm_project,
                         tenant_id=(
@@ -1714,6 +1718,7 @@ class AgentPipeline:
                     stop_event,
                     turn_plan_id=_turn_pid,
                     plan_controller=plan_controller,
+                    web_search_enabled=_wse,
                 )
                 set_turn_runtime(
                     session_id=self.session_id,
@@ -1828,6 +1833,7 @@ class AgentPipeline:
                     stop_event,
                     turn_plan_id=_turn_pid,
                     plan_controller=plan_controller,
+                    web_search_enabled=_wse,
                 )
                 set_turn_runtime(
                     session_id=self.session_id,
@@ -3942,6 +3948,7 @@ class AgentPipeline:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Drain ``run_stream`` until a ``final`` chunk (sync / automation clients)."""
+        error_message = ""
         async for chunk in self.run_stream(
             user_input,
             attachments=attachments,
@@ -3963,4 +3970,9 @@ class AgentPipeline:
                     "charts": chunk.get("charts", []),
                     "success": True,
                 }
-        return {"text": "", "charts": [], "success": False}
+            if chunk.get("type") == "error" and chunk.get("content"):
+                error_message = str(chunk["content"])
+        out: Dict[str, Any] = {"text": "", "charts": [], "success": False}
+        if error_message:
+            out["error"] = error_message
+        return out

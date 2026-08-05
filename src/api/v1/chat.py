@@ -282,6 +282,10 @@ class ChatSyncResponse(BaseModel):
     profile: str
     success: bool = True
     charts: List[Any] = Field(default_factory=list)
+    error: Optional[str] = Field(
+        default=None,
+        description="Set when success=false and the pipeline emitted an error event.",
+    )
 
 
 class ChatPrepareBody(BaseModel):
@@ -901,4 +905,5 @@ async def chat_sync(
         profile=profile_name,
         success=bool(result.get("success", True)),
         charts=list(result.get("charts") or []),
+        error=(result.get("error") or None),
     )
