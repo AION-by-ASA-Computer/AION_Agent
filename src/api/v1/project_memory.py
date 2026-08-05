@@ -182,9 +182,7 @@ async def get_digest_zoom(
     slug: str = Depends(require_project_access),
 ) -> Dict[str, Any]:
     tenant = default_tenant_id()
-    return await zoom_project_digest(
-        tenant_id=tenant, project_slug=slug, lo=lo, hi=hi
-    )
+    return await zoom_project_digest(tenant_id=tenant, project_slug=slug, lo=lo, hi=hi)
 
 
 @router.get("/wake-preview")
@@ -204,9 +202,7 @@ async def post_compress(
 ) -> Dict[str, Any]:
     tenant = default_tenant_id()
     try:
-        return await compress_project_memory(
-            tenant_id=tenant, project_slug=slug
-        )
+        return await compress_project_memory(tenant_id=tenant, project_slug=slug)
     except Exception as exc:
         logger.warning("project memory compress failed: %s", exc)
         raise HTTPException(status_code=503, detail=str(exc)) from exc
@@ -272,9 +268,7 @@ async def remove_note(
         raise HTTPException(status_code=404, detail="note_not_found")
     slug = await _assert_project_access(note.scope_key, auth)
     tenant = default_tenant_id()
-    ok = await delete_project_note(
-        note_id, tenant_id=tenant, project_slug=slug
-    )
+    ok = await delete_project_note(note_id, tenant_id=tenant, project_slug=slug)
     if not ok:
         raise HTTPException(status_code=404, detail="note_not_found")
     return {"ok": True, "note_id": note_id}

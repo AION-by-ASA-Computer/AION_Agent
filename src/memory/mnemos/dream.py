@@ -43,18 +43,26 @@ async def decay_stale_confidence(*, tenant_id: str = "default") -> int:
     changed = 0
     async with get_async_session_maker()() as session:
         rows = (
-            await session.execute(
-                select(LtmNote).where(
-                    LtmNote.tenant_id == tenant_id,
-                    LtmNote.status == "active",
-                    LtmNote.confidence > min_conf,
-                    (LtmNote.last_recalled_at.is_(None))
-                    | (LtmNote.last_recalled_at < cutoff),
-                ).limit(200)
+            (
+                await session.execute(
+                    select(LtmNote)
+                    .where(
+                        LtmNote.tenant_id == tenant_id,
+                        LtmNote.status == "active",
+                        LtmNote.confidence > min_conf,
+                        (LtmNote.last_recalled_at.is_(None))
+                        | (LtmNote.last_recalled_at < cutoff),
+                    )
+                    .limit(200)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for note in rows:
-            note.confidence = max(min_conf, float(note.confidence or 1.0) * decay_factor)
+            note.confidence = max(
+                min_conf, float(note.confidence or 1.0) * decay_factor
+            )
             changed += 1
         if changed:
             await session.commit()
@@ -165,9 +173,7 @@ async def snapshot_quality_metrics(*, tenant_id: str = "default") -> Dict[str, A
         "never_recalled_fraction": (
             float(never_recalled) / float(active) if active else 0.0
         ),
-        "top_users_by_active_notes": [
-            {"user": u, "count": int(c)} for u, c in by_user
-        ],
+        "top_users_by_active_notes": [{"user": u, "count": int(c)} for u, c in by_user],
         "ts": datetime.now(timezone.utc).isoformat(),
     }
     logger.info("Mnemos quality snapshot: %s", metrics)

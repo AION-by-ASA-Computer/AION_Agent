@@ -98,9 +98,7 @@ def render_report_md(run_id: str, metrics: Dict[str, Any]) -> str:
     if by_eval:
         lines.extend(["", "## By official eval_function", ""])
         for k, v in by_eval.items():
-            lines.append(
-                f"- {k}: {v['accuracy'] * 100:.1f}% ({v['cases']} cases)"
-            )
+            lines.append(f"- {k}: {v['accuracy'] * 100:.1f}% ({v['cases']} cases)")
 
     image_cases = metrics.get("image_cases") or 0
     skipped = metrics.get("skipped_image") or 0

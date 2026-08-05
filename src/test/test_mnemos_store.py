@@ -39,7 +39,9 @@ def mnemos_db(monkeypatch, tmp_path):
 async def test_insert_and_wake(mnemos_db):
     scope = user_scope("default", "tester")
     for i in range(5):
-        await store.insert_note(scope, content=f"note number {i} about postgres", importance=3)
+        await store.insert_note(
+            scope, content=f"note number {i} about postgres", importance=3
+        )
     rows = await wake(scope, k=10)
     assert len(rows) >= 1
     assert any("postgres" in (r.get("line") or "") for r in rows)
@@ -80,8 +82,10 @@ async def test_insert_notes_bulk_matches_loop(mnemos_db):
     loop_notes = await store.list_notes(scope_loop, limit=100)
     bulk_notes = await store.list_notes(scope_bulk, limit=100)
     assert len(loop_notes) == len(bulk_notes) == len(contents)
-    assert sorted(n.seq for n in loop_notes) == sorted(n.seq for n in bulk_notes) == list(
-        range(len(contents))
+    assert (
+        sorted(n.seq for n in loop_notes)
+        == sorted(n.seq for n in bulk_notes)
+        == list(range(len(contents)))
     )
 
     loop_hits = await store.fts_search(scope_loop, "laptops servicenow", limit=10)

@@ -25,7 +25,9 @@ def test_env_disable_flag_parses_zero():
 
 
 def test_normalize_boxed_answer():
-    assert normalize_actual_answer("foo \\boxed{Reports;Problems}") == "Reports;Problems"
+    assert (
+        normalize_actual_answer("foo \\boxed{Reports;Problems}") == "Reports;Problems"
+    )
 
 
 def test_score_multi_part_expected():

@@ -10,7 +10,11 @@ from sqlalchemy import select
 
 from src.data.engine import get_async_session_maker
 from src.data.models import LtmNote
-from src.memory.mnemos.embedding import embedding_to_bytes, embeddings_configured, get_embedding
+from src.memory.mnemos.embedding import (
+    embedding_to_bytes,
+    embeddings_configured,
+    get_embedding,
+)
 from src.memory.mnemos.types import MemoryScope
 
 logger = logging.getLogger("aion.memory.mnemos.backfill_embeddings")

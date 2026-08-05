@@ -41,7 +41,9 @@ async def test_recall_fts_fallback_without_embedding_service(mnemos_db, monkeypa
     monkeypatch.delenv("AION_EMBEDDING_URL", raising=False)
 
     scope = user_scope("default", "hybrid_fallback")
-    await store.insert_note(scope, content="PostgreSQL is the preferred analytics database")
+    await store.insert_note(
+        scope, content="PostgreSQL is the preferred analytics database"
+    )
     rows = await recall(scope, "PostgreSQL analytics", limit=3)
     assert rows
     assert "PostgreSQL" in rows[0]["content"]

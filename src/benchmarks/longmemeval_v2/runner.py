@@ -169,7 +169,9 @@ async def run_longmemeval_v2_small(
             rows.append(row)
             with open(per_case_path, "a", encoding="utf-8") as pf:
                 pf.write(json.dumps(row) + "\n")
-            log.debug_record({"phase": "query", "case_id": qid, "skipped": "skipped_image"})
+            log.debug_record(
+                {"phase": "query", "case_id": qid, "skipped": "skipped_image"}
+            )
             continue
 
         qa_debug: Dict[str, Any] = {}

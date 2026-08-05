@@ -799,7 +799,6 @@ class StreamLoop:
 
             try:
                 import src.runtime.exploration_tracker  # noqa: F401
-                import src.runtime.exploration_tracker  # noqa: F401
                 from src.runtime.exploration_tracker import record_exploration_tool
                 from src.runtime.tool_result_postprocess import (
                     apply_tool_result_postprocess,

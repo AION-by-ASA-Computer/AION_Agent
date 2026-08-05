@@ -25,7 +25,9 @@ def apply_mnemos_env(config: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
     return applied
 
 
-def resolve_judge_profile(profile_name: str, config: Optional[Dict[str, Any]] = None) -> str:
+def resolve_judge_profile(
+    profile_name: str, config: Optional[Dict[str, Any]] = None
+) -> str:
     cfg = config or {}
     return str(
         cfg.get("judge_profile")
@@ -69,7 +71,9 @@ def apply_benchmark_isolation_env(
         "AION_LME_V2_MAX_TREE_CHARS": "0",
     }
     cfg = config or {}
-    overrides = cfg.get("benchmark_env") if isinstance(cfg.get("benchmark_env"), dict) else {}
+    overrides = (
+        cfg.get("benchmark_env") if isinstance(cfg.get("benchmark_env"), dict) else {}
+    )
     for key, value in {**defaults, **overrides}.items():
         if not key.startswith("AION_"):
             continue

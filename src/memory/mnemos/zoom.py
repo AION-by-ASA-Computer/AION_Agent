@@ -9,9 +9,7 @@ from .types import MemoryScope
 from .wake import resolve_block
 
 
-async def zoom(
-    scope: MemoryScope, lo: int, hi: int
-) -> Dict[str, Any]:
+async def zoom(scope: MemoryScope, lo: int, hi: int) -> Dict[str, Any]:
     digest = await store.get_digest(scope, lo, hi)
     if not digest:
         return {"error": "digest_not_found", "lo": lo, "hi": hi}

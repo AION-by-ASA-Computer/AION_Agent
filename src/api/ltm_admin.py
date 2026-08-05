@@ -12,7 +12,12 @@ from pydantic import BaseModel, Field
 
 from src.memory.ltm_audit import append_ltm_audit
 from src.memory.mnemos.compress import compress_scope
-from src.memory.mnemos.scope import default_tenant_id, global_scope, project_scope, user_scope
+from src.memory.mnemos.scope import (
+    default_tenant_id,
+    global_scope,
+    project_scope,
+    user_scope,
+)
 from src.memory.mnemos import store
 from src.memory.mnemos.zoom import zoom as zoom_digest
 

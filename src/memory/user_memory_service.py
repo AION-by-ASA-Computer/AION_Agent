@@ -67,6 +67,7 @@ async def search_user_notes(
     notes = await store.fts_search(scope, query, limit=limit, mode=mode)
     return [_note_to_dict(n) for n, _ in notes]
 
+
 async def create_user_note(
     *,
     tenant_id: str,
@@ -121,9 +122,7 @@ async def delete_user_note(
     return await store.forget_note(note_id, hard=False)
 
 
-async def user_memory_status(
-    *, tenant_id: str, user_identifier: str
-) -> Dict[str, Any]:
+async def user_memory_status(*, tenant_id: str, user_identifier: str) -> Dict[str, Any]:
     key = sanitize_scope_key(user_identifier)
     scope = _user_scope(tenant_id, user_identifier)
     counts = await store.digest_debug_stats(scope)

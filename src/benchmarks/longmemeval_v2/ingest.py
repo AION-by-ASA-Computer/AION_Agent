@@ -46,7 +46,9 @@ async def ingest_haystack(
     log: Optional["RunLogger"] = None,
 ) -> Dict[str, Any]:
     """Ingest haystack trajectories as Mnemos project notes."""
-    scope, _user_id = eval_scope(run_id=run_id, project_slug=project_slug or "lme_v2_small")
+    scope, _user_id = eval_scope(
+        run_id=run_id, project_slug=project_slug or "lme_v2_small"
+    )
     haystack = load_haystack_small(root)
 
     def _log(msg: str, **fields: Any) -> None:

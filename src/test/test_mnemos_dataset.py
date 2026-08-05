@@ -26,7 +26,9 @@ def _validate_dataset(payload: dict, *, min_cases: int) -> None:
     for case in cases:
         assert case.get("setup_notes"), f"{case.get('id')}: missing setup_notes"
         assert case.get("query"), f"{case.get('id')}: missing query"
-        assert case.get("expected_substrings"), f"{case.get('id')}: missing expected_substrings"
+        assert case.get("expected_substrings"), (
+            f"{case.get('id')}: missing expected_substrings"
+        )
 
 
 @pytest.mark.parametrize("path,min_cases", [(SMOKE, 6), (FULL, 60), (ADVERSARIAL, 40)])
@@ -99,4 +101,6 @@ def test_true_paraphrase_cases_share_no_content_token_with_target():
         target = case["setup_notes"][0]
         content = target["content"] if isinstance(target, dict) else target
         overlap = _content_tokens(case["query"]) & _content_tokens(content)
-        assert not overlap, f"{case['id']}: query reuses target tokens {sorted(overlap)}"
+        assert not overlap, (
+            f"{case['id']}: query reuses target tokens {sorted(overlap)}"
+        )

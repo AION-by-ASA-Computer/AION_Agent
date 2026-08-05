@@ -52,7 +52,9 @@ def dataset_status() -> Dict[str, Any]:
         "question_count": question_count,
         "trajectory_count": trajectory_count,
         "root": str(root),
-        "message": "Dataset ready" if ready else "Run prepare to download LME-V2-Small files",
+        "message": "Dataset ready"
+        if ready
+        else "Run prepare to download LME-V2-Small files",
     }
 
 
@@ -267,7 +269,9 @@ def _stable_deprioritize_chrome(labels: List[str]) -> List[str]:
     return primary + chrome
 
 
-def _extract_label_groups(tree: str, *, limit: Optional[int] = None) -> tuple[List[str], List[str]]:
+def _extract_label_groups(
+    tree: str, *, limit: Optional[int] = None
+) -> tuple[List[str], List[str]]:
     """Return (picker_labels, static_labels) preserving discovery order."""
     if not tree:
         return [], []
@@ -424,7 +428,9 @@ def trajectory_text_chunks(
                 step_meta.append(f"{key}: {val.strip()}")
         if step_meta:
             chunks.append(
-                _note_safe_chunk(prefix + " | " + " | ".join(step_meta), max_chars=note_max)
+                _note_safe_chunk(
+                    prefix + " | " + " | ".join(step_meta), max_chars=note_max
+                )
             )
 
         tree = state.get("accessibility_tree") or state.get("observation")
@@ -454,7 +460,9 @@ def trajectory_text_chunks(
         if not isinstance(step, dict):
             if isinstance(step, str) and step.strip():
                 chunks.append(
-                    _note_safe_chunk(f"traj={traj_id} | {step.strip()}", max_chars=note_max)
+                    _note_safe_chunk(
+                        f"traj={traj_id} | {step.strip()}", max_chars=note_max
+                    )
                 )
             continue
         for key in ("observation", "text", "content", "page_text", "action_result"):

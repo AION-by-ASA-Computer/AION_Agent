@@ -170,10 +170,14 @@ async def compress_all_pending() -> int:
     total = 0
     async with get_async_session_maker()() as session:
         rows = (
-            await session.execute(
-                select(LtmDigest).where(LtmDigest.ready.is_(False)).limit(50)
+            (
+                await session.execute(
+                    select(LtmDigest).where(LtmDigest.ready.is_(False)).limit(50)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     seen: set[tuple[str, str, str]] = set()
     for d in rows:
         key = (d.tenant_id, d.scope_type, d.scope_key)

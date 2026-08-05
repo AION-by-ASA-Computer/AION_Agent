@@ -136,9 +136,7 @@ class LTMOrchestrator:
         if not wake_short:
             return user_input
         if len(wake_short) > int(os.getenv("AION_LTM_WAKE_MAX_CHARS", "4000")):
-            wake_short = wake_short[
-                : int(os.getenv("AION_LTM_WAKE_MAX_CHARS", "4000"))
-            ]
+            wake_short = wake_short[: int(os.getenv("AION_LTM_WAKE_MAX_CHARS", "4000"))]
         return f"[session_memory]\n{wake_short}\n\n{user_input}"
 
 

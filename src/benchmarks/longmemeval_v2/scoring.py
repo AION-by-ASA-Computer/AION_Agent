@@ -186,9 +186,17 @@ async def _llm_judge(
     verdict_raw = str(detail.get("raw_text") or detail.get("text") or "")
     verdict = normalize_phrase(verdict_raw)
     if verdict.startswith("correct"):
-        return {"score": 1.0, "reason": "llm_judge_correct", "verdict": verdict_raw.strip()}
+        return {
+            "score": 1.0,
+            "reason": "llm_judge_correct",
+            "verdict": verdict_raw.strip(),
+        }
     if verdict.startswith("incorrect"):
-        return {"score": 0.0, "reason": "llm_judge_incorrect", "verdict": verdict_raw.strip()}
+        return {
+            "score": 0.0,
+            "reason": "llm_judge_incorrect",
+            "verdict": verdict_raw.strip(),
+        }
     return {
         "score": 0.0,
         "reason": "llm_judge_unparsable",
@@ -226,7 +234,12 @@ async def score_case(
                 actual=raw_actual.strip() or prediction,
             )
         except Exception as exc:  # judge outage must not abort the run
-            return {**detail, "score": 0.0, "reason": "llm_judge_error", "error": str(exc)}
+            return {
+                **detail,
+                "score": 0.0,
+                "reason": "llm_judge_error",
+                "error": str(exc),
+            }
         return {**detail, **verdict}
 
     if family in {"mc_choice_match", "mc_choice_set_match"}:

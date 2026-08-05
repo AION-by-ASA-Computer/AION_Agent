@@ -20,7 +20,12 @@ from src.memory.mnemos.wake import wake, wake_budget
 
 from ..paths import run_artifact_dir
 from ..run_log import RunLogger
-from ..run_store import ensure_run, save_case_result, update_run_progress, update_run_status
+from ..run_store import (
+    ensure_run,
+    save_case_result,
+    update_run_progress,
+    update_run_status,
+)
 
 BENCH_TENANT = "mnemos_bench"
 
@@ -56,7 +61,9 @@ async def _backdate_note(note_id: int, age_days: float) -> None:
     """Rewrite created_at so recency-sensitive ranking can be exercised."""
     async with get_async_session_maker()() as session:
         await session.execute(
-            text("UPDATE ltm_notes SET created_at = datetime('now', :delta) WHERE id = :id"),
+            text(
+                "UPDATE ltm_notes SET created_at = datetime('now', :delta) WHERE id = :id"
+            ),
             {"delta": f"-{float(age_days)} days", "id": int(note_id)},
         )
         await session.commit()
@@ -179,19 +186,28 @@ def _render_report(run_id: str, metrics: Dict[str, Any], dataset_path: str) -> s
     ]
     by_cat = metrics.get("accuracy_by_category") or {}
     if by_cat:
-        lines.extend(["## Accuracy by category", "", "| Category | Passed | Total | Accuracy |", "|----------|--------|-------|----------|"])
+        lines.extend(
+            [
+                "## Accuracy by category",
+                "",
+                "| Category | Passed | Total | Accuracy |",
+                "|----------|--------|-------|----------|",
+            ]
+        )
         for cat, row in sorted(by_cat.items()):
             lines.append(
                 f"| {cat} | {row.get('passed', 0)} | {row.get('total', 0)} | "
                 f"{row.get('accuracy', 0) * 100:.1f}% |"
             )
         lines.append("")
-    lines.extend([
-        "## Per case",
-        "",
-        "| Case | Category | Score | Reason | Latency | Query |",
-        "|------|----------|-------|--------|---------|-------|",
-    ])
+    lines.extend(
+        [
+            "## Per case",
+            "",
+            "| Case | Category | Score | Reason | Latency | Query |",
+            "|------|----------|-------|--------|---------|-------|",
+        ]
+    )
     for row in metrics.get("cases") or []:
         q = str(row.get("query") or "").replace("|", "\\|")[:50]
         lines.append(
@@ -245,7 +261,9 @@ async def run_mnemos_bench(
     path = Path(dataset_path)
     if not path.is_file():
         log.line("error", f"dataset not found: {path}")
-        await update_run_status(run_id, status="failed", error=f"dataset not found: {path}")
+        await update_run_status(
+            run_id, status="failed", error=f"dataset not found: {path}"
+        )
         return {"error": f"dataset not found: {path}"}
 
     payload = json.loads(path.read_text(encoding="utf-8"))
@@ -339,9 +357,17 @@ async def run_mnemos_bench(
 
         t_case = time.perf_counter()
         recalled: List[Dict[str, Any]] = []
-        score_dbg: Dict[str, Any] = {"score": 0.0, "reason": "error", "hits": [], "returned": 0}
+        score_dbg: Dict[str, Any] = {
+            "score": 0.0,
+            "reason": "error",
+            "hits": [],
+            "returned": 0,
+        }
         try:
-            if str(case.get("recall_scope") or "") == "across" and extra_scope is not None:
+            if (
+                str(case.get("recall_scope") or "") == "across"
+                and extra_scope is not None
+            ):
                 recalled = await recall_across_scopes(
                     [scope, extra_scope], query, limit=recall_limit, as_of=as_of
                 )
@@ -399,7 +425,9 @@ async def run_mnemos_bench(
 
         latency = time.perf_counter() - t_case
         mark = "PASS" if score_dbg["score"] == 1.0 else "FAIL"
-        top_snip = (recalled[0].get("content") or "")[:100] if recalled else "(no results)"
+        top_snip = (
+            (recalled[0].get("content") or "")[:100] if recalled else "(no results)"
+        )
         row = {
             "case_id": case_id,
             "category": str(case.get("category") or "uncategorized"),

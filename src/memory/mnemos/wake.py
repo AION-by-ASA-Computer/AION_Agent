@@ -16,9 +16,7 @@ def wake_budget() -> int:
     return int(os.getenv("AION_LTM_WAKE_MAX_ROWS", "20"))
 
 
-async def resolve_block(
-    scope: MemoryScope, lo: int, hi: int
-) -> List[Dict[str, Any]]:
+async def resolve_block(scope: MemoryScope, lo: int, hi: int) -> List[Dict[str, Any]]:
     """Return ordered rows covering [lo, hi), descending to raw notes if needed."""
     if hi <= lo:
         return []

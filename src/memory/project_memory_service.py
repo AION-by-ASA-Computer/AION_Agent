@@ -7,7 +7,11 @@ from typing import Any, Dict, List, Optional
 
 from src.memory.mnemos.compress import compress_scope
 from src.memory.mnemos.orchestrator import mnemos_orchestrator
-from src.memory.mnemos.scope import default_tenant_id, project_scope, sanitize_project_slug
+from src.memory.mnemos.scope import (
+    default_tenant_id,
+    project_scope,
+    sanitize_project_slug,
+)
 from src.memory.mnemos import store
 from src.memory.mnemos.wake import wake
 from src.memory.mnemos.zoom import zoom as zoom_digest
@@ -157,9 +161,7 @@ async def delete_project_note(
     return await store.forget_note(note_id, hard=False)
 
 
-async def project_memory_status(
-    *, tenant_id: str, project_slug: str
-) -> Dict[str, Any]:
+async def project_memory_status(*, tenant_id: str, project_slug: str) -> Dict[str, Any]:
     scope = project_scope(tenant_id, sanitize_project_slug(project_slug))
     counts = await store.digest_debug_stats(scope)
     return {

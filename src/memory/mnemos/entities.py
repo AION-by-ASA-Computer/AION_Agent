@@ -217,7 +217,9 @@ async def split_entity(entity_id: int, *, new_canonical_key: str) -> int:
     async with get_async_session_maker()() as session:
         row = (
             await session.execute(
-                text("SELECT tenant_id, scope_type, scope_key, display_name FROM ltm_entities WHERE id = :id"),
+                text(
+                    "SELECT tenant_id, scope_type, scope_key, display_name FROM ltm_entities WHERE id = :id"
+                ),
                 {"id": entity_id},
             )
         ).first()

@@ -21,15 +21,22 @@ async def test_answer_question_with_agent_binds_scope(monkeypatch):
 
         async def run_stream(self, question, sql_query_project=None):
             captured["project"] = sql_query_project
-            yield {"type": "tool_event", "event": {"type": "tool_start", "name": "memory_recall"}}
+            yield {
+                "type": "tool_event",
+                "event": {"type": "tool_start", "name": "memory_recall"},
+            }
             yield {"type": "final", "text": "\\boxed{Reports}"}
 
     async def fake_get_agent(profile_name, session_id, user_id, tenant_id="default"):
         captured["tenant_id"] = tenant_id
         return object(), profile_name
 
-    monkeypatch.setattr("src.benchmarks.longmemeval_v2.agent_query.get_agent", fake_get_agent)
-    monkeypatch.setattr("src.benchmarks.longmemeval_v2.agent_query.AgentPipeline", FakePipeline)
+    monkeypatch.setattr(
+        "src.benchmarks.longmemeval_v2.agent_query.get_agent", fake_get_agent
+    )
+    monkeypatch.setattr(
+        "src.benchmarks.longmemeval_v2.agent_query.AgentPipeline", FakePipeline
+    )
 
     from src.benchmarks.longmemeval_v2.agent_query import answer_question_with_agent
 

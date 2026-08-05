@@ -91,7 +91,10 @@ def test_phrase_set_flags_over_answering():
 
 
 def test_phrase_set_ordered_is_order_sensitive():
-    assert score("Reports;Problems", "Reports; Problems", PHRASE_SET_ORDERED)["score"] == 1.0
+    assert (
+        score("Reports;Problems", "Reports; Problems", PHRASE_SET_ORDERED)["score"]
+        == 1.0
+    )
     reversed_answer = score("Reports;Problems", "Problems;Reports", PHRASE_SET_ORDERED)
     assert reversed_answer["score"] == 0.0
     assert reversed_answer["reason"] == "phrase_list_mismatch"
@@ -141,7 +144,10 @@ def test_mc_choice_match():
 
 
 def test_mc_choice_set_match_is_order_insensitive():
-    assert score("A,B,F", "\\boxed{F, A, B}", MC_SET, raw="\\boxed{F, A, B}")["score"] == 1.0
+    assert (
+        score("A,B,F", "\\boxed{F, A, B}", MC_SET, raw="\\boxed{F, A, B}")["score"]
+        == 1.0
+    )
     assert score("A,B,F", "\\boxed{A, B}", MC_SET, raw="\\boxed{A, B}")["score"] == 0.0
 
 

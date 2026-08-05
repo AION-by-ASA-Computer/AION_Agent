@@ -75,9 +75,7 @@ def _resolve_ctx(
     return tenant, user_id, profile_slug, None
 
 
-def build_memory_recall_tool(
-    session_id: str, user_id: str, profile=None
-) -> Tool:
+def build_memory_recall_tool(session_id: str, user_id: str, profile=None) -> Tool:
     _ = profile
 
     def memory_recall(
@@ -146,9 +144,7 @@ def build_memory_recall_tool(
     )
 
 
-def build_memory_note_tool(
-    session_id: str, user_id: str, profile=None
-) -> Tool:
+def build_memory_note_tool(session_id: str, user_id: str, profile=None) -> Tool:
     _ = profile
 
     def memory_note(
@@ -194,7 +190,10 @@ def build_memory_note_tool(
         parameters={
             "type": "object",
             "properties": {
-                "text": {"type": "string", "description": "One-line note, max 500 chars"},
+                "text": {
+                    "type": "string",
+                    "description": "One-line note, max 500 chars",
+                },
                 "scope": {
                     "type": "string",
                     "enum": ["user", "project", "global"],
@@ -224,9 +223,7 @@ def build_memory_note_tool(
     )
 
 
-def build_memory_forget_tool(
-    session_id: str, user_id: str, profile=None
-) -> Tool:
+def build_memory_forget_tool(session_id: str, user_id: str, profile=None) -> Tool:
     _ = session_id, user_id, profile
 
     def memory_forget(note_id: int) -> str:
@@ -254,9 +251,7 @@ def build_memory_forget_tool(
     )
 
 
-def load_mnemos_tools(
-    profile, session_id: str, user_id: str
-) -> List[Tool]:
+def load_mnemos_tools(profile, session_id: str, user_id: str) -> List[Tool]:
     if not mnemos_native_tools_enabled() or not profile_wants_mnemos(profile):
         return []
     tools: List[Tool] = [build_memory_recall_tool(session_id, user_id, profile)]

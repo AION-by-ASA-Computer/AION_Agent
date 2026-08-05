@@ -6,9 +6,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 ScopeType = Literal["user", "project", "global"]
-NoteCategory = Literal[
-    "preference", "fact", "event", "decision", "pitfall", "task"
-]
+NoteCategory = Literal["preference", "fact", "event", "decision", "pitfall", "task"]
 RecallMode = Literal["current", "historical"]
 
 SCOPE_TYPES = frozenset({"user", "project", "global"})

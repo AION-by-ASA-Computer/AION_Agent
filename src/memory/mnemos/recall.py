@@ -138,9 +138,7 @@ async def _recall_notes(
     as_of: Optional[datetime] = None,
     use_hybrid: Optional[bool] = None,
 ) -> List[LtmNote]:
-    hybrid = (
-        use_hybrid if use_hybrid is not None else embedding_recall_enabled()
-    )
+    hybrid = use_hybrid if use_hybrid is not None else embedding_recall_enabled()
     ranked_lists, notes_by_id = await _gather_ranked_lists(
         scope, query, limit=limit, mode=mode, as_of=as_of, use_hybrid=hybrid
     )
@@ -160,9 +158,7 @@ async def recall(
     as_of: datetime | None = None,
 ) -> List[Dict[str, Any]]:
     lim = limit if limit is not None else recall_limit()
-    notes = await _recall_notes(
-        scope, query, limit=lim, mode=mode, as_of=as_of
-    )
+    notes = await _recall_notes(scope, query, limit=lim, mode=mode, as_of=as_of)
     return _note_rows(notes)
 
 
@@ -196,8 +192,6 @@ async def recall_across_scopes(
     if not notes_by_id:
         return []
 
-    ordered = rank_notes(
-        ranked_lists, notes_by_id, limit=lim, now=as_of
-    )
+    ordered = rank_notes(ranked_lists, notes_by_id, limit=lim, now=as_of)
     await store.touch_recall_stats([n.id for n in ordered])
     return _note_rows(ordered)

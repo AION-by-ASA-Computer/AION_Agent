@@ -371,16 +371,20 @@ async def _purge_digests_covering(
     await invalidate_digests_covering(session, scope, seq)
     tid, st, sk = scope.as_tuple()
     rows = (
-        await session.execute(
-            select(LtmDigest).where(
-                LtmDigest.tenant_id == tid,
-                LtmDigest.scope_type == st,
-                LtmDigest.scope_key == sk,
-                LtmDigest.range_start_seq <= seq,
-                LtmDigest.range_end_seq > seq,
+        (
+            await session.execute(
+                select(LtmDigest).where(
+                    LtmDigest.tenant_id == tid,
+                    LtmDigest.scope_type == st,
+                    LtmDigest.scope_key == sk,
+                    LtmDigest.range_start_seq <= seq,
+                    LtmDigest.range_end_seq > seq,
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     now = datetime.now(timezone.utc)
     for d in rows:
         d.summary_text = ""
@@ -412,10 +416,10 @@ async def touch_recall_stats(note_ids: List[int]) -> None:
     now = datetime.now(timezone.utc)
     async with get_async_session_maker()() as session:
         rows = (
-            await session.execute(
-                select(LtmNote).where(LtmNote.id.in_(note_ids))
-            )
-        ).scalars().all()
+            (await session.execute(select(LtmNote).where(LtmNote.id.in_(note_ids))))
+            .scalars()
+            .all()
+        )
         for note in rows:
             note.last_recalled_at = now
             note.recall_count = int(note.recall_count or 0) + 1
@@ -427,17 +431,21 @@ async def invalidate_digests_covering(
 ) -> None:
     tid, st, sk = scope.as_tuple()
     rows = (
-        await session.execute(
-            select(LtmDigest).where(
-                LtmDigest.tenant_id == tid,
-                LtmDigest.scope_type == st,
-                LtmDigest.scope_key == sk,
-                LtmDigest.range_start_seq <= seq,
-                LtmDigest.range_end_seq > seq,
-                LtmDigest.ready.is_(True),
+        (
+            await session.execute(
+                select(LtmDigest).where(
+                    LtmDigest.tenant_id == tid,
+                    LtmDigest.scope_type == st,
+                    LtmDigest.scope_key == sk,
+                    LtmDigest.range_start_seq <= seq,
+                    LtmDigest.range_end_seq > seq,
+                    LtmDigest.ready.is_(True),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     for d in rows:
         d.ready = False
         d.updated_at = datetime.now(timezone.utc)
@@ -452,17 +460,21 @@ async def _invalidate_ancestors(
 ) -> None:
     tid, st, sk = scope.as_tuple()
     parents = (
-        await session.execute(
-            select(LtmDigest).where(
-                LtmDigest.tenant_id == tid,
-                LtmDigest.scope_type == st,
-                LtmDigest.scope_key == sk,
-                LtmDigest.range_start_seq <= lo,
-                LtmDigest.range_end_seq >= hi,
-                LtmDigest.ready.is_(True),
+        (
+            await session.execute(
+                select(LtmDigest).where(
+                    LtmDigest.tenant_id == tid,
+                    LtmDigest.scope_type == st,
+                    LtmDigest.scope_key == sk,
+                    LtmDigest.range_start_seq <= lo,
+                    LtmDigest.range_end_seq >= hi,
+                    LtmDigest.ready.is_(True),
+                )
             )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
     now = datetime.now(timezone.utc)
     for p in parents:
         if p.range_start_seq == lo and p.range_end_seq == hi:
@@ -488,9 +500,7 @@ async def _get_digest_in_session(
     ).scalar_one_or_none()
 
 
-async def get_digest(
-    scope: MemoryScope, lo: int, hi: int
-) -> Optional[LtmDigest]:
+async def get_digest(scope: MemoryScope, lo: int, hi: int) -> Optional[LtmDigest]:
     async with get_async_session_maker()() as session:
         return await _get_digest_in_session(session, scope, lo, hi)
 
@@ -577,9 +587,10 @@ async def fts_search(
         for fts_q in queries:
             try:
                 rows = (
-                    await session.execute(
-                        text(
-                            """
+                    (
+                        await session.execute(
+                            text(
+                                """
                     SELECT note_id, bm25(ltm_notes_fts) AS score
                     FROM ltm_notes_fts
                     WHERE ltm_notes_fts MATCH :q
@@ -589,16 +600,19 @@ async def fts_search(
                     ORDER BY score
                     LIMIT :lim
                     """
-                        ),
-                        {
-                            "q": fts_q,
-                            "tid": tid,
-                            "st": st,
-                            "sk": sk,
-                            "lim": max(limit * 3, limit),
-                        },
+                            ),
+                            {
+                                "q": fts_q,
+                                "tid": tid,
+                                "st": st,
+                                "sk": sk,
+                                "lim": max(limit * 3, limit),
+                            },
+                        )
                     )
-                ).mappings().all()
+                    .mappings()
+                    .all()
+                )
             except Exception as exc:
                 logger.warning(
                     "Mnemos FTS search failed scope=%s:%s query=%r escaped=%r: %s",
@@ -632,9 +646,7 @@ async def fts_search(
                 terminal_by_id[tid_note] = note
 
         ordered = sorted(best_score.items(), key=lambda item: item[1])
-        return [
-            (terminal_by_id[nid], best_score[nid]) for nid, _ in ordered[:limit]
-        ]
+        return [(terminal_by_id[nid], best_score[nid]) for nid, _ in ordered[:limit]]
 
 
 def _note_visible(
@@ -747,9 +759,7 @@ async def embedding_search(
             terminal_by_id[tid_note] = note
 
     ordered = sorted(best_sim.items(), key=lambda item: item[1], reverse=True)
-    return [
-        (terminal_by_id[nid], best_sim[nid]) for nid, _ in ordered[:limit]
-    ]
+    return [(terminal_by_id[nid], best_sim[nid]) for nid, _ in ordered[:limit]]
 
 
 async def list_digests(

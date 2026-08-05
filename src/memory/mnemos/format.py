@@ -42,9 +42,7 @@ def format_digest_line(
     return f"{label} (digest) {summary.strip()}"
 
 
-def format_wake_block(
-    rows: List[Dict[str, Any]], header: Optional[str] = None
-) -> str:
+def format_wake_block(rows: List[Dict[str, Any]], header: Optional[str] = None) -> str:
     lines = [r.get("line", "") for r in rows if r.get("line")]
     if not lines:
         return ""

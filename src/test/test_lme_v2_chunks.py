@@ -11,7 +11,9 @@ def test_header_note_always_includes_goal():
         "goal": "Offboard user Sean",
         "outcome": "failure",
         "start_url": "https://example.service-now.com/home",
-        "states": [{"step": 0, "url": "https://x", "action": "click", "thought": "open"}],
+        "states": [
+            {"step": 0, "url": "https://x", "action": "click", "thought": "open"}
+        ],
     }
     chunks = trajectory_text_chunks(traj, max_chunks=100)
     header = next(c for c in chunks if "header" in c)

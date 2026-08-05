@@ -47,7 +47,11 @@ async def test_hard_delete_invalidates_covering_digest(mnemos_db):
     note = await store.insert_note(scope, content="Personal phone is +39 333 1234567")
     await store.insert_note(scope, content="Unrelated second note about the office")
     await store.upsert_digest(
-        scope, 0, 2, "User shared the phone +39 333 1234567 and an office note", ready=True
+        scope,
+        0,
+        2,
+        "User shared the phone +39 333 1234567 and an office note",
+        ready=True,
     )
 
     await store.forget_note(note.id, hard=True)
@@ -68,7 +72,9 @@ async def test_recall_across_scopes_does_not_starve_later_scopes(mnemos_db):
         project, content="Project deploy target is namespace alibr-prod"
     )
 
-    rows = await recall_across_scopes([user, project], "deploy target namespace", limit=10)
+    rows = await recall_across_scopes(
+        [user, project], "deploy target namespace", limit=10
+    )
 
     assert any("alibr-prod" in r["content"] for r in rows)
 

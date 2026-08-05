@@ -45,9 +45,11 @@ async def agent_db_sync_drawer(
     x_aion_agent_db_secret: str | None = Header(None, alias="X-AION-Agent-DB-Secret"),
 ):
     _require_secret(x_aion_agent_db_secret)
-    category = body.room if body.room in {
-        "preference", "fact", "event", "decision", "pitfall", "task"
-    } else "fact"
+    category = (
+        body.room
+        if body.room in {"preference", "fact", "event", "decision", "pitfall", "task"}
+        else "fact"
+    )
     try:
         out = await mnemos_orchestrator.add_note(
             tenant_id=default_tenant_id(),

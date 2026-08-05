@@ -19,32 +19,32 @@ from .run_store import create_run, update_run_status
 
 
 def _register_defaults() -> None:
-  register_benchmark(
-      BenchmarkSpec(
-          id="general_agent",
-          title="General agent eval",
-          description="JSON case regression through AgentPipeline",
-      ),
-      _run_general_wrapper,
-  )
-  register_benchmark(
-      BenchmarkSpec(
-          id="longmemeval_v2_small",
-          title="LongMemEval-V2 Small",
-          description="LME-V2-Small long-term memory benchmark with Mnemos",
-          tier="small",
-          dataset_ready_fn=is_dataset_ready,
-      ),
-      _run_lme_wrapper,
-  )
-  register_benchmark(
-      BenchmarkSpec(
-          id="mnemos_bench",
-          title="Mnemos recall micro-benchmark",
-          description="Dev-only Mnemos FTS/hybrid recall validation",
-      ),
-      _run_mnemos_wrapper,
-  )
+    register_benchmark(
+        BenchmarkSpec(
+            id="general_agent",
+            title="General agent eval",
+            description="JSON case regression through AgentPipeline",
+        ),
+        _run_general_wrapper,
+    )
+    register_benchmark(
+        BenchmarkSpec(
+            id="longmemeval_v2_small",
+            title="LongMemEval-V2 Small",
+            description="LME-V2-Small long-term memory benchmark with Mnemos",
+            tier="small",
+            dataset_ready_fn=is_dataset_ready,
+        ),
+        _run_lme_wrapper,
+    )
+    register_benchmark(
+        BenchmarkSpec(
+            id="mnemos_bench",
+            title="Mnemos recall micro-benchmark",
+            description="Dev-only Mnemos FTS/hybrid recall validation",
+        ),
+        _run_mnemos_wrapper,
+    )
 
 
 async def _run_general_wrapper(
@@ -141,7 +141,11 @@ async def _async_main(args: argparse.Namespace) -> int:
             )
         else:
             raise ValueError(f"unknown benchmark: {args.benchmark}")
-        if metrics and args.benchmark == "mnemos_bench" and "accuracy_overall" in metrics:
+        if (
+            metrics
+            and args.benchmark == "mnemos_bench"
+            and "accuracy_overall" in metrics
+        ):
             acc = metrics["accuracy_overall"] * 100
             print(
                 f"[cli] summary: {metrics.get('passed', 0)}/{metrics.get('case_count', 0)} "

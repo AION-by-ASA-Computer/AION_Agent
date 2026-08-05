@@ -8,7 +8,7 @@ from src.benchmarks.longmemeval_v2.query import build_benchmark_recall_query
 def test_recall_query_extracts_quoted_and_product_terms():
     q = (
         'On the Incidents list page, when I open the "Filters" dropdown, '
-        "which filter option labels contain the substring \"Incident\"?"
+        'which filter option labels contain the substring "Incident"?'
     )
     boosted = build_benchmark_recall_query(q)
     assert "Filters" in boosted

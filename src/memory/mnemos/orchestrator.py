@@ -138,9 +138,7 @@ class MnemosOrchestrator:
                 include_global=os.getenv("AION_MNEMOS_WAKE_GLOBAL", "0").lower()
                 in ("1", "true", "yes"),
             )
-            return await recall_across_scopes(
-                scopes, query, limit=limit, mode=mode
-            )
+            return await recall_across_scopes(scopes, query, limit=limit, mode=mode)
         scope = resolve_scope_for_write(
             tenant_id=tenant_id,
             user_id=user_id,
@@ -149,9 +147,7 @@ class MnemosOrchestrator:
         )
         return await recall(scope, query, limit=limit, mode=mode)
 
-    async def forget(
-        self, note_id: int, *, hard: bool = False
-    ) -> bool:
+    async def forget(self, note_id: int, *, hard: bool = False) -> bool:
         return await store.forget_note(note_id, hard=hard)
 
     def _extraction_skill_text(self) -> str:

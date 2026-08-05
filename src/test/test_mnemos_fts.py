@@ -5,7 +5,7 @@ from src.memory.mnemos.fts import _escape_fts_query
 
 def test_escape_lme_style_question():
     q = (
-        'I am working with our ServiceNow portal. On the Incidents list page, when I open the '
+        "I am working with our ServiceNow portal. On the Incidents list page, when I open the "
         '"Filters" dropdown, excluding "Edit personal filters" — which filter option labels '
         'contain the substring "Incident"? Mark your final answer in \\boxed{}.'
     )

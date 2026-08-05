@@ -350,9 +350,7 @@ class SqlQueryProjectMember(Base):
         DateTime(timezone=True), server_default=func.now()
     )
 
-    project: Mapped["Project"] = relationship(
-        "Project", back_populates="members"
-    )
+    project: Mapped["Project"] = relationship("Project", back_populates="members")
 
     __table_args__ = (
         UniqueConstraint(
@@ -401,12 +399,13 @@ class CachedSqlQuery(Base):
     )
 
 
-
 class LtmNote(Base):
     __tablename__ = "ltm_notes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default"
+    )
     scope_type: Mapped[str] = mapped_column(String(16), nullable=False)
     scope_key: Mapped[str] = mapped_column(String(256), nullable=False)
     seq: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -424,7 +423,9 @@ class LtmNote(Base):
     confidence_source: Mapped[Optional[str]] = mapped_column(String(24))
     valid_from: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     valid_to: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    last_recalled_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_recalled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
     recall_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -432,12 +433,18 @@ class LtmNote(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "scope_type", "scope_key", "seq",
+            "tenant_id",
+            "scope_type",
+            "scope_key",
+            "seq",
             name="uq_ltm_notes_scope_seq",
         ),
         Index(
             "ix_ltm_notes_scope_status",
-            "tenant_id", "scope_type", "scope_key", "status",
+            "tenant_id",
+            "scope_type",
+            "scope_key",
+            "status",
         ),
     )
 
@@ -446,7 +453,9 @@ class LtmDigest(Base):
     __tablename__ = "ltm_digests"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False, default="default")
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default"
+    )
     scope_type: Mapped[str] = mapped_column(String(16), nullable=False)
     scope_key: Mapped[str] = mapped_column(String(256), nullable=False)
     level: Mapped[int] = mapped_column(Integer, nullable=False)
@@ -475,6 +484,7 @@ class LtmDigest(Base):
 
 # Backward-compatible alias for SQL QueryMemory imports
 SqlQueryProject = Project
+
 
 class TrustedPath(Base):
     __tablename__ = "trusted_paths"
