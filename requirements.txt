@@ -56,7 +56,7 @@ prometheus-fastapi-instrumentator>=6.0.0
 structlog>=24.1.0
 mcp-server-openmetadata
 openlit
-json-repair
+json-repair>=0.60.1
 opik
 pydantic-settings>=2.0.0
 pymupdf4llm
