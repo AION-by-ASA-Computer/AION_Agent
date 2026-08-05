@@ -59,7 +59,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Clients',
       collapsed: false,
-      items: ['clients/chat-ui', 'clients/admin-ui', 'clients/sdk-and-widget'],
+      items: ['clients/chat-ui', 'clients/admin-ui', 'clients/sdk-and-widget', 'clients/n8n'],
     },
     {
       type: 'category',

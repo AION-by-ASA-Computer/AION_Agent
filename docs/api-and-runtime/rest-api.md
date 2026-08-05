@@ -220,6 +220,47 @@ Performs polling of the loading status of MCPs.
 
 ---
 
+### Sync Chat (JSON)
+`POST /v1/chat` (Requires Chat Auth)
+
+Sends a message and waits for the full agent reply as a single JSON object.
+Intended for **automation clients** (n8n, scripts) that cannot consume SSE.
+See also [N8N Integration](../clients/n8n.md).
+
+**Request Body:**
+```json
+{
+  "message": "What is the status of the Prometheus servers?",
+  "profile": "aion_std",
+  "conversation_id": null,
+  "user_id": "n8n",
+  "message_source": "internal_trigger",
+  "timeout_seconds": 300
+}
+```
+
+| Field | Default | Notes |
+|-------|---------|--------|
+| `message` | — | Required |
+| `profile` / `profile_slug` / `profile_name` | `aion_std` | Profile slug |
+| `conversation_id` / `session_id` | auto UUID | Omit to create a new conversation |
+| `message_source` | `internal_trigger` | Use `user_input` for human turns |
+| `timeout_seconds` | `300` | Range 1–3600; **504** on timeout |
+
+**Response (200 OK):**
+```json
+{
+  "text": "The Prometheus servers are active...",
+  "conversation_id": "01907a5e-...",
+  "session_id": "01907a5e-...",
+  "profile": "aion_std",
+  "success": true,
+  "charts": []
+}
+```
+
+---
+
 ### Chat Stream (SSE)
 `POST /v1/chat/stream` (Requires Chat Auth)
 

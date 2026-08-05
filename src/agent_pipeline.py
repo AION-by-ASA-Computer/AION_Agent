@@ -3924,8 +3924,39 @@ class AgentPipeline:
                 except Exception as e:
                     logger.warning("Errore chiusura span OTel: %s", e)
 
-    async def run(self, user_input: str) -> Dict[str, Any]:
-        async for chunk in self.run_stream(user_input):
+    async def run(
+        self,
+        user_input: str,
+        *,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+        turn_attachments: Optional[List[Dict[str, Any]]] = None,
+        reasoning_effort: Optional[str] = None,
+        user_message_id: Optional[str] = None,
+        assistant_message_id: Optional[str] = None,
+        message_source: str = "user_input",
+        web_search_enabled: Optional[bool] = None,
+        web_search_restrict_hosts: Optional[List[str]] = None,
+        sql_query_project: Optional[str] = None,
+        plan_id: Optional[str] = None,
+        plan_execution_task_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Drain ``run_stream`` until a ``final`` chunk (sync / automation clients)."""
+        async for chunk in self.run_stream(
+            user_input,
+            attachments=attachments,
+            turn_attachments=turn_attachments,
+            reasoning_effort=reasoning_effort,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message_id,
+            message_source=message_source,
+            web_search_enabled=web_search_enabled,
+            web_search_restrict_hosts=web_search_restrict_hosts,
+            sql_query_project=sql_query_project,
+            plan_id=plan_id,
+            plan_execution_task_id=plan_execution_task_id,
+            metadata=metadata,
+        ):
             if chunk["type"] == "final":
                 return {
                     "text": chunk["text"],
