@@ -76,6 +76,90 @@ export async function uploadSessionFiles(sessionId: string, userId: string, file
   return attachments;
 }
 
+export type UploadSessionFileResult = {
+  attachment: AttachmentRef;
+};
+
+/** Upload one file with XMLHttpRequest progress (per-file gauge in composer). */
+export function uploadSessionFileWithProgress(
+  sessionId: string,
+  userId: string,
+  file: File,
+  token?: string | null,
+  opts?: {
+    onProgress?: (percent: number) => void;
+    signal?: AbortSignal;
+  },
+): Promise<UploadSessionFileResult> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const fd = new FormData();
+    fd.append("files", file);
+
+    const url = `${apiBase()}/sessions/${encodeURIComponent(sessionId)}/upload`;
+
+    const onAbort = () => xhr.abort();
+    if (opts?.signal) {
+      if (opts.signal.aborted) {
+        reject(new DOMException("Upload aborted", "AbortError"));
+        return;
+      }
+      opts.signal.addEventListener("abort", onAbort, { once: true });
+    }
+
+    xhr.upload.addEventListener("progress", (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.min(100, Math.round((e.loaded / e.total) * 100));
+      opts?.onProgress?.(pct);
+    });
+
+    xhr.addEventListener("load", () => {
+      opts?.signal?.removeEventListener("abort", onAbort);
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(`upload failed (${xhr.status})`));
+        return;
+      }
+      try {
+        const j = JSON.parse(xhr.responseText) as {
+          files?: Array<Record<string, string>>;
+        };
+        const item = (j.files || [])[0];
+        if (!item?.relative_path) {
+          reject(new Error("upload response missing file"));
+          return;
+        }
+        resolve({
+          attachment: {
+            relative_path: item.relative_path,
+            original_relative_path: item.original_relative_path,
+            original_name: item.original_name,
+            mime: item.mime,
+          },
+        });
+      } catch {
+        reject(new Error("invalid upload response"));
+      }
+    });
+
+    xhr.addEventListener("error", () => {
+      opts?.signal?.removeEventListener("abort", onAbort);
+      reject(new Error("network error during upload"));
+    });
+
+    xhr.addEventListener("abort", () => {
+      opts?.signal?.removeEventListener("abort", onAbort);
+      reject(new DOMException("Upload aborted", "AbortError"));
+    });
+
+    xhr.open("POST", url);
+    const h = baseUserHeaders(userId, token);
+    for (const [k, v] of Object.entries(h)) {
+      xhr.setRequestHeader(k, v);
+    }
+    xhr.send(fd);
+  });
+}
+
 export type ChatRequestBody = {
   message: string;
   session_id: string;
