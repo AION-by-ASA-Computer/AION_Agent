@@ -1393,6 +1393,7 @@ class AgentPipeline:
                 set_sql_qm_turn_context,
             )
 
+            conv_proj: Optional[str] = None
             _qm_project = (
                 sql_query_project
                 or _os_qm.getenv("AION_SQL_QM_DEFAULT_PROJECT")
@@ -1432,7 +1433,10 @@ class AgentPipeline:
                     verify_user_project_access,
                 )
 
-                if profile_has_memory_capability_by_slug(_qm_profile_slug):
+                _explicit_sql_project = bool((sql_query_project or "").strip())
+                if (
+                    _explicit_sql_project or conv_proj
+                ) and profile_has_memory_capability_by_slug(_qm_profile_slug):
                     _acc_err = await verify_user_project_access(
                         project_slug=_qm_project,
                         tenant_id=(
@@ -1714,6 +1718,7 @@ class AgentPipeline:
                     stop_event,
                     turn_plan_id=_turn_pid,
                     plan_controller=plan_controller,
+                    web_search_enabled=_wse,
                 )
                 set_turn_runtime(
                     session_id=self.session_id,
@@ -1828,6 +1833,7 @@ class AgentPipeline:
                     stop_event,
                     turn_plan_id=_turn_pid,
                     plan_controller=plan_controller,
+                    web_search_enabled=_wse,
                 )
                 set_turn_runtime(
                     session_id=self.session_id,
@@ -3924,12 +3930,49 @@ class AgentPipeline:
                 except Exception as e:
                     logger.warning("Errore chiusura span OTel: %s", e)
 
-    async def run(self, user_input: str) -> Dict[str, Any]:
-        async for chunk in self.run_stream(user_input):
+    async def run(
+        self,
+        user_input: str,
+        *,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+        turn_attachments: Optional[List[Dict[str, Any]]] = None,
+        reasoning_effort: Optional[str] = None,
+        user_message_id: Optional[str] = None,
+        assistant_message_id: Optional[str] = None,
+        message_source: str = "user_input",
+        web_search_enabled: Optional[bool] = None,
+        web_search_restrict_hosts: Optional[List[str]] = None,
+        sql_query_project: Optional[str] = None,
+        plan_id: Optional[str] = None,
+        plan_execution_task_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Drain ``run_stream`` until a ``final`` chunk (sync / automation clients)."""
+        error_message = ""
+        async for chunk in self.run_stream(
+            user_input,
+            attachments=attachments,
+            turn_attachments=turn_attachments,
+            reasoning_effort=reasoning_effort,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message_id,
+            message_source=message_source,
+            web_search_enabled=web_search_enabled,
+            web_search_restrict_hosts=web_search_restrict_hosts,
+            sql_query_project=sql_query_project,
+            plan_id=plan_id,
+            plan_execution_task_id=plan_execution_task_id,
+            metadata=metadata,
+        ):
             if chunk["type"] == "final":
                 return {
                     "text": chunk["text"],
                     "charts": chunk.get("charts", []),
                     "success": True,
                 }
-        return {"text": "", "charts": [], "success": False}
+            if chunk.get("type") == "error" and chunk.get("content"):
+                error_message = str(chunk["content"])
+        out: Dict[str, Any] = {"text": "", "charts": [], "success": False}
+        if error_message:
+            out["error"] = error_message
+        return out
