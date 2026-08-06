@@ -13,6 +13,7 @@ from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 
 from src.session_workspace import list_dir, save_upload
+from src.tools.doc_auto_ingest import schedule_auto_ingest
 from .auth_login import ChatAuthIdentity, require_chat_auth
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,7 @@ async def upload_session_files(
             for f in files:
                 data = await f.read()
                 meta = save_upload(session_id, f.filename or "upload", data)
+                schedule_auto_ingest(session_id, meta)
                 out.append(meta)
 
             logger.info(

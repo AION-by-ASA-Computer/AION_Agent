@@ -645,20 +645,59 @@ class AgentPipeline:
                     "You MUST read, analyze, and consider ALL of these newly uploaded documents to answer the current request. "
                     "CRITICAL RULES:\n"
                     "- NEVER process documents in parallel\n"
-                    "- ALWAYS process documents sequentially by using OCR tool.\n"
-                    "- Call ocr_file on one document at a time\n"
-                    "- Wait for the ocr_file call to complete before processing the next document\n"
-                    "- Do not ignore any of these newly uploaded documents\n"
-                    "Ensure you use your tools (like read_file, ocr, or custom scripts) to inspect all of them."
+                    "- For PDFs, check the extraction manifest below before calling doc_ingest\n"
+                    "- Process documents sequentially\n"
+                    "- Do not ignore any of these newly uploaded documents"
                 )
             else:
                 lines.append(
                     "IMPORTANT: A new document has been uploaded in this prompt. "
                     "You MUST read, analyze, and consider this document to answer the current request."
-                    "Always use OCR tools to read the document."
-                    "If OCR tools are not available, try to read the document anyway using any "
-                    "available tool."
                 )
+
+            from src.tools.doc_auto_ingest import load_manifest
+            from src.tools.doc_ingest import slugify_document_name
+
+            for a in new_files:
+                rp = a.get("relative_path", "")
+                mime = (a.get("mime") or "").lower()
+                if not mime.startswith("application/pdf") and not rp.lower().endswith(
+                    ".pdf"
+                ):
+                    continue
+                slug = slugify_document_name(
+                    a.get("original_name") or Path(rp).name
+                )
+                manifest = load_manifest(self.session_id, rp)
+                if manifest and manifest.get("ok"):
+                    lines.append(f"\n### PDF extraction ready: `{slug}`")
+                    lines.append(
+                        f"- pages_total: {manifest.get('pages_total')}, "
+                        f"written: {manifest.get('pages_written')}, "
+                        f"partial: {manifest.get('partial')}"
+                    )
+                    if manifest.get("partial") and manifest.get("resume_from"):
+                        lines.append(
+                            f"- INCOMPLETE: call doc_ingest(first_page={manifest['resume_from']}) to resume"
+                        )
+                    if manifest.get("empty_pages_count"):
+                        lines.append(
+                            f"- empty_pages (no text layer): {manifest.get('empty_pages_count')} "
+                            "— use doc_ingest(ocr_mode='auto') or ocr_file on those pages"
+                        )
+                    excerpt = (manifest.get("first_page_excerpt") or "").strip()
+                    if excerpt:
+                        lines.append(f"- first_page_excerpt: {excerpt[:300]}")
+                    hint = manifest.get("grep_hint") or (
+                        f"sandbox_grep_content(pattern=..., relative_root='derived', "
+                        f"glob_filter='docs/{slug}/pages/*.txt')"
+                    )
+                    lines.append(f"- search: {hint}")
+                elif mime.startswith("application/pdf") or rp.lower().endswith(".pdf"):
+                    lines.append(
+                        f"\n### PDF `{slug}`: extraction in progress or not started. "
+                        "If pages are missing after a few seconds, call doc_ingest(relative_path=...)."
+                    )
 
             if old_files:
                 lines.append(

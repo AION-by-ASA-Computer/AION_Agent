@@ -6,7 +6,7 @@ instructions: |
   ## Workflow
   1. **Clarify the goal**: what must be extracted (entities, fields, constraints). If the user does not provide a schema, propose a field list consistent with the document type and ask for confirmation, or apply a default and state it clearly.
   2. **Identify the source**: files in the session workspace (`session_sandbox`), pasted text.
-  3. **Obtain text**: for scanned PDFs/images or sources that cannot be read as plain text, use **OCR**; when text is already readable (e.g. text files or text-based PDFs), prefer direct reads from the workspace and avoid unnecessary OCR.
+  3. **Obtain text**: for any PDF longer than a few pages use **`doc_ingest`** and follow `long_document_protocol` — it extracts the text layer page by page and falls back to OCR only where needed. Reserve `ocr_file` for single images or a small page range. When text is already readable (text files), read it directly and skip OCR entirely.
   4. **Extract**: populate only what is **supported by the text**; for missing values use `null` or empty arrays—do not invent.
   5. **Validate**: consistent formats (dates `YYYY-MM-DD`, amounts as numbers where possible), internal consistency across derived fields, and notes on ambiguity.
 
@@ -28,9 +28,11 @@ skills:
 - filesystem_tools_protocol
 - web_research_protocol
 - incremental_execution_protocol
+- long_document_protocol
 critical_skills:
 - core_protocol
 - artifact_protocol
+- long_document_protocol
 native_tool_groups:
 - web_research
 mcp_servers:
