@@ -39,3 +39,4 @@ mcp_servers:
 - session_sandbox
 - skills_hub
 - ocr
+- geocoding
