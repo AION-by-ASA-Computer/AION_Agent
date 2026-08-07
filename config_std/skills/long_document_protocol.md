@@ -4,7 +4,7 @@ description: "Mandatory protocol for finding and extracting facts from PDFs long
 tags: [core, protocol, documents, pdf, ocr, extraction]
 status: verified
 source: curated
-version: 3
+version: 4
 ---
 
 # Long Document Protocol
@@ -154,16 +154,40 @@ Every claim carries its `source_doc` and `page`. For a Word/Excel deliverable, l
 `docx` / `xlsx` skill and build it **from `workspace/<slug>_findings.json`**, not from
 the conversation, so the citations cannot drift.
 
+### Professional Word standard (mandatory)
+
+The deliverable must read as a **client-ready relazione**, not a screenshot gallery.
+
+| Required | Forbidden |
+|----------|-----------|
+| Copertina (titolo, cliente/impianto, data, riservatezza) | Solo elenco immagini senza narrativa |
+| Sintesi esecutiva (1–2 paragrafi) | Script python-docx ad hoc se esiste `build_evidence_report.py` |
+| Tabella quadro obblighi (ID, sezione, pagina, sintesi) | Full-page `pdftoppm` / screenshot non croppati |
+| Sezioni numerate per prescrizione con testo + osservazioni | Indice manuale al posto del corpo analitico |
+| Figure numerate «Figura N — …» sotto l'immagine | `add_picture(width=6.5)` senza cap altezza |
+| Header/footer con titolo e numerazione pagine | |
+
 Preferred Word workflow when evidence PNGs exist:
 
 1. Collect findings JSON + all `derived/docs/<slug>/evidence/eNNN.png` paths (and sidecars).
-2. If `skill_view("docx")` materialized `scripts/report/build_evidence_report.py`, run it
-   to produce a structured report (cover, scadenziario, per-prescription body, figure appendix).
-3. Otherwise build with docx-js / python-docx, embedding PNGs from `derived/.../evidence/`
-   — never from ad-hoc full-page `pdftoppm` output.
-4. **Run QA before delivery:** `python scripts/report/qa_evidence_images.py <png...>` (or
-   `--glob derived/docs/<slug>/evidence/*.png`). If it fails, re-crop with `pdf_evidence_crop`;
-   do not deliver the report.
+2. **Run `scripts/report/build_evidence_report.py`** (after `skill_view("docx")`) — this is the
+   default path; do not hand-roll a gallery script unless the template is unavailable.
+3. Pass meaningful metadata: `--title`, `--subtitle`, `--client`, `--plant`, `--source-doc`.
+4. **Run QA before delivery:** `python scripts/report/qa_evidence_images.py --glob derived/docs/<slug>/evidence/*.png`.
+5. Open the output and verify: tables present, sections numbered, figures captioned — not bare PNG stack.
+
+Example:
+
+```bash
+python scripts/report/build_evidence_report.py \
+  --findings workspace/decreto_findings.json \
+  --evidence derived/docs/<slug>/evidence/*.png \
+  --output workspace/prescrizioni_rumore_report.docx \
+  --title "Prescrizioni autorizzative — Rumore (PIC / PMC)" \
+  --subtitle "Estrazione da decreto IPPC" \
+  --client "Nome cliente" \
+  --plant "Impianto"
+```
 
 ## Troubleshooting
 

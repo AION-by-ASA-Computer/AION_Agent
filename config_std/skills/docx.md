@@ -4,7 +4,7 @@ description: "Create and edit Word .docx files via docx-js in the session sandbo
 tags: [office, docx, word, document]
 status: verified
 source: curated
-version: 3
+version: 4
 ---
 
 # Word (.docx) via docx-js
@@ -76,6 +76,22 @@ Use `scripts/report/evidence_layout.py`:
 - Set **`keep_with_next`** on the heading / intro paragraphs so title and figure stay together.
 
 `build_evidence_report.py` applies these rules automatically.
+
+## Professional report deliverable (mandatory for PDF → Word)
+
+When the user asks for a report, relazione, or sintesi with screenshots from a decree/PDF:
+
+1. Follow **`long_document_protocol`** through findings JSON + evidence PNGs.
+2. **Always prefer** `scripts/report/build_evidence_report.py` over a custom script.
+3. The output must include: **cover**, **executive summary**, **obligations table**,
+   **numbered prescription sections** (verbatim quote + operational summary), **numbered figures**
+   (`Figura N — …`), **deadlines table**, header/footer with page numbers.
+4. **Never** deliver a bare screenshot gallery (title + image list only) — that is below quality bar.
+
+Metadata to pass to the template: `--title`, `--subtitle`, `--client`, `--plant`, `--source-doc`.
+
+If building manually with python-docx, import `scripts/report/report_style.py` and
+`scripts/report/evidence_layout.py` — do not invent ad-hoc formatting.
 
 ## Errors
 

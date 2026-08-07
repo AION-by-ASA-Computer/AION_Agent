@@ -72,7 +72,8 @@ After `skill_view("docx")`, when proprietary config is synced:
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/report/build_evidence_report.py` | Structured report: cover, quadro obblighi, scadenziario, prescrizioni **with inline capped figures**, figure appendix |
+| `scripts/report/build_evidence_report.py` | Client-ready relazione: cover, sintesi esecutiva, quadro obblighi, prescrizioni numerate, figure, scadenziario |
+| `scripts/report/report_style.py` | Navy theme, styled tables, header/footer |
 | `scripts/report/qa_evidence_images.py` | Fail on high white-ratio, full-page aspect, or natural display height ≥6.5″ |
 | `scripts/report/evidence_layout.py` | Shared max-width/max-height picture sizing for python-docx |
 
