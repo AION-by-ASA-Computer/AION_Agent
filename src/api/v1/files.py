@@ -12,6 +12,7 @@ from src.api.auth import AuthContext, Scope, require_scope
 from src.session_workspace import save_upload
 from src.storage import get_storage_backend
 from src.tools.doc_auto_ingest import schedule_auto_ingest
+from src.tools.office_auto_convert import apply_legacy_word_conversion
 
 router = APIRouter()
 
@@ -30,6 +31,7 @@ async def upload_files(
     for f in files:
         data = await f.read()
         meta = save_upload(conversation_id, f.filename or "upload", data)
+        meta = await apply_legacy_word_conversion(conversation_id, meta)
         schedule_auto_ingest(conversation_id, meta)
         key = f"{tenant}/conversations/{conversation_id}/uploads/{uuid.uuid4().hex[:12]}_{meta.get('name', 'file')}"
         try:

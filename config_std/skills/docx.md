@@ -42,6 +42,16 @@ main().catch((e) => { console.error(e); process.exit(1); });
 
 Prefer unpack/edit/pack workflows from office scripts when available via `skill_view` and `sandbox_exec_allowlisted` on materialized `scripts/office/...` paths.
 
+## Legacy `.doc` (Word 97–2003)
+
+Binary `.doc` files **cannot** be read with `docx2txt`, `unpack.py`, or docx-js. On upload, the API host auto-converts them via **LibreOffice** (`soffice`) when `AION_OFFICE_AUTO_CONVERT_LEGACY_WORD=1` (default). Production Docker images ship `libreoffice-writer-nogui`; local dev needs LibreOffice on the API host (`brew install --cask libreoffice` on macOS).
+
+- Check the attachments block for **`converted_docx_path`** (e.g. `derived/converted/report.docx`).
+- Use **only that .docx path** for `skill_view("docx")`, unpack, and edits.
+- Do **not** convert in the sandbox and do **not** call `unpack.py` on the original `.doc` binary.
+
+If conversion is unavailable, install LibreOffice on the API server or set `AION_SOFFICE_PATH`.
+
 ## Errors
 
 - **`empty_file` / `file_not_found` on run**: rewrite the script with `sandbox_write_workspace_file`.

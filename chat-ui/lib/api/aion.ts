@@ -63,14 +63,17 @@ export async function uploadSessionFiles(sessionId: string, userId: string, file
     body: fd,
   });
   if (!r.ok) return [];
-  const j = (await r.json()) as { files?: Array<Record<string, string>> };
+  const j = (await r.json()) as { files?: Array<Record<string, unknown>> };
   const attachments: AttachmentRef[] = [];
   for (const item of j.files || []) {
     attachments.push({
-      relative_path: item.relative_path,
-      original_relative_path: item.original_relative_path,
-      original_name: item.original_name,
-      mime: item.mime,
+      relative_path: String(item.relative_path ?? ""),
+      original_relative_path: item.original_relative_path as string | undefined,
+      original_name: item.original_name as string | undefined,
+      mime: item.mime as string | undefined,
+      converted_docx_path: item.converted_docx_path as string | undefined,
+      legacy_word: Boolean(item.legacy_word),
+      conversion_status: item.conversion_status as string | undefined,
     });
   }
   return attachments;
@@ -121,7 +124,7 @@ export function uploadSessionFileWithProgress(
       }
       try {
         const j = JSON.parse(xhr.responseText) as {
-          files?: Array<Record<string, string>>;
+          files?: Array<Record<string, unknown>>;
         };
         const item = (j.files || [])[0];
         if (!item?.relative_path) {
@@ -130,10 +133,13 @@ export function uploadSessionFileWithProgress(
         }
         resolve({
           attachment: {
-            relative_path: item.relative_path,
-            original_relative_path: item.original_relative_path,
-            original_name: item.original_name,
-            mime: item.mime,
+            relative_path: String(item.relative_path),
+            original_relative_path: item.original_relative_path as string | undefined,
+            original_name: item.original_name as string | undefined,
+            mime: item.mime as string | undefined,
+            converted_docx_path: item.converted_docx_path as string | undefined,
+            legacy_word: Boolean(item.legacy_word),
+            conversion_status: item.conversion_status as string | undefined,
           },
         });
       } catch {

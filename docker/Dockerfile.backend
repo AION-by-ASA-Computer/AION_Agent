@@ -78,6 +78,7 @@ RUN apt-get update \
     nodejs \
     npm \
     podman \
+    libreoffice-writer-nogui \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia il venv (contiene tutti i pacchetti Python + console scripts)

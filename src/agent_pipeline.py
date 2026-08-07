@@ -657,6 +657,10 @@ class AgentPipeline:
 
             from src.tools.doc_auto_ingest import load_manifest
             from src.tools.doc_ingest import slugify_document_name
+            from src.tools.office_auto_convert import (
+                load_conversion_manifest,
+                retry_legacy_word_conversion,
+            )
 
             for a in new_files:
                 rp = a.get("relative_path", "")
@@ -698,6 +702,56 @@ class AgentPipeline:
                         f"\n### PDF `{slug}`: extraction in progress or not started. "
                         "If pages are missing after a few seconds, call doc_ingest(relative_path=...)."
                     )
+
+                on = (a.get("original_name") or Path(rp).name).lower()
+                is_legacy = (
+                    a.get("legacy_word")
+                    or on.endswith(".doc")
+                    or on.endswith(".dot")
+                    or (mime or "").startswith("application/msword")
+                )
+                if is_legacy:
+                    conv = a.get("converted_docx_path") or ""
+                    status = a.get("conversion_status") or ""
+                    manifest = load_conversion_manifest(self.session_id, rp)
+                    if manifest:
+                        conv = conv or str(manifest.get("converted_docx_path") or "")
+                        status = status or str(manifest.get("conversion_status") or "")
+                    elif not conv and not status:
+                        retried = retry_legacy_word_conversion(self.session_id, rp)
+                        if retried.get("conversion_status") == "ok":
+                            conv = str(retried.get("converted_docx_path") or "")
+                            status = "ok"
+                    if conv and status == "ok":
+                        lines.append(
+                            f"\n### Legacy Word → DOCX ready for `{on}`"
+                        )
+                        lines.append(
+                            f"- Original (binary .doc): `{rp}` — do NOT unpack or docx2txt on this file"
+                        )
+                        lines.append(
+                            f"- **Use this path for editing**: `{conv}` (OpenXML .docx)"
+                        )
+                        lines.append(
+                            "- Workflow: `skill_view('docx')` then unpack/edit/pack on the .docx path"
+                        )
+                    elif status == "unavailable":
+                        lines.append(
+                            f"\n### Legacy Word `{on}`: conversion unavailable on server "
+                            "(LibreOffice/soffice missing). Ask admin to install LibreOffice "
+                            "or set AION_SOFFICE_PATH."
+                        )
+                    elif status == "failed":
+                        err = a.get("conversion_error") or "unknown error"
+                        lines.append(
+                            f"\n### Legacy Word `{on}`: auto-conversion failed ({err}). "
+                            "Re-upload after fixing the file or convert manually to .docx."
+                        )
+                    else:
+                        lines.append(
+                            f"\n### Legacy Word `{on}`: conversion pending or not started. "
+                            "Wait a moment; the server converts .doc → .docx on upload."
+                        )
 
             if old_files:
                 lines.append(
