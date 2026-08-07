@@ -145,6 +145,7 @@ Contains the Python wrappers of the tools exposed to the agent.
 - [promo_capture.py](src/tools/promo_capture.py): Performs graphic capture (screenshots) of HTML reports and dashboards using integrated Chromium (Playwright).
 - [prometheus_tools.py](src/tools/prometheus_tools.py) and [grafana_tools.py](src/tools/grafana_tools.py): PromQL queries and interaction with Grafana.
 - [office_convert.py](src/tools/office_convert.py) and [office_auto_convert.py](src/tools/office_auto_convert.py): Legacy `.doc` → `.docx` via LibreOffice on upload.
+- [pdf_evidence.py](src/tools/pdf_evidence.py): PDF page crop for Word report evidence images (MCP `pdf_evidence_crop`).
 
 #### `src/a2a/` and `src/plan_execution/` — Inter-agent protocol and Execution
 

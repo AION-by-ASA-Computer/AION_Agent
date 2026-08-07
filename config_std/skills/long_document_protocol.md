@@ -4,7 +4,7 @@ description: "Mandatory protocol for finding and extracting facts from PDFs long
 tags: [core, protocol, documents, pdf, ocr, extraction]
 status: verified
 source: curated
-version: 2
+version: 3
 ---
 
 # Long Document Protocol
@@ -92,6 +92,30 @@ Always read `page-1` and `page+1` as well. Clauses run across page breaks: a
 prescription that starts at the bottom of one page and ends on the next is silently
 truncated if you only read the page that matched.
 
+## Step 4b — Evidence images (mandatory for Word deliverables)
+
+For every finding that will appear in a report with a screenshot, call:
+
+```
+pdf_evidence_crop(
+    relative_path="uploads/<file>.pdf",
+    page=<page>,
+    caption="<source_doc> / <section> / pag. <page>",
+)
+```
+
+Rules:
+
+| Rule | Why |
+|------|-----|
+| Use `pdf_evidence_crop`, not `pdftoppm` full-page | Full-page dumps fail the white-ratio guard and look unprofessional in Word. |
+| Caption is mandatory | Every figure in the deliverable must cite doc / section / PDF page. |
+| Read the sidecar JSON | `derived/docs/<slug>/evidence/eNNN.json` carries `white_ratio`, `bbox`, `cropped`. |
+| If `ok: false` with `too_much_whitespace` | Tighten with an explicit `bbox`, or call `sandbox_list_files(subdir="uploads")` if the PDF path was wrong — do not attach the image. |
+
+PNG output lives under `derived/docs/<slug>/evidence/eNNN.png`. Reference those paths in the
+`docx` deliverable (or `scripts/report/build_evidence_report.py` when available).
+
 ## Step 5 — Record findings as you go
 
 Append to `workspace/<slug>_findings.json`, one object per extracted item, never in
@@ -130,6 +154,17 @@ Every claim carries its `source_doc` and `page`. For a Word/Excel deliverable, l
 `docx` / `xlsx` skill and build it **from `workspace/<slug>_findings.json`**, not from
 the conversation, so the citations cannot drift.
 
+Preferred Word workflow when evidence PNGs exist:
+
+1. Collect findings JSON + all `derived/docs/<slug>/evidence/eNNN.png` paths (and sidecars).
+2. If `skill_view("docx")` materialized `scripts/report/build_evidence_report.py`, run it
+   to produce a structured report (cover, scadenziario, per-prescription body, figure appendix).
+3. Otherwise build with docx-js / python-docx, embedding PNGs from `derived/.../evidence/`
+   — never from ad-hoc full-page `pdftoppm` output.
+4. **Run QA before delivery:** `python scripts/report/qa_evidence_images.py <png...>` (or
+   `--glob derived/docs/<slug>/evidence/*.png`). If it fails, re-crop with `pdf_evidence_crop`;
+   do not deliver the report.
+
 ## Troubleshooting
 
 | Symptom | Action |
@@ -139,3 +174,5 @@ the conversation, so the citations cannot drift.
 | Grep returns nothing | Your pattern is too narrow, or you grepped the wrong root. Confirm with a pattern you know is present, e.g. a word from `first_page_excerpt`. |
 | Grep returns `truncated: true` | Split by page range; do not treat it as the full result. |
 | Tool timeout | Reduce the page range. Do not repeat the same call unchanged. |
+| `pdf_evidence_crop` returns `too_much_whitespace` | Provide a tighter `bbox` in PDF points, or confirm the page has visible content. |
+| Evidence QA fails | Re-run `pdf_evidence_crop` with bbox; never ship full-page screenshots. |

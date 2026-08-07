@@ -316,7 +316,7 @@ python -m src.mcp_import -i claude_desktop_config.json -o config/mcp_registry.lo
 | `skills_hub` | `mcp_servers/skills_hub/` | Skill search, list, view |
 | `code` | `mcp_servers/code_executor/` | Execute code in sandbox |
 | `session_sandbox` | `mcp_servers/session_sandbox/` | Session workspace operations |
-| `ocr` | `mcp_servers/ocr_mcp/` | OCR processing |
+| `ocr` | `mcp_servers/ocr_mcp/` | OCR + document ingest (`doc_ingest`, `ocr_file`, **`pdf_evidence_crop`**) |
 | `geocoding` | `mcp_servers/geocoding/` | Forward/reverse geocode via OpenStreetMap Nominatim (`geocode_place`, `reverse_geocode`) |
 | `promo_render` | `mcp_servers/promo_render/` | Promotional graphics React/HTML → PNG |
 | `agent_db` | `mcp_servers/agent_db/` | Agent SQLite database for structured memory |

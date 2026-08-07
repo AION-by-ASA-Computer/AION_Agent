@@ -117,6 +117,8 @@ Reload profile/skill or restart backend after upgrading; proprietary `docx` skil
 
 Run `python scripts/merge_mcp_registry_from_std.py` and restart the API.
 
+For PDF → Word reports with evidence screenshots, see [PDF evidence images](./document-evidence.md).
+
 ---
 
 ## Related source files

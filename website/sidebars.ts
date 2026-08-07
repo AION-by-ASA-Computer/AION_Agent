@@ -36,6 +36,7 @@ const sidebars: SidebarsConfig = {
         'configuration/profiles',
         'configuration/skills-and-prompts',
         'configuration/office-and-legacy-word',
+        'configuration/document-evidence',
         'configuration/soul-memory-user',
       ],
     },

@@ -371,6 +371,91 @@ async def ocr_file(
     return f"MIME type not supported for OCR: {mime}. Use images (png, jpeg, webp, tiff) o PDF."
 
 
+@mcp.tool()
+async def pdf_evidence_crop(
+    relative_path: str,
+    page: int,
+    bbox: dict | None = None,
+    full_page: bool = False,
+    dpi: int = 0,
+    caption: str = "",
+) -> str:
+    """
+    Crop a PDF page region into a PNG evidence image for Word report deliverables.
+
+    Writes ``derived/docs/<slug>/evidence/eNNN.png`` plus a JSON sidecar with page,
+    bbox, dpi, white_ratio, and caption. Use after ``doc_ingest`` + grep when you need
+    a screenshot for a cited page — never attach a full-page ``pdftoppm`` dump as evidence.
+
+    Args:
+        relative_path: Session path to the PDF (e.g. ``uploads/decreto.pdf``).
+        page: 1-based page number.
+        bbox: Optional clip in PDF points ``{x0, y0, x1, y1}``. When omitted and
+            ``full_page`` is false, the page is rendered then auto-trimmed to content.
+        full_page: When true (and no bbox), keep the entire page without auto-trim.
+        dpi: Render resolution (default from ``AION_PDF_EVIDENCE_DPI``, usually 200).
+        caption: Required caption for the figure (e.g. ``decreto / §8.9 / pag. 101``).
+
+    Returns JSON with ``ok``, ``png_path``, ``sidecar_path``, ``white_ratio``. Fails with
+    ``too_much_whitespace`` when the result is mostly blank (full-page dump guard).
+    """
+    import asyncio
+    import json
+
+    from src.session_workspace import ensure_session_dirs, safe_resolve, session_root
+    from src.tools.pdf_evidence import default_dpi, pdf_evidence_crop_sync
+
+    sid = _require_session()
+    ensure_session_dirs(sid)
+    try:
+        path = safe_resolve(sid, relative_path, must_exist=True)
+    except FileNotFoundError:
+        from src.session_workspace import list_dir
+
+        pdfs = [
+            row["relative_path"]
+            for row in list_dir(sid, subdir="uploads")
+            if str(row.get("mime", "")).endswith("pdf")
+            or str(row.get("name", "")).lower().endswith(".pdf")
+        ]
+        hint = "Call sandbox_list_files(subdir='uploads') to list uploaded files."
+        if pdfs:
+            hint = (
+                f"PDF not found at {relative_path!r}. Available uploads: "
+                + ", ".join(pdfs[:8])
+                + (" …" if len(pdfs) > 8 else "")
+            )
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "path_error",
+                "message": f"file not found: {relative_path}",
+                "hint": hint,
+                "upload_pdfs": pdfs[:12],
+            },
+            ensure_ascii=False,
+        )
+    except Exception as e:
+        return json.dumps(
+            {"ok": False, "error": "path_error", "message": str(e)},
+            ensure_ascii=False,
+        )
+
+    render_dpi = dpi if dpi and dpi > 0 else default_dpi()
+    result = await asyncio.to_thread(
+        pdf_evidence_crop_sync,
+        path,
+        session_root(sid),
+        page=page,
+        bbox=bbox,
+        full_page=full_page,
+        dpi=render_dpi,
+        caption=caption,
+        source_relative_path=relative_path.strip().lstrip("/"),
+    )
+    return json.dumps(result, ensure_ascii=False)
+
+
 if __name__ == "__main__":
     import asyncio
     import traceback

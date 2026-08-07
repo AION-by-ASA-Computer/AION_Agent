@@ -99,8 +99,10 @@ These variables **enable/disable** advanced features:
 | `AION_GEOCODING_NOMINATIM_URL` | `https://nominatim.openstreetmap.org` | Nominatim base URL for MCP `geocoding` |
 | `AION_GEOCODING_USER_AGENT` | *(required for Nominatim)* | User-Agent string for geocoding requests |
 | `AION_GEOCODING_MIN_INTERVAL_SEC` | `1.1` | Min interval between Nominatim calls (rate limit) |
+| `AION_PDF_EVIDENCE_DPI` | `200` | Default DPI for MCP `pdf_evidence_crop` |
+| `AION_PDF_EVIDENCE_MAX_WHITE_RATIO` | `0.90` | Reject evidence crops above this white pixel ratio |
 
-Session uploads, legacy Word conversion, and PDF auto-ingest are documented in [Office files and legacy Word](./office-and-legacy-word.md).
+Session uploads, legacy Word conversion, and PDF auto-ingest are documented in [Office files and legacy Word](./office-and-legacy-word.md). PDF evidence crops for Word reports: [PDF evidence images](./document-evidence.md).
 
 
 ### 🔵 Observability and Telemetry Variables (V3)

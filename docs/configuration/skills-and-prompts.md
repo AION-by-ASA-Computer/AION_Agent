@@ -25,6 +25,8 @@ The curated skill **`artifact_protocol`** (`config_std/skills/artifact_protocol.
 
 Companion skill **`docx`** documents the docx-js workflow (`skill_view` → `sandbox_install_npm_packages` → write script → `sandbox_run_node_file`). Legacy **`.doc`** (Word 97–2003) is converted to `.docx` on the API host at upload — see [Office files and legacy Word](./office-and-legacy-word.md).
 
+For multi-page PDF → Word reports with screenshots, skill **`long_document_protocol`** requires MCP **`pdf_evidence_crop`** (server `ocr`) instead of full-page `pdftoppm`. See [PDF evidence images](./document-evidence.md).
+
 ## Skill file format
 
 Skills are **Markdown** files with **YAML frontmatter** (`python-frontmatter`):
