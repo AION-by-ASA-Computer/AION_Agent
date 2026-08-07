@@ -35,6 +35,7 @@ const sidebars: SidebarsConfig = {
         'configuration/web-search-and-fetch',
         'configuration/profiles',
         'configuration/skills-and-prompts',
+        'configuration/office-and-legacy-word',
         'configuration/soul-memory-user',
       ],
     },

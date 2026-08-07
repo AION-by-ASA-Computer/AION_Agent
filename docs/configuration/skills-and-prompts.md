@@ -23,7 +23,7 @@ Extended tool descriptions for sandbox write/edit/patch live in `config_std/tool
 
 The curated skill **`artifact_protocol`** (`config_std/skills/artifact_protocol.md`, v8) is the single source for file-delivery rules. Legacy per-strategy skills (`artifact_protocol_tool`, `artifact_protocol_xml`, `artifact_protocol_markdown`) were removed — delivery is always via sandbox tools unless `AION_ARTIFACT_STREAM_LEGACY=1`.
 
-Companion skill **`docx`** documents the docx-js workflow (`skill_view` → `sandbox_install_npm_packages` → write script → `sandbox_run_node_file`).
+Companion skill **`docx`** documents the docx-js workflow (`skill_view` → `sandbox_install_npm_packages` → write script → `sandbox_run_node_file`). Legacy **`.doc`** (Word 97–2003) is converted to `.docx` on the API host at upload — see [Office files and legacy Word](./office-and-legacy-word.md).
 
 ## Skill file format
 

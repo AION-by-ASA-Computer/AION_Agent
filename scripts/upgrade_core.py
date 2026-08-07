@@ -1686,6 +1686,7 @@ def main() -> int:
             ROOT / "scripts/setup_core.py",
             ROOT / "scripts/sync_config.py",
             ROOT / "scripts/sync_mcp_servers.py",
+            ROOT / "scripts/merge_mcp_registry_from_std.py",
             ROOT / "scripts/init_unified_db.py",
             ROOT / "scripts/check_env_example_coverage.py",
         ]

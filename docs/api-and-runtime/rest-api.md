@@ -325,7 +325,29 @@ Sends a cancellation signal to immediately stop the generation of the response i
 `POST /v1/conversations/{conversation_id}/files` (Requires `files:write`)
 
 Allows multipart/form-data sending of files to be analyzed.
-Returns an array of attachments saved in the `uploads/` folder of the session:
+Returns an array of attachments saved in the `uploads/` folder of the session.
+For legacy **`.doc`** uploads, the API host may also set conversion metadata (LibreOffice on the API process — see [Office and legacy Word](../configuration/office-and-legacy-word.md)):
+
+```json
+{
+  "attachments": [
+    {
+      "relative_path": "uploads/01907a5e_report.doc",
+      "original_relative_path": "uploads/report.doc",
+      "name": "01907a5e_report.doc",
+      "original_name": "report.doc",
+      "size_bytes": 18780160,
+      "mime": "application/msword",
+      "legacy_word": true,
+      "conversion_status": "ok",
+      "converted_docx_path": "derived/converted/report.docx"
+    }
+  ]
+}
+```
+
+Plain text upload (no conversion):
+
 ```json
 {
   "attachments": [
