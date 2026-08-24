@@ -24,7 +24,7 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@fa4ff678dd5d0a4fa3d628e57af8162873e93cd6 # main (export-results=false)
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@ffa0a5f39214d80778c9b494822d94d0d9668458 # main (export-results=false)
     with:
       export-results: false
 
@@ -37,7 +37,7 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@fa4ff678dd5d0a4fa3d628e57af8162873e93cd6 # main (export-results=false)
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@ffa0a5f39214d80778c9b494822d94d0d9668458 # main (export-results=false)
     with:
       upload-sarif: false
       export-results: false
