@@ -1030,7 +1030,8 @@ class MCPManager:
     def server_exists(self, name: str) -> bool:
         return bool(name) and name in self._registry
 
-    def get_python_exe(self, server_name: str) -> str:
+    @staticmethod
+    def get_python_exe(server_name: str) -> str:
         venv_path = _repo_root() / "mcp_servers" / server_name / ".venv"
         if venv_path.exists():
             if sys.platform == "win32":
