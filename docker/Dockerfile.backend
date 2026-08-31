@@ -90,6 +90,10 @@ COPY --from=uv-bin /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
+# mcp-remote proxy for remote-bridge MCP servers (ClickUp, Notion, GitHub Copilot, …)
+COPY docker/package.mcp-remote.json ./package.json
+RUN npm install --omit=dev
+
 # Application code (runtime dirs config/ and mcp_servers/ come from sync at boot)
 COPY src/              ./src/
 COPY mcp_servers_std/  ./mcp_servers_std/

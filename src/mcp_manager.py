@@ -362,18 +362,9 @@ class MCPStdioWorker:
                 raise ValueError(
                     f"MCP server '{self.server_name}' not found in registry"
                 )
-            command = config.get("command", "python")
-            if command == "python":
-                command = self._manager.get_python_exe(self.server_name)
-            elif isinstance(command, str) and (
-                "/" in command or os.path.sep in command
-            ):
-                cmd_path = Path(command)
-                if not cmd_path.is_absolute():
-                    cand = _repo_root() / command
-                    if cand.is_file():
-                        command = str(cand.resolve())
-            args = self._manager.resolve_stdio_args(list(config.get("args", [])))
+            command, args = self._manager.resolve_stdio_spawn_command(
+                self.server_name, config
+            )
             env = os.environ.copy()
             project_root = os.getcwd()
             env.setdefault("FASTMCP_LOG_LEVEL", "ERROR")
@@ -1096,6 +1087,28 @@ class MCPManager:
         return None
 
     @classmethod
+    def resolve_stdio_spawn_command(
+        cls, server_name: str, config: Dict[str, Any]
+    ) -> Tuple[str, List[str]]:
+        """Resolve process command + args for stdio / remote-bridge MCP servers."""
+        if (config.get("type") or "stdio").lower() == "remote-bridge":
+            from src.mcp_remote_install import resolve_remote_bridge_spawn
+
+            return resolve_remote_bridge_spawn(config)
+
+        command = config.get("command", "python")
+        if command == "python":
+            command = cls.get_python_exe(server_name)
+        elif isinstance(command, str) and ("/" in command or os.path.sep in command):
+            cmd_path = Path(command)
+            if not cmd_path.is_absolute():
+                cand = _repo_root() / command
+                if cand.is_file():
+                    command = str(cand.resolve())
+        args = cls.resolve_stdio_args(list(config.get("args", [])))
+        return command, args
+
+    @classmethod
     def resolve_stdio_args(cls, args: List[str]) -> List[str]:
         """Risolve path di file sotto ``mcp_servers/`` o repo root; non convertire flag."""
         root = _repo_root()
@@ -1135,10 +1148,9 @@ class MCPManager:
         if t in ("sse", "in_process"):
             return None
         if t == "remote-bridge":
-            local_path = os.path.join(
-                os.getcwd(), "node_modules", "mcp-remote", "dist", "proxy.js"
-            )
-            if os.path.exists(local_path):
+            from src.mcp_remote_install import mcp_remote_proxy_path
+
+            if mcp_remote_proxy_path():
                 if not shutil.which("node"):
                     return "node command not found. Node.js is required to run remote-bridge."
                 return None
@@ -1739,18 +1751,7 @@ class MCPManager:
                     yield session
 
         else:
-            command = config.get("command", "python")
-            if command == "python":
-                command = self.get_python_exe(name)
-            elif isinstance(command, str) and (
-                "/" in command or os.path.sep in command
-            ):
-                cmd_path = Path(command)
-                if not cmd_path.is_absolute():
-                    cand = _repo_root() / command
-                    if cand.is_file():
-                        command = str(cand.resolve())
-            args = self.resolve_stdio_args(list(config.get("args", [])))
+            command, args = self.resolve_stdio_spawn_command(name, config)
             env = os.environ.copy()
             project_root = os.getcwd()
             env.setdefault("FASTMCP_LOG_LEVEL", "WARNING")
