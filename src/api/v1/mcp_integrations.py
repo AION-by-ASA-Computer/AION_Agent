@@ -440,8 +440,11 @@ def _oauth_redirect_api_base(request: Optional[Request] = None) -> str:
         return explicit
 
     public = (os.getenv("AION_PUBLIC_API_URL") or "").strip().rstrip("/")
-    if _is_absolute_http_url(public) and public.lower().endswith("/api"):
-        return public
+    if _is_absolute_http_url(public):
+        if public.lower().endswith("/api"):
+            return public
+        # https://dominio.example.com → https://dominio.example.com/api
+        return f"{public}/api"
 
     chat = (os.getenv("AION_CHAT_URL") or "").strip().rstrip("/")
     if _is_absolute_http_url(chat):
@@ -593,9 +596,10 @@ async def _oauth_dynamic_client_register(
             )
             if reg_resp.status_code not in (200, 201):
                 logger.warning(
-                    "oauth_start: dynamic registration HTTP %s slug=%s body=%s",
+                    "oauth_start: dynamic registration HTTP %s slug=%s redirect_uri=%r body=%s",
                     reg_resp.status_code,
                     server_slug,
+                    redirect_uri,
                     reg_resp.text[:300],
                 )
                 return False
@@ -824,7 +828,15 @@ async def oauth_start(
     oauth_cfg = _apply_catalog_oauth_defaults(oauth_cfg, server_slug, reg_cfg)
 
     # Determina il redirect_uri prima della discovery (serve per la dynamic registration)
+    raw_redirect_uri = redirect_uri
     redirect_uri = _resolve_oauth_redirect_uri(redirect_uri, request)
+    logger.info(
+        "oauth_start: slug=%s redirect_uri raw=%r resolved=%r oauth_base_env=%r",
+        server_slug,
+        raw_redirect_uri,
+        redirect_uri,
+        (os.getenv("AION_OAUTH_REDIRECT_BASE_URL") or "").strip() or None,
+    )
 
     modified = False
 
