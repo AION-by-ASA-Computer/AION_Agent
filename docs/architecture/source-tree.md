@@ -59,7 +59,7 @@ The APIs represent the "boundary" that separates the agent's business logic from
 | [cron_admin.py](src/api/cron_admin.py) & [cron_user.py](src/api/cron_user.py) | Cron Job scheduling APIs | Endpoints to create, monitor, and delete periodic/scheduled tasks of the agent. |
 | [research.py](src/api/research.py) | Deep Research APIs | Support for external queries for running deep research cycles. |
 | [history.py](src/api/history.py) | STM & FTS data layer | Provides services to retrieve chat history and full-text searches on old messages. |
-| [session_uploads.py](src/api/session_uploads.py) | File upload management | Dedicated endpoint for uploading attachments (PDFs, images) to be stored in the session. |
+| [session_uploads.py](src/api/session_uploads.py) | File upload management | Upload attachments to `uploads/`; triggers PDF auto-ingest and legacy `.doc` → `.docx` conversion on the API host. |
 | [admin.py](src/api/admin.py) | Administrative CRUD dashboard | Endpoints for centralized management of profiles, users, sessions, and installed skills. |
 | [admin_agent_db.py](src/api/admin_agent_db.py) | Personal Agents Database CRUD | Administration and export of the isolated SQLite databases of each user. |
 | [admin_profile_memory.py](src/api/admin_profile_memory.py) | SOUL/MEMORY/USER CRUD | Management of persistent profile files for agents (legacy endpoints). |
@@ -144,6 +144,8 @@ Contains the Python wrappers of the tools exposed to the agent.
 - [skill_materialize.py](src/tools/skill_materialize.py): Physically materializes distilled skills on disk.
 - [promo_capture.py](src/tools/promo_capture.py): Performs graphic capture (screenshots) of HTML reports and dashboards using integrated Chromium (Playwright).
 - [prometheus_tools.py](src/tools/prometheus_tools.py) and [grafana_tools.py](src/tools/grafana_tools.py): PromQL queries and interaction with Grafana.
+- [office_convert.py](src/tools/office_convert.py) and [office_auto_convert.py](src/tools/office_auto_convert.py): Legacy `.doc` → `.docx` via LibreOffice on upload.
+- [pdf_evidence.py](src/tools/pdf_evidence.py): PDF page crop for Word report evidence images (MCP `pdf_evidence_crop`).
 
 #### `src/a2a/` and `src/plan_execution/` — Inter-agent protocol and Execution
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 
 from src.runtime.mcp_tool_result import (
+    build_timeout_message,
     classify_tool_result_text,
     format_exception_for_tool,
 )
@@ -52,6 +53,36 @@ def test_format_exception_for_tool():
     data = json.loads(body)
     assert data["ok"] is False
     assert "connection reset" in data["message"]
+
+
+def test_timeout_message_for_postgres_keeps_sql_guidance():
+    msg = build_timeout_message("toolbox-postgres", "query")
+    assert "PostgreSQL cap" in msg
+    assert "Heavy JOINs" in msg
+
+
+def test_timeout_message_for_document_tools_is_not_about_sql():
+    """A PostgreSQL hint on an OCR timeout actively derails the model."""
+    for tool in ("ocr_file", "doc_ingest"):
+        msg = build_timeout_message("ocr", tool)
+        assert "PostgreSQL" not in msg
+        assert "JOIN" not in msg
+        assert "doc_ingest" in msg
+        assert "first_page" in msg
+
+
+def test_timeout_message_generic_tool_has_no_sql_or_false_recycle_claim():
+    msg = build_timeout_message("session_sandbox", "sandbox_run_python_file")
+    assert "PostgreSQL" not in msg
+    # Only the Postgres path actually restarts the worker.
+    assert "recycled" not in msg
+    assert "AION_MCP_TOOL_RESULT_TIMEOUT" in msg
+
+
+def test_timeout_message_handles_prefixed_tool_names():
+    msg = build_timeout_message("ocr", "ocr-doc_ingest")
+    assert "doc_ingest" in msg
+    assert "PostgreSQL" not in msg
 
 
 def test_classify_skill_view_not_error_despite_keywords():

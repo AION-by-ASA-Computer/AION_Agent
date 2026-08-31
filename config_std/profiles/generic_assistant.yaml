@@ -24,6 +24,7 @@ skills:
 - web_research_protocol
 - incremental_execution_protocol
 - email_imap_mcp
+- long_document_protocol
 - docx
 - pdf
 - xlsx
@@ -42,4 +43,5 @@ mcp_servers:
 - session_sandbox
 - skills_hub
 - ocr
+- geocoding
 - email-mcp-server

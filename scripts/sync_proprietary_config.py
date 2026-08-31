@@ -112,6 +112,11 @@ def sync_proprietary_config(
         f"\nSync proprietario completato. "
         f"Copiati: {copied}  Sovrascritti: {overwritten}  Saltati: {skipped}\n"
     )
+    if copied == 0 and skipped > 0 and not force:
+        print(
+            "Suggerimento: nuovi file in config_proprietary/ non copiati (modalità safe). "
+            "Esegui: python scripts/sync_proprietary_config.py --force\n"
+        )
     return 0
 
 

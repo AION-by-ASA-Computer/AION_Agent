@@ -91,9 +91,19 @@ These variables **enable/disable** advanced features:
 | `AION_AGENT_MIN_REASONING_CHARS_WITHOUT_TOOL` | `6000` | SSE `turn_status` if many reasoning characters without tool (0=off) |
 | `AION_AGENT_MAX_REASONING_WITHOUT_TOOL` | `0` | Optional: threshold on SSE reasoning chunk (0=ignore; prefer chars) |
 | `AION_REASONING_HARD_STOP` | `0` | If `1`, interrupts the turn when it exceeds **both** `AION_REASONING_MAX_*` (not recommended: empty response) |
-| `AION_SQL_QM_PARAMETERIZE` | `1` | Literals → `?` before save SQL QueryMemory |
+| `AION_UPLOAD_MAX_BYTES` | `52428800` | Max size per uploaded file (session `uploads/`) |
+| `AION_OFFICE_AUTO_CONVERT_LEGACY_WORD` | `1` | Auto-convert legacy `.doc` → `.docx` on upload via LibreOffice on the API host |
+| `AION_SOFFICE_PATH` | *(auto)* | Path to `soffice` if not on `PATH` (macOS: LibreOffice.app bundle) |
+| `AION_OFFICE_CONVERT_TIMEOUT_SEC` | `90` | Timeout for `.doc` conversion |
+| `AION_DOC_AUTO_INGEST` | `1` | Background PDF text extraction on upload (PyMuPDF) |
+| `AION_GEOCODING_NOMINATIM_URL` | `https://nominatim.openstreetmap.org` | Nominatim base URL for MCP `geocoding` |
+| `AION_GEOCODING_USER_AGENT` | *(required for Nominatim)* | User-Agent string for geocoding requests |
+| `AION_GEOCODING_MIN_INTERVAL_SEC` | `1.1` | Min interval between Nominatim calls (rate limit) |
+| `AION_PDF_EVIDENCE_DPI` | `200` | Default DPI for MCP `pdf_evidence_crop` |
+| `AION_PDF_EVIDENCE_MAX_WHITE_RATIO` | `0.90` | Reject evidence crops above this white pixel ratio |
 
-Mnemos LTM has additional knobs (ranking weights, dream schedule, embedding scan limits). See [Mnemos Architectural Hardening](../memory/mnemos-hardening.md#environment-variables) and `.env.example`.
+Session uploads, legacy Word conversion, and PDF auto-ingest are documented in [Office files and legacy Word](./office-and-legacy-word.md). PDF evidence crops for Word reports: [PDF evidence images](./document-evidence.md).
+
 
 ### 🔵 Observability and Telemetry Variables (V3)
 

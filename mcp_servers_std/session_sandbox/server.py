@@ -24,7 +24,11 @@ def _sid() -> str:
 
 @mcp.tool()
 def sandbox_list_files(subdir: str = "uploads", recursive: bool = False) -> str:
-    """List files under uploads/, derived/, workspace/ o unpacked/. Con recursive=True include sottocartelle."""
+    """List files under uploads/, derived/, workspace/ (or nested paths like workspace/screenshots/).
+
+    Use subdir="uploads" to find uploaded PDFs. For nested folders, pass the full relative
+    path (e.g. subdir="workspace/screenshots") or set recursive=True on a top-level root.
+    """
     import json
     import mimetypes
 

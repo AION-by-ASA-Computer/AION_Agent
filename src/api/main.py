@@ -599,6 +599,9 @@ class AttachmentRef(BaseModel):
     relative_path: str
     original_name: Optional[str] = None
     mime: Optional[str] = None
+    converted_docx_path: Optional[str] = None
+    legacy_word: Optional[bool] = None
+    conversion_status: Optional[str] = None
 
 
 ReasoningEffort = Literal["min", "medium", "max"]

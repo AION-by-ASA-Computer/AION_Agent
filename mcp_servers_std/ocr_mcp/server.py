@@ -145,16 +145,115 @@ async def _ocr_via_api_async(
     return content if isinstance(content, str) else str(content)
 
 
+def _clamp_ingest_budget(requested: float) -> float:
+    """Keep the internal deadline safely below the MCP bridge timeout."""
+    bridge = _env_float("AION_MCP_TOOL_RESULT_TIMEOUT", 120.0)
+    ceiling = max(10.0, bridge - 25.0)
+    try:
+        value = float(requested)
+    except (TypeError, ValueError):
+        value = 90.0
+    if value <= 0:
+        value = ceiling
+    return min(max(value, 10.0), ceiling)
+
+
+@mcp.tool()
+async def doc_ingest(
+    relative_path: str,
+    first_page: int = 1,
+    last_page: int = 0,
+    ocr_mode: str = "auto",
+    budget_sec: float = 90.0,
+    force: bool = False,
+    write_full: bool = False,
+) -> str:
+    """
+    Extract a PDF into one text file per page under derived/docs/<slug>/pages/.
+
+    This is the entry point for ANY multi-page document. Prefer it over ocr_file and
+    over custom extraction scripts: it never loads the whole document in memory, it
+    skips pages already extracted, and if it runs out of time it returns
+    ``partial: true`` with ``resume_from`` so the next call continues where it stopped.
+
+    ``ocr_mode``: ``auto`` runs OCR only on pages with no usable text layer (cheap on
+    born-digital PDFs), ``never`` disables it, ``always`` forces OCR on every page.
+    ``write_full`` additionally concatenates everything into ``full.txt``; leave it off
+    unless you need sequential reading, because a single large file is skipped by
+    ``sandbox_grep_content`` above AION_GREP_MAX_FILE_BYTES.
+
+    Returns a small JSON manifest: page counts, empty pages, the grep pattern to use,
+    and an excerpt of the first page to confirm the document is the one requested.
+    """
+    import json
+
+    from src.session_workspace import ensure_session_dirs, safe_resolve, session_root
+    from src.tools.doc_ingest import ingest_document
+
+    sid = _require_session()
+    ensure_session_dirs(sid)
+    try:
+        path = safe_resolve(sid, relative_path, must_exist=True)
+    except Exception as e:
+        return json.dumps(
+            {"ok": False, "error": "path_error", "message": str(e)},
+            ensure_ascii=False,
+        )
+
+    async def _ocr_page(page_no: int, image_bytes: bytes, mime: str) -> str:
+        return await _ocr_via_api_async(
+            image_bytes,
+            mime,
+            f"Page {page_no}: Extract all visible text. Preserve reading order.",
+        )
+
+    use_ocr = ocr_mode != "never" and _is_advanced_ocr_enabled()
+
+    try:
+        manifest = await ingest_document(
+            path,
+            session_root(sid),
+            first_page=first_page,
+            last_page=last_page,
+            ocr_mode=ocr_mode,
+            budget_sec=_clamp_ingest_budget(budget_sec),
+            force=force,
+            write_full=write_full,
+            ocr_page=_ocr_page if use_ocr else None,
+        )
+    except Exception as e:
+        logger.exception("doc_ingest failed for %s", relative_path)
+        return json.dumps(
+            {"ok": False, "error": "ingest_failed", "message": str(e)},
+            ensure_ascii=False,
+        )
+
+    if manifest.get("ok") and not use_ocr and manifest.get("empty_pages_count"):
+        manifest["warning"] = (
+            f"{manifest['empty_pages_count']} page(s) have no text layer and OCR is "
+            "unavailable (ocr_mode=never or OCR service not configured). Those pages "
+            "are empty in the extraction."
+        )
+    return json.dumps(manifest, ensure_ascii=False)
+
+
 @mcp.tool()
 async def ocr_file(
     relative_path: str,
     instruction: str = "Extract all visible text. Preserve reading order.",
     max_pages: int = 20,
+    first_page: int = 1,
+    last_page: int = 0,
 ) -> str:
     """
-    Extract text from a session file (uploads/, derived/, workspace/).
-    ALWAYS use the vision-based OCR model (vLLM/OpenAI) per la massima precisione.
-    Per i PDF, elabora le pagine in parallelo.
+    Extract text from a session file (uploads/, derived/, workspace/) via vision OCR.
+
+    For multi-page PDFs prefer ``doc_ingest``: it is far cheaper, writes one file per
+    page and resumes after a timeout. Use ``ocr_file`` for single images or a small
+    page range of a scanned PDF.
+
+    Page range (PDF only): ``first_page``/``last_page`` are 1-based and inclusive.
+    Leave ``last_page=0`` to read ``max_pages`` pages starting at ``first_page``.
     """
     from src.session_workspace import ensure_session_dirs, safe_resolve
     import asyncio
@@ -207,8 +306,15 @@ async def ocr_file(
             from pdf2image import convert_from_path
 
             # Carichiamo le impostazioni o usiamo il parametro
-            limit = _env_int("AION_OCR_PDF_MAX_PAGES", max_pages)
-            images = convert_from_path(str(path), first_page=1, last_page=limit)
+            span = _env_int("AION_OCR_PDF_MAX_PAGES", max_pages)
+            start = max(1, int(first_page or 1))
+            if last_page and int(last_page) >= start:
+                end = int(last_page)
+            else:
+                end = start + max(1, span) - 1
+            # Never let an explicit range exceed the configured per-call page budget.
+            end = min(end, start + max(1, span) - 1)
+            images = convert_from_path(str(path), first_page=start, last_page=end)
 
             # Limit parallel calls to avoid overloading the OCR server
             sem = asyncio.Semaphore(5)
@@ -223,20 +329,26 @@ async def ocr_file(
                 img.save(buf, format="JPEG", quality=85)
                 img_data = buf.getvalue()
                 tasks.append(
-                    limited_ocr(img_data, "image/jpeg", f"Page {i + 1}: {instruction}")
+                    limited_ocr(
+                        img_data, "image/jpeg", f"Page {start + i}: {instruction}"
+                    )
                 )
 
             logger.info(
-                f"Starting parallel OCR (limit 5) for {len(tasks)} pages of {path.name}"
+                "Starting parallel OCR (limit 5) for pages %d-%d of %s",
+                start,
+                start + len(tasks) - 1,
+                path.name,
             )
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             all_text = []
             for i, res in enumerate(results):
+                page_no = start + i
                 if isinstance(res, Exception):
-                    all_text.append(f"--- PAGE {i + 1} ERROR ---\n{res}")
+                    all_text.append(f"--- PAGE {page_no} ERROR ---\n{res}")
                 else:
-                    all_text.append(f"--- PAGE {i + 1} ---\n{res}")
+                    all_text.append(f"--- PAGE {page_no} ---\n{res}")
 
             return "\n\n".join(all_text)
         except Exception as e:
@@ -257,6 +369,91 @@ async def ocr_file(
             return f"OCR call error: {e}"
 
     return f"MIME type not supported for OCR: {mime}. Use images (png, jpeg, webp, tiff) o PDF."
+
+
+@mcp.tool()
+async def pdf_evidence_crop(
+    relative_path: str,
+    page: int,
+    bbox: dict | None = None,
+    full_page: bool = False,
+    dpi: int = 0,
+    caption: str = "",
+) -> str:
+    """
+    Crop a PDF page region into a PNG evidence image for Word report deliverables.
+
+    Writes ``derived/docs/<slug>/evidence/eNNN.png`` plus a JSON sidecar with page,
+    bbox, dpi, white_ratio, and caption. Use after ``doc_ingest`` + grep when you need
+    a screenshot for a cited page — never attach a full-page ``pdftoppm`` dump as evidence.
+
+    Args:
+        relative_path: Session path to the PDF (e.g. ``uploads/decreto.pdf``).
+        page: 1-based page number.
+        bbox: Optional clip in PDF points ``{x0, y0, x1, y1}``. When omitted and
+            ``full_page`` is false, the page is rendered then auto-trimmed to content.
+        full_page: When true (and no bbox), keep the entire page without auto-trim.
+        dpi: Render resolution (default from ``AION_PDF_EVIDENCE_DPI``, usually 200).
+        caption: Required caption for the figure (e.g. ``decreto / §8.9 / pag. 101``).
+
+    Returns JSON with ``ok``, ``png_path``, ``sidecar_path``, ``white_ratio``. Fails with
+    ``too_much_whitespace`` when the result is mostly blank (full-page dump guard).
+    """
+    import asyncio
+    import json
+
+    from src.session_workspace import ensure_session_dirs, safe_resolve, session_root
+    from src.tools.pdf_evidence import default_dpi, pdf_evidence_crop_sync
+
+    sid = _require_session()
+    ensure_session_dirs(sid)
+    try:
+        path = safe_resolve(sid, relative_path, must_exist=True)
+    except FileNotFoundError:
+        from src.session_workspace import list_dir
+
+        pdfs = [
+            row["relative_path"]
+            for row in list_dir(sid, subdir="uploads")
+            if str(row.get("mime", "")).endswith("pdf")
+            or str(row.get("name", "")).lower().endswith(".pdf")
+        ]
+        hint = "Call sandbox_list_files(subdir='uploads') to list uploaded files."
+        if pdfs:
+            hint = (
+                f"PDF not found at {relative_path!r}. Available uploads: "
+                + ", ".join(pdfs[:8])
+                + (" …" if len(pdfs) > 8 else "")
+            )
+        return json.dumps(
+            {
+                "ok": False,
+                "error": "path_error",
+                "message": f"file not found: {relative_path}",
+                "hint": hint,
+                "upload_pdfs": pdfs[:12],
+            },
+            ensure_ascii=False,
+        )
+    except Exception as e:
+        return json.dumps(
+            {"ok": False, "error": "path_error", "message": str(e)},
+            ensure_ascii=False,
+        )
+
+    render_dpi = dpi if dpi and dpi > 0 else default_dpi()
+    result = await asyncio.to_thread(
+        pdf_evidence_crop_sync,
+        path,
+        session_root(sid),
+        page=page,
+        bbox=bbox,
+        full_page=full_page,
+        dpi=render_dpi,
+        caption=caption,
+        source_relative_path=relative_path.strip().lstrip("/"),
+    )
+    return json.dumps(result, ensure_ascii=False)
 
 
 if __name__ == "__main__":

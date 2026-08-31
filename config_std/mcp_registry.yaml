@@ -43,6 +43,11 @@ ocr:
   args: ["-u", "ocr_mcp/server.py"]
   description: "OCR immagini/PDF tramite servizio dedicato (GLM-OCR)"
 
+geocoding:
+  command: "python"
+  args: ["-u", "geocoding/server.py"]
+  description: "Geocoding WGS84 via OpenStreetMap Nominatim (geocode_place, reverse_geocode)"
+
 session_sandbox:
   command: "python"
   args: ["-u", "session_sandbox/server.py"]

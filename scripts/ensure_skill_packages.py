@@ -49,7 +49,8 @@ def ensure_skill_packages(
     if SYNC_PROPRIETARY.is_file():
         rc = _run([py_exec, str(SYNC_PROPRIETARY), "--force"], dry_run=dry_run)
         if rc != 0:
-            print("[warn] sync_proprietary_config failed", file=sys.stderr)
+            print("[error] sync_proprietary_config failed", file=sys.stderr)
+            return rc
 
     if SYNC_MCP.is_file():
         cmd = [py_exec, str(SYNC_MCP)]
