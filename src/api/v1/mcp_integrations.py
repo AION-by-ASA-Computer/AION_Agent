@@ -410,13 +410,70 @@ def _oauth_dynamic_registration_enabled() -> bool:
     )
 
 
+def _is_absolute_http_url(url: str) -> bool:
+    u = (url or "").strip().lower()
+    return u.startswith("http://") or u.startswith("https://")
+
+
+def _public_api_base_url() -> str:
+    """Absolute public API base (scheme + host + optional path prefix). Skips relative `/api`."""
+    for key in (
+        "AION_OAUTH_REDIRECT_BASE_URL",
+        "AION_PUBLIC_API_URL",
+        "AION_FASTAPI_URL",
+    ):
+        val = (os.getenv(key) or "").strip().rstrip("/")
+        if _is_absolute_http_url(val):
+            return val
+    return ""
+
+
 def _default_oauth_redirect_uri() -> str:
-    aion_api_base = (
-        os.getenv("AION_OAUTH_REDIRECT_BASE_URL")
-        or os.getenv("AION_FASTAPI_URL")
-        or "http://localhost:8001"
+    base = _public_api_base_url()
+    if base:
+        return f"{base}/v1/integrations/oauth/callback"
+    return "/v1/integrations/oauth/callback"
+
+
+def _resolve_oauth_redirect_uri(
+    redirect_uri: Optional[str],
+    request: Optional[Request] = None,
+) -> str:
+    """
+    OAuth providers require an absolute redirect_uri.
+
+    chat-ui in Docker uses NEXT_PUBLIC_AION_API_URL=/api (relative, same-origin fetch).
+    Resolve to https://host/api/v1/integrations/oauth/callback via env or proxy headers.
+    """
+    raw = (redirect_uri or "").strip() or _default_oauth_redirect_uri()
+    if _is_absolute_http_url(raw):
+        return raw
+
+    if raw.startswith("/"):
+        base = _public_api_base_url()
+        if base:
+            return f"{base.rstrip('/')}{raw}"
+        if request is not None:
+            fwd_proto = (
+                request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+            )
+            fwd_host = (
+                request.headers.get("x-forwarded-host", "").split(",")[0].strip()
+            )
+            host = fwd_host or request.headers.get("host", "").split(",")[0].strip()
+            scheme = fwd_proto or request.url.scheme
+            if host:
+                return f"{scheme}://{host}{raw}"
+
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "OAuth redirect_uri deve essere un URL assoluto "
+            "(es. https://dominio.example.com/api/v1/integrations/oauth/callback). "
+            "In Docker imposta AION_OAUTH_REDIRECT_BASE_URL=https://<dominio>/api "
+            f"(o AION_PUBLIC_API_URL assoluto). Ricevuto: {raw!r}"
+        ),
     )
-    return f"{aion_api_base.rstrip('/')}/v1/integrations/oauth/callback"
 
 
 def _apply_catalog_oauth_defaults(
@@ -575,6 +632,7 @@ class OAuthCallbackBody(BaseModel):
 @router.post("/oauth/callback")
 async def oauth_callback(
     body: OAuthCallbackBody,
+    request: Request,
     auth: ChatAuthIdentity = Depends(require_chat_auth),
 ) -> Dict[str, Any]:
     _require_credentials_enabled()
@@ -612,7 +670,7 @@ async def oauth_callback(
             detail=f"OAuth token_url is not configured or discovered for server '{body.server_slug}'.",
         )
 
-    redirect_uri = body.redirect_uri or _default_oauth_redirect_uri()
+    redirect_uri = _resolve_oauth_redirect_uri(body.redirect_uri, request)
 
     from src.runtime.oauth_token_exchange import (
         OAuthTokenExchangeError,
@@ -677,6 +735,7 @@ def _generate_pkce_pair() -> tuple[str, str]:
 
 @router.get("/oauth/start")
 async def oauth_start(
+    request: Request,
     server_slug: str,
     redirect_uri: Optional[str] = None,
     auth: ChatAuthIdentity = Depends(require_chat_auth),
@@ -726,8 +785,7 @@ async def oauth_start(
     oauth_cfg = _apply_catalog_oauth_defaults(oauth_cfg, server_slug, reg_cfg)
 
     # Determina il redirect_uri prima della discovery (serve per la dynamic registration)
-    if not redirect_uri:
-        redirect_uri = _default_oauth_redirect_uri()
+    redirect_uri = _resolve_oauth_redirect_uri(redirect_uri, request)
 
     modified = False
 
@@ -970,7 +1028,9 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
             url=f"{chat_base}/integrations?oauth_status=error&error=Token+URL+non+configurato"
         )
 
-    callback_redirect_uri = pending.get("redirect_uri") or _default_oauth_redirect_uri()
+    callback_redirect_uri = _resolve_oauth_redirect_uri(
+        pending.get("redirect_uri"), request
+    )
 
     from src.runtime.oauth_token_exchange import (
         OAuthTokenExchangeError,

@@ -14,6 +14,14 @@ from src.api.v1 import mcp_integrations as mod
 from src.test.mcp_oauth_test_helpers import insert_mcp_server_config
 
 
+@pytest.fixture
+def oauth_request() -> MagicMock:
+    req = MagicMock()
+    req.url.scheme = "http"
+    req.headers = {"host": "localhost:8001"}
+    return req
+
+
 def test_generate_pkce_pair() -> None:
     verifier, challenge = mod._generate_pkce_pair()
     assert len(verifier) >= 43
@@ -21,9 +29,42 @@ def test_generate_pkce_pair() -> None:
     assert "=" not in challenge
 
 
+def test_resolve_oauth_redirect_uri_absolute_passthrough() -> None:
+    out = mod._resolve_oauth_redirect_uri(
+        "https://client.example.com/api/v1/integrations/oauth/callback"
+    )
+    assert out == "https://client.example.com/api/v1/integrations/oauth/callback"
+
+
+def test_resolve_oauth_redirect_uri_relative_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv(
+        "AION_OAUTH_REDIRECT_BASE_URL", "https://client.example.com/api"
+    )
+    out = mod._resolve_oauth_redirect_uri("/api/v1/integrations/oauth/callback")
+    assert out == "https://client.example.com/api/v1/integrations/oauth/callback"
+
+
+def test_resolve_oauth_redirect_uri_relative_from_proxy_headers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AION_OAUTH_REDIRECT_BASE_URL", raising=False)
+    monkeypatch.delenv("AION_PUBLIC_API_URL", raising=False)
+    monkeypatch.delenv("AION_FASTAPI_URL", raising=False)
+    request = MagicMock()
+    request.url.scheme = "https"
+    request.headers = {
+        "x-forwarded-proto": "https",
+        "x-forwarded-host": "client.example.com",
+    }
+    out = mod._resolve_oauth_redirect_uri(
+        "/api/v1/integrations/oauth/callback", request
+    )
+    assert out == "https://client.example.com/api/v1/integrations/oauth/callback"
+
+
 @pytest.mark.asyncio
 async def test_oauth_start_retries_dynamic_registration_when_endpoints_cached(
-    oauth_db: str, monkeypatch: pytest.MonkeyPatch
+    oauth_db: str, oauth_request: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Endpoints in DB without client_id must not skip RFC 7591 registration."""
     await insert_mcp_server_config(
@@ -51,6 +92,7 @@ async def test_oauth_start_retries_dynamic_registration_when_endpoints_cached(
             client_cls.return_value.__aenter__.return_value = client
             client.post = AsyncMock(return_value=_Resp())
             result = await mod.oauth_start(
+                oauth_request,
                 server_slug="clickup",
                 redirect_uri="http://localhost:8001/v1/integrations/oauth/callback",
                 auth=auth,
@@ -65,7 +107,7 @@ async def test_oauth_start_retries_dynamic_registration_when_endpoints_cached(
 
 @pytest.mark.asyncio
 async def test_oauth_start_rejects_missing_client_id_when_registration_disabled(
-    oauth_db: str, monkeypatch: pytest.MonkeyPatch
+    oauth_db: str, oauth_request: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("AION_MCP_OAUTH_DYNAMIC_REGISTRATION", "0")
     await insert_mcp_server_config(
@@ -80,6 +122,7 @@ async def test_oauth_start_rejects_missing_client_id_when_registration_disabled(
     with patch.object(mod, "_cleanup_expired_states"):
         with pytest.raises(Exception) as exc:
             await mod.oauth_start(
+                oauth_request,
                 server_slug="clickup",
                 redirect_uri="http://localhost:8001/v1/integrations/oauth/callback",
                 auth=auth,
@@ -88,7 +131,9 @@ async def test_oauth_start_rejects_missing_client_id_when_registration_disabled(
 
 
 @pytest.mark.asyncio
-async def test_oauth_start_builds_authorization_url(oauth_db: str) -> None:
+async def test_oauth_start_builds_authorization_url(
+    oauth_db: str, oauth_request: MagicMock
+) -> None:
     await insert_mcp_server_config(
         "clickup",
         oauth_config={
@@ -104,6 +149,7 @@ async def test_oauth_start_builds_authorization_url(oauth_db: str) -> None:
 
     with patch.object(mod, "_cleanup_expired_states"):
         result = await mod.oauth_start(
+            oauth_request,
             server_slug="clickup",
             redirect_uri="http://localhost:8001/v1/integrations/oauth/callback",
             auth=auth,
@@ -131,7 +177,7 @@ async def test_oauth_start_builds_authorization_url(oauth_db: str) -> None:
 
 @pytest.mark.asyncio
 async def test_oauth_start_skips_dynamic_registration_when_disabled(
-    oauth_db: str, monkeypatch: pytest.MonkeyPatch
+    oauth_db: str, oauth_request: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("AION_MCP_OAUTH_DYNAMIC_REGISTRATION", "0")
     await insert_mcp_server_config(
@@ -152,7 +198,7 @@ async def test_oauth_start_skips_dynamic_registration_when_disabled(
         client_cls.return_value.__aenter__.return_value = client
         client.post = AsyncMock()
         result = await mod.oauth_start(
-            server_slug="remote-svc", redirect_uri=None, auth=auth
+            oauth_request, server_slug="remote-svc", redirect_uri=None, auth=auth
         )
 
     client.post.assert_not_called()
@@ -211,7 +257,9 @@ def test_apply_catalog_oauth_defaults_for_sharepoint_resolves_tenant() -> None:
 
 
 @pytest.mark.asyncio
-async def test_oauth_start_rejects_microsoft_without_client_id(oauth_db: str) -> None:
+async def test_oauth_start_rejects_microsoft_without_client_id(
+    oauth_db: str, oauth_request: MagicMock
+) -> None:
     tenant = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"
     await insert_mcp_server_config(
         "microsoft_sharepoint",
@@ -226,6 +274,9 @@ async def test_oauth_start_rejects_microsoft_without_client_id(oauth_db: str) ->
     auth = ChatAuthIdentity(via="chat_token", identifier="alice", user_row_id="1")
     with pytest.raises(Exception) as exc:
         await mod.oauth_start(
-            server_slug="microsoft_sharepoint", redirect_uri=None, auth=auth
+            oauth_request,
+            server_slug="microsoft_sharepoint",
+            redirect_uri=None,
+            auth=auth,
         )
     assert "client ID" in str(exc.value.detail)
