@@ -669,9 +669,7 @@ class AgentPipeline:
                     ".pdf"
                 ):
                     continue
-                slug = slugify_document_name(
-                    a.get("original_name") or Path(rp).name
-                )
+                slug = slugify_document_name(a.get("original_name") or Path(rp).name)
                 manifest = load_manifest(self.session_id, rp)
                 if manifest and manifest.get("ok"):
                     lines.append(f"\n### PDF extraction ready: `{slug}`")
@@ -723,9 +721,7 @@ class AgentPipeline:
                             conv = str(retried.get("converted_docx_path") or "")
                             status = "ok"
                     if conv and status == "ok":
-                        lines.append(
-                            f"\n### Legacy Word → DOCX ready for `{on}`"
-                        )
+                        lines.append(f"\n### Legacy Word → DOCX ready for `{on}`")
                         lines.append(
                             f"- Original (binary .doc): `{rp}` — do NOT unpack or docx2txt on this file"
                         )

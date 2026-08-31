@@ -49,11 +49,15 @@ def score_required_hits(
 
         hits = grep_pages(session_root, slug, pattern)
         page_hits = [h for h in hits if page_no_from_hit_file(h["file"]) is not None]
-        on_page = [
-            h
-            for h in page_hits
-            if page_no_from_hit_file(h["file"]) == int(expected_page)
-        ] if expected_page is not None else page_hits
+        on_page = (
+            [
+                h
+                for h in page_hits
+                if page_no_from_hit_file(h["file"]) == int(expected_page)
+            ]
+            if expected_page is not None
+            else page_hits
+        )
 
         row: dict[str, Any] = {
             "label": label,
@@ -72,8 +76,7 @@ def score_required_hits(
 
         if expected_page is not None and not on_page:
             found_pages = sorted(
-                {page_no_from_hit_file(h["file"]) for h in page_hits}
-                - {None}
+                {page_no_from_hit_file(h["file"]) for h in page_hits} - {None}
             )
             row["reason"] = f"hits on pages {found_pages}, expected {expected_page}"
             details.append(row)
@@ -105,7 +108,9 @@ def score_required_hits(
     }
 
 
-def score_identity_gate(manifest: dict[str, Any], identity: dict[str, Any]) -> dict[str, Any]:
+def score_identity_gate(
+    manifest: dict[str, Any], identity: dict[str, Any]
+) -> dict[str, Any]:
     """Check title/excerpt against must / must-not lists."""
     haystack = " ".join(
         [

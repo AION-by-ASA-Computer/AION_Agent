@@ -74,7 +74,9 @@ async def test_altomonte_cases_skip_without_pdf(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_scoring_required_hits_on_ingested_pages(tmp_path):
-    pdf = build_rumore_decreto_pdf(tmp_path / "decreto.pdf", pages=20, prescription_page=10, pmc_page=15)
+    pdf = build_rumore_decreto_pdf(
+        tmp_path / "decreto.pdf", pages=20, prescription_page=10, pmc_page=15
+    )
     session = tmp_path / "session"
     manifest = await ingest_document(pdf, session, ocr_mode="never", budget_sec=60)
     assert manifest["ok"]
@@ -138,7 +140,9 @@ async def test_agentic_altomonte_optional(tmp_path):
     # Seed session with ingested PDF via pipeline eval helper first.
     await run_pipeline_case(case, work_dir=tmp_path / "seed")
 
-    agent, profile = await get_agent("document_extractor", session_id=session_id, user_id="eval")
+    agent, profile = await get_agent(
+        "document_extractor", session_id=session_id, user_id="eval"
+    )
     pipeline = AgentPipeline(
         agent, session_id=session_id, profile_name=profile, user_id="eval"
     )

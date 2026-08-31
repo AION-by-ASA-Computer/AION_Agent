@@ -176,15 +176,19 @@ def _score_hit(
 
     if typ in _PLACE_OF_WORSHIP:
         score += 0.35
-    elif shrine_query and typ in _INARI_NEARBY_TYPES and any(
-        k in disp for k in ("稲荷", "inari", "神社")
+    elif (
+        shrine_query
+        and typ in _INARI_NEARBY_TYPES
+        and any(k in disp for k in ("稲荷", "inari", "神社"))
     ):
         score += 0.2
     if typ in _UNRELIABLE_TYPES:
         score -= 1.0
     if validate_contains and validate_contains.lower() in disp_lower:
         score += 0.5
-    if shrine_query and any(k in disp_lower for k in ("神社", "稲荷", "jinja", "inari", "shrine")):
+    if shrine_query and any(
+        k in disp_lower for k in ("神社", "稲荷", "jinja", "inari", "shrine")
+    ):
         score += 0.15
 
     if region_hints:
@@ -300,7 +304,9 @@ def geocode_place_sync(
     if not primary and not fallback:
         return {"ok": False, "error": "empty_query"}
 
-    shrine_query = bool(_SHRINE_HINT_RE.search(primary) or _SHRINE_HINT_RE.search(fallback))
+    shrine_query = bool(
+        _SHRINE_HINT_RE.search(primary) or _SHRINE_HINT_RE.search(fallback)
+    )
     validate = (validate_contains or "").strip()
     cc = (country_code or "").strip().lower()
     region_hints = _region_hints(primary, fallback)

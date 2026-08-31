@@ -48,7 +48,13 @@ def default_dpi() -> int:
 
 
 def max_white_ratio() -> float:
-    return min(1.0, max(0.0, _env_float("AION_PDF_EVIDENCE_MAX_WHITE_RATIO", _DEFAULT_MAX_WHITE_RATIO)))
+    return min(
+        1.0,
+        max(
+            0.0,
+            _env_float("AION_PDF_EVIDENCE_MAX_WHITE_RATIO", _DEFAULT_MAX_WHITE_RATIO),
+        ),
+    )
 
 
 def _open_pdf(path: Path):
@@ -81,7 +87,10 @@ def _text_blocks_clip(pdf_page, *, padding: int = 12):
     y0 = min(block[1] for block in blocks)
     x1 = max(block[2] for block in blocks)
     y1 = max(block[3] for block in blocks)
-    clip = pymupdf.Rect(x0 - padding, y0 - padding, x1 + padding, y1 + padding) & pdf_page.rect
+    clip = (
+        pymupdf.Rect(x0 - padding, y0 - padding, x1 + padding, y1 + padding)
+        & pdf_page.rect
+    )
     return None if clip.is_empty else clip
 
 
@@ -308,7 +317,9 @@ def pdf_evidence_crop_sync(
             effective_white_limit = min(0.97, white_limit + 0.07)
         rel_png = _relative_to_session(session_root, png_path)
         rel_sidecar = _relative_to_session(session_root, sidecar_path)
-        rel_source = source_relative_path or _relative_to_session(session_root, pdf_path)
+        rel_source = source_relative_path or _relative_to_session(
+            session_root, pdf_path
+        )
 
         sidecar = {
             "page": page,
@@ -351,7 +362,9 @@ def pdf_evidence_crop_sync(
             }
 
         image.save(png_path, format="PNG", optimize=True)
-        sidecar_path.write_text(json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8")
+        sidecar_path.write_text(
+            json.dumps(sidecar, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
 
         return {
             "ok": True,

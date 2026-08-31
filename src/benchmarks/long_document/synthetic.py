@@ -40,7 +40,9 @@ def build_rumore_decreto_pdf(
                 c.drawString(72, 645, "8.9 Rumore - Parere Istruttorio Conclusivo")
             if page_no == pmc_page:
                 c.drawString(72, 660, "Piano di Monitoraggio e Controllo (PMC)")
-                c.drawString(72, 645, "Tabella parametri Rumore e monitoraggio acustico")
+                c.drawString(
+                    72, 645, "Tabella parametri Rumore e monitoraggio acustico"
+                )
         c.showPage()
     c.save()
     return path

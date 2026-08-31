@@ -160,7 +160,9 @@ async def test_second_call_resumes_and_skips_existing(sample_pdf, session_root):
     assert second["partial"] is False
     assert second["pages_skipped_existing"] == first["pages_written"]
     assert second["pages_written"] == PAGE_COUNT - first["pages_written"]
-    assert len(list(_pages_dir(session_root, second["slug"]).glob("p*.txt"))) == PAGE_COUNT
+    assert (
+        len(list(_pages_dir(session_root, second["slug"]).glob("p*.txt"))) == PAGE_COUNT
+    )
 
 
 @pytest.mark.asyncio
@@ -290,7 +292,11 @@ async def test_force_reextracts_pages(sample_pdf, session_root):
     stale.write_text("contenuto obsoleto", encoding="utf-8")
 
     refreshed = await ingest_document(
-        sample_pdf, session_root, budget_sec=600, last_page=PRESCRIPTION_PAGE, force=True
+        sample_pdf,
+        session_root,
+        budget_sec=600,
+        last_page=PRESCRIPTION_PAGE,
+        force=True,
     )
 
     assert refreshed["pages_skipped_existing"] == 0
@@ -305,7 +311,9 @@ async def test_page_range_limits_extraction(sample_pdf, session_root):
 
     assert manifest["range"] == [10, 12]
     assert manifest["pages_written"] == 3
-    names = sorted(p.name for p in _pages_dir(session_root, manifest["slug"]).glob("*.txt"))
+    names = sorted(
+        p.name for p in _pages_dir(session_root, manifest["slug"]).glob("*.txt")
+    )
     assert names == ["p0010.txt", "p0011.txt", "p0012.txt"]
 
 
@@ -316,7 +324,9 @@ async def test_first_page_excerpt_supports_identity_check(sample_pdf, session_ro
 
 
 @pytest.mark.asyncio
-async def test_invalid_inputs_return_structured_errors(sample_pdf, session_root, tmp_path):
+async def test_invalid_inputs_return_structured_errors(
+    sample_pdf, session_root, tmp_path
+):
     bad_mode = await ingest_document(sample_pdf, session_root, ocr_mode="sometimes")
     assert bad_mode == {
         "ok": False,

@@ -98,7 +98,9 @@ def _ingest_sync(session_id: str, relative_path: str) -> dict[str, Any]:
     return manifest
 
 
-async def run_auto_ingest_background(session_id: str, relative_path: str, mime: str) -> None:
+async def run_auto_ingest_background(
+    session_id: str, relative_path: str, mime: str
+) -> None:
     """Schedule-safe background ingest for one uploaded PDF."""
     if not auto_ingest_enabled():
         return

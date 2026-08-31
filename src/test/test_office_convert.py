@@ -75,9 +75,7 @@ def test_convert_legacy_word_with_soffice_mock(tmp_path, monkeypatch):
     def fake_run(cmd, **kwargs):
         outdir = Path(cmd[cmd.index("--outdir") + 1])
         src = Path(cmd[-1])
-        (outdir / f"{src.stem}.docx").write_bytes(
-            b"PK\x03\x04" + b"fake-docx-bytes"
-        )
+        (outdir / f"{src.stem}.docx").write_bytes(b"PK\x03\x04" + b"fake-docx-bytes")
 
         class R:
             returncode = 0
@@ -86,7 +84,9 @@ def test_convert_legacy_word_with_soffice_mock(tmp_path, monkeypatch):
 
         return R()
 
-    with patch("src.tools.office_convert.find_soffice", return_value="/usr/bin/soffice"):
+    with patch(
+        "src.tools.office_convert.find_soffice", return_value="/usr/bin/soffice"
+    ):
         with patch("src.tools.office_convert.subprocess.run", side_effect=fake_run):
             out = convert_legacy_word_sync(sid, meta)
 

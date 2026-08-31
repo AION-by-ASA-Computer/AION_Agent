@@ -43,7 +43,9 @@ def test_auto_trim_crops_whitespace():
 
 def test_pdf_evidence_crop_writes_png_and_sidecar(tmp_path, monkeypatch):
     monkeypatch.setenv("AION_PDF_EVIDENCE_MAX_WHITE_RATIO", "0.99")
-    pdf = build_rumore_decreto_pdf(tmp_path / "decreto.pdf", pages=5, prescription_page=3, pmc_page=4)
+    pdf = build_rumore_decreto_pdf(
+        tmp_path / "decreto.pdf", pages=5, prescription_page=3, pmc_page=4
+    )
     session = tmp_path / "session"
     session.mkdir()
 
@@ -96,7 +98,9 @@ def test_pdf_evidence_crop_rejects_whitespace_heavy_full_page(tmp_path, monkeypa
 
 def test_pdf_evidence_crop_with_bbox(tmp_path, monkeypatch):
     monkeypatch.setenv("AION_PDF_EVIDENCE_MAX_WHITE_RATIO", "0.99")
-    pdf = build_rumore_decreto_pdf(tmp_path / "decreto.pdf", pages=3, prescription_page=2, pmc_page=3)
+    pdf = build_rumore_decreto_pdf(
+        tmp_path / "decreto.pdf", pages=3, prescription_page=2, pmc_page=3
+    )
     session = tmp_path / "session"
     session.mkdir()
 
@@ -115,7 +119,9 @@ def test_pdf_evidence_crop_with_bbox(tmp_path, monkeypatch):
 
 def test_pdf_evidence_crop_increments_index(tmp_path, monkeypatch):
     monkeypatch.setenv("AION_PDF_EVIDENCE_MAX_WHITE_RATIO", "0.99")
-    pdf = build_rumore_decreto_pdf(tmp_path / "decreto.pdf", pages=2, prescription_page=1, pmc_page=2)
+    pdf = build_rumore_decreto_pdf(
+        tmp_path / "decreto.pdf", pages=2, prescription_page=1, pmc_page=2
+    )
     session = tmp_path / "session"
     session.mkdir()
 
@@ -149,7 +155,9 @@ def test_pdf_evidence_crop_uses_text_blocks_at_default_threshold(tmp_path, monke
 
 
 def test_pdf_evidence_crop_invalid_page(tmp_path):
-    pdf = build_rumore_decreto_pdf(tmp_path / "decreto.pdf", pages=2, prescription_page=1, pmc_page=2)
+    pdf = build_rumore_decreto_pdf(
+        tmp_path / "decreto.pdf", pages=2, prescription_page=1, pmc_page=2
+    )
     session = tmp_path / "session"
     session.mkdir()
 

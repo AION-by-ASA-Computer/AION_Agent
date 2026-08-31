@@ -61,7 +61,9 @@ def _open_pdf(path: Path):
     return pymupdf.open(str(path))
 
 
-def _rebuild_full_text(pages_dir: Path, full_path: Path, page_numbers: list[int]) -> int:
+def _rebuild_full_text(
+    pages_dir: Path, full_path: Path, page_numbers: list[int]
+) -> int:
     """Concatenate page files with explicit markers, streaming to avoid buffering."""
     written = 0
     with full_path.open("w", encoding="utf-8") as out:
@@ -190,7 +192,9 @@ async def ingest_document(
             if needs_ocr and ocr_page is not None:
                 try:
                     pixmap = page.get_pixmap(dpi=ocr_dpi)
-                    ocr_text = await ocr_page(page_no, pixmap.tobytes("png"), "image/png")
+                    ocr_text = await ocr_page(
+                        page_no, pixmap.tobytes("png"), "image/png"
+                    )
                     if ocr_text and ocr_text.strip():
                         text = ocr_text
                         used_ocr = True
