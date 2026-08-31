@@ -106,8 +106,37 @@ def test_resolve_oauth_redirect_uri_caddy_port_fallback(
     assert out == "http://localhost:8066/api/v1/integrations/oauth/callback"
 
 
-@pytest.mark.asyncio
-async def test_oauth_start_retries_dynamic_registration_when_endpoints_cached(
+def test_chat_base_url_derives_from_oauth_redirect_base(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AION_CHAT_URL", "http://localhost:8003")
+    monkeypatch.setenv(
+        "AION_OAUTH_REDIRECT_BASE_URL", "https://agnt2.aion-asa.com/api"
+    )
+    assert mod._chat_base_url() == "https://agnt2.aion-asa.com"
+
+
+def test_chat_base_url_prefers_explicit_public_chat_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AION_CHAT_URL", "http://localhost:8003")
+    monkeypatch.setenv("AION_PUBLIC_CHAT_URL", "https://chat.example.com")
+    assert mod._chat_base_url() == "https://chat.example.com"
+
+
+def test_chat_base_url_from_proxy_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("AION_CHAT_URL", raising=False)
+    monkeypatch.delenv("AION_OAUTH_REDIRECT_BASE_URL", raising=False)
+    monkeypatch.delenv("AION_PUBLIC_API_URL", raising=False)
+    request = MagicMock()
+    request.url.scheme = "https"
+    request.headers = {
+        "x-forwarded-proto": "https",
+        "x-forwarded-host": "agnt2.aion-asa.com",
+    }
+    assert mod._chat_base_url(request) == "https://agnt2.aion-asa.com"
+
+
     oauth_db: str, oauth_request: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Endpoints in DB without client_id must not skip RFC 7591 registration."""

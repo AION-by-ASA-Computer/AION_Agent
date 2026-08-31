@@ -37,9 +37,61 @@ def _tenant_id() -> str:
     return (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
 
 
-def _chat_base_url() -> str:
-    """URL base del chat-ui per redirect OAuth utente."""
-    return (os.getenv("AION_CHAT_URL") or "http://localhost:8003").rstrip("/")
+def _is_loopback_host_url(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower()
+    return host in ("localhost", "127.0.0.1", "::1")
+
+
+def _chat_base_url(request: Optional[Request] = None) -> str:
+    """
+    Browser-facing chat-ui base URL for OAuth return redirects.
+
+    In Docker prod ``AION_CHAT_URL=http://localhost:8003`` is wrong for the user's
+    browser — derive from ``AION_OAUTH_REDIRECT_BASE_URL`` / proxy headers when set.
+    """
+    explicit = (os.getenv("AION_CHAT_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(explicit) and not _is_loopback_host_url(explicit):
+        return explicit
+
+    public_chat = (os.getenv("AION_PUBLIC_CHAT_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(public_chat):
+        return public_chat
+
+    api_base = _oauth_redirect_api_base(request)
+    if _is_absolute_http_url(api_base):
+        low = api_base.rstrip("/").lower()
+        if low.endswith("/api"):
+            return api_base.rstrip("/")[:-4]
+        return api_base.rstrip("/")
+
+    if request is not None:
+        fwd_proto = (
+            request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+        )
+        fwd_host = (
+            request.headers.get("x-forwarded-host", "").split(",")[0].strip()
+        )
+        host = fwd_host or request.headers.get("host", "").split(",")[0].strip()
+        scheme = fwd_proto or request.url.scheme
+        if host and not host.startswith("backend:"):
+            return f"{scheme}://{host}".rstrip("/")
+
+    domain = (os.getenv("DOMAIN") or "").strip()
+    if domain and domain not in (":80", "http://:80"):
+        host = domain.lstrip("http://").lstrip("https://").strip("/")
+        if host and not host.startswith(":"):
+            scheme = (
+                "https"
+                if (os.getenv("LETS_ENCRYPT_EMAIL") or "").strip()
+                else "http"
+            )
+            return f"{scheme}://{host}"
+
+    if _is_absolute_http_url(explicit):
+        return explicit
+    return "http://localhost:8003"
 
 
 def _credential_user_id(auth: ChatAuthIdentity) -> str:
@@ -555,6 +607,7 @@ async def _oauth_dynamic_client_register(
     server_slug: str,
     oauth_cfg: Dict[str, Any],
     redirect_uri: str,
+    request: Optional[Request] = None,
 ) -> bool:
     """RFC 7591 dynamic registration. Returns True if client_id was obtained."""
     import asyncio
@@ -563,6 +616,9 @@ async def _oauth_dynamic_client_register(
         return False
     if (oauth_cfg.get("client_id") or "").strip():
         return False
+
+    if not _is_absolute_http_url(redirect_uri):
+        redirect_uri = _resolve_oauth_redirect_uri(redirect_uri, request)
 
     reg_endpoint = (oauth_cfg.get("registration_endpoint") or "").strip()
     if not reg_endpoint:
@@ -901,6 +957,7 @@ async def oauth_start(
                         server_slug=server_slug,
                         oauth_cfg=oauth_cfg,
                         redirect_uri=redirect_uri,
+                        request=request,
                     ):
                         modified = True
 
@@ -916,6 +973,7 @@ async def oauth_start(
         server_slug=server_slug,
         oauth_cfg=oauth_cfg,
         redirect_uri=redirect_uri,
+        request=request,
     ):
         modified = True
 
@@ -1036,7 +1094,7 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
     _cleanup_expired_states()
 
     pending = _oauth_pending.pop(state, None)
-    chat_base = _chat_base_url()
+    chat_base = _chat_base_url(request)
 
     if not pending:
         return RedirectResponse(
