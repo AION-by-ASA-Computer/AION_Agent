@@ -22,6 +22,72 @@ def test_generate_pkce_pair() -> None:
 
 
 @pytest.mark.asyncio
+async def test_oauth_start_retries_dynamic_registration_when_endpoints_cached(
+    oauth_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Endpoints in DB without client_id must not skip RFC 7591 registration."""
+    await insert_mcp_server_config(
+        "clickup",
+        oauth_config={
+            "authorization_server": "https://mcp.clickup.com",
+            "authorization_endpoint": "https://mcp.clickup.com/oauth/authorize",
+            "token_url": "https://mcp.clickup.com/oauth/token",
+            "registration_endpoint": "https://mcp.clickup.com/oauth/register",
+        },
+    )
+
+    auth = ChatAuthIdentity(via="chat_token", identifier="alice", user_row_id="1")
+
+    class _Resp:
+        status_code = 201
+
+        @staticmethod
+        def json():
+            return {"client_id": "dyn-client-xyz"}
+
+    with patch.object(mod, "_cleanup_expired_states"):
+        with patch("httpx.AsyncClient") as client_cls:
+            client = AsyncMock()
+            client_cls.return_value.__aenter__.return_value = client
+            client.post = AsyncMock(return_value=_Resp())
+            result = await mod.oauth_start(
+                server_slug="clickup",
+                redirect_uri="http://localhost:8001/v1/integrations/oauth/callback",
+                auth=auth,
+            )
+
+    client.post.assert_called_once()
+    parsed = urlparse(result["authorization_url"])
+    params = parse_qs(parsed.query)
+    assert params["client_id"] == ["dyn-client-xyz"]
+    mod._oauth_pending.pop(result["state"], None)
+
+
+@pytest.mark.asyncio
+async def test_oauth_start_rejects_missing_client_id_when_registration_disabled(
+    oauth_db: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AION_MCP_OAUTH_DYNAMIC_REGISTRATION", "0")
+    await insert_mcp_server_config(
+        "clickup",
+        oauth_config={
+            "authorization_server": "https://mcp.clickup.com",
+            "authorization_endpoint": "https://mcp.clickup.com/oauth/authorize",
+            "token_url": "https://mcp.clickup.com/oauth/token",
+        },
+    )
+    auth = ChatAuthIdentity(via="chat_token", identifier="alice", user_row_id="1")
+    with patch.object(mod, "_cleanup_expired_states"):
+        with pytest.raises(Exception) as exc:
+            await mod.oauth_start(
+                server_slug="clickup",
+                redirect_uri="http://localhost:8001/v1/integrations/oauth/callback",
+                auth=auth,
+            )
+    assert "client_id" in str(exc.value.detail).lower()
+
+
+@pytest.mark.asyncio
 async def test_oauth_start_builds_authorization_url(oauth_db: str) -> None:
     await insert_mcp_server_config(
         "clickup",
