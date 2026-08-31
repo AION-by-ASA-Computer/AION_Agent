@@ -428,11 +428,58 @@ def _public_api_base_url() -> str:
     return ""
 
 
+def _oauth_redirect_api_base(request: Optional[Request] = None) -> str:
+    """
+    Browser-facing API base for OAuth callbacks (…/api), not the internal uvicorn URL.
+
+    ``AION_PUBLIC_API_URL=http://localhost:8001`` is valid for server-side fetch but
+    wrong for OAuth — prefer Caddy ``Host`` + ``/api`` or ``AION_OAUTH_REDIRECT_BASE_URL``.
+    """
+    explicit = (os.getenv("AION_OAUTH_REDIRECT_BASE_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(explicit):
+        return explicit
+
+    public = (os.getenv("AION_PUBLIC_API_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(public) and public.lower().endswith("/api"):
+        return public
+
+    chat = (os.getenv("AION_CHAT_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(chat):
+        return f"{chat}/api"
+
+    if request is not None:
+        fwd_proto = (
+            request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+        )
+        fwd_host = (
+            request.headers.get("x-forwarded-host", "").split(",")[0].strip()
+        )
+        host = fwd_host or request.headers.get("host", "").split(",")[0].strip()
+        scheme = fwd_proto or request.url.scheme
+        prefix = (request.headers.get("x-forwarded-prefix") or "/api").strip() or "/api"
+        if not prefix.startswith("/"):
+            prefix = f"/{prefix}"
+        if host:
+            return f"{scheme}://{host}{prefix.rstrip('/')}"
+
+    domain = (os.getenv("DOMAIN") or "").strip()
+    if domain and domain not in (":80", "http://:80"):
+        host = domain.lstrip("http://").lstrip("https://").strip("/")
+        if host and not host.startswith(":"):
+            scheme = (
+                "https"
+                if (os.getenv("LETS_ENCRYPT_EMAIL") or "").strip()
+                else "http"
+            )
+            return f"{scheme}://{host}/api"
+
+    caddy_port = (os.getenv("CADDY_HTTP_PORT") or "80").strip() or "80"
+    return f"http://localhost:{caddy_port}/api"
+
+
 def _default_oauth_redirect_uri() -> str:
-    base = _public_api_base_url()
-    if base:
-        return f"{base}/v1/integrations/oauth/callback"
-    return "/v1/integrations/oauth/callback"
+    base = _oauth_redirect_api_base()
+    return f"{base.rstrip('/')}/v1/integrations/oauth/callback"
 
 
 def _resolve_oauth_redirect_uri(
@@ -450,20 +497,12 @@ def _resolve_oauth_redirect_uri(
         return raw
 
     if raw.startswith("/"):
-        base = _public_api_base_url()
-        if base:
-            return f"{base.rstrip('/')}{raw}"
-        if request is not None:
-            fwd_proto = (
-                request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
-            )
-            fwd_host = (
-                request.headers.get("x-forwarded-host", "").split(",")[0].strip()
-            )
-            host = fwd_host or request.headers.get("host", "").split(",")[0].strip()
-            scheme = fwd_proto or request.url.scheme
-            if host:
-                return f"{scheme}://{host}{raw}"
+        base = _oauth_redirect_api_base(request)
+        if raw.startswith("/api/"):
+            # /api/v1/... behind Caddy → {base}/v1/... when base already ends with /api
+            suffix = raw[4:]  # "/v1/integrations/oauth/callback"
+            return f"{base.rstrip('/')}{suffix}"
+        return f"{base.rstrip('/')}{raw}"
 
     raise HTTPException(
         status_code=400,
@@ -471,7 +510,7 @@ def _resolve_oauth_redirect_uri(
             "OAuth redirect_uri deve essere un URL assoluto "
             "(es. https://dominio.example.com/api/v1/integrations/oauth/callback). "
             "In Docker imposta AION_OAUTH_REDIRECT_BASE_URL=https://<dominio>/api "
-            f"(o AION_PUBLIC_API_URL assoluto). Ricevuto: {raw!r}"
+            f"(o AION_PUBLIC_API_URL che termini con /api). Ricevuto: {raw!r}"
         ),
     )
 

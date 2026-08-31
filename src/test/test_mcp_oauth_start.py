@@ -50,16 +50,60 @@ def test_resolve_oauth_redirect_uri_relative_from_proxy_headers(
     monkeypatch.delenv("AION_OAUTH_REDIRECT_BASE_URL", raising=False)
     monkeypatch.delenv("AION_PUBLIC_API_URL", raising=False)
     monkeypatch.delenv("AION_FASTAPI_URL", raising=False)
+    monkeypatch.delenv("AION_CHAT_URL", raising=False)
+    monkeypatch.delenv("DOMAIN", raising=False)
     request = MagicMock()
     request.url.scheme = "https"
     request.headers = {
         "x-forwarded-proto": "https",
         "x-forwarded-host": "client.example.com",
+        "x-forwarded-prefix": "/api",
     }
     out = mod._resolve_oauth_redirect_uri(
         "/api/v1/integrations/oauth/callback", request
     )
     assert out == "https://client.example.com/api/v1/integrations/oauth/callback"
+
+
+def test_resolve_oauth_redirect_uri_ignores_backend_port_public_api_url(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """AION_PUBLIC_API_URL=http://localhost:8001 is internal; OAuth needs Caddy /api."""
+    monkeypatch.delenv("AION_OAUTH_REDIRECT_BASE_URL", raising=False)
+    monkeypatch.setenv("AION_PUBLIC_API_URL", "http://localhost:8001")
+    request = MagicMock()
+    request.url.scheme = "http"
+    request.headers = {
+        "host": "thinkstation:8066",
+        "x-forwarded-proto": "http",
+        "x-forwarded-host": "thinkstation:8066",
+        "x-forwarded-prefix": "/api",
+    }
+    out = mod._resolve_oauth_redirect_uri(
+        "/api/v1/integrations/oauth/callback", request
+    )
+    assert out == "http://thinkstation:8066/api/v1/integrations/oauth/callback"
+
+
+def test_resolve_oauth_redirect_uri_public_api_url_with_api_suffix(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AION_OAUTH_REDIRECT_BASE_URL", raising=False)
+    monkeypatch.setenv("AION_PUBLIC_API_URL", "https://client.example.com/api")
+    out = mod._resolve_oauth_redirect_uri("/api/v1/integrations/oauth/callback")
+    assert out == "https://client.example.com/api/v1/integrations/oauth/callback"
+
+
+def test_resolve_oauth_redirect_uri_caddy_port_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AION_OAUTH_REDIRECT_BASE_URL", raising=False)
+    monkeypatch.delenv("AION_PUBLIC_API_URL", raising=False)
+    monkeypatch.delenv("AION_CHAT_URL", raising=False)
+    monkeypatch.setenv("DOMAIN", ":80")
+    monkeypatch.setenv("CADDY_HTTP_PORT", "8066")
+    out = mod._resolve_oauth_redirect_uri("/api/v1/integrations/oauth/callback")
+    assert out == "http://localhost:8066/api/v1/integrations/oauth/callback"
 
 
 @pytest.mark.asyncio
