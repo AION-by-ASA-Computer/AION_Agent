@@ -870,6 +870,55 @@ class MCPManager:
             except Exception as e:
                 logger.error("Error in MCP pool cleanup: %s", e)
 
+            # OAuth token refresh per remote-bridge in scadenza
+            await self._refresh_expiring_oauth_tokens()
+
+    async def _refresh_expiring_oauth_tokens(self) -> None:
+        """Rinnova token OAuth per remote-bridge in scadenza e riavvia i worker."""
+        ahead_sec = float(os.getenv("AION_MCP_OAUTH_REFRESH_AHEAD_SEC", "120"))
+        
+        # Raccoglie workers da controllare (solo user-pool, remote-bridge con auth)
+        to_check: list[tuple[str, str, str, str]] = []  # (pool_sid, sname, uid, tid)
+        async with self._pool_lock:
+            for (pool_sid, sname), worker in list(self._pool.items()):
+                parsed = _parse_user_pool_key(pool_sid)
+                if not parsed:
+                    continue
+                uid, tid = parsed
+                cfg = self.get_server_config(sname) or {}
+                if cfg.get("type") != "remote-bridge":
+                    continue
+                auth_env = cfg.get("auth_env_var") or ""
+                if "OAUTH_TOKEN" not in auth_env:
+                    continue
+                to_check.append((pool_sid, sname, uid, tid))
+        
+        for pool_sid, sname, uid, tid in to_check:
+            try:
+                from .runtime.credential_store import (
+                    _get_credential_row, _credential_is_expired,
+                    refresh_oauth_access_token, OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS
+                )
+                row = await _get_credential_row(uid, sname, "OAUTH_TOKEN", tenant_id=tid)
+                if not row or not row.expires_at:
+                    continue
+                # Controlla se scade entro ahead_sec + buffer standard
+                buf = int(ahead_sec) + OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS
+                if not _credential_is_expired(row.expires_at, buffer_seconds=buf):
+                    continue  # token ancora valido per abbastanza tempo
+                
+                logger.info("🔄 OAuth token in scadenza per user=%s server=%s — refresh...", uid, sname)
+                new_token = await refresh_oauth_access_token(uid, sname, tenant_id=tid)
+                if new_token:
+                    # Riavvia il worker con il token fresco
+                    stopped = await self.restart_workers_for_user(uid, server_slug=sname, tenant_id=tid)
+                    self._clear_warm_failure(pool_sid, sname)
+                    logger.info("✅ Token rinnovato e %d worker(s) riavviati per server=%s", stopped, sname)
+                else:
+                    logger.warning("⚠️ Refresh token fallito per user=%s server=%s", uid, sname)
+            except Exception as exc:
+                logger.warning("OAuth token refresh check failed server=%s: %s", sname, exc)
+
     def _atexit_sync(self) -> None:
         try:
             loop = asyncio.get_event_loop()

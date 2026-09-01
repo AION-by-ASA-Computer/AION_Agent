@@ -29,8 +29,8 @@ mcp_servers:
   - openmetadata
   - skills_hub
   - session_sandbox
+  - mempalace
   - memory
   - charts
 native_tool_groups:
   - sql_query_memory
-  - mnemos
