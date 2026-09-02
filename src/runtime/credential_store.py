@@ -326,6 +326,24 @@ async def _persist_oauth_tokens(
     from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
 
     await invalidate_mcp_credentials_runtime(user_id, server_slug, tenant_id=tenant_id)
+
+    # Seed mcp-remote token cache to prevent browser from opening on token expiry.
+    # When mcp-remote finds a refresh_token in its local cache, it silently refreshes
+    # via HTTP (POST /token) instead of triggering the OAuth browser flow.
+    try:
+        from src.runtime.mcp_remote_cache import seed_mcp_remote_token_cache
+
+        await seed_mcp_remote_token_cache(
+            user_id,
+            server_slug,
+            token_data,
+            oauth_cfg,
+        )
+    except Exception as _seed_exc:
+        logger.debug(
+            "mcp-remote cache seed skipped for server=%s: %s", server_slug, _seed_exc
+        )
+
     return access_token
 
 
@@ -386,10 +404,11 @@ async def refresh_oauth_access_token(
         )
     except OAuthTokenExchangeError as exc:
         logger.warning(
-            "OAuth refresh failed: user=%s server=%s reason=%s",
+            "OAuth refresh failed: user=%s server=%s reason=%s status=%s",
             user_id,
             server_slug,
             exc,
+            exc.status_code,
         )
         from src.runtime.mcp_oauth_audit import append_mcp_oauth_audit
 
@@ -403,7 +422,27 @@ async def refresh_oauth_access_token(
                 "status_code": exc.status_code,
             },
         )
-        await _delete_oauth_credentials(user_id, server_slug, tenant_id=tenant_id)
+        # Elimina le credenziali OAuth solo se il server ha esplicitamente rifiutato
+        # il refresh_token come non valido (401 = token revocato/scaduto).
+        # Per errori 400 (es. client non registrato per grant refresh_token, errori di
+        # configurazione) o errori di rete (None), conserviamo il refresh_token:
+        # potrebbe funzionare dopo un re-login che aggiorna il client_id nel DB.
+        if exc.status_code == 401:
+            logger.info(
+                "OAuth refresh: refresh_token revocato o scaduto per user=%s server=%s — "
+                "elimino le credenziali OAuth per forzare un nuovo login.",
+                user_id,
+                server_slug,
+            )
+            await _delete_oauth_credentials(user_id, server_slug, tenant_id=tenant_id)
+        else:
+            logger.info(
+                "OAuth refresh: errore non definitivo (status=%s) per user=%s server=%s — "
+                "conservo il refresh_token per nuovi tentativi.",
+                exc.status_code,
+                user_id,
+                server_slug,
+            )
         return None
 
     return await _persist_oauth_tokens(
