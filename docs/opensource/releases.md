@@ -104,11 +104,40 @@ docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
 docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
 ```
 
+`--no-build` is **required**: the `build:` section in `docker-compose.yml` cannot be
+removed by an override, so without the flag Compose rebuilds the image from the local
+source whenever it is not already in cache.
+
+### What the GHCR overlay changes
+
+`docker-compose.ghcr.yml` does two things, not one:
+
+1. replaces `image:` with the GHCR reference for the four app services;
+2. rewrites the backend `volumes` list with the YAML tag `!override`, dropping the
+   `./src`, `./config_std`, `./mcp_servers_std` and `requirements-sandbox-skills.txt`
+   bind-mounts.
+
+Step 2 is what makes the pulled image actually run. A bind-mount always shadows the
+image content at that path, so leaving `./src:/app/src` in place would keep executing
+the code of the local git clone regardless of which image was pulled. Only the
+**state** mounts survive: `aion_data`, `.env`, `data/sessions`, `data/db_test`, the
+Podman socket, and the writable `config/` + `mcp_servers/` overlays holding customer
+customizations.
+
+Consequence: in GHCR mode the code comes from the image, so `git pull` is no longer
+part of the upgrade — pulling a new image tag is.
+
+**Requires Docker Compose >= 2.24** for the `!override` tag.
+
 ### Build locally (default)
 
 ```bash
 docker compose up -d --build
 ```
+
+In this mode the bind-mounts of the base file stay active, so `src/` and the `*_std/`
+template dirs are served from the git clone: `git pull && docker compose restart backend`
+propagates code changes without an image rebuild.
 
 See also [Docker deployment](../deployment/docker.md).
 
