@@ -22,7 +22,8 @@ def build_remote_bridge_registry_config(
 
     if auth_type == "oauth2":
         env_var = f"AION_USER_{slug}__OAUTH_TOKEN"
-        args.extend(["--header", "Authorization: Bearer ${" + env_var + "}"])
+        # We DO NOT pass --header for oauth2 anymore. 
+        # AION will pre-seed the mcp-remote cache and mcp-remote will use it.
         env[env_var] = "${" + env_var + "}"
     elif auth_type == "api-key":
         env_var = f"AION_USER_{slug}__API_KEY"

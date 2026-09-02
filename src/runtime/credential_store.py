@@ -326,6 +326,24 @@ async def _persist_oauth_tokens(
     from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
 
     await invalidate_mcp_credentials_runtime(user_id, server_slug, tenant_id=tenant_id)
+
+    # Seed mcp-remote token cache to prevent browser from opening on token expiry.
+    # When mcp-remote finds a refresh_token in its local cache, it silently refreshes
+    # via HTTP (POST /token) instead of triggering the OAuth browser flow.
+    try:
+        from src.runtime.mcp_remote_cache import seed_mcp_remote_token_cache
+
+        await seed_mcp_remote_token_cache(
+            user_id,
+            server_slug,
+            token_data,
+            oauth_cfg,
+        )
+    except Exception as _seed_exc:
+        logger.debug(
+            "mcp-remote cache seed skipped for server=%s: %s", server_slug, _seed_exc
+        )
+
     return access_token
 
 
