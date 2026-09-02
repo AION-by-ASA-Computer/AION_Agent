@@ -51,4 +51,3 @@ if __name__ == "__main__":
         target = sys.argv[1]
 
     asyncio.run(diagnose_server(target))
-

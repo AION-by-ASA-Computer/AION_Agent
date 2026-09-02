@@ -232,7 +232,11 @@ def _aion_mcp_tool_run(
     inject(carrier)
     kwargs["_trace_context"] = carrier
 
-    loop = _GLOBAL_LOOP or asyncio.get_event_loop()
+    try:
+        loop = _GLOBAL_LOOP or asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
     # Signal the streaming pipeline that we need to sync before running the tool
     loop.call_soon_threadsafe(
@@ -335,6 +339,8 @@ def _aion_mcp_tool_run(
             tool_name=tool_name,
             event_type="tool_error" if is_error else "tool_end",
         )
+        status_val = "error" if is_error else "ok"
+
         # SSE/UI first — mid-turn compaction can block on the agent thread when sync enabled.
         if is_error:
             loop.call_soon_threadsafe(
@@ -493,7 +499,10 @@ def _aion_mcp_tool_run(
 
                 pre_ctx = HookContext(
                     event="pre_tool_use",
-                    tenant_id=tenant_id,
+                    tenant_id=(
+                        user_id if user_id and user_id != "default" else tenant_id
+                    )
+                    or "default",
                     conversation_id=session_id,
                     user_id=user_id,
                     profile=profile,
@@ -589,7 +598,10 @@ def _aion_mcp_tool_run(
 
                     post_ctx = HookContext(
                         event="post_tool_use",
-                        tenant_id=tenant_id,
+                        tenant_id=(
+                            user_id if user_id and user_id != "default" else tenant_id
+                        )
+                        or "default",
                         conversation_id=session_id,
                         user_id=user_id,
                         profile=profile,
@@ -597,7 +609,9 @@ def _aion_mcp_tool_run(
                             "tool_name": tool_name,
                             "server_name": server_name,
                             "input": tool_input,
-                            "status": "error" if is_err else "success",
+                            "status": "error" if is_err else "ok",
+                            "error": normalized if is_err else None,
+                            "result": normalized,
                         },
                     )
                     asyncio.run_coroutine_threadsafe(
@@ -652,7 +666,10 @@ def _aion_mcp_tool_run(
 
                     post_ctx = HookContext(
                         event="post_tool_use",
-                        tenant_id=tenant_id,
+                        tenant_id=(
+                            user_id if user_id and user_id != "default" else tenant_id
+                        )
+                        or "default",
                         conversation_id=session_id,
                         user_id=user_id,
                         profile=profile,

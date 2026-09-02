@@ -117,11 +117,13 @@ if (
                 from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
                     OTLPMetricExporter as OTLPHTTPMetricExporter,
                 )
+
                 exporter = OTLPHTTPMetricExporter(endpoint=otlp_endpoint)
             else:
                 from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
                     OTLPMetricExporter,
                 )
+
                 exporter = OTLPMetricExporter(endpoint=otlp_endpoint)
 
             export_interval_str = os.getenv(

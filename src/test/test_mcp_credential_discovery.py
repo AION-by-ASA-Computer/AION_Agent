@@ -72,4 +72,3 @@ const env = z.object({
     result = discover_mcp_credentials("custom-aion-mcp", {})
     assert "AION_MY_CUSTOM_SECRET" in result.env_keys
     assert "AION_CHAT_SESSION_ID" not in result.env_keys
-

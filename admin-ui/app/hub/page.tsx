@@ -1268,7 +1268,7 @@ export default function MCPHub() {
                   <label className="flex items-center gap-3 cursor-pointer">
                     <input type="checkbox" checked={editingPolicy.enabled} onChange={(e) => setEditingPolicy({ ...editingPolicy, enabled: e.target.checked })} className="rounded border-white/20" />
                     <span className="text-sm text-gray-200">Enable edit in chat-ui for users</span>
-                  </label> */}
+                  </label>
                   <div className="flex flex-wrap gap-3 text-sm text-foreground">
                     {(["none", "org_shared", "per_user"] as CredentialMode[]).map((m) => (
                       <label key={m} className="flex items-center gap-1.5 cursor-pointer">

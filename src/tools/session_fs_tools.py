@@ -308,7 +308,25 @@ def read_file_chunk(
     max_lines: Optional[int] = None,
     max_bytes: Optional[int] = None,
 ) -> dict:
-    binary_exts = {".p7m", ".p7s", ".pkcs7", ".der", ".pfx", ".p12", ".exe", ".dll", ".so", ".zip", ".tar", ".gz", ".7z", ".pdf", ".png", ".jpg", ".jpeg"}
+    binary_exts = {
+        ".p7m",
+        ".p7s",
+        ".pkcs7",
+        ".der",
+        ".pfx",
+        ".p12",
+        ".exe",
+        ".dll",
+        ".so",
+        ".zip",
+        ".tar",
+        ".gz",
+        ".7z",
+        ".pdf",
+        ".png",
+        ".jpg",
+        ".jpeg",
+    }
     if path.suffix.lower() in binary_exts:
         raise ValueError(
             f"Il file {path.name} ha un'estensione binaria ({path.suffix}) e non può essere letto come testo plain. "

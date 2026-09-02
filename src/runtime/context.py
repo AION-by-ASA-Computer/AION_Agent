@@ -19,6 +19,7 @@ def set_context(
     *,
     turn_plan_id: Optional[str] = None,
     plan_controller: Any = None,
+    profile_name: Optional[str] = None,
 ) -> None:
     ctx: Dict[str, Any] = {
         "session_id": session_id,
@@ -29,6 +30,8 @@ def set_context(
         # Used by mark_task_completed to enforce one-call-per-turn semantics.
         "mark_once": {"used": False, "lock": threading.Lock()},
     }
+    if profile_name:
+        ctx["profile_name"] = profile_name.strip()
     if turn_plan_id:
         ctx["turn_plan_id"] = turn_plan_id.strip()
     if plan_controller is not None:

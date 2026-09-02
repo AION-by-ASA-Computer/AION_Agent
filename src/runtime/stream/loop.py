@@ -827,10 +827,10 @@ class StreamLoop:
                 from src.runtime.hooks import HookContext, hook_registry
 
                 await hook_registry.dispatch(
-                    "post_tool",
+                    "post_tool_use",
                     HookContext(
-                        event="post_tool",
-                        tenant_id=_tenant_qm,
+                        event="post_tool_use",
+                        tenant_id=self.user_id or _tenant_qm,
                         conversation_id=self.session_id,
                         user_id=self.user_id,
                         profile=self.profile_name,

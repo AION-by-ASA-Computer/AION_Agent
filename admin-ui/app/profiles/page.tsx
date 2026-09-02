@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { apiFetch } from "@/lib/api/headers"
-import { UserPlus, Settings2, Trash2, Save, X, Cpu, Search, Check, Plus, Layers, ShieldCheck, Sparkles, Star, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Download, Upload, Terminal, FileText, Code2 } from "lucide-react";
+import { UserPlus, Settings2, Trash2, Save, X, Cpu, Search, Check, Plus, Layers, ShieldCheck, Sparkles, Star, ChevronRight, ChevronDown, ChevronUp, AlertTriangle, Download, Upload, Terminal, FileText, Code2, Wand2 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { PageToast, ToastState } from "@/components/PageToast";
 import { BlockMarkdownEditor } from "@/components/BlockMarkdownEditor";
@@ -41,10 +41,92 @@ export default function Profiles() {
   const [mcpDropdownOpen, setMcpDropdownOpen] = useState(false);
   const [showSelectedSkillsOnly, setShowSelectedSkillsOnly] = useState(false);
   const [showSelectedMCPsOnly, setShowSelectedMCPsOnly] = useState(false);
+  const [activeTab, setActiveTab] = useState<"identity" | "skills" | "mcp">("identity");
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardPrompt, setWizardPrompt] = useState("");
+  const [wizardLoading, setWizardLoading] = useState(false);
   const NATIVE_TOOL_BUNDLES = ["web_research"];
+
+  const handleRunWizard = async () => {
+    if (!wizardPrompt.trim()) return;
+    setWizardLoading(true);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/profiles/wizard-generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: wizardPrompt }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Generazione wizard fallita");
+      }
+      const data = await res.json();
+      setSelectedProfile({
+        name: data.name || "Wizard Agent",
+        description: data.description || "",
+        instructions: data.instructions || "",
+        skills: Array.isArray(data.skills) ? data.skills : [],
+        critical_skills: [],
+        mcp_servers: Array.isArray(data.mcp_servers) ? data.mcp_servers : [],
+        native_tool_groups: [],
+      });
+      setIsWizardOpen(false);
+      setWizardPrompt("");
+      setToast({
+        message: `Profilo "${data.name || "Agente"}" generato con successo! Revisiona e salva.`,
+        variant: "success",
+      });
+    } catch (e: any) {
+      setToast({ message: "Errore Wizard: " + e.message, variant: "error" });
+    } finally {
+      setWizardLoading(false);
+    }
+  };
+
+  const [inlineRefinePrompt, setInlineRefinePrompt] = useState("");
+  const [refineLoading, setRefineLoading] = useState(false);
+
+  const handleRefineProfile = async (promptOverride?: string) => {
+    const targetPrompt = promptOverride || inlineRefinePrompt;
+    if (!targetPrompt.trim() || !selectedProfile) return;
+    setRefineLoading(true);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/profiles/wizard-refine`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: targetPrompt,
+          current_profile: selectedProfile,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Modifica profilo fallita");
+      }
+      const data = await res.json();
+      setSelectedProfile({
+        name: data.name || selectedProfile.name,
+        description: data.description || selectedProfile.description,
+        instructions: data.instructions || selectedProfile.instructions,
+        skills: Array.isArray(data.skills) ? data.skills : selectedProfile.skills,
+        critical_skills: selectedProfile.critical_skills || [],
+        mcp_servers: Array.isArray(data.mcp_servers) ? data.mcp_servers : selectedProfile.mcp_servers,
+        native_tool_groups: selectedProfile.native_tool_groups || [],
+      });
+      setInlineRefinePrompt("");
+      setToast({
+        message: `Profilo "${data.name || selectedProfile.name}" modificato dall'IA! Revisiona i campi sotto e salva.`,
+        variant: "success",
+      });
+    } catch (e: any) {
+      setToast({ message: "Errore Modifica AI: " + e.message, variant: "error" });
+    } finally {
+      setRefineLoading(false);
+    }
+  };
 
   useEffect(() => {
     fetchProfiles();
@@ -463,297 +545,512 @@ export default function Profiles() {
       </div>
 
       {/* ==========================================
-          HEADER: WORKSPACE CONTROLS & PROFILE SWITCHER
+          HEADER: WORKSPACE CONTROLS & PROFILE SWITCHER & TAB NAVIGATION
           ========================================== */}
-      <header className="flex items-center justify-between px-6 py-4 bg-[#0a0a0a] border-b border-slate-800/80 sticky top-16 z-40">
+      <header className="flex flex-col gap-3 px-6 py-4 bg-[#0a0a0a]/95 border border-slate-800/80 sticky top-16 z-40 backdrop-blur-xl shadow-2xl rounded-2xl mb-6">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* Profile Switcher */}
+          <HeaderDropdown
+            triggerIcon={<Terminal className="w-5 h-5" />}
+            triggerLabelTop="Active Identity"
+            triggerLabelMain={
+              loadingProfile
+                ? "Loading..."
+                : selectedProfile
+                  ? (selectedProfile.name || "New Profile")
+                  : "Select Profile..."
+            }
+            items={profiles.map((p) => ({ key: profileSlug(p), label: p.name }))}
+            selectedKey={selectedProfile ? profileSlug(selectedProfile) : undefined}
+            itemIcon={<Terminal className="w-4 h-4" />}
+            onItemSelect={(key) => handleEdit(key)}
+            searchPlaceholder="Search profiles..."
+            emptyLabel="No profiles found"
+            actions={[
+              {
+                icon: <Wand2 className="w-4 h-4" />,
+                label: "AI Wizard Generator",
+                onClick: () => setIsWizardOpen(true),
+                colorClass: "text-purple-400 hover:bg-purple-600/10 font-bold",
+              },
+              {
+                icon: <Plus className="w-4 h-4" />,
+                label: "New Profile",
+                onClick: handleNewProfile,
+                colorClass: "text-blue-400 hover:bg-blue-600/10",
+              },
+              {
+                icon: <Upload className="w-4 h-4" />,
+                label: "Import Profile",
+                onClick: handleImport,
+                colorClass: "text-emerald-400 hover:bg-emerald-600/10",
+              },
+            ]}
+          />
 
+          {/* Global Actions */}
+          <div className="flex items-center gap-3">
+            {selectedProfile && (
+              <>
+                {/* Export Current Profile */}
+                <button
+                  onClick={() => handleExport(selectedProfile)}
+                  title="Export Current Profile"
+                  className="p-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+                >
+                  <Download className="w-5 h-5" />
+                </button>
 
+                {/* Delete Profile */}
+                <button
+                  onClick={() => handleDelete(selectedProfile.name)}
+                  title="Delete Profile"
+                  className="p-2.5 rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
 
-        {/* Profile Switcher */}
-        <HeaderDropdown
-          triggerIcon={<Terminal className="w-5 h-5" />}
-          triggerLabelTop="Active Identity"
-          triggerLabelMain={
-            loadingProfile
-              ? "Loading..."
-              : selectedProfile
-                ? (selectedProfile.name || "New Profile")
-                : "Select Profile..."
-          }
-          items={profiles.map((p) => ({ key: profileSlug(p), label: p.name }))}
-          selectedKey={selectedProfile ? profileSlug(selectedProfile) : undefined}
-          itemIcon={<Terminal className="w-4 h-4" />}
-          onItemSelect={(key) => handleEdit(key)}
-          searchPlaceholder="Search profiles..."
-          emptyLabel="No profiles found"
-          actions={[
-            {
-              icon: <Plus className="w-4 h-4" />,
-              label: "New Profile",
-              onClick: handleNewProfile,
-              colorClass: "text-blue-400 hover:bg-blue-600/10",
-            },
-            {
-              icon: <Upload className="w-4 h-4" />,
-              label: "Import Profile",
-              onClick: handleImport,
-              colorClass: "text-emerald-400 hover:bg-emerald-600/10",
-            },
-          ]}
-        />
+                {/* Save Configuration */}
+                <button
+                  onClick={handleSave}
+                  disabled={loading}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-bold text-sm transition-all shadow-[0_0_15px_rgba(59,130,246,0.2)] disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" /> {loading ? "Saving..." : "Save Configuration"}
+                </button>
+              </>
+            )}
 
-        {/* Global Actions */}
-        <div className="flex items-center gap-3">
-          {selectedProfile && (
-            <>
-              {/* Export Current Profile */}
+            {/* Export All Profiles */}
+            {profiles.length > 0 && (
               <button
-                onClick={() => handleExport(selectedProfile)}
-                title="Export Current Profile"
-                className="p-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+                onClick={handleExportAll}
+                title="Export All Profiles"
+                className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-lg font-semibold text-xs transition-all"
               >
-                <Download className="w-5 h-5" />
+                <Download className="w-3.5 h-3.5" /> Export All
               </button>
-
-              {/* Delete Profile */}
-              <button
-                onClick={() => handleDelete(selectedProfile.name)}
-                title="Delete Profile"
-                className="p-2.5 rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-500 transition-colors"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
-
-              {/* Save Configuration */}
-              <button
-                onClick={handleSave}
-                disabled={loading}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-bold text-sm transition-all shadow-[0_0_15px_rgba(59,130,246,0.2)] disabled:opacity-50"
-              >
-                <Save className="w-4 h-4" /> {loading ? "Saving..." : "Save Configuration"}
-              </button>
-            </>
-          )}
-
-          {/* Export All Profiles */}
-          {profiles.length > 0 && (
-            <button
-              onClick={handleExportAll}
-              title="Export All Profiles"
-              className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-lg font-semibold text-xs transition-all"
-            >
-              <Download className="w-3.5 h-3.5" /> Export All
-            </button>
-          )}
+            )}
+          </div>
         </div>
+
+        {/* Section Tabs Navigation inside the sticky Header container */}
+        {selectedProfile && (
+          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setActiveTab("identity")}
+                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${activeTab === "identity"
+                  ? "bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white shadow-lg shadow-purple-900/40"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+                  }`}
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>1. Identity & Instructions</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("skills")}
+                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${activeTab === "skills"
+                  ? "bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-600 text-white shadow-lg shadow-blue-900/40"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+                  }`}
+              >
+                <Layers className="w-4 h-4" />
+                <span>2. Capability Skills</span>
+                <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-mono text-white">
+                  {(selectedProfile.skills || []).length}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab("mcp")}
+                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${activeTab === "mcp"
+                  ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white shadow-lg shadow-emerald-900/40"
+                  : "text-slate-400 hover:text-white hover:bg-white/5"
+                  }`}
+              >
+                <Cpu className="w-4 h-4" />
+                <span>3. MCP Tools & Servers</span>
+                <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-mono text-white">
+                  {(selectedProfile.mcp_servers || []).length}
+                </span>
+              </button>
+            </div>
+
+            <div className="hidden md:flex items-center gap-3 pr-2">
+              <span className="text-xs text-slate-400 font-mono">
+                Agent: <strong className="text-purple-400 font-semibold">{selectedProfile.name || "Untitled"}</strong>
+              </span>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ==========================================
           MAIN EDITOR: LAYOUT ORIZZONTALE (2 Colonne)
           ========================================== */}
       {selectedProfile ? (
-        <main className="flex-1 p-6 lg:p-10 overflow-y-auto">
-          <div className="max-w-[1600px] mx-auto flex flex-col gap-6 lg:gap-8">
+        <main className="flex-1">
+          <div className="max-w-[1600px] mx-auto flex flex-col gap-6">
 
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+            {/* ================= TAB 1: IDENTITY & INSTRUCTIONS ================= */}
+            {activeTab === "identity" && (
+              <div className="flex flex-col gap-6 animate-in fade-in duration-200">
 
-              {/* COLONNA TESTUALE (Prompt & Meta) */}
-              <div className="lg:col-span-7 flex flex-col gap-6">
-
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Identity Name</label>
-                  <input
-                    type="text"
-                    value={selectedProfile.name}
-                    placeholder="e.g. dev_agent"
-                    onChange={(e) => setSelectedProfile((prev: any) => prev ? { ...prev, name: e.target.value } : null)}
-                    className="w-full bg-[#0a0a0a] border border-slate-800 rounded-xl px-4 py-3 text-slate-200 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all font-medium outline-none"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-bold uppercase tracking-wider text-slate-500">Short Description</label>
-                  <textarea
-                    value={selectedProfile.description || ""}
-                    placeholder="Observability-focused profile..."
-                    onChange={(e) => setSelectedProfile((prev: any) => prev ? { ...prev, description: e.target.value } : null)}
-                    rows={4}
-                    className="w-full bg-[#0a0a0a] border border-slate-800 rounded-xl px-4 py-3 text-sm text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all outline-none resize-y min-h-[60px] custom-scrollbar"
-                  />
-                </div>
-
-                <div className="flex-1 flex flex-col space-y-2 min-h-[600px]">
-                  <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold uppercase tracking-wider text-slate-500 flex items-center gap-2">
-                      <Terminal className="w-4 h-4" /> System Instructions (Prompt)
-                    </label>
+                {/* ELEGANT COMPACT TOP BANNER: AI PROFILE CO-PILOT */}
+                <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 via-[#121216] to-indigo-950/40 p-3.5 px-5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xl backdrop-blur-md">
+                  <div className="flex items-center gap-2 text-purple-400 font-bold text-xs uppercase tracking-wider shrink-0">
+                    <Wand2 className="w-4 h-4 animate-pulse" />
+                    <span>AI Profile Co-Pilot</span>
                   </div>
-                  <div className="flex-1 bg-[#0a0a0a] border border-slate-800 rounded-xl p-5 text-[13px] text-slate-300 transition-all shadow-inner outline-none font-sans">
+
+                  <div className="flex-1 flex items-center gap-2 max-w-3xl">
+                    <input
+                      type="text"
+                      value={inlineRefinePrompt}
+                      onChange={(e) => setInlineRefinePrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRefineProfile();
+                      }}
+                      placeholder="Chiedi all'IA di modificare questo profilo... (es: 'Formatta in JSON', 'Aggiungi memoria LTM')"
+                      className="flex-1 bg-black/60 border border-purple-500/30 rounded-xl px-4 py-2 text-xs text-white placeholder:text-gray-500 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRefineProfile()}
+                      disabled={refineLoading || !inlineRefinePrompt.trim()}
+                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-900/30 disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      {refineLoading ? (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                          <span>...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-3.5 h-3.5" />
+                          <span>Applica</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  <div className="hidden lg:flex items-center gap-1.5 shrink-0">
+                    {[
+                      { label: "🧠 Memoria", prompt: "Aggiungi la capacità di ricordare conversazioni passate con la memoria a lungo termine." },
+                      { label: "📧 Email", prompt: "Aggiungi l'integrazione per leggere ed inviare email via IMAP/SMTP." },
+                      { label: "🌐 Web", prompt: "Aggiungi la capacità di effettuare ricerche sul web." },
+                      { label: "⚡ JSON", prompt: "Aggiorna le istruzioni rendendo obbligatorio il formato JSON strutturato per tutte le risposte." },
+                    ].map((chip) => (
+                      <button
+                        key={chip.label}
+                        type="button"
+                        onClick={() => handleRefineProfile(chip.prompt)}
+                        disabled={refineLoading}
+                        className="px-2.5 py-1 rounded-lg bg-purple-900/30 border border-purple-500/25 text-purple-300 hover:bg-purple-800/50 hover:border-purple-400 text-xs transition-all cursor-pointer font-medium disabled:opacity-50"
+                      >
+                        {chip.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* TOP ROW (2 EQUAL COLUMNS): AGENT IDENTITY (LEFT 6 COLS) vs CONFIGURED TOOLS (RIGHT 6 COLS) */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+
+                  {/* LEFT (6 COLS): Agent Identity Metadata Card */}
+                  <div className="lg:col-span-6 bg-[#0e0e12] border border-white/10 rounded-2xl p-5 flex flex-col justify-between shadow-2xl">
+                    <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs uppercase tracking-wider pb-2 border-b border-white/5">
+                      <UserPlus className="w-4 h-4" />
+                      <span>Agent Identity</span>
+                    </div>
+
+                    <div className="flex flex-col gap-4 py-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Identity Name <span className="text-red-400">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={selectedProfile.name}
+                          placeholder="e.g. dev_agent"
+                          onChange={(e) => setSelectedProfile((prev: any) => prev ? { ...prev, name: e.target.value } : null)}
+                          className="w-full bg-[#16161d] border border-white/10 rounded-xl px-4 py-2.5 text-slate-100 font-bold focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all outline-none text-sm"
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                          Short Description
+                        </label>
+                        <textarea
+                          value={selectedProfile.description || ""}
+                          placeholder="Observability-focused profile..."
+                          onChange={(e) => setSelectedProfile((prev: any) => prev ? { ...prev, description: e.target.value } : null)}
+                          rows={2}
+                          className="w-full bg-[#16161d] border border-white/10 rounded-xl px-4 py-2.5 text-xs text-slate-300 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all outline-none resize-none custom-scrollbar min-h-[60px]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* RIGHT (6 COLS): Configured Tools & Capabilities Summary Card */}
+                  <div className="lg:col-span-6 bg-[#0e0e12] border border-white/10 rounded-2xl p-5 flex flex-col justify-between shadow-2xl">
+                    <div className="text-xs font-bold uppercase tracking-wider text-slate-300 pb-2 border-b border-white/5 flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-cyan-400" />
+                      <span>Configured Tools & Capabilities</span>
+                    </div>
+
+                    <div className="flex flex-col gap-3 py-3">
+                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-blue-950/25 border border-blue-500/30 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <Layers className="w-5 h-5 text-blue-400" />
+                          <div>
+                            <div className="text-sm font-bold text-slate-100">Attached Capability Skills</div>
+                            <div className="text-xs text-slate-400 font-mono">{(selectedProfile.skills || []).length} active skills attached</div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("skills")}
+                          className="px-4 py-2 rounded-xl bg-blue-600/30 border border-blue-500/40 text-blue-200 hover:bg-blue-600/50 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                        >
+                          Manage →
+                        </button>
+                      </div>
+
+                      <div className="flex items-center justify-between p-3.5 rounded-xl bg-emerald-950/25 border border-emerald-500/30 shadow-sm">
+                        <div className="flex items-center gap-3">
+                          <Cpu className="w-5 h-5 text-emerald-400" />
+                          <div>
+                            <div className="text-sm font-bold text-slate-100">Connected MCP Servers</div>
+                            <div className="text-xs text-slate-400 font-mono">{(selectedProfile.mcp_servers || []).length} servers connected</div>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab("mcp")}
+                          className="px-4 py-2 rounded-xl bg-emerald-600/30 border border-emerald-500/40 text-emerald-200 hover:bg-emerald-600/50 text-xs font-bold transition-all cursor-pointer shadow-sm"
+                        >
+                          Manage →
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                </div>
+
+                {/* BOTTOM ROW (FULL WIDTH): SYSTEM INSTRUCTIONS PROMPT EDITOR (EXACTLY LIKE SKILLS PAGE!) */}
+                <div className="flex-1 flex flex-col space-y-3 min-h-[550px]">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold uppercase tracking-wider text-slate-300 flex items-center gap-2">
+                      <Terminal className="w-4 h-4 text-indigo-400" />
+                      <span>System Instructions (Prompt)</span>
+                    </label>
+                    <span className="text-xs text-slate-400 font-mono">Full-width Markdown Editor</span>
+                  </div>
+                  <div className="flex-1 bg-[#0e0e12] border border-white/10 rounded-2xl p-5 text-sm text-slate-200 transition-all shadow-2xl">
                     <BlockMarkdownEditor
                       value={selectedProfile.instructions || ""}
                       onChange={(val) => setSelectedProfile((prev: any) => prev ? { ...prev, instructions: val } : null)}
-                      height={550}
+                      height={500}
                       placeholder="You are an expert AI assistant dedicated to assisting the user with specialized tasks."
                       allowTasks={false}
                     />
                   </div>
                 </div>
+
               </div>
+            )}
 
-              {/* COLONNA CONFIGURAZIONI (Skills & Server) */}
-              <div className="lg:col-span-5 flex flex-col gap-6">
+            {/* ================= TAB 2: CAPABILITY SKILLS ================= */}
+            {activeTab === "skills" && (
+              <div className="flex flex-col gap-6 animate-in fade-in duration-200">
+                <div className="bg-[#0e0e12] border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col min-h-[600px]">
 
-                {/* Skills Panel */}
-                <div className="bg-[#0a0a0a] border border-slate-800 rounded-xl p-5 flex flex-col max-h-[600px]">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-blue-500" />
-                      <h3 className="text-sm font-bold tracking-wider uppercase">Attached Skills</h3>
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
+                    <div>
+                      <h3 className="text-xl font-extrabold text-white flex items-center gap-2.5">
+                        <Layers className="w-6 h-6 text-blue-400" />
+                        <span>Attached Capability Skills</span>
+                      </h3>
+                      <p className="text-sm text-slate-300 mt-1">
+                        Select skills to attach to this profile. Attached skills provide specialized execution protocols and workflows.
+                      </p>
                     </div>
+
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => setShowSelectedSkillsOnly(!showSelectedSkillsOnly)}
-                        className={`text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded-lg border transition-colors ${showSelectedSkillsOnly
-                          ? 'bg-blue-500/20 text-blue-400 border-blue-500/40 hover:bg-blue-500/30'
-                          : 'bg-transparent text-slate-500 border-slate-800 hover:text-slate-300 hover:border-slate-700'
+                        className={`text-xs uppercase font-bold tracking-wider px-4 py-2 rounded-xl border transition-all cursor-pointer ${showSelectedSkillsOnly
+                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 shadow-lg shadow-blue-900/20'
+                          : 'bg-white/5 text-slate-300 border-white/10 hover:text-white hover:bg-white/10'
                           }`}
                       >
-                        {showSelectedSkillsOnly ? "Selected Only" : "Show All"}
+                        {showSelectedSkillsOnly ? "Attached Only" : "Show All Skills"}
                       </button>
-                      <span className="text-[11px] text-slate-500">Click to toggle</span>
                     </div>
                   </div>
 
                   {/* Skill Search Box */}
-                  <div className="relative mb-4">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                  <div className="relative mb-6">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Search available skills..."
+                      placeholder="Search available skills by name, tag, or description..."
                       value={skillSearch}
                       onChange={(e) => setSkillSearch(e.target.value)}
-                      className="w-full bg-[#121212] border border-slate-800 rounded-lg pl-9 pr-8 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-blue-500/50 outline-none transition-all"
+                      className="w-full bg-[#16161d] border border-white/10 rounded-xl pl-11 pr-10 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all font-medium"
                     />
                     {skillSearch && (
                       <button
                         onClick={() => setSkillSearch("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 transition-colors"
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-4 h-4" />
                       </button>
                     )}
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 overflow-y-auto pr-1 custom-scrollbar">
-                    {filteredSkills.map(skill => {
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                    {filteredSkills.map((skill) => {
                       const isAttached = (selectedProfile.skills || []).includes(skill);
                       const isCritical = (selectedProfile.critical_skills ?? []).includes(skill);
+                      const skillInfo = availableSkills[skill];
 
                       return (
                         <div
                           key={skill}
                           onClick={() => toggleSkill(skill)}
-                          onMouseEnter={(e) => {
-                            const desc = availableSkills[skill]?.description;
-                            if (!desc) return;
-                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                            setSkillTooltip({
-                              name: skill,
-                              x: rect.left + rect.width / 2,
-                              y: rect.top,
-                              height: rect.height
-                            });
-                          }}
-                          onMouseLeave={() => setSkillTooltip(null)}
-                          className={`relative group flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all
-                          ${isAttached
-                              ? 'bg-[#121212] border-slate-700'
-                              : 'bg-transparent border-slate-800 hover:border-slate-700'
-                            }
-                        `}
+                          className={`group relative flex flex-col justify-between p-5 rounded-2xl border cursor-pointer transition-all ${isAttached
+                            ? 'bg-blue-950/30 border-blue-500/60 shadow-xl shadow-blue-950/40 text-white'
+                            : 'bg-[#16161d]/60 border-white/10 hover:border-white/25 hover:bg-[#16161d] text-slate-300'
+                            }`}
                         >
-                          <span className={`text-xs font-mono truncate ${isAttached ? 'text-slate-200' : 'text-slate-500'}`}>
-                            {skill}
-                          </span>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleCriticalSkill(skill);
-                            }}
-                            className="focus:outline-none p-1 -mr-1"
-                          >
-                            <Star className={`w-3.5 h-3.5 transition-colors ${!isAttached ? 'text-transparent' :
-                              isCritical ? 'fill-amber-500 text-amber-500' : 'text-slate-600 hover:text-amber-500/50'
-                              }`} />
-                          </button>
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`text-sm font-mono font-bold truncate ${isAttached ? 'text-blue-300' : 'text-slate-100'}`}>
+                                {skill}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleCriticalSkill(skill);
+                                }}
+                                className="focus:outline-none p-1"
+                                title={isCritical ? "Skill critica (sempre abilitata)" : "Segna come skill critica"}
+                              >
+                                <Star className={`w-4 h-4 transition-colors ${!isAttached ? 'text-transparent' : isCritical ? 'fill-amber-400 text-amber-400' : 'text-slate-500 hover:text-amber-400/80'}`} />
+                              </button>
+                            </div>
+
+                            <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed font-sans">
+                              {skillInfo?.description || "Specialized competence protocol file."}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center justify-between pt-4 mt-3 border-t border-white/10">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {(skillInfo?.tags || []).slice(0, 3).map((t) => (
+                                <span key={t} className="px-2 py-0.5 rounded-md bg-white/10 text-xs font-mono text-slate-300 font-medium">
+                                  #{t}
+                                </span>
+                              ))}
+                            </div>
+
+                            <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-sm ${isAttached ? 'bg-blue-500/30 text-blue-200 border border-blue-400/40' : 'bg-white/5 text-slate-400 border border-white/5'
+                              }`}>
+                              {isAttached ? 'Attached' : 'Off'}
+                            </span>
+                          </div>
                         </div>
                       );
                     })}
                     {filteredSkills.length === 0 && (
-                      <div className="col-span-2 text-center text-xs text-slate-500 italic py-4">
-                        No skills found
+                      <div className="col-span-full text-center text-sm text-slate-400 italic py-12">
+                        No skills found matching your search.
                       </div>
                     )}
                   </div>
-                </div>
 
-                {/* Connected MCP Servers & Native Tools Panel */}
-                <div className="bg-[#0a0a0a] border border-slate-800 rounded-xl p-5 flex-1 flex flex-col max-h-[600px]">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <Cpu className="w-4 h-4 text-emerald-500" />
-                      <h3 className="text-sm font-bold tracking-wider uppercase">Connected MCP Servers</h3>
+                </div>
+              </div>
+            )}
+
+            {/* ================= TAB 3: CONNECTED MCP SERVERS ================= */}
+            {activeTab === "mcp" && (
+              <div className="flex flex-col gap-6 animate-in fade-in duration-200">
+                <div className="bg-[#0e0e12] border border-white/10 rounded-2xl p-6 shadow-2xl flex flex-col min-h-[600px]">
+
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
+                    <div>
+                      <h3 className="text-xl font-extrabold text-white flex items-center gap-2.5">
+                        <Cpu className="w-6 h-6 text-emerald-400" />
+                        <span>Connected MCP Servers & Native Tools</span>
+                      </h3>
+                      <p className="text-sm text-slate-300 mt-1">
+                        Attach Model Context Protocol (MCP) servers and native tool bundles to expand the agent's tool execution capabilities.
+                      </p>
                     </div>
+
                     <div className="flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => setShowSelectedMCPsOnly(!showSelectedMCPsOnly)}
-                        className={`text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded-lg border transition-colors ${showSelectedMCPsOnly
-                          ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/30'
-                          : 'bg-transparent text-slate-500 border-slate-800 hover:text-slate-300 hover:border-slate-700'
+                        className={`text-xs uppercase font-bold tracking-wider px-4 py-2 rounded-xl border transition-all cursor-pointer ${showSelectedMCPsOnly
+                          ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-lg shadow-emerald-950/20'
+                          : 'bg-white/5 text-slate-300 border-white/10 hover:text-white hover:bg-white/10'
                           }`}
                       >
-                        {showSelectedMCPsOnly ? "Connected Only" : "Show All"}
+                        {showSelectedMCPsOnly ? "Connected Only" : "Show All MCPs"}
                       </button>
-                      <span className="text-[11px] text-slate-500">Click to toggle</span>
                     </div>
                   </div>
 
                   {profileHasBlockedMcps ? (
-                    <div className="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200/90">
-                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                    <div className="mb-5 flex items-start gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-xs text-amber-200 shadow-lg">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
                       <span>
-                        Alcuni MCP collegati sono in attesa di configurazione OAuth in MCP Hub. Rimuovili dal
-                        profilo o completa client ID/secret prima di usarli in chat.
+                        Alcuni MCP collegati sono in attesa di configurazione OAuth in MCP Hub. Rimuovili dal profilo o completa client ID/secret prima di usarli in chat.
                       </span>
                     </div>
                   ) : null}
 
                   {/* MCP Search Box */}
-                  <div className="relative mb-4">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                  <div className="relative mb-6">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                     <input
                       type="text"
-                      placeholder="Search servers..."
+                      placeholder="Search available MCP servers or native tools..."
                       value={mcpSearch}
                       onChange={(e) => setMcpSearch(e.target.value)}
-                      className="w-full bg-[#121212] border border-slate-800 rounded-lg pl-9 pr-8 py-2 text-xs text-slate-200 placeholder:text-slate-600 focus:border-blue-500/50 outline-none transition-all"
+                      className="w-full bg-[#16161d] border border-white/10 rounded-xl pl-11 pr-10 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 outline-none transition-all font-medium"
                     />
                     {mcpSearch && (
                       <button
                         onClick={() => setMcpSearch("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-200 transition-colors"
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200 transition-colors"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-4 h-4" />
                       </button>
                     )}
                   </div>
 
-                  <div className="space-y-4 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+                  <div className="space-y-6 flex-1 overflow-y-auto pr-1 custom-scrollbar">
+
                     {/* Native tool bundles */}
                     <div>
-                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">Native tool bundles</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-2">
+                        <Code2 className="w-4 h-4 text-cyan-400" />
+                        <span>Native Tool Bundles</span>
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                         {NATIVE_TOOL_BUNDLES
                           .filter(bid => !showSelectedMCPsOnly || (selectedProfile?.native_tool_groups || []).includes(bid))
                           .map((bid) => {
@@ -762,22 +1059,18 @@ export default function Profiles() {
                               <div
                                 key={bid}
                                 onClick={() => toggleNativeBundle(bid)}
-                                onMouseEnter={(e) => {
-                                  const desc = availableMCPs[bid];
-                                  if (!desc) return;
-                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                  setMcpTooltip({ name: bid, x: rect.left + rect.width / 2, y: rect.top, height: rect.height });
-                                }}
-                                onMouseLeave={() => setMcpTooltip(null)}
-                                className={`flex items-center justify-between p-2.5 rounded-lg border cursor-pointer transition-all
-                              ${isConnected
-                                    ? 'bg-cyan-950/20 border-cyan-800 text-cyan-200'
-                                    : 'bg-transparent border-slate-800 hover:border-slate-700 text-slate-500'
-                                  }
-                            `}
+                                className={`flex items-center justify-between p-5 rounded-2xl border cursor-pointer transition-all ${isConnected
+                                  ? 'bg-cyan-950/30 border-cyan-500/60 shadow-xl shadow-cyan-950/40 text-cyan-100'
+                                  : 'bg-[#16161d]/60 border-white/10 hover:border-white/25 hover:bg-[#16161d] text-slate-300'
+                                  }`}
                               >
-                                <span className="text-xs font-mono truncate">{bid}</span>
-                                <span className="text-[9px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400">Native</span>
+                                <div>
+                                  <div className="text-sm font-mono font-bold text-slate-100">{bid}</div>
+                                  <div className="text-xs text-slate-300 mt-1">Built-in agent execution tools</div>
+                                </div>
+                                <span className="text-xs uppercase font-bold tracking-wider px-2.5 py-1 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                  Native
+                                </span>
                               </div>
                             );
                           })}
@@ -786,62 +1079,68 @@ export default function Profiles() {
 
                     {/* External MCP Servers */}
                     <div>
-                      <h4 className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">External MCP Servers</h4>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-300 mb-3 flex items-center gap-2">
+                        <Cpu className="w-4 h-4 text-emerald-400" />
+                        <span>External MCP Servers</span>
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
                         {filteredMCPs.map((m) => {
                           const isConnected = (selectedProfile.mcp_servers || []).includes(m);
                           const awaitingSetup = mcpAwaitingAdminSetup(m);
+                          const mcpDesc = availableMCPs[m];
+
                           return (
                             <div
                               key={m}
                               onClick={() => toggleMCP(m)}
-                              onMouseEnter={(e) => {
-                                const desc = availableMCPs[m];
-                                if (!desc && !awaitingSetup) return;
-                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                                setMcpTooltip({ name: m, x: rect.left + rect.width / 2, y: rect.top, height: rect.height });
-                              }}
-                              onMouseLeave={() => setMcpTooltip(null)}
-                              className={`flex items-center justify-between p-2.5 rounded-lg border transition-all
-                              ${awaitingSetup
-                                  ? isConnected
-                                    ? "cursor-pointer border-amber-700/60 bg-amber-950/20 text-amber-200"
-                                    : "cursor-not-allowed border-slate-800/80 bg-slate-900/40 text-slate-600 opacity-60"
-                                  : "cursor-pointer"
-                                }
-                              ${!awaitingSetup && isConnected
-                                  ? "bg-emerald-950/20 border-emerald-800 text-emerald-200"
+                              className={`flex flex-col justify-between p-5 rounded-2xl border transition-all ${awaitingSetup
+                                ? isConnected
+                                  ? "cursor-pointer border-amber-700/60 bg-amber-950/20 text-amber-200"
+                                  : "cursor-not-allowed border-slate-800/80 bg-slate-900/40 text-slate-600 opacity-60"
+                                : "cursor-pointer"
+                                } ${!awaitingSetup && isConnected
+                                  ? "bg-emerald-950/30 border-emerald-500/60 shadow-xl shadow-emerald-950/40 text-emerald-100"
                                   : !awaitingSetup
-                                    ? "bg-transparent border-slate-800 hover:border-slate-700 text-slate-500"
+                                    ? "bg-[#16161d]/60 border-white/10 hover:border-white/25 hover:bg-[#16161d] text-slate-300"
                                     : ""
-                                }
-                            `}
+                                }`}
                             >
-                              <span className="text-xs font-mono truncate">{m}</span>
-                              <div className="flex shrink-0 items-center gap-1">
-                                {awaitingSetup ? (
-                                  <span className="text-[9px] font-bold uppercase tracking-wider text-amber-400/90">
-                                    Attesa config
-                                  </span>
-                                ) : null}
-                                {isConnected && <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden />}
+                              <div className="space-y-2">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className="text-sm font-mono font-bold text-slate-100 truncate">{m}</span>
+                                  {isConnected && <Check className="h-4 w-4 text-emerald-400" />}
+                                </div>
+                                <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed font-sans">
+                                  {mcpDesc || "External MCP integration server"}
+                                </p>
+                              </div>
+
+                              <div className="pt-4 mt-3 border-t border-white/10 flex items-center justify-between">
+                                <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-sm ${isConnected ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/40' : 'bg-white/5 text-slate-400 border border-white/5'
+                                  }`}>
+                                  {isConnected ? 'Connected' : 'Disconnected'}
+                                </span>
+                                {awaitingSetup && (
+                                  <span className="text-xs font-bold text-amber-400">Attesa OAuth</span>
+                                )}
                               </div>
                             </div>
                           );
                         })}
                         {filteredMCPs.length === 0 && (
-                          <div className="col-span-2 text-center text-xs text-slate-500 italic py-2">
-                            No MCP servers found
+                          <div className="col-span-full text-center text-sm text-slate-400 italic py-8">
+                            No MCP servers found.
                           </div>
                         )}
                       </div>
                     </div>
+
                   </div>
+
                 </div>
-
               </div>
+            )}
 
-            </div>
           </div>
         </main>
       ) : (
@@ -978,6 +1277,98 @@ export default function Profiles() {
             ) : (
               <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-[#0c0c0e]/95" />
             )}
+          </div>
+        </div>
+      )}
+
+      {/* AI PROFILE WIZARD MODAL */}
+      {isWizardOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-xl rounded-2xl bg-[#121212] border border-purple-500/40 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2 text-purple-400 font-bold text-lg">
+                <Wand2 className="w-5 h-5 animate-pulse" />
+                <span>AI Profile Creation Wizard</span>
+              </div>
+              <button
+                onClick={() => setIsWizardOpen(false)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Descrivi l'agente desiderato in linguaggio naturale. Il sistema selezionerà automaticamente dal catalogo le Skill ed i server MCP adatti, garantendo l'inclusione di tutte le skill e MCP necessarie all'agente per lo scopo che stai descrivendo. Tutte le istruzioni dell'agente verranno generate rigorosamente in <b className="text-white">Inglese</b>.
+            </p>
+
+            {/* QUICK SUGGESTION CHIPS */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                💡 Suggerimenti per arricchire il prompt:
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: "🧠 Memoria a Lungo Termine", add: " Includi la capacità di ricordare conversazioni passate con la memoria a lungo termine." },
+                  { label: "📧 Lettura & Invio Email", add: " Aggiungi l'integrazione per leggere e gestire email via IMAP." },
+                  { label: "🌐 Ricerca Web Avanzata", add: " Aggiungi le funzionalità di ricerca e scraping web." },
+                  { label: "🗄️ Query Database SQL", add: " Includi l'accesso per interrogare schemi e tabelle di database SQL." },
+                  { label: "📄 Analisi OCR & Documenti", add: " Abilita l'estrazione di testo da immagini e file PDF/OCR." },
+                ].map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => {
+                      if (!wizardPrompt.includes(chip.add.trim())) {
+                        setWizardPrompt((prev) => (prev ? prev + chip.add : chip.add.trim()));
+                      }
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-purple-950/40 border border-purple-500/30 text-purple-300 hover:bg-purple-900/60 hover:border-purple-400 text-xs transition-all cursor-pointer font-medium"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <textarea
+              rows={4}
+              value={wizardPrompt}
+              onChange={(e) => setWizardPrompt(e.target.value)}
+              placeholder="Es: Voglio un agente per il supporto clienti che consulti la documentazione interna e risponda ai ticket Jira..."
+              className="w-full bg-black/60 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none resize-none"
+            />
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] text-gray-500 italic">
+                Output generato in Inglese (LLM Native)
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsWizardOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleRunWizard}
+                  disabled={wizardLoading || !wizardPrompt.trim()}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg disabled:opacity-50 transition-all cursor-pointer shadow-purple-900/30"
+                >
+                  {wizardLoading ? (
+                    <>
+                      <Sparkles className="w-4 h-4 animate-spin" />
+                      <span>Generazione Profilo (EN)...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4" />
+                      <span>Genera Profilo con IA</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

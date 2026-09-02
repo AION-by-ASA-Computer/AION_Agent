@@ -49,6 +49,7 @@ from .admin_profile_memory import router as admin_profile_memory_router
 from .cron_admin import router as cron_admin_router
 from .admin_query_memory import router as admin_query_memory_router
 from .llm_providers import router as llm_providers_router
+from .metrics_api import router as metrics_router
 from ..runtime.redis_client import redis_status
 from ..data.engine import get_async_session_maker
 from ..mcp_connector_catalog import (
@@ -290,6 +291,7 @@ router.include_router(admin_profile_memory_router)
 router.include_router(cron_admin_router)
 router.include_router(admin_query_memory_router)
 router.include_router(llm_providers_router)
+router.include_router(metrics_router)
 
 
 def _project_root() -> Path:
@@ -553,6 +555,96 @@ async def trust_security_scan(scan_id: str, req: TrustRequest):
 
 
 # --- PROFILES ---
+
+
+class WizardPromptRequest(BaseModel):
+    prompt: str = Field(
+        ...,
+        min_length=1,
+        description="Prompt in linguaggio naturale per la generazione",
+    )
+    messages: Optional[List[Dict[str, str]]] = Field(
+        None, description="Storico messaggi per affinamento multi-turn"
+    )
+
+
+@router.post("/profiles/wizard-generate")
+async def wizard_generate_profile(req: WizardPromptRequest):
+    from ..runtime.wizard_generator import generate_profile_wizard
+
+    try:
+        return await generate_profile_wizard(req.prompt, history=req.messages)
+    except Exception as exc:
+        logger.error("Profile wizard generation failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Generazione profilo fallita: {exc}"
+        )
+
+
+@router.post("/profiles/wizard-suggest")
+async def wizard_suggest_profile(req: WizardPromptRequest):
+    from ..runtime.wizard_generator import suggest_profile_enhancements
+
+    try:
+        return await suggest_profile_enhancements(req.prompt, history=req.messages)
+    except Exception as exc:
+        logger.error("Profile wizard suggestion failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Generazione suggerimenti fallita: {exc}"
+        )
+
+
+class WizardRefineProfileRequest(BaseModel):
+    prompt: str = Field(
+        ..., min_length=1, description="Prompt per la modifica/affinamento in-place"
+    )
+    current_profile: Dict[str, Any] = Field(
+        ..., description="Stato attuale del profilo da modificare"
+    )
+
+
+@router.post("/profiles/wizard-refine")
+async def wizard_refine_profile(req: WizardRefineProfileRequest):
+    from ..runtime.wizard_generator import refine_profile_wizard
+
+    try:
+        return await refine_profile_wizard(req.prompt, req.current_profile)
+    except Exception as exc:
+        logger.error("Profile wizard refine failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Modifica profilo fallita: {exc}")
+
+
+@router.post("/skills/wizard-generate")
+async def wizard_generate_skill(req: WizardPromptRequest):
+    from ..runtime.wizard_generator import generate_skill_wizard
+
+    try:
+        return await generate_skill_wizard(req.prompt, history=req.messages)
+    except Exception as exc:
+        logger.error("Skill wizard generation failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Generazione skill fallita: {exc}")
+
+
+class WizardRefineSkillRequest(BaseModel):
+    prompt: str = Field(
+        ...,
+        min_length=1,
+        description="Prompt per la modifica/affinamento in-place della skill",
+    )
+    current_skill: Dict[str, Any] = Field(
+        ..., description="Stato attuale della skill da modificare"
+    )
+
+
+@router.post("/skills/wizard-refine")
+async def wizard_refine_skill(req: WizardRefineSkillRequest):
+    from ..runtime.wizard_generator import refine_skill_wizard
+
+    try:
+        return await refine_skill_wizard(req.prompt, req.current_skill)
+    except Exception as exc:
+        logger.error("Skill wizard refine failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Modifica skill fallita: {exc}")
 
 
 @router.get("/profiles")

@@ -4,10 +4,10 @@ packages:
   - 'website'
   - 'services/pi-long-run'
 allowBuilds:
-  '@google/genai': set this to true or false
+  '@google/genai': false
   '@swc/core': true
   core-js: true
-  esbuild: set this to true or false
-  protobufjs: set this to true or false
+  esbuild: false
+  protobufjs: false
   sharp: true
   unrs-resolver: true
