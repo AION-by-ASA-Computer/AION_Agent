@@ -220,10 +220,13 @@ def main() -> int:
                     spec.loader.exec_module(up_mod)
                     rep = up_mod.Report()
                     up_mod._ensure_sql_qm_env_keys(out_path, dry_run=False, report=rep)
-                    up_mod._ensure_mempalace_nav_env_keys(
+                    up_mod._ensure_mnemos_env_keys(
                         out_path, dry_run=False, report=rep
                     )
-                    up_mod._ensure_mnemos_env_keys(
+                    up_mod._ensure_harness_v2_env_keys(
+                        out_path, dry_run=False, report=rep
+                    )
+                    up_mod._ensure_optimal_tool_format_env_keys(
                         out_path, dry_run=False, report=rep
                     )
                     up_mod._ensure_skill_view_env_keys(
@@ -237,7 +240,7 @@ def main() -> int:
                     )
             except Exception as exc:
                 print(
-                    f"[warn] memory env defaults (SQL QM / MemPalace nav): {exc}",
+                    f"[warn] memory env defaults (Mnemos / harness): {exc}",
                     file=sys.stderr,
                 )
 

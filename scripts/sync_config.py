@@ -56,6 +56,7 @@ def sync_config(
     *,
     skills_only: bool = False,
     profiles_only: bool = False,
+    reconcile_profiles_from_std: bool = False,
     root: Path | None = None,
 ) -> None:
     script_dir = Path(__file__).parent.absolute()
@@ -80,6 +81,8 @@ def sync_config(
         mode += " — skills/ only"
     if profiles_only:
         mode += " — profiles/ only"
+    if reconcile_profiles_from_std:
+        mode += " — reconcile profiles (ignore local customizations)"
     if _NEVER_FORCE_OVERWRITE and force:
         mode += f" (esclusi: {', '.join(sorted(_NEVER_FORCE_OVERWRITE))})"
     print(f"    mode   : {mode}\n")
@@ -128,6 +131,12 @@ def sync_config(
                 skipped += 1
             elif force:
                 rel_key = profile_rel_key(rel_path)
+                if rel_key and reconcile_profiles_from_std:
+                    print(f"  [RECONCILE] {rel_path}")
+                    shutil.copy2(item, target)
+                    record_profile_after_sync(target, profile_state, rel_key)
+                    overwritten += 1
+                    continue
                 if rel_key:
                     preserve, reason = should_preserve_profile_on_force(
                         target, item, profile_state, rel_key
@@ -185,11 +194,24 @@ if __name__ == "__main__":
         action="store_true",
         help="Sincronizza solo config_std/profiles/ → config/profiles/.",
     )
+    ap.add_argument(
+        "--reconcile-profiles-from-std",
+        action="store_true",
+        help=(
+            "Con --force: sovrascrive sempre i profili da config_std ignorando "
+            "customizzazioni locali e .aion-sync-state.json (Mnemos/MCP/skills)."
+        ),
+    )
     args = ap.parse_args()
     if args.profiles_only and args.skills_only:
         ap.error("Usa solo uno tra --profiles-only e --skills-only")
+    if args.reconcile_profiles_from_std and not args.force:
+        ap.error("--reconcile-profiles-from-std richiede --force")
+    if args.reconcile_profiles_from_std and not args.profiles_only:
+        ap.error("--reconcile-profiles-from-std richiede --profiles-only")
     sync_config(
         force=args.force,
         skills_only=args.skills_only,
         profiles_only=args.profiles_only,
+        reconcile_profiles_from_std=args.reconcile_profiles_from_std,
     )

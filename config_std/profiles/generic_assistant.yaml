@@ -32,6 +32,7 @@ skills:
 critical_skills:
 - core_protocol
 - artifact_protocol
+- memory_protocol
 - web_research_protocol
 - incremental_execution_protocol
 native_tool_groups:

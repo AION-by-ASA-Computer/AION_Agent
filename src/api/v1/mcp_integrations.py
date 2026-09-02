@@ -37,9 +37,55 @@ def _tenant_id() -> str:
     return (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
 
 
-def _chat_base_url() -> str:
-    """URL base del chat-ui per redirect OAuth utente."""
-    return (os.getenv("AION_CHAT_URL") or "http://localhost:8003").rstrip("/")
+def _is_loopback_host_url(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    host = (urlparse(url).hostname or "").lower()
+    return host in ("localhost", "127.0.0.1", "::1")
+
+
+def _chat_base_url(request: Optional[Request] = None) -> str:
+    """
+    Browser-facing chat-ui base URL for OAuth return redirects.
+
+    In Docker prod ``AION_CHAT_URL=http://localhost:8003`` is wrong for the user's
+    browser — derive from ``AION_OAUTH_REDIRECT_BASE_URL`` / proxy headers when set.
+    """
+    explicit = (os.getenv("AION_CHAT_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(explicit) and not _is_loopback_host_url(explicit):
+        return explicit
+
+    public_chat = (os.getenv("AION_PUBLIC_CHAT_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(public_chat):
+        return public_chat
+
+    api_base = _oauth_redirect_api_base(request)
+    if _is_absolute_http_url(api_base):
+        low = api_base.rstrip("/").lower()
+        if low.endswith("/api"):
+            return api_base.rstrip("/")[:-4]
+        return api_base.rstrip("/")
+
+    if request is not None:
+        fwd_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+        fwd_host = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
+        host = fwd_host or request.headers.get("host", "").split(",")[0].strip()
+        scheme = fwd_proto or request.url.scheme
+        if host and not host.startswith("backend:"):
+            return f"{scheme}://{host}".rstrip("/")
+
+    domain = (os.getenv("DOMAIN") or "").strip()
+    if domain and domain not in (":80", "http://:80"):
+        host = domain.lstrip("http://").lstrip("https://").strip("/")
+        if host and not host.startswith(":"):
+            scheme = (
+                "https" if (os.getenv("LETS_ENCRYPT_EMAIL") or "").strip() else "http"
+            )
+            return f"{scheme}://{host}"
+
+    if _is_absolute_http_url(explicit):
+        return explicit
+    return "http://localhost:8003"
 
 
 def _credential_user_id(auth: ChatAuthIdentity) -> str:
@@ -410,13 +456,106 @@ def _oauth_dynamic_registration_enabled() -> bool:
     )
 
 
+def _is_absolute_http_url(url: str) -> bool:
+    u = (url or "").strip().lower()
+    return u.startswith("http://") or u.startswith("https://")
+
+
+def _public_api_base_url() -> str:
+    """Absolute public API base (scheme + host + optional path prefix). Skips relative `/api`."""
+    for key in (
+        "AION_OAUTH_REDIRECT_BASE_URL",
+        "AION_PUBLIC_API_URL",
+        "AION_FASTAPI_URL",
+    ):
+        val = (os.getenv(key) or "").strip().rstrip("/")
+        if _is_absolute_http_url(val):
+            return val
+    return ""
+
+
+def _oauth_redirect_api_base(request: Optional[Request] = None) -> str:
+    """
+    Browser-facing API base for OAuth callbacks (…/api), not the internal uvicorn URL.
+
+    ``AION_PUBLIC_API_URL=http://localhost:8001`` is valid for server-side fetch but
+    wrong for OAuth — prefer Caddy ``Host`` + ``/api`` or ``AION_OAUTH_REDIRECT_BASE_URL``.
+    """
+    explicit = (os.getenv("AION_OAUTH_REDIRECT_BASE_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(explicit):
+        return explicit
+
+    public = (os.getenv("AION_PUBLIC_API_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(public):
+        if public.lower().endswith("/api"):
+            return public
+        # https://dominio.example.com → https://dominio.example.com/api
+        return f"{public}/api"
+
+    chat = (os.getenv("AION_CHAT_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(chat):
+        return f"{chat}/api"
+
+    if request is not None:
+        fwd_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+        fwd_host = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
+        host = fwd_host or request.headers.get("host", "").split(",")[0].strip()
+        scheme = fwd_proto or request.url.scheme
+        prefix = (request.headers.get("x-forwarded-prefix") or "/api").strip() or "/api"
+        if not prefix.startswith("/"):
+            prefix = f"/{prefix}"
+        if host:
+            return f"{scheme}://{host}{prefix.rstrip('/')}"
+
+    domain = (os.getenv("DOMAIN") or "").strip()
+    if domain and domain not in (":80", "http://:80"):
+        host = domain.lstrip("http://").lstrip("https://").strip("/")
+        if host and not host.startswith(":"):
+            scheme = (
+                "https" if (os.getenv("LETS_ENCRYPT_EMAIL") or "").strip() else "http"
+            )
+            return f"{scheme}://{host}/api"
+
+    caddy_port = (os.getenv("CADDY_HTTP_PORT") or "80").strip() or "80"
+    return f"http://localhost:{caddy_port}/api"
+
+
 def _default_oauth_redirect_uri() -> str:
-    aion_api_base = (
-        os.getenv("AION_OAUTH_REDIRECT_BASE_URL")
-        or os.getenv("AION_FASTAPI_URL")
-        or "http://localhost:8001"
+    base = _oauth_redirect_api_base()
+    return f"{base.rstrip('/')}/v1/integrations/oauth/callback"
+
+
+def _resolve_oauth_redirect_uri(
+    redirect_uri: Optional[str],
+    request: Optional[Request] = None,
+) -> str:
+    """
+    OAuth providers require an absolute redirect_uri.
+
+    chat-ui in Docker uses NEXT_PUBLIC_AION_API_URL=/api (relative, same-origin fetch).
+    Resolve to https://host/api/v1/integrations/oauth/callback via env or proxy headers.
+    """
+    raw = (redirect_uri or "").strip() or _default_oauth_redirect_uri()
+    if _is_absolute_http_url(raw):
+        return raw
+
+    if raw.startswith("/"):
+        base = _oauth_redirect_api_base(request)
+        if raw.startswith("/api/"):
+            # /api/v1/... behind Caddy → {base}/v1/... when base already ends with /api
+            suffix = raw[4:]  # "/v1/integrations/oauth/callback"
+            return f"{base.rstrip('/')}{suffix}"
+        return f"{base.rstrip('/')}{raw}"
+
+    raise HTTPException(
+        status_code=400,
+        detail=(
+            "OAuth redirect_uri deve essere un URL assoluto "
+            "(es. https://dominio.example.com/api/v1/integrations/oauth/callback). "
+            "In Docker imposta AION_OAUTH_REDIRECT_BASE_URL=https://<dominio>/api "
+            f"(o AION_PUBLIC_API_URL che termini con /api). Ricevuto: {raw!r}"
+        ),
     )
-    return f"{aion_api_base.rstrip('/')}/v1/integrations/oauth/callback"
 
 
 def _apply_catalog_oauth_defaults(
@@ -449,6 +588,95 @@ def _oauth_scope_param(oauth_cfg: Dict[str, Any]) -> str:
     if isinstance(scopes, list):
         return " ".join(str(s) for s in scopes if s)
     return ""
+
+
+async def _oauth_dynamic_client_register(
+    *,
+    server_slug: str,
+    oauth_cfg: Dict[str, Any],
+    redirect_uri: str,
+    request: Optional[Request] = None,
+) -> bool:
+    """RFC 7591 dynamic registration. Returns True if client_id was obtained."""
+    import asyncio
+
+    if not _oauth_dynamic_registration_enabled():
+        return False
+    if (oauth_cfg.get("client_id") or "").strip():
+        return False
+
+    if not _is_absolute_http_url(redirect_uri):
+        redirect_uri = _resolve_oauth_redirect_uri(redirect_uri, request)
+
+    reg_endpoint = (oauth_cfg.get("registration_endpoint") or "").strip()
+    if not reg_endpoint:
+        auth_server = (oauth_cfg.get("authorization_server") or "").strip()
+        if auth_server:
+            from src.mcp_credential_discovery import fetch_authorization_server_metadata
+
+            as_meta = await asyncio.to_thread(
+                fetch_authorization_server_metadata, auth_server
+            )
+            reg_endpoint = str(
+                (as_meta or {}).get("registration_endpoint") or ""
+            ).strip()
+            if reg_endpoint:
+                oauth_cfg["registration_endpoint"] = reg_endpoint
+
+    if not reg_endpoint:
+        return False
+
+    try:
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as hclient:
+            reg_payload = {
+                "client_name": "AION Agent",
+                "redirect_uris": [redirect_uri],
+                "grant_types": ["authorization_code"],
+                "response_types": ["code"],
+                "token_endpoint_auth_method": "none",
+            }
+            reg_resp = await hclient.post(
+                reg_endpoint,
+                json=reg_payload,
+                headers={"Content-Type": "application/json"},
+            )
+            if reg_resp.status_code not in (200, 201):
+                logger.warning(
+                    "oauth_start: dynamic registration HTTP %s slug=%s redirect_uri=%r body=%s",
+                    reg_resp.status_code,
+                    server_slug,
+                    redirect_uri,
+                    reg_resp.text[:300],
+                )
+                return False
+            reg_data = reg_resp.json()
+            new_client_id = str(reg_data.get("client_id") or "").strip()
+            if not new_client_id:
+                return False
+            oauth_cfg["client_id"] = new_client_id
+            oauth_cfg["client_id_source"] = "dynamic_registration"
+            if reg_data.get("client_secret"):
+                oauth_cfg["client_secret"] = reg_data["client_secret"]
+            from src.runtime.mcp_oauth_audit import log_dynamic_client_registration
+
+            log_dynamic_client_registration(
+                server_slug=server_slug,
+                registration_endpoint=reg_endpoint,
+                client_id=new_client_id,
+            )
+            logger.info(
+                "oauth_start: dynamic client registration OK slug=%s client_id=%s",
+                server_slug,
+                new_client_id,
+            )
+            return True
+    except Exception as reg_exc:
+        logger.warning(
+            "oauth_start: dynamic client registration failed slug=%s: %s",
+            server_slug,
+            reg_exc,
+        )
+    return False
 
 
 async def _resolve_oauth_config_for_server(
@@ -493,6 +721,7 @@ class OAuthCallbackBody(BaseModel):
 @router.post("/oauth/callback")
 async def oauth_callback(
     body: OAuthCallbackBody,
+    request: Request,
     auth: ChatAuthIdentity = Depends(require_chat_auth),
 ) -> Dict[str, Any]:
     _require_credentials_enabled()
@@ -530,7 +759,7 @@ async def oauth_callback(
             detail=f"OAuth token_url is not configured or discovered for server '{body.server_slug}'.",
         )
 
-    redirect_uri = body.redirect_uri or _default_oauth_redirect_uri()
+    redirect_uri = _resolve_oauth_redirect_uri(body.redirect_uri, request)
 
     from src.runtime.oauth_token_exchange import (
         OAuthTokenExchangeError,
@@ -595,6 +824,7 @@ def _generate_pkce_pair() -> tuple[str, str]:
 
 @router.get("/oauth/start")
 async def oauth_start(
+    request: Request,
     server_slug: str,
     redirect_uri: Optional[str] = None,
     auth: ChatAuthIdentity = Depends(require_chat_auth),
@@ -644,8 +874,15 @@ async def oauth_start(
     oauth_cfg = _apply_catalog_oauth_defaults(oauth_cfg, server_slug, reg_cfg)
 
     # Determina il redirect_uri prima della discovery (serve per la dynamic registration)
-    if not redirect_uri:
-        redirect_uri = _default_oauth_redirect_uri()
+    raw_redirect_uri = redirect_uri
+    redirect_uri = _resolve_oauth_redirect_uri(redirect_uri, request)
+    logger.info(
+        "oauth_start: slug=%s redirect_uri raw=%r resolved=%r oauth_base_env=%r",
+        server_slug,
+        raw_redirect_uri,
+        redirect_uri,
+        (os.getenv("AION_OAUTH_REDIRECT_BASE_URL") or "").strip() or None,
+    )
 
     modified = False
 
@@ -706,63 +943,13 @@ async def oauth_start(
                             ]
                             modified = True
 
-                    # ─── Dynamic Client Registration (RFC 7591) ──
-                    reg_endpoint = oauth_cfg.get("registration_endpoint") or (
-                        as_meta or {}
-                    ).get("registration_endpoint")
-                    if (
-                        _oauth_dynamic_registration_enabled()
-                        and reg_endpoint
-                        and not oauth_cfg.get("client_id")
+                    if await _oauth_dynamic_client_register(
+                        server_slug=server_slug,
+                        oauth_cfg=oauth_cfg,
+                        redirect_uri=redirect_uri,
+                        request=request,
                     ):
-                        try:
-                            async with httpx.AsyncClient(
-                                timeout=8.0, follow_redirects=True
-                            ) as hclient:
-                                reg_payload = {
-                                    "client_name": "AION Agent",
-                                    "redirect_uris": [redirect_uri],
-                                    "grant_types": ["authorization_code"],
-                                    "response_types": ["code"],
-                                    "token_endpoint_auth_method": "none",
-                                }
-                                reg_resp = await hclient.post(
-                                    reg_endpoint,
-                                    json=reg_payload,
-                                    headers={"Content-Type": "application/json"},
-                                )
-                                if reg_resp.status_code in (200, 201):
-                                    reg_data = reg_resp.json()
-                                    new_client_id = reg_data.get("client_id")
-                                    if new_client_id:
-                                        oauth_cfg["client_id"] = new_client_id
-                                        oauth_cfg["client_id_source"] = (
-                                            "dynamic_registration"
-                                        )
-                                        if reg_data.get("client_secret"):
-                                            oauth_cfg["client_secret"] = reg_data[
-                                                "client_secret"
-                                            ]
-                                        modified = True
-                                        from src.runtime.mcp_oauth_audit import (
-                                            log_dynamic_client_registration,
-                                        )
-
-                                        log_dynamic_client_registration(
-                                            server_slug=server_slug,
-                                            registration_endpoint=reg_endpoint,
-                                            client_id=new_client_id,
-                                        )
-                                        logger.info(
-                                            "oauth_start: dynamic client registration OK slug=%s client_id=%s",
-                                            server_slug,
-                                            new_client_id,
-                                        )
-                        except Exception as reg_exc:
-                            logger.warning(
-                                "oauth_start: dynamic client registration failed: %s",
-                                reg_exc,
-                            )
+                        modified = True
 
             except Exception as disc_exc:
                 logger.warning(
@@ -770,6 +957,15 @@ async def oauth_start(
                     server_slug,
                     disc_exc,
                 )
+
+    # Endpoints già in DB ma client_id mancante (es. prima registrazione fallita).
+    if await _oauth_dynamic_client_register(
+        server_slug=server_slug,
+        oauth_cfg=oauth_cfg,
+        redirect_uri=redirect_uri,
+        request=request,
+    ):
+        modified = True
 
     # Dopo discovery, riapplica catalogo (corregge endpoint errati su host MCP remoto)
     oauth_cfg = _apply_catalog_oauth_defaults(oauth_cfg, server_slug, reg_cfg)
@@ -805,7 +1001,7 @@ async def oauth_start(
             ),
         )
 
-    client_id = oauth_cfg.get("client_id") or ""
+    client_id = (oauth_cfg.get("client_id") or "").strip()
     needs_client_id = bool(oauth_cfg.get("client_credentials_required")) or (
         "login.microsoftonline.com" in str(authorization_endpoint or "").lower()
     )
@@ -817,6 +1013,15 @@ async def oauth_start(
                 "in Microsoft Entra ID (o Google/GitHub Cloud) e inserire client ID e secret "
                 "in Admin → MCP Hub per questo connettore, con redirect URI: "
                 f"{redirect_uri}"
+            ),
+        )
+    if not client_id:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "OAuth client_id non disponibile per questo connettore. "
+                "Verifica AION_MCP_OAUTH_DYNAMIC_REGISTRATION=1, la connettività verso il "
+                f"provider (es. mcp.clickup.com) e che il redirect URI sia corretto: {redirect_uri}"
             ),
         )
 
@@ -841,13 +1046,12 @@ async def oauth_start(
 
     params: Dict[str, str] = {
         "response_type": "code",
+        "client_id": client_id,
         "redirect_uri": redirect_uri,
         "state": state,
         "code_challenge": code_challenge,
         "code_challenge_method": "S256",
     }
-    if client_id:
-        params["client_id"] = client_id
 
     scope = _oauth_scope_param(oauth_cfg)
     if scope:
@@ -880,7 +1084,7 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
     _cleanup_expired_states()
 
     pending = _oauth_pending.pop(state, None)
-    chat_base = _chat_base_url()
+    chat_base = _chat_base_url(request)
 
     if not pending:
         return RedirectResponse(
@@ -923,7 +1127,9 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
             url=f"{chat_base}/integrations?oauth_status=error&error=Token+URL+non+configurato"
         )
 
-    callback_redirect_uri = pending.get("redirect_uri") or _default_oauth_redirect_uri()
+    callback_redirect_uri = _resolve_oauth_redirect_uri(
+        pending.get("redirect_uri"), request
+    )
 
     from src.runtime.oauth_token_exchange import (
         OAuthTokenExchangeError,

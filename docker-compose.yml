@@ -75,6 +75,8 @@ services:
       # Local default (DOMAIN non valorizzato): http://localhost via Caddy su :80.
       # In prod sovrascrivere nel .env: AION_PUBLIC_API_URL=https://${DOMAIN}/api
       AION_PUBLIC_API_URL: ${AION_PUBLIC_API_URL:-http://localhost/api}
+      # OAuth callback base (browser-facing). Defaults to AION_PUBLIC_API_URL when absolute.
+      AION_OAUTH_REDIRECT_BASE_URL: ${AION_OAUTH_REDIRECT_BASE_URL:-${AION_PUBLIC_API_URL:-http://localhost/api}}
       AION_CORS_ORIGINS: ${AION_CORS_ORIGINS:-*}
       # Root path per il reverse proxy: Caddy strippa /api, root_path glielo
       # restituisce per generare URL corretti nello schema OpenAPI / Swagger UI.
