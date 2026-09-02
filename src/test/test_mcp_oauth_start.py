@@ -36,10 +36,10 @@ def test_resolve_oauth_redirect_uri_absolute_passthrough() -> None:
     assert out == "https://client.example.com/api/v1/integrations/oauth/callback"
 
 
-def test_resolve_oauth_redirect_uri_relative_from_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(
-        "AION_OAUTH_REDIRECT_BASE_URL", "https://client.example.com/api"
-    )
+def test_resolve_oauth_redirect_uri_relative_from_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AION_OAUTH_REDIRECT_BASE_URL", "https://client.example.com/api")
     out = mod._resolve_oauth_redirect_uri("/api/v1/integrations/oauth/callback")
     assert out == "https://client.example.com/api/v1/integrations/oauth/callback"
 
@@ -110,9 +110,7 @@ def test_chat_base_url_derives_from_oauth_redirect_base(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("AION_CHAT_URL", "http://localhost:8003")
-    monkeypatch.setenv(
-        "AION_OAUTH_REDIRECT_BASE_URL", "https://agnt2.aion-asa.com/api"
-    )
+    monkeypatch.setenv("AION_OAUTH_REDIRECT_BASE_URL", "https://agnt2.aion-asa.com/api")
     assert mod._chat_base_url() == "https://agnt2.aion-asa.com"
 
 
@@ -137,6 +135,8 @@ def test_chat_base_url_from_proxy_headers(monkeypatch: pytest.MonkeyPatch) -> No
     assert mod._chat_base_url(request) == "https://agnt2.aion-asa.com"
 
 
+@pytest.mark.asyncio
+async def test_oauth_start_retries_dynamic_registration_when_endpoints_cached(
     oauth_db: str, oauth_request: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Endpoints in DB without client_id must not skip RFC 7591 registration."""

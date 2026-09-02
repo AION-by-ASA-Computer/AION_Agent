@@ -67,12 +67,8 @@ def _chat_base_url(request: Optional[Request] = None) -> str:
         return api_base.rstrip("/")
 
     if request is not None:
-        fwd_proto = (
-            request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
-        )
-        fwd_host = (
-            request.headers.get("x-forwarded-host", "").split(",")[0].strip()
-        )
+        fwd_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+        fwd_host = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
         host = fwd_host or request.headers.get("host", "").split(",")[0].strip()
         scheme = fwd_proto or request.url.scheme
         if host and not host.startswith("backend:"):
@@ -83,9 +79,7 @@ def _chat_base_url(request: Optional[Request] = None) -> str:
         host = domain.lstrip("http://").lstrip("https://").strip("/")
         if host and not host.startswith(":"):
             scheme = (
-                "https"
-                if (os.getenv("LETS_ENCRYPT_EMAIL") or "").strip()
-                else "http"
+                "https" if (os.getenv("LETS_ENCRYPT_EMAIL") or "").strip() else "http"
             )
             return f"{scheme}://{host}"
 
@@ -503,12 +497,8 @@ def _oauth_redirect_api_base(request: Optional[Request] = None) -> str:
         return f"{chat}/api"
 
     if request is not None:
-        fwd_proto = (
-            request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
-        )
-        fwd_host = (
-            request.headers.get("x-forwarded-host", "").split(",")[0].strip()
-        )
+        fwd_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
+        fwd_host = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
         host = fwd_host or request.headers.get("host", "").split(",")[0].strip()
         scheme = fwd_proto or request.url.scheme
         prefix = (request.headers.get("x-forwarded-prefix") or "/api").strip() or "/api"
@@ -522,9 +512,7 @@ def _oauth_redirect_api_base(request: Optional[Request] = None) -> str:
         host = domain.lstrip("http://").lstrip("https://").strip("/")
         if host and not host.startswith(":"):
             scheme = (
-                "https"
-                if (os.getenv("LETS_ENCRYPT_EMAIL") or "").strip()
-                else "http"
+                "https" if (os.getenv("LETS_ENCRYPT_EMAIL") or "").strip() else "http"
             )
             return f"{scheme}://{host}/api"
 
@@ -629,7 +617,9 @@ async def _oauth_dynamic_client_register(
             as_meta = await asyncio.to_thread(
                 fetch_authorization_server_metadata, auth_server
             )
-            reg_endpoint = str((as_meta or {}).get("registration_endpoint") or "").strip()
+            reg_endpoint = str(
+                (as_meta or {}).get("registration_endpoint") or ""
+            ).strip()
             if reg_endpoint:
                 oauth_cfg["registration_endpoint"] = reg_endpoint
 

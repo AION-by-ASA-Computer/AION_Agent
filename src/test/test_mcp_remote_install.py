@@ -27,9 +27,7 @@ def test_build_remote_bridge_none():
 def test_resolve_remote_bridge_spawn_uses_npx_when_local_missing(
     monkeypatch,
 ) -> None:
-    monkeypatch.setattr(
-        "src.mcp_remote_install.mcp_remote_proxy_path", lambda: None
-    )
+    monkeypatch.setattr("src.mcp_remote_install.mcp_remote_proxy_path", lambda: None)
     cfg = build_remote_bridge_registry_config(
         "https://mcp.clickup.com/mcp", "clickup", auth_type="oauth2"
     )

@@ -22,7 +22,9 @@ def is_mcp_remote_proxy_arg(arg: str) -> bool:
     if not isinstance(arg, str):
         return False
     norm = arg.replace("\\", "/")
-    return any(norm.endswith(marker) or marker in norm for marker in MCP_REMOTE_PROXY_MARKERS)
+    return any(
+        norm.endswith(marker) or marker in norm for marker in MCP_REMOTE_PROXY_MARKERS
+    )
 
 
 def mcp_remote_proxy_path() -> Optional[str]:
