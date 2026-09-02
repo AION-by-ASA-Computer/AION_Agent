@@ -11,9 +11,16 @@ async def diagnose_server(server_path: str):
     # Use absolute paths and current python
     python_exe = sys.executable
     abs_server_path = os.path.abspath(server_path)
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+    env = os.environ.copy()
+    existing_pp = (env.get("PYTHONPATH") or "").strip()
+    env["PYTHONPATH"] = (
+        f"{repo_root}{os.pathsep}{existing_pp}" if existing_pp else repo_root
+    )
 
     server_params = StdioServerParameters(
-        command=python_exe, args=["-u", abs_server_path], env=os.environ.copy()
+        command=python_exe, args=["-u", abs_server_path], env=env
     )
 
     try:
@@ -26,12 +33,11 @@ async def diagnose_server(server_path: str):
                 print("Richiedo la lista dei tool...")
                 tools_result = await session.list_tools()
 
-                print(
-                    f"✅ Successo! Tool trovati: {[t.name for t in tools_result.tools]}"
-                )
+                tool_names = [t.name for t in tools_result.tools]
+                print(f"[OK] Successo! Tool trovati: {tool_names}")
                 return True
     except Exception as e:
-        print(f"❌ FALLIMENTO: {str(e)}")
+        print(f"[FAIL] FALLIMENTO: {str(e)}")
         import traceback
 
         traceback.print_exc()
@@ -45,3 +51,4 @@ if __name__ == "__main__":
         target = sys.argv[1]
 
     asyncio.run(diagnose_server(target))
+

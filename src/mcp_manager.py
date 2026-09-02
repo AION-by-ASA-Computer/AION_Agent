@@ -375,14 +375,19 @@ class MCPStdioWorker:
                         command = str(cand.resolve())
             args = self._manager.resolve_stdio_args(list(config.get("args", [])))
             env = os.environ.copy()
-            project_root = os.getcwd()
+            repo_root_dir = str(_repo_root())
             env.setdefault("FASTMCP_LOG_LEVEL", "ERROR")
             env.setdefault("FASTMCP_SHOW_SERVER_BANNER", "false")
             env.setdefault("FASTMCP_CHECK_FOR_UPDATES", "off")
             env.setdefault("NO_COLOR", "1")
             env.setdefault("TQDM_DISABLE", "1")
             env.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-            env["PYTHONPATH"] = f"{project_root}:{env.get('PYTHONPATH', '')}"
+            existing_pp = (env.get("PYTHONPATH") or "").strip()
+            env["PYTHONPATH"] = (
+                f"{repo_root_dir}{os.pathsep}{existing_pp}"
+                if existing_pp
+                else repo_root_dir
+            )
             lookup_sid = self._chat_session_id or BOOTSTRAP_SESSION_ID
             env["AION_CHAT_SESSION_ID"] = self._chat_session_id or ""
             if self._pool_user_id:
@@ -1752,14 +1757,19 @@ class MCPManager:
                         command = str(cand.resolve())
             args = self.resolve_stdio_args(list(config.get("args", [])))
             env = os.environ.copy()
-            project_root = os.getcwd()
+            repo_root_dir = str(_repo_root())
             env.setdefault("FASTMCP_LOG_LEVEL", "WARNING")
             env.setdefault("FASTMCP_SHOW_SERVER_BANNER", "false")
             env.setdefault("FASTMCP_CHECK_FOR_UPDATES", "true")
             env.setdefault("NO_COLOR", "1")
             env.setdefault("TQDM_DISABLE", "1")
             env.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-            env["PYTHONPATH"] = f"{project_root}:{env.get('PYTHONPATH', '')}"
+            existing_pp = (env.get("PYTHONPATH") or "").strip()
+            env["PYTHONPATH"] = (
+                f"{repo_root_dir}{os.pathsep}{existing_pp}"
+                if existing_pp
+                else repo_root_dir
+            )
             if chat_session_id:
                 env["AION_CHAT_SESSION_ID"] = chat_session_id
                 ctx = self._session_ctx.get(

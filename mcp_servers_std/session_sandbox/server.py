@@ -101,6 +101,40 @@ def sandbox_read_text_file(relative_path: str, max_bytes: int = 0) -> str:
 
 
 @mcp.tool()
+def sandbox_read_p7m_xml(relative_path: str, strip_base64_attachments: bool = True) -> str:
+    """
+    Extract the clean XML content from a digitally signed .p7m (PKCS#7) invoice file.
+    Automatically strips digital signature binary envelope and extracts <FatturaElettronica> XML.
+    
+    Args:
+        relative_path (str): Path to the .p7m file (e.g. 'uploads/invoice.xml.p7m').
+        strip_base64_attachments (bool): If True, replaces large Base64 <Attachment> / <Allegati> tags with '[BASE64_ATTACHMENT_OMITTED]' to save context.
+    """
+    import re
+    from src.session_workspace import safe_resolve
+
+    try:
+        p = safe_resolve(_sid(), relative_path, must_exist=True)
+        raw_bytes = p.read_bytes()
+    except Exception as e:
+        return f"File error: {e}"
+
+    xml_pattern = rb'(<\?xml[\s\S]*?</(?:p:)?FatturaElettronica>|<(?:p:)?FatturaElettronica[\s\S]*?</(?:p:)?FatturaElettronica>)'
+    match = re.search(xml_pattern, raw_bytes, re.IGNORECASE)
+    if not match:
+        return f"Error: No valid <FatturaElettronica> XML structure found inside {p.name}."
+
+    xml_bytes = match.group(1)
+    xml_str = xml_bytes.decode("utf-8", errors="replace")
+
+    if strip_base64_attachments:
+        xml_str = re.sub(r'<Attachment>[\s\S]*?</Attachment>', '<Attachment>[BASE64_ATTACHMENT_OMITTED]</Attachment>', xml_str)
+        xml_str = re.sub(r'<Allegati>[\s\S]*?</Allegati>', '<Allegati>[BASE64_ATTACHMENT_OMITTED]</Allegati>', xml_str)
+
+    return xml_str
+
+
+@mcp.tool()
 def sandbox_get_absolute_path(relative_path: str) -> str:
     """Get the host's absolute path of a session file/directory (uploads/, workspace/, derived/)."""
     from src.session_workspace import safe_resolve

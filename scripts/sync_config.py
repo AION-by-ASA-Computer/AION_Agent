@@ -71,8 +71,13 @@ def sync_config(
     else:
         scan_root = src_dir
 
+    if sys.stdout and hasattr(sys.stdout, "reconfigure"):
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+        except Exception:
+            pass
     _ver = _read_version(root)
-    print(f"\n🔄  AION Sync Config  —  {_ver}\n")
+    print(f"\n[+]  AION Sync Config  -  {_ver}\n")
     print(f"    source : {scan_root}")
     print(f"    target : {dst_dir}")
     mode = "FORCE (overwrite existing)" if force else "safe (skip existing)"

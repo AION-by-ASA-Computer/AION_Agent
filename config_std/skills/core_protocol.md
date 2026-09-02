@@ -152,7 +152,7 @@ Wrong: long thinking without tools, repeating the same search, or answering befo
 
 ## Temporal context
 
-Profile instructions may include `{{current_date}}` / `{{current_time}}`. Use them for deadlines, relative dates, and time-based filters.
+Profile instructions may include `{% raw %}{{current_date}}{% endraw %}` / `{% raw %}{{current_time}}{% endraw %}`. Use them for deadlines, relative dates, and time-based filters.
 
 ## Memory Search Routing
 *(Skip steps for servers not included in your profile.)*

@@ -1025,99 +1025,99 @@ export default function MCPHub() {
 
           <section className="space-y-4">
             <h2 className="text-xs font-bold uppercase tracking-wider text-gray-400">Marketplace search</h2>
-          {loading && !githubInstallOpen ? (
-            <div className="flex flex-col items-center justify-center text-center py-20 bg-[#121212]/30 border border-white/5 rounded-3xl px-4 min-h-[300px]">
-              <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
-              <p className="text-sm font-semibold text-white">Searching the Marketplace...</p>
-              <p className="text-xs text-gray-500 mt-1 max-w-xs leading-relaxed">We are querying the configured registries and MCP sources.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {displayedMarketItems.map((item) => {
-                const isInstallingThis = installingId === item.id;
-                return (
-                  <div key={item.id} className="glass-card flex flex-col bg-[#121212]/80 border border-white/5 hover:border-blue-500/50 rounded-2xl backdrop-blur-sm transition-all duration-200 shadow-xl group">
-                    <div className="p-6 flex-1 space-y-4">
-                      <div className="flex items-start justify-between">
-                        <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl group-hover:bg-blue-500/20 transition-colors">
-                          <Globe className="w-6 h-6 text-blue-400" />
+            {loading && !githubInstallOpen ? (
+              <div className="flex flex-col items-center justify-center text-center py-20 bg-[#121212]/30 border border-white/5 rounded-3xl px-4 min-h-[300px]">
+                <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
+                <p className="text-sm font-semibold text-white">Searching the Marketplace...</p>
+                <p className="text-xs text-gray-500 mt-1 max-w-xs leading-relaxed">We are querying the configured registries and MCP sources.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {displayedMarketItems.map((item) => {
+                  const isInstallingThis = installingId === item.id;
+                  return (
+                    <div key={item.id} className="glass-card flex flex-col bg-[#121212]/80 border border-white/5 hover:border-blue-500/50 rounded-2xl backdrop-blur-sm transition-all duration-200 shadow-xl group">
+                      <div className="p-6 flex-1 space-y-4">
+                        <div className="flex items-start justify-between">
+                          <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl group-hover:bg-blue-500/20 transition-colors">
+                            <Globe className="w-6 h-6 text-blue-400" />
+                          </div>
+                          <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg font-mono">
+                            {item.source}
+                          </div>
                         </div>
-                        <div className="text-[10px] font-bold uppercase tracking-widest text-gray-400 bg-white/5 border border-white/10 px-2.5 py-1 rounded-lg font-mono">
-                          {item.source}
-                        </div>
-                      </div>
-                      <div>
-                        <a
-                          href={item.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="group/link flex items-center gap-2 text-white hover:text-blue-400 transition-colors"
-                        >
-                          <h3 className="text-xl font-bold truncate">{item.name}</h3>
-                          <ExternalLink className="w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity shrink-0" />
-                        </a>
-                        <p className="text-sm text-gray-400 mt-1 line-clamp-2">{item.description || "Experimental MCP Server from the community."}</p>
-                      </div>
-                    </div>
-                    <div className="p-4 border-t border-white/5 bg-black/20 flex items-center justify-between rounded-b-2xl">
-                      <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase font-mono">
-                        {item.install_type === "remote" ? (
-                          <>
-                            <Globe className="w-3 h-3 text-blue-400" /> Remote
-                          </>
-                        ) : item.install_type === "binary" ? (
-                          <>
-                            <Box className="w-3 h-3 text-emerald-400" /> Binary
-                          </>
-                        ) : item.install_type === "git" ? (
-                          <>
-                            <GitBranch className="w-3 h-3 text-purple-400" /> Git
-                          </>
-                        ) : (
-                          <>
-                            <Terminal className="w-3 h-3 text-gray-400" /> Stdio
-                          </>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {item.install_type !== "remote" && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setWizardTarget({
-                                kind: "market",
-                                marketItemId: item.id,
-                                title: item.name || item.id,
-                              })
-                            }
-                            disabled={installingId !== null || loading}
-                            className="flex items-center gap-1.5 text-xs font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 rounded-xl hover:bg-indigo-500/20 disabled:opacity-50 cursor-pointer"
+                        <div>
+                          <a
+                            href={item.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="group/link flex items-center gap-2 text-white hover:text-blue-400 transition-colors"
                           >
-                            <Wand2 className="w-3.5 h-3.5" /> WIZARD
+                            <h3 className="text-xl font-bold truncate">{item.name}</h3>
+                            <ExternalLink className="w-4 h-4 opacity-0 group-hover/link:opacity-100 transition-opacity shrink-0" />
+                          </a>
+                          <p className="text-sm text-gray-400 mt-1 line-clamp-2">{item.description || "Experimental MCP Server from the community."}</p>
+                        </div>
+                      </div>
+                      <div className="p-4 border-t border-white/5 bg-black/20 flex items-center justify-between rounded-b-2xl">
+                        <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase font-mono">
+                          {item.install_type === "remote" ? (
+                            <>
+                              <Globe className="w-3 h-3 text-blue-400" /> Remote
+                            </>
+                          ) : item.install_type === "binary" ? (
+                            <>
+                              <Box className="w-3 h-3 text-emerald-400" /> Binary
+                            </>
+                          ) : item.install_type === "git" ? (
+                            <>
+                              <GitBranch className="w-3 h-3 text-purple-400" /> Git
+                            </>
+                          ) : (
+                            <>
+                              <Terminal className="w-3 h-3 text-gray-400" /> Stdio
+                            </>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {item.install_type !== "remote" && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setWizardTarget({
+                                  kind: "market",
+                                  marketItemId: item.id,
+                                  title: item.name || item.id,
+                                })
+                              }
+                              disabled={installingId !== null || loading}
+                              className="flex items-center gap-1.5 text-xs font-bold text-indigo-300 bg-indigo-500/10 border border-indigo-500/20 px-3 py-2 rounded-xl hover:bg-indigo-500/20 disabled:opacity-50 cursor-pointer"
+                            >
+                              <Wand2 className="w-3.5 h-3.5" /> WIZARD
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleInstall(item.id)}
+                            disabled={installingId !== null || loading}
+                            className="flex items-center gap-2 text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl hover:bg-blue-500/20 hover:border-blue-500/40 transition-all disabled:opacity-50 cursor-pointer shadow-lg shadow-blue-500/5"
+                          >
+                            <Download className="w-3.5 h-3.5" /> {isInstallingThis ? "INSTALLING..." : "INSTALL"}
                           </button>
-                        )}
-                        <button
-                          onClick={() => handleInstall(item.id)}
-                          disabled={installingId !== null || loading}
-                          className="flex items-center gap-2 text-xs font-bold text-blue-400 bg-blue-500/10 border border-blue-500/20 px-4 py-2 rounded-xl hover:bg-blue-500/20 hover:border-blue-500/40 transition-all disabled:opacity-50 cursor-pointer shadow-lg shadow-blue-500/5"
-                        >
-                          <Download className="w-3.5 h-3.5" /> {isInstallingThis ? "INSTALLING..." : "INSTALL"}
-                        </button>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })}
 
-              {displayedMarketItems.length === 0 && (
-                <div className="col-span-full py-20 flex flex-col items-center justify-center text-center bg-[#121212]/30 border border-white/5 rounded-3xl px-4">
-                  <Box className="w-12 h-12 text-gray-600 mb-3 animate-pulse" />
-                  <p className="text-sm font-semibold text-gray-400">Enter a query to browse the Marketplace</p>
-                  <p className="text-xs text-gray-600 mt-1 max-w-xs">Search for modular features and expand agent capabilities.</p>
-                </div>
-              )}
-            </div>
-          )}
+                {displayedMarketItems.length === 0 && (
+                  <div className="col-span-full py-20 flex flex-col items-center justify-center text-center bg-[#121212]/30 border border-white/5 rounded-3xl px-4">
+                    <Box className="w-12 h-12 text-gray-600 mb-3 animate-pulse" />
+                    <p className="text-sm font-semibold text-gray-400">Enter a query to browse the Marketplace</p>
+                    <p className="text-xs text-gray-600 mt-1 max-w-xs">Search for modular features and expand agent capabilities.</p>
+                  </div>
+                )}
+              </div>
+            )}
           </section>
         </div>
       )}
@@ -1215,11 +1215,10 @@ export default function MCPHub() {
                   key={tab}
                   type="button"
                   onClick={() => setConfigModalTab(tab)}
-                  className={`focus-ring flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${
-                    configModalTab === tab
+                  className={`focus-ring flex-1 rounded-lg px-3 py-2 text-xs font-semibold transition ${configModalTab === tab
                       ? "bg-background text-foreground shadow-sm"
                       : "text-muted-foreground hover:text-foreground"
-                  }`}
+                    }`}
                 >
                   {label}
                 </button>
@@ -1228,36 +1227,36 @@ export default function MCPHub() {
 
             <div className="space-y-5">
               {(configModalTab === "chat" || configModalTab === "registry") && (
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Connector Type (Catalog)</label>
-                <select
-                  value={(editingConfig.values.aion_connector_id as string | undefined) ?? ""}
-                  onChange={(e) =>
-                    setEditingConfig({
-                      ...editingConfig,
-                      values: {
-                        ...editingConfig.values,
-                        aion_connector_id: e.target.value ? e.target.value : undefined,
-                      },
-                    })
-                  }
-                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none cursor-pointer"
-                >
-                  <option value="">— Auto-detect from name —</option>
-                  {connectorRows.map((c: any) => (
-                    <option key={c.id} value={c.id}>
-                      {c.title || c.id}
-                    </option>
-                  ))}
-                </select>
-                {connectorFormContext.matched ? (
-                  <p className="text-[11px] text-emerald-400/90">
-                    Guided form: <span className="font-mono text-white">{String((connectorFormContext.matched as { id?: string }).id)}</span>
-                  </p>
-                ) : (
-                  <p className="text-[11px] text-gray-500">Nessun connettore catalogato: usa il JSON in Avanzate o seleziona un tipo sopra.</p>
-                )}
-              </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Connector Type (Catalog)</label>
+                  <select
+                    value={(editingConfig.values.aion_connector_id as string | undefined) ?? ""}
+                    onChange={(e) =>
+                      setEditingConfig({
+                        ...editingConfig,
+                        values: {
+                          ...editingConfig.values,
+                          aion_connector_id: e.target.value ? e.target.value : undefined,
+                        },
+                      })
+                    }
+                    className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none cursor-pointer"
+                  >
+                    <option value="">— Auto-detect from name —</option>
+                    {connectorRows.map((c: any) => (
+                      <option key={c.id} value={c.id}>
+                        {c.title || c.id}
+                      </option>
+                    ))}
+                  </select>
+                  {connectorFormContext.matched ? (
+                    <p className="text-[11px] text-emerald-400/90">
+                      Guided form: <span className="font-mono text-white">{String((connectorFormContext.matched as { id?: string }).id)}</span>
+                    </p>
+                  ) : (
+                    <p className="text-[11px] text-gray-500">Nessun connettore catalogato: usa il JSON in Avanzate o seleziona un tipo sopra.</p>
+                  )}
+                </div>
               )}
 
               {configModalTab === "chat" && editingPolicy && (
@@ -1266,7 +1265,7 @@ export default function MCPHub() {
                     <Users className="h-3.5 w-3.5" aria-hidden />
                     Disponibilità utenti (chat)
                   </div>
-                  {/* <label className="flex items-center gap-3 cursor-pointer">
+                  <label className="flex items-center gap-3 cursor-pointer">
                     <input type="checkbox" checked={editingPolicy.enabled} onChange={(e) => setEditingPolicy({ ...editingPolicy, enabled: e.target.checked })} className="rounded border-white/20" />
                     <span className="text-sm text-gray-200">Enable edit in chat-ui for users</span>
                   </label> */}
@@ -1332,9 +1331,9 @@ export default function MCPHub() {
                           integrationBySlug[editingConfig.name]?.suggested_env_yaml ||
                           (editingPolicy.credentialSchema.length > 0
                             ? `env:\n${editingPolicy.credentialSchema
-                                .filter((f) => f.env_placeholder)
-                                .map((f) => `  ${f.registry_env_key || f.key}: "${f.env_placeholder}"`)
-                                .join("\n")}`
+                              .filter((f) => f.env_placeholder)
+                              .map((f) => `  ${f.registry_env_key || f.key}: "${f.env_placeholder}"`)
+                              .join("\n")}`
                             : "")
                         }
                       />
@@ -1366,212 +1365,212 @@ export default function MCPHub() {
 
               {configModalTab === "chat" &&
                 connectorFormContext.fields.length > 0 && editingPolicy?.mode === "org_shared" ? (
-                  <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4">
-                    <div className="aion-section-label">Credenziali organizzazione</div>
-                    {connectorFormContext.fields.map((field) => (
-                      <div key={field.key} className="space-y-1.5">
-                        <label className="text-xs font-semibold text-gray-200 flex items-center gap-2">
-                          {field.label}
-                          <span className="text-[10px] font-mono text-gray-500">{field.key}</span>
-                          {field.required ? <span className="text-red-400">*</span> : <span className="text-gray-600 text-[10px]">(opt.)</span>}
-                        </label>
-                        <input
-                          type={field.secret ? "password" : "text"}
-                          autoComplete="off"
-                          value={String((editingConfig.values.env || {})[field.key] ?? "")}
-                          onChange={(e) => {
-                            const next = { ...(editingConfig.values.env || {}) };
-                            next[field.key] = e.target.value;
-                            setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, env: next } });
-                          }}
-                          className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/70 outline-none"
-                          placeholder={field.required ? "Required" : "Optional"}
-                        />
-                      </div>
-                    ))}
-                    {Array.isArray((connectorFormContext.matched as { integration_hints?: unknown[] })?.integration_hints) &&
-                      ((connectorFormContext.matched as { integration_hints?: unknown[] }).integration_hints?.length ?? 0) > 0 ? (
-                      <div className="pt-2 space-y-2 border-t border-white/10 mt-2">
-                        <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Same secret elsewhere</div>
-                        {(connectorFormContext.matched as { integration_hints: { id?: string; label_it?: string; note_it?: string }[] }).integration_hints.map(
-                          (h) => (
-                            <div key={h.id || h.label_it} className="text-[11px] text-gray-400 leading-relaxed rounded-lg bg-black/30 p-2 border border-white/5">
-                              <span className="font-bold text-gray-300">{h.label_it || h.id}</span>
-                              {h.note_it ? <span className="block mt-1">{h.note_it}</span> : null}
-                            </div>
-                          ),
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                ) : null
+                <div className="space-y-4 rounded-2xl border border-border/70 bg-muted/20 p-4">
+                  <div className="aion-section-label">Credenziali organizzazione</div>
+                  {connectorFormContext.fields.map((field) => (
+                    <div key={field.key} className="space-y-1.5">
+                      <label className="text-xs font-semibold text-gray-200 flex items-center gap-2">
+                        {field.label}
+                        <span className="text-[10px] font-mono text-gray-500">{field.key}</span>
+                        {field.required ? <span className="text-red-400">*</span> : <span className="text-gray-600 text-[10px]">(opt.)</span>}
+                      </label>
+                      <input
+                        type={field.secret ? "password" : "text"}
+                        autoComplete="off"
+                        value={String((editingConfig.values.env || {})[field.key] ?? "")}
+                        onChange={(e) => {
+                          const next = { ...(editingConfig.values.env || {}) };
+                          next[field.key] = e.target.value;
+                          setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, env: next } });
+                        }}
+                        className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/70 outline-none"
+                        placeholder={field.required ? "Required" : "Optional"}
+                      />
+                    </div>
+                  ))}
+                  {Array.isArray((connectorFormContext.matched as { integration_hints?: unknown[] })?.integration_hints) &&
+                    ((connectorFormContext.matched as { integration_hints?: unknown[] }).integration_hints?.length ?? 0) > 0 ? (
+                    <div className="pt-2 space-y-2 border-t border-white/10 mt-2">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Same secret elsewhere</div>
+                      {(connectorFormContext.matched as { integration_hints: { id?: string; label_it?: string; note_it?: string }[] }).integration_hints.map(
+                        (h) => (
+                          <div key={h.id || h.label_it} className="text-[11px] text-gray-400 leading-relaxed rounded-lg bg-black/30 p-2 border border-white/5">
+                            <span className="font-bold text-gray-300">{h.label_it || h.id}</span>
+                            {h.note_it ? <span className="block mt-1">{h.note_it}</span> : null}
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null
               }
 
               {configModalTab === "registry" && (
-              <>
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Tipo connessione</label>
-                <select
-                  value={editingConfig.values.type ?? "stdio"}
-                  onChange={(e) =>
-                    setEditingConfig({
-                      ...editingConfig,
-                      values: {
-                        ...editingConfig.values,
-                        type: e.target.value,
-                        ...(e.target.value === "sse" ? { command: undefined, args: undefined } : {})
-                      },
-                    })
-                  }
-                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none cursor-pointer"
-                >
-                  <option value="stdio">Local (Stdio)</option>
-                  <option value="sse">Remote (SSE)</option>
-                  <option value="in_process">In-Process</option>
-                </select>
-              </div>
-
-              {
-                editingConfig.values.type === "sse" ? (
+                <>
                   <div className="space-y-2">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">SSE Endpoint URL</label>
-                    <input
-                      type="text"
-                      value={editingConfig.values.url ?? ""}
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Tipo connessione</label>
+                    <select
+                      value={editingConfig.values.type ?? "stdio"}
                       onChange={(e) =>
                         setEditingConfig({
                           ...editingConfig,
-                          values: { ...editingConfig.values, url: e.target.value },
+                          values: {
+                            ...editingConfig.values,
+                            type: e.target.value,
+                            ...(e.target.value === "sse" ? { command: undefined, args: undefined } : {})
+                          },
                         })
                       }
-                      placeholder="https://example.com/sse"
-                      className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner font-mono"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none cursor-pointer"
+                    >
+                      <option value="stdio">Local (Stdio)</option>
+                      <option value="sse">Remote (SSE)</option>
+                      <option value="in_process">In-Process</option>
+                    </select>
+                  </div>
+
+                  {
+                    editingConfig.values.type === "sse" ? (
+                      <div className="space-y-2">
+                        <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">SSE Endpoint URL</label>
+                        <input
+                          type="text"
+                          value={editingConfig.values.url ?? ""}
+                          onChange={(e) =>
+                            setEditingConfig({
+                              ...editingConfig,
+                              values: { ...editingConfig.values, url: e.target.value },
+                            })
+                          }
+                          placeholder="https://example.com/sse"
+                          className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner font-mono"
+                        />
+                      </div>
+                    ) : editingConfig.values.type !== "in_process" ? (
+                      <>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Command</label>
+                          <input
+                            type="text"
+                            value={editingConfig.values.command ?? ""}
+                            onChange={(e) =>
+                              setEditingConfig({
+                                ...editingConfig,
+                                values: { ...editingConfig.values, command: e.target.value },
+                              })
+                            }
+                            placeholder="npx"
+                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner font-mono"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">
+                            Arguments
+                            <span className="ml-2 font-normal normal-case tracking-normal text-gray-500">(one argument per line)</span>
+                          </label>
+                          <textarea
+                            rows={Math.max(3, (editingConfig.values.args || []).length + 1)}
+                            value={(editingConfig.values.args || []).join("\n")}
+                            onChange={(e) => {
+                              const args = e.target.value
+                                .split("\n")
+                                .map((line) => line.trimEnd())
+                                .filter((line, i, arr) => line !== "" || i < arr.length - 1);
+                              setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, args } });
+                            }}
+                            placeholder={"mcp-server\n--port\n8080"}
+                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner font-mono resize-none leading-relaxed"
+                          />
+                        </div>
+                      </>
+                    ) : null
+                  }
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Description</label>
+                    <textarea
+                      value={editingConfig.values.description || ""}
+                      onChange={(e) => setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, description: e.target.value } })}
+                      placeholder="MCP server description..."
+                      className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner min-h-[100px]"
                     />
                   </div>
-                ) : editingConfig.values.type !== "in_process" ? (
-                  <>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Command</label>
-                      <input
-                        type="text"
-                        value={editingConfig.values.command ?? ""}
-                        onChange={(e) =>
-                          setEditingConfig({
-                            ...editingConfig,
-                            values: { ...editingConfig.values, command: e.target.value },
-                          })
+                </>
+              )}
+
+              {configModalTab === "advanced" && (
+                <>
+                  <details className="rounded-xl border border-white/10 bg-black/20 p-3 group" open>
+                    <summary className="text-xs font-bold text-gray-400 cursor-pointer list-none flex items-center justify-between">
+                      <span>Advanced — extra variables (keys not in form only)</span>
+                      <span className="text-[10px] text-gray-600 group-open:text-gray-400">JSON</span>
+                    </summary>
+                    <textarea
+                      value={extraEnvJson(editingConfig.values.env as Record<string, string> | undefined, connectorFormContext.knownKeys)}
+                      onChange={(e) => {
+                        try {
+                          const parsed = JSON.parse(e.target.value) as Record<string, string>;
+                          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return;
+                          const env = { ...(editingConfig.values.env || {}) };
+                          for (const key of Object.keys(env)) {
+                            if (!connectorFormContext.knownKeys.has(key)) delete env[key];
+                          }
+                          for (const [key, val] of Object.entries(parsed)) {
+                            if (!connectorFormContext.knownKeys.has(key)) env[key] = String(val ?? "");
+                          }
+                          setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, env } });
+                        } catch {
+                          /* */
                         }
-                        placeholder="npx"
-                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner font-mono"
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">
-                        Arguments
-                        <span className="ml-2 font-normal normal-case tracking-normal text-gray-500">(one argument per line)</span>
-                      </label>
-                      <textarea
-                        rows={Math.max(3, (editingConfig.values.args || []).length + 1)}
-                        value={(editingConfig.values.args || []).join("\n")}
-                        onChange={(e) => {
-                          const args = e.target.value
-                            .split("\n")
-                            .map((line) => line.trimEnd())
-                            .filter((line, i, arr) => line !== "" || i < arr.length - 1);
-                          setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, args } });
-                        }}
-                        placeholder={"mcp-server\n--port\n8080"}
-                        className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner font-mono resize-none leading-relaxed"
-                      />
-                    </div>
-                  </>
-                ) : null
-              }
+                      }}
+                      spellCheck={false}
+                      className="w-full min-h-[100px] mt-3 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-mono"
+                      placeholder='{ "CUSTOM_KEY": "..." }'
+                    />
+                  </details>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 block">Description</label>
-                <textarea
-                  value={editingConfig.values.description || ""}
-                  onChange={(e) => setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, description: e.target.value } })}
-                  placeholder="MCP server description..."
-                  className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner min-h-[100px]"
-                />
-              </div>
-              </>
+                  <details className="rounded-xl border border-white/10 bg-black/20 p-3 group">
+                    <summary className="text-xs font-bold text-gray-400 cursor-pointer list-none">Advanced — all environment variables (JSON)</summary>
+                    <textarea
+                      value={JSON.stringify(editingConfig.values.env ?? {}, null, 2)}
+                      onChange={(e) => {
+                        try {
+                          const parsed = JSON.parse(e.target.value);
+                          if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+                            setEditingConfig({
+                              ...editingConfig,
+                              values: { ...editingConfig.values, env: parsed as Record<string, string> },
+                            });
+                          }
+                        } catch {
+                          /* */
+                        }
+                      }}
+                      spellCheck={false}
+                      className="w-full min-h-[120px] mt-3 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-mono"
+                    />
+                  </details>
+                </>
               )}
 
               {configModalTab === "advanced" && (
-              <>
-              <details className="rounded-xl border border-white/10 bg-black/20 p-3 group" open>
-                <summary className="text-xs font-bold text-gray-400 cursor-pointer list-none flex items-center justify-between">
-                  <span>Advanced — extra variables (keys not in form only)</span>
-                  <span className="text-[10px] text-gray-600 group-open:text-gray-400">JSON</span>
-                </summary>
-                <textarea
-                  value={extraEnvJson(editingConfig.values.env as Record<string, string> | undefined, connectorFormContext.knownKeys)}
-                  onChange={(e) => {
-                    try {
-                      const parsed = JSON.parse(e.target.value) as Record<string, string>;
-                      if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return;
-                      const env = { ...(editingConfig.values.env || {}) };
-                      for (const key of Object.keys(env)) {
-                        if (!connectorFormContext.knownKeys.has(key)) delete env[key];
-                      }
-                      for (const [key, val] of Object.entries(parsed)) {
-                        if (!connectorFormContext.knownKeys.has(key)) env[key] = String(val ?? "");
-                      }
-                      setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, env } });
-                    } catch {
-                      /* */
-                    }
-                  }}
-                  spellCheck={false}
-                  className="w-full min-h-[100px] mt-3 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-mono"
-                  placeholder='{ "CUSTOM_KEY": "..." }'
-                />
-              </details>
-
-              <details className="rounded-xl border border-white/10 bg-black/20 p-3 group">
-                <summary className="text-xs font-bold text-gray-400 cursor-pointer list-none">Advanced — all environment variables (JSON)</summary>
-                <textarea
-                  value={JSON.stringify(editingConfig.values.env ?? {}, null, 2)}
-                  onChange={(e) => {
-                    try {
-                      const parsed = JSON.parse(e.target.value);
-                      if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-                        setEditingConfig({
-                          ...editingConfig,
-                          values: { ...editingConfig.values, env: parsed as Record<string, string> },
-                        });
-                      }
-                    } catch {
-                      /* */
-                    }
-                  }}
-                  spellCheck={false}
-                  className="w-full min-h-[120px] mt-3 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-mono"
-                />
-              </details>
-              </>
-              )}
-
-              {configModalTab === "advanced" && (
-              <div className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${sandboxBackend === "container" ? 'bg-indigo-500/5 border-indigo-500/20' : 'bg-white/5 border-white/10 opacity-80'}`}>
-                <div className="space-y-0.5">
-                  <div className="text-sm font-bold text-white flex items-center gap-2">
-                    Session sandbox backend
-                    {sandboxBackend === "container" && <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />}
+                <div className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${sandboxBackend === "container" ? 'bg-indigo-500/5 border-indigo-500/20' : 'bg-white/5 border-white/10 opacity-80'}`}>
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-bold text-white flex items-center gap-2">
+                      Session sandbox backend
+                      {sandboxBackend === "container" && <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />}
+                    </div>
+                    <div className="text-[10px] text-gray-400 uppercase tracking-wider">
+                      {sandboxBackend === "container"
+                        ? "AION_SANDBOX_BACKEND=container (Podman/Docker per sessione)"
+                        : "AION_SANDBOX_BACKEND=subprocess (env scrub, dev/macOS)"}
+                    </div>
                   </div>
-                  <div className="text-[10px] text-gray-400 uppercase tracking-wider">
-                    {sandboxBackend === "container"
-                      ? "AION_SANDBOX_BACKEND=container (Podman/Docker per sessione)"
-                      : "AION_SANDBOX_BACKEND=subprocess (env scrub, dev/macOS)"}
+                  <div className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${sandboxBackend === "container" ? 'bg-indigo-600/20 text-indigo-300' : 'bg-gray-800 text-gray-400'}`}>
+                    {sandboxBackend}
                   </div>
                 </div>
-                <div className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${sandboxBackend === "container" ? 'bg-indigo-600/20 text-indigo-300' : 'bg-gray-800 text-gray-400'}`}>
-                  {sandboxBackend}
-                </div>
-              </div>
               )}
             </div>
 

@@ -75,8 +75,35 @@ from ..data.models import (
 )
 from ..data.ids import new_uuid7_str
 from sqlalchemy import select, delete, func, desc
+from .v1.mcp_integrations import _credential_user_id
 
 logger = logging.getLogger("aion.api.admin")
+
+_SECRET_KEY_PATTERNS = (
+    "KEY",
+    "TOKEN",
+    "PASSWORD",
+    "SECRET",
+    "AUTH",
+    "PASS",
+    "CREDENTIAL",
+    "PRIVATE",
+    "BEARER",
+)
+
+
+def _is_secret_key(key: str) -> bool:
+    if not isinstance(key, str):
+        return False
+    k = key.upper()
+    return any(p in k for p in _SECRET_KEY_PATTERNS)
+
+
+def _is_literal_secret(val: Any) -> bool:
+    if not isinstance(val, str):
+        return False
+    v = val.strip()
+    return bool(v) and not v.startswith("${")
 
 
 def _synthetic_npx_market_item(item_id: str) -> Optional[Dict[str, Any]]:

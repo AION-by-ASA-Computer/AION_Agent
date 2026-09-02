@@ -53,3 +53,23 @@ const env = z.object({
     assert "EMAIL_USER" in result.env_keys
     assert "IMAP_HOST" in result.env_keys
     assert result.credential_mode_hint == "per_user"
+
+
+def test_discover_custom_aion_variables(tmp_path: Path, monkeypatch) -> None:
+    mcp_dir = tmp_path / "mcp_servers" / "custom-aion-mcp"
+    mcp_dir.mkdir(parents=True)
+    (mcp_dir / "index.ts").write_text(
+        """
+import { z } from 'zod';
+const env = z.object({
+  AION_MY_CUSTOM_SECRET: z.string(),
+  AION_CHAT_SESSION_ID: z.string(),
+}).parse(process.env);
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("src.mcp_server_files._repo_root", lambda: tmp_path)
+    result = discover_mcp_credentials("custom-aion-mcp", {})
+    assert "AION_MY_CUSTOM_SECRET" in result.env_keys
+    assert "AION_CHAT_SESSION_ID" not in result.env_keys
+

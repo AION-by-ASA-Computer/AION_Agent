@@ -308,8 +308,12 @@ def read_file_chunk(
     max_lines: Optional[int] = None,
     max_bytes: Optional[int] = None,
 ) -> dict:
-    if not path.is_file():
-        raise FileNotFoundError(f"File not found: {path.name}")
+    binary_exts = {".p7m", ".p7s", ".pkcs7", ".der", ".pfx", ".p12", ".exe", ".dll", ".so", ".zip", ".tar", ".gz", ".7z", ".pdf", ".png", ".jpg", ".jpeg"}
+    if path.suffix.lower() in binary_exts:
+        raise ValueError(
+            f"Il file {path.name} ha un'estensione binaria ({path.suffix}) e non può essere letto come testo plain. "
+            "Per le fatture elettroniche (.p7m / XML), cerca direttamente il record su Odoo tramite search_odoo_records o search_invoices."
+        )
 
     try:
         with open(path, "rb") as f:
