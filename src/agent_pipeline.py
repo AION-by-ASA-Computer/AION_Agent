@@ -645,20 +645,109 @@ class AgentPipeline:
                     "You MUST read, analyze, and consider ALL of these newly uploaded documents to answer the current request. "
                     "CRITICAL RULES:\n"
                     "- NEVER process documents in parallel\n"
-                    "- ALWAYS process documents sequentially by using OCR tool.\n"
-                    "- Call ocr_file on one document at a time\n"
-                    "- Wait for the ocr_file call to complete before processing the next document\n"
-                    "- Do not ignore any of these newly uploaded documents\n"
-                    "Ensure you use your tools (like read_file, ocr, or custom scripts) to inspect all of them."
+                    "- For PDFs, check the extraction manifest below before calling doc_ingest\n"
+                    "- Process documents sequentially\n"
+                    "- Do not ignore any of these newly uploaded documents"
                 )
             else:
                 lines.append(
                     "IMPORTANT: A new document has been uploaded in this prompt. "
                     "You MUST read, analyze, and consider this document to answer the current request."
-                    "Always use OCR tools to read the document."
-                    "If OCR tools are not available, try to read the document anyway using any "
-                    "available tool."
                 )
+
+            from src.tools.doc_auto_ingest import load_manifest
+            from src.tools.doc_ingest import slugify_document_name
+            from src.tools.office_auto_convert import (
+                load_conversion_manifest,
+                retry_legacy_word_conversion,
+            )
+
+            for a in new_files:
+                rp = a.get("relative_path", "")
+                mime = (a.get("mime") or "").lower()
+                if not mime.startswith("application/pdf") and not rp.lower().endswith(
+                    ".pdf"
+                ):
+                    continue
+                slug = slugify_document_name(a.get("original_name") or Path(rp).name)
+                manifest = load_manifest(self.session_id, rp)
+                if manifest and manifest.get("ok"):
+                    lines.append(f"\n### PDF extraction ready: `{slug}`")
+                    lines.append(
+                        f"- pages_total: {manifest.get('pages_total')}, "
+                        f"written: {manifest.get('pages_written')}, "
+                        f"partial: {manifest.get('partial')}"
+                    )
+                    if manifest.get("partial") and manifest.get("resume_from"):
+                        lines.append(
+                            f"- INCOMPLETE: call doc_ingest(first_page={manifest['resume_from']}) to resume"
+                        )
+                    if manifest.get("empty_pages_count"):
+                        lines.append(
+                            f"- empty_pages (no text layer): {manifest.get('empty_pages_count')} "
+                            "— use doc_ingest(ocr_mode='auto') or ocr_file on those pages"
+                        )
+                    excerpt = (manifest.get("first_page_excerpt") or "").strip()
+                    if excerpt:
+                        lines.append(f"- first_page_excerpt: {excerpt[:300]}")
+                    hint = manifest.get("grep_hint") or (
+                        f"sandbox_grep_content(pattern=..., relative_root='derived', "
+                        f"glob_filter='docs/{slug}/pages/*.txt')"
+                    )
+                    lines.append(f"- search: {hint}")
+                elif mime.startswith("application/pdf") or rp.lower().endswith(".pdf"):
+                    lines.append(
+                        f"\n### PDF `{slug}`: extraction in progress or not started. "
+                        "If pages are missing after a few seconds, call doc_ingest(relative_path=...)."
+                    )
+
+                on = (a.get("original_name") or Path(rp).name).lower()
+                is_legacy = (
+                    a.get("legacy_word")
+                    or on.endswith(".doc")
+                    or on.endswith(".dot")
+                    or (mime or "").startswith("application/msword")
+                )
+                if is_legacy:
+                    conv = a.get("converted_docx_path") or ""
+                    status = a.get("conversion_status") or ""
+                    manifest = load_conversion_manifest(self.session_id, rp)
+                    if manifest:
+                        conv = conv or str(manifest.get("converted_docx_path") or "")
+                        status = status or str(manifest.get("conversion_status") or "")
+                    elif not conv and not status:
+                        retried = retry_legacy_word_conversion(self.session_id, rp)
+                        if retried.get("conversion_status") == "ok":
+                            conv = str(retried.get("converted_docx_path") or "")
+                            status = "ok"
+                    if conv and status == "ok":
+                        lines.append(f"\n### Legacy Word → DOCX ready for `{on}`")
+                        lines.append(
+                            f"- Original (binary .doc): `{rp}` — do NOT unpack or docx2txt on this file"
+                        )
+                        lines.append(
+                            f"- **Use this path for editing**: `{conv}` (OpenXML .docx)"
+                        )
+                        lines.append(
+                            "- Workflow: `skill_view('docx')` then unpack/edit/pack on the .docx path"
+                        )
+                    elif status == "unavailable":
+                        lines.append(
+                            f"\n### Legacy Word `{on}`: conversion unavailable on server "
+                            "(LibreOffice/soffice missing). Ask admin to install LibreOffice "
+                            "or set AION_SOFFICE_PATH."
+                        )
+                    elif status == "failed":
+                        err = a.get("conversion_error") or "unknown error"
+                        lines.append(
+                            f"\n### Legacy Word `{on}`: auto-conversion failed ({err}). "
+                            "Re-upload after fixing the file or convert manually to .docx."
+                        )
+                    else:
+                        lines.append(
+                            f"\n### Legacy Word `{on}`: conversion pending or not started. "
+                            "Wait a moment; the server converts .doc → .docx on upload."
+                        )
 
             if old_files:
                 lines.append(
@@ -1393,6 +1482,7 @@ class AgentPipeline:
                 set_sql_qm_turn_context,
             )
 
+            conv_proj: Optional[str] = None
             _qm_project = (
                 sql_query_project
                 or _os_qm.getenv("AION_SQL_QM_DEFAULT_PROJECT")
@@ -1432,7 +1522,10 @@ class AgentPipeline:
                     verify_user_project_access,
                 )
 
-                if profile_has_memory_capability_by_slug(_qm_profile_slug):
+                _explicit_sql_project = bool((sql_query_project or "").strip())
+                if (
+                    _explicit_sql_project or conv_proj
+                ) and profile_has_memory_capability_by_slug(_qm_profile_slug):
                     _acc_err = await verify_user_project_access(
                         project_slug=_qm_project,
                         tenant_id=(
@@ -1715,6 +1808,7 @@ class AgentPipeline:
                     turn_plan_id=_turn_pid,
                     plan_controller=plan_controller,
                     profile_name=self.profile_name,
+                    web_search_enabled=_wse,
                 )
                 set_turn_runtime(
                     session_id=self.session_id,
@@ -1830,6 +1924,7 @@ class AgentPipeline:
                     turn_plan_id=_turn_pid,
                     plan_controller=plan_controller,
                     profile_name=self.profile_name,
+                    web_search_enabled=_wse,
                 )
                 set_turn_runtime(
                     session_id=self.session_id,
@@ -3926,12 +4021,49 @@ class AgentPipeline:
                 except Exception as e:
                     logger.warning("Errore chiusura span OTel: %s", e)
 
-    async def run(self, user_input: str) -> Dict[str, Any]:
-        async for chunk in self.run_stream(user_input):
+    async def run(
+        self,
+        user_input: str,
+        *,
+        attachments: Optional[List[Dict[str, Any]]] = None,
+        turn_attachments: Optional[List[Dict[str, Any]]] = None,
+        reasoning_effort: Optional[str] = None,
+        user_message_id: Optional[str] = None,
+        assistant_message_id: Optional[str] = None,
+        message_source: str = "user_input",
+        web_search_enabled: Optional[bool] = None,
+        web_search_restrict_hosts: Optional[List[str]] = None,
+        sql_query_project: Optional[str] = None,
+        plan_id: Optional[str] = None,
+        plan_execution_task_id: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Drain ``run_stream`` until a ``final`` chunk (sync / automation clients)."""
+        error_message = ""
+        async for chunk in self.run_stream(
+            user_input,
+            attachments=attachments,
+            turn_attachments=turn_attachments,
+            reasoning_effort=reasoning_effort,
+            user_message_id=user_message_id,
+            assistant_message_id=assistant_message_id,
+            message_source=message_source,
+            web_search_enabled=web_search_enabled,
+            web_search_restrict_hosts=web_search_restrict_hosts,
+            sql_query_project=sql_query_project,
+            plan_id=plan_id,
+            plan_execution_task_id=plan_execution_task_id,
+            metadata=metadata,
+        ):
             if chunk["type"] == "final":
                 return {
                     "text": chunk["text"],
                     "charts": chunk.get("charts", []),
                     "success": True,
                 }
-        return {"text": "", "charts": [], "success": False}
+            if chunk.get("type") == "error" and chunk.get("content"):
+                error_message = str(chunk["content"])
+        out: Dict[str, Any] = {"text": "", "charts": [], "success": False}
+        if error_message:
+            out["error"] = error_message
+        return out

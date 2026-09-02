@@ -30,6 +30,9 @@ python scripts/sync_proprietary_config.py
 python scripts/sync_proprietary_config.py --force
 ```
 
+**Nota:** non mettere commenti inline sulla stessa riga se il comando viene incollato in
+runner che non interpretano `#` (es. alcuni task IDE). Usa righe separate.
+
 `setup-aion-env.sh` / `upgrade-aion.sh` chiamano questo script **solo se**
 `config_proprietary/skills/` esiste.
 
@@ -48,3 +51,15 @@ config_proprietary/
 
 Senza `skills/`, i profili che referenziano `docx` / `pptx` / … funzionano ma
 `skill_view` su quelle skill non troverà i pacchetti finché non esegui il sync.
+
+### Verifica rapida
+
+Dopo il sync, i nuovi script report devono comparire in runtime:
+
+```bash
+ls config/skills/docx/scripts/report/
+# build_evidence_report.py  evidence_layout.py  qa_evidence_images.py
+```
+
+Se la directory manca ma esiste sotto `config_proprietary/`, il sync non è stato eseguito
+(o è fallito — controlla l'exit code).

@@ -635,17 +635,11 @@ def _aion_mcp_tool_run(
             )
             err_text = format_exception_for_tool(tool_name, e)
             if isinstance(e, TimeoutError):
-                pg_cap = os.getenv("AION_PG_QUERY_TIMEOUT_SEC", "60")
+                from src.runtime.mcp_tool_result import build_timeout_message
+
                 err_text = format_exception_for_tool(
                     tool_name,
-                    TimeoutError(
-                        f"Query timed out ({server_name}/{tool_name}). "
-                        f"PostgreSQL cap AION_PG_QUERY_TIMEOUT_SEC={pg_cap}s; "
-                        f"MCP bridge cap AION_MCP_TOOL_RESULT_TIMEOUT="
-                        f"{os.getenv('AION_MCP_TOOL_RESULT_TIMEOUT', '120')}s. "
-                        "Heavy JOINs may need indexes or a narrower filter (e.g. codice_ditta). "
-                        "The MCP worker was recycled; retry with a simpler query."
-                    ),
+                    TimeoutError(build_timeout_message(server_name, tool_name)),
                 )
             mark_sql_exec_tool_failed(session_id, tool_name)
 

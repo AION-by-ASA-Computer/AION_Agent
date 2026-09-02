@@ -180,3 +180,45 @@ def format_exception_for_tool(tool_name: str, exc: BaseException) -> str:
         "tool": tool_name,
     }
     return json.dumps(payload, ensure_ascii=False)
+
+
+_DOC_TOOL_NAMES = frozenset({"ocr_file", "doc_ingest"})
+
+
+def build_timeout_message(server_name: str, tool_name: str) -> str:
+    """Timeout guidance tailored to the tool family.
+
+    A generic message that mentions PostgreSQL derails the model when the tool
+    that timed out is an OCR or document call, so each family gets the remedy
+    that actually applies to it.
+    """
+    import os
+
+    from src.runtime.pg_query_guard import is_postgres_query_tool
+
+    mcp_cap = os.getenv("AION_MCP_TOOL_RESULT_TIMEOUT", "120")
+    head = f"Tool timed out ({server_name}/{tool_name}). MCP bridge cap AION_MCP_TOOL_RESULT_TIMEOUT={mcp_cap}s."
+
+    if is_postgres_query_tool(server_name, tool_name):
+        pg_cap = os.getenv("AION_PG_QUERY_TIMEOUT_SEC", "60")
+        return (
+            f"{head} PostgreSQL cap AION_PG_QUERY_TIMEOUT_SEC={pg_cap}s. "
+            "Heavy JOINs may need indexes or a narrower filter (e.g. codice_ditta). "
+            "The MCP worker was recycled; retry with a simpler query."
+        )
+
+    base_tool = (tool_name or "").split("-")[-1]
+    if base_tool in _DOC_TOOL_NAMES:
+        return (
+            f"{head} Document extraction is too slow for the whole file in one call. "
+            "Use doc_ingest(relative_path, first_page=..., last_page=...) to process a page "
+            "range: it writes one file per page under derived/docs/<slug>/pages/, skips pages "
+            "already done, and can be called again to resume. Do NOT retry the same call "
+            "unchanged, and do NOT fall back to a custom extraction script."
+        )
+
+    return (
+        f"{head} The call exceeded the budget. Retry with a narrower scope "
+        "(fewer items, a smaller range, or a more specific filter) rather than repeating "
+        "the same arguments."
+    )

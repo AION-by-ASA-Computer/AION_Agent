@@ -30,6 +30,9 @@ if [[ ! -f "$ROOT/mcp_servers/agent_db/db_manager.py" ]] && [[ -f "$ROOT/scripts
   echo "[AION] mcp_servers/ incompleta — sync da mcp_servers_std/"
   python "$ROOT/scripts/sync_mcp_servers.py"
 fi
+if [[ -f "$ROOT/scripts/merge_mcp_registry_from_std.py" ]]; then
+  python "$ROOT/scripts/merge_mcp_registry_from_std.py"
+fi
 echo "[AION] venv attivo: $(python -c 'import sys; print(sys.prefix)')"
 echo "[AION] Avvio API dev con --reload (watch: src, config, .env*)"
 

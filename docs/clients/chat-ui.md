@@ -77,6 +77,7 @@ Path: `/integrations`. Panel for personal credentials on servers with `credentia
 | `presentation_preview` | Yes |
 | `/db` → Agent DB iframe | Partial (component + BFF exist but trigger commented out in ChatWorkspace) |
 | Upload + merge session attachments | Yes |
+| Legacy `.doc` → `.docx` on upload (API host; fields `converted_docx_path`, `conversion_status`) | Yes — see [Office and legacy Word](../configuration/office-and-legacy-word.md) |
 | Post-turn charts | Yes (Recharts, data from `/sessions/.../charts`) |
 | New session files (uploads/workspace/derived) | Yes |
 | Profile + reasoning effort | Yes |

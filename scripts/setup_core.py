@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SETUP_PY = ROOT / "scripts" / "setup_aion_env.py"
 SYNC_CONFIG = ROOT / "scripts" / "sync_config.py"
 SYNC_MCP_SERVERS = ROOT / "scripts" / "sync_mcp_servers.py"
+MERGE_MCP_REGISTRY = ROOT / "scripts" / "merge_mcp_registry_from_std.py"
 SYNC_RUNTIME_ENV = ROOT / "scripts" / "sync_runtime_env.py"
 RUNTIME_EXTRAS = ROOT / "scripts" / "runtime_extras_setup.py"
 ENSURE_SKILL_PACKAGES = ROOT / "scripts" / "ensure_skill_packages.py"
@@ -119,6 +120,10 @@ def main() -> int:
             rc = _run([py_exec, str(SYNC_MCP_SERVERS)])
             if rc != 0:
                 return rc
+            if MERGE_MCP_REGISTRY.is_file():
+                rc = _run([py_exec, str(MERGE_MCP_REGISTRY)])
+                if rc != 0:
+                    print("[warn] merge_mcp_registry_from_std failed", file=sys.stderr)
             if SYNC_RUNTIME_ENV.is_file():
                 rc = _run([py_exec, str(SYNC_RUNTIME_ENV)])
                 if rc != 0:
@@ -215,10 +220,13 @@ def main() -> int:
                     spec.loader.exec_module(up_mod)
                     rep = up_mod.Report()
                     up_mod._ensure_sql_qm_env_keys(out_path, dry_run=False, report=rep)
-                    up_mod._ensure_mempalace_nav_env_keys(
+                    up_mod._ensure_mnemos_env_keys(
                         out_path, dry_run=False, report=rep
                     )
-                    up_mod._ensure_mnemos_env_keys(
+                    up_mod._ensure_harness_v2_env_keys(
+                        out_path, dry_run=False, report=rep
+                    )
+                    up_mod._ensure_optimal_tool_format_env_keys(
                         out_path, dry_run=False, report=rep
                     )
                     up_mod._ensure_skill_view_env_keys(
@@ -232,7 +240,7 @@ def main() -> int:
                     )
             except Exception as exc:
                 print(
-                    f"[warn] memory env defaults (SQL QM / MemPalace nav): {exc}",
+                    f"[warn] memory env defaults (Mnemos / harness): {exc}",
                     file=sys.stderr,
                 )
 

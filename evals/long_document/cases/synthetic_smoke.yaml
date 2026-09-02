@@ -1,0 +1,39 @@
+title: Long document — synthetic smoke (CI)
+description: >
+  Pipeline eval without LLM: doc_ingest on a 200-page synthetic decree, then
+  grep for PIC [53] and PMC rumore markers on known pages.
+tier: ci
+cases:
+  - id: synthetic_rumore_smoke
+    min_recall: 1.0
+    pdf:
+      source: synthetic
+      profile: rumore_decreto
+      pages: 200
+      prescription_page: 101
+      pmc_page: 150
+    ingest:
+      ocr_mode: never
+      budget_sec: 600
+    identity:
+      must_contain: []
+      must_not_contain: []
+    required_hits:
+      - label: PIC prescrizione 53
+        grep_pattern: "\\[53\\]"
+        page: 101
+        must_contain:
+          - "[53]"
+          - "rumore"
+      - label: PIC sezione 8.9 Rumore
+        grep_pattern: "8\\.9 Rumore"
+        page: 101
+        must_contain:
+          - "Parere Istruttorio Conclusivo"
+      - label: PMC tabella rumore
+        grep_pattern: "Piano di Monitoraggio"
+        page: 150
+        must_contain:
+          - "Rumore"
+          - "monitoraggio acustico"
+    nl_query: prescrizioni autorizzative relative al rumore PIC e PMC monitoraggio acustico

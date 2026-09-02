@@ -1,0 +1,97 @@
+title: Altomonte — prescrizioni rumore PIC + PMC
+description: >
+  Golden set from the production failure case (decreto IPPC ~200 pagine).
+  Requires the real PDF via AION_EVAL_ALTOMONTE_PDF; skipped in CI when unset.
+  Validate page numbers against your copy before tightening min_recall.
+tier: manual
+cases:
+  - id: altomonte_rumore_pic_pmc
+    skip_if_pdf_missing: true
+    min_recall: 0.85
+    pdf:
+      source: env
+      path_env: AION_EVAL_ALTOMONTE_PDF
+    ingest:
+      ocr_mode: auto
+      budget_sec: 90
+    identity:
+      must_contain:
+        - altomonte
+      must_not_contain: []
+    required_hits:
+      - label: PIC prescrizione 53
+        grep_pattern: "\\[53\\]"
+        page: 101
+        must_contain:
+          - "[53]"
+      - label: PIC prescrizione 54
+        grep_pattern: "\\[54\\]"
+        page: 101
+        must_contain:
+          - "[54]"
+      - label: PIC prescrizione 55
+        grep_pattern: "\\[55\\]"
+        page: 101
+        must_contain:
+          - "[55]"
+      - label: PIC prescrizione 56
+        grep_pattern: "\\[56\\]"
+        page: 102
+        must_contain:
+          - "[56]"
+      - label: PIC prescrizione 57
+        grep_pattern: "\\[57\\]"
+        page: 102
+        must_contain:
+          - "[57]"
+      - label: PIC prescrizione 58
+        grep_pattern: "\\[58\\]"
+        page: 102
+        must_contain:
+          - "[58]"
+      - label: PIC prescrizione 59
+        grep_pattern: "\\[59\\]"
+        page: 102
+        must_contain:
+          - "[59]"
+      - label: PMC sezione Rumore
+        grep_pattern: "(?i)rumor"
+        page: null
+        must_contain:
+          - "monitoraggio"
+    agent_expectations:
+      user_query: >
+        ESTRAI DA DECRETO - PIC E PMC LE PRESCRIZIONI AUTORIZZATIVE RELATIVE AL RUMORE.
+        Genera un elenco con documento, riferimento e pagina.
+      output_must_contain:
+        - "[53]"
+        - "PIC"
+        - "PMC"
+        - "101"
+      output_must_not_contain:
+        - "presenzano"
+
+  - id: altomonte_wrong_plant_guard
+    skip_if_pdf_missing: true
+    min_recall: 1.0
+    pdf:
+      source: env
+      path_env: AION_EVAL_ALTOMONTE_PDF
+    ingest:
+      ocr_mode: auto
+      budget_sec: 90
+    identity:
+      must_contain:
+        - altomonte
+      must_not_contain:
+        - presenzano
+    required_hits: []
+    agent_expectations:
+      user_query: >
+        Estrai le prescrizioni rumore per l'impianto PRESENZANO da questo decreto.
+      output_must_not_contain:
+        - "[53]"
+        - "altomonte"
+      notes: >
+        If the PDF is Altomonte, a correct agent must refuse or ask for the right
+        document instead of fabricating Presenzano prescriptions.

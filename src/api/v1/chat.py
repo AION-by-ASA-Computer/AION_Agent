@@ -4,6 +4,7 @@ import asyncio
 import json
 import logging
 import os
+import uuid
 from typing import Any, Dict, List, Literal, Optional, Set
 
 MessageSource = Literal["user_input", "internal_trigger", "scheduled_trigger"]
@@ -191,6 +192,9 @@ class AttachmentRef(BaseModel):
     relative_path: str
     original_name: Optional[str] = None
     mime: Optional[str] = None
+    converted_docx_path: Optional[str] = None
+    legacy_word: Optional[bool] = None
+    conversion_status: Optional[str] = None
 
 
 class ChatStreamBody(BaseModel):
@@ -233,6 +237,58 @@ class ChatStreamBody(BaseModel):
 
     class Config:
         populate_by_name = True
+
+
+class ChatSyncBody(BaseModel):
+    """Request/response JSON chat for automation clients (N8N, scripts)."""
+
+    message: str
+    conversation_id: Optional[str] = Field(
+        default=None,
+        validation_alias=AliasChoices("conversation_id", "session_id"),
+        description="Omit to auto-create a new conversation id.",
+    )
+    profile: str = Field(
+        default="aion_std",
+        validation_alias=AliasChoices("profile", "profile_slug", "profile_name"),
+    )
+    user_id: Optional[str] = None
+    reasoning_effort: Optional[ReasoningEffort] = None
+    thinking_enabled: Optional[bool] = None
+    message_source: MessageSource = Field(
+        default="internal_trigger",
+        description="Default internal_trigger for automation; use user_input for human turns.",
+    )
+    web_search_enabled: Optional[bool] = None
+    web_search_restrict_hosts: Optional[List[str]] = None
+    agent_mode: Optional[str] = "normal"
+    plan_mode: Optional[bool] = None
+    deep_research_mode: Optional[bool] = None
+    sql_query_project: Optional[str] = None
+    llm_provider_name: Optional[str] = None
+    metadata: Optional[Dict[str, Any]] = None
+    timeout_seconds: Optional[float] = Field(
+        default=300.0,
+        ge=1.0,
+        le=3600.0,
+        description="Max wall time for the agent turn (default 300s).",
+    )
+
+    class Config:
+        populate_by_name = True
+
+
+class ChatSyncResponse(BaseModel):
+    text: str
+    conversation_id: str
+    session_id: str
+    profile: str
+    success: bool = True
+    charts: List[Any] = Field(default_factory=list)
+    error: Optional[str] = Field(
+        default=None,
+        description="Set when success=false and the pipeline emitted an error event.",
+    )
 
 
 class ChatPrepareBody(BaseModel):
@@ -694,4 +750,163 @@ async def chat_stream_reconnect(
         gen(),
         ping=15,
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@router.post("/chat", response_model=ChatSyncResponse)
+async def chat_sync(
+    body: ChatSyncBody,
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
+):
+    """
+    Synchronous JSON chat for automation (N8N, scripts, webhooks).
+
+    Prefer this over ``POST /v1/chat/stream`` when the client cannot consume SSE.
+    Drains the agent pipeline until a ``final`` event (or timeout).
+    """
+    set_event_loop(asyncio.get_running_loop())
+    uid = _resolve_chat_user_id(
+        auth,
+        body_user_id=body.user_id,
+        x_aion_user_id=x_aion_user_id,
+    )
+    conversation_id = (body.conversation_id or "").strip() or str(uuid.uuid4())
+
+    from src.runtime.agent_mode_resolve import resolve_agent_mode
+
+    resolved_agent_mode = resolve_agent_mode(
+        body.agent_mode,
+        body.plan_mode,
+        deep_research_mode=body.deep_research_mode,
+        message_source=body.message_source,
+    )
+
+    conversation_project: str | None = None
+    if os.getenv("AION_UNIFIED_DB", "1").lower() in ("1", "true", "yes"):
+        try:
+            from datetime import datetime, timezone
+            from src.data.engine import get_async_session_maker
+            from src.data.models import Conversation
+
+            async with get_async_session_maker()() as session:
+                r = await session.get(Conversation, conversation_id)
+                if not r:
+                    meta: Dict[str, Any] = {"agent_mode": resolved_agent_mode}
+                    if body.thinking_enabled is not None:
+                        meta["thinking_enabled"] = body.thinking_enabled
+                    if body.reasoning_effort is not None:
+                        meta["reasoning_effort"] = body.reasoning_effort
+                    if body.sql_query_project is not None:
+                        meta["sql_query_project"] = body.sql_query_project
+                    if body.llm_provider_name is not None:
+                        meta["llm_provider_name"] = body.llm_provider_name
+                    tenant = (
+                        os.getenv("AION_DEFAULT_TENANT_ID") or "default"
+                    ).strip() or "default"
+                    session.add(
+                        Conversation(
+                            id=conversation_id,
+                            tenant_id=tenant,
+                            user_id=uid,
+                            profile_slug=body.profile,
+                            title=None,
+                            message_count=0,
+                            metadata_json=json.dumps(meta),
+                        )
+                    )
+                    await session.commit()
+                else:
+                    meta = json.loads(r.metadata_json or "{}")
+                    conversation_project = (
+                        meta.get("sql_query_project") or ""
+                    ).strip() or None
+                    if r.profile_slug != body.profile:
+                        r.profile_slug = body.profile
+                        r.updated_at = datetime.now(timezone.utc)
+                        session.add(r)
+                        await session.commit()
+        except Exception as e:
+            logger.error("Error ensuring conversation for sync chat: %s", e)
+
+    from src.runtime.sql_query_project_resolve import resolve_sql_query_project
+
+    sql_project_resolved = resolve_sql_query_project(
+        request_project=body.sql_query_project,
+        conversation_project=conversation_project,
+    )
+
+    if body.thinking_enabled is False:
+        resolved_effort = "min"
+    else:
+        resolved_effort = effective_reasoning_effort(body.reasoning_effort)
+
+    timeout = float(body.timeout_seconds or 300.0)
+
+    try:
+        agent_instance, profile_name = await get_agent(
+            body.profile,
+            session_id=conversation_id,
+            user_id=uid,
+            agent_mode=resolved_agent_mode,
+            message_source=body.message_source,
+            llm_provider_name=body.llm_provider_name,
+        )
+        pipeline = AgentPipeline(
+            agent=agent_instance,
+            session_id=conversation_id,
+            profile_name=profile_name,
+            user_id=uid,
+            agent_mode=resolved_agent_mode,
+        )
+        result = await asyncio.wait_for(
+            pipeline.run(
+                body.message,
+                reasoning_effort=resolved_effort,
+                message_source=body.message_source,
+                web_search_enabled=body.web_search_enabled,
+                web_search_restrict_hosts=normalize_web_search_restrict_hosts(
+                    body.web_search_restrict_hosts
+                ),
+                sql_query_project=sql_project_resolved,
+                metadata={
+                    **(body.metadata or {}),
+                    **(
+                        {"llm_provider_name": body.llm_provider_name}
+                        if body.llm_provider_name
+                        else {}
+                    ),
+                },
+            ),
+            timeout=timeout,
+        )
+    except asyncio.TimeoutError:
+        await redis_set_stream_cancel(conversation_id)
+        raise HTTPException(
+            status_code=504,
+            detail=f"Agent turn timed out after {timeout:.0f}s",
+        )
+    except Exception as e:
+        from src.agent_profile import ProfileNotFoundError
+
+        if isinstance(e, ProfileNotFoundError):
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": str(e),
+                    "code": "profile_not_found",
+                    "available_slugs": e.available_slugs,
+                },
+            ) from e
+        logger.exception("sync chat failed conv=%s", conversation_id[:12])
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+    return ChatSyncResponse(
+        text=result.get("text") or "",
+        conversation_id=conversation_id,
+        session_id=conversation_id,
+        profile=profile_name,
+        success=bool(result.get("success", True)),
+        charts=list(result.get("charts") or []),
+        error=(result.get("error") or None),
     )

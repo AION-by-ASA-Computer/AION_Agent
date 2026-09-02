@@ -78,6 +78,7 @@ RUN apt-get update \
     nodejs \
     npm \
     podman \
+    libreoffice-writer-nogui \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia il venv (contiene tutti i pacchetti Python + console scripts)
@@ -88,6 +89,10 @@ COPY --from=uv-bin /uv /uvx /usr/local/bin/
 
 
 WORKDIR /app
+
+# mcp-remote proxy for remote-bridge MCP servers (ClickUp, Notion, GitHub Copilot, …)
+COPY docker/package.mcp-remote.json ./package.json
+RUN npm install --omit=dev
 
 # Application code (runtime dirs config/ and mcp_servers/ come from sync at boot)
 COPY src/              ./src/

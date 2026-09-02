@@ -2,8 +2,65 @@
 
 from __future__ import annotations
 
+import os
 import re
-from typing import Any, Dict
+import shutil
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+MCP_REMOTE_PROXY_MARKERS = (
+    "node_modules/mcp-remote/dist/proxy.js",
+    "mcp-remote/dist/proxy.js",
+)
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def is_mcp_remote_proxy_arg(arg: str) -> bool:
+    if not isinstance(arg, str):
+        return False
+    norm = arg.replace("\\", "/")
+    return any(
+        norm.endswith(marker) or marker in norm for marker in MCP_REMOTE_PROXY_MARKERS
+    )
+
+
+def mcp_remote_proxy_path() -> Optional[str]:
+    """Absolute path to locally installed mcp-remote proxy.js, if present."""
+    for root in (Path.cwd(), _repo_root()):
+        candidate = root / "node_modules" / "mcp-remote" / "dist" / "proxy.js"
+        if candidate.is_file():
+            return str(candidate.resolve())
+    return None
+
+
+def remote_bridge_tail_args(args: List[str]) -> List[str]:
+    """Args after the optional proxy.js entrypoint."""
+    if args and is_mcp_remote_proxy_arg(args[0]):
+        return list(args[1:])
+    return list(args)
+
+
+def resolve_remote_bridge_spawn(config: Dict[str, Any]) -> Tuple[str, List[str]]:
+    """
+    Spawn command for remote-bridge MCP servers.
+
+    Prefer local ``node_modules/mcp-remote`` (Docker image); fall back to
+    ``npx -y mcp-remote`` when the package is not installed under /app.
+    """
+    raw_args = list(config.get("args") or [])
+    tail = remote_bridge_tail_args(raw_args)
+
+    local = mcp_remote_proxy_path()
+    if local:
+        return ("node", [local, *tail])
+    if shutil.which("npx"):
+        return ("npx", ["-y", "mcp-remote", *tail])
+
+    command = str(config.get("command") or "node")
+    return (command, raw_args)
 
 
 def build_remote_bridge_registry_config(

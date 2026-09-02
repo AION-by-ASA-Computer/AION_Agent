@@ -35,6 +35,8 @@ const sidebars: SidebarsConfig = {
         'configuration/web-search-and-fetch',
         'configuration/profiles',
         'configuration/skills-and-prompts',
+        'configuration/office-and-legacy-word',
+        'configuration/document-evidence',
         'configuration/soul-memory-user',
       ],
     },
@@ -59,7 +61,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Clients',
       collapsed: false,
-      items: ['clients/chat-ui', 'clients/admin-ui', 'clients/sdk-and-widget'],
+      items: ['clients/chat-ui', 'clients/admin-ui', 'clients/sdk-and-widget', 'clients/n8n'],
     },
     {
       type: 'category',

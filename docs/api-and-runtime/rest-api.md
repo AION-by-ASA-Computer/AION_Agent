@@ -220,6 +220,47 @@ Performs polling of the loading status of MCPs.
 
 ---
 
+### Sync Chat (JSON)
+`POST /v1/chat` (Requires Chat Auth)
+
+Sends a message and waits for the full agent reply as a single JSON object.
+Intended for **automation clients** (n8n, scripts) that cannot consume SSE.
+See also [N8N Integration](../clients/n8n.md).
+
+**Request Body:**
+```json
+{
+  "message": "What is the status of the Prometheus servers?",
+  "profile": "aion_std",
+  "conversation_id": null,
+  "user_id": "n8n",
+  "message_source": "internal_trigger",
+  "timeout_seconds": 300
+}
+```
+
+| Field | Default | Notes |
+|-------|---------|--------|
+| `message` | — | Required |
+| `profile` / `profile_slug` / `profile_name` | `aion_std` | Profile slug |
+| `conversation_id` / `session_id` | auto UUID | Omit to create a new conversation |
+| `message_source` | `internal_trigger` | Use `user_input` for human turns |
+| `timeout_seconds` | `300` | Range 1–3600; **504** on timeout |
+
+**Response (200 OK):**
+```json
+{
+  "text": "The Prometheus servers are active...",
+  "conversation_id": "01907a5e-...",
+  "session_id": "01907a5e-...",
+  "profile": "aion_std",
+  "success": true,
+  "charts": []
+}
+```
+
+---
+
 ### Chat Stream (SSE)
 `POST /v1/chat/stream` (Requires Chat Auth)
 
@@ -284,7 +325,29 @@ Sends a cancellation signal to immediately stop the generation of the response i
 `POST /v1/conversations/{conversation_id}/files` (Requires `files:write`)
 
 Allows multipart/form-data sending of files to be analyzed.
-Returns an array of attachments saved in the `uploads/` folder of the session:
+Returns an array of attachments saved in the `uploads/` folder of the session.
+For legacy **`.doc`** uploads, the API host may also set conversion metadata (LibreOffice on the API process — see [Office and legacy Word](../configuration/office-and-legacy-word.md)):
+
+```json
+{
+  "attachments": [
+    {
+      "relative_path": "uploads/01907a5e_report.doc",
+      "original_relative_path": "uploads/report.doc",
+      "name": "01907a5e_report.doc",
+      "original_name": "report.doc",
+      "size_bytes": 18780160,
+      "mime": "application/msword",
+      "legacy_word": true,
+      "conversion_status": "ok",
+      "converted_docx_path": "derived/converted/report.docx"
+    }
+  ]
+}
+```
+
+Plain text upload (no conversion):
+
 ```json
 {
   "attachments": [

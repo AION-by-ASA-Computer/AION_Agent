@@ -523,6 +523,13 @@
     },
     "session_files_new": "New session files",
     "remove_file": "Remove {{name}}",
+    "upload": {
+      "uploading": "Uploading… {{progress}}%",
+      "done": "Upload complete",
+      "failed": "Upload failed",
+      "retry": "Retry",
+      "send_blocked": "Wait for file uploads to finish"
+    },
     "web_search": {
       "disabled": "Web search disabled",
       "restricted": "Restricted · {{count}} hosts",

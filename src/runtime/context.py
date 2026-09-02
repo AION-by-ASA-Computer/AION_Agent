@@ -20,6 +20,7 @@ def set_context(
     turn_plan_id: Optional[str] = None,
     plan_controller: Any = None,
     profile_name: Optional[str] = None,
+    web_search_enabled: Optional[bool] = None,
 ) -> None:
     ctx: Dict[str, Any] = {
         "session_id": session_id,
@@ -36,6 +37,8 @@ def set_context(
         ctx["turn_plan_id"] = turn_plan_id.strip()
     if plan_controller is not None:
         ctx["plan_controller"] = plan_controller
+    if web_search_enabled is not None:
+        ctx["web_search_enabled"] = bool(web_search_enabled)
     _forward_ctx.set(ctx)
 
 

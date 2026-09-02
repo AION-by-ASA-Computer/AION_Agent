@@ -17,6 +17,7 @@ import { ShimmerText } from "@/components/chat/ShimmerText";
 import Link from "next/link";
 import { AgentModeSelectChip } from "@/components/chat/AgentModeSelectChip";
 import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
+import { CircularUploadProgress } from "@/components/chat/CircularUploadProgress";
 import { ComposerOptionRow } from "@/components/chat/ComposerOptionRow";
 import { ChatDragDrop } from "@/components/chat/ChatDragDrop";
 import { mergeAttachmentRefs } from "@/lib/attachments";
@@ -38,7 +39,6 @@ import {
   waitForChatPrepare,
   type ChatPrepareMcpError,
   sessionDownloadUrl,
-  uploadSessionFiles,
   listSessionUploads,
   fetchConversationHistory,
   fetchStreamStatus,
@@ -60,6 +60,7 @@ import {
   type SessionChart,
 } from "@/lib/api/aion";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
+import { usePendingSessionUploads } from "@/hooks/use-pending-session-uploads";
 import { useT } from "@/lib/i18n/use-t";
 import {
   extractStreamingPlanMarkdown,
@@ -412,6 +413,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const shellActions = useShellActions();
   const sidebarOpen = useSidebarOpen();
   const [conversationId, setConversationId] = useState(initialConversationId);
+
+  const {
+    items: pendingUploadItems,
+    queueFiles: queuePendingUploads,
+    removeItem: removePendingUpload,
+    retryItem: retryPendingUpload,
+    clearAll: clearPendingUploads,
+    isUploading: pendingUploadsInProgress,
+    hasUploadErrors: pendingUploadsFailed,
+    completedAttachments: pendingUploadedAttachments,
+  } = usePendingSessionUploads(conversationId, userId, token);
+
+  const sendBlockedByUploads = pendingUploadsInProgress || pendingUploadsFailed;
 
   const [dockTab, setDockTab] = useState<DockTab>("none");
   const [lastActiveTab, setLastActiveTab] = useState<DockTab>("plan");
@@ -1278,16 +1292,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     minHeight: COMPOSER_TEXTAREA_MIN,
     maxHeight: composerTextMax,
   });
-  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
-
   const handleFilesDropped = useCallback((files: File[]) => {
-    setPendingFiles((prev) => {
-      const filtered = files.filter(
-        (sf) => !prev.some((pf) => pf.name === sf.name && pf.size === sf.size)
-      );
-      return [...prev, ...filtered];
-    });
-  }, []);
+    queuePendingUploads(files);
+  }, [queuePendingUploads]);
 
   const [streamEpoch, setStreamEpoch] = useState(0);
   const abortRef = useRef<AbortController | null>(null);
@@ -1831,18 +1838,20 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         opts?.deepResearchModeOverride !== undefined
           ? opts.deepResearchModeOverride
           : effectiveAgentMode === "deep_research";
+      if (pendingUploadsInProgress || pendingUploadsFailed) {
+        return;
+      }
+
       let uidMsg = crypto.randomUUID();
       let aid = crypto.randomUUID();
       setActiveMessageId(aid);
 
-      const hasPendingFiles = pendingFiles.length > 0;
-      const uploads = await uploadSessionFiles(conversationId, userId, pendingFiles, token);
-      setPendingFiles([]);
+      const uploads = [...pendingUploadedAttachments];
+      const hasNewUploads = uploads.length > 0;
+      clearPendingUploads();
       void fetchSessionFiles();
-      // Fetch existing session uploads only when new files were uploaded,
-      // so previous uploads aren't incorrectly attached to the current message.
-      const existing = hasPendingFiles ? await listSessionUploads(conversationId, userId, token) : [];
-      const attachments = hasPendingFiles ? mergeAttachmentRefs(uploads, existing) : [];
+      const existing = hasNewUploads ? await listSessionUploads(conversationId, userId, token) : [];
+      const attachments = hasNewUploads ? mergeAttachmentRefs(uploads, existing) : [];
 
       const userArtifacts: ChatHistoryArtifact[] = uploads.map((a, i) => ({
         id: `att-${i}-${Date.now()}`,
@@ -2245,7 +2254,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       token,
       activeProfileSlug,
       effectiveEffort,
-      pendingFiles,
+      pendingUploadsInProgress,
+      pendingUploadsFailed,
+      pendingUploadedAttachments,
+      clearPendingUploads,
       thinkingEnabled,
       markStreamConversation,
       transcriptStreaming,
@@ -3834,24 +3846,58 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   </div>
                 )
               ) : null}
-              {pendingFiles.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2">
-                  {pendingFiles.map((f) => (
-                    <span
-                      key={f.name}
-                      className="inline-flex items-center gap-1.5 rounded-full border border-border bg-muted/60 px-3 py-1.5 text-[0.857em] font-medium text-foreground backdrop-blur-sm"
-                    >
-                      {f.name}
-                      <button
-                        type="button"
-                        className="focus-ring rounded-full px-0.5 text-muted-foreground hover:text-destructive transition-colors"
-                        aria-label={t("chat.remove_file", { name: f.name })}
-                        onClick={() => setPendingFiles((prev) => prev.filter((x) => x.name !== f.name))}
+              {pendingUploadItems.length > 0 && (
+                <div className="mb-3 flex flex-wrap gap-2" aria-live="polite">
+                  {pendingUploadItems.map((item) => {
+                    const ringStatus =
+                      item.status === "done"
+                        ? "done"
+                        : item.status === "error"
+                          ? "error"
+                          : "uploading";
+                    const statusLabel =
+                      item.status === "done"
+                        ? t("chat.upload.done")
+                        : item.status === "error"
+                          ? t("chat.upload.failed")
+                          : t("chat.upload.uploading", { progress: item.progress });
+                    return (
+                      <span
+                        key={item.id}
+                        className={cn(
+                          "inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-[0.857em] font-medium backdrop-blur-sm",
+                          item.status === "error"
+                            ? "border-destructive/40 bg-destructive/10 text-destructive"
+                            : "border-border bg-muted/60 text-foreground",
+                        )}
+                        title={statusLabel}
                       >
-                        ×
-                      </button>
-                    </span>
-                  ))}
+                        <CircularUploadProgress
+                          value={item.progress}
+                          status={ringStatus}
+                          size={18}
+                        />
+                        <span className="truncate max-w-[14rem]">{item.file.name}</span>
+                        {item.status === "error" ? (
+                          <button
+                            type="button"
+                            className="focus-ring rounded-full px-1 text-[0.786em] font-semibold hover:underline"
+                            onClick={() => retryPendingUpload(item.id)}
+                          >
+                            {t("chat.upload.retry")}
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="focus-ring rounded-full px-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                          aria-label={t("chat.remove_file", { name: item.file.name })}
+                          onClick={() => removePendingUpload(item.id)}
+                        >
+                          ×
+                        </button>
+                      </span>
+                    );
+                  })}
                 </div>
               )}
               {isProjectRequiredButMissing && (
@@ -3914,7 +3960,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         handleAgentModeChange(agentMode === "plan" ? "normal" : "plan");
                       } else if (e.key === "Enter" && !e.shiftKey) {
                         e.preventDefault();
-                        void send();
+                        if (!sendBlockedByUploads) void send();
                       }
                     }}
                     placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
@@ -3930,12 +3976,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     className="hidden"
                     onChange={(e) => {
                       const selected = Array.from(e.target.files || []);
-                      setPendingFiles((prev) => {
-                        const filtered = selected.filter(
-                          (sf) => !prev.some((pf) => pf.name === sf.name && pf.size === sf.size)
-                        );
-                        return [...prev, ...filtered];
-                      });
+                      queuePendingUploads(selected);
                       e.target.value = "";
                     }}
                   />
@@ -4492,7 +4533,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       <button
                         type="button"
                         onClick={() => void send()}
-                        disabled={!input.trim() || isProjectRequiredButMissing}
+                        disabled={
+                          !input.trim() ||
+                          isProjectRequiredButMissing ||
+                          sendBlockedByUploads
+                        }
+                        title={
+                          sendBlockedByUploads ? t("chat.upload.send_blocked") : undefined
+                        }
                         className="focus-ring inline-flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all duration-200 hover:scale-105 hover:bg-primary/95 disabled:pointer-events-none disabled:opacity-30"
                       >
                         <Send size={13} aria-hidden />

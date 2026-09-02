@@ -1,0 +1,96 @@
+title: Inari shrines Japan — geocoding golden set
+description: >
+  Ten famous Inari shrines across Japan. Reference coordinates from OSM Nominatim
+  (Japanese queries) and Wikipedia where noted. Use max_distance_km tolerance per case.
+tier: manual
+cases:
+  - id: fushimi_inari
+    query: "Fushimi Inari Taisha, Kyoto, Japan"
+    query_ja: "伏見稲荷大社, 京都府"
+    prefecture: Kyoto
+    lat: 34.967519
+    lon: 135.779710
+    max_distance_km: 0.5
+    notes: "English query works on Nominatim."
+
+  - id: kasama_inari
+    query: "Kasama Inari Jinja, Ibaraki, Japan"
+    query_ja: "笠間稲荷神社, 茨城県"
+    prefecture: Ibaraki
+    lat: 36.3854725
+    lon: 140.2543843
+    max_distance_km: 0.5
+    notes: "English romanization often misses; Japanese name required."
+
+  - id: yutoku_inari
+    query: "Yūtoku Inari Jinja, Saga, Japan"
+    query_ja: "祐徳稲荷神社, 佐賀県"
+    prefecture: Saga
+    lat: 33.074398
+    lon: 130.108065
+    max_distance_km: 0.5
+
+  - id: toyokawa_inari
+    query: "Toyokawa Inari, Myōgon-ji, Aichi, Japan"
+    query_ja: "豊川稲荷, 豊川市, 愛知県"
+    prefecture: Aichi
+    lat: 34.8258196
+    lon: 137.3922658
+    max_distance_km: 0.5
+    notes: "Buddhist temple name (Myōgon-ji) + shrine; city Toyokawa disambiguates."
+
+  - id: saijo_inari
+    query: "Saijō Inari, Myōkyō-ji, Okayama, Japan"
+    query_ja: "最上稲荷, 岡山市, 岡山県"
+    prefecture: Okayama
+    lat: 34.7099376
+    lon: 133.8319529
+    max_distance_km: 0.5
+    notes: "Must use Okayama city, not Kurashiki homonym."
+
+  - id: taikodani_inari
+    query: "Taikodani Inari Jinja, Shimane, Japan"
+    query_ja: "太皷谷稲成神社, 津和野町, 島根県"
+    prefecture: Shimane
+    lat: 34.4633957
+    lon: 131.7678723
+    max_distance_km: 1.0
+    notes: "OSM uses 稲成 variant; town Tsuwano required."
+
+  - id: takekoma_jinja
+    query: "Takekoma Jinja, Miyagi, Japan"
+    query_ja: "竹駒神社, 岩沼市, 宮城県"
+    prefecture: Miyagi
+    lat: 38.1049802
+    lon: 140.8619439
+    max_distance_km: 0.5
+    notes: "Iwanuma city disambiguates from Sendai area homonyms."
+
+  - id: kusado_inari
+    query: "Kusado Inari Jinja, Hiroshima, Japan"
+    query_ja: "草戸稲荷神社, 広島県"
+    prefecture: Hiroshima
+    lat: 34.4795347
+    lon: 133.3464400
+    max_distance_km: 0.5
+    notes: "Fukuyama area; prefecture alone is enough in JA."
+
+  - id: chiyobo_inari
+    query: "Chiyobo Inari Jinja, Gifu, Japan"
+    query_ja: "千代保稲荷神社, 岐阜県"
+    prefecture: Gifu
+    lat: 35.2635572
+    lon: 136.6464304
+    max_distance_km: 0.5
+    notes: "Romanization Chiyobo vs 千代保; near Seki/Kaisen."
+
+  - id: takahashi_inari
+    query: "Takahashi Inari Jinja, Kumamoto, Japan"
+    query_ja: "高橋稲荷神社, 熊本市西区, 熊本県"
+    prefecture: Kumamoto
+    lat: 32.7830
+    lon: 130.6586
+    max_distance_km: 0.5
+    notes: >
+      Dangerous homonym: query「高橋稲荷, 熊本市」without 神社 returned a salon in Akita.
+      Always include shrine type + ward/city.
