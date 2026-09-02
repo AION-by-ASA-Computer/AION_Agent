@@ -79,6 +79,9 @@ per l'installazione dei pacchetti Python:
 `/app/data/chroma_embedding_cache` (build + warmup al boot). Con volume `aion_data` vuoto al
 primo deploy, il warmup lifespan ripopola la cache sul volume persistente. Variabili:
 `AION_MEMPALACE_WARMUP`, `AION_CHROMA_SHARED_EMBEDDING_CACHE`, `AION_SSE_KEEPALIVE_SEC`.
+- **Legacy Word (.doc):** immagine backend include `libreoffice-writer-nogui` per conversione
+  automatica all'upload (`derived/converted/*.docx`). Vedi
+  [Office e Word legacy](../configuration/office-and-legacy-word.md).
 - Risolutore deterministico (no problemi di metadata caching pip)
 - Binario statico copiato da `ghcr.io/astral-sh/uv:${UV_VERSION}` (no Rust toolchain
   richiesta nel builder; versione configurabile in `.env` → `docker-compose.yml`)
@@ -116,7 +119,7 @@ Dopo `git pull` che aggiorna solo profili/skill/MCP standard:
 docker compose restart backend    # prod o dev — niente rebuild immagine
 ```
 
-Rebuild serve solo per cambi a `src/`, `requirements.txt` o Dockerfile. `sync_config --force` non sovrascrive `mcp_registry.yaml` / `mcp_registry.local.yaml` (overlay locale).
+Rebuild serve solo per cambi a `src/`, `requirements.txt` o Dockerfile. `sync_config --force` non sovrascrive `mcp_registry.yaml` / `mcp_registry.local.yaml` (overlay locale). Per aggiungere **nuovi** server MCP da `config_std` (es. `geocoding`) senza toccare i custom, l'entrypoint esegue anche `scripts/merge_mcp_registry_from_std.py`.
 
 **Profili (dev e Docker):** un solo percorso, `config/profiles/` (bind mount `./config` in compose).
 L'admin UI scrive lì; in locale e in container vedi gli stessi file.
@@ -263,7 +266,7 @@ Alembic e' sincrono: l'URL viene convertito al driver sync equivalente
 
 ```
 docker/
-├── Dockerfile.backend     # Python 3.13 + tesseract + poppler + tini; COPY *_std + entrypoint sync
+├── Dockerfile.backend     # Python 3.13 + tesseract + poppler + libreoffice-writer-nogui + tini; COPY *_std + entrypoint sync
 ├── backend-entrypoint.sh  # sync config_std/mcp_servers_std → runtime dirs at boot
 ├── Dockerfile.chat-ui     # Next.js standalone (output: 'standalone')
 ├── Dockerfile.admin-ui    # Next.js standalone + basePath=/admin

@@ -523,6 +523,13 @@
     },
     "session_files_new": "Nuovi file sessione",
     "remove_file": "Rimuovi {{name}}",
+    "upload": {
+      "uploading": "Caricamento… {{progress}}%",
+      "done": "Caricamento completato",
+      "failed": "Caricamento fallito",
+      "retry": "Riprova",
+      "send_blocked": "Attendi il termine del caricamento file"
+    },
     "web_search": {
       "disabled": "Ricerca web disattivata",
       "restricted": "Controllata · {{count}} host",

@@ -1,0 +1,37 @@
+title: Document evidence — smoke (CI)
+description: >
+  Pipeline eval for pdf_evidence_crop: synthetic PDF page crop, sidecar JSON,
+  and white-ratio guard (no golden visual comparison).
+tier: ci
+cases:
+  - id: synthetic_evidence_crop
+    pdf:
+      source: synthetic
+      profile: rumore_decreto
+      pages: 10
+      prescription_page: 5
+      pmc_page: 8
+    crop:
+      page: 5
+      caption: "decreto / PIC [53] / pag. 5"
+    expect:
+      ok: true
+      max_white_ratio: 0.90
+      min_width: 50
+      sidecar_required: true
+      cropped: true
+
+  - id: synthetic_full_page_rejected
+    pdf:
+      source: synthetic
+      profile: rumore_decreto
+      pages: 3
+      prescription_page: 1
+      pmc_page: 2
+    crop:
+      page: 1
+      full_page: true
+      caption: "full page dump test"
+    expect:
+      ok: false
+      error: too_much_whitespace

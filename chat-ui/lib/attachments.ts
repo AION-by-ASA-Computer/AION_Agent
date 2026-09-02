@@ -3,6 +3,9 @@ export type AttachmentRef = {
   original_name?: string | null;
   mime?: string | null;
   original_relative_path?: string | null;
+  converted_docx_path?: string | null;
+  legacy_word?: boolean | null;
+  conversion_status?: string | null;
 };
 
 /** Same merge as Chainlit `_merge_attachment_refs`. */

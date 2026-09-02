@@ -13,6 +13,8 @@ from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 
 from src.session_workspace import list_dir, save_upload
+from src.tools.doc_auto_ingest import schedule_auto_ingest
+from src.tools.office_auto_convert import apply_legacy_word_conversion
 from .auth_login import ChatAuthIdentity, require_chat_auth
 
 logger = logging.getLogger(__name__)
@@ -69,6 +71,8 @@ async def upload_session_files(
             for f in files:
                 data = await f.read()
                 meta = save_upload(session_id, f.filename or "upload", data)
+                meta = await apply_legacy_word_conversion(session_id, meta)
+                schedule_auto_ingest(session_id, meta)
                 out.append(meta)
 
             logger.info(

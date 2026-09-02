@@ -12,6 +12,7 @@ from src.main import set_event_loop
 
 from .general_agent import run_general_agent_benchmark
 from .longmemeval_v2.runner import run_longmemeval_v2_small
+from .long_document.runner import run_long_document_pipeline_eval
 from .mnemos_bench.runner import run_mnemos_bench
 from .registry import register_benchmark, BenchmarkSpec, catalog_entries
 from .longmemeval_v2.prepare import is_dataset_ready
@@ -44,6 +45,15 @@ def _register_defaults() -> None:
             description="Dev-only Mnemos FTS/hybrid recall validation",
         ),
         _run_mnemos_wrapper,
+    )
+    register_benchmark(
+        BenchmarkSpec(
+            id="long_document_pipeline",
+            title="Long document pipeline eval",
+            description="doc_ingest + grep golden cases (no LLM); see evals/long_document/cases/",
+            tier="ci",
+        ),
+        _run_long_document_wrapper,
     )
 
 
@@ -95,6 +105,19 @@ async def _run_mnemos_wrapper(
     )
 
 
+async def _run_long_document_wrapper(
+    run_id: str,
+    profile_name: str,
+    config: dict | None = None,
+    dataset_path: str | None = None,
+    **_: object,
+) -> dict:
+    del run_id, profile_name, config  # pipeline eval is profile-agnostic
+    if not dataset_path:
+        dataset_path = "evals/long_document/cases/synthetic_smoke.yaml"
+    return await run_long_document_pipeline_eval(dataset_path)
+
+
 async def _async_main(args: argparse.Namespace) -> int:
     set_event_loop(asyncio.get_running_loop())
     _register_defaults()
@@ -139,6 +162,9 @@ async def _async_main(args: argparse.Namespace) -> int:
                 dataset_path=dataset,
                 config=config,
             )
+        elif args.benchmark == "long_document_pipeline":
+            dataset = args.dataset or "evals/long_document/cases/synthetic_smoke.yaml"
+            metrics = await run_long_document_pipeline_eval(dataset)
         else:
             raise ValueError(f"unknown benchmark: {args.benchmark}")
         if (

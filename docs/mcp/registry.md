@@ -56,7 +56,7 @@ graph TD
 
 | Registro | Contenuto | Versionato | Scopo |
 |----------|-----------|------------|-------|
-| `mcp_registry.yaml` | Server standard (prometheus, grafana, etc.) | Template in `config_std/` | Copiato in `config/` al primo sync; **non** sovrascritto da `sync_config.py --force` |
+| `mcp_registry.yaml` | Server standard (prometheus, grafana, etc.) | Template in `config_std/` | Copiato in `config/` al primo sync; **non** sovrascritto da `sync_config.py --force`. Nuovi slug da std: `scripts/merge_mcp_registry_from_std.py` (setup, upgrade, Docker entrypoint, `dev-api.sh`) |
 | `mcp_registry.local.yaml` | Overlay flat (stile AION) | ❌ No | Specifico per deployment (es. `toolbox-mysql`) |
 | `mcp_registry.local.json` | Overlay standard `{ "mcpServers": { ... } }` | ❌ No | Stesso merge del `.local.yaml`; formato Claude/Cursor/VS Code |
 
@@ -316,7 +316,8 @@ python -m src.mcp_import -i claude_desktop_config.json -o config/mcp_registry.lo
 | `skills_hub` | `mcp_servers/skills_hub/` | Skill search, list, view |
 | `code` | `mcp_servers/code_executor/` | Execute code in sandbox |
 | `session_sandbox` | `mcp_servers/session_sandbox/` | Session workspace operations |
-| `ocr` | `mcp_servers/ocr_mcp/` | OCR processing |
+| `ocr` | `mcp_servers/ocr_mcp/` | OCR + document ingest (`doc_ingest`, `ocr_file`, **`pdf_evidence_crop`**) |
+| `geocoding` | `mcp_servers/geocoding/` | Forward/reverse geocode via OpenStreetMap Nominatim (`geocode_place`, `reverse_geocode`) |
 | `promo_render` | `mcp_servers/promo_render/` | Promotional graphics React/HTML → PNG |
 | `agent_db` | `mcp_servers/agent_db/` | Agent SQLite database for structured memory |
 | `aion_subagents` | `mcp_servers/aion_subagents/` | Delegate tasks to isolated subagents |
@@ -465,5 +466,6 @@ custom_server:
 
 - [Albero dei sorgenti](../architecture/source-tree.md) - Struttura directory
 - [Variabili ambiente](../configuration/environment.md) - Configurazioni
+- [Office e Word legacy](../configuration/office-and-legacy-word.md) - Conversione `.doc` e merge registry MCP
 - [Profili agente](../configuration/profiles.md) - Come i profili usano MCP servers
 - [Orchestrazione e HITL](./orchestration.md) — `mark_task_completed` built-in su tutti i profili; server `orchestration` (`type: in_process`), approve API, UI TaskPlanManager

@@ -151,44 +151,66 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
     sub = subdir.strip().replace("\\", "/").strip("/")
     if sub == ".":
         sub = ""
-    if sub not in LISTABLE_SUBDIRS:
+    if sub in LISTABLE_SUBDIRS:
+        if sub == "tool_results":
+            return _list_tool_results_files(session_id)
+        d = root / sub
+        if not d.is_dir():
+            return []
+        all_names = set(p.name for p in d.iterdir() if p.is_file())
+        out: List[Dict[str, Any]] = []
+        for p in sorted(d.iterdir()):
+            if p.is_file():
+                if p.name.startswith("."):
+                    continue
+                if sub == "uploads":
+                    is_alias = False
+                    for name in all_names:
+                        if (
+                            name != p.name
+                            and name.endswith("_" + p.name)
+                            and len(name) == len(p.name) + 11
+                        ):
+                            is_alias = True
+                            break
+                    if is_alias:
+                        continue
+
+                rel = f"{subdir}/{p.name}".replace("\\", "/").lstrip("/")
+                mime, _ = mimetypes.guess_type(p.name)
+                out.append(
+                    {
+                        "name": p.name,
+                        "relative_path": rel,
+                        "size_bytes": p.stat().st_size,
+                        "mime": mime or "application/octet-stream",
+                    }
+                )
+        return out
+
+    # Nested paths under a known session root (e.g. workspace/screenshots).
+    top = sub.split("/", 1)[0]
+    if top not in SESSION_CONTENT_ROOTS - {""}:
         raise ValueError(
             f"subdir deve essere uno tra: {', '.join(sorted(LISTABLE_SUBDIRS))}"
         )
-    if sub == "tool_results":
-        return _list_tool_results_files(session_id)
     d = root / sub
     if not d.is_dir():
         return []
-    all_names = set(p.name for p in d.iterdir() if p.is_file())
-    out: List[Dict[str, Any]] = []
+    out = []
     for p in sorted(d.iterdir()):
-        if p.is_file():
-            if p.name.startswith("."):
-                continue
-            if sub == "uploads":
-                is_alias = False
-                for name in all_names:
-                    if (
-                        name != p.name
-                        and name.endswith("_" + p.name)
-                        and len(name) == len(p.name) + 11
-                    ):
-                        is_alias = True
-                        break
-                if is_alias:
-                    continue
-
-            rel = f"{subdir}/{p.name}".replace("\\", "/").lstrip("/")
-            mime, _ = mimetypes.guess_type(p.name)
-            out.append(
-                {
-                    "name": p.name,
-                    "relative_path": rel,
-                    "size_bytes": p.stat().st_size,
-                    "mime": mime or "application/octet-stream",
-                }
-            )
+        if not p.is_file() or p.name.startswith("."):
+            continue
+        rel = str(p.relative_to(root)).replace("\\", "/")
+        mime, _ = mimetypes.guess_type(p.name)
+        out.append(
+            {
+                "name": p.name,
+                "relative_path": rel,
+                "size_bytes": p.stat().st_size,
+                "mime": mime or "application/octet-stream",
+            }
+        )
     return out
 
 
