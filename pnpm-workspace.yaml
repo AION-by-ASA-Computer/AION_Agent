@@ -4,7 +4,10 @@ packages:
   - 'website'
   - 'services/pi-long-run'
 allowBuilds:
+  '@google/genai': false
   '@swc/core': true
   core-js: true
+  esbuild: false
+  protobufjs: false
   sharp: true
   unrs-resolver: true

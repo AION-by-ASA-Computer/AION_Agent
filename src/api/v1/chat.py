@@ -178,10 +178,10 @@ def _prepare_dedupe_key(conversation_id: str, profile: str, user_id: str) -> str
 
 
 def _credential_user_id(auth: ChatAuthIdentity) -> str:
-    if auth.user_row_id:
-        return sanitize_user_id(auth.user_row_id)
     if auth.identifier:
         return sanitize_user_id(auth.identifier)
+    if auth.user_row_id:
+        return sanitize_user_id(auth.user_row_id)
     return "default"
 
 

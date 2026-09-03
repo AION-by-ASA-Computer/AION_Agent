@@ -18,6 +18,7 @@ import {
   Plug2,
   Clock,
   MessageSquare,
+  BarChart3,
 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { adminPath } from "@/lib/paths";
@@ -57,6 +58,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { name: "Dashboard", href: "/", icon: LayoutDashboard },
     { name: "Users Management", href: "/users", icon: Users },
     { name: "Agent Profiles", href: "/profiles", icon: Users },
+    { name: "Evaluation & Metrics", href: "/metrics", icon: BarChart3 },
     { name: "Skill Registry", href: "/skills", icon: Zap },
     { name: "MCP Hub", href: "/hub", icon: Globe },
     { name: "Conversations", href: "/conversations", icon: ClipboardList },
@@ -66,21 +68,17 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { name: "Memory", href: "/memory", icon: Brain },
     { name: "Plugins & Hooks", href: "/plugins", icon: Layers },
     { name: "Security Audit", href: "/security", icon: ShieldCheck },
-    // { name: "Approvals", href: "/approvals", icon: ClipboardList },
-    // { name: "Agent DB", href: "/agent-db", icon: Database },
-    // { name: "Profiling", href: "/profiling", icon: Activity },
-    // { name: "Evaluation", href: "/evaluation", icon: BarChart3 },
     { name: "System Health", href: "/system", icon: LayoutDashboard },
     { name: "Settings", href: "/settings", icon: Settings },
   ];
 
   return (
     <>
-      <aside className="w-64 border-r border-[#262626] flex flex-col p-4 bg-[#0a0a0a]">
-        <div className="mb-8 px-4 flex min-h-[32px] items-center gap-2 sm:min-w-0">
+      <aside className="w-64 h-screen sticky top-0 border-r border-[#262626] flex flex-col p-4 bg-[#0a0a0a] overflow-hidden">
+        <div className="mb-6 px-4 flex min-h-[32px] items-center gap-2 sm:min-w-0 shrink-0">
           <AdminBrand />
         </div>
-        <nav className="flex-1 space-y-1">
+        <nav className="flex-1 space-y-1 overflow-y-auto no-scrollbar py-1">
           {navItems.map((item) => {
             const isActive =
               item.href === "/"
@@ -102,7 +100,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             );
           })}
         </nav>
-        <div className="pt-3 mt-2 border-t border-[#262626] space-y-1">
+        <div className="pt-3 mt-2 border-t border-[#262626] space-y-1 shrink-0">
           {userId && (
             <div className="px-4 py-1.5 text-md text-gray-500">
               Signed in as <span className="text-gray-300">{userId}</span>

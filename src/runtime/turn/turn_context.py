@@ -360,7 +360,7 @@ async def build_turn_context(
             "pre_turn",
             HookContext(
                 event="pre_turn",
-                tenant_id=_tenant_qm,
+                tenant_id=pipeline.user_id or _tenant_qm,
                 conversation_id=pipeline.session_id,
                 user_id=pipeline.user_id,
                 profile=pipeline.profile_name,

@@ -63,6 +63,64 @@ def test_web_search_executor_emits_tool_start_end(monkeypatch):
     asyncio.run(_run())
 
 
+def test_tool_event_bus_logs_info(caplog):
+    import logging
+
+    caplog.set_level(logging.INFO, logger="aion.tool_events")
+
+    session_id = "test-logging-session"
+    tool_event_bus.put_event(
+        session_id,
+        {
+            "type": "tool_start",
+            "id": "call-1",
+            "name": "my_test_tool",
+            "input": {"arg": 1},
+            "profile": "odoo_assistant",
+        },
+    )
+    tool_event_bus.put_event(
+        session_id,
+        {
+            "type": "tool_end",
+            "id": "call-1",
+            "name": "my_test_tool",
+            "output": "ok",
+            "profile": "odoo_assistant",
+        },
+    )
+    tool_event_bus.put_event(
+        session_id,
+        {
+            "type": "tool_error",
+            "id": "call-2",
+            "name": "my_test_tool",
+            "error": "failed",
+            "profile": "odoo_assistant",
+        },
+    )
+
+    logs = [r for r in caplog.records if r.name == "aion.tool_events"]
+    assert len(logs) >= 3
+
+    start_log = next(r for r in logs if "Tool execution started" in r.message)
+    assert "my_test_tool" in start_log.message
+    assert "call-1" in start_log.message
+    assert "profile=odoo_assistant" in start_log.message
+    assert (
+        getattr(start_log, "profile", None) == "odoo_assistant"
+        or start_log.__dict__.get("profile_name") == "odoo_assistant"
+    )
+
+    end_log = next(r for r in logs if "Tool execution completed" in r.message)
+    assert "my_test_tool" in end_log.message
+    assert "profile=odoo_assistant" in end_log.message
+
+    error_log = next(r for r in logs if "Tool execution failed" in r.message)
+    assert "failed" in error_log.message
+    assert "profile=odoo_assistant" in error_log.message
+
+
 def test_agent_forward_propagates_via_copy_context_like_haystack_tool_invoker():
     """ToolInvoker esegue i tool con snap.run(...); ContextVar deve propagare session_id e loop."""
     loop_obj = object()

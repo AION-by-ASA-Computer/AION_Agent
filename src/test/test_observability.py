@@ -18,6 +18,12 @@ class TestObservabilityMetrics(unittest.TestCase):
     def setUp(self):
         # Clear handlers to avoid duplicate registration between tests
         hook_registry._handlers.clear()
+        # Clear metrics dictionary for test isolation
+        metrics.aion_turn_duration_seconds.prom_metric._metrics.clear()
+        metrics.aion_last_turn_duration_seconds.prom_metric._metrics.clear()
+        metrics.aion_messages_total.prom_metric._metrics.clear()
+        metrics.aion_tool_calls_total.prom_metric._metrics.clear()
+        metrics.aion_llm_tokens_total.prom_metric._metrics.clear()
         # Register hooks
         register_observability_hooks()
 
@@ -26,6 +32,7 @@ class TestObservabilityMetrics(unittest.TestCase):
         self.assertIsNotNone(metrics.aion_messages_total)
         self.assertIsNotNone(metrics.aion_tool_calls_total)
         self.assertIsNotNone(metrics.aion_turn_duration_seconds)
+        self.assertIsNotNone(metrics.aion_last_turn_duration_seconds)
         self.assertIsNotNone(metrics.aion_llm_tokens_total)
         self.assertIsNotNone(metrics.aion_llm_turn_tokens)
         self.assertIsNotNone(metrics.aion_llm_turn_calls)
@@ -367,6 +374,128 @@ class TestObservabilityMetrics(unittest.TestCase):
         # Restore mocks
         mcp_manager.get_server_config = orig_get_config
         mcp_manager._is_stdio_server = orig_is_stdio
+
+    def test_turn_duration_kpi_media_delle_medie(self):
+        """Verify turn duration KPI is the mean of profile averages regardless of profile filter, and profile breakdown shows per-profile averages."""
+        from src.api import metrics_api
+        from src.api.metrics_api import get_metrics_overview
+
+        # Mock _query_prometheus to force local fallback testing
+        orig_query_prom = metrics_api._query_prometheus
+        metrics_api._query_prometheus = lambda *args, **kwargs: None
+
+        try:
+            # Observe turn duration for profile_dur_a (10.0s) and profile_dur_b (20.0s)
+            metrics.aion_turn_duration_seconds.labels(
+                tenant_id="default", profile="profile_dur_a"
+            ).observe(10.0)
+
+            metrics.aion_turn_duration_seconds.labels(
+                tenant_id="default", profile="profile_dur_b"
+            ).observe(20.0)
+
+            # Call get_metrics_overview passing profile filter "profile_dur_a"
+            overview = get_metrics_overview(profile="profile_dur_a", time_range="all")
+
+            # Global KPI avg_turn_duration_seconds should be (10.0 + 20.0) / 2 = 15.0s, un-influenced by profile filter
+            self.assertAlmostEqual(overview.avg_turn_duration_seconds, 15.0, places=2)
+
+            # Check breakdown in profile_metrics list
+            prof_a_metric = next(
+                (p for p in overview.profile_metrics if p.profile == "profile_dur_a"),
+                None,
+            )
+            prof_b_metric = next(
+                (p for p in overview.profile_metrics if p.profile == "profile_dur_b"),
+                None,
+            )
+
+            self.assertIsNotNone(prof_a_metric)
+            self.assertIsNotNone(prof_b_metric)
+            self.assertAlmostEqual(
+                prof_a_metric.avg_turn_duration_seconds, 10.0, places=2
+            )
+            self.assertAlmostEqual(
+                prof_b_metric.avg_turn_duration_seconds, 20.0, places=2
+            )
+        finally:
+            metrics_api._query_prometheus = orig_query_prom
+
+    def test_user_metrics_breakdown_and_user_filter(self):
+        """Verify user_metrics breakdown per user and user_id filtering in get_metrics_overview."""
+        from src.api import metrics_api
+        from src.api.metrics_api import get_metrics_overview
+
+        orig_query_prom = metrics_api._query_prometheus
+        metrics_api._query_prometheus = lambda *args, **kwargs: None
+
+        try:
+            # Record tokens for user_test_1 on profile_a and profile_b
+            metrics.aion_llm_tokens_total.labels(
+                tenant_id="user_test_1",
+                profile="profile_a",
+                model="gpt-4",
+                token_type="prompt",
+            ).inc(100)
+            metrics.aion_llm_tokens_total.labels(
+                tenant_id="user_test_1",
+                profile="profile_b",
+                model="gpt-4",
+                token_type="completion",
+            ).inc(50)
+
+            # Record tokens for user_test_2 on profile_a
+            metrics.aion_llm_tokens_total.labels(
+                tenant_id="user_test_2",
+                profile="profile_a",
+                model="gpt-4",
+                token_type="prompt",
+            ).inc(200)
+
+            # Record tool calls for user_test_1 on profile_a
+            metrics.aion_tool_calls_total.labels(
+                tenant_id="user_test_1",
+                profile="profile_a",
+                tool_name="web_search",
+                mcp_server="native",
+                status="ok",
+            ).inc(3)
+
+            # Get overview without user filter
+            overview = get_metrics_overview(time_range="all")
+            self.assertTrue(hasattr(overview, "user_metrics"))
+
+            u1_metric = next(
+                (u for u in overview.user_metrics if u.user_id == "user_test_1"), None
+            )
+            u2_metric = next(
+                (u for u in overview.user_metrics if u.user_id == "user_test_2"), None
+            )
+            self.assertIsNotNone(u1_metric)
+            self.assertIsNotNone(u2_metric)
+            self.assertEqual(u1_metric.total_tokens, 150)
+            self.assertEqual(u2_metric.total_tokens, 200)
+
+            # Check user_test_1 profile breakdown (profile_a and profile_b)
+            self.assertEqual(len(u1_metric.profile_breakdown), 2)
+            prof_a = next(
+                (p for p in u1_metric.profile_breakdown if p.profile == "profile_a"),
+                None,
+            )
+            self.assertIsNotNone(prof_a)
+            self.assertEqual(prof_a.prompt_tokens, 100)
+            self.assertEqual(prof_a.total_tool_calls, 3)
+            self.assertEqual(len(prof_a.tools_breakdown), 1)
+            self.assertEqual(prof_a.tools_breakdown[0].tool_name, "web_search")
+            self.assertEqual(prof_a.tools_breakdown[0].call_count, 3)
+
+            # Filter overview by user_id="user_test_1"
+            overview_u1 = get_metrics_overview(user_id="user_test_1", time_range="all")
+            self.assertEqual(overview_u1.total_tokens, 150)
+            self.assertEqual(len(overview_u1.user_metrics), 1)
+            self.assertEqual(overview_u1.user_metrics[0].user_id, "user_test_1")
+        finally:
+            metrics_api._query_prometheus = orig_query_prom
 
 
 if __name__ == "__main__":

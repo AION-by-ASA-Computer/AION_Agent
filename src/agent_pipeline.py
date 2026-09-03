@@ -1034,7 +1034,7 @@ class AgentPipeline:
             "pre_compact",
             HookContext(
                 event="pre_compact",
-                tenant_id="default",
+                tenant_id=self.user_id or "default",
                 conversation_id=self.session_id,
                 user_id=self.user_id,
                 payload={
@@ -1628,7 +1628,7 @@ class AgentPipeline:
                 "on_user_message",
                 HookContext(
                     event="on_user_message",
-                    tenant_id="default",
+                    tenant_id=self.user_id or "default",
                     conversation_id=self.session_id,
                     user_id=self.user_id,
                     payload={"message": user_input, "attachments": attachments or []},
@@ -1807,6 +1807,7 @@ class AgentPipeline:
                     stop_event,
                     turn_plan_id=_turn_pid,
                     plan_controller=plan_controller,
+                    profile_name=self.profile_name,
                     web_search_enabled=_wse,
                 )
                 set_turn_runtime(
@@ -1922,6 +1923,7 @@ class AgentPipeline:
                     stop_event,
                     turn_plan_id=_turn_pid,
                     plan_controller=plan_controller,
+                    profile_name=self.profile_name,
                     web_search_enabled=_wse,
                 )
                 set_turn_runtime(
@@ -2972,10 +2974,10 @@ class AgentPipeline:
                                             or "default"
                                         ).strip() or "default"
                                         await hook_registry.dispatch(
-                                            "post_tool",
+                                            "post_tool_use",
                                             HookContext(
-                                                event="post_tool",
-                                                tenant_id=_tenant_qm,
+                                                event="post_tool_use",
+                                                tenant_id=self.user_id or _tenant_qm,
                                                 conversation_id=self.session_id,
                                                 user_id=self.user_id,
                                                 profile=self.profile_name,
@@ -3969,7 +3971,7 @@ class AgentPipeline:
                 "post_turn",
                 HookContext(
                     event="post_turn",
-                    tenant_id="default",
+                    tenant_id=self.user_id or "default",
                     conversation_id=self.session_id,
                     user_id=self.user_id,
                     profile=self.profile_name,

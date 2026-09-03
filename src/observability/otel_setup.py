@@ -174,6 +174,7 @@ def init_observability(app):
         trace.set_tracer_provider(trace_provider)
 
     # Metrics
+    meter_provider = None
     if metrics_enabled:
         _patch_prometheus_routing_for_included_router()
         # FastAPI Instrumentator for basic HTTP metrics
@@ -182,70 +183,68 @@ def init_observability(app):
         )
 
         from opentelemetry import metrics as otel_metrics
+        from opentelemetry.sdk.metrics import MeterProvider as OTelMeterProvider
+        from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 
-        if openlit_success:
-            # Riusa il MeterProvider creato da OpenLit per non sovrascriverlo (altrimenti perdiamo gli strumenti OpenLit)
-            meter_provider = otel_metrics.get_meter_provider()
-            metrics.set_meter_provider(meter_provider)
-        else:
-            # Setup standard OTel MeterProvider
-            from opentelemetry.sdk.metrics import MeterProvider as OTelMeterProvider
-            from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
-
-            readers = []
-            if otel_enabled:
-                endpoint = os.getenv("AION_OTEL_ENDPOINT", "http://localhost:4317")
-                protocol = os.getenv("AION_OTEL_PROTOCOL", "grpc")
-                try:
-                    if protocol == "http":
-                        from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
-                            OTLPMetricExporter as OTLPHTTPMetricExporter,
-                        )
-
-                        exporter = OTLPHTTPMetricExporter(endpoint=endpoint)
-                    else:
-                        from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
-                            OTLPMetricExporter,
-                        )
-
-                        exporter = OTLPMetricExporter(endpoint=endpoint)
-
-                    export_interval_str = os.getenv(
-                        "AION_OTEL_METRIC_EXPORT_INTERVAL"
-                    ) or os.getenv("OTEL_METRIC_EXPORT_INTERVAL")
-                    try:
-                        export_interval = (
-                            int(export_interval_str) if export_interval_str else 5000
-                        )
-                    except ValueError:
-                        export_interval = 5000
-
-                    readers.append(
-                        PeriodicExportingMetricReader(
-                            exporter, export_interval_millis=export_interval
-                        )
+        readers = []
+        if otel_enabled:
+            endpoint = os.getenv("AION_OTEL_ENDPOINT", "http://localhost:4317")
+            protocol = os.getenv("AION_OTEL_PROTOCOL", "grpc")
+            try:
+                if protocol == "http":
+                    from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+                        OTLPMetricExporter as OTLPHTTPMetricExporter,
                     )
-                except Exception as e:
-                    # Log or handle metrics exporter initialization errors gracefully
-                    pass
 
-            meter_provider = OTelMeterProvider(
-                resource=resource,
-                metric_readers=readers,
-            )
+                    exporter = OTLPHTTPMetricExporter(endpoint=endpoint)
+                else:
+                    from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+                        OTLPMetricExporter,
+                    )
 
-            # Set global meter provider
+                    exporter = OTLPMetricExporter(endpoint=endpoint)
+
+                export_interval_str = os.getenv(
+                    "AION_OTEL_METRIC_EXPORT_INTERVAL"
+                ) or os.getenv("OTEL_METRIC_EXPORT_INTERVAL")
+                try:
+                    export_interval = (
+                        int(export_interval_str) if export_interval_str else 5000
+                    )
+                except ValueError:
+                    export_interval = 5000
+
+                readers.append(
+                    PeriodicExportingMetricReader(
+                        exporter, export_interval_millis=export_interval
+                    )
+                )
+            except Exception as e:
+                # Log or handle metrics exporter initialization errors gracefully
+                pass
+
+        meter_provider = OTelMeterProvider(
+            resource=resource,
+            metric_readers=readers,
+        )
+
+        try:
             otel_metrics.set_meter_provider(meter_provider)
+        except Exception:
+            pass
 
-            # Also register with custom metrics module to initialize all backing OTel instruments
-            metrics.set_meter_provider(meter_provider)
+        # Also register with custom metrics module to initialize all backing OTel instruments
+        metrics.set_meter_provider(meter_provider)
 
     # Auto-instrumentations
     if otel_enabled:
-        FastAPIInstrumentor.instrument_app(app)
+        kwargs = {}
+        if meter_provider:
+            kwargs["meter_provider"] = meter_provider
+        FastAPIInstrumentor.instrument_app(app, **kwargs)
         try:
             # Assumes engine is created later, we instrument the generic SQLAlchemy module
-            SQLAlchemyInstrumentor().instrument()
+            SQLAlchemyInstrumentor().instrument(**kwargs)
         except Exception:
             pass
 
@@ -253,6 +252,6 @@ def init_observability(app):
         try:
             from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
 
-            HTTPXClientInstrumentor().instrument()
+            HTTPXClientInstrumentor().instrument(**kwargs)
         except ImportError:
             pass
