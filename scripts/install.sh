@@ -145,11 +145,13 @@ env_file = '.env'
 with open(env_file, 'r') as f:
     lines = f.readlines()
 
+redis_password = secrets.token_hex(32)
+
 config = {
     'AION_VERSION': os.environ.get('AION_VERSION', 'latest'),
     'AION_SANDBOX_HOST_DATA_DIR': os.path.join(os.environ['AION_INSTALL_DIR'], 'data'),
     'AION_PODMAN_SOCKET_HOST': f"/run/user/{os.getuid()}/podman/podman.sock",
-    'AION_REDIS_URL': 'redis://redis:6379/0',
+    'AION_REDIS_URL': f"redis://:{redis_password}@redis:6379/0",
     'AION_DB_URL': 'sqlite+aiosqlite:///data/aion.db',
     'AION_DATA_DIR': '/app/data',
     'AION_STORAGE_LOCAL_ROOT': '/app/data',
@@ -169,7 +171,7 @@ config = {
     'AION_CHAT_AUTH_SECRET': secrets.token_hex(32),
     'AION_CREDENTIAL_ENCRYPTION_KEY': secrets.token_hex(32),
     'AION_API_KEY_BOOTSTRAP': f"aion_dev_{secrets.token_hex(16)}",
-    'REDIS_PASSWORD': secrets.token_hex(32),
+    'REDIS_PASSWORD': redis_password,
     
     # Auth
     'AION_CHAT_PASSWORD_AUTH': '1',
@@ -221,6 +223,11 @@ EOF
 
 chmod 644 .env
 echo "[ok] .env generated."
+
+# Fix ownership if run with sudo
+if [ -n "${SUDO_USER:-}" ]; then
+    chown -R "$SUDO_USER" "$AION_INSTALL_DIR"
+fi
 
 if [ -z "${AION_API_URL:-}" ] || [ -z "${AION_LLM_API_KEY:-}" ]; then
     echo "[warning] LLM configuration (AION_API_URL, AION_LLM_API_KEY) not provided. Please edit .env later."
