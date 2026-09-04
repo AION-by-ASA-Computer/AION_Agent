@@ -20,7 +20,7 @@ SQL metadata profiles use **two layers on the same project slug**:
 
 1. `sql_memory_search` for reusable SQL on the active project.
 2. `memory_recall` for navigation context (JOIN paths, pitfalls, conventions).
-3. Run SQL via Wren/toolbox; verify results.
+3. Run SQL via toolbox; verify results.
 
 ## Write path (after verified success)
 

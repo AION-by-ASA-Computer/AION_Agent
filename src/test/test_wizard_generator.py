@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from src.runtime.wizard_generator import (
     _extract_json_object,

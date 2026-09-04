@@ -48,6 +48,22 @@ import {
   Users,
   ChevronDown,
   ChevronRight,
+  Sliders,
+  Radio,
+  Server,
+  Network,
+  Save,
+  X,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Check,
+  Globe,
+  HelpCircle,
+  Loader2,
+  Play,
+  Info,
+  AlertCircle,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
@@ -184,13 +200,37 @@ interface SparklineProps {
   data?: TimeSeriesDataPoint[];
   color?: string;
   height?: number;
+  timeRange?: string;
   formatVal?: (v: number) => string;
 }
+
+const formatTimestamp = (ts: string | undefined, timeRange: string = "1h") => {
+  if (!ts) return "";
+  const d = new Date(ts);
+  if (!isNaN(d.getTime())) {
+    if (timeRange === "7d" || timeRange === "30d" || timeRange === "all") {
+      return d.toLocaleDateString(undefined, {
+        day: "2-digit",
+        month: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+    }
+    return d.toLocaleTimeString(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+  }
+  return ts;
+};
 
 const SparklineArea: React.FC<SparklineProps> = ({
   data = [],
   color = "#a855f7",
   height = 38,
+  timeRange = "1h",
   formatVal = (v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : `${v}`),
 }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -285,7 +325,7 @@ const SparklineArea: React.FC<SparklineProps> = ({
           className="absolute -top-8 z-20 -translate-x-1/2 bg-[#181824] border border-white/20 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded shadow-xl pointer-events-none whitespace-nowrap"
           style={{ left: `${(activePoint.x / width) * 100}%` }}
         >
-          <span className="text-slate-400 font-sans mr-1.5">{activePoint.timestamp}:</span>
+          <span className="text-slate-400 font-sans mr-1.5">{formatTimestamp(activePoint.timestamp, timeRange)}:</span>
           <span style={{ color }}>{formatVal(activePoint.value)}</span>
         </div>
       )}
@@ -297,6 +337,7 @@ const MiniBarChart: React.FC<SparklineProps> = ({
   data = [],
   color = "#f59e0b",
   height = 38,
+  timeRange = "1h",
   formatVal = (v) => `${v}`,
 }) => {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
@@ -350,7 +391,7 @@ const MiniBarChart: React.FC<SparklineProps> = ({
           className="absolute -top-8 z-20 -translate-x-1/2 bg-[#181824] border border-white/20 text-white text-[10px] font-mono font-bold px-2 py-0.5 rounded shadow-xl pointer-events-none whitespace-nowrap"
           style={{ left: `${(activeX / width) * 100}%` }}
         >
-          <span className="text-slate-400 font-sans mr-1.5">{activePoint.timestamp}:</span>
+          <span className="text-slate-400 font-sans mr-1.5">{formatTimestamp(activePoint.timestamp, timeRange)}:</span>
           <span style={{ color }}>{formatVal(activePoint.value)}</span>
         </div>
       )}
@@ -374,6 +415,171 @@ export default function MetricsEvaluationPage() {
   const [errorLimit, setErrorLimit] = useState<number>(5);
   const [showAllErrors, setShowAllErrors] = useState<boolean>(false);
   const [toolSearch, setToolSearch] = useState<string>("");
+
+  // Observability & Telemetry configuration state
+  const [showConfigModal, setShowConfigModal] = useState<boolean>(false);
+  const [configTab, setConfigTab] = useState<"prometheus" | "otel" | "opik">("prometheus");
+  const [configSettings, setConfigSettings] = useState<Record<string, string>>({});
+  const [configLoading, setConfigLoading] = useState<boolean>(false);
+  const [configSaving, setConfigSaving] = useState<boolean>(false);
+  const [configMessage, setConfigMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [configProbing, setConfigProbing] = useState<Record<string, boolean>>({});
+  const [configProbeResults, setConfigProbeResults] = useState<Record<string, { success: boolean; message: string; latency_ms?: number } | null>>({});
+  const [showOpikApiKey, setShowOpikApiKey] = useState<boolean>(false);
+  const [restarting, setRestarting] = useState<boolean>(false);
+
+  const handleOpenConfigModal = async () => {
+    setConfigMessage(null);
+    setConfigProbeResults({});
+    setShowConfigModal(true);
+    setConfigLoading(true);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/settings`);
+      if (res.ok) {
+        const data = await res.json();
+        const cur = data.settings || {};
+        setConfigSettings({
+          AION_PROMETHEUS_URL: cur.AION_PROMETHEUS_URL || "http://localhost:9090",
+          AION_METRICS_ENABLED: cur.AION_METRICS_ENABLED !== undefined ? String(cur.AION_METRICS_ENABLED) : "1",
+          AION_METRICS_PATH: cur.AION_METRICS_PATH || "/metrics",
+          AION_OTEL_ENABLED: cur.AION_OTEL_ENABLED !== undefined ? String(cur.AION_OTEL_ENABLED) : "0",
+          AION_OTEL_ENDPOINT: cur.AION_OTEL_ENDPOINT || "http://localhost:4317",
+          AION_OTEL_PROTOCOL: cur.AION_OTEL_PROTOCOL || "grpc",
+          AION_OTEL_SERVICE_NAME: cur.AION_OTEL_SERVICE_NAME || "aion-agent",
+          AION_OTEL_TRACE_CONTENT: cur.AION_OTEL_TRACE_CONTENT !== undefined ? String(cur.AION_OTEL_TRACE_CONTENT) : "1",
+          AION_OTEL_METRIC_EXPORT_INTERVAL: cur.AION_OTEL_METRIC_EXPORT_INTERVAL || "5000",
+          AION_OPIK_ENABLED: cur.AION_OPIK_ENABLED !== undefined ? String(cur.AION_OPIK_ENABLED) : "0",
+          OPIK_URL_OVERRIDE: cur.OPIK_URL_OVERRIDE || "http://localhost:5173/api",
+          OPIK_PROJECT_NAME: cur.OPIK_PROJECT_NAME || "AION-Agent",
+          OPIK_API_KEY: cur.OPIK_API_KEY || "",
+        });
+      }
+    } catch (err: any) {
+      console.error("Failed to load settings:", err);
+      setConfigMessage({ type: "error", text: "Failed to load current configuration from server." });
+    } finally {
+      setConfigLoading(false);
+    }
+  };
+
+  const handleProbeConnection = async (target: "prometheus" | "otel" | "opik") => {
+    setConfigProbing((prev) => ({ ...prev, [target]: true }));
+    setConfigProbeResults((prev) => ({ ...prev, [target]: null }));
+    try {
+      const payload: any = { target };
+      if (target === "prometheus") {
+        payload.url = configSettings.AION_PROMETHEUS_URL || "http://localhost:9090";
+      } else if (target === "otel") {
+        payload.endpoint = configSettings.AION_OTEL_ENDPOINT || "http://localhost:4317";
+        payload.protocol = configSettings.AION_OTEL_PROTOCOL || "grpc";
+      } else if (target === "opik") {
+        payload.url = configSettings.OPIK_URL_OVERRIDE || "http://localhost:5173/api";
+        payload.api_key = configSettings.OPIK_API_KEY;
+      }
+
+      const res = await apiFetch(`${apiBase()}/admin/metrics/test-connection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      setConfigProbeResults((prev) => ({
+        ...prev,
+        [target]: {
+          success: !!data.success,
+          message: data.message || (data.success ? "Connected successfully" : "Connection failed"),
+          latency_ms: data.latency_ms,
+        },
+      }));
+    } catch (err: any) {
+      setConfigProbeResults((prev) => ({
+        ...prev,
+        [target]: {
+          success: false,
+          message: err.message || "Network error while probing connection.",
+        },
+      }));
+    } finally {
+      setConfigProbing((prev) => ({ ...prev, [target]: false }));
+    }
+  };
+
+  const pollHealth = async () => {
+    const maxAttempts = 30;
+    let attempt = 0;
+
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    const interval = setInterval(async () => {
+      attempt++;
+      try {
+        const res = await fetch(`${apiBase()}/health`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === "ok") {
+            clearInterval(interval);
+            setRestarting(false);
+            setConfigMessage({
+              type: "success",
+              text: "API Container restarted and telemetry configuration applied successfully.",
+            });
+            fetchMetrics(false);
+          }
+        }
+      } catch (err) {
+        console.log("Waiting for backend to come back online...", err);
+      }
+
+      if (attempt >= maxAttempts) {
+        clearInterval(interval);
+        setRestarting(false);
+        setConfigMessage({
+          type: "error",
+          text: "API Container took too long to restart. Please verify manually.",
+        });
+        fetchMetrics(false);
+      }
+    }, 1500);
+  };
+
+  const handleSaveConfig = async () => {
+    setConfigSaving(true);
+    setConfigMessage(null);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/settings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: configSettings }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.detail || `Failed to save settings (${res.status})`);
+      }
+
+      const resData = await res.json();
+      if (resData.restarting) {
+        setRestarting(true);
+        setShowConfigModal(false);
+        pollHealth();
+      } else {
+        setConfigMessage({
+          type: "success",
+          text: resData.message || "Observability settings saved successfully!",
+        });
+        // Refetch metrics immediately to update Prometheus status badge and data
+        fetchMetrics(false);
+      }
+    } catch (err: any) {
+      setConfigMessage({
+        type: "error",
+        text: err.message || "Failed to update configuration settings.",
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  };
 
   // Fetch available profiles
   useEffect(() => {
@@ -495,37 +701,50 @@ export default function MetricsEvaluationPage() {
               </div>
             </div>
 
-            {/* PROMETHEUS STATUS BADGE (COMPACT, TOP RIGHT) */}
-            {metrics && (
-              <div
-                className={`flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl border text-xs font-semibold backdrop-blur-md shrink-0 shadow-lg ${metrics.prometheus_connected
-                  ? "bg-emerald-950/30 border-emerald-500/30 text-emerald-300 shadow-emerald-950/20"
-                  : "bg-amber-950/30 border-amber-500/30 text-amber-300 shadow-amber-950/20"
-                  }`}
-                title={
-                  metrics.prometheus_connected
-                    ? `Connected to Prometheus (${metrics.prometheus_url})`
-                    : "Prometheus Offline — Falling back to in-process local metrics"
-                }
+            {/* TOP RIGHT: PROMETHEUS STATUS & CONFIGURE OBSERVABILITY BUTTON */}
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {/* PROMETHEUS STATUS BADGE (COMPACT) */}
+              {metrics && (
+                <div
+                  className={`flex items-center gap-2.5 px-3.5 py-1.5 rounded-xl border text-xs font-semibold backdrop-blur-md shrink-0 shadow-lg ${metrics.prometheus_connected
+                    ? "bg-emerald-950/30 border-emerald-500/30 text-emerald-300 shadow-emerald-950/20"
+                    : "bg-amber-950/30 border-amber-500/30 text-amber-300 shadow-amber-950/20"
+                    }`}
+                  title={
+                    metrics.prometheus_connected
+                      ? `Connected to Prometheus (${metrics.prometheus_url})`
+                      : "Prometheus Offline — Falling back to in-process local metrics"
+                  }
+                >
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span
+                      className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${metrics.prometheus_connected ? "bg-emerald-400" : "bg-amber-400"
+                        }`}
+                    />
+                    <span
+                      className={`relative inline-flex rounded-full h-2.5 w-2.5 ${metrics.prometheus_connected ? "bg-emerald-500" : "bg-amber-500"
+                        }`}
+                    />
+                  </span>
+                  <span className="font-bold">
+                    {metrics.prometheus_connected ? "Prometheus Online" : "Local Metrics (Fallback)"}
+                  </span>
+                  <span className="font-mono text-[10px] opacity-75 hidden md:inline">
+                    ({metrics.prometheus_url})
+                  </span>
+                </div>
+              )}
+
+              {/* CONFIGURE OBSERVABILITY BUTTON */}
+              <button
+                onClick={handleOpenConfigModal}
+                className="flex items-center gap-2 px-3.5 py-1.5 rounded-xl border border-purple-500/40 bg-purple-950/40 hover:bg-purple-900/60 text-purple-200 hover:text-white text-xs font-bold transition-all shadow-lg shadow-purple-950/30 cursor-pointer group"
+                title="Configure Prometheus, OpenTelemetry (OTel) & Opik Telemetry"
               >
-                <span className="relative flex h-2.5 w-2.5">
-                  <span
-                    className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${metrics.prometheus_connected ? "bg-emerald-400" : "bg-amber-400"
-                      }`}
-                  />
-                  <span
-                    className={`relative inline-flex rounded-full h-2.5 w-2.5 ${metrics.prometheus_connected ? "bg-emerald-500" : "bg-amber-500"
-                      }`}
-                  />
-                </span>
-                <span className="font-bold">
-                  {metrics.prometheus_connected ? "Prometheus Online" : "Local Metrics (Fallback)"}
-                </span>
-                <span className="font-mono text-[10px] opacity-75 hidden md:inline">
-                  ({metrics.prometheus_url})
-                </span>
-              </div>
-            )}
+                <Sliders className="w-3.5 h-3.5 text-purple-400 group-hover:text-purple-300 transition-transform group-hover:rotate-45" />
+                <span>Configure Observability</span>
+              </button>
+            </div>
           </div>
 
           {/* SECOND ROW: CONTROLS TOOLBAR (USER & PROFILE SELECTOR, TIME RANGE, REALTIME & MANUAL REFRESH) */}
@@ -731,7 +950,7 @@ export default function MetricsEvaluationPage() {
             </div>
 
             {/* TOKENS SPARKLINE AREA CHART */}
-            <SparklineArea data={metrics?.tokens_series} color="#a855f7" formatVal={(v) => formatNumber(v)} />
+            <SparklineArea data={metrics?.tokens_series} timeRange={timeRange} color="#a855f7" formatVal={(v) => formatNumber(v)} />
           </div>
 
           {/* KPI 2: TURN DURATION (AVG & LAST TURN) */}
@@ -762,7 +981,7 @@ export default function MetricsEvaluationPage() {
             <div className="text-[11px] text-slate-500 italic">Overall mean turn response duration across profiles</div>
 
             {/* TURN DURATION SPARKLINE AREA CHART */}
-            <SparklineArea data={metrics?.turn_duration_series} color="#3b82f6" formatVal={(v) => `${v}s`} />
+            <SparklineArea data={metrics?.turn_duration_series} timeRange={timeRange} color="#3b82f6" formatVal={(v) => `${v}s`} />
           </div>
 
           {/* KPI 3: TOTAL TURNS & FAILURES */}
@@ -784,7 +1003,7 @@ export default function MetricsEvaluationPage() {
             <div className="text-[11px] text-slate-500 italic">Completed user interactions ({timeRange})</div>
 
             {/* TOTAL TURNS MINI BAR CHART */}
-            <MiniBarChart data={metrics?.turns_series} color="#f59e0b" formatVal={(v) => `${v} turns`} />
+            <MiniBarChart data={metrics?.turns_series} timeRange={timeRange} color="#f59e0b" formatVal={(v) => `${v} turns`} />
           </div>
 
           {/* KPI 4: TOOL INVOCATIONS */}
@@ -806,7 +1025,7 @@ export default function MetricsEvaluationPage() {
             <div className="text-[11px] text-slate-500 italic">MCP integration and skill invocations ({timeRange})</div>
 
             {/* TOOL CALLS MINI BAR CHART */}
-            <MiniBarChart data={metrics?.tool_calls_series} color="#06b6d4" formatVal={(v) => `${v} calls`} />
+            <MiniBarChart data={metrics?.tool_calls_series} timeRange={timeRange} color="#06b6d4" formatVal={(v) => `${v} calls`} />
           </div>
         </div>
 
@@ -1343,7 +1562,7 @@ export default function MetricsEvaluationPage() {
 
                       {err.timestamp && (
                         <span className="text-[10px] text-slate-500 font-mono shrink-0">
-                          {err.timestamp}
+                          {formatTimestamp(err.timestamp, "1h")}
                         </span>
                       )}
                     </div>
@@ -1361,6 +1580,623 @@ export default function MetricsEvaluationPage() {
           </div>
         </div>
       </main>
+
+      {/* OBSERVABILITY & TELEMETRY CONFIGURATION MODAL */}
+      {showConfigModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#0e0e12] border border-white/10 rounded-3xl max-w-3xl w-full flex flex-col max-h-[90vh] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* MODAL HEADER */}
+            <div className="px-6 py-5 border-b border-white/10 flex items-center justify-between bg-[#13131a]">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-xl bg-purple-950/50 border border-purple-500/40 text-purple-400 shadow-md shadow-purple-950/30">
+                  <Sliders className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
+                    Observability & Telemetry Settings
+                  </h2>
+                  <p className="text-xs text-slate-400">
+                    Configure Prometheus scrapers, OpenTelemetry exporters, and Opik LLM tracking.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowConfigModal(false)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10 transition-all cursor-pointer"
+                title="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* MESSAGE BANNER */}
+            {configMessage && (
+              <div
+                className={`mx-6 mt-4 p-3 rounded-xl border text-xs flex items-center gap-2.5 ${configMessage.type === "success"
+                  ? "bg-emerald-950/40 border-emerald-500/40 text-emerald-200"
+                  : "bg-red-950/40 border-red-500/40 text-red-200"
+                  }`}
+              >
+                {configMessage.type === "success" ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                )}
+                <span>{configMessage.text}</span>
+              </div>
+            )}
+
+            {/* TAB NAVIGATION */}
+            <div className="px-6 pt-4 border-b border-white/5 flex gap-2 overflow-x-auto bg-[#0e0e12]">
+              <button
+                onClick={() => setConfigTab("prometheus")}
+                className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer ${configTab === "prometheus"
+                  ? "border-purple-500 text-white"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+                  }`}
+              >
+                <BarChart3 className="w-4 h-4 text-purple-400" />
+                <span>Prometheus & Scraping</span>
+              </button>
+
+              <button
+                onClick={() => setConfigTab("otel")}
+                className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer ${configTab === "otel"
+                  ? "border-indigo-500 text-white"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+                  }`}
+              >
+                <Radio className="w-4 h-4 text-indigo-400" />
+                <span>OpenTelemetry (OTel)</span>
+              </button>
+
+              <button
+                onClick={() => setConfigTab("opik")}
+                className={`pb-3 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-2 cursor-pointer ${configTab === "opik"
+                  ? "border-cyan-500 text-white"
+                  : "border-transparent text-slate-400 hover:text-slate-200"
+                  }`}
+              >
+                <Brain className="w-4 h-4 text-cyan-400" />
+                <span>Opik (LLM Telemetry)</span>
+              </button>
+            </div>
+
+            {/* MODAL BODY (TAB CONTENT) */}
+            <div className="p-6 overflow-y-auto space-y-5 flex-1 custom-scrollbar">
+              {configLoading ? (
+                <div className="py-16 flex flex-col items-center justify-center gap-3 text-slate-400">
+                  <Loader2 className="w-7 h-7 animate-spin text-purple-400" />
+                  <span className="text-xs font-mono">Loading current configuration...</span>
+                </div>
+              ) : (
+                <>
+                  {/* TAB 1: PROMETHEUS */}
+                  {configTab === "prometheus" && (
+                    <div className="space-y-4">
+                      {/* PROMETHEUS URL */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-200">
+                            Remote Prometheus Server URL
+                          </label>
+                          <span className="text-[10px] font-mono text-purple-400">AION_PROMETHEUS_URL</span>
+                        </div>
+                        <p className="text-[11px] text-slate-400">
+                          URL used by AION to query aggregated PromQL metrics for the Evaluation dashboard and time-series charts.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={configSettings.AION_PROMETHEUS_URL || ""}
+                            onChange={(e) =>
+                              setConfigSettings((prev) => ({
+                                ...prev,
+                                AION_PROMETHEUS_URL: e.target.value,
+                              }))
+                            }
+                            placeholder="http://localhost:9090"
+                            className="bg-[#16161f] border border-white/10 rounded-xl px-3.5 py-2 text-xs font-mono text-white w-full outline-none focus:border-purple-500 transition-all shadow-inner"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleProbeConnection("prometheus")}
+                            disabled={configProbing.prometheus}
+                            className="px-3.5 py-2 rounded-xl bg-purple-950/50 border border-purple-500/40 text-purple-300 hover:bg-purple-900/60 text-xs font-bold transition-all whitespace-nowrap cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {configProbing.prometheus ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Play className="w-3.5 h-3.5" />
+                            )}
+                            <span>Test Connection</span>
+                          </button>
+                        </div>
+
+                        {/* PROBE RESULT BADGE */}
+                        {configProbeResults.prometheus && (
+                          <div
+                            className={`mt-2 p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${configProbeResults.prometheus.success
+                              ? "bg-emerald-950/30 border-emerald-500/30 text-emerald-300"
+                              : "bg-red-950/30 border-red-500/30 text-red-300"
+                              }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              {configProbeResults.prometheus.success ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                              ) : (
+                                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                              )}
+                              <span>{configProbeResults.prometheus.message}</span>
+                            </div>
+                            {configProbeResults.prometheus.latency_ms !== undefined && (
+                              <span className="font-mono text-[11px] font-bold">
+                                {configProbeResults.prometheus.latency_ms} ms
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* LOCAL /METRICS SCRAPING EXPOSURE TOGGLE */}
+                      <div className="p-4 rounded-2xl bg-[#14141d] border border-white/5 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="space-y-0.5">
+                            <span className="text-xs font-bold text-slate-200">
+                              Expose Local Prometheus Scraping Endpoint
+                            </span>
+                            <p className="text-[11px] text-slate-400">
+                              Enables the FastAPI instrumentator endpoint for Prometheus/Grafana Agent scrapers.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setConfigSettings((prev) => ({
+                                ...prev,
+                                AION_METRICS_ENABLED:
+                                  prev.AION_METRICS_ENABLED === "1" ? "0" : "1",
+                              }))
+                            }
+                            className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${configSettings.AION_METRICS_ENABLED === "1"
+                              ? "bg-purple-600"
+                              : "bg-slate-700"
+                              }`}
+                          >
+                            <span
+                              className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${configSettings.AION_METRICS_ENABLED === "1"
+                                ? "left-6"
+                                : "left-1"
+                                }`}
+                            />
+                          </button>
+                        </div>
+
+                        {configSettings.AION_METRICS_ENABLED === "1" && (
+                          <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-3">
+                            <label className="text-xs text-slate-300">
+                              Metrics Path:
+                            </label>
+                            <input
+                              type="text"
+                              value={configSettings.AION_METRICS_PATH || "/metrics"}
+                              onChange={(e) =>
+                                setConfigSettings((prev) => ({
+                                  ...prev,
+                                  AION_METRICS_PATH: e.target.value,
+                                }))
+                              }
+                              placeholder="/metrics"
+                              className="bg-[#16161f] border border-white/10 rounded-lg px-3 py-1 text-xs font-mono text-white w-48 outline-none focus:border-purple-500"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 2: OPENTELEMETRY (OTEL) */}
+                  {configTab === "otel" && (
+                    <div className="space-y-4">
+                      {/* OTEL ENABLED TOGGLE */}
+                      <div className="p-4 rounded-2xl bg-[#14141d] border border-white/5 flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-slate-200">
+                            Enable OpenTelemetry (OTel) Exporter
+                          </span>
+                          <p className="text-[11px] text-slate-400">
+                            Pushes distributed traces and metrics to an OTLP Collector (Jaeger, Phoenix, Tempo, OpenLit).
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfigSettings((prev) => ({
+                              ...prev,
+                              AION_OTEL_ENABLED:
+                                prev.AION_OTEL_ENABLED === "1" ? "0" : "1",
+                            }))
+                          }
+                          className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${configSettings.AION_OTEL_ENABLED === "1"
+                            ? "bg-indigo-600"
+                            : "bg-slate-700"
+                            }`}
+                        >
+                          <span
+                            className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${configSettings.AION_OTEL_ENABLED === "1"
+                              ? "left-6"
+                              : "left-1"
+                              }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* OTEL COLLECTOR ENDPOINT */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-200">
+                            OTLP Collector Endpoint
+                          </label>
+                          <span className="text-[10px] font-mono text-indigo-400">AION_OTEL_ENDPOINT</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={configSettings.AION_OTEL_ENDPOINT || ""}
+                            onChange={(e) =>
+                              setConfigSettings((prev) => ({
+                                ...prev,
+                                AION_OTEL_ENDPOINT: e.target.value,
+                              }))
+                            }
+                            placeholder="http://localhost:4317"
+                            className="bg-[#16161f] border border-white/10 rounded-xl px-3.5 py-2 text-xs font-mono text-white w-full outline-none focus:border-indigo-500 transition-all shadow-inner"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleProbeConnection("otel")}
+                            disabled={configProbing.otel}
+                            className="px-3.5 py-2 rounded-xl bg-indigo-950/50 border border-indigo-500/40 text-indigo-300 hover:bg-indigo-900/60 text-xs font-bold transition-all whitespace-nowrap cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {configProbing.otel ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Play className="w-3.5 h-3.5" />
+                            )}
+                            <span>Test Collector</span>
+                          </button>
+                        </div>
+
+                        {/* PROBE RESULT BADGE */}
+                        {configProbeResults.otel && (
+                          <div
+                            className={`mt-2 p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${configProbeResults.otel.success
+                              ? "bg-emerald-950/30 border-emerald-500/30 text-emerald-300"
+                              : "bg-red-950/30 border-red-500/30 text-red-300"
+                              }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              {configProbeResults.otel.success ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                              ) : (
+                                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                              )}
+                              <span>{configProbeResults.otel.message}</span>
+                            </div>
+                            {configProbeResults.otel.latency_ms !== undefined && (
+                              <span className="font-mono text-[11px] font-bold">
+                                {configProbeResults.otel.latency_ms} ms
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* GRID: PROTOCOL & SERVICE NAME & METRIC INTERVAL */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* PROTOCOL */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-300">
+                            Protocol (AION_OTEL_PROTOCOL)
+                          </label>
+                          <select
+                            value={configSettings.AION_OTEL_PROTOCOL || "grpc"}
+                            onChange={(e) =>
+                              setConfigSettings((prev) => ({
+                                ...prev,
+                                AION_OTEL_PROTOCOL: e.target.value,
+                              }))
+                            }
+                            className="w-full bg-[#16161f] border border-white/10 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-indigo-500 cursor-pointer"
+                          >
+                            <option value="grpc" className="bg-[#16161f]">gRPC (4317)</option>
+                            <option value="http" className="bg-[#16161f]">HTTP (4318)</option>
+                          </select>
+                        </div>
+
+                        {/* SERVICE NAME */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-300">
+                            Service Name
+                          </label>
+                          <input
+                            type="text"
+                            value={configSettings.AION_OTEL_SERVICE_NAME || "aion-agent"}
+                            onChange={(e) =>
+                              setConfigSettings((prev) => ({
+                                ...prev,
+                                AION_OTEL_SERVICE_NAME: e.target.value,
+                              }))
+                            }
+                            placeholder="aion-agent"
+                            className="w-full bg-[#16161f] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-indigo-500"
+                          />
+                        </div>
+
+                        {/* METRIC EXPORT INTERVAL */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-300">
+                            Export Interval (ms)
+                          </label>
+                          <input
+                            type="number"
+                            value={configSettings.AION_OTEL_METRIC_EXPORT_INTERVAL || "5000"}
+                            onChange={(e) =>
+                              setConfigSettings((prev) => ({
+                                ...prev,
+                                AION_OTEL_METRIC_EXPORT_INTERVAL: e.target.value,
+                              }))
+                            }
+                            placeholder="5000"
+                            className="w-full bg-[#16161f] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                      </div>
+
+                      {/* TRACE CONTENT TOGGLE */}
+                      <div className="p-3.5 rounded-xl bg-[#14141d] border border-white/5 flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-slate-300">
+                            Capture LLM Content in Traces (AION_OTEL_TRACE_CONTENT)
+                          </span>
+                          <p className="text-[11px] text-slate-400">
+                            Records user prompts and generated assistant outputs in span attributes.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfigSettings((prev) => ({
+                              ...prev,
+                              AION_OTEL_TRACE_CONTENT:
+                                prev.AION_OTEL_TRACE_CONTENT === "1" ? "0" : "1",
+                            }))
+                          }
+                          className={`w-9 h-5 rounded-full transition-colors relative cursor-pointer ${configSettings.AION_OTEL_TRACE_CONTENT === "1"
+                            ? "bg-indigo-600"
+                            : "bg-slate-700"
+                            }`}
+                        >
+                          <span
+                            className={`w-3.5 h-3.5 bg-white rounded-full absolute top-0.75 transition-transform ${configSettings.AION_OTEL_TRACE_CONTENT === "1"
+                              ? "left-5"
+                              : "left-0.75"
+                              }`}
+                          />
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 3: OPIK */}
+                  {configTab === "opik" && (
+                    <div className="space-y-4">
+                      {/* OPIK ENABLED TOGGLE */}
+                      <div className="p-4 rounded-2xl bg-[#14141d] border border-white/5 flex items-center justify-between">
+                        <div className="space-y-0.5">
+                          <span className="text-xs font-bold text-slate-200">
+                            Enable Opik (Comet ML) LLM Telemetry
+                          </span>
+                          <p className="text-[11px] text-slate-400">
+                            Self-hosted LLM prompt library versioning, tracing, and session feedback scores.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setConfigSettings((prev) => ({
+                              ...prev,
+                              AION_OPIK_ENABLED:
+                                prev.AION_OPIK_ENABLED === "1" ? "0" : "1",
+                            }))
+                          }
+                          className={`w-11 h-6 rounded-full transition-colors relative cursor-pointer ${configSettings.AION_OPIK_ENABLED === "1"
+                            ? "bg-cyan-600"
+                            : "bg-slate-700"
+                            }`}
+                        >
+                          <span
+                            className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-transform ${configSettings.AION_OPIK_ENABLED === "1"
+                              ? "left-6"
+                              : "left-1"
+                              }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* OPIK URL OVERRIDE */}
+                      <div className="space-y-1.5">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-bold text-slate-200">
+                            Opik Endpoint URL (OPIK_URL_OVERRIDE)
+                          </label>
+                          <span className="text-[10px] font-mono text-cyan-400">OPIK_URL_OVERRIDE</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={configSettings.OPIK_URL_OVERRIDE || ""}
+                            onChange={(e) =>
+                              setConfigSettings((prev) => ({
+                                ...prev,
+                                OPIK_URL_OVERRIDE: e.target.value,
+                              }))
+                            }
+                            placeholder="http://localhost:5173/api"
+                            className="bg-[#16161f] border border-white/10 rounded-xl px-3.5 py-2 text-xs font-mono text-white w-full outline-none focus:border-cyan-500 transition-all shadow-inner"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleProbeConnection("opik")}
+                            disabled={configProbing.opik}
+                            className="px-3.5 py-2 rounded-xl bg-cyan-950/50 border border-cyan-500/40 text-cyan-300 hover:bg-cyan-900/60 text-xs font-bold transition-all whitespace-nowrap cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                          >
+                            {configProbing.opik ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Play className="w-3.5 h-3.5" />
+                            )}
+                            <span>Test Opik</span>
+                          </button>
+                        </div>
+
+                        {/* PROBE RESULT BADGE */}
+                        {configProbeResults.opik && (
+                          <div
+                            className={`mt-2 p-2.5 rounded-xl border text-xs flex items-center justify-between gap-2 ${configProbeResults.opik.success
+                              ? "bg-emerald-950/30 border-emerald-500/30 text-emerald-300"
+                              : "bg-red-950/30 border-red-500/30 text-red-300"
+                              }`}
+                          >
+                            <div className="flex items-center gap-2">
+                              {configProbeResults.opik.success ? (
+                                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                              ) : (
+                                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+                              )}
+                              <span>{configProbeResults.opik.message}</span>
+                            </div>
+                            {configProbeResults.opik.latency_ms !== undefined && (
+                              <span className="font-mono text-[11px] font-bold">
+                                {configProbeResults.opik.latency_ms} ms
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* GRID: PROJECT NAME & API KEY */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {/* PROJECT NAME */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-300">
+                            Project Name (OPIK_PROJECT_NAME)
+                          </label>
+                          <input
+                            type="text"
+                            value={configSettings.OPIK_PROJECT_NAME || "AION-Agent"}
+                            onChange={(e) =>
+                              setConfigSettings((prev) => ({
+                                ...prev,
+                                OPIK_PROJECT_NAME: e.target.value,
+                              }))
+                            }
+                            placeholder="AION-Agent"
+                            className="w-full bg-[#16161f] border border-white/10 rounded-xl px-3 py-2 text-xs font-mono text-white outline-none focus:border-cyan-500"
+                          />
+                        </div>
+
+                        {/* API KEY */}
+                        <div className="space-y-1">
+                          <label className="text-xs font-bold text-slate-300">
+                            Opik API Key (OPIK_API_KEY)
+                          </label>
+                          <div className="relative">
+                            <input
+                              type={showOpikApiKey ? "text" : "password"}
+                              value={configSettings.OPIK_API_KEY || ""}
+                              onChange={(e) =>
+                                setConfigSettings((prev) => ({
+                                  ...prev,
+                                  OPIK_API_KEY: e.target.value,
+                                }))
+                              }
+                              placeholder="local-self-hosted-placeholder"
+                              className="w-full bg-[#16161f] border border-white/10 rounded-xl px-3 py-2 pr-9 text-xs font-mono text-white outline-none focus:border-cyan-500"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowOpikApiKey(!showOpikApiKey)}
+                              className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                              title={showOpikApiKey ? "Hide key" : "Show key"}
+                            >
+                              {showOpikApiKey ? (
+                                <EyeOff className="w-3.5 h-3.5" />
+                              ) : (
+                                <Eye className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            {/* MODAL FOOTER */}
+            <div className="px-6 py-4 border-t border-white/10 bg-[#13131a] flex items-center justify-between">
+              <span className="text-[11px] text-slate-500">
+                Changes will be saved to <strong className="text-slate-400 font-mono">data/runtime.env</strong>
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowConfigModal(false)}
+                  className="px-4 py-2 rounded-xl border border-white/10 bg-slate-900 hover:bg-white/10 text-slate-300 hover:text-white text-xs font-bold transition-all cursor-pointer"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveConfig}
+                  disabled={configSaving || configLoading}
+                  className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold transition-all shadow-lg shadow-purple-900/40 cursor-pointer disabled:opacity-50 flex items-center gap-2"
+                >
+                  {configSaving ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Save className="w-3.5 h-3.5" />
+                  )}
+                  <span>Save Configuration</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REINITIALIZING AI KERNEL OVERLAY */}
+      {restarting && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-50 animate-in fade-in duration-300">
+          <div className="bg-[#0d0d0d] border border-[#262626] rounded-3xl p-8 max-w-md w-full text-center space-y-6 shadow-2xl shadow-purple-500/10">
+            <div className="relative w-20 h-20 mx-auto">
+              <div className="absolute inset-0 border-4 border-purple-500/20 rounded-full" />
+              <div className="absolute inset-0 border-4 border-t-purple-500 rounded-full animate-spin" />
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-xl font-bold text-white">Reinitializing AI Kernel</h3>
+              <p className="text-sm text-slate-400">
+                The API container is restarting to apply the new telemetry and observability configurations. This usually takes about few minutes.
+              </p>
+            </div>
+            <div className="text-[10px] font-bold uppercase tracking-widest text-purple-400 bg-purple-500/10 border border-purple-500/20 px-3.5 py-1.5 rounded-full inline-block animate-pulse">
+              Waiting for health check...
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -31,15 +31,10 @@ from typing import (
 
 if TYPE_CHECKING:
     from src.runtime.artifact_manager import ArtifactManager
-    from src.runtime.artifact_parser import (
-        ArtifactEvent,
-        XMLArtifactStreamParser,
-    )
     from src.runtime.plan_engine import PlanModeController
     from src.runtime.stream.demux import StreamDemux
     from src.runtime.turn.turn_guards import TurnGuards
     from src.runtime.turn.turn_persistence import TurnPersistence
-    from src.runtime.stream_sync import StreamSync
 
 logger = logging.getLogger("aion.stream_loop")
 
@@ -209,7 +204,6 @@ class StreamLoop:
         The generator exits when a ``done`` or hard-stop condition is reached.
         """
         from src.agent_pipeline import _chunk_counters, _agent_debug_log
-        from src.runtime.artifact_parser import ArtifactEvent
         from src.runtime.stream_sync import StreamSync
 
         async with asyncio.timeout(self.turn_guards.turn_timeout):
@@ -355,12 +349,6 @@ class StreamLoop:
     async def _handle_token(
         self, chunk: Dict[str, Any]
     ) -> AsyncGenerator[Dict[str, Any], None]:
-        from src.agent_pipeline import (
-            _is_plan_artifact_payload,
-            _plan_artifact_sse_end,
-            _resolve_turn_plan_id,
-            _setup_plan_artifact_chunk,
-        )
         from src.runtime.artifact_parser import ArtifactEvent
 
         self.is_streaming = True
@@ -564,10 +552,6 @@ class StreamLoop:
         """
         from src.agent_pipeline import (
             _agent_debug_log,
-            _is_plan_artifact_payload,
-            _plan_artifact_sse_end,
-            _resolve_turn_plan_id,
-            _setup_plan_artifact_chunk,
         )
         from src.runtime.artifact_parser import ArtifactEvent
         from src.runtime.stream_sync import StreamSync

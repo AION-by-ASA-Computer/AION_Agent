@@ -2,7 +2,6 @@
 
 import asyncio
 
-import pytest
 
 from src.mcp_manager import MCPManager, _parse_user_pool_key, _session_scoped_servers
 
@@ -34,20 +33,6 @@ def test_parse_user_pool_key():
     assert _parse_user_pool_key("__user__admin__default") == ("admin", "default")
     assert _parse_user_pool_key("__user__alice__tenant1") == ("alice", "tenant1")
     assert _parse_user_pool_key("conv-abc") is None
-
-
-def test_agent_db_identity_prefers_injected_args_over_stale_env(monkeypatch):
-    import src.aion_env  # noqa: F401
-
-    from mcp_servers.agent_db.server import _resolve_effective_identity
-
-    monkeypatch.setenv("AION_CURRENT_USER_ID", "default")
-    monkeypatch.setenv("AION_CURRENT_TENANT_ID", "default")
-    monkeypatch.setenv("AION_AGENT_DB_STRICT_IDENTITY", "1")
-
-    uid, tid = _resolve_effective_identity({"user_id": "admin", "tenant_id": "default"})
-    assert uid == "admin"
-    assert tid == "default"
 
 
 def test_resolve_pool_key_falls_back_without_ctx(monkeypatch):

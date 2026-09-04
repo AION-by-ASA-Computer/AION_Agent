@@ -9,14 +9,7 @@ description: user_id resolution, chat-ui login, admin roles, database schema, an
 Operational guide for linking **real users** (tenant / organization), **agent profiles**, and **USER preferences** (SOUL/MEMORY deprecated — see [soul-memory-user](../configuration/soul-memory-user.md)), with authenticated chat-ui and conversation tracking.
 
 :::info Env naming
-Chat login uses `AION_CHAT_*` variables. Legacy `AION_CHAINLIT_*` / `CHAINLIT_AUTH_SECRET` names are still read as fallback; `scripts/upgrade-aion.sh` migrates them in `.env`.
-
-| Current name                 | Legacy alias (fallback only)      |
-|------------------------------|-----------------------------------|
-| `AION_CHAT_PASSWORD_AUTH`    | `AION_CHAINLIT_PASSWORD_AUTH`     |
-| `AION_CHAT_AUTH_SECRET`      | `CHAINLIT_AUTH_SECRET`            |
-| `AION_SETUP_CHAT_IDENTIFIER` | `AION_SETUP_CHAINLIT_IDENTIFIER`  |
-| `AION_SETUP_CHAT_PASSWORD`   | `AION_SETUP_CHAINLIT_PASSWORD`    |
+Chat login uses `AION_CHAT_*` variables (`AION_CHAT_PASSWORD_AUTH`, `AION_CHAT_AUTH_SECRET`, `AION_SETUP_CHAT_IDENTIFIER`, `AION_SETUP_CHAT_PASSWORD`).
 :::
 
 :::tip Admin panel — always protected

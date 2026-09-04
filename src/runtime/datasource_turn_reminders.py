@@ -51,7 +51,7 @@ def build_turn_state_reminder(
         return (
             "<system-reminder>\n"
             "Step PERSIST: you explored or verified a new SQL path. Before the final answer call "
-            "`sql_memory_save` (verified SQL) and `mempalace_add_drawer` when a reusable join path applies.\n"
+            "`sql_memory_save` (verified SQL) and `memory_note` when a reusable join path applies.\n"
             "</system-reminder>"
         )
     if cache_hit or has_sql_inject:
@@ -66,7 +66,7 @@ def build_turn_state_reminder(
         return None
     return (
         "<system-reminder>\n"
-        "Step SEARCH: call `sql_memory_search` and `mempalace_search` unless the turn header already "
+        "Step SEARCH: call `sql_memory_search` and `memory_recall` unless the turn header already "
         "includes QueryMemory cache. Then ONE exploration or execute tool — no long thinking loops.\n"
         "</system-reminder>"
     )

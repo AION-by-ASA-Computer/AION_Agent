@@ -179,7 +179,7 @@ def _call_llm_for_json(
     timeout: float = 90.0,
 ) -> Dict[str, Any]:
     base, model, token = resolve_llm_credentials()
-    max_tokens = int(os.getenv("AION_WIZARD_MAX_TOKENS", "4096"))
+    max_tokens = int(os.getenv("AION_WIZARD_MAX_TOKENS", "8192"))
 
     gen_kwargs = {
         "temperature": 0.2,
@@ -317,7 +317,10 @@ async def generate_profile_wizard(
         f"3. MANDATORY SKILLS TO INCLUDE: {json.dumps(MANDATORY_SKILLS)}\n"
         f"4. MANDATORY MCP SERVERS TO INCLUDE: {json.dumps(MANDATORY_MCPS)}\n"
         "5. Choose additional relevant skills and MCP servers ONLY from the provided catalogs.\n"
-        "6. Respond EXCLUSIVELY with a JSON object with the keys:\n"
+        "6. INSTRUCTION CONCISENESS & FLEXIBILITY:\n"
+        "   - Keep 'instructions' clear, well-structured, and concise by default (avoid generic fluff, filler text, or redundant preamble).\n"
+        "   - However, if the user explicitly requests a complex profile with extensive rules, detailed domain constraints, or multi-step protocols, satisfy all requirements fully without omitting requested details.\n"
+        "7. Respond EXCLUSIVELY with a JSON object with the keys:\n"
         "{\n"
         '  "name": "Readable Agent Name in English",\n'
         '  "slug": "agent_name_snake_case",\n'
@@ -425,7 +428,10 @@ async def refine_profile_wizard(
         "3. Retain existing skills and MCPs unless specifically asked to remove them.\n"
         f"4. MANDATORY SKILLS TO ALWAYS INCLUDE: {json.dumps(MANDATORY_SKILLS)}\n"
         f"5. MANDATORY MCP SERVERS TO ALWAYS INCLUDE: {json.dumps(MANDATORY_MCPS)}\n"
-        "6. Respond EXCLUSIVELY with a JSON object:\n"
+        "6. INSTRUCTION CONCISENESS & FLEXIBILITY:\n"
+        "   - Keep 'instructions' clear, well-structured, and concise by default (avoid generic fluff, filler text, or redundant preamble).\n"
+        "   - However, if the user explicitly requests a complex profile with extensive rules, detailed domain constraints, or multi-step protocols, satisfy all requirements fully without omitting requested details.\n"
+        "7. Respond EXCLUSIVELY with a JSON object:\n"
         "{\n"
         '  "name": "Updated Agent Name in English",\n'
         '  "slug": "existing_or_new_snake_case_slug",\n'

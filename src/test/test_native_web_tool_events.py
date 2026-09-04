@@ -7,7 +7,6 @@ import contextvars
 import json
 import threading
 
-import pytest
 
 from src.runtime.context import (
     clear_context,

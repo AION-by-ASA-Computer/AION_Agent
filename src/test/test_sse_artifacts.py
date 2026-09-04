@@ -1,7 +1,6 @@
 import asyncio
 import httpx
 import json
-import sys
 
 
 async def test_sse_artifacts(prompt: str, profile: str = "Generic Assistant"):

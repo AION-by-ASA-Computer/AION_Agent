@@ -1,7 +1,4 @@
-import os
 import logging
-from datetime import datetime
-from typing import Optional
 
 from sqlalchemy import select, delete
 from ..data.engine import get_async_session_maker

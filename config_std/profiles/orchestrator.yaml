@@ -41,4 +41,4 @@ native_tool_groups:
 mcp_servers:
 - session_sandbox
 - skills_hub
-- memory
+- query_memory

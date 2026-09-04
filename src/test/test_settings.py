@@ -1,4 +1,3 @@
-import pytest
 from src.settings import AionSettings, get_settings
 
 
@@ -8,11 +7,11 @@ from src.settings import AionSettings, get_settings
 
 
 def _fresh(monkeypatch, **env_overrides) -> AionSettings:
-    """Clear the LRU cache, apply env overrides, and return a fresh settings instance."""
+    """Clear the LRU cache, apply env overrides, and return a fresh settings instance isolated from local .env."""
     get_settings.cache_clear()
     for k, v in env_overrides.items():
         monkeypatch.setenv(k, str(v))
-    s = get_settings()
+    s = AionSettings(_env_file=None)
     get_settings.cache_clear()
     return s
 

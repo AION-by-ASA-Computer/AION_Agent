@@ -285,7 +285,7 @@
       "regenerate": "Antwort regenerieren",
       "memorize": "Information speichern",
       "memorized_prefix": "Der Agent hat gespeichert: ",
-      "memorize_instruction": "Analysieren Sie die folgende Konversationsrunde (Frage, Denken und Antwort) und extrahieren Sie die relevanten Hauptinformationen. Speichern Sie diese in der angegebenen Projekt-Wing. Um in MemPalace zu speichern, müssen Sie AUSSCHLIESSLICH das Tool 'mempalace_add_drawer' verwenden, um einen Drawer in der aktuellen Projekt-Wing zu erstellen. Verwenden Sie unter keinen Umständen die Tools des Knowledge Graph (wie 'mempalace_kg_add'). Wenn es SQL-Abfragen, Datenbankschemata oder Projekteinstellungen gibt, speichern Sie diese auch mit dem Tool 'sql_memory_save'. Wenn die Info bereits gespeichert ist, speichern Sie sie nicht erneut. Antworten Sie ausschließlich mit einem einzigen Satz, der direkt mit dem Präfix 'Der Agent hat gespeichert: ' beginnt, gefolgt von einer kurzen Zusammenfassung dessen, was in welcher Wing gespeichert wurde (oder 'Der Agent hat festgestellt, dass die Info bereits im Speicher vorhanden ist', falls sie bereits aufgezeichnet war). Fügen Sie vor diesem Präfix keine Einleitung und danach keine weiteren Erklärungen oder Kommentare hinzu.",
+      "memorize_instruction": "Analysieren Sie die folgende Konversationsrunde (Frage, Denken und Antwort) und extrahieren Sie die relevanten Hauptinformationen für das aktive Projekt. Verwenden Sie das Tool 'memory_note', um dauerhafte Lektionen zu speichern (eine Zeile pro Notiz, max. 500 Zeichen). Wenn SQL-Abfragen oder Schemata vorhanden sind, verwenden Sie bei Bedarf auch 'sql_memory_save'. Wenn die Information bereits im Speicher vorhanden ist, duplizieren Sie sie nicht. Antworten Sie ausschließlich mit einem einzigen Satz, der direkt mit dem Präfix 'Der Agent hat gespeichert: ' beginnt, gefolgt von einer kurzen Zusammenfassung (oder 'Der Agent hat festgestellt, dass die Info bereits im Speicher vorhanden ist').",
       "feedback_placeholder": "Warum hat Ihnen diese Nachricht nicht gefallen? (Fügen Sie eine optionale Beschreibung hinzu)...",
       "feedback_title": "Feedback zur Antwort",
       "feedback_submit": "Senden",
@@ -453,13 +453,13 @@
   },
   "memory_dock": {
     "title": "Projektspeicher",
-    "subtitle": "Gespeicherte SQL-Abfragen und MemPalace-Navigation für das aktive Projekt.",
+    "subtitle": "Gespeicherte SQL-Abfragen und Mnemos-Notizen für das aktive Projekt.",
     "tab_query": "SQL-Abfragen",
     "tab_navigation": "Navigation",
     "hint_query": "Filtern, verifizieren oder bearbeiten Sie vom Agenten gespeicherte SELECTs.",
-    "hint_navigation": "Strukturierte Drawer für Datenbank-Exploration: Einstieg, JOINs, Fallstricke, Entdeckungen.",
+    "hint_navigation": "Strukturierte Notizen für Datenbank-Exploration: Einstieg, JOINs, Fallstricke, Entdeckungen.",
     "open_panel": "Speicher-Panel öffnen (Projekteinstellungen)",
-    "no_capabilities": "Dieses Profil bietet keinen SQL- oder MemPalace-Speicher."
+    "no_capabilities": "Dieses Profil bietet keinen SQL- oder Mnemos-Speicher."
   },
   "memory_project": {
     "label": "Projekt",
@@ -468,7 +468,7 @@
     "settings": "Projekteinstellungen",
     "settings_short": "Einstellungen",
     "create_btn": "Projekt erstellen",
-    "create_modal_hint": "Der Slug identifiziert den MemPalace-Wing und den QueryMemory-Bucket.",
+    "create_modal_hint": "Der Slug identifiziert das gemeinsame Projekt für QueryMemory und Mnemos-Notizen.",
     "slug_label": "Slug",
     "name_label": "Anzeigename",
     "desc_label": "Beschreibung",
@@ -484,7 +484,7 @@
     "loading": "Wird geladen…",
     "no_projects": "Noch keine Projekte. Erstellen Sie eines, um zu beginnen.",
     "no_description": "Keine Beschreibung — fügen Sie eine hinzu, um den Agenten bezüglich des Bereichs anzuleiten.",
-    "page_footer": "SQL-Abfragen und MemPalace-Drawer teilen sich den im Chat ausgewählten Projekt-Slug.",
+    "page_footer": "SQL-Abfragen und Mnemos-Notizen teilen sich den im Chat ausgewählten Projekt-Slug.",
     "select_project": "Wählen Sie ein Projekt aus der Liste aus.",
     "slug_placeholder": "Slug (z. B. billing_db)",
     "name_placeholder": "Anzeigename",

@@ -178,6 +178,85 @@ Metrics are emitted at runtime via hooks registered in `src/observability/hooks_
 | `post_tool_use` | `aion_tool_calls_total`, `aion_tool_call_duration_seconds` |
 | `post_turn` | `aion_turn_duration_seconds`, `aion_messages_total` (role=assistant), `aion_llm_tokens_total`, `aion_llm_turn_tokens`, `aion_llm_turn_calls`, `aion_agent_failures_total`, `aion_session_cache_size_bytes` |
 
+---
+
+### Evaluation & Metrics Architecture (`/admin/metrics`)
+
+AION Agent includes a dedicated telemetry dashboard (`/admin/metrics`) and backend aggregator (`/admin/metrics/overview`) designed to operate seamlessly **both with a remote Prometheus server and in standalone/local environments without Prometheus**.
+
+```
+                           ┌───────────────────────────────────────────────┐
+                           │      Admin UI: Evaluation & Metrics Page      │
+                           │   (KPI Cards, Sparklines, Profiles & Users)   │
+                           └───────────────────────┬───────────────────────┘
+                                                   │
+                                                   ▼ GET /admin/metrics/overview
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│ FastAPI Backend (`src/api/metrics_api.py`)                                                │
+│                                                                                           │
+│ 1. Check Prometheus Connectivity (GET {AION_PROMETHEUS_URL}/api/v1/query?query=up)        │
+│                                                                                           │
+│   ┌───────────────────────────────────────────┐   ┌───────────────────────────────────┐   │
+│   │           WITH PROMETHEUS                 │   │        WITHOUT PROMETHEUS         │   │
+│   │        (Prometheus Online)                │   │        (Local Fallback)           │   │
+│   ├───────────────────────────────────────────┤   ├───────────────────────────────────┤   │
+│   │ • Range PromQL queries:                   │   │ • Local `prometheus_client`       │   │
+│   │   `increase(aion_llm_tokens_total[step])` │   │   metric objects in RAM           │   │
+│   │ • `histogram_quantile(0.95, ...)` latency │   │ • In-memory rolling ring buffer   │   │
+│   │ • Dynamic step intervals (1m → 1d)        │   │   `_time_series_ring_buffer`      │   │
+│   │ • Cross-tenant and profile label filters  │   │ • Exact per-minute bucketized pts │   │
+│   │ • Tool error aggregations                 │   │ • Rolling `_recent_mcp_errors`    │   │
+│   └─────────────────────┬─────────────────────┘   └─────────────────┬─────────────────┘   │
+│                         │                                           │                     │
+│                         └─────────────────────┬─────────────────────┘                     │
+│                                               ▼                                           │
+│                     Standardized ISO 8601 UTC Timestamps (`dt.isoformat()`)               │
+└───────────────────────────────────────────────┬───────────────────────────────────────────┘
+                                                │
+                                                ▼ JSON Response
+┌───────────────────────────────────────────────────────────────────────────────────────────┐
+│ Client-side Dynamic Timezone Rendering (`admin-ui/app/metrics/page.tsx`)                  │
+│ • Converts ISO 8601 UTC → User Browser Local Timezone (e.g. UTC+2 / CEST)                 │
+│ • Near real-time auto-refresh (every 3 seconds) displaying last-turn activity immediately │
+└───────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 1. Scope & Target Audience
+
+AION partitions observability between Grafana and the Admin UI:
+
+| Target Dashboard | Supported Telemetry & Visualizations |
+|---|---|
+| **Both (Grafana + Admin UI)** | LLM Tokens (Input, Output, Reasoning), Turn Durations (Average, Last Turn, P95 Latency), Total Turns & Failures, Total Tool Invocations & Success Rate %. |
+| **Grafana Exclusive** | Raw tool execution latency histograms, Session workspace disk cache footprint (`aion_session_cache_size_bytes`), MCP server binary health gauges (`aion_mcp_server_healthy`), worker pool sizes. |
+| **Admin UI Exclusive** | Per-agent profile metric breakdown table, Per-user expandable profile usage & tool distribution, Last turn tool invocation snapshot, Searchable MCP tool metrics, MCP Call Error Diagnostics list with full stack traces, and local timezone trendline sparklines. |
+
+#### 2. Operation WITH Prometheus
+
+When `AION_PROMETHEUS_URL` is reachable:
+- The backend queries Prometheus via standard REST endpoints (`/api/v1/query` and `/api/v1/query_range`).
+- **Dynamic Step Calculation**: Step intervals automatically adapt to the selected time range to generate optimal chart resolution (12 to 60 data points):
+  - `1h` range → `1m` step (60 points)
+  - `6h` range → `10m` step (36 points)
+  - `24h` range → `30m` step (48 points)
+  - `7d` range → `6h` step (28 points)
+  - `30d` / `all` → `1d` step (30 points)
+- **Aggregations**: Executes vector operations like `sum(increase(aion_llm_tokens_total[step]))` and `histogram_quantile(0.95, sum(rate(aion_turn_duration_seconds_bucket[step])) by (le))`.
+
+#### 3. Operation WITHOUT Prometheus (Standalone Fallback)
+
+When Prometheus is unavailable or offline:
+- The backend automatically switches to **zero-dependency in-process fallback mode** without failing API calls.
+- Cumulative counters, gauges, and histograms are directly extracted from local Python memory structures in `src/observability/metrics.py`.
+- Time-series charts for tokens, turn durations, turns, and tool calls are generated from `_time_series_ring_buffer` in `src/observability/hooks_emitter.py`, which records every conversational turn and tool invocation with epoch timestamps.
+- MCP execution errors are captured in `_recent_mcp_errors` with full error payloads.
+
+#### 4. Timezone & Real-Time Synchronization
+
+- **ISO 8601 UTC Emission**: All server-side time-series data points and error records emit standard ISO 8601 timestamps (e.g. `2026-09-03T12:51:06+00:00`).
+- **Client-Side Localization**: The Admin UI parses these timestamps using the browser's native JavaScript `Date` engine, displaying accurate local time (e.g. `14:51` in UTC+2/CEST) in chart hover tooltips and diagnostic tables.
+- **Near Real-Time Telemetry**: With auto-refresh enabled (3s interval), requests made in the chat or via API immediately reflect on the rightmost bucket of the trendlines.
+
 ## Structured Logging
 
 All core infrastructure logs use `structlog` to produce structured logs (JSON or human-readable text). The configuration is managed by `src/observability/logging.py`.

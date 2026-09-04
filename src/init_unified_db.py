@@ -1,5 +1,4 @@
 import asyncio
-import os
 from src.data.engine import get_engine
 from src.data.models import Base
 

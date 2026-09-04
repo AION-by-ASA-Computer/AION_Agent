@@ -55,7 +55,7 @@ def test_no_reminder_when_saved() -> None:
     )
     record_exploration_tool(
         session_id=sid,
-        tool_name="mempalace_add_drawer",
+        tool_name="memory_note",
         event_type="tool_end",
         output='{"ok":true}',
         profile_slug="mysql_metadata_assistant",

@@ -6,7 +6,7 @@ import json
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from src.memory.sql_query_memory import sql_query_memory, sql_query_memory_enabled
 from src.memory.sql_query_memory.fingerprint import normalize_sql
@@ -143,7 +143,7 @@ async def _run_pre_turn_sql_query_memory(ctx: HookContext) -> None:
         "\n\n## QueryMemory — server cache (this turn)",
         f"**Active project:** `{project}` — search/save only in this drawer; other projects are ignored.",
         "**Mandatory:** run `execute_sql` with the best cached SQL below before any other tool. "
-        "`list_tables`, `sql_memory_search`, `search_known_sql`, and `mempalace_search` are "
+        "`list_tables`, `sql_memory_search`, `search_known_sql`, and `memory_recall` are "
         "**blocked** until you get a successful SQL result (server guard).",
         schema_line,
         "Adapt `?` placeholders, then answer. Save only via `sql_memory_save` / `save_successful_sql` if needed.\n",
@@ -175,7 +175,7 @@ def profile_wants_sql_query_memory_by_slug(profile_slug: str) -> bool:
     try:
         from src.agent_profile import profile_manager
 
-        p = profile_manager.get_profile(profile_slug)
+        p = profile_manager.resolve_profile(profile_slug)
         return profile_wants_sql_query_memory(p)
     except Exception:
         return False

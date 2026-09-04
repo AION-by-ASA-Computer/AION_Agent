@@ -100,7 +100,6 @@ COPY mcp_servers_std/  ./mcp_servers_std/
 COPY config_std/       ./config_std/
 COPY migrations/       ./migrations/
 COPY scripts/          ./scripts/
-COPY wre[n]/            ./wren/
 COPY alembic.ini       ./
 COPY docker/backend-entrypoint.sh /usr/local/bin/aion-backend-entrypoint.sh
 
@@ -111,7 +110,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/aion-backend-entrypoint.sh \
 
 # Writable runtime directories (mounted as volume in compose, created here as fallback)
 RUN mkdir -p /app/data /app/data/sessions /app/data/profiles \
-    /app/data/skills/generated /app/data/agent_dbs
+    /app/data/skills/generated
 
 EXPOSE 8001
 

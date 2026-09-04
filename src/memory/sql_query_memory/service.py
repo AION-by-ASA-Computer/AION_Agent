@@ -8,8 +8,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-import numpy as np
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.orm import selectinload
 
 from src.data.engine import get_async_session_maker
@@ -31,7 +30,6 @@ from .fingerprint import (
     build_save_metadata,
     normalize_request_intent,
     normalize_request_text,
-    normalize_sql,
     sql_fingerprint,
 )
 from .models import (

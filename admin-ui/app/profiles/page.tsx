@@ -741,7 +741,7 @@ export default function Profiles() {
 
                   <div className="hidden lg:flex items-center gap-1.5 shrink-0">
                     {[
-                      { label: "🧠 Memoria", prompt: "Aggiungi la capacità di ricordare conversazioni passate con la memoria a lungo termine." },
+                      { label: "🧠 Memoria", prompt: "Aggiungi la capacità di ricordare conversazioni passate con la memoria a lungo termine, aggiungendo l'MCP \"Mnemos\" e la skill \"memory_protocol\"." },
                       { label: "📧 Email", prompt: "Aggiungi l'integrazione per leggere ed inviare email via IMAP/SMTP." },
                       { label: "🌐 Web", prompt: "Aggiungi la capacità di effettuare ricerche sul web." },
                       { label: "⚡ JSON", prompt: "Aggiorna le istruzioni rendendo obbligatorio il formato JSON strutturato per tutte le risposte." },

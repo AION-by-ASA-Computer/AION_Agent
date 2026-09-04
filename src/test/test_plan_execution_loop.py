@@ -1,7 +1,7 @@
 """Plan execution handler (background jobs, Deep Research-style)."""
 
 import threading
-from typing import Any, AsyncGenerator, Dict, List, Optional
+from typing import Any, Dict, List
 
 import pytest
 

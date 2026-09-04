@@ -11,14 +11,11 @@ from typing import Any, Dict, List, Optional, Tuple
 from src.a2a.plan_markdown import (
     iter_plan_task_rows,
     mark_task_checked,
-    markdown_goal,
     markdown_to_plan,
     normalize_plan_task_lines,
     plan_to_markdown,
     plan_to_todos,
-    resolve_plan_markdown_for_approval,
     resolve_plan_markdown_lenient,
-    todos_to_plan,
 )
 from src.a2a.protocol import ExecutionPlan
 from src.runtime.plan_wait_registry import set_pending

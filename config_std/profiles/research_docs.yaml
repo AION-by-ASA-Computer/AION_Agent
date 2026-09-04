@@ -25,6 +25,6 @@ native_tool_groups:
 - mnemos
 mcp_servers:
 - ocr
-- memory
+- query_memory
 - skills_hub
 - session_sandbox

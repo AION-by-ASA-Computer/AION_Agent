@@ -1,7 +1,7 @@
 """
 MCP opzionale (stdio): espone gli stessi tool dell’orchestrazione in-process.
 
-Per HITL in UI Chainlit si consiglia il profilo **Orchestrator** con registry
+Per HITL in chat-ui si consiglia il profilo **Orchestrator** con registry
 ``type: in_process`` (tool nel processo API così gli eventi SSE raggiungono la UI).
 
 Con questo server stdio, l’approve via API funziona se Redis/LocalFallback è condiviso

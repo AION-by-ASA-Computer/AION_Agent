@@ -22,17 +22,16 @@ def test_prompt_contains_workflow_steps() -> None:
     assert "save_successful_query" in prompt
 
 
-def test_wren_prompt_mentions_sandbox_exec() -> None:
-    from types import SimpleNamespace
+def test_same_turn_reminder_after_explore(monkeypatch) -> None:
+    monkeypatch.setenv("AION_PROFILES_STD_DIR", "config_std/profiles")
+    monkeypatch.setenv("AION_DATASOURCE_PERSIST_REMINDER", "1")
+    monkeypatch.setenv("AION_DATASOURCE_MEMORY_WORKFLOW", "1")
+    from src.agent_profile import profile_manager, profiles_std_path
 
-    profile = SimpleNamespace(skills=["wren"], wren_project_path="wren/alibr_db")
-    prompt = build_datasource_memory_system_prompt(profile)
-    assert "Wren Engine" in prompt
-    assert "sandbox_exec_allowlisted" in prompt
-    assert "toolbox-postgres" in prompt
-
-
-def test_same_turn_reminder_after_explore() -> None:
+    profile_manager.std_path = profiles_std_path()
+    profile_manager.write_path = profiles_std_path()
+    profile_manager.invalidate()
+    profile_manager.load_all()
     _trackers.clear()
     sid = "sess-reminder-1"
     begin_exploration_turn(sid)

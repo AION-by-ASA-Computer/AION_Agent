@@ -5,7 +5,7 @@ import logging
 import os
 import re
 import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 from haystack.dataclasses import ChatMessage
 

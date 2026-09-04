@@ -23,10 +23,10 @@ grafana:
   args: ["-u", "grafana/server.py"]
   description: "Integrazione Grafana Annotations & Dashboards"
 
-memory:
+query_memory:
   command: "python"
   args: ["-u", "query_memory/server.py"]
-  description: "QueryMemory (SQL/PromQL cache) + session_search — NOT Mnemos LTM (use native memory_* tools)"
+  description: "QueryMemory (cache query SQL/PromQL, session search) per interrogazione e analisi dati"
 
 code:
   command: "python"
@@ -83,10 +83,18 @@ cron:
   type: in_process
   description: "Built-in scheduled jobs (create_scheduled_job, …); richiede AION_CRON_ENABLED=1; merge in build_all_tools"
 
-agent_db:
-  command: "python"
-  args: ["-m", "mcp_servers.agent_db.server"]
-  description: "Agent-managed SQL databases for structured long-term memory"
+plane:
+  command: uvx
+  args:
+  - --from
+  - plane-mcp-server==0.2.9
+  - plane-mcp-server
+  - stdio
+  env:
+    PLANE_API_KEY: ${PLANE_API_KEY}
+    PLANE_WORKSPACE_SLUG: ${PLANE_WORKSPACE_SLUG}
+    PLANE_BASE_URL: ${PLANE_BASE_URL}
+    PLANE_USE_LEGACY_ISSUES_ENDPOINT: ${PLANE_USE_LEGACY_ISSUES_ENDPOINT}
 
 # --- Per-user MCP credentials (Approccio A + HOME isolation Approccio B) ---
 # Con AION_MCP_USER_CREDENTIALS=1, i valori sotto possono usare placeholder risolti dal DB

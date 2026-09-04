@@ -307,13 +307,8 @@ Password auth for chat-ui uses the unified `users` table and HMAC tokens (`src/c
 | `AION_SETUP_CHAT_IDENTIFIER`   | First admin username (only `-y` / `--import-state`)     |
 | `AION_SETUP_CHAT_PASSWORD`     | First admin password (only `-y` / `--import-state`)     |
 
-**Legacy aliases (deprecated, read as fallback):**
-`AION_CHAINLIT_PASSWORD_AUTH`, `CHAINLIT_AUTH_SECRET`, `AION_SETUP_CHAINLIT_IDENTIFIER`,
-`AION_SETUP_CHAINLIT_PASSWORD`. The new names take precedence; the old names
-will be removed in a future release. **Automatic migration** of a legacy `.env`:
-
 ```bash
-./scripts/upgrade-aion.sh           # invoca _migrate_env_legacy_keys()
+./scripts/upgrade-aion.sh           # invoca upgrade-aion
 ./scripts/upgrade-aion.sh --docker  # idem in flusso Docker
 ./scripts/upgrade-aion.sh --dry-run # mostra cosa cambierebbe senza scrivere
 ```

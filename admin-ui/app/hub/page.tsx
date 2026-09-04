@@ -261,12 +261,17 @@ export default function MCPHub() {
     } catch {
       /* use cached policy */
     }
+    const args = Array.isArray(config.args) ? config.args : [];
+    const env = config.env && typeof config.env === "object" && !Array.isArray(config.env) ? { ...(config.env as object) } : {};
     setUserMayDisable(policy?.user_may_disable !== false);
     setEditingConfig({
       name,
       values: {
         ...config,
-        env: config.env && typeof config.env === "object" && !Array.isArray(config.env) ? { ...(config.env as object) } : {},
+        rawArgsText: args.join("\n"),
+        rawAllEnvText: JSON.stringify(env, null, 2),
+        rawExtraEnvText: extraEnvJson(env as Record<string, string>, connectorFormContext.knownKeys),
+        env,
       },
     });
     const schema = normalizeCredentialSchema(policy?.credential_schema);
@@ -365,9 +370,15 @@ export default function MCPHub() {
       );
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
+      const newEnv = data.env || editingConfig.values.env || {};
       setEditingConfig({
         ...editingConfig,
-        values: { ...editingConfig.values, env: data.env || editingConfig.values.env },
+        values: {
+          ...editingConfig.values,
+          env: newEnv,
+          rawAllEnvText: JSON.stringify(newEnv, null, 2),
+          rawExtraEnvText: extraEnvJson(newEnv, connectorFormContext.knownKeys),
+        },
       });
       setToast({ message: "Suggested env applied to local registry.", variant: "success" });
       void loadPolicyPreview(editingConfig.name, editingPolicy.mode);
@@ -403,10 +414,28 @@ export default function MCPHub() {
     setLoading(true);
     try {
       const v = editingConfig.values;
+      const rawArgs = typeof v.rawArgsText === "string" ? v.rawArgsText : (Array.isArray(v.args) ? v.args.join("\n") : "");
+      const parsedArgs = rawArgs
+        .split("\n")
+        .map((line: string) => line.trim())
+        .filter((line: string) => line.length > 0);
+
+      let finalEnv = v.env && typeof v.env === "object" && !Array.isArray(v.env) ? { ...v.env } : {};
+      if (typeof v.rawAllEnvText === "string") {
+        try {
+          const parsed = JSON.parse(v.rawAllEnvText);
+          if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+            finalEnv = parsed as Record<string, string>;
+          }
+        } catch {
+          /* fallback to v.env */
+        }
+      }
+
       const payload: Record<string, unknown> = {
         command: typeof v.command === "string" ? v.command : "python",
-        args: Array.isArray(v.args) ? v.args : [],
-        env: v.env && typeof v.env === "object" && !Array.isArray(v.env) ? { ...v.env } : {},
+        args: parsedArgs,
+        env: finalEnv,
         description: typeof v.description === "string" ? v.description : "",
       };
       if (typeof v.type === "string") {
@@ -1381,7 +1410,15 @@ export default function MCPHub() {
                         onChange={(e) => {
                           const next = { ...(editingConfig.values.env || {}) };
                           next[field.key] = e.target.value;
-                          setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, env: next } });
+                          setEditingConfig({
+                            ...editingConfig,
+                            values: {
+                              ...editingConfig.values,
+                              env: next,
+                              rawAllEnvText: JSON.stringify(next, null, 2),
+                              rawExtraEnvText: extraEnvJson(next, connectorFormContext.knownKeys),
+                            },
+                          });
                         }}
                         className="w-full bg-black/50 border border-white/10 rounded-xl p-3 text-sm text-white placeholder:text-gray-600 focus:border-emerald-500/70 outline-none"
                         placeholder={field.required ? "Required" : "Optional"}
@@ -1418,7 +1455,7 @@ export default function MCPHub() {
                           values: {
                             ...editingConfig.values,
                             type: e.target.value,
-                            ...(e.target.value === "sse" ? { command: undefined, args: undefined } : {})
+                            ...(e.target.value === "sse" ? { command: undefined, args: undefined, rawArgsText: "" } : {})
                           },
                         })
                       }
@@ -1470,17 +1507,18 @@ export default function MCPHub() {
                             <span className="ml-2 font-normal normal-case tracking-normal text-gray-500">(one argument per line)</span>
                           </label>
                           <textarea
-                            rows={Math.max(3, (editingConfig.values.args || []).length + 1)}
-                            value={(editingConfig.values.args || []).join("\n")}
+                            rows={Math.max(4, (editingConfig.values.rawArgsText ?? (editingConfig.values.args || []).join("\n")).split("\n").length + 1)}
+                            value={editingConfig.values.rawArgsText ?? (editingConfig.values.args || []).join("\n")}
                             onChange={(e) => {
-                              const args = e.target.value
+                              const rawArgsText = e.target.value;
+                              const args = rawArgsText
                                 .split("\n")
-                                .map((line) => line.trimEnd())
-                                .filter((line, i, arr) => line !== "" || i < arr.length - 1);
-                              setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, args } });
+                                .map((line) => line.trim())
+                                .filter((line) => line.length > 0);
+                              setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, rawArgsText, args } });
                             }}
                             placeholder={"mcp-server\n--port\n8080"}
-                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner font-mono resize-none leading-relaxed"
+                            className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner font-mono resize-y leading-relaxed min-h-[100px]"
                           />
                         </div>
                       </>
@@ -1493,7 +1531,7 @@ export default function MCPHub() {
                       value={editingConfig.values.description || ""}
                       onChange={(e) => setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, description: e.target.value } })}
                       placeholder="MCP server description..."
-                      className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner min-h-[100px]"
+                      className="w-full bg-black/40 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 outline-none transition-all shadow-inner min-h-[90px] resize-y"
                     />
                   </div>
                 </>
@@ -1507,25 +1545,35 @@ export default function MCPHub() {
                       <span className="text-[10px] text-gray-600 group-open:text-gray-400">JSON</span>
                     </summary>
                     <textarea
-                      value={extraEnvJson(editingConfig.values.env as Record<string, string> | undefined, connectorFormContext.knownKeys)}
+                      value={editingConfig.values.rawExtraEnvText ?? extraEnvJson(editingConfig.values.env as Record<string, string> | undefined, connectorFormContext.knownKeys)}
                       onChange={(e) => {
+                        const text = e.target.value;
+                        let nextEnv = { ...(editingConfig.values.env || {}) };
                         try {
-                          const parsed = JSON.parse(e.target.value) as Record<string, string>;
-                          if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return;
-                          const env = { ...(editingConfig.values.env || {}) };
-                          for (const key of Object.keys(env)) {
-                            if (!connectorFormContext.knownKeys.has(key)) delete env[key];
+                          const parsed = JSON.parse(text) as Record<string, string>;
+                          if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
+                            for (const key of Object.keys(nextEnv)) {
+                              if (!connectorFormContext.knownKeys.has(key)) delete nextEnv[key];
+                            }
+                            for (const [key, val] of Object.entries(parsed)) {
+                              if (!connectorFormContext.knownKeys.has(key)) nextEnv[key] = String(val ?? "");
+                            }
                           }
-                          for (const [key, val] of Object.entries(parsed)) {
-                            if (!connectorFormContext.knownKeys.has(key)) env[key] = String(val ?? "");
-                          }
-                          setEditingConfig({ ...editingConfig, values: { ...editingConfig.values, env } });
                         } catch {
-                          /* */
+                          /* wait until valid JSON */
                         }
+                        setEditingConfig({
+                          ...editingConfig,
+                          values: {
+                            ...editingConfig.values,
+                            rawExtraEnvText: text,
+                            rawAllEnvText: JSON.stringify(nextEnv, null, 2),
+                            env: nextEnv,
+                          },
+                        });
                       }}
                       spellCheck={false}
-                      className="w-full min-h-[100px] mt-3 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-mono"
+                      className="w-full min-h-[100px] mt-3 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-mono resize-y"
                       placeholder='{ "CUSTOM_KEY": "..." }'
                     />
                   </details>
@@ -1533,22 +1581,30 @@ export default function MCPHub() {
                   <details className="rounded-xl border border-white/10 bg-black/20 p-3 group">
                     <summary className="text-xs font-bold text-gray-400 cursor-pointer list-none">Advanced — all environment variables (JSON)</summary>
                     <textarea
-                      value={JSON.stringify(editingConfig.values.env ?? {}, null, 2)}
+                      value={editingConfig.values.rawAllEnvText ?? JSON.stringify(editingConfig.values.env ?? {}, null, 2)}
                       onChange={(e) => {
+                        const text = e.target.value;
+                        let nextEnv = editingConfig.values.env;
                         try {
-                          const parsed = JSON.parse(e.target.value);
+                          const parsed = JSON.parse(text);
                           if (parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)) {
-                            setEditingConfig({
-                              ...editingConfig,
-                              values: { ...editingConfig.values, env: parsed as Record<string, string> },
-                            });
+                            nextEnv = parsed as Record<string, string>;
                           }
                         } catch {
-                          /* */
+                          /* wait until valid JSON */
                         }
+                        setEditingConfig({
+                          ...editingConfig,
+                          values: {
+                            ...editingConfig.values,
+                            rawAllEnvText: text,
+                            rawExtraEnvText: extraEnvJson(nextEnv, connectorFormContext.knownKeys),
+                            env: nextEnv,
+                          },
+                        });
                       }}
                       spellCheck={false}
-                      className="w-full min-h-[120px] mt-3 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-mono"
+                      className="w-full min-h-[120px] mt-3 bg-black/40 border border-white/10 rounded-xl p-3 text-xs text-white font-mono resize-y"
                     />
                   </details>
                 </>

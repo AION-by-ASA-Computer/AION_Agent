@@ -8,7 +8,6 @@ from typing import Any, Dict, List, Optional
 from src.memory.mnemos.compress import compress_scope
 from src.memory.mnemos.orchestrator import mnemos_orchestrator
 from src.memory.mnemos.scope import (
-    default_tenant_id,
     project_scope,
     sanitize_project_slug,
 )

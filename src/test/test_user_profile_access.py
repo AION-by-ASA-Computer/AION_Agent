@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy import select, delete
+from sqlalchemy import delete
 from src.data.engine import get_async_session_maker
 from src.data.models import User, UserProfileAccess
 from src.api.main import get_allowed_profiles_for_user

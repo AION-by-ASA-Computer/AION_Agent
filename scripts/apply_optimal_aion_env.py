@@ -51,15 +51,12 @@ TUNING_GROUPS: dict[str, frozenset[str]] = {
         or k in {"AION_MODEL_MAX_CONTEXT"}
     ),
     "web": frozenset(
-        k
-        for k in OPTIMAL_RUNTIME_TUNING
-        if k.startswith("AION_WEB_") or k.startswith("AION_WIKIPEDIA_")
+        k for k in OPTIMAL_RUNTIME_TUNING if k.startswith("AION_WEB_")
     ),
     "tools": frozenset(
         {
             "AION_TOOL_CIRCUIT_BREAKER_ENABLED",
             "AION_TOOL_RESULT_MAX_CHARS",
-            "AION_CHROMA_SHARED_EMBEDDING_CACHE",
         }
     ),
 }

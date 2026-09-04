@@ -138,7 +138,6 @@ def setup_logging():
             from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
             from opentelemetry.sdk._logs.export import (
                 BatchLogRecordProcessor,
-                SimpleLogRecordProcessor,
             )
             from opentelemetry.sdk.resources import Resource
 

@@ -70,9 +70,6 @@ exec:
     - executable: "unzip"
       argv_prefix: []
       validate_path_positions: [1, 2, 3]
-    # Wren CLI (skills get/list, ask, query, context, profile, memory — see skills/wren/SKILL.md)
-    - executable: "wren"
-      argv_prefix: []
 
 limits:
   max_file_read_bytes: 2097152

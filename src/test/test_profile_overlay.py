@@ -1,6 +1,5 @@
 """Profile std + writable overlay merge and migration."""
 
-import os
 import textwrap
 from pathlib import Path
 

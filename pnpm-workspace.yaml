@@ -2,7 +2,6 @@ packages:
   - 'admin-ui'
   - 'chat-ui'
   - 'website'
-  - 'services/pi-long-run'
 allowBuilds:
   '@google/genai': false
   '@swc/core': true

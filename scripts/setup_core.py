@@ -17,7 +17,6 @@ SYNC_RUNTIME_ENV = ROOT / "scripts" / "sync_runtime_env.py"
 RUNTIME_EXTRAS = ROOT / "scripts" / "runtime_extras_setup.py"
 ENSURE_SKILL_PACKAGES = ROOT / "scripts" / "ensure_skill_packages.py"
 PATCH_SQL_QM_CONFIG = ROOT / "scripts" / "patch_sql_query_memory_config.py"
-PATCH_MEMPALACE_NAV_CONFIG = ROOT / "scripts" / "patch_mempalace_navigation_config.py"
 VENV_DIR = ROOT / ".venv"
 REQ = ROOT / "requirements.txt"
 
@@ -146,19 +145,6 @@ def main() -> int:
                 print(
                     "[warn] runtime_extras_setup exited non-zero (optional promo/fs steps)",
                     file=sys.stderr,
-                )
-        if PATCH_MEMPALACE_NAV_CONFIG.is_file() and not args.dry_run:
-            rc = _run(
-                [
-                    py_exec,
-                    str(PATCH_MEMPALACE_NAV_CONFIG),
-                    "--force-skills",
-                    "--force-profile-sync",
-                ]
-            )
-            if rc != 0:
-                print(
-                    "[warn] patch_mempalace_navigation_config failed", file=sys.stderr
                 )
         if PATCH_SQL_QM_CONFIG.is_file() and not args.dry_run:
             rc = _run([py_exec, str(PATCH_SQL_QM_CONFIG)])

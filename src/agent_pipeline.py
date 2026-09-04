@@ -22,7 +22,6 @@ except ImportError:
         return decorator
 
 
-import requests
 from haystack.dataclasses import ChatMessage, FileContent, ImageContent
 
 from .haystack_chat import chat_message_text
@@ -35,7 +34,6 @@ from .runtime.redis_client import (
 )
 from .api.history import history_manager
 from .memory.ltm_orchestrator import ltm_orchestrator
-from .memory import stm_consolidator
 from .memory.context_compressor import (
     CompactionTranscriptRow,
     build_transcript_from_rows,
@@ -1479,7 +1477,6 @@ class AgentPipeline:
 
             from src.runtime.sql_query_memory_context import (
                 clear_sql_qm_turn_context,
-                set_sql_qm_turn_context,
             )
 
             conv_proj: Optional[str] = None
@@ -1676,7 +1673,6 @@ class AgentPipeline:
                 build_prompt_snapshot,
                 prompt_debug_enabled,
                 store_prompt_snapshot,
-                track_prepend_layer,
             )
 
             # 4. Stream setup
@@ -2033,32 +2029,14 @@ class AgentPipeline:
                 preflight_messages=agent_messages,
             )
             from src.runtime.agent_exec import run_agent_turn
-            from src.runtime.pi_runtime.pi_turn_runner import run_pi_agent_turn
 
-            if effective_agent_mode == "long_run":
-                agent_task = asyncio.create_task(
-                    run_pi_agent_turn(
-                        session_id=self.session_id,
-                        profile_name=self.profile_name,
-                        user_id=self.user_id,
-                        user_message=augmented_user or user_input,
-                        preflight_messages=agent_messages,
-                        queue=queue,
-                        stop_event=stop_event,
-                        loop=loop,
-                        llm_provider_name=getattr(self, "_llm_provider_name", None),
-                        agent_tools=list(getattr(self.agent, "tools", None) or []),
-                        reasoning_effort=reasoning_effort,
-                    )
+            agent_task = asyncio.create_task(
+                run_agent_turn(
+                    agent_messages,
+                    sync_runner=_run_agent_sync,
+                    async_runner=_run_agent_async,
                 )
-            else:
-                agent_task = asyncio.create_task(
-                    run_agent_turn(
-                        agent_messages,
-                        sync_runner=_run_agent_sync,
-                        async_runner=_run_agent_async,
-                    )
-                )
+            )
 
             async def _cancel_checker() -> None:
                 try:
@@ -3462,21 +3440,6 @@ class AgentPipeline:
                 logger.error(">>> [FATAL] Error in run_stream: %s", e, exc_info=True)
                 yield {"type": "error", "content": str(e)}
             finally:
-                if effective_agent_mode == "long_run":
-                    try:
-                        from src.runtime.pi_runtime.pi_turn_runner import (
-                            sync_pi_messages_to_history,
-                        )
-
-                        await sync_pi_messages_to_history(
-                            self.session_id,
-                            self.profile_name,
-                            self.user_id,
-                            assistant_message_id,
-                            history_manager,
-                        )
-                    except Exception as sync_exc:
-                        logger.debug("Pi post-turn sync skipped: %s", sync_exc)
                 try:
                     from src.runtime.sql_query_memory_context import (
                         clear_sql_qm_turn_context,

@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import logging
 import uuid
-from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import List
 
-import yaml
 
 from ..agent_profile import profile_manager
 from ..session_workspace import ensure_session_dirs, sync_parent_uploads_to_child

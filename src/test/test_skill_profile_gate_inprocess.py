@@ -19,7 +19,7 @@ def test_block_skill_view_for_postgres_profile(monkeypatch):
         )
         assert msg is not None
         assert "is not enabled in the active profile" in msg
-        for allowed in ("wren", "openmetadata_guide", "datasource_memory_protocol"):
+        for allowed in ("openmetadata_guide", "datasource_memory_protocol"):
             assert (
                 block_skills_hub_tool_if_needed(
                     "skills_hub",

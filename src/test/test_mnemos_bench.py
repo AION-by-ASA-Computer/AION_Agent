@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -13,6 +12,15 @@ from src.data.models import Base
 
 @pytest.fixture()
 def bench_db(monkeypatch, tmp_path):
+    import src.data.engine as engine
+
+    if engine._engine is not None:
+        import asyncio
+
+        asyncio.run(engine._engine.dispose())
+    engine._engine = None
+    engine._session_factory = None
+
     url = f"sqlite+aiosqlite:///{tmp_path}/mnemos_bench.db"
     monkeypatch.setenv("AION_DB_URL", url)
     monkeypatch.setenv("AION_BENCHMARK_DATA_DIR", str(tmp_path / "benchmarks"))
@@ -28,7 +36,7 @@ def bench_db(monkeypatch, tmp_path):
     return tmp_path
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_mnemos_bench_smoke(bench_db, monkeypatch):
     from src.benchmarks.mnemos_bench.runner import run_mnemos_bench
 

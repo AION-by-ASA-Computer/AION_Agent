@@ -1,5 +1,3 @@
-"""Internal API routers (Pi worker, etc.)."""
+"""Internal API routers."""
 
-from .pi_tools import router as pi_tools_router
-
-__all__ = ["pi_tools_router"]
+__all__: list[str] = []

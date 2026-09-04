@@ -39,7 +39,7 @@ RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app/admin-ui
 COPY --from=deps /app/admin-ui/node_modules ./node_modules
 COPY admin-ui/ ./
-RUN pnpm run build
+RUN mkdir -p public && pnpm run build
 
 # ---------- runner ----------
 FROM node:${NODE_VERSION} AS runner

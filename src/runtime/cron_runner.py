@@ -219,7 +219,7 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
                 # ---------------------------------------------------------
                 chunk_count += 1
                 if chunk_count % 8 == 0:
-                    partial_text = "".join(parts).strip()
+                    "".join(parts).strip()
                     # Salva il messaggio parziale (Sostituisci con la tua funzione DB)
                     # await save_assistant_message(conversation_id, assistant_message_id, partial_text, user_id=user_id)
 

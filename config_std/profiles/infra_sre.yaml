@@ -29,6 +29,6 @@ mcp_servers:
 - prometheus
 - charts
 - grafana
-- memory
+- query_memory
 - skills_hub
 - session_sandbox

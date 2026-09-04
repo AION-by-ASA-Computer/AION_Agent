@@ -47,9 +47,6 @@ data/users/*/mcp_home/
 data/elements/
 # MemPalace LTM vector store (ChromaDB runtime per tenant/user)
 data/mempalace/
-# Wren Engine local credentials (synced from AION .env)
-wren/**/.env
-wren/
 # Runtime diagnostics (turn/agent debug JSONL — merge noise if tracked)
 data/diagnostics/
 data/diagnostics/agent-debug.jsonl

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import argparse
 import shutil
-import sys
 from pathlib import Path
 
 _SKIP_DIR_NAMES = frozenset({".git", "__pycache__", ".pytest_cache", "node_modules"})

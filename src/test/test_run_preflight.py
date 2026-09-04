@@ -1,7 +1,6 @@
 """Preflight gates for sandbox run tools."""
 
 import json
-from pathlib import Path
 
 from src.runtime.mcp_tool_args import preflight_run_file_tool
 

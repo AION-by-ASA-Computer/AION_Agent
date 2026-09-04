@@ -60,10 +60,6 @@ fan-out. If horizontal scaling is needed, use sticky sessions at the reverse pro
 - **Admin auth** (`AION_ADMIN_PASSWORD_AUTH`): always on by default (Grafana-style).
   Controls `/admin/*` endpoints. Separate from chat auth.
 
-Legacy env aliases (`AION_CHAINLIT_*`, `CHAINLIT_AUTH_SECRET`) are deprecated;
-new names (`AION_CHAT_*`) take precedence. The upgrade script
-(`scripts/upgrade-aion.sh`) auto-migrates them.
-
 ## MCP tool registration
 
 MCP tools are serialized via Haystack `Tool.to_dict()` → **must be top-level
@@ -78,8 +74,6 @@ connections per chat session.
 Single database at `data/aion.db` (SQLite via aiosqlite + SQLAlchemy).
 Migrations in `migrations/versions/`. Run them with Alembic (configured in
 `alembic.ini`). Redis is optional (`AION_REDIS_URL`), with an in-process fallback.
-
-Agent DB is a separate per-user SQLite under `data/agent_dbs/<tenant>/<user>.db`.
 
 ## Session management
 

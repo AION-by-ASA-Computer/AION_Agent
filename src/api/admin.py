@@ -10,7 +10,7 @@ import zipfile
 import shutil
 import copy
 from pydantic import BaseModel, Field
-from ..agent_profile import profile_manager, AgentProfile
+from ..agent_profile import profile_manager
 from ..skill_registry import skill_registry
 from ..mcp_manager import mcp_manager
 from ..security.checker import AIONAntivirus
@@ -40,7 +40,6 @@ except ImportError:
     pass
 from ..agent_pipeline import AgentPipeline
 from ..main import get_agent, set_event_loop
-from mcp import StdioServerParameters
 from .auth_login import require_admin_role
 from .settings_api import router as settings_router
 
@@ -71,12 +70,10 @@ from ..data.models import (
     Step,
     Attachment,
     SecurityScan,
-    TrustedPath,
     McpServerConfig,
 )
 from ..data.ids import new_uuid7_str
-from sqlalchemy import select, delete, func, desc
-from .v1.mcp_integrations import _credential_user_id
+from sqlalchemy import select, delete
 
 logger = logging.getLogger("aion.api.admin")
 
@@ -115,7 +112,7 @@ def _synthetic_npx_market_item(item_id: str) -> Optional[Dict[str, Any]]:
     pkg = s.split(":", 1)[-1].strip()
     if not pkg:
         return None
-    name = pkg.split("/")[-1].replace("@", "").replace(".", "_") or "mcp_npx"
+    pkg.split("/")[-1].replace("@", "").replace(".", "_") or "mcp_npx"
     return {
         "id": s,
         "name": pkg,
@@ -1719,7 +1716,6 @@ async def _call_llm_advise_async(
     Returns: (markdown_response, error_string_or_None)
     """
     import json as _json
-    import httpx
     import logging as _logging
 
     _log = _logging.getLogger("aion.admin.advise")
@@ -1730,7 +1726,7 @@ async def _call_llm_advise_async(
         base, model, token = resolve_llm_credentials()
         if not base.endswith("/v1"):
             base = base + "/v1" if "/v1" not in base else base.split("/v1")[0] + "/v1"
-        url = base.rstrip("/") + "/chat/completions"
+        base.rstrip("/") + "/chat/completions"
     except Exception as e:
         return "", f"Errore costruzione URL LLM: {e}"
 
@@ -2297,7 +2293,7 @@ async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -
             },
         )
     elif target.get("install_type") == "git":
-        dest_dir = os.path.join("mcp_servers", name)
+        os.path.join("mcp_servers", name)
         clone_rel = f"mcp_servers/{name}".replace("\\", "/")
         config["aion_market_install"] = "git"
         config["aion_market_clone_path"] = clone_rel
@@ -2948,25 +2944,6 @@ async def delete_mcp(name: str):
         )
         await session.commit()
     return {"status": "success", "cleanup": cleanup}
-
-
-@router.get("/plugins")
-async def admin_list_plugins():
-    root = _project_root() / "data" / "plugins"
-    if not root.is_dir():
-        return {"plugins": []}
-    return {
-        "plugins": [
-            p.stem for p in sorted(root.glob("*.py")) if not p.name.startswith("_")
-        ]
-    }
-
-
-@router.post("/plugins/reload")
-async def admin_reload_plugins():
-    from src.runtime.plugin_loader import load_plugins
-
-    return {"loaded": load_plugins()}
 
 
 @router.get("/subagents")

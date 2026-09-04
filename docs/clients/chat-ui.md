@@ -54,7 +54,7 @@ Backend (`.env`): `AION_CORS_ORIGINS` can list `http://localhost:8003`; default 
 - `GET /sessions/{id}/events/stream` — session Redis events (plan approval)
 - `POST /chat/stop` — stream interruption
 - `GET /profiles`
-- `POST /auth/login`, `GET /auth/me` — password login (requires `AION_CHAT_PASSWORD_AUTH=1`, legacy: `AION_CHAINLIT_PASSWORD_AUTH`)
+- `POST /auth/login`, `GET /auth/me` — password login (requires `AION_CHAT_PASSWORD_AUTH=1`)
 - `GET|POST /chat-ui/conversations` — list/create conversations on the unified DB
 - `GET /chat-ui/conversations/{id}/stream-status` — `/chat` turn still executing (reconnection after navigation)
 - `POST /v1/chat/stream` — extended with `user_message_id`, `assistant_message_id`, `message_source` (API key)

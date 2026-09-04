@@ -1,14 +1,12 @@
 import asyncio
-import os
 import pytest
 import secrets
 from pathlib import Path
-from unittest.mock import MagicMock, AsyncMock
 
 from src.data.bootstrap import ensure_bootstrap_schema
 from src.data.engine import init_engine
 from src.runtime import credential_store as cs
-from src.api.admin import _is_secret_key, _is_literal_secret, _credential_user_id
+from src.api.admin import _is_secret_key, _is_literal_secret
 
 
 @pytest.fixture()

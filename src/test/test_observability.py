@@ -1,5 +1,4 @@
 import unittest
-import time
 import asyncio
 from unittest.mock import MagicMock, AsyncMock
 
@@ -496,6 +495,102 @@ class TestObservabilityMetrics(unittest.TestCase):
             self.assertEqual(overview_u1.user_metrics[0].user_id, "user_test_1")
         finally:
             metrics_api._query_prometheus = orig_query_prom
+
+    def test_tool_error_consistency_between_overview_and_profile_breakdown(self):
+        """Test that tool errors are reflected consistently in both tool_metrics table and profile tools breakdown."""
+        from src.api.metrics_api import get_metrics_overview
+        import src.api.metrics_api as metrics_api
+
+        orig_query_prom = metrics_api._query_prometheus
+        metrics_api._query_prometheus = lambda q: None
+
+        try:
+            # Clear in-memory counters
+            metrics.aion_tool_calls_total.prom_metric._metrics.clear()
+
+            # Record 1 success and 1 error for retrieve_project on plane
+            metrics.aion_tool_calls_total.labels(
+                instance_id="test_inst",
+                tenant_id="user_test",
+                profile="plane_assistant",
+                tool_name="retrieve_project",
+                mcp_server="plane",
+                status="error",
+            ).inc(1)
+
+            overview = get_metrics_overview(time_range="all")
+
+            # 1. Verify in tool_metrics (bottom table)
+            tool_entry = next(
+                (
+                    t
+                    for t in overview.tool_metrics
+                    if t.tool_name == "retrieve_project" and t.mcp_server == "plane"
+                ),
+                None,
+            )
+            self.assertIsNotNone(
+                tool_entry, "retrieve_project (plane) should be in tool_metrics"
+            )
+            self.assertEqual(tool_entry.call_count, 1)
+            self.assertEqual(tool_entry.error_count, 1)
+            self.assertEqual(tool_entry.success_rate, 0.0)
+
+            # 2. Verify in user_metrics profile breakdown (top table)
+            u_metric = next(
+                (u for u in overview.user_metrics if u.user_id == "user_test"), None
+            )
+            self.assertIsNotNone(u_metric)
+            p_metric = next(
+                (
+                    p
+                    for p in u_metric.profile_breakdown
+                    if p.profile == "plane_assistant"
+                ),
+                None,
+            )
+            self.assertIsNotNone(p_metric)
+            tb_entry = next(
+                (
+                    t
+                    for t in p_metric.tools_breakdown
+                    if t.tool_name == "retrieve_project" and t.mcp_server == "plane"
+                ),
+                None,
+            )
+            self.assertIsNotNone(tb_entry)
+            self.assertEqual(tb_entry.call_count, 1)
+            self.assertEqual(tb_entry.error_count, 1)
+        finally:
+            metrics_api._query_prometheus = orig_query_prom
+
+    def test_observability_connection_probe(self):
+        """Test the probe and connectivity testing helper endpoint for Prometheus, OTel and Opik."""
+        from src.api.metrics_api import (
+            test_observability_connection,
+            ProbeObservabilityRequest,
+            _get_prometheus_url,
+        )
+
+        # Test dynamic prometheus URL resolution
+        default_url = _get_prometheus_url()
+        self.assertIn("9090", default_url)
+
+        # Test probe endpoint with unreachable port
+        res_prom = test_observability_connection(
+            ProbeObservabilityRequest(target="prometheus", url="http://127.0.0.1:59999")
+        )
+        self.assertEqual(res_prom.target, "prometheus")
+        self.assertFalse(res_prom.success)
+        self.assertIsNotNone(res_prom.latency_ms)
+
+        res_otel = test_observability_connection(
+            ProbeObservabilityRequest(
+                target="otel", endpoint="127.0.0.1:59999", protocol="grpc"
+            )
+        )
+        self.assertEqual(res_otel.target, "otel")
+        self.assertFalse(res_otel.success)
 
 
 if __name__ == "__main__":

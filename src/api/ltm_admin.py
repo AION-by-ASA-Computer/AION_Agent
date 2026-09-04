@@ -7,13 +7,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 
 from src.memory.ltm_audit import append_ltm_audit
 from src.memory.mnemos.compress import compress_scope
 from src.memory.mnemos.scope import (
-    default_tenant_id,
     global_scope,
     project_scope,
     user_scope,

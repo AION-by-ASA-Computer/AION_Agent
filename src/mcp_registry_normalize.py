@@ -6,11 +6,10 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import shutil
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from .mcp_connector_catalog import (
     infer_connector_id_for_registry_name,

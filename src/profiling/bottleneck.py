@@ -84,7 +84,7 @@ class BottleneckDetector:
                 }
             )
 
-        # 3. Context Builder / Wake Up (MemPalace-bound)
+        # 3. Context Builder / Wake Up (Mnemos-bound)
         # Assuming wake_up > 1.0s is slow
         slow_wakeups = sum(
             1 for r in records if r.get("phases", {}).get("wake_up", 0) > 1.0
@@ -92,9 +92,9 @@ class BottleneckDetector:
         if len(records) > 0 and (slow_wakeups / len(records)) > 0.3:
             bottlenecks.append(
                 {
-                    "type": "mempalace_bound",
+                    "type": "mnemos_bound",
                     "severity": "low",
-                    "message": "Il recupero della LTM (MemPalace wake_up) impiega più di 1 secondo in oltre il 30% dei casi. Ridurre top_drawers.",
+                    "message": "Il recupero della LTM (Mnemos wake_up) impiega più di 1 secondo in oltre il 30% dei casi.",
                 }
             )
 

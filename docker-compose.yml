@@ -15,8 +15,6 @@ x-aion-env: &aion-env
   env_file:
     - .env
 
-    
-
 services:
   caddy:
     image: caddy:2.8-alpine
@@ -50,7 +48,7 @@ services:
       args:
         PYTHON_VERSION: ${PYTHON_VERSION:-3.13-slim}
     image: aion/sandbox:${AION_SANDBOX_IMAGE_TAG:-latest}
-    profiles: ["sandbox-build"]
+    profiles: [ "sandbox-build" ]
 
   backend:
     build:
@@ -83,8 +81,6 @@ services:
       AION_ROOT_PATH: /api
       # Docs API disabilitati in produzione (security hardening by default).
       AION_API_DOCS_ENABLED: "0"
-      AION_WREN_HOME: /app/data/wren/.wren
-      AION_NORTHWIND_DB_URL: /app/data/db_test
       # Session sandbox container isolation (Podman rootless on host)
       AION_SANDBOX_BACKEND: ${AION_SANDBOX_BACKEND:-container}
       AION_CONTAINER_RUNTIME: ${AION_CONTAINER_RUNTIME:-podman}
@@ -93,9 +89,6 @@ services:
       CONTAINER_HOST: unix:///run/podman/podman.sock
       AION_SANDBOX_FAIL_CLOSED: ${AION_SANDBOX_FAIL_CLOSED:-1}
       AION_SANDBOX_MCP_JAIL: ${AION_SANDBOX_MCP_JAIL:-1}
-      AION_PI_WORKER_URL: ${AION_PI_WORKER_URL:-http://pi-worker:8791}
-      AION_PI_WORKER_SECRET: ${AION_PI_WORKER_SECRET:-}
-      AION_LONG_RUN_ENABLED: ${AION_LONG_RUN_ENABLED:-0}
       # Absolute host path to data/ (required for Podman session bind-mounts + live src overlay)
       AION_SANDBOX_HOST_DATA_DIR: ${AION_SANDBOX_HOST_DATA_DIR}
     volumes:
@@ -105,7 +98,6 @@ services:
       # Host-visible sessions so rootless Podman can bind-mount per chat (see AION_SANDBOX_HOST_DATA_DIR)
       - ./data/sessions:/app/data/sessions
       - ./data/db_test:/app/data/db_test
-      - ~/.wren:/app/data/wren/.wren:ro
       - ${AION_PODMAN_SOCKET_HOST:-/run/user/1000/podman/podman.sock}:/run/podman/podman.sock
       # Versioned templates from git (git pull + restart propagates without image rebuild)
       - ./config_std:/app/config_std:ro
@@ -122,7 +114,7 @@ services:
       - "contractai-db:host-gateway"
       - "host.docker.internal:host-gateway"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8001/health"]
+      test: [ "CMD", "curl", "-fsS", "http://127.0.0.1:8001/health" ]
       interval: 15s
       timeout: 10s
       retries: 8
@@ -135,26 +127,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-
-  pi-worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.pi-worker
-    image: aion/pi-worker:latest
-    restart: unless-stopped
-    environment:
-      AION_PI_WORKER_PORT: "8791"
-      AION_PI_WORKER_HOST: "0.0.0.0"
-      AION_PI_WORKER_SECRET: ${AION_PI_WORKER_SECRET:-}
-    expose:
-      - "8791"
-    networks: [ aion_net ]
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8791/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
 
   chat-ui:
     build:
