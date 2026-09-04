@@ -38,7 +38,7 @@ RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app/chat-ui
 COPY --from=deps /app/chat-ui/node_modules ./node_modules
 COPY chat-ui/ ./
-RUN pnpm run build
+RUN mkdir -p public && pnpm run build
 
 # ---------- runner ----------
 FROM node:${NODE_VERSION} AS runner
