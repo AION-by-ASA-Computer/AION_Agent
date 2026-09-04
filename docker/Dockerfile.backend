@@ -102,6 +102,11 @@ COPY migrations/       ./migrations/
 COPY scripts/          ./scripts/
 COPY wre[n]/            ./wren/
 COPY alembic.ini       ./
+# Needed at runtime inside the image (GHCR mode has no host bind-mount of the repo):
+#   version.json                     -> _read_version() in upgrade_core.py / sync_config.py
+#   requirements-sandbox-skills.txt  -> _ensure_skill_packages() during reconcile
+COPY version.json      ./
+COPY requirements-sandbox-skills.txt ./
 COPY docker/backend-entrypoint.sh /usr/local/bin/aion-backend-entrypoint.sh
 
 RUN sed -i 's/\r$//' /usr/local/bin/aion-backend-entrypoint.sh \
