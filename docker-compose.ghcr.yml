@@ -4,9 +4,9 @@
 # Caddy gestisce TLS automaticamente via Let's Encrypt (richiede porte 80/443 pubbliche).
 #
 # Utilizza le immagini pre-compilate da GHCR (GitHub Container Registry).
-# I servizi sandbox e pi-worker vengono compilati localmente.
+# Il solo servizio sandbox viene compilato localmente (profilo `sandbox-build`).
 #
-# Variabili principali (vedi .env.docker.example):
+# Variabili principali (vedi .env.example):
 #   DOMAIN, LETS_ENCRYPT_EMAIL, AION_API_URL, AION_MODEL, secrets vari.
 #
 # Avvio:           docker compose -f docker-compose.ghcr.yml up -d
@@ -88,8 +88,6 @@ services:
       CONTAINER_HOST: unix:///run/podman/podman.sock
       AION_SANDBOX_FAIL_CLOSED: ${AION_SANDBOX_FAIL_CLOSED:-1}
       AION_SANDBOX_MCP_JAIL: ${AION_SANDBOX_MCP_JAIL:-1}
-      AION_PI_WORKER_URL: ${AION_PI_WORKER_URL:-http://pi-worker:8791}
-      AION_PI_WORKER_SECRET: ${AION_PI_WORKER_SECRET:-}
       AION_LONG_RUN_ENABLED: ${AION_LONG_RUN_ENABLED:-0}
       # Absolute host path to data/ (required for Podman session bind-mounts + live src overlay)
       AION_SANDBOX_HOST_DATA_DIR: ${AION_SANDBOX_HOST_DATA_DIR}
@@ -124,26 +122,6 @@ services:
     depends_on:
       redis:
         condition: service_healthy
-
-  pi-worker:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.pi-worker
-    image: aion/pi-worker:latest
-    restart: unless-stopped
-    environment:
-      AION_PI_WORKER_PORT: "8791"
-      AION_PI_WORKER_HOST: "0.0.0.0"
-      AION_PI_WORKER_SECRET: ${AION_PI_WORKER_SECRET:-}
-    expose:
-      - "8791"
-    networks: [ aion_net ]
-    healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8791/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
 
   chat-ui:
     image: ghcr.io/aion-by-asa-computer/aion-chat-ui:${AION_VERSION:-latest}
