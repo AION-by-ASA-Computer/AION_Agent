@@ -5,6 +5,52 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.4.0...v1.5.0) (2026-09-04)
+
+
+### Features
+
+* add authenticated sync chat API for n8n automation. ([c83e26a](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/c83e26aadf61e62dc9fae44355c19187e96a8ef7))
+* add Dockerfiles for admin-ui and chat-ui deployments and initialize chat-ui public directory ([08ae282](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/08ae282c2d1ca1420bcd3a53dd181cbe6006769f))
+* add geocoding functionality and update configuration files ([6ed85a8](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/6ed85a8b044337a97784a14337724e1732a1d8e6))
+* add PDF evidence cropping functionality for Word reports ([42368e4](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/42368e4cb27553058fe4ff3b3592fcd95593819d))
+* ai wizard for profiles and skills creation, metrics tab ([53e02da](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/53e02da7df0127907c729e99a00baba1accef209))
+* AI wizard for profiles and skills creation, refactor agent profiles tab in admin ui, new Evaluation & Metrics tab in admin UI ([ca438db](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/ca438dbb4afa136cee5197e74f179567aee46e53))
+* enhance backend entrypoint and documentation for legacy Word conversion ([729168c](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/729168c493fa61f5b335403bb59341bfefd2d8f0))
+* enhance chat base URL resolution for OAuth redirects ([22037a0](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/22037a0e2074648373e41fe23721fe80ef7724a4))
+* enhance error handling and web search configuration in agent pipeline ([40e3cdc](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/40e3cdcf73215301845123b43512a4669177f199))
+* enhance file upload management in chat workspace ([e04abca](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/e04abca424ed86648c0e7c0b266280bf38120018))
+* enhance memory management and evaluation features ([81f9e53](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/81f9e53854c4048fb3d65c8136eeb5bf72ffc5a5))
+* enhance Mnemos configuration and benchmarking capabilities ([7b2d705](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7b2d7055fc069d3baa5cb106c1bd747810dffe62))
+* enhance Mnemos documentation and configuration ([835a17c](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/835a17c256487bf42d149c81eca56a1c48dc9c02))
+* enhance OAuth redirect URI handling and configuration ([dfd8e1b](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/dfd8e1bd5a454acb3abdb6522994cd3e13b5f7f8))
+* enhance profile synchronization with new reconciliation option ([6e31dc8](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/6e31dc8fbed2d1f756eb244e2668e0a7cbe3d361))
+* enhance Profiles component with integration and MCP handling ([9975566](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/997556669c61a18666f5ce2208c9e1763e31c11d))
+* enhance styling and layout for dark theme and component consistency ([61e1eed](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/61e1eedc4f48ed7caf7723ef7b9b36e5b537e02d))
+* implement admin OAuth setup checks and enhance integration handling ([746fabd](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/746fabdd6ff908273f4779a7b2e27d3f760f17f0))
+* implement dynamic client registration for OAuth integration ([89fed82](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/89fed82bbf22ce09eb6aabd523fad6f60d9aaae6))
+* implement legacy Word document conversion and update related configurations ([60a6826](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/60a682601ddf7a767a0544b67294b06a4d7d8075))
+* implement long document protocol across profiles and enhance document ingestion ([b2cc4e1](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/b2cc4e10be8d5c603a46dd69262a9e6d55b8c68e))
+* implement remote-bridge MCP server support and enhance command resolution ([7f81d55](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7f81d55a6b8fe6678823fcd51532d71854fb5c25))
+* improve OAuth redirect URI handling and configuration ([52bb7e2](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/52bb7e2b78c58702db2037dda2c4fcdfdb4eb8d9))
+* introduce adversarial benchmarking suite for Mnemos ([a7c069b](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/a7c069b877a34d086c7d780f1934bff75a34e541))
+* make get_python_exe a static method in MCPManager ([4155910](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/41559100fdcd379f4c40ee08a4492ded72e4c51b))
+* mcp v2 major updates remote and oauth ([39b3315](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/39b3315dcaeb39ce1319d6444f168743f64fd3c1))
+* new Ai wizard for profiles and skill, refactor Agent Profiles tab ([6a2f70a](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/6a2f70a90d79e868ddbcd0d133d6d38be467b4c3))
+* refine OAuth redirect URI handling and logging ([42c1909](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/42c19098092927409dba9118a2421b7d9737281f))
+* update environment configuration and remove legacy MemPalace references ([f7b5708](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/f7b5708923b2eb064e8920bd6206cffcc7697966))
+* update Mnemos environment configuration and integration ([7830e68](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7830e68cc9f15242cd92b16a10352c32d58277d7))
+* update Word document protocols and versioning ([36882e6](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/36882e6aba346de5ccdbd55bc5d9596d8045bb37))
+
+
+### Bug Fixes
+
+* cleaning repo and remove old and unused scripts ([91e4711](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/91e47115d3b262073f8ce0f6de1062d1cbd33ac7))
+* cleaning repo and remove old and unused scripts ([566da9e](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/566da9ea879578189c4dd6ffc2b237a345b2a684))
+* improve long document ingestion and read ([7f6386b](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7f6386b6eaea97002d392ef7fd2197bab2c916d5))
+* setup upgrade fix ([77f72f0](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/77f72f0b769406de3d7ec0e0c1df0cbb8a7f0083))
+* update localization placeholders for status line in English and Italian ([8a74599](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/8a745992bdc635af54057427c830fa1575673678))
+
 ## [1.4.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.3.0...v1.4.0) (2026-07-30)
 
 
