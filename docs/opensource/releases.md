@@ -90,18 +90,14 @@ Published platforms: **`linux/amd64`** and **`linux/arm64`** (Apple Silicon, ARM
 
 ### Deploy from GHCR
 
-```bash
-cp .env.example .env
-./scripts/setup-aion-env.sh --docker
+The recommended way to deploy pre-built images is using the standalone installer:
 
+```bash
 # Latest release (dev/staging):
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
+curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash
 
 # Pinned version (production):
-export AION_VERSION=1.0.0
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
+curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash -s -- --version 1.0.0
 ```
 
 ### Build locally (default)
