@@ -13,7 +13,6 @@ from typing import Any, Dict, List, Optional
 
 from haystack.dataclasses import ChatMessage
 
-from src.haystack_chat import chat_message_text
 from src.runtime.litellm_errors import (
     LiteLLMErrorCode,
     classify_litellm_error,

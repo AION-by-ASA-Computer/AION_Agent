@@ -145,9 +145,6 @@ Hard limits on the single turn to avoid LLM runaway loops:
 | Variable | Default | Description |
 |-----------|---------|-------------|
 | `AION_CHAT_AUTH_TOKEN_TTL_SEC` | `604800` | chat-ui JWT token TTL (7 days) |
-| `AION_AGENT_DB_ADMIN_SQL_WRITE` | `0` | Enables SQL write on admin agent-db (risky in prod) |
-| `AION_AGENT_DB_ADMIN_STRICT_IDENTITY` | `1` | Requires X-AION-Identity consistent with session |
-| `AION_AGENT_DB_EMBED_SECRET` |  | Secret HMAC embedded token /agent-db |
 | `AION_FS_POLICY_PATH` |  | Filesystem policy YAML path (empty = default in-code) |
 | `AION_PROMO_CAPTURE_ENABLED` | `1` | Enables PNG export via MCP `promo_render` |
 | `AION_PROMO_CAPTURE_TIMEOUT_MS` | (optional) | Playwright capture timeout (ms) |

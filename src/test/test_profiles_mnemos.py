@@ -17,6 +17,7 @@ MNEMOS_EXEMPT = frozenset(
         "coding_workspace.yaml",
         "data_agent.yaml",
         "mcp_integration_advisor.yaml",
+        "aion_wizard_creator.yaml",
     }
 )
 

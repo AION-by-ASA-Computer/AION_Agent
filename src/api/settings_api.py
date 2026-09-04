@@ -182,6 +182,29 @@ async def update_settings(update: SettingsUpdate):
                     detail="LLM Timeout (AION_LLM_TIMEOUT) must be a valid integer.",
                 )
 
+        # Validation: Session cleanup settings must be valid non-negative integers
+        cleanup_days_str = merged.get("AION_SESSION_CLEANUP_MAX_AGE_DAYS")
+        if cleanup_days_str:
+            try:
+                if int(cleanup_days_str) < 0:
+                    raise ValueError()
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Session Cleanup Max Age (AION_SESSION_CLEANUP_MAX_AGE_DAYS) must be a non-negative integer.",
+                )
+
+        cleanup_interval_str = merged.get("AION_SESSION_CLEANUP_INTERVAL_SEC")
+        if cleanup_interval_str:
+            try:
+                if int(cleanup_interval_str) < 0:
+                    raise ValueError()
+            except ValueError:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Session Cleanup Interval (AION_SESSION_CLEANUP_INTERVAL_SEC) must be a non-negative integer.",
+                )
+
         _write_env(merged)
         _reload_env()
 

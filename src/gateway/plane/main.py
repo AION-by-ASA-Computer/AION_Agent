@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from contextlib import asynccontextmanager
-from typing import Any, Dict, List, Optional
+from typing import Any, List, Optional
 from uuid import UUID
 
 import httpx

@@ -4,11 +4,9 @@ import logging
 import json
 import requests
 import numpy as np
-import asyncio
-from typing import List, Tuple, Optional, Dict, Any
-from datetime import datetime
+from typing import List, Optional, Dict, Any
 
-from sqlalchemy import select, update, delete, func
+from sqlalchemy import select, delete
 from .data.engine import get_async_session_maker
 from .data.models import CachedQuery
 

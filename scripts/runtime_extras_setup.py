@@ -106,60 +106,7 @@ def ensure_fs_policy_dev_active(env_path: Path, *, dry_run: bool, report) -> int
     return 0
 
 
-_WREN_ALLOWLIST_BLOCK = """    # --- Wren CLI (semantic SQL layer; skills/wren/SKILL.md) ---
-    - executable: "wren"
-      argv_prefix: []
-"""
 
-
-def _resolve_active_fs_policy_path(env_path: Path) -> Path | None:
-    """Return config/fs_policy.yaml (or path from .env) when present."""
-    if env_path.is_file():
-        for key, val, _ in _parse_env_simple(env_path):
-            if key == "AION_FS_POLICY_PATH" and val.strip():
-                p = Path(val.strip())
-                if not p.is_absolute():
-                    p = ROOT / p
-                return p
-    active = CONFIG / "fs_policy.yaml"
-    if active.is_file():
-        return active
-    return None
-
-
-def ensure_fs_policy_wren_allowlist(env_path: Path, *, dry_run: bool, report) -> int:
-    """Append ``wren`` to exec.allowlist on the active fs_policy file (idempotent)."""
-    policy = _resolve_active_fs_policy_path(env_path)
-    if policy is None or not policy.is_file():
-        report.log_ok("FS policy wren: no active policy file, skip")
-        return 0
-    try:
-        text = policy.read_text(encoding="utf-8")
-    except OSError as e:
-        report.log_warn(f"FS policy wren: read failed ({policy}): {e}")
-        return 0
-    if 'executable: "wren"' in text or "executable: wren\n" in text:
-        report.log_ok("FS policy wren: already in allowlist")
-        return 0
-    if "allowlist:" not in text:
-        report.log_warn(f"FS policy wren: no allowlist section in {policy.name}, skip")
-        return 0
-    if "\nlimits:" in text:
-        new_text = text.replace("\nlimits:", f"\n{_WREN_ALLOWLIST_BLOCK}\nlimits:", 1)
-    else:
-        new_text = text.rstrip() + "\n" + _WREN_ALLOWLIST_BLOCK + "\n"
-    if dry_run:
-        report.log_ok(
-            f"FS policy wren: would patch {policy.relative_to(ROOT)} (dry-run)"
-        )
-        return 0
-    try:
-        policy.write_text(new_text, encoding="utf-8")
-    except OSError as e:
-        report.log_fail(f"FS policy wren: write failed ({policy}): {e}")
-        return 3
-    report.log_ok(f"FS policy wren: patched {policy.relative_to(ROOT)}")
-    return 0
 
 
 def ensure_promo_env_keys(env_path: Path, *, dry_run: bool, report) -> int:
@@ -229,9 +176,6 @@ def run_runtime_extras(
 ) -> int:
     """Full optional runtime extras chain."""
     rc = ensure_fs_policy_files(dry_run=dry_run, report=report)
-    if rc != 0:
-        return rc
-    rc = ensure_fs_policy_wren_allowlist(env_path, dry_run=dry_run, report=report)
     if rc != 0:
         return rc
     rc = ensure_promo_env_keys(env_path, dry_run=dry_run, report=report)

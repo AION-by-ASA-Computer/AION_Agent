@@ -9,7 +9,7 @@ import logging
 import os
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 try:
     import pwd
@@ -41,16 +41,6 @@ def _parse_dotenv_file(path: Path) -> Dict[str, str]:
     return out
 
 
-def _resolve_wren_project_home() -> Optional[Path]:
-    raw = (os.environ.get("AION_WREN_PROJECT_PATH") or "").strip()
-    if not raw:
-        return None
-    path = Path(raw).expanduser()
-    if not path.is_absolute():
-        path = _REPO_ROOT / path
-    return path.resolve()
-
-
 _SYNTHETIC_HOME_MARKERS = (
     "/data/sessions/",
     "/data/users/",
@@ -75,26 +65,8 @@ def _system_user_home() -> Path:
     return Path.home().expanduser().resolve()
 
 
-def _resolve_wren_home() -> Path:
-    """Wren profiles live under WREN_HOME — never under session or MCP-isolated HOME."""
-    for key in ("WREN_HOME", "AION_WREN_HOME"):
-        raw = (os.environ.get(key) or "").strip()
-        if raw:
-            return Path(raw).expanduser().resolve()
-
-    repo_wren = (_REPO_ROOT / "data" / "wren" / ".wren").resolve()
-    if (repo_wren / "profiles.yml").is_file():
-        return repo_wren
-
-    proc_home = (os.environ.get("HOME") or "").strip()
-    if proc_home and not _is_synthetic_home(proc_home):
-        return (Path(proc_home).expanduser() / ".wren").resolve()
-
-    return (_system_user_home() / ".wren").resolve()
-
-
 def _extend_path_for_exec(env: Dict[str, str]) -> None:
-    """Prefer repo .venv/bin (or Scripts on Windows) so MCP subprocesses find wren without global install."""
+    """Prefer repo .venv/bin (or Scripts on Windows) so MCP subprocesses find executables without global install."""
     extra: list[str] = []
     venv_bin = _REPO_ROOT / ".venv" / "bin"
     if venv_bin.is_dir():
@@ -107,16 +79,6 @@ def _extend_path_for_exec(env: Dict[str, str]) -> None:
         if prefix and prefix not in current.split(os.pathsep):
             current = f"{prefix}{os.pathsep}{current}" if current else prefix
     env["PATH"] = current
-
-
-def _wren_exec_timeout_sec(requested: float) -> float:
-    if requested != 30.0:
-        return requested
-    raw = (os.environ.get("AION_WREN_EXEC_TIMEOUT_SEC") or "180").strip()
-    try:
-        return max(30.0, float(raw))
-    except ValueError:
-        return 180.0
 
 
 def _build_exec_env(sid: str, argv: List[str]) -> Dict[str, str]:
@@ -159,22 +121,6 @@ def _build_exec_env(sid: str, argv: List[str]) -> Dict[str, str]:
         for k, v in os.environ.items():
             if k.upper() in win_keys:
                 env[k] = v
-    if not _exe_matches("wren", argv[0]):
-        return env
-    wren_home = _resolve_wren_home()
-    env["WREN_HOME"] = str(wren_home)
-    project_home = _resolve_wren_project_home()
-    if project_home is not None:
-        env["WREN_PROJECT_HOME"] = str(project_home)
-        for key, val in _parse_dotenv_file(project_home / ".env").items():
-            env.setdefault(key, val)
-    logger.debug(
-        "wren_exec_env session=%s WREN_HOME=%s WREN_PROJECT_HOME=%s PATH_head=%s",
-        sid[:8],
-        env.get("WREN_HOME"),
-        env.get("WREN_PROJECT_HOME"),
-        (env.get("PATH") or "").split(os.pathsep)[:3],
-    )
     return env
 
 
@@ -332,9 +278,6 @@ def run_allowlisted(
     path_positions = entry.get("validate_path_positions") or []
     if path_positions:
         _validate_path_args(argv, sid, path_positions)
-
-    if _exe_matches("wren", argv[0]):
-        timeout_sec = _wren_exec_timeout_sec(timeout_sec)
 
     cwd = str(session_root(sid))
     if len(argv) >= 2 and argv[1].startswith("scripts/"):

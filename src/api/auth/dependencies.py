@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Any, List, Optional
+from typing import List, Optional
 
 from fastapi import Depends, Header, HTTPException, status
 

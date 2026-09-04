@@ -11,7 +11,6 @@ import {
   Settings,
   Globe,
   Brain,
-  Layers,
   ClipboardList,
   LogOut,
   KeyRound,
@@ -36,13 +35,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setEmbedded(v);
     setUserId(getStoredUserId());
   }, [pathname]);
-  const isDbEditor = pathname.startsWith("/agent-db/");
   const isAuthPage = pathname === "/login" || pathname === "/change-password" || pathname === "/first-setup";
-  const hideChrome = embedded && isDbEditor;
 
-  if (hideChrome) {
-    return <main className="h-screen overflow-auto bg-[#0a0a0a] p-2">{children}</main>;
-  }
   if (isAuthPage) {
     // Auth pages (login / change-password): no sidebar, full screen.
     return <main className="h-screen w-screen overflow-auto bg-[#0a0a0a]">{children}</main>;
@@ -66,7 +60,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { name: "Scheduled jobs", href: "/schedules", icon: Clock },
     { name: "API Keys", href: "/api-keys", icon: ShieldCheck },
     { name: "Memory", href: "/memory", icon: Brain },
-    { name: "Plugins & Hooks", href: "/plugins", icon: Layers },
     { name: "Security Audit", href: "/security", icon: ShieldCheck },
     { name: "System Health", href: "/system", icon: LayoutDashboard },
     { name: "Settings", href: "/settings", icon: Settings },

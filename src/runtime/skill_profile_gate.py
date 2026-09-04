@@ -42,7 +42,7 @@ def skill_view_denied_message(skill_name: str, profile_slug: str) -> str:
     return (
         f"Skill '{skill_name}' is not enabled in the active profile `{profile_slug}`. "
         f"Allowed skills: {', '.join(allowed) or '(none)'}. "
-        "For DB navigation use `mempalace_search` / chat-ui project drawer, "
+        "For DB navigation use `memory_recall` / chat-ui project memory, "
         "not `skill_view` on skills removed from the profile."
     )
 

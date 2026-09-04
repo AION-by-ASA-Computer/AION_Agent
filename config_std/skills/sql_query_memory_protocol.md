@@ -5,7 +5,7 @@ description: QueryMemory SQL — reuse validated SELECT queries per project (any
 
 # SQL QueryMemory Protocol
 
-**Canonical guide:** `datasource_memory_protocol` (SQL layer + MemPalace navigation pairing).
+**Canonical guide:** `datasource_memory_protocol` (SQL layer + Mnemos notes pairing).
 
 **Scope:** analytical **SELECT** on relational databases. **Never** PromQL tools (`search_known_query`, `save_successful_query`).
 

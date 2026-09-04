@@ -34,11 +34,7 @@ def circuit_breaker_enabled() -> bool:
 
 
 def _max_repeat() -> int:
-    raw = (
-        os.getenv("AION_TOOL_CIRCUIT_BREAKER_MAX")
-        or os.getenv("AION_PI_TOOL_CIRCUIT_BREAKER_MAX")
-        or ""
-    ).strip()
+    raw = os.getenv("AION_TOOL_CIRCUIT_BREAKER_MAX", "").strip()
     if raw:
         try:
             return max(1, int(raw))

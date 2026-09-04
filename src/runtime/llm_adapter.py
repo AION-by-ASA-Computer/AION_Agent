@@ -92,10 +92,38 @@ def resolve_llm_credentials() -> Tuple[str, str, str]:
                     "Failed to query default LLM provider from SQLite: %s", e
                 )
 
-        else:
-            raise ValueError(
-                "No LLM provider configured. Please configure one in the Admin UI."
-            )
+    # Fallback to environment variables if DB has no provider configured
+    env_url = (
+        (
+            os.getenv("AION_API_URL")
+            or os.getenv("OPENAI_API_BASE")
+            or os.getenv("OPENAI_BASE_URL")
+            or ""
+        )
+        .strip()
+        .rstrip("/")
+    )
+    env_model = (
+        os.getenv("AION_MODEL")
+        or os.getenv("OPENAI_MODEL")
+        or os.getenv("AION_DEFAULT_MODEL")
+        or ""
+    ).strip()
+    env_key = (
+        os.getenv("AION_LLM_API_KEY")
+        or os.getenv("OPENAI_API_KEY")
+        or "placeholder-token"
+    )
+
+    if env_url and env_model:
+        if not env_url.startswith(("http://", "https://")):
+            env_url = "http://" + env_url
+        full_model = env_model if "/" in env_model else f"openai/{env_model}"
+        return env_url, full_model, env_key
+
+    raise ValueError(
+        "No LLM provider configured. Please configure one in the Admin UI or set AION_API_URL and AION_MODEL in .env."
+    )
 
 
 def resolve_llm_endpoint() -> Tuple[str, str]:

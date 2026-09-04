@@ -7,6 +7,7 @@ METRICS SCOPE & TARGET AUDIENCE:
 - ADMIN UI ONLY: Per-profile metrics breakdown, Last turn tool invocation snapshot, tool usage time-series.
 """
 
+from fastapi import HTTPException
 import logging
 import os
 import time
@@ -18,7 +19,6 @@ from pydantic import BaseModel, Field
 
 from ..agent_profile import profile_manager
 from ..observability import metrics as otel_metrics
-from ..observability.metrics import get_instance_id
 from ..observability.hooks_emitter import (
     get_last_turn_tools,
     get_last_turn_tokens,
@@ -33,9 +33,13 @@ router = APIRouter(
     prefix="/metrics", tags=["metrics"], dependencies=[Depends(require_admin_role)]
 )
 
-PROMETHEUS_URL = os.environ.get(
-    "AION_PROMETHEUS_URL", "http://192.168.193.55:9090"
-).rstrip("/")
+
+def _get_prometheus_url() -> str:
+    """Returns currently configured Prometheus URL from environment."""
+    return os.environ.get("AION_PROMETHEUS_URL", "http://localhost:9090").rstrip("/")
+
+
+PROMETHEUS_URL = _get_prometheus_url()
 
 
 class MetricValuePoint(BaseModel):
@@ -162,8 +166,8 @@ class MetricsOverviewResponse(BaseModel):
 
 def _query_prometheus(query: str, timeout: int = 4) -> Optional[List[Dict[str, Any]]]:
     """Helper to safely query Prometheus instant query REST API."""
+    url = f"{_get_prometheus_url()}/api/v1/query"
     try:
-        url = f"{PROMETHEUS_URL}/api/v1/query"
         resp = requests.get(url, params={"query": query}, timeout=timeout)
         if resp.status_code == 200:
             data = resp.json()
@@ -178,8 +182,8 @@ def _query_prometheus_range(
     query: str, start: float, end: float, step: str, timeout: int = 4
 ) -> Optional[List[Dict[str, Any]]]:
     """Helper to safely query Prometheus range query REST API."""
+    url = f"{_get_prometheus_url()}/api/v1/query_range"
     try:
-        url = f"{PROMETHEUS_URL}/api/v1/query_range"
         params = {"query": query, "start": start, "end": end, "step": step}
         resp = requests.get(url, params=params, timeout=timeout)
         if resp.status_code == 200:
@@ -258,11 +262,13 @@ def _generate_fallback_time_series(
         and (not user_id or b.get("tenant_id") == user_id)
     ]
 
+    has_buffer_data = len(valid_buffer) > 0
+
     for i in range(num_points):
         bucket_ts = start_ts + (i * step_seconds)
         bucket_end = bucket_ts + step_seconds
         dt = datetime.datetime.fromtimestamp(bucket_ts, tz=datetime.timezone.utc)
-        lbl = dt.strftime("%H:%M") if total_sec <= 24 * 3600 else dt.strftime("%d/%m")
+        lbl = dt.isoformat()
 
         b_items = [b for b in valid_buffer if bucket_ts <= b.get("ts", 0) < bucket_end]
         if b_items:
@@ -279,7 +285,7 @@ def _generate_fallback_time_series(
             else:
                 val = 0.0
         else:
-            if total_val > 0 and num_points > 0:
+            if not has_buffer_data and total_val > 0 and num_points > 0:
                 factor = 0.7 + (hash(f"{metric_name}_{i}_{time_range}") % 60) / 100.0
                 val = round(
                     (total_val / num_points) * factor,
@@ -296,16 +302,199 @@ def _generate_fallback_time_series(
 @router.get("/prometheus-status")
 def get_prometheus_status():
     """Checks connectivity to configured Prometheus instance."""
+    prom_url = _get_prometheus_url()
     try:
-        resp = requests.get(f"{PROMETHEUS_URL}/api/v1/query?query=up", timeout=3)
+        resp = requests.get(f"{prom_url}/api/v1/query?query=up", timeout=3)
         connected = resp.status_code == 200
     except Exception:
         connected = False
 
     return {
         "connected": connected,
-        "url": PROMETHEUS_URL,
+        "url": prom_url,
     }
+
+
+class ProbeObservabilityRequest(BaseModel):
+    target: str = Field(
+        ..., description="Target service: 'prometheus', 'otel', or 'opik'"
+    )
+    url: Optional[str] = None
+    endpoint: Optional[str] = None
+    protocol: Optional[str] = "grpc"
+    api_key: Optional[str] = None
+
+
+class ProbeObservabilityResponse(BaseModel):
+    target: str
+    success: bool
+    status_code: Optional[int] = None
+    latency_ms: Optional[float] = None
+    message: str
+    details: Optional[Dict[str, Any]] = None
+
+
+@router.post("/test-connection", response_model=ProbeObservabilityResponse)
+def test_observability_connection(req: ProbeObservabilityRequest):
+    """Tests connectivity to Prometheus, OTel Collector or Opik endpoint."""
+    target = req.target.lower().strip()
+    t0 = time.time()
+
+    if target == "prometheus":
+        target_url = (req.url or _get_prometheus_url()).rstrip("/")
+        if not target_url.startswith(("http://", "https://")):
+            target_url = f"http://{target_url}"
+        try:
+            resp = requests.get(f"{target_url}/api/v1/query?query=up", timeout=4)
+            latency_ms = round((time.time() - t0) * 1000, 1)
+            if resp.status_code == 200:
+                data = resp.json()
+                if data.get("status") == "success":
+                    build_info = None
+                    try:
+                        b_resp = requests.get(
+                            f"{target_url}/api/v1/status/buildinfo", timeout=2
+                        )
+                        if b_resp.status_code == 200:
+                            build_info = b_resp.json().get("data", {})
+                    except Exception:
+                        pass
+                    return ProbeObservabilityResponse(
+                        target="prometheus",
+                        success=True,
+                        status_code=resp.status_code,
+                        latency_ms=latency_ms,
+                        message=f"Connected to Prometheus successfully ({latency_ms}ms)",
+                        details=build_info,
+                    )
+            return ProbeObservabilityResponse(
+                target="prometheus",
+                success=False,
+                status_code=resp.status_code,
+                latency_ms=latency_ms,
+                message=f"Prometheus returned HTTP {resp.status_code}",
+            )
+        except Exception as e:
+            latency_ms = round((time.time() - t0) * 1000, 1)
+            return ProbeObservabilityResponse(
+                target="prometheus",
+                success=False,
+                latency_ms=latency_ms,
+                message=f"Connection failed: {str(e)}",
+            )
+
+    elif target == "otel":
+        endpoint = (
+            req.endpoint
+            or os.environ.get("AION_OTEL_ENDPOINT", "http://localhost:4317")
+        ).strip()
+        protocol = (
+            (req.protocol or os.environ.get("AION_OTEL_PROTOCOL", "grpc"))
+            .lower()
+            .strip()
+        )
+        import socket
+        import urllib.parse
+
+        try:
+            parsed = urllib.parse.urlparse(
+                endpoint if "://" in endpoint else f"http://{endpoint}"
+            )
+            host = parsed.hostname or "localhost"
+            port = parsed.port or (4318 if protocol == "http" else 4317)
+
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(3.0)
+            result = sock.connect_ex((host, port))
+            sock.close()
+            latency_ms = round((time.time() - t0) * 1000, 1)
+
+            if result == 0:
+                return ProbeObservabilityResponse(
+                    target="otel",
+                    success=True,
+                    latency_ms=latency_ms,
+                    message=f"OTel Collector port {port} on {host} is reachable ({latency_ms}ms)",
+                    details={"host": host, "port": port, "protocol": protocol},
+                )
+            else:
+                return ProbeObservabilityResponse(
+                    target="otel",
+                    success=False,
+                    latency_ms=latency_ms,
+                    message=f"Could not connect to {host}:{port} (socket code {result})",
+                    details={"host": host, "port": port, "protocol": protocol},
+                )
+        except Exception as e:
+            latency_ms = round((time.time() - t0) * 1000, 1)
+            return ProbeObservabilityResponse(
+                target="otel",
+                success=False,
+                latency_ms=latency_ms,
+                message=f"OTel Collector check failed: {str(e)}",
+            )
+
+    elif target == "opik":
+        target_url = (
+            req.url or os.environ.get("OPIK_URL_OVERRIDE", "http://localhost:5173/api")
+        ).rstrip("/")
+        if not target_url.startswith(("http://", "https://")):
+            target_url = f"http://{target_url}"
+
+        headers = {}
+        if req.api_key and req.api_key != "***":
+            headers["Authorization"] = req.api_key
+            headers["Comet-Api-Key"] = req.api_key
+
+        try:
+            resp = None
+            for path in ["/is-alive/ping", "/is-alive", "/health", ""]:
+                try:
+                    resp = requests.get(
+                        f"{target_url}{path}", headers=headers, timeout=3
+                    )
+                    if resp.status_code in (200, 204, 401, 403):
+                        break
+                except Exception:
+                    continue
+
+            latency_ms = round((time.time() - t0) * 1000, 1)
+            if resp is not None and resp.status_code in (200, 204):
+                return ProbeObservabilityResponse(
+                    target="opik",
+                    success=True,
+                    status_code=resp.status_code,
+                    latency_ms=latency_ms,
+                    message=f"Connected to Opik server successfully ({latency_ms}ms)",
+                )
+            elif resp is not None:
+                return ProbeObservabilityResponse(
+                    target="opik",
+                    success=False,
+                    status_code=resp.status_code,
+                    latency_ms=latency_ms,
+                    message=f"Opik server reachable but returned HTTP {resp.status_code}",
+                )
+            else:
+                return ProbeObservabilityResponse(
+                    target="opik",
+                    success=False,
+                    latency_ms=latency_ms,
+                    message="Opik endpoint is unreachable (connection timed out or refused)",
+                )
+        except Exception as e:
+            latency_ms = round((time.time() - t0) * 1000, 1)
+            return ProbeObservabilityResponse(
+                target="opik",
+                success=False,
+                latency_ms=latency_ms,
+                message=f"Opik connection test failed: {str(e)}",
+            )
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown target '{target}'. Choose 'prometheus', 'otel', or 'opik'.",
+        )
 
 
 @router.get("/overview", response_model=MetricsOverviewResponse)
@@ -471,7 +660,7 @@ def get_metrics_overview(
             val = float(r.get("value", [0, 0])[1])
             ttype = metric.get("token_type", "prompt")
             model = metric.get("model", "default")
-            ival = int(val)
+            ival = int(round(val))
 
             if model not in token_usage_by_model:
                 token_usage_by_model[model] = {
@@ -502,7 +691,7 @@ def get_metrics_overview(
         for r in res_prof_tokens:
             p = r.get("metric", {}).get("profile", "default")
             ttype = r.get("metric", {}).get("token_type", "prompt")
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
             if p not in profile_metrics_map:
                 profile_metrics_map[p] = {
                     "profile": p,
@@ -535,7 +724,7 @@ def get_metrics_overview(
             u_id = r.get("metric", {}).get("tenant_id", "default")
             p = r.get("metric", {}).get("profile", "default")
             ttype = r.get("metric", {}).get("token_type", "prompt")
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
 
             u_entry = _ensure_user_entry(u_id)
             up_entry = _ensure_user_profile_entry(u_id, p)
@@ -565,7 +754,7 @@ def get_metrics_overview(
 
         turn_count_res = _query_prometheus(turn_count_query) or []
         total_turns = (
-            int(float(turn_count_res[0].get("value", [0, 0])[1]))
+            int(round(float(turn_count_res[0].get("value", [0, 0])[1])))
             if turn_count_res
             else 0
         )
@@ -573,7 +762,7 @@ def get_metrics_overview(
         res_prof_turns = _query_prometheus(prof_turn_query) or []
         for r in res_prof_turns:
             p = r.get("metric", {}).get("profile", "default")
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
             if p not in profile_metrics_map:
                 profile_metrics_map[p] = {
                     "profile": p,
@@ -593,7 +782,7 @@ def get_metrics_overview(
         for r in res_user_turns:
             u_id = r.get("metric", {}).get("tenant_id", "default")
             p = r.get("metric", {}).get("profile", "default")
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
 
             u_entry = _ensure_user_entry(u_id)
             up_entry = _ensure_user_profile_entry(u_id, p)
@@ -609,21 +798,23 @@ def get_metrics_overview(
         )
         for r in res_prof_dur:
             p = r.get("metric", {}).get("profile", "default")
-            val = round(float(r.get("value", [0, 0])[1]), 2)
-            if p not in profile_metrics_map:
-                profile_metrics_map[p] = {
-                    "profile": p,
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "reasoning_tokens": 0,
-                    "total_tokens": 0,
-                    "total_turns": 0,
-                    "total_tool_calls": 0,
-                    "successful_tool_calls": 0,
-                    "tool_success_rate": 100.0,
-                    "avg_turn_duration_seconds": 0.0,
-                }
-            profile_metrics_map[p]["avg_turn_duration_seconds"] = val
+            val_str = r.get("value", [0, 0])[1]
+            if val_str != "NaN":
+                p_avg = round(float(val_str), 2)
+                if p not in profile_metrics_map:
+                    profile_metrics_map[p] = {
+                        "profile": p,
+                        "prompt_tokens": 0,
+                        "completion_tokens": 0,
+                        "reasoning_tokens": 0,
+                        "total_tokens": 0,
+                        "total_turns": 0,
+                        "total_tool_calls": 0,
+                        "successful_tool_calls": 0,
+                        "tool_success_rate": 100.0,
+                        "avg_turn_duration_seconds": 0.0,
+                    }
+                profile_metrics_map[p]["avg_turn_duration_seconds"] = p_avg
 
         res_user_dur = (
             _query_prometheus(
@@ -633,11 +824,13 @@ def get_metrics_overview(
         )
         for r in res_user_dur:
             u_id = r.get("metric", {}).get("tenant_id", "default")
-            val = round(float(r.get("value", [0, 0])[1]), 2)
-            u_entry = _ensure_user_entry(u_id)
-            u_entry["avg_turn_duration_seconds"] = val
+            val_str = r.get("value", [0, 0])[1]
+            if val_str != "NaN":
+                u_entry = _ensure_user_entry(u_id)
+                u_entry["avg_turn_duration_seconds"] = round(float(val_str), 2)
 
-        p95_range = "1h" if time_range == "all" else time_range
+        # Fetch p95 turn duration
+        p95_range = time_range if time_range != "all" else "30d"
         p95_dur_res = (
             _query_prometheus(
                 f"histogram_quantile(0.95, sum(rate(aion_turn_duration_seconds_bucket{lbl_selector}[{p95_range}])) by (le))"
@@ -667,7 +860,7 @@ def get_metrics_overview(
         )
         for r in last_turn_tokens_res:
             ttype = r.get("metric", {}).get("token_type")
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
             if ttype == "prompt" and val > 0:
                 last_turn_prompt_tokens = val
             elif ttype == "completion" and val > 0:
@@ -693,7 +886,9 @@ def get_metrics_overview(
 
         for r in tool_res:
             metric = r.get("metric", {})
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
+            if val <= 0:
+                continue
             tname = metric.get("tool_name", "unknown")
             mserver = metric.get("mcp_server", "local")
             st = metric.get("status", "ok")
@@ -727,7 +922,7 @@ def get_metrics_overview(
         )
         for r in prom_error_res:
             metric = r.get("metric", {})
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
             tname = metric.get("tool_name", "unknown")
             mserver = metric.get("mcp_server", "unknown")
             prof_name = metric.get("profile", "default")
@@ -761,7 +956,9 @@ def get_metrics_overview(
         for r in res_prof_tools:
             p = r.get("metric", {}).get("profile", "default")
             st = r.get("metric", {}).get("status", "ok")
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
+            if val <= 0:
+                continue
             if p not in profile_metrics_map:
                 profile_metrics_map[p] = {
                     "profile": p,
@@ -786,10 +983,12 @@ def get_metrics_overview(
             tname = r.get("metric", {}).get("tool_name", "unknown")
             mserver = r.get("metric", {}).get("mcp_server", "local")
             st = r.get("metric", {}).get("status", "ok")
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
 
             if val <= 0:
                 continue
+
+            from src.observability.hooks_emitter import resolve_mcp_server_dynamically
 
             mserver = resolve_mcp_server_dynamically(tname, mserver)
 
@@ -816,6 +1015,11 @@ def get_metrics_overview(
         # Overlay in-memory tool metrics (RAM) to ensure instant responsiveness before Prometheus scrape
         try:
             val_tools = otel_metrics.aion_tool_calls_total.prom_metric._metrics
+
+            # Group in-memory metrics by (mserver, tname) and by (u_id, p_slug, mserver, tname)
+            ram_tools_summary: Dict[str, Dict[str, Any]] = {}
+            ram_user_tools_summary: Dict[Tuple[str, str, str, str], Dict[str, Any]] = {}
+
             for labels, metric in val_tools.items():
                 if len(labels) >= 6:
                     inst_id = labels[0]
@@ -836,36 +1040,98 @@ def get_metrics_overview(
                     if val <= 0:
                         continue
 
+                    from src.observability.hooks_emitter import (
+                        resolve_mcp_server_dynamically,
+                    )
+
                     mserver = resolve_mcp_server_dynamically(tname, mserver)
 
-                    key = f"{mserver}:{tname}"
-                    if key not in tool_dict:
-                        tool_dict[key] = {
+                    # Global tool aggregation
+                    t_key = f"{mserver}:{tname}"
+                    if t_key not in ram_tools_summary:
+                        ram_tools_summary[t_key] = {
                             "tool_name": tname,
                             "mcp_server": mserver,
-                            "call_count": val,
-                            "error_count": 0 if st in ("ok", "success") else val,
+                            "call_count": 0,
+                            "error_count": 0,
+                            "success_count": 0,
                         }
-                        total_tool_calls += val
+                    ram_tools_summary[t_key]["call_count"] += val
+                    if st in ("ok", "success"):
+                        ram_tools_summary[t_key]["success_count"] += val
                     else:
-                        if val > tool_dict[key]["call_count"]:
-                            diff = val - tool_dict[key]["call_count"]
-                            tool_dict[key]["call_count"] = val
-                            total_tool_calls += diff
+                        ram_tools_summary[t_key]["error_count"] += val
 
-                    u_entry = _ensure_user_entry(u_id)
-                    up_entry = _ensure_user_profile_entry(u_id, p_slug)
-                    tool_key = f"{mserver}:{tname}"
-                    if tool_key not in up_entry["tools_dict"]:
-                        up_entry["tools_dict"][tool_key] = {
+                    # Per user/profile aggregation
+                    u_key = (u_id, p_slug, mserver, tname)
+                    if u_key not in ram_user_tools_summary:
+                        ram_user_tools_summary[u_key] = {
+                            "u_id": u_id,
+                            "p_slug": p_slug,
                             "tool_name": tname,
                             "mcp_server": mserver,
-                            "call_count": val,
-                            "error_count": 0 if st in ("ok", "success") else val,
+                            "call_count": 0,
+                            "error_count": 0,
+                            "success_count": 0,
                         }
+                    ram_user_tools_summary[u_key]["call_count"] += val
+                    if st in ("ok", "success"):
+                        ram_user_tools_summary[u_key]["success_count"] += val
                     else:
-                        if val > up_entry["tools_dict"][tool_key]["call_count"]:
-                            up_entry["tools_dict"][tool_key]["call_count"] = val
+                        ram_user_tools_summary[u_key]["error_count"] += val
+
+            # Overlay global tool metrics into tool_dict
+            for t_key, r_data in ram_tools_summary.items():
+                if t_key not in tool_dict:
+                    tool_dict[t_key] = {
+                        "tool_name": r_data["tool_name"],
+                        "mcp_server": r_data["mcp_server"],
+                        "call_count": r_data["call_count"],
+                        "error_count": r_data["error_count"],
+                    }
+                    total_tool_calls += r_data["call_count"]
+                    successful_tool_calls += r_data["success_count"]
+                else:
+                    if r_data["call_count"] > tool_dict[t_key]["call_count"]:
+                        diff = r_data["call_count"] - tool_dict[t_key]["call_count"]
+                        tool_dict[t_key]["call_count"] = r_data["call_count"]
+                        total_tool_calls += diff
+                    if r_data["error_count"] > tool_dict[t_key]["error_count"]:
+                        tool_dict[t_key]["error_count"] = r_data["error_count"]
+
+            # Overlay user/profile breakdown into user_metrics_map
+            for (
+                u_id,
+                p_slug,
+                mserver,
+                tname,
+            ), ru_data in ram_user_tools_summary.items():
+                u_entry = _ensure_user_entry(u_id)
+                up_entry = _ensure_user_profile_entry(u_id, p_slug)
+                tool_key = f"{mserver}:{tname}"
+
+                if tool_key not in up_entry["tools_dict"]:
+                    up_entry["tools_dict"][tool_key] = {
+                        "tool_name": tname,
+                        "mcp_server": mserver,
+                        "call_count": ru_data["call_count"],
+                        "error_count": ru_data["error_count"],
+                    }
+                else:
+                    if (
+                        ru_data["call_count"]
+                        > up_entry["tools_dict"][tool_key]["call_count"]
+                    ):
+                        up_entry["tools_dict"][tool_key]["call_count"] = ru_data[
+                            "call_count"
+                        ]
+                    if (
+                        ru_data["error_count"]
+                        > up_entry["tools_dict"][tool_key]["error_count"]
+                    ):
+                        up_entry["tools_dict"][tool_key]["error_count"] = ru_data[
+                            "error_count"
+                        ]
         except Exception as _tool_overlay_err:
             logger.debug(f"Tool metrics in-memory overlay error: {_tool_overlay_err}")
 
@@ -900,7 +1166,7 @@ def get_metrics_overview(
 
         for r in fail_res:
             metric = r.get("metric", {})
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
             etype = metric.get("error_type", "error")
             failure_breakdown[etype] = val
             total_failures += val
@@ -933,13 +1199,10 @@ def get_metrics_overview(
             values = series_res[0].get("values", [])
             for ts, val_str in values:
                 dt = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
-                lbl = (
-                    dt.strftime("%H:%M")
-                    if time_range in ("1h", "6h", "24h")
-                    else dt.strftime("%d/%m")
-                )
                 tool_usage_series.append(
-                    ToolUsageTimeSeriesPoint(timestamp=lbl, calls=int(float(val_str)))
+                    ToolUsageTimeSeriesPoint(
+                        timestamp=dt.isoformat(), calls=int(round(float(val_str)))
+                    )
                 )
 
     else:
@@ -1333,7 +1596,7 @@ def get_metrics_overview(
         valid_recent = []
         for r in prom_recent_tools:
             metric = r.get("metric", {})
-            val = int(float(r.get("value", [0, 0])[1]))
+            val = int(round(float(r.get("value", [0, 0])[1])))
             if val > 0:
                 valid_recent.append(
                     {
@@ -1355,7 +1618,7 @@ def get_metrics_overview(
             )
             for r in cum_tools:
                 metric = r.get("metric", {})
-                val = int(float(r.get("value", [0, 0])[1]))
+                val = int(round(float(r.get("value", [0, 0])[1])))
                 if val > 0:
                     raw_last_tools.append(
                         {
@@ -1415,15 +1678,11 @@ def get_metrics_overview(
                 vals = raw[0].get("values", [])
                 for ts, v_str in vals:
                     dt = datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc)
-                    lbl = (
-                        dt.strftime("%H:%M")
-                        if start_ts >= now_ts - 86400
-                        else dt.strftime("%d/%m")
-                    )
                     v = float(v_str) if v_str != "NaN" else 0.0
                     pts.append(
                         TimeSeriesDataPoint(
-                            timestamp=lbl, value=round(v, 2 if format_float else 0)
+                            timestamp=dt.isoformat(),
+                            value=round(v, 2 if format_float else 0),
                         )
                     )
             return pts
@@ -1470,7 +1729,7 @@ def get_metrics_overview(
 
     return MetricsOverviewResponse(
         prometheus_connected=prometheus_connected,
-        prometheus_url=PROMETHEUS_URL,
+        prometheus_url=_get_prometheus_url(),
         profile=profile_slug,
         user_id=target_user_id,
         time_range=time_range,

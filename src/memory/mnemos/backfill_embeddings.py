@@ -15,7 +15,6 @@ from src.memory.mnemos.embedding import (
     embeddings_configured,
     get_embedding,
 )
-from src.memory.mnemos.types import MemoryScope
 
 logger = logging.getLogger("aion.memory.mnemos.backfill_embeddings")
 

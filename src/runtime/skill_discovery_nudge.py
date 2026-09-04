@@ -61,7 +61,7 @@ def build_skill_discovery_nudge(
 
             ignored_skills = set(DEFAULT_CRITICAL_SKILL_NAMES)
         except ImportError:
-            ignored_skills = {"core_protocol", "artifact_protocol", "agent_db_protocol"}
+            ignored_skills = {"core_protocol", "artifact_protocol"}
     else:
         ignored_skills = set(critical_skills)
 
@@ -75,12 +75,11 @@ def build_skill_discovery_nudge(
             if len(avail) > 0
             else "available skills"
         )
-        list_desc = f"the specific skill you need from the profile's available list ({avail_str})"
+        f"the specific skill you need from the profile's available list ({avail_str})"
     else:
         example_str = (
             "reading or creating PDF/Word/Excel documents, operating on Plane, etc."
         )
-        list_desc = "the specific skill you need (e.g. pdf, docx, xlsx, plane, etc.)"
 
     if avail and not not_loaded:
         return (

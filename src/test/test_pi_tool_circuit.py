@@ -9,7 +9,7 @@ from src.runtime.tool_circuit import (
 
 def test_circuit_breaker_blocks_after_repeated_failures(monkeypatch):
     monkeypatch.setenv("AION_TOOL_CIRCUIT_BREAKER_ENABLED", "1")
-    monkeypatch.setenv("AION_PI_TOOL_CIRCUIT_BREAKER_MAX", "2")
+    monkeypatch.setenv("AION_TOOL_CIRCUIT_BREAKER_MAX", "2")
     from src.settings import get_settings
 
     get_settings.cache_clear()

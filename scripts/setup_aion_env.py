@@ -19,15 +19,11 @@ esistente vengono preservate in coda sotto un blocco commentato.
 ``./scripts/upgrade-aion.sh`` (``upgrade_core._ensure_*_env_keys``) appende in ``.env`` le chiavi
 mancanti (web search, context compress, tool-first runtime ``AION_MODEL_PROMPT_FRAGMENTS`` /
 ``AION_ARTIFACT_STREAM_LEGACY`` / ``AION_STREAM_LOOP_V2`` / doom loop / vLLM tool args /
-``AION_LLM_CALL_AUDIT``, SQL QueryMemory ``AION_SQL_QM_*``,
-MemPalace navigazione ``AION_MEMPALACE_NAV_*``, allowlist ``skill_view`` ``AION_SKILL_VIEW_ENFORCE_PROFILE``, …).
-``setup_core.py`` / ``upgrade_core.py`` applicano anche ``patch_sql_query_memory_config.py`` e
-``patch_mempalace_navigation_config.py`` (profilo Postgres, skill, wing ``wing_proj_{project}``).
-Bootstrap opzionale drawer: ``python scripts/bootstrap_db_navigation_mempalace.py --project default``.
+``AION_LLM_CALL_AUDIT``, SQL QueryMemory ``AION_SQL_QM_*``, Mnemos ``AION_MNEMOS_*``,
+allowlist ``skill_view`` ``AION_SKILL_VIEW_ENFORCE_PROFILE``, …).
+``setup_core.py`` / ``upgrade_core.py`` applicano anche ``patch_sql_query_memory_config.py``.
 
-Il client principale e' ``chat-ui/`` (Next.js). I flag legacy ``AION_CHAINLIT_*``
-/ ``CHAINLIT_AUTH_SECRET`` sono ancora migrati automaticamente in ``AION_CHAT_*``
-(fallback in ``src/api/auth_login.py``).
+Il client principale e' ``chat-ui/`` (Next.js).
 """
 
 from __future__ import annotations
@@ -39,7 +35,6 @@ import os
 import re
 import secrets
 import shutil
-import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -87,6 +82,7 @@ _DEPRECATED_KEYS: frozenset = frozenset(
         "AION_MEMPALACE_PROJECT_WING_PREFIX",
         "AION_MEMPALACE_WARMUP",
         "AION_MEMPALACE_WEAK_MEMORY_THRESHOLD",
+        "AION_MEMPALACE_PALACE_PATH",
     }
 )
 
@@ -312,7 +308,6 @@ _DOCKER_DEFAULTS: Dict[str, str] = {
     "AION_PUBLIC_API_URL": "http://localhost/api",
     "AION_FASTAPI_URL": "http://backend:8001",
     "AION_ADMIN_UI_URL": "http://admin-ui:3870",
-    "AION_AGENT_DB_LTM_SYNC_URL": "http://backend:8001/internal/agent-db/sync-drawer",
     "NEXT_PUBLIC_AION_API_URL": "/api",
     "NEXT_PUBLIC_AION_ADMIN_UI_URL": "/admin",
     "DOMAIN": ":80",
@@ -457,7 +452,7 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
         mode_default,
     )
 
-    print("\n=== Memoria (LTM MemPalace) ===\n")
+    print("\n=== Memoria (LTM Mnemos) ===\n")
     if _prompt_yesno(
         "Abilitare retrieval ed estrazione LTM (AION_LTM_RETRIEVAL / AION_LTM_EXTRACT)?",
         state.get("AION_LTM_RETRIEVAL", "1") == "1",
@@ -771,67 +766,6 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
         else "0"
     )
 
-    print("\n--- Agent DB (MCP agent_db) ---\n")
-    state["AION_AGENT_DB_ROOT"] = _prompt_str(
-        "Directory SQLite Agent DB (AION_AGENT_DB_ROOT)",
-        state.get("AION_AGENT_DB_ROOT", "data/agent_dbs"),
-    )
-    state["AION_AGENT_DB_LTM_SYNC_THRESHOLD"] = _prompt_str(
-        "Soglia righe insert per sync LTM (AION_AGENT_DB_LTM_SYNC_THRESHOLD)",
-        state.get("AION_AGENT_DB_LTM_SYNC_THRESHOLD", "10"),
-    )
-    port_hint = state.get("AION_API_PORT", "") or "8001"
-    sync_hint = f"http://localhost:{port_hint}/internal/agent-db/sync-drawer"
-    print(f"  Esempio sync URL: {sync_hint}")
-    state["AION_AGENT_DB_LTM_SYNC_URL"] = _prompt_str(
-        "URL sync drawer verso API (vuoto = off; AION_AGENT_DB_LTM_SYNC_URL)",
-        state.get("AION_AGENT_DB_LTM_SYNC_URL", ""),
-    )
-    state["AION_AGENT_DB_INTERNAL_SECRET"] = _prompt_str(
-        "Secret condiviso API + MCP (AION_AGENT_DB_INTERNAL_SECRET)",
-        state.get("AION_AGENT_DB_INTERNAL_SECRET", ""),
-        secret=True,
-    )
-    state["AION_AGENT_DB_LTM_HTTP_TIMEOUT"] = _prompt_str(
-        "Timeout HTTP sync secondi (AION_AGENT_DB_LTM_HTTP_TIMEOUT)",
-        state.get("AION_AGENT_DB_LTM_HTTP_TIMEOUT", "8"),
-    )
-    state["AION_AGENT_DB_MAX_SIZE_MB"] = _prompt_str(
-        "Max dimensione DB per utente in MB (AION_AGENT_DB_MAX_SIZE_MB)",
-        state.get("AION_AGENT_DB_MAX_SIZE_MB", "2048"),
-    )
-    state["AION_AGENT_DB_MAX_TABLES_PER_USER"] = _prompt_str(
-        "Max tabelle per utente (AION_AGENT_DB_MAX_TABLES_PER_USER)",
-        state.get("AION_AGENT_DB_MAX_TABLES_PER_USER", "50"),
-    )
-    state["AION_AGENT_DB_MAX_ROWS_PER_TABLE"] = _prompt_str(
-        "Max righe per tabella (AION_AGENT_DB_MAX_ROWS_PER_TABLE)",
-        state.get("AION_AGENT_DB_MAX_ROWS_PER_TABLE", "500000"),
-    )
-    state["AION_AGENT_DB_DATE_LOCALE"] = _prompt_str(
-        "Locale date (AION_AGENT_DB_DATE_LOCALE)",
-        state.get("AION_AGENT_DB_DATE_LOCALE", "it_IT"),
-    )
-    state["AION_AGENT_DB_DECIMAL_LOCALE"] = _prompt_str(
-        "Locale decimali [IT/US] (AION_AGENT_DB_DECIMAL_LOCALE)",
-        state.get("AION_AGENT_DB_DECIMAL_LOCALE", "IT"),
-    )
-    state["AION_AGENT_DB_BACKUP_ON_DROP"] = (
-        "1"
-        if _prompt_yesno(
-            "Abilitare backup prima del DROP fisico (AION_AGENT_DB_BACKUP_ON_DROP)?",
-            state.get("AION_AGENT_DB_BACKUP_ON_DROP", "1") == "1",
-        )
-        else "0"
-    )
-    state["AION_AGENT_DB_QUERY_TIMEOUT_MS"] = _prompt_str(
-        "Timeout query SELECT in ms (AION_AGENT_DB_QUERY_TIMEOUT_MS)",
-        state.get("AION_AGENT_DB_QUERY_TIMEOUT_MS", "5000"),
-    )
-    state["AION_AGENT_DB_MAX_EXPORT_ROWS"] = _prompt_str(
-        "Max righe export (AION_AGENT_DB_MAX_EXPORT_ROWS)",
-        state.get("AION_AGENT_DB_MAX_EXPORT_ROWS", "100000"),
-    )
 
     print("\n--- DB unificato / Redis ---\n")
     state["AION_DB_URL"] = _prompt_str(
@@ -1253,23 +1187,14 @@ async def _bootstrap_chat_user_coroutine(
             )
             return
     else:
-        # Nuovi nomi + fallback legacy
-        identifier = (
-            merged_env.get("AION_SETUP_CHAT_IDENTIFIER")
-            or merged_env.get("AION_SETUP_CHAINLIT_IDENTIFIER")
-            or ""
-        ).strip()
-        pw = (
-            merged_env.get("AION_SETUP_CHAT_PASSWORD")
-            or merged_env.get("AION_SETUP_CHAINLIT_PASSWORD")
-            or ""
-        ).strip()
+        # Nuovi nomi
+        identifier = (merged_env.get("AION_SETUP_CHAT_IDENTIFIER") or "").strip()
+        pw = (merged_env.get("AION_SETUP_CHAT_PASSWORD") or "").strip()
         if not identifier or not pw:
             print(
                 "\n→ Login chat attivo: per creare un utente senza prompt interattivo, "
                 "imposta nel .env AION_SETUP_CHAT_IDENTIFIER e AION_SETUP_CHAT_PASSWORD "
                 "e rilancia con --import-state, oppure usa l'API POST /admin/users o l’Admin UI.\n"
-                "  (Legacy alias supportati: AION_SETUP_CHAINLIT_IDENTIFIER / AION_SETUP_CHAINLIT_PASSWORD)\n"
             )
             return
 
@@ -1295,12 +1220,7 @@ async def _bootstrap_chat_user_coroutine(
 
 def _bootstrap_chat_login_after_env_write(env_path: Path, *, interactive: bool) -> None:
     merged = _parse_env_file(env_path)
-    # Nuovo nome con fallback legacy.
-    pwd_auth_raw = (
-        merged.get("AION_CHAT_PASSWORD_AUTH")
-        or merged.get("AION_CHAINLIT_PASSWORD_AUTH")
-        or "0"
-    )
+    pwd_auth_raw = merged.get("AION_CHAT_PASSWORD_AUTH", "0")
     chat_auth = pwd_auth_raw.lower() in ("1", "true", "yes")
 
     # Bootstrap admin default: gira sempre a meno che esplicitamente disabilitato.

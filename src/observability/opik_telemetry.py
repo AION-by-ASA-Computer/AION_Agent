@@ -28,7 +28,7 @@ import src.aion_env  # noqa: F401 — IMPORTANTE: Deve essere il primo import pe
 # Importazione dell'infrastruttura Opik e dei decoratori di tracciamento
 from opik import track
 from opik.opik_context import update_current_trace, update_current_span
-from src.observability.opik_setup import opik_client, get_or_create_prompt
+from src.observability.opik_setup import get_or_create_prompt
 
 # Logger locale per il tracciamento interno
 logger = logging.getLogger("aion.observability.telemetry")

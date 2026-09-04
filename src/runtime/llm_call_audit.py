@@ -12,7 +12,6 @@ from typing import Any, Dict, List, Optional
 
 from haystack.dataclasses import ChatMessage
 
-from src.haystack_chat import chat_message_text
 from src.runtime.prompt_snapshot import (
     _message_role,
     _serialize_message_content,

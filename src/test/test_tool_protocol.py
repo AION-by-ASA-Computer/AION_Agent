@@ -1,7 +1,5 @@
 """Tool protocol helpers."""
 
-import os
-
 from src.runtime.tool_protocol import (
     format_tool_error,
     should_skip_tools_for_truncation,

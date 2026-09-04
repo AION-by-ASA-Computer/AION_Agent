@@ -17,7 +17,7 @@ import argparse
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -87,7 +87,7 @@ def main() -> int:
 
     missing = merge_missing_only(env_path, set_values)
     print(
-        f"MemPalace → Mnemos: will set/update {len(set_values)} keys, "
+        f"MemPalace -> Mnemos: will set/update {len(set_values)} keys, "
         f"remove {len(remove_keys)} keys."
     )
     if missing:
@@ -100,7 +100,7 @@ def main() -> int:
                 file=sys.stderr,
             )
             return 1
-        ans = input("Proceed with MemPalace → Mnemos migration? [y/N] ").strip().lower()
+        ans = input("Proceed with MemPalace -> Mnemos migration? [y/N] ").strip().lower()
         if ans not in ("y", "yes"):
             print("Aborted.")
             return 1

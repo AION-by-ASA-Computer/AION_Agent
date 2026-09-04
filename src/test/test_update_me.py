@@ -4,7 +4,6 @@ import pytest
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.data.bootstrap import ensure_bootstrap_schema
-from src.data.models import User
 from src.api.auth_login import update_me, UpdateUserMetadata, issue_chat_token
 from fastapi import HTTPException
 

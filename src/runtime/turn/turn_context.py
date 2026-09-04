@@ -24,8 +24,7 @@ Usage
 from __future__ import annotations
 
 import logging
-import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional
 
 from haystack.dataclasses import ChatMessage

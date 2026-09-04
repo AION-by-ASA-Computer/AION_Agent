@@ -462,14 +462,6 @@ async def chat_stop(
         raise HTTPException(400, detail="conversation_id or session_id required")
     await redis_set_stream_cancel(cid)
     await _stop_background_run(cid, timeout=15.0)
-    try:
-        from src.runtime.long_run_mode import long_run_enabled
-        from src.runtime.pi_runtime.pi_client import PiWorkerClient
-
-        if long_run_enabled():
-            await PiWorkerClient().abort_session(cid)
-    except Exception:
-        pass
     return {"ok": True, "conversation_id": cid, "session_id": cid}
 
 
@@ -494,24 +486,6 @@ async def chat_stream(
         deep_research_mode=body.deep_research_mode,
         message_source=body.message_source,
     )
-
-    if resolved_agent_mode == "long_run":
-        from src.runtime.long_run_mode import long_run_enabled
-        from src.runtime.pi_runtime.pi_client import pi_worker_healthy
-
-        if not long_run_enabled():
-            raise HTTPException(
-                status_code=503,
-                detail="Long Run mode is disabled (set AION_LONG_RUN_ENABLED=1).",
-            )
-        if not await pi_worker_healthy():
-            raise HTTPException(
-                status_code=503,
-                detail=(
-                    "Pi worker is not reachable. Start services/pi-long-run "
-                    "(AION_PI_WORKER_URL)."
-                ),
-            )
 
     sql_project_resolved = (body.sql_query_project or "").strip() or None
     conversation_project: str | None = None

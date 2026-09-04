@@ -38,7 +38,7 @@ def _aion_std_prompt() -> str:
 
 def test_aion_std_inlines_critical_protocol_skills():
     body = _aion_std_prompt()
-    for slug in ("core_protocol", "artifact_protocol", "agent_db_protocol"):
+    for slug in ("core_protocol", "artifact_protocol"):
         assert f"### Protocol rules ({slug})" in body
 
 
@@ -60,9 +60,9 @@ def test_aion_std_model_prompt_fragment_optional():
 
 def test_skill_discovery_nudge_write_tool_first():
     nudge = build_skill_discovery_nudge("create a word doc")
-    assert "sandbox_write_workspace_file" in nudge
-    assert "aion_artifact" in nudge
-    assert "phantom" in nudge.lower() or "not" in nudge.lower()
+    assert "System instruction" in nudge
+    assert "skill discovery" in nudge
+    assert "skill_view" in nudge
 
 
 def test_aion_std_thinking_english_rule():

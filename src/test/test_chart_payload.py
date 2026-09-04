@@ -1,12 +1,7 @@
 """Tests for session chart payload normalization."""
 
-import os
-
-import pytest
-
 from src.chart_payload import (
     CHART_KINDS,
-    chart_kind_feature_enabled,
     normalize_chart_dict,
 )
 

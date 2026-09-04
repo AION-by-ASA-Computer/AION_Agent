@@ -40,12 +40,9 @@ Apri [http://localhost:3870](http://localhost:3870) (in dev locale senza prefiss
 | `/profiles` | Profili agente |
 | `/skills` | Skill Markdown |
 | `/hub` | Registry MCP |
-| `/memory` | Query memory + LTM MemPalace |
-| `/profile-memory` | File **SOUL / MEMORY / USER** per profilo (`/admin/profile-memory/*`) |
+| `/memory` | Query memory + LTM Mnemos |
 | `/security` | Audit sicurezza |
 | `/settings` | Impostazioni |
-
-Per le route **profile-memory**, se nel backend è impostato `AION_ADMIN_MEMORY_TOKEN`, inserisci lo stesso token nella pagina (salvato in `sessionStorage`).
 
 ## Build produzione
 

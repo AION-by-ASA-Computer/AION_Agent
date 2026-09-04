@@ -7,7 +7,7 @@ import logging
 import os
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, MutableMapping
+from typing import Any, Dict, Mapping, MutableMapping
 
 logger = logging.getLogger("aion.env_sync")
 

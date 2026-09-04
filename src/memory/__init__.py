@@ -1,1 +1,1 @@
-"""Memory subsystem: STM helpers, LTM (MemPalace), audit."""
+"""Memory subsystem: STM helpers, LTM (Mnemos), audit."""

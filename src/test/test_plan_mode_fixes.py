@@ -1,7 +1,5 @@
 """Regression tests for Plan Mode prompt, tool blocking, parsing, and coercion."""
 
-import os
-
 import pytest
 
 from src.a2a.plan_markdown import markdown_to_plan

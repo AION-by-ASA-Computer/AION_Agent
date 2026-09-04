@@ -44,16 +44,12 @@ def test_block_exploration_until_success() -> None:
     )
     with patch.dict(os.environ, {"AION_SQL_QM_GATE_EXPLORATION": "1"}, clear=False):
         assert (
-            block_exploration_tool_if_sql_cache(
-                "mempalace", "mempalace_search", "sess1"
-            )
+            block_exploration_tool_if_sql_cache("memory", "memory_recall", "sess1")
             is not None
         )
         mark_execute_sql_succeeded("sess1")
         assert (
-            block_exploration_tool_if_sql_cache(
-                "mempalace", "mempalace_search", "sess1"
-            )
+            block_exploration_tool_if_sql_cache("memory", "memory_recall", "sess1")
             is None
         )
     clear_sql_qm_turn_context("sess1")

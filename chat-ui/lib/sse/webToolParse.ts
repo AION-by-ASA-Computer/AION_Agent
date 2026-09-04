@@ -175,7 +175,7 @@ function parseToonWebFetch(body: string): ParsedWebFetch | null {
   let error: string | undefined;
   let mode: string | undefined;
   let textLen: number | undefined;
-  let textBlock: string[] = [];
+  const textBlock: string[] = [];
   let inText = false;
 
   for (const line of lines) {

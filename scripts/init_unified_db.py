@@ -20,7 +20,7 @@ async def main():
 
     # Pre-load env if exists
     try:
-        import src.aion_env
+        pass
     except ImportError:
         pass
 

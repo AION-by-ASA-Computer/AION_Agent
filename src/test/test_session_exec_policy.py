@@ -24,22 +24,13 @@ def test_python_requires_scripts_prefix():
     )
 
 
-def test_wren_argv_matches_allowlist():
-    allowlist = [{"executable": "wren", "argv_prefix": []}]
-    for argv in (
-        ["wren", "skills", "get", "onboarding"],
-        ["wren", "skills", "list"],
-        ["wren", "ask", "how many users?", "--guided"],
-        ["wren", "--sql", "SELECT 1"],
-        ["wren", "query", "--sql", "SELECT 1"],
-        ["wren", "dry-plan", "--sql", "SELECT 1"],
-        ["wren", "context", "show"],
-        ["wren", "profile", "list"],
-        ["wren", "docs", "connection-info", "postgres"],
-        ["wren", "--help"],
-    ):
-        entry = _validate_argv_against_allowlist(argv, allowlist)
-        assert entry["executable"] == "wren"
+def test_pdftoppm_argv_matches_allowlist():
+    allowlist = [
+        {"executable": "pdftoppm", "argv_prefix": [], "validate_path_positions": [2, 3]}
+    ]
+    argv = ["pdftoppm", "-png", "-r", "150", "input.pdf", "output_page"]
+    entry = _validate_argv_against_allowlist(argv, allowlist)
+    assert entry["executable"] == "pdftoppm"
 
 
 def test_unpack_argv_matches_dev_allowlist():

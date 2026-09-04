@@ -35,7 +35,7 @@ def test_empty_final_with_tools():
 
 
 def test_user_cancelled_no_warning():
-    """User-initiated cancel must never surface the MemPalace scary warning."""
+    """User-initiated cancel must never surface the scary warning."""
     for stop in ("user_cancelled", "cancelled", "session_cancelled_by_user"):
         out = classify_turn_outcome(
             session_id="sess",

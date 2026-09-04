@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
-import os
 import socket
 import threading
 import time
@@ -178,9 +176,7 @@ async def test_chat_stream_route_yields_token_events(monkeypatch):
             if streaming_callback:
                 try:
                     # Simulate streaming callbacks
-                    from haystack.components.generators.utils import (
-                        print_streaming_chunk,
-                    )
+                    pass
                 except ImportError:
                     pass
             return {"messages": messages + [CM.from_assistant("Hello from AION!")]}

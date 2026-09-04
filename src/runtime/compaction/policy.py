@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Sequence
+from typing import List, Optional
 
 from haystack.dataclasses import ChatMessage
 

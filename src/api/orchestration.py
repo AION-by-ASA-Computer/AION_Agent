@@ -31,7 +31,6 @@ from src.runtime.plan_wait_registry import resolve_plan
 from src.runtime.redis_client import redis_enqueue_session_event
 from src.a2a.plan_markdown import (
     is_degenerate_plan_json,
-    markdown_to_plan,
     normalize_approved_payload,
     resolve_plan_markdown_lenient,
 )

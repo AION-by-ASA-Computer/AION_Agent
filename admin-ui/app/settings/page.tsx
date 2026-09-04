@@ -1480,6 +1480,51 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* Session Cleanup & Retention */}
+        <section className="glass-card p-6 border-[#262626] hover:border-emerald-500/30 transition-colors group">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 group-hover:scale-110 transition-transform">
+              <Database className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div>
+              <h3 className="font-bold text-white">Session Cleanup & Retention</h3>
+              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Automated Session & Workspace Purge</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <ConfigInput
+              label="Session Retention Max Age in Days (AION_SESSION_CLEANUP_MAX_AGE_DAYS)"
+              value={settings.AION_SESSION_CLEANUP_MAX_AGE_DAYS || "15"}
+              onChange={(v) => handleUpdate("AION_SESSION_CLEANUP_MAX_AGE_DAYS", v)}
+              description="Maximum age in days before inactive sessions and workspace sandboxes are cleaned up (0 to disable automatic cleanup)."
+            />
+
+            <ConfigInput
+              label="Cleanup Job Interval in Seconds (AION_SESSION_CLEANUP_INTERVAL_SEC)"
+              value={settings.AION_SESSION_CLEANUP_INTERVAL_SEC || "86400"}
+              onChange={(v) => handleUpdate("AION_SESSION_CLEANUP_INTERVAL_SEC", v)}
+              description="Execution frequency in seconds of the background purge task (minimum 60 seconds, e.g. 86400 for 24 hours)."
+            />
+
+            <ConfigToggle
+              label="Hard Delete Sessions & Attachments (AION_SESSION_CLEANUP_HARD_DELETE)"
+              enabled={settings.AION_SESSION_CLEANUP_HARD_DELETE === "1"}
+              onChange={(e) => handleUpdate("AION_SESSION_CLEANUP_HARD_DELETE", e ? "1" : "0")}
+            />
+
+            <div className="p-3.5 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-xs text-slate-400 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                <Info className="w-3.5 h-3.5 shrink-0" />
+                <span>Automatic Purge Policy</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                When enabled, the background task deletes old session folders under <span className="font-mono text-slate-300">data/sessions/</span> and cleans database conversations. Hard delete permanently purges messages and file attachments.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* OCR Document Processing */}
         <section className="glass-card p-6 border-[#262626] hover:border-amber-500/30 transition-colors group md:col-span-2">
           <div className="flex items-center gap-3 mb-6">

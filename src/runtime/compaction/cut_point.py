@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from typing import List, Sequence
+from typing import Sequence
 
 from haystack.dataclasses import ChatMessage
-
-from src.haystack_chat import chat_message_text
 
 
 def is_valid_cut_index(messages: Sequence[ChatMessage], index: int) -> bool:

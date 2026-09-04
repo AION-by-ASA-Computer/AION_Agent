@@ -1,5 +1,5 @@
 from PIL.Image import logger
-from typing import Optional, Tuple, Dict, Any, List
+from typing import Optional
 from src.observability.metrics import get_instance_id
 import time
 import datetime
@@ -275,9 +275,9 @@ async def _on_post_tool_use(ctx):
             _recent_mcp_errors.insert(
                 0,
                 {
-                    "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime(
-                        "%H:%M:%S"
-                    ),
+                    "timestamp": datetime.datetime.now(
+                        datetime.timezone.utc
+                    ).isoformat(),
                     "tool_name": tool_name,
                     "mcp_server": mcp_server,
                     "profile": profile,

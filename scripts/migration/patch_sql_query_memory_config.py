@@ -7,7 +7,6 @@ Propaga skill e patch profilo Postgres per QueryMemory SQL in config/ (locale).
 - Riscrive config_std/profiles/postgres_metadata_assistant.yaml dal profilo locale patchato (formato |)
 
 Chiamato da setup_core.py e upgrade_core.py dopo sync_config.
-Vedi anche patch_mempalace_navigation_config.py (layer navigazione MemPalace).
 """
 
 from __future__ import annotations

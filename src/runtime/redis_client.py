@@ -315,7 +315,6 @@ async def redis_ping_startup() -> bool:
             )
             _client = _LocalFallback()
             _fallback_used = True
-            _redis_degraded = True
             return True
         if url and _fallback_enabled() and _is_connection_error(e):
             _degrade_to_local_fallback("ping all'avvio", e)
@@ -528,7 +527,7 @@ async def cache_set(key: str, value: str, ttl_sec: int = 300) -> None:
 
 def redis_status() -> dict[str, Any]:
     """Returns connection and fallback info for admin dashboard."""
-    r = get_redis()
+    get_redis()
     url = _redis_url()
     return {
         "connected": not _fallback_used,

@@ -41,7 +41,7 @@ def mnemos_db(monkeypatch, tmp_path):
     return url
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_hard_delete_invalidates_covering_digest(mnemos_db):
     scope = user_scope("default", "digest_leak")
     note = await store.insert_note(scope, content="Personal phone is +39 333 1234567")
@@ -60,7 +60,7 @@ async def test_hard_delete_invalidates_covering_digest(mnemos_db):
     assert digest is None or not digest.ready or not (digest.summary_text or "").strip()
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_recall_across_scopes_does_not_starve_later_scopes(mnemos_db):
     user = user_scope("default", "starve")
     project = project_scope("default", "starve")

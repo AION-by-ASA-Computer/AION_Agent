@@ -1,7 +1,7 @@
 import ast
 import os
 import logging
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Tuple
 
 logger = logging.getLogger("aion.security.checker")
 

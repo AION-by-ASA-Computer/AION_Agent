@@ -7,7 +7,6 @@ from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExport
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
     OTLPSpanExporter as OTLPHTTPSpanExporter,
 )
-from opentelemetry.sdk.metrics import MeterProvider
 
 try:
     from opentelemetry.exporter.prometheus import PrometheusMetricReader

@@ -154,12 +154,12 @@ USER.md remains the only recommended file layer. It works as described on this p
 
 For **direct APIs**: `POST /chat` accepts `user_id` in the JSON and/or the **`X-AION-User-Id`** header (priority to the header if present), as in [REST API and contract](../api-and-runtime/rest-api.md).
 
-## Management from Admin UI and REST API
+## Management from Chat UI and REST API
 
-- **Interface:** Next.js app **`admin-ui/`**, route **`/profile-memory`** — the SOUL and MEMORY tabs are considered legacy (their content is copied into the YAML profiles and MemPalace respectively). The USER tab remains active and recommended.
-- **API:** prefix **`/admin/profile-memory/`** — e.g. `GET/PUT .../<slug>/soul`, `.../memory`, `GET .../<slug>/users/<user_id>` for USER, `GET .../<slug>/meta` for metadata and limits.
+- **Interface:** `chat-ui` settings page manages `USER.md` per user.
+- **API:** prefix **`/admin/profile-memory/`** — `GET/PUT .../<slug>/users/<user_id>` for USER instructions, `GET .../<slug>/meta` for user metadata and limits.
 
-If **`AION_ADMIN_MEMORY_TOKEN`** is set, requests must include the expected bearer token from the backend.
+If **`AION_ADMIN_MEMORY_TOKEN`** is set, administrative requests can include the expected bearer token.
 
 Memory Hub (**`/memory`** in the admin UI) instead concerns **PromQL query cache** and **MemPalace (LTM)** — a separate concept from SOUL/MEMORY/USER; see [STM, LTM and QueryMemory Memory](../memory/stm-ltm-and-query.md).
 
@@ -176,9 +176,8 @@ Memory Hub (**`/memory`** in the admin UI) instead concerns **PromQL query cache
 | File | Content |
 |------|-----------|
 | `src/agent_profile.py` | `generate_system_prompt()`, condition on `AION_SOUL_MEMORY_USER_SPLIT`. |
-| `src/memory/memory_files.py` | `ProfileMemoryBundle`, `BoundedMemoryFile`, paths SOUL/MEMORY/USER. |
-| `src/api/admin_profile_memory.py` | REST CRUD and meta routes. |
-| `admin-ui/app/profile-memory/page.tsx` | Edit UI. |
+| `src/memory/memory_files.py` | `ProfileMemoryBundle`, `BoundedMemoryFile`, path for USER.md. |
+| `src/api/admin_profile_memory.py` | REST CRUD for `USER.md` preferences and meta routes. |
 
 ## Related documents
 

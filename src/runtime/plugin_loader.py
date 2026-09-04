@@ -6,8 +6,7 @@ import importlib.util
 import logging
 import os
 from pathlib import Path
-from types import ModuleType
-from typing import Any, Callable, List
+from typing import Any, List
 
 logger = logging.getLogger("aion.plugins")
 

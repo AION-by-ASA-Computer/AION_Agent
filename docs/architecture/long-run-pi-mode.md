@@ -1,73 +1,33 @@
 ---
-title: Long Run mode (Pi backend)
+title: Long Run mode & Consolidamento Nativo
 sidebar_position: 13
-description: Agent mode long_run using Pi worker, MCP bridge, and relaxed turn budgets.
+description: "Consolidamento della modalità Long Run: transizione dall'architettura con worker esterno Pi Agent all'esecuzione nativa unificata in AION."
 ---
 
-# Long Run mode (Pi backend)
+# Long Run Mode & Consolidamento Nativo
 
-`long_run` is an agent mode for **multi-step deliverables** (web research + Excel/CSV in sandbox) using the [Pi](https://github.com/earendil-works/pi) agent loop instead of Haystack.
+> [!NOTE]
+> **Consolidamento Completato**: La modalità di esecuzione per task lunghi e multi-step è ora **completamente gestita dal runtime nativo di AION** (Harness V2 / Haystack).
+>
+> Il worker esterno Node.js (`services/pi-long-run`) è stato dismesso in favore di un'architettura unificata in Python che offre prestazioni superiori, minore latenza e persistenza integrata.
 
-## Architecture
+---
 
-- **chat-ui** sends `agent_mode=long_run` on `POST /v1/chat/stream`
-- **FastAPI** branches in `AgentPipeline` to `src/runtime/pi_runtime/pi_turn_runner.py`
-- **Pi worker** (`services/pi-long-run/`) runs `createAgentSession()` with AION tools via HTTP bridge
-- **MCP** stays in Python: `POST /internal/pi/tools/invoke` → `mcp_manager.call_tool_pooled`
-- **SSE** contract unchanged (`token`, `reasoning`, `tool_event`, `context_compacting`, `done`)
+## Architettura Unificata
 
-## Enable locally
+Tutti i requisiti per sessioni complesse e di lunga durata sono integrati nel backend nativo:
 
-```bash
-# .env
-AION_LONG_RUN_ENABLED=1
-AION_PI_WORKER_URL=http://127.0.0.1:8791
-AION_PI_WORKER_SECRET=dev-secret   # same on worker + backend
+- **Esecuzione In-Process:** Nessun round-trip di rete extra verso processi Node.js intermedi.
+- **Context Offloading (L1):** Output di tool voluminosi salvati automaticamente su file (`src/runtime/tool_offload.py`).
+- **Tool Ledger (L2):** Storico sintetico delle azioni iniettato nel contesto (`src/runtime/tool_ledger.py`).
+- **Circuit Breaker:** Protezione nativa anti-loop su errori ripetuti (`src/runtime/tool_circuit.py`).
+- **Compattazione Dinamica:** Sintesi automatica del contesto con preservazione dei cut-point (`src/memory/context_compressor.py`).
 
-# Terminal 1
-cd services/pi-long-run && npm install && npm run dev
+---
 
-# Terminal 2
-uvicorn src.api.main:app --reload --reload-exclude data/sessions
-```
+## Documenti Correlati
 
-Select **Long run** in the chat composer mode chip.
-
-## Environment
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `AION_LONG_RUN_ENABLED` | `0` | Feature gate |
-| `AION_PI_WORKER_URL` | `http://127.0.0.1:8791` | Worker HTTP base |
-| `AION_PI_WORKER_SECRET` | empty | Shared secret (worker + backend) |
-| `AION_LONG_RUN_TURN_TIMEOUT` | `3600` | Whole-turn timeout (seconds) |
-| `AION_LONG_RUN_TOOL_CALLS_MAX` | `200` | Tool call cap |
-| `AION_LONG_RUN_NO_PROGRESS_TIMEOUT_SEC` | `600` | Stall detector |
-| `AION_TOOL_OFFLOAD_ENABLED` | `0` | Offload large tool results to `derived/tool_results/` |
-| `AION_TOOL_LEDGER_ENABLED` | `0` | Inject per-session tool trace table |
-| `AION_PI_CUSTOM_COMPACTION` | `0` | Pi compaction summary via AION backend |
-
-See [context-offloading.md](./context-offloading.md) for the full flag list and rollout steps.
-
-Session files: `data/sessions/<id>/.pi/` (`SYSTEM.md`, `skills/`, `models.json`, `tool_manifest.json`).
-
-## Docker
-
-Production `docker-compose.yml` includes optional `pi-worker` service. Set `AION_LONG_RUN_ENABLED=1` on `backend`.
-
-## Pi-native compaction
-
-Pi maintains its own session transcript and runs **compaction inside the worker** when context nears the model window (`settings.json` → `compaction.reserveTokens` / `keepRecentTokens`, env `AION_PI_COMPACTION_*`).
-
-- Events: `compaction_start` / `compaction_end` → SSE `context_compacting { active: true|false }`
-- The worker may **pause token streaming** during compaction (no bug in chat-ui); the turn continues after `compaction_end`
-- chat-ui shows the banner **above the composer** (always visible while scrolling)
-- Do **not** stop the turn manually unless it exceeds `AION_LONG_RUN_TURN_TIMEOUT`; compaction can take 10–60s on large sessions
-
-Haystack mid-turn compaction (normal mode) is documented in [context-compaction.md](../memory/context-compaction.md).
-
-## Related
-
-- Harness v2 patterns (Haystack): [aion-harness-v2.md](./aion-harness-v2.md)
-- Context compaction (Haystack mid-turn): [context-compaction.md](../memory/context-compaction.md)
-- Context offloading (tool result microfiles + ledger): [context-offloading.md](./context-offloading.md)
+- [Valutazione Tecnica e Consolidamento](./aion-vs-longrun-assessment.md)
+- [AION Harness v2](./aion-harness-v2.md)
+- [Context Compaction](../memory/context-compaction.md)
+- [Context Offloading](./context-offloading.md)

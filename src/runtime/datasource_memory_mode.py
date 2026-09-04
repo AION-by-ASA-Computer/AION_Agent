@@ -19,8 +19,8 @@ DEFAULT_DATASOURCE_BLOCKED_PROMQL_TOOLS: FrozenSet[str] = frozenset(
 _SAME_TURN_REMINDER = (
     "\n\n[datasource_persist_reminder] You explored or verified a new SQL path but have not "
     "persisted yet. Before the final answer: call `sql_memory_save` (parameterized SQL, "
-    "`is_verified=true`) and `mempalace_add_drawer` when a reusable join path or convention "
-    "was discovered. Do not dump raw list_tables output into MemPalace."
+    "`is_verified=true`) and `memory_note` when a reusable join path or convention "
+    "was discovered. Do not dump raw list_tables output into memory."
 )
 
 
@@ -72,7 +72,7 @@ def datasource_orchestrator_enabled() -> bool:
 
 
 def datasource_nav_pre_turn_enabled() -> bool:
-    """MemPalace nav inject on for datasource profiles (overrides global opt-in default)."""
+    """Nav inject on for datasource profiles (overrides global opt-in default)."""
     if os.getenv("AION_DATASOURCE_NAV_PRE_TURN_INJECT", "1").strip().lower() in (
         "0",
         "false",
@@ -87,54 +87,13 @@ def same_turn_persist_reminder_text() -> str:
     return _SAME_TURN_REMINDER
 
 
-def profile_uses_wren_engine(profile) -> bool:
-    """True when the profile routes SQL through Wren CLI instead of toolbox MCP."""
-    if profile is None:
-        return False
-    skills = set(profile.skills or [])
-    if "wren" in skills or "wren_guide" in skills:
-        return True
-    return bool(getattr(profile, "wren_project_path", None))
-
-
 def build_datasource_memory_system_prompt(profile=None) -> str:
     max_lt = datasource_max_list_tables()
-    if profile_uses_wren_engine(profile):
-        return (
-            "\n\n## DATASOURCE MEMORY WORKFLOW (mandatory — Wren Engine)\n"
-            "Wren semantic-layer assistant: follow this process every data turn.\n\n"
-            "### Required flow\n"
-            "1. **SEARCH** — `sql_memory_search` + `mempalace_search` (skip only when the turn "
-            "header includes **QueryMemory — server cache**).\n"
-            '2. **EXPLORE** — `sandbox_exec_allowlisted(["wren", "context", "show"])` '
-            "or `wren memory fetch` when memory extra is installed; max **2** Wren context "
-            "calls per turn before asking the user.\n"
-            '3. **EXECUTE** — `sandbox_exec_allowlisted(["wren", "--sql", "<SELECT>", '
-            '"-o", "table"], timeout_sec=180)` — SQL targets MDL model names.\n'
-            "4. **PERSIST** — before the final answer when this turn verified a **new reusable** path:\n"
-            "   - `sql_memory_save` / `save_successful_sql`: parameterized SQL + intent template "
-            "(`is_verified=true`)\n"
-            "   - `mempalace_add_drawer`: ONE concise lesson (`join_paths` / `heuristics` / `pitfalls`)\n"
-            "5. **ANSWER** — after step 4 when steps 2–3 involved new exploration.\n\n"
-            "### What to persist (you decide)\n"
-            "- Reusable join path for a **class** of questions (not one person's name)\n"
-            "- Schema convention (e.g. operational schema for asset queries)\n"
-            "- Pitfall (wrong model name, apostrophe in names)\n\n"
-            "### What NOT to persist\n"
-            "- Raw `wren context show` dumps / full column lists for every model\n"
-            "- Every successful query automatically\n"
-            "- Duplicate drawers (`mempalace_check_duplicate` first)\n\n"
-            "### Tool disambiguation\n"
-            "- `sql_memory_save` / `save_successful_sql` — SQL only; **do not pass `project`** (fixed by chat-ui)\n"
-            "- `search_known_query` / `save_successful_query` — **PromQL only** (not on this profile)\n"
-            "- Do **not** use `toolbox-postgres` on this profile — Wren only.\n"
-            "See skills `wren` and `datasource_memory_protocol`.\n"
-        )
     return (
         "\n\n## DATASOURCE MEMORY WORKFLOW (mandatory)\n"
         "Relational datasource assistant: follow this process every data turn.\n\n"
         "### Required flow\n"
-        "1. **SEARCH** — `sql_memory_search` + `mempalace_search` (skip only when the turn "
+        "1. **SEARCH** — `sql_memory_search` + `memory_recall` (skip only when the turn "
         "header includes **QueryMemory — server cache**).\n"
         f"2. **EXPLORE** — targeted `list_tables` with `schema_name` from project description; "
         f"max **{max_lt}** `list_tables` calls per turn before asking the user.\n"
@@ -142,7 +101,7 @@ def build_datasource_memory_system_prompt(profile=None) -> str:
         "4. **PERSIST** — before the final answer when this turn verified a **new reusable** path:\n"
         "   - `sql_memory_save` / `save_successful_sql`: parameterized SQL + intent template "
         "(`is_verified=true`)\n"
-        "   - `mempalace_add_drawer`: ONE concise lesson (`join_paths` / `heuristics` / `pitfalls`)\n"
+        "   - `memory_note`: ONE concise lesson (`join_paths` / `heuristics` / `pitfalls`)\n"
         "5. **ANSWER** — after step 4 when steps 2–3 involved new exploration.\n\n"
         "### What to persist (you decide)\n"
         "- Reusable join path for a **class** of questions (not one person's name)\n"
@@ -151,20 +110,19 @@ def build_datasource_memory_system_prompt(profile=None) -> str:
         "### What NOT to persist\n"
         "- Raw `list_tables` dumps / full column lists for every table\n"
         "- Every successful query automatically\n"
-        "- Duplicate drawers (`mempalace_check_duplicate` first)\n\n"
+        "- Duplicate notes (`memory_recall` first)\n\n"
         "### Tool disambiguation\n"
         "- `sql_memory_save` / `save_successful_sql` — SQL only; **do not pass `project`** (fixed by chat-ui)\n"
         "- `sql_memory_update` / `update_sql_memory_entry` — fix saved SQL by id (`sql_memory_list_saved` for ids)\n"
         "- `sql_memory_delete` / `delete_sql_memory_entry` — remove obsolete saved SQL by id\n"
         "- `search_known_query` / `save_successful_query` — **PromQL only** (not on this profile)\n"
         "- You **cannot** list or switch QueryMemory projects — only the active chat-ui project is available.\n"
-        "See skill `datasource_memory_protocol` for drawer format and examples.\n"
+        "See skill `datasource_memory_protocol` for notes format and examples.\n"
     )
 
 
 def profile_slug_wants_datasource_workflow(profile_slug: str) -> bool:
     try:
-        from src.agent_profile import profile_manager
         from src.runtime.query_memory_hooks import (
             profile_wants_sql_query_memory_by_slug,
         )
@@ -249,7 +207,7 @@ def block_list_tables_if_budget_exceeded(
         return (
             f"Blocked `{server_name}/{tool_name}`: datasource workflow allows at most "
             f"{max_lt} `list_tables` calls per turn. Search `sql_memory_search` and "
-            f"`mempalace_search` first, or ask the user to disambiguate schema/table."
+            f"`memory_recall` first, or ask the user to disambiguate schema/table."
         )
     return None
 

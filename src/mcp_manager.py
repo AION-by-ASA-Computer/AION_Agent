@@ -83,7 +83,7 @@ _DEFAULT_SESSION_SCOPED_SERVERS = frozenset(
         "ocr",  # registry slug in config/mcp_registry.yaml (folder: ocr_mcp/)
         "ocr_mcp",  # legacy alias
         "skills_hub",
-        "memory",
+        "query_memory",
         "aion_subagents",
     }
 )
@@ -146,12 +146,6 @@ def _apply_call_session_env(
         ):
             backup[key] = os.environ.get(key)
             os.environ[key] = str(val)
-        from .agent_profile import profile_manager
-
-        profile = profile_manager.get_profile(slug)
-        if profile and getattr(profile, "wren_project_path", None):
-            backup["AION_WREN_PROJECT_PATH"] = os.environ.get("AION_WREN_PROJECT_PATH")
-            os.environ["AION_WREN_PROJECT_PATH"] = profile.wren_project_path
     return backup
 
 
@@ -404,11 +398,6 @@ class MCPStdioWorker:
             env["AION_CURRENT_PROFILE_SLUG"] = slug
             env["AION_CURRENT_USER_ID"] = uid
             env["AION_CURRENT_TENANT_ID"] = tid
-            from .agent_profile import profile_manager
-
-            profile = profile_manager.get_profile(slug)
-            if profile and getattr(profile, "wren_project_path", None):
-                env["AION_WREN_PROJECT_PATH"] = profile.wren_project_path
 
             if config.get("remote_url"):
                 env["MCP_REMOTE_URL"] = config["remote_url"]

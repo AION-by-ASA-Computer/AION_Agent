@@ -7,7 +7,7 @@ import time
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 

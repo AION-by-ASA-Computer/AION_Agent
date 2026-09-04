@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 
 from src.session_workspace import _REPO_ROOT, data_root
 
