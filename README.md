@@ -81,17 +81,19 @@ Details: [docs/deployment/docker.md](docs/deployment/docker.md)
 
 ### Pre-built images (GHCR)
 
-Published on each [GitHub Release](https://github.com/AION-by-ASA-Computer/AION_Agent/releases). Pin a version in production:
+You can run AION Agent using a standalone one-liner installer that downloads the pre-built GHCR compose stack without cloning the repository.
 
 ```bash
-export AION_VERSION=1.0.0
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
+curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash
 ```
 
-For always-current dev/staging pulls, omit `AION_VERSION` (defaults to `latest` via `docker-compose.ghcr.yml`).
+To install a specific version or customize the installation (e.g., domain name), use flags:
+```bash
+curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash -s -- --version 1.4.0 --domain aion.example.com
+```
 
-See [docs/opensource/releases.md](docs/opensource/releases.md).
+For more options, run `bash -s -- --help`.
+See [docs/opensource/releases.md](docs/opensource/releases.md) for version information.
 
 ### Development compose (hot reload)
 
