@@ -72,8 +72,16 @@ def resolve_llm_credentials() -> Tuple[str, str, str]:
                             from src.runtime.credential_store import decrypt_value
 
                             api_key = decrypt_value(api_key_encrypted)
-                        except Exception:
-                            pass
+                        except Exception as exc:
+                            logger.error(
+                                "Impossibile decifrare api_key del provider LLM di "
+                                "default (%s): %s. Verificare "
+                                "AION_CREDENTIAL_ENCRYPTION_KEY nel .env oppure "
+                                "risalvare il provider dalla Admin UI per ri-cifrare "
+                                "la chiave. Proseguo con 'placeholder-token'.",
+                                type(exc).__name__,
+                                exc,
+                            )
                     else:
                         api_key = os.getenv("AION_LLM_API_KEY", "placeholder-token")
 

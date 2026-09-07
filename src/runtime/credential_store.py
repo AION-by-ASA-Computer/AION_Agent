@@ -54,24 +54,49 @@ def user_credentials_enabled() -> bool:
     return os.getenv("AION_MCP_USER_CREDENTIALS", "0").lower() in ("1", "true", "yes")
 
 
+class CredentialDecryptionError(RuntimeError):
+    """La credenziale cifrata non è decifrabile con la chiave corrente."""
+
+
+_DEV_ENVS = {"dev", "development", "local", "test", "testing"}
+
+_KEY_HELP = (
+    "Impostare AION_CREDENTIAL_ENCRYPTION_KEY con 16/24/32 byte in esadecimale "
+    "(es. `openssl rand -hex 32`)."
+)
+
+
+def _is_dev_env() -> bool:
+    return (os.getenv("AION_ENV") or "dev").strip().lower() in _DEV_ENVS
+
+
 def _get_encryption_key() -> bytes:
     raw = (os.getenv("AION_CREDENTIAL_ENCRYPTION_KEY") or "").strip()
     if raw:
         try:
             key = bytes.fromhex(raw)
         except ValueError:
-            logger.warning(
-                "AION_CREDENTIAL_ENCRYPTION_KEY non è hex valido — uso chiave dev"
-            )
             key = b""
-        if len(key) in (16, 24, 32):
-            return key
-        logger.warning(
-            "AION_CREDENTIAL_ENCRYPTION_KEY deve essere 16/24/32 byte in hex — uso chiave dev"
-        )
+            reason = "AION_CREDENTIAL_ENCRYPTION_KEY non è hex valido"
+        else:
+            if len(key) in (16, 24, 32):
+                return key
+            reason = (
+                "AION_CREDENTIAL_ENCRYPTION_KEY deve essere 16/24/32 byte in hex "
+                f"(ricevuti {len(key)})"
+            )
+    else:
+        reason = "AION_CREDENTIAL_ENCRYPTION_KEY non configurata"
+
+    if not _is_dev_env():
+        logger.error("%s — configurazione non valida. %s", reason, _KEY_HELP)
+        raise CredentialDecryptionError(f"{reason}. {_KEY_HELP}")
+
     logger.warning(
-        "AION_CREDENTIAL_ENCRYPTION_KEY non configurata — uso chiave di sviluppo insicura. "
-        "Configurare in produzione."
+        "%s — uso chiave di sviluppo insicura (AION_ENV=%s). %s",
+        reason,
+        os.getenv("AION_ENV") or "dev",
+        _KEY_HELP,
     )
     return b"aion-dev-insecure-key-0000000000"  # 32 byte
 
@@ -93,23 +118,66 @@ def encrypt_value(plaintext: str) -> str:
     return base64.b64encode(blob).decode("ascii")
 
 
+def _as_legacy_plaintext(blob: bytes) -> Optional[str]:
+    """Blob salvato in chiaro (base64 puro, pre-AES-GCM): utf-8 valido o None."""
+    try:
+        return blob.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def decrypt_value(ciphertext_b64: str) -> str:
+    """Decifra una credenziale salvata da :func:`encrypt_value`.
+
+    Solleva :class:`CredentialDecryptionError` quando il dato è cifrato ma la
+    chiave corrente non corrisponde: il fallback base64 resta valido solo per i
+    blob legacy salvati in chiaro.
+    """
+    try:
+        blob = base64.b64decode(ciphertext_b64.encode("ascii"))
+    except Exception as exc:  # noqa: BLE001 — dato corrotto o non base64
+        raise CredentialDecryptionError(
+            "credenziale non decodificabile: il valore salvato non è base64 valido"
+        ) from exc
+
     try:
         from cryptography.hazmat.primitives.ciphers.aead import AESGCM
     except ImportError:
-        return base64.b64decode(ciphertext_b64.encode("ascii")).decode("utf-8")
+        legacy = _as_legacy_plaintext(blob)
+        if legacy is not None:
+            return legacy
+        raise CredentialDecryptionError(
+            "credenziale cifrata ma il pacchetto `cryptography` non è installato"
+        )
 
-    key = _get_encryption_key()
-    blob = base64.b64decode(ciphertext_b64.encode("ascii"))
+    # Troppo corto per essere nonce(12) + tag: blob legacy in chiaro.
     if len(blob) < 13:
-        return base64.b64decode(ciphertext_b64.encode("ascii")).decode("utf-8")
-    nonce = blob[:12]
-    ct = blob[12:]
-    aesgcm = AESGCM(key)
+        legacy = _as_legacy_plaintext(blob)
+        if legacy is not None:
+            return legacy
+        raise CredentialDecryptionError("credenziale non decodificabile (blob corrotto)")
+
+    nonce, ct = blob[:12], blob[12:]
     try:
-        return aesgcm.decrypt(nonce, ct, None).decode("utf-8")
-    except Exception:
-        return base64.b64decode(ciphertext_b64.encode("ascii")).decode("utf-8")
+        return AESGCM(_get_encryption_key()).decrypt(nonce, ct, None).decode("utf-8")
+    except CredentialDecryptionError:
+        raise
+    except Exception as exc:  # noqa: BLE001 — InvalidTag o chiave errata
+        legacy = _as_legacy_plaintext(blob)
+        if legacy is not None:
+            # Valore storico salvato in chiaro con base64: nessuna cifratura da annullare.
+            return legacy
+        logger.error(
+            "Decifratura credenziale fallita (%s): AION_CREDENTIAL_ENCRYPTION_KEY non "
+            "corrisponde alla chiave con cui il dato è stato cifrato.",
+            type(exc).__name__,
+        )
+        raise CredentialDecryptionError(
+            "AION_CREDENTIAL_ENCRYPTION_KEY non corrisponde alla chiave usata per "
+            "cifrare questa credenziale. Ripristinare la chiave precedente nel .env "
+            "oppure risalvare la credenziale (provider LLM / credenziali MCP) per "
+            "ri-cifrarla con la chiave corrente."
+        ) from exc
 
 
 async def set_credential(
