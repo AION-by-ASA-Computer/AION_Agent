@@ -155,7 +155,9 @@ def decrypt_value(ciphertext_b64: str) -> str:
         legacy = _as_legacy_plaintext(blob)
         if legacy is not None:
             return legacy
-        raise CredentialDecryptionError("credenziale non decodificabile (blob corrotto)")
+        raise CredentialDecryptionError(
+            "credenziale non decodificabile (blob corrotto)"
+        )
 
     nonce, ct = blob[:12], blob[12:]
     try:
