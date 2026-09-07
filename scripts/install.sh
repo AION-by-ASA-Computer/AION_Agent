@@ -134,6 +134,44 @@ echo "[ok] Files downloaded."
 
 # --- Step 3: Generate .env ---
 echo "--- Step 3: Generating .env ---"
+
+# --- Rilevamento volume Docker preesistente ---
+# Il project name 'aion-agent' è fisso in docker-compose.ghcr.yml, quindi
+# il volume 'aion-agent_aion_data' è GLOBALE al daemon Docker, non per directory.
+# Se esiste, contiene un DB cifrato con una chiave precedente: rigenerare
+# AION_CREDENTIAL_ENCRYPTION_KEY romperebbe la decifratura al primo messaggio.
+EXISTING_VOLUME=$(docker volume ls -q --filter "name=^aion-agent_aion_data$" 2>/dev/null || true)
+if [ -n "$EXISTING_VOLUME" ]; then
+    if [ "${AION_RESET_DATA:-0}" = "1" ]; then
+        echo "[info] AION_RESET_DATA=1: rimuovo il volume 'aion-agent_aion_data' (fresh start)."
+        docker volume rm aion-agent_aion_data 2>/dev/null || true
+        EXISTING_VOLUME=""
+    elif [ "${AION_REUSE_DATA:-0}" = "1" ]; then
+        echo "[info] AION_REUSE_DATA=1: mantengo il volume esistente e la chiave di cifratura."
+    elif [ -n "${AION_CREDENTIAL_ENCRYPTION_KEY:-}" ]; then
+        echo "[info] Volume 'aion-agent_aion_data' preesistente rilevato."
+        echo "       Uso AION_CREDENTIAL_ENCRYPTION_KEY fornita dall'ambiente."
+    else
+        echo ""
+        echo "[error] Il volume Docker 'aion-agent_aion_data' esiste già."
+        echo "        Contiene un database cifrato con una chiave precedente."
+        echo "        Rigenerare la chiave causerebbe 'UnicodeDecodeError' al primo messaggio."
+        echo ""
+        echo "Opzioni:"
+        echo "  1) Fresh start (cancella il vecchio DB):"
+        echo "     AION_RESET_DATA=1 $0 $*"
+        echo ""
+        echo "  2) Mantenere il DB (usare la chiave precedente):"
+        echo "     Recupera AION_CREDENTIAL_ENCRYPTION_KEY dal .env della vecchia installazione, poi:"
+        echo "     AION_REUSE_DATA=1 AION_CREDENTIAL_ENCRYPTION_KEY=<vecchia_chiave> $0 $*"
+        echo ""
+        echo "  3) Riconfigurare il provider LLM dall'Admin UI dopo l'avvio:"
+        echo "     il salvataggio ri-cifra la chiave API con la nuova chiave."
+        echo ""
+        exit 1
+    fi
+fi
+
 cp .env.example .env
 
 # Patch .env using Python
@@ -168,11 +206,15 @@ config = {
     'CADDY_HTTPS_PORT': os.environ.get('CADDY_HTTPS_PORT', '443'),
     
     # Secrets
+    # NOTA: AION_CREDENTIAL_ENCRYPTION_KEY NON viene rigenerata se già valorizzata
+    # nell'ambiente (AION_REUSE_DATA=1) o passata via env — vedi logica sotto.
     'AION_CHAT_AUTH_SECRET': secrets.token_hex(32),
-    'AION_CREDENTIAL_ENCRYPTION_KEY': secrets.token_hex(32),
+    'AION_CREDENTIAL_ENCRYPTION_KEY': (
+        os.environ.get('AION_CREDENTIAL_ENCRYPTION_KEY') or secrets.token_hex(32)
+    ),
     'AION_API_KEY_BOOTSTRAP': f"aion_dev_{secrets.token_hex(16)}",
     'REDIS_PASSWORD': redis_password,
-    
+
     # Auth
     'AION_CHAT_PASSWORD_AUTH': '1',
     'AION_ADMIN_PASSWORD_AUTH': '1',
@@ -196,13 +238,25 @@ else:
     config['AION_SANDBOX_BACKEND'] = 'subprocess'
     print(f"[warning] Podman socket not found at {config['AION_PODMAN_SOCKET_HOST']}. Defaulting to subprocess sandbox.")
 
+# Quando AION_REUSE_DATA=1 o la chiave è già nel .env target, non sovrascrivere
+# AION_CREDENTIAL_ENCRYPTION_KEY: cambiarla renderebbe illeggibile il DB esistente.
+REUSE_DATA = os.environ.get('AION_REUSE_DATA', '0') == '1'
+# Chiavi la cui sovrascrittura è protetta in modalità reuse
+PROTECTED_IF_SET = {'AION_CREDENTIAL_ENCRYPTION_KEY'} if REUSE_DATA else set()
+
 new_lines = []
 existing_keys = []
 for line in lines:
     replaced = False
     for k, v in config.items():
         if line.startswith(f"{k}="):
-            new_lines.append(f"{k}={v}\n")
+            existing_val = line.split('=', 1)[1].strip().rstrip('\n')
+            if k in PROTECTED_IF_SET and existing_val:
+                # Mantieni il valore già presente nel .env
+                new_lines.append(line)
+                print(f"[info] Manteno {k} esistente (AION_REUSE_DATA=1).")
+            else:
+                new_lines.append(f"{k}={v}\n")
             existing_keys.append(k)
             replaced = True
             break
@@ -230,7 +284,16 @@ if [ -n "${SUDO_USER:-}" ]; then
 fi
 
 if [ -z "${AION_API_URL:-}" ] || [ -z "${AION_LLM_API_KEY:-}" ]; then
-    echo "[warning] LLM configuration (AION_API_URL, AION_LLM_API_KEY) not provided. Please edit .env later."
+    echo ""
+    echo "[action required] Configurazione LLM incompleta — il primo messaggio in chat fallirà."
+    echo "  Modifica: $AION_INSTALL_DIR/.env"
+    [ -z "${AION_API_URL:-}" ]      && echo "  • AION_API_URL     (es. http://ollama-host:11434/v1  oppure  https://api.openai.com/v1)"
+    [ -z "${AION_LLM_API_KEY:-}" ]  && echo "  • AION_LLM_API_KEY (chiave API del provider)"
+    [ -z "${AION_MODEL:-}" ]        && echo "  • AION_MODEL       (es. qwen3:8b  oppure  gpt-4o)"
+    echo ""
+    echo "  Dopo aver editato il .env, riavvia il backend:"
+    echo "  docker compose -f docker-compose.ghcr.yml restart backend"
+    echo ""
 fi
 
 # --- Step 4: Optimal Tuning ---
