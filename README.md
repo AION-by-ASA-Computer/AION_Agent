@@ -87,9 +87,14 @@ You can run AION Agent using a standalone one-liner installer that downloads the
 curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash
 ```
 
-To install a specific version or customize the installation (e.g., domain name), use flags:
+**Managing existing volumes:**
+If you have previously installed AION via GHCR, the global Docker volume `aion-agent_aion_data` may already exist. The installer will pause and ask you to choose how to handle it:
+- **Fresh start (delete old data):** Run with `AION_RESET_DATA=1`.
+- **Keep existing data:** Pass the `AION_CREDENTIAL_ENCRYPTION_KEY` from your previous installation's `.env` and run with `AION_REUSE_DATA=1`.
+
+Example keeping data:
 ```bash
-curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash -s -- --version 1.4.0 --domain aion.example.com
+AION_REUSE_DATA=1 AION_CREDENTIAL_ENCRYPTION_KEY="<your_old_key>" curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash
 ```
 
 For more options, run `bash -s -- --help`.
