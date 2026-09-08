@@ -5,6 +5,26 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.5.0...v1.5.1) (2026-09-08)
+
+
+### Features
+
+* implement credential encryption key persistence and add robust … ([4e77379](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/4e77379595a2ea5c17dfa88bef68a0aec1dcd43e))
+* implement credential encryption key persistence and add robust decryption tests ([0428350](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/0428350c5667cfe05dbc0359537cf91d7da014bb))
+
+
+### Bug Fixes
+
+* bug fix ([f8a6aa0](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/f8a6aa0cadfa667076309046fc88ed8e9e691d9a))
+* general bug fix ([c75db85](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/c75db8568374bf564ac2eb7f8150c513d749e875))
+* general bug fix ([969aafc](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/969aafc6daa9c6c89618c5b5b83bc96f96b99f2d))
+
+
+### Documentation
+
+* update installation instructions with guidance on managing existing Docker volumes ([b6b715b](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/b6b715b4d50508bc673d1bf3c8fbe1d586d7fcf4))
+
 ## [1.5.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.4.0...v1.5.0) (2026-09-07)
 
 
