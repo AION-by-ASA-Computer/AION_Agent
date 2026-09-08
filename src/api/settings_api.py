@@ -74,13 +74,18 @@ def _mask_settings_for_get(raw: Dict[str, str]) -> Dict[str, str]:
     return out
 
 
-def _filter_settings_post(updates: Dict[str, str]) -> Dict[str, str]:
+def _filter_settings_post(
+    updates: Dict[str, str], existing: Dict[str, str] | None = None
+) -> Dict[str, str]:
     """Non sovrascrivere segreti se il client re-invia il placeholder da GET mascherato."""
     out: Dict[str, str] = {}
+    existing_map = existing or {}
     for k, v in updates.items():
         if _is_sensitive_env_key(k) and _is_masked_placeholder(str(v)):
+            if k in existing_map and existing_map[k]:
+                out[k] = existing_map[k]
             continue
-        out[k] = v if v is not None else ""
+        out[k] = str(v) if v is not None else ""
     return out
 
 
@@ -138,7 +143,8 @@ def _reload_env():
 async def update_settings(update: SettingsUpdate):
     """Update .env settings."""
     try:
-        merged = _filter_settings_post(dict(update.settings))
+        existing_env = _parse_env()
+        merged = _filter_settings_post(dict(update.settings), existing=existing_env)
         base = load_base_env(repo_root=_get_repo_root())
         for key, value in base.items():
             if key not in merged and key not in RUNTIME_STICKY_KEYS:

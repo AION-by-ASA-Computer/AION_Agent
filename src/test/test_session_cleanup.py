@@ -89,10 +89,18 @@ async def test_cleanup_soft_delete_archiving(tmp_path, monkeypatch):
             assert c2.archived_at is None
     finally:
         await eng.dispose()
+        import src.data.engine as eng_mod
+
+        eng_mod._engine = None
+        eng_mod._session_factory = None
 
 
 @pytest.mark.anyio
 async def test_cleanup_hard_delete_and_sandbox(tmp_path, monkeypatch):
+    import src.data.engine as eng_mod
+
+    eng_mod._engine = None
+    eng_mod._session_factory = None
     db_file = tmp_path / "test_session_cleanup_hard.db"
     db_url = f"sqlite+aiosqlite:///{db_file}"
     monkeypatch.setenv("AION_DB_URL", db_url)
@@ -114,7 +122,7 @@ async def test_cleanup_hard_delete_and_sandbox(tmp_path, monkeypatch):
         (sandbox_dir / "test_file.txt").write_text("hello sandbox", encoding="utf-8")
         assert (sandbox_dir / "test_file.txt").exists()
 
-        # Insert old session
+        # Insert old session and a fresh session
         async with session_maker() as session:
             old_conv = Conversation(
                 id="test-old-hard-1",
@@ -124,7 +132,15 @@ async def test_cleanup_hard_delete_and_sandbox(tmp_path, monkeypatch):
                 updated_at=old_date,
                 created_at=old_date,
             )
-            session.add(old_conv)
+            new_conv = Conversation(
+                id="test-new-hard-1",
+                tenant_id="default",
+                user_id="user1",
+                profile_slug="aion_std",
+                updated_at=now,
+                created_at=now,
+            )
+            session.add_all([old_conv, new_conv])
             await session.commit()
 
         # Run hard cleanup for > 15 days
@@ -141,3 +157,84 @@ async def test_cleanup_hard_delete_and_sandbox(tmp_path, monkeypatch):
             assert c1 is None
     finally:
         await eng.dispose()
+        eng_mod._engine = None
+        eng_mod._session_factory = None
+
+
+@pytest.mark.anyio
+async def test_cleanup_protects_favorite_and_recent(tmp_path, monkeypatch):
+    import src.data.engine as eng_mod
+
+    eng_mod._engine = None
+    eng_mod._session_factory = None
+    db_file = tmp_path / "test_session_cleanup_protected.db"
+    db_url = f"sqlite+aiosqlite:///{db_file}"
+    monkeypatch.setenv("AION_DB_URL", db_url)
+    monkeypatch.setenv("AION_UNIFIED_DB", "1")
+    monkeypatch.setenv("AION_DATA_DIR", str(tmp_path))
+
+    eng = init_engine(db_url)
+    await ensure_bootstrap_schema(eng)
+    run_migrations()
+
+    try:
+        session_maker = get_async_session_maker()
+        now = datetime.now(timezone.utc)
+        old_date_1 = now - timedelta(days=30)
+        old_date_2 = now - timedelta(days=25)
+        old_date_3 = now - timedelta(days=20)
+
+        # 3 old conversations for user1:
+        # conv1: oldest, regular -> should be deleted
+        # conv2: old, marked favorite -> should be protected
+        # conv3: most recent of user1 -> should be protected by keep_min_recent=1
+        async with session_maker() as session:
+            conv1 = Conversation(
+                id="test-old-regular",
+                tenant_id="default",
+                user_id="user1",
+                profile_slug="aion_std",
+                updated_at=old_date_1,
+                created_at=old_date_1,
+            )
+            conv2 = Conversation(
+                id="test-old-fav",
+                tenant_id="default",
+                user_id="user1",
+                profile_slug="aion_std",
+                metadata_json='{"favorite": true}',
+                updated_at=old_date_2,
+                created_at=old_date_2,
+            )
+            conv3 = Conversation(
+                id="test-old-most-recent",
+                tenant_id="default",
+                user_id="user1",
+                profile_slug="aion_std",
+                updated_at=old_date_3,
+                created_at=old_date_3,
+            )
+            session.add_all([conv1, conv2, conv3])
+            await session.commit()
+
+        # Run cleanup for > 15 days with keep_min_recent=1
+        res = await cleanup_expired_sessions(
+            max_age_days=15, hard_delete=True, keep_min_recent=1
+        )
+        assert res.get("processed_conversations") == 1
+        assert "test-old-regular" in res.get("session_ids", [])
+        assert "test-old-fav" not in res.get("session_ids", [])
+        assert "test-old-most-recent" not in res.get("session_ids", [])
+
+        # Verify DB records
+        async with session_maker() as session:
+            c1 = await session.get(Conversation, "test-old-regular")
+            c2 = await session.get(Conversation, "test-old-fav")
+            c3 = await session.get(Conversation, "test-old-most-recent")
+            assert c1 is None  # Deleted
+            assert c2 is not None  # Favorite preserved
+            assert c3 is not None  # Most recent preserved
+    finally:
+        await eng.dispose()
+        eng_mod._engine = None
+        eng_mod._session_factory = None
