@@ -104,9 +104,8 @@ async def cleanup_expired_sessions(
                 )
                 if not is_hard:
                     recent_q = recent_q.where(Conversation.archived_at.is_(None))
-                recent_q = (
-                    recent_q.order_by(Conversation.updated_at.desc())
-                    .limit(keep_min_recent)
+                recent_q = recent_q.order_by(Conversation.updated_at.desc()).limit(
+                    keep_min_recent
                 )
                 recent_res = await session.execute(recent_q)
                 for r in recent_res.all():

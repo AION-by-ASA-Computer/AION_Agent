@@ -218,7 +218,9 @@ async def test_cleanup_protects_favorite_and_recent(tmp_path, monkeypatch):
             await session.commit()
 
         # Run cleanup for > 15 days with keep_min_recent=1
-        res = await cleanup_expired_sessions(max_age_days=15, hard_delete=True, keep_min_recent=1)
+        res = await cleanup_expired_sessions(
+            max_age_days=15, hard_delete=True, keep_min_recent=1
+        )
         assert res.get("processed_conversations") == 1
         assert "test-old-regular" in res.get("session_ids", [])
         assert "test-old-fav" not in res.get("session_ids", [])
@@ -236,4 +238,3 @@ async def test_cleanup_protects_favorite_and_recent(tmp_path, monkeypatch):
         await eng.dispose()
         eng_mod._engine = None
         eng_mod._session_factory = None
-

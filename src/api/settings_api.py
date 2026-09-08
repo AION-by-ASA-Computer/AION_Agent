@@ -74,7 +74,9 @@ def _mask_settings_for_get(raw: Dict[str, str]) -> Dict[str, str]:
     return out
 
 
-def _filter_settings_post(updates: Dict[str, str], existing: Dict[str, str] | None = None) -> Dict[str, str]:
+def _filter_settings_post(
+    updates: Dict[str, str], existing: Dict[str, str] | None = None
+) -> Dict[str, str]:
     """Non sovrascrivere segreti se il client re-invia il placeholder da GET mascherato."""
     out: Dict[str, str] = {}
     existing_map = existing or {}
