@@ -48,7 +48,7 @@ export default function Profiles() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [wizardPrompt, setWizardPrompt] = useState("");
   const [wizardLoading, setWizardLoading] = useState(false);
-  const NATIVE_TOOL_BUNDLES = ["web_research"];
+  const NATIVE_TOOL_BUNDLES = ["web_research", "deep_research", "mnemos"];
 
   const handleRunWizard = async () => {
     if (!wizardPrompt.trim()) return;
@@ -88,6 +88,7 @@ export default function Profiles() {
 
   const [inlineRefinePrompt, setInlineRefinePrompt] = useState("");
   const [refineLoading, setRefineLoading] = useState(false);
+  const [isCopilotOpen, setIsCopilotOpen] = useState(true);
 
   const handleRefineProfile = async (promptOverride?: string) => {
     const targetPrompt = promptOverride || inlineRefinePrompt;
@@ -258,6 +259,7 @@ export default function Profiles() {
       instructions: "You are an expert AI assistant dedicated to assisting the user with specialized tasks.",
       skills: [],
       critical_skills: [],
+      native_tool_groups: ["web_research", "mnemos"],
       mcp_servers: []
     });
   };
@@ -634,59 +636,173 @@ export default function Profiles() {
           </div>
         </div>
 
-        {/* Section Tabs Navigation inside the sticky Header container */}
+        {/* Section Tabs Navigation & Co-Pilot Toggle inside the sticky Header container */}
         {selectedProfile && (
-          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={() => setActiveTab("identity")}
-                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${activeTab === "identity"
-                  ? "bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white shadow-lg shadow-purple-900/40"
-                  : "text-slate-400 hover:text-white hover:bg-white/5"
-                  }`}
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>1. Identity & Instructions</span>
-              </button>
+          <>
+            <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("identity")}
+                  className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${activeTab === "identity"
+                    ? "bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 text-white shadow-lg shadow-purple-900/40"
+                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    }`}
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>1. Identity & Instructions</span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab("skills")}
-                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${activeTab === "skills"
-                  ? "bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-600 text-white shadow-lg shadow-blue-900/40"
-                  : "text-slate-400 hover:text-white hover:bg-white/5"
-                  }`}
-              >
-                <Layers className="w-4 h-4" />
-                <span>2. Capability Skills</span>
-                <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-mono text-white">
-                  {(selectedProfile.skills || []).length}
-                </span>
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("skills")}
+                  className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${activeTab === "skills"
+                    ? "bg-gradient-to-r from-blue-600 via-cyan-600 to-teal-600 text-white shadow-lg shadow-blue-900/40"
+                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    }`}
+                >
+                  <Layers className="w-4 h-4" />
+                  <span>2. Capability Skills</span>
+                  <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-mono text-white">
+                    {(selectedProfile.skills || []).length}
+                  </span>
+                </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveTab("mcp")}
-                className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${activeTab === "mcp"
-                  ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white shadow-lg shadow-emerald-900/40"
-                  : "text-slate-400 hover:text-white hover:bg-white/5"
-                  }`}
-              >
-                <Cpu className="w-4 h-4" />
-                <span>3. MCP Tools & Servers</span>
-                <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-mono text-white">
-                  {(selectedProfile.mcp_servers || []).length}
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("mcp")}
+                  className={`flex items-center gap-2.5 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all cursor-pointer ${activeTab === "mcp"
+                    ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-green-600 text-white shadow-lg shadow-emerald-900/40"
+                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    }`}
+                >
+                  <Cpu className="w-4 h-4" />
+                  <span>3. MCP Tools & Servers</span>
+                  <span className="px-2 py-0.5 rounded-full bg-white/20 text-[10px] font-mono text-white">
+                    {(selectedProfile.mcp_servers || []).length}
+                  </span>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3 pr-1">
+                <span className="hidden md:inline text-xs text-slate-400 font-mono">
+                  Agent: <strong className="text-purple-400 font-semibold">{selectedProfile.name || "Untitled"}</strong>
                 </span>
-              </button>
+
+                {/* AI Co-Pilot Toggle Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsCopilotOpen((prev) => !prev)}
+                  title={isCopilotOpen ? "Nascondi AI Co-Pilot" : "Mostra AI Co-Pilot"}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${isCopilotOpen
+                    ? "bg-purple-600/25 border-purple-500/50 text-purple-200 shadow-md shadow-purple-950/50"
+                    : "bg-white/5 border-white/10 text-slate-400 hover:text-purple-300 hover:bg-purple-900/20 hover:border-purple-500/30"
+                    }`}
+                >
+                  <Wand2 className={`w-3.5 h-3.5 ${isCopilotOpen ? "text-purple-400 animate-pulse" : "text-slate-400"}`} />
+                  <span>AI Co-Pilot</span>
+                  {isCopilotOpen ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-purple-400 transition-transform" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 transition-transform" />
+                  )}
+                </button>
+              </div>
             </div>
 
-            <div className="hidden md:flex items-center gap-3 pr-2">
-              <span className="text-xs text-slate-400 font-mono">
-                Agent: <strong className="text-purple-400 font-semibold">{selectedProfile.name || "Untitled"}</strong>
-              </span>
-            </div>
-          </div>
+            {/* COLLAPSIBLE FIXED AI PROFILE CO-PILOT BANNER */}
+            {isCopilotOpen && (
+              <div className="pt-3 border-t border-purple-500/20 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-950/50 via-[#121218]/95 to-indigo-950/40 p-3 px-4 flex flex-col xl:flex-row xl:items-center justify-between gap-3 shadow-inner shadow-purple-950/30 backdrop-blur-md">
+                  
+                  {/* Label */}
+                  <div className="flex items-center justify-between xl:justify-start gap-2 text-purple-400 font-bold text-xs uppercase tracking-wider shrink-0">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1 rounded-lg bg-purple-500/20 border border-purple-500/30">
+                        <Wand2 className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
+                      </div>
+                      <span>AI Profile Co-Pilot</span>
+                    </div>
+
+                    {/* Mobile arrow to collapse */}
+                    <button
+                      type="button"
+                      onClick={() => setIsCopilotOpen(false)}
+                      title="Nascondi Co-Pilot"
+                      className="xl:hidden p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                    >
+                      <ChevronUp className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* Input & Applica */}
+                  <div className="flex-1 flex items-center gap-2 max-w-3xl">
+                    <input
+                      type="text"
+                      value={inlineRefinePrompt}
+                      onChange={(e) => setInlineRefinePrompt(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRefineProfile();
+                      }}
+                      placeholder="Chiedi all'IA di modificare questo profilo... (es: 'Formatta in JSON', 'Aggiungi memoria LTM')"
+                      className="flex-1 bg-black/60 border border-purple-500/30 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-gray-500 focus:border-purple-400 focus:ring-1 focus:ring-purple-400/30 outline-none transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRefineProfile()}
+                      disabled={refineLoading || !inlineRefinePrompt.trim()}
+                      className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-900/30 disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap"
+                    >
+                      {refineLoading ? (
+                        <>
+                          <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                          <span>Applico...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-3.5 h-3.5" />
+                          <span>Applica</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* Quick Chips & Desktop Collapse Arrow */}
+                  <div className="flex items-center gap-2 shrink-0 justify-between xl:justify-end">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {[
+                        { label: "🧠 Memoria", prompt: "Aggiungi la capacità di ricordare conversazioni passate con la memoria a lungo termine, aggiungendo l'MCP \"Mnemos\" e la skill \"memory_protocol\"." },
+                        { label: "📧 Email", prompt: "Aggiungi l'integrazione per leggere ed inviare email via IMAP/SMTP." },
+                        { label: "🌐 Web", prompt: "Aggiungi la capacità di effettuare ricerche sul web." },
+                        { label: "⚡ JSON", prompt: "Aggiorna le istruzioni rendendo obbligatorio il formato JSON strutturato per tutte le risposte." },
+                      ].map((chip) => (
+                        <button
+                          key={chip.label}
+                          type="button"
+                          onClick={() => handleRefineProfile(chip.prompt)}
+                          disabled={refineLoading}
+                          className="px-2.5 py-1 rounded-lg bg-purple-900/30 border border-purple-500/25 text-purple-300 hover:bg-purple-800/50 hover:border-purple-400 text-xs transition-all cursor-pointer font-medium disabled:opacity-50"
+                        >
+                          {chip.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Desktop arrow to collapse */}
+                    <button
+                      type="button"
+                      onClick={() => setIsCopilotOpen(false)}
+                      title="Nascondi Co-Pilot"
+                      className="hidden xl:flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer ml-1"
+                    >
+                      <ChevronUp className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                </div>
+              </div>
+            )}
+          </>
         )}
       </header>
 
@@ -700,64 +816,6 @@ export default function Profiles() {
             {/* ================= TAB 1: IDENTITY & INSTRUCTIONS ================= */}
             {activeTab === "identity" && (
               <div className="flex flex-col gap-6 animate-in fade-in duration-200">
-
-                {/* ELEGANT COMPACT TOP BANNER: AI PROFILE CO-PILOT */}
-                <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 via-[#121216] to-indigo-950/40 p-3.5 px-5 flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-2xl backdrop-blur-md">
-                  <div className="flex items-center gap-2 text-purple-400 font-bold text-xs uppercase tracking-wider shrink-0">
-                    <Wand2 className="w-4 h-4 animate-pulse" />
-                    <span>AI Profile Co-Pilot</span>
-                  </div>
-
-                  <div className="flex-1 flex items-center gap-2 max-w-3xl">
-                    <input
-                      type="text"
-                      value={inlineRefinePrompt}
-                      onChange={(e) => setInlineRefinePrompt(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleRefineProfile();
-                      }}
-                      placeholder="Chiedi all'IA di modificare questo profilo... (es: 'Formatta in JSON', 'Aggiungi memoria LTM')"
-                      className="flex-1 bg-black/60 border border-purple-500/30 rounded-xl px-4 py-2 text-xs text-white placeholder:text-gray-500 focus:border-purple-500 focus:ring-1 focus:ring-purple-500/30 outline-none transition-all"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleRefineProfile()}
-                      disabled={refineLoading || !inlineRefinePrompt.trim()}
-                      className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-900/30 disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap"
-                    >
-                      {refineLoading ? (
-                        <>
-                          <Sparkles className="w-3.5 h-3.5 animate-spin" />
-                          <span>...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Wand2 className="w-3.5 h-3.5" />
-                          <span>Applica</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-
-                  <div className="hidden lg:flex items-center gap-1.5 shrink-0">
-                    {[
-                      { label: "🧠 Memoria", prompt: "Aggiungi la capacità di ricordare conversazioni passate con la memoria a lungo termine, aggiungendo l'MCP \"Mnemos\" e la skill \"memory_protocol\"." },
-                      { label: "📧 Email", prompt: "Aggiungi l'integrazione per leggere ed inviare email via IMAP/SMTP." },
-                      { label: "🌐 Web", prompt: "Aggiungi la capacità di effettuare ricerche sul web." },
-                      { label: "⚡ JSON", prompt: "Aggiorna le istruzioni rendendo obbligatorio il formato JSON strutturato per tutte le risposte." },
-                    ].map((chip) => (
-                      <button
-                        key={chip.label}
-                        type="button"
-                        onClick={() => handleRefineProfile(chip.prompt)}
-                        disabled={refineLoading}
-                        className="px-2.5 py-1 rounded-lg bg-purple-900/30 border border-purple-500/25 text-purple-300 hover:bg-purple-800/50 hover:border-purple-400 text-xs transition-all cursor-pointer font-medium disabled:opacity-50"
-                      >
-                        {chip.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
 
                 {/* TOP ROW (2 EQUAL COLUMNS): AGENT IDENTITY (LEFT 6 COLS) vs CONFIGURED TOOLS (RIGHT 6 COLS) */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
@@ -1055,22 +1113,35 @@ export default function Profiles() {
                           .filter(bid => !showSelectedMCPsOnly || (selectedProfile?.native_tool_groups || []).includes(bid))
                           .map((bid) => {
                             const isConnected = (selectedProfile.native_tool_groups || []).includes(bid);
+                            const desc = availableMCPs[bid] || (bid === "mnemos" ? "LTM Mnemos — recall, note, forget (in-process)." : bid === "deep_research" ? "Multi-turn autonomous web research agent." : "Web search & fetch tools.");
                             return (
                               <div
                                 key={bid}
                                 onClick={() => toggleNativeBundle(bid)}
-                                className={`flex items-center justify-between p-5 rounded-2xl border cursor-pointer transition-all ${isConnected
+                                className={`flex flex-col justify-between p-5 rounded-2xl border cursor-pointer transition-all ${isConnected
                                   ? 'bg-cyan-950/30 border-cyan-500/60 shadow-xl shadow-cyan-950/40 text-cyan-100'
                                   : 'bg-[#16161d]/60 border-white/10 hover:border-white/25 hover:bg-[#16161d] text-slate-300'
                                   }`}
                               >
-                                <div>
-                                  <div className="text-sm font-mono font-bold text-slate-100">{bid}</div>
-                                  <div className="text-xs text-slate-300 mt-1">Built-in agent execution tools</div>
+                                <div className="space-y-2">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <span className="text-sm font-mono font-bold text-slate-100 truncate">{bid}</span>
+                                    {isConnected && <Check className="h-4 w-4 text-cyan-400" />}
+                                  </div>
+                                  <p className="text-xs text-slate-300 line-clamp-3 leading-relaxed font-sans">
+                                    {desc}
+                                  </p>
                                 </div>
-                                <span className="text-xs uppercase font-bold tracking-wider px-2.5 py-1 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                                  Native
-                                </span>
+
+                                <div className="pt-4 mt-3 border-t border-white/10 flex items-center justify-between">
+                                  <span className={`text-xs font-bold uppercase tracking-wider px-3 py-1 rounded-full shadow-sm ${isConnected ? 'bg-cyan-500/30 text-cyan-200 border border-cyan-400/40' : 'bg-white/5 text-slate-400 border border-white/5'
+                                    }`}>
+                                    {isConnected ? 'Connected' : 'Disconnected'}
+                                  </span>
+                                  <span className="text-xs uppercase font-bold tracking-wider px-2.5 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                    Native
+                                  </span>
+                                </div>
                               </div>
                             );
                           })}

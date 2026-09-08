@@ -43,12 +43,34 @@ def _delete_session_sandbox(session_id: str) -> bool:
     return deleted
 
 
+def _is_protected_conversation(conv: Conversation) -> bool:
+    """Return True if conversation is starred/pinned or explicitly protected."""
+    try:
+        import json
+
+        meta = json.loads(conv.metadata_json or "{}")
+        if meta.get("favorite") in (True, "true", 1, "1"):
+            return True
+        if meta.get("pinned") in (True, "true", 1, "1"):
+            return True
+    except Exception:
+        pass
+    return False
+
+
 async def cleanup_expired_sessions(
     *,
     max_age_days: int | None = None,
     hard_delete: bool | None = None,
+    keep_min_recent: int = 1,
 ) -> Dict[str, Any]:
-    """Clean up or archive sessions older than max_age_days."""
+    """Clean up or archive sessions older than max_age_days.
+
+    Protections:
+    - Favorite / pinned conversations are never deleted or archived.
+    - At least `keep_min_recent` (default: 1) most recent conversations per user
+      are kept so users returning after inactive periods never encounter a blank/empty state.
+    """
     cfg_days, _, cfg_hard = _session_cleanup_settings()
     days = max_age_days if max_age_days is not None else cfg_days
     is_hard = hard_delete if hard_delete is not None else cfg_hard
@@ -63,17 +85,46 @@ async def cleanup_expired_sessions(
 
     async with get_async_session_maker()() as session:
         # Find active or non-cleaned conversations whose updated_at < cutoff
-        query = select(Conversation.id).where(Conversation.updated_at < cutoff)
+        query = select(Conversation).where(Conversation.updated_at < cutoff)
         if not is_hard:
             # Soft delete (archiving): process only currently unarchived conversations
             query = query.where(Conversation.archived_at.is_(None))
 
         result = await session.execute(query)
-        conv_ids = [str(r[0]).strip() for r in result.all() if r[0]]
+        candidates = result.scalars().all()
+
+        # Identify protected recent conversation IDs per user
+        protected_recent_ids: set[str] = set()
+        if keep_min_recent > 0 and candidates:
+            user_keys = {(c.tenant_id, c.user_id) for c in candidates}
+            for t_id, u_id in user_keys:
+                recent_q = select(Conversation.id).where(
+                    Conversation.tenant_id == t_id,
+                    Conversation.user_id == u_id,
+                )
+                if not is_hard:
+                    recent_q = recent_q.where(Conversation.archived_at.is_(None))
+                recent_q = (
+                    recent_q.order_by(Conversation.updated_at.desc())
+                    .limit(keep_min_recent)
+                )
+                recent_res = await session.execute(recent_q)
+                for r in recent_res.all():
+                    if r[0]:
+                        protected_recent_ids.add(str(r[0]).strip())
+
+        to_process: List[Conversation] = []
+        for conv in candidates:
+            if _is_protected_conversation(conv):
+                continue
+            if conv.id in protected_recent_ids:
+                continue
+            to_process.append(conv)
 
         now = datetime.now(timezone.utc)
 
-        for conv_id in conv_ids:
+        for conv in to_process:
+            conv_id = conv.id
             try:
                 # Release MCP session pool if active
                 try:

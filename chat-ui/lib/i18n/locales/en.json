@@ -492,7 +492,7 @@
       "regenerate": "Regenerate response",
       "memorize": "Memorize information",
       "memorized_prefix": "The agent has memorized: ",
-      "memorize_instruction": "Analyze the following conversation turn (question, thinking and answer) and extract the relevant main information for the active project. Use the `memory_note` tool to save durable lessons (one line per note, max 500 chars). For SQL queries or schemas, also use `sql_memory_save` when appropriate. If the information is already in memory, do not duplicate it. Respond with exactly one sentence starting with 'The agent has memorized: ' followed by a very short summary (or 'The agent detected that the info is already in memory').",
+      "memorize_instruction": "MANDATORY ACTION: Analyze the following conversation turn (question, thinking, and answer) and extract durable key facts and information relevant to the active project. You MUST CALL the `memory_note` tool setting ALWAYS scope='project' (save exclusively under the current project, NEVER under scope='user') for each extracted piece of information (one line per note, max 500 chars, category='fact' or appropriate, scope='project'). For SQL queries or schemas, also call `sql_memory_save`. Do not duplicate notes across multiple scopes. ONLY AFTER successfully invoking the memory tools (or detecting it already exists), respond with exactly one confirmation sentence starting with 'The agent has memorized: ' followed by a very short summary (or 'The agent detected that the info is already in memory').",
       "feedback_placeholder": "Why didn't you like this message? (Add an optional description)...",
       "feedback_title": "Feedback on response",
       "feedback_submit": "Submit",
