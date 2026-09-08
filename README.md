@@ -81,17 +81,24 @@ Details: [docs/deployment/docker.md](docs/deployment/docker.md)
 
 ### Pre-built images (GHCR)
 
-Published on each [GitHub Release](https://github.com/AION-by-ASA-Computer/AION_Agent/releases). Pin a version in production:
+You can run AION Agent using a standalone one-liner installer that downloads the pre-built GHCR compose stack without cloning the repository.
 
 ```bash
-export AION_VERSION=1.0.0
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml pull
-docker compose -f docker-compose.yml -f docker-compose.ghcr.yml up -d --no-build
+curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash
 ```
 
-For always-current dev/staging pulls, omit `AION_VERSION` (defaults to `latest` via `docker-compose.ghcr.yml`).
+**Managing existing volumes:**
+If you have previously installed AION via GHCR, the global Docker volume `aion-agent_aion_data` may already exist. The installer will pause and ask you to choose how to handle it:
+- **Fresh start (delete old data):** Run with `AION_RESET_DATA=1`.
+- **Keep existing data:** Pass the `AION_CREDENTIAL_ENCRYPTION_KEY` from your previous installation's `.env` and run with `AION_REUSE_DATA=1`.
 
-See [docs/opensource/releases.md](docs/opensource/releases.md).
+Example keeping data:
+```bash
+AION_REUSE_DATA=1 AION_CREDENTIAL_ENCRYPTION_KEY="<your_old_key>" curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash
+```
+
+For more options, run `bash -s -- --help`.
+See [docs/opensource/releases.md](docs/opensource/releases.md) for version information.
 
 ### Development compose (hot reload)
 

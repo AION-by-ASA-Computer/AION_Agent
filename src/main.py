@@ -1351,7 +1351,10 @@ async def _finish_get_agent_build(
         logger.info("Caricamento provider LLM dal database: %s", llm_provider_name)
         from src.data.engine import get_async_session_maker
         from src.data.models import LlmProvider
-        from src.runtime.credential_store import decrypt_value
+        from src.runtime.credential_store import (
+            CredentialDecryptionError,
+            decrypt_value,
+        )
 
         async with get_async_session_maker()() as session:
             row = (
@@ -1384,7 +1387,18 @@ async def _finish_get_agent_build(
                 )
                 provider_timeout = row.timeout
                 if row.api_key_encrypted:
-                    api_key = decrypt_value(row.api_key_encrypted)
+                    try:
+                        api_key = decrypt_value(row.api_key_encrypted)
+                    except CredentialDecryptionError as exc:
+                        logger.error(
+                            "Provider LLM %s: impossibile decifrare api_key (%s)",
+                            llm_provider_name,
+                            exc,
+                        )
+                        raise RuntimeError(
+                            f"Chiave API del provider LLM '{llm_provider_name}' non "
+                            f"decifrabile: {exc}"
+                        ) from exc
                     api_key_secret = Secret.from_token(api_key)
                 else:
                     api_key_secret = Secret.from_token(
