@@ -24,7 +24,7 @@ async def test_build_all_tools_includes_orchestration_without_profile_entry(
 
     profile = SimpleNamespace(
         name="Coding Workspace",
-        mcp_servers=["session_sandbox", "code", "skills_hub", "memory"],
+        mcp_servers=["session_sandbox", "code", "skills_hub", "query_memory"],
     )
 
     tools = await build_all_tools("sess-test-1", profile, user_id="u1")

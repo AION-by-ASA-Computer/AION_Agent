@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import type { CredentialSchemaField } from "@/lib/mcpIntegrationPolicy";
 import { cn } from "@/lib/cn";
@@ -17,6 +18,23 @@ const inputClass =
   "focus-ring w-full rounded-xl border border-border/70 bg-background/60 px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60";
 
 export function CredentialSchemaEditor({ value, onChange, className, showEnvPlaceholders = true }: Props) {
+  const idMapRef = useRef<WeakMap<CredentialSchemaField, string>>(new WeakMap());
+
+  function getFieldId(field: CredentialSchemaField, index: number): string {
+    if (field._id) return field._id;
+    let cached = idMapRef.current.get(field);
+    if (!cached) {
+      cached = `cred_field_${index}_${Math.random().toString(36).slice(2, 9)}`;
+      idMapRef.current.set(field, cached);
+      try {
+        field._id = cached;
+      } catch {
+        /* ignore */
+      }
+    }
+    return cached;
+  }
+
   function updateAt(index: number, patch: Partial<CredentialSchemaField>) {
     const next = value.map((f, i) => (i === index ? { ...f, ...patch } : f));
     onChange(next);
@@ -27,9 +45,11 @@ export function CredentialSchemaEditor({ value, onChange, className, showEnvPlac
   }
 
   function addField() {
+    const newId = `cred_field_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     onChange([
       ...value,
       {
+        _id: newId,
         key: `FIELD_${value.length + 1}`,
         label: "Nuovo campo",
         type: "password",
@@ -57,11 +77,13 @@ export function CredentialSchemaEditor({ value, onChange, className, showEnvPlac
         </p>
       ) : (
         <div className="space-y-2">
-          {value.map((field, index) => (
-            <div
-              key={`${field.key}-${index}`}
-              className="space-y-2 rounded-2xl border border-border/70 bg-muted/20 p-3"
-            >
+          {value.map((field, index) => {
+            const rowKey = getFieldId(field, index);
+            return (
+              <div
+                key={rowKey}
+                className="space-y-2 rounded-2xl border border-border/70 bg-muted/20 p-3"
+              >
               <div className="grid gap-2 sm:grid-cols-[1fr_1fr_auto_auto_auto]">
                 <div>
                   <label className="mb-1 block text-[0.714em] font-medium text-muted-foreground">Chiave</label>
@@ -121,7 +143,8 @@ export function CredentialSchemaEditor({ value, onChange, className, showEnvPlac
                 </p>
               ) : null}
             </div>
-          ))}
+          );
+        })}
         </div>
       )}
     </div>

@@ -1,7 +1,7 @@
 import yaml
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 
 def resolve_env_placeholders(

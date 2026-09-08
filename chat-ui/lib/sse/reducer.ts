@@ -3,7 +3,6 @@ import { feedPlanAwareDisplay, stripPlanBlocksForChatDisplay } from "./planDispl
 import {
   generatingTitleForFileTool,
   isFilePreviewTool,
-  isScriptLikeTitle,
 } from "./filePreviewTools";
 import { coalesceTurnSegments } from "./coalesceTurnSegments";
 import { initialTurnState } from "./types";
@@ -110,19 +109,7 @@ function resolveToolId(
   return state.activeToolKeyByName[name] || latestToolKeyForName(state, name) || eid || name;
 }
 
-function syncLegacyToolFromSegment(next: TurnState, seg: Extract<TurnSegment, { kind: "tool" }>): void {
-  next.toolSteps[seg.id] = {
-    id: seg.id,
-    name: seg.name,
-    input: seg.input,
-    output: seg.output,
-    isError: seg.isError,
-    status: seg.status,
-  };
-  if (!next.toolOrder.includes(seg.id)) {
-    next.toolOrder.push(seg.id);
-  }
-}
+
 
 function upsertToolSegment(
   segments: TurnSegment[],

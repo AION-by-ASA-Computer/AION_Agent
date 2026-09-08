@@ -1,4 +1,4 @@
-"""Datasource memory orchestrator without MemPalace nav hooks."""
+"""Datasource memory orchestrator tests."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from src.runtime.datasource_memory_orchestrator import (
 from src.runtime.hooks import HookContext
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_orchestrator_injects_active_project(monkeypatch):
     monkeypatch.setenv("AION_DATASOURCE_MEMORY_ORCHESTRATOR", "1")
     ctx = HookContext(

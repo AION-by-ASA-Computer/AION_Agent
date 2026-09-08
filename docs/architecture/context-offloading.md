@@ -426,8 +426,6 @@ Add to `.env.example` under the compaction block. **L1 offload and L2 ledger are
 | `AION_TOOL_LEDGER_ENABLED` | `1` | Master gate for L2 |
 | `AION_TOOL_LEDGER_MAX_ROWS` | `60` | Rows rendered before collapsing |
 | `AION_TOOL_LEDGER_MAX_CHARS` | `3000` | Hard cap on injected table |
-| `AION_PI_CUSTOM_COMPACTION` | `0` | Master gate for L3 |
-| `AION_PI_COMPACTION_HTTP_TIMEOUT` | `120` | Worker → backend summarize timeout |
 
 Reference thresholds from comparable systems, for calibration: Deep Agents
 offloads above 20 k tokens with a 10-line preview; Strands `ContextOffloader`
@@ -498,9 +496,8 @@ and the agent re-reading at least one offloaded file with
 |------|-------|-------------|
 | 1 | `AION_TOOL_OFFLOAD_ENABLED=1` | dev/staging long_run |
 | 2 | + `AION_TOOL_LEDGER_ENABLED=1` | dev/staging |
-| 3 | + `AION_PI_CUSTOM_COMPACTION=1` | dev Pi worker |
-| 4 | All three ON | production `long_run` |
-| 5 | L1+L2 ON (Haystack normal) | production after long_run stable |
+| 3 | All three ON | production `long_run` |
+| 4 | L1+L2 ON (Haystack normal) | production after long_run stable |
 
 Restart `services/pi-long-run` after changing Pi-related flags so extensions reload.
 

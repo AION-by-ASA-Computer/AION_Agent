@@ -35,7 +35,7 @@ def mnemos_db(monkeypatch, tmp_path):
     return url
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_insert_and_wake(mnemos_db):
     scope = user_scope("default", "tester")
     for i in range(5):
@@ -47,7 +47,7 @@ async def test_insert_and_wake(mnemos_db):
     assert any("postgres" in (r.get("line") or "") for r in rows)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_supersede_chain(mnemos_db):
     scope = user_scope("default", "tester2")
     n1 = await store.insert_note(scope, content="works at company X", category="fact")
@@ -59,7 +59,7 @@ async def test_supersede_chain(mnemos_db):
     assert current.id == n2.id
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_insert_notes_bulk_matches_loop(mnemos_db):
     """Bulk insert should produce same row count, seq range, and FTS hits as a loop."""
     from src.memory.mnemos.scope import project_scope
@@ -93,7 +93,7 @@ async def test_insert_notes_bulk_matches_loop(mnemos_db):
     assert {n.content for n, _ in loop_hits} == {n.content for n, _ in bulk_hits}
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_parallel_insert_unique_seq(mnemos_db):
     """Parallel memory_note calls must not collide on (scope, seq)."""
     import asyncio

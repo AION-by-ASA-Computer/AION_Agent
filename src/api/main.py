@@ -343,6 +343,7 @@ async def _lifespan(app: FastAPI):
         logger.warning("cron scheduler: %s", e)
 
     _offload_cleanup_task = None
+    _session_cleanup_task = None
     _memory_maintenance_task = None
     try:
         from src.runtime.offload_cleanup import offload_cleanup_loop
@@ -355,6 +356,18 @@ async def _lifespan(app: FastAPI):
             logger.info("Tool offload cleanup loop scheduled.")
     except Exception as e:
         logger.warning("tool offload cleanup: %s", e)
+
+    try:
+        from src.runtime.session_cleanup import session_cleanup_loop
+        from src.settings import get_settings
+
+        if get_settings().session_cleanup_max_age_days > 0:
+            _session_cleanup_task = asyncio.create_task(
+                session_cleanup_loop(), name="session-cleanup"
+            )
+            logger.info("Session automatic cleanup loop scheduled.")
+    except Exception as e:
+        logger.warning("session cleanup loop: %s", e)
 
     try:
         from src.runtime.memory_maintenance import memory_maintenance_loop
@@ -493,23 +506,11 @@ app.include_router(orchestration_router)
 app.include_router(research_router)
 app.include_router(plan_execution_router)
 
-from src.api.internal.pi_tools import router as pi_tools_router
-
-app.include_router(pi_tools_router)
-
 from .auth_login import router as auth_login_router
 from .chat_ui import router as chat_ui_router
 
 app.include_router(auth_login_router)
 app.include_router(chat_ui_router)
-
-# Inclusione ESPLICITA per debug/sicurezza
-from .admin_agent_db import router as agent_db_router
-from .agent_db_internal import router as agent_db_internal_router
-
-app.include_router(agent_db_router, prefix="/admin/agent-db")
-app.include_router(agent_db_internal_router)
-logger.info("Agent DB router included directly in main at /admin/agent-db")
 
 
 @app.middleware("http")

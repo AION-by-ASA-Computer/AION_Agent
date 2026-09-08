@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
 
-from .mcp_server_files import read_mcp_server_files, resolve_mcp_server_dir
+from .mcp_server_files import resolve_mcp_server_dir
 
 logger = logging.getLogger("aion.mcp_credential_discovery")
 

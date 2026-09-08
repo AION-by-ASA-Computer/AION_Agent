@@ -2,7 +2,6 @@
 
 from src.mcp_connector_catalog import _connector_by_id, load_mcp_connector_catalog
 from src.mcp_integration_sync import (
-    build_integration_preview,
     merge_suggested_env_into_registry,
     suggest_registry_env_for_per_user,
 )

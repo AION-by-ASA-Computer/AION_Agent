@@ -1,7 +1,5 @@
 """draft_execution_plan built-in orchestration tool."""
 
-import asyncio
-
 import pytest
 
 from src.runtime import orchestration_tools as ot

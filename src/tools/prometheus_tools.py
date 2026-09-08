@@ -2,7 +2,7 @@ import requests
 import time
 import re
 import pandas as pd
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Optional
 from dataclasses import dataclass
 
 

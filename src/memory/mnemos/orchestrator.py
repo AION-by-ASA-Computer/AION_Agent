@@ -13,7 +13,6 @@ from .compress import schedule_compress
 from .format import format_wake_block
 from .recall import recall, recall_across_scopes
 from .scope import (
-    default_tenant_id,
     parse_scope_name,
     resolve_scope_for_write,
     resolve_scopes_for_wake,
@@ -151,11 +150,7 @@ class MnemosOrchestrator:
         return await store.forget_note(note_id, hard=hard)
 
     def _extraction_skill_text(self) -> str:
-        return (
-            skill_registry.get_skill("ltm_note_extraction")
-            or skill_registry.get_skill("ltm_extraction")
-            or ""
-        )
+        return skill_registry.get_skill("ltm_note_extraction") or ""
 
     async def apply_extraction(
         self,

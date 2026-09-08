@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from typing import Optional, Tuple
+from typing import Tuple
 
 import requests
 

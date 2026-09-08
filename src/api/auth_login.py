@@ -46,7 +46,7 @@ _TOKEN_TTL_SEC = int(os.getenv("AION_CHAT_AUTH_TOKEN_TTL_SEC", str(7 * 24 * 3600
 
 
 def _secret() -> str:
-    # chat_auth_secret() legge AION_CHAT_AUTH_SECRET (nuovo) o CHAINLIT_AUTH_SECRET (legacy)
+    # chat_auth_secret() legge AION_CHAT_AUTH_SECRET
     s = chat_auth_secret()
     if not s:
         return "aion-chat-auth-dev-insecure"

@@ -45,17 +45,17 @@ def test_critical_empty_still_inlines_core_protocol():
 
 
 def test_critical_none_matches_legacy_default():
-    assert "agent_db_protocol" in DEFAULT_CRITICAL_SKILL_NAMES
+    assert "artifact_protocol" in DEFAULT_CRITICAL_SKILL_NAMES
     p = AgentProfile(
         name="T",
         description="",
         instructions="Hi",
-        skills=["agent_db_protocol"],
+        skills=["artifact_protocol"],
         critical_skills=None,
         slug="t",
     )
     body = p.generate_system_prompt()
-    assert "### Protocol rules (agent_db_protocol)" in body
+    assert "### Protocol rules (artifact_protocol)" in body
 
 
 def test_datetime_placeholders_resolved_in_inlined_skills():

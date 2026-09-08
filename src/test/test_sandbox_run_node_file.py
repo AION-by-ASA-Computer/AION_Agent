@@ -1,7 +1,5 @@
 """sandbox_run_node_file path validation."""
 
-import pytest
-
 from src.tools.session_code import SessionSandboxExecutor
 
 

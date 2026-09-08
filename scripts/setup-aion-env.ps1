@@ -57,7 +57,7 @@ if ($dockerMode) {
   Banner
   Write-Host "[setup] Docker preset selected." -ForegroundColor Cyan
   $envFile = Join-Path $Root ".env"
-  $template = Join-Path $Root ".env.docker.example"
+  $template = Join-Path $Root ".env.example"
   if (-not (Test-Path $template)) {
     Write-Host "Missing $template" -ForegroundColor Red
     exit 2
@@ -70,9 +70,9 @@ if ($dockerMode) {
   }
   if (-not $dryRun) {
     Copy-Item $template $envFile -Force
-    Write-Host "[setup] Copied .env.docker.example -> .env (edit DOMAIN, CADDY_* ports, AION_API_URL, secrets)"
+    Write-Host "[setup] Copied .env.example -> .env (edit DOMAIN, CADDY_* ports, AION_API_URL, secrets)"
   } else {
-    Write-Host "[dry-run] Would copy .env.docker.example -> .env"
+    Write-Host "[dry-run] Would copy .env.example -> .env"
   }
   Write-Host ""
   Write-Host "Next steps:"

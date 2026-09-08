@@ -19,7 +19,6 @@ async def _reset_unified_db(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("AION_DEFAULT_TENANT_ID", "default")
     monkeypatch.setenv("AION_DB_URL", f"sqlite+aiosqlite:///{tmp_path / 'aion.db'}")
     monkeypatch.delenv("AION_CHAT_UI_INTERNAL_SECRET", raising=False)
-    monkeypatch.setenv("AION_SHOW_TOOL_CALLS", "complete")
     from src.settings import get_settings
 
     get_settings.cache_clear()

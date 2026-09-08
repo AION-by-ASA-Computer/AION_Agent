@@ -27,4 +27,4 @@ skills:
 critical_skills:
 - mcp_integration_advisor
 mcp_servers:
-- memory
+- query_memory

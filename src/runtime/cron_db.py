@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import func, select, update
 
 from src.data.engine import get_async_session_maker
 from src.data.models import ScheduledJob, ScheduledJobRun

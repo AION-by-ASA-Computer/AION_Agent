@@ -499,7 +499,6 @@ class ChatHistoryManager:
                 metadata_json=metadata_json,
             )
         # Non-unified implementation skipped for brevity as we focus on aion.db
-        pass
 
     async def update_step(
         self,
@@ -544,7 +543,6 @@ class ChatHistoryManager:
                 attachment_id,
             )
         # Non-unified implementation skipped
-        pass
 
     async def get_messages(
         self,

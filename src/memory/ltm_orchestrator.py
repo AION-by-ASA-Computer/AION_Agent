@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from ..skill_registry import skill_registry
 from .llm_extract import complete_json_async
@@ -69,11 +69,7 @@ class LTMOrchestrator:
         )
 
     def _extraction_skill_text(self) -> str:
-        return (
-            skill_registry.get_skill("ltm_note_extraction")
-            or skill_registry.get_skill("ltm_extraction")
-            or ""
-        )
+        return skill_registry.get_skill("ltm_note_extraction") or ""
 
     async def extract_and_persist(
         self,

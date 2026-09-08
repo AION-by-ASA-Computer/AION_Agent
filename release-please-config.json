@@ -4,6 +4,7 @@
     ".": {
       "release-type": "simple",
       "package-name": "aion-agent",
+      "release-as": "1.5.1",
       "changelog-path": "CHANGELOG.md",
       "include-component-in-tag": false,
       "extra-files": [

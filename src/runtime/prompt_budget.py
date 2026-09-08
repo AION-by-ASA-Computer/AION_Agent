@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,6 @@ _DEFAULT_LAYER_BUDGETS: Dict[str, int] = {
     "workspace_manifest": 500,
     "orchestration_context": 500,
     "sql_query_memory": 400,
-    "mempalace_nav": 400,
     "project_context": 400,
     "session_entity_cache": 300,
     "exploration_reminder": 200,
@@ -83,7 +82,6 @@ _LAYER_PRIORITY: Dict[str, int] = {
     "plan_artifact_reminder": 5,
     "ltm_wake": 15,
     "sql_query_memory": 25,
-    "mempalace_nav": 30,
     "project_context": 35,
     "session_entity_cache": 40,
     "operational_augment": 45,

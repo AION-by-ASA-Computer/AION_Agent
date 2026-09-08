@@ -1,7 +1,6 @@
 import logging
 import json
-import asyncio
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 from datetime import datetime
 
 logger = logging.getLogger("aion.visibility")

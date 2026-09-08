@@ -10,7 +10,7 @@ import zipfile
 import shutil
 import copy
 from pydantic import BaseModel, Field
-from ..agent_profile import profile_manager, AgentProfile
+from ..agent_profile import profile_manager
 from ..skill_registry import skill_registry
 from ..mcp_manager import mcp_manager
 from ..security.checker import AIONAntivirus
@@ -40,7 +40,6 @@ except ImportError:
     pass
 from ..agent_pipeline import AgentPipeline
 from ..main import get_agent, set_event_loop
-from mcp import StdioServerParameters
 from .auth_login import require_admin_role
 from .settings_api import router as settings_router
 
@@ -49,6 +48,7 @@ from .admin_profile_memory import router as admin_profile_memory_router
 from .cron_admin import router as cron_admin_router
 from .admin_query_memory import router as admin_query_memory_router
 from .llm_providers import router as llm_providers_router
+from .metrics_api import router as metrics_router
 from ..runtime.redis_client import redis_status
 from ..data.engine import get_async_session_maker
 from ..mcp_connector_catalog import (
@@ -70,13 +70,38 @@ from ..data.models import (
     Step,
     Attachment,
     SecurityScan,
-    TrustedPath,
     McpServerConfig,
 )
 from ..data.ids import new_uuid7_str
-from sqlalchemy import select, delete, func, desc
+from sqlalchemy import select, delete
 
 logger = logging.getLogger("aion.api.admin")
+
+_SECRET_KEY_PATTERNS = (
+    "KEY",
+    "TOKEN",
+    "PASSWORD",
+    "SECRET",
+    "AUTH",
+    "PASS",
+    "CREDENTIAL",
+    "PRIVATE",
+    "BEARER",
+)
+
+
+def _is_secret_key(key: str) -> bool:
+    if not isinstance(key, str):
+        return False
+    k = key.upper()
+    return any(p in k for p in _SECRET_KEY_PATTERNS)
+
+
+def _is_literal_secret(val: Any) -> bool:
+    if not isinstance(val, str):
+        return False
+    v = val.strip()
+    return bool(v) and not v.startswith("${")
 
 
 def _synthetic_npx_market_item(item_id: str) -> Optional[Dict[str, Any]]:
@@ -87,7 +112,7 @@ def _synthetic_npx_market_item(item_id: str) -> Optional[Dict[str, Any]]:
     pkg = s.split(":", 1)[-1].strip()
     if not pkg:
         return None
-    name = pkg.split("/")[-1].replace("@", "").replace(".", "_") or "mcp_npx"
+    pkg.split("/")[-1].replace("@", "").replace(".", "_") or "mcp_npx"
     return {
         "id": s,
         "name": pkg,
@@ -263,6 +288,7 @@ router.include_router(admin_profile_memory_router)
 router.include_router(cron_admin_router)
 router.include_router(admin_query_memory_router)
 router.include_router(llm_providers_router)
+router.include_router(metrics_router)
 
 
 def _project_root() -> Path:
@@ -526,6 +552,96 @@ async def trust_security_scan(scan_id: str, req: TrustRequest):
 
 
 # --- PROFILES ---
+
+
+class WizardPromptRequest(BaseModel):
+    prompt: str = Field(
+        ...,
+        min_length=1,
+        description="Prompt in linguaggio naturale per la generazione",
+    )
+    messages: Optional[List[Dict[str, str]]] = Field(
+        None, description="Storico messaggi per affinamento multi-turn"
+    )
+
+
+@router.post("/profiles/wizard-generate")
+async def wizard_generate_profile(req: WizardPromptRequest):
+    from ..runtime.wizard_generator import generate_profile_wizard
+
+    try:
+        return await generate_profile_wizard(req.prompt, history=req.messages)
+    except Exception as exc:
+        logger.error("Profile wizard generation failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Generazione profilo fallita: {exc}"
+        )
+
+
+@router.post("/profiles/wizard-suggest")
+async def wizard_suggest_profile(req: WizardPromptRequest):
+    from ..runtime.wizard_generator import suggest_profile_enhancements
+
+    try:
+        return await suggest_profile_enhancements(req.prompt, history=req.messages)
+    except Exception as exc:
+        logger.error("Profile wizard suggestion failed: %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Generazione suggerimenti fallita: {exc}"
+        )
+
+
+class WizardRefineProfileRequest(BaseModel):
+    prompt: str = Field(
+        ..., min_length=1, description="Prompt per la modifica/affinamento in-place"
+    )
+    current_profile: Dict[str, Any] = Field(
+        ..., description="Stato attuale del profilo da modificare"
+    )
+
+
+@router.post("/profiles/wizard-refine")
+async def wizard_refine_profile(req: WizardRefineProfileRequest):
+    from ..runtime.wizard_generator import refine_profile_wizard
+
+    try:
+        return await refine_profile_wizard(req.prompt, req.current_profile)
+    except Exception as exc:
+        logger.error("Profile wizard refine failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Modifica profilo fallita: {exc}")
+
+
+@router.post("/skills/wizard-generate")
+async def wizard_generate_skill(req: WizardPromptRequest):
+    from ..runtime.wizard_generator import generate_skill_wizard
+
+    try:
+        return await generate_skill_wizard(req.prompt, history=req.messages)
+    except Exception as exc:
+        logger.error("Skill wizard generation failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Generazione skill fallita: {exc}")
+
+
+class WizardRefineSkillRequest(BaseModel):
+    prompt: str = Field(
+        ...,
+        min_length=1,
+        description="Prompt per la modifica/affinamento in-place della skill",
+    )
+    current_skill: Dict[str, Any] = Field(
+        ..., description="Stato attuale della skill da modificare"
+    )
+
+
+@router.post("/skills/wizard-refine")
+async def wizard_refine_skill(req: WizardRefineSkillRequest):
+    from ..runtime.wizard_generator import refine_skill_wizard
+
+    try:
+        return await refine_skill_wizard(req.prompt, req.current_skill)
+    except Exception as exc:
+        logger.error("Skill wizard refine failed: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Modifica skill fallita: {exc}")
 
 
 @router.get("/profiles")
@@ -1600,7 +1716,6 @@ async def _call_llm_advise_async(
     Returns: (markdown_response, error_string_or_None)
     """
     import json as _json
-    import httpx
     import logging as _logging
 
     _log = _logging.getLogger("aion.admin.advise")
@@ -1611,7 +1726,7 @@ async def _call_llm_advise_async(
         base, model, token = resolve_llm_credentials()
         if not base.endswith("/v1"):
             base = base + "/v1" if "/v1" not in base else base.split("/v1")[0] + "/v1"
-        url = base.rstrip("/") + "/chat/completions"
+        base.rstrip("/") + "/chat/completions"
     except Exception as e:
         return "", f"Errore costruzione URL LLM: {e}"
 
@@ -2178,7 +2293,7 @@ async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -
             },
         )
     elif target.get("install_type") == "git":
-        dest_dir = os.path.join("mcp_servers", name)
+        os.path.join("mcp_servers", name)
         clone_rel = f"mcp_servers/{name}".replace("\\", "/")
         config["aion_market_install"] = "git"
         config["aion_market_clone_path"] = clone_rel
@@ -2829,25 +2944,6 @@ async def delete_mcp(name: str):
         )
         await session.commit()
     return {"status": "success", "cleanup": cleanup}
-
-
-@router.get("/plugins")
-async def admin_list_plugins():
-    root = _project_root() / "data" / "plugins"
-    if not root.is_dir():
-        return {"plugins": []}
-    return {
-        "plugins": [
-            p.stem for p in sorted(root.glob("*.py")) if not p.name.startswith("_")
-        ]
-    }
-
-
-@router.post("/plugins/reload")
-async def admin_reload_plugins():
-    from src.runtime.plugin_loader import load_plugins
-
-    return {"loaded": load_plugins()}
 
 
 @router.get("/subagents")

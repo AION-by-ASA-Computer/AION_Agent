@@ -12,7 +12,7 @@ Two optional features share the same setup hook: **YAML policy for filesystem/ex
 
 | Script | Role |
 |--------|--------|
-| [`scripts/runtime_extras_setup.py`](../../scripts/runtime_extras_setup.py) | Copies `fs_policy` template to `config/`, appends promo keys to `.env`, optional dev policy activation, automatic patch of `wren` allowlist, installs Playwright |
+| [`scripts/runtime_extras_setup.py`](../../scripts/runtime_extras_setup.py) | Copies `fs_policy` template to `config/`, appends promo keys to `.env`, optional dev policy activation, installs Playwright |
 | [`scripts/setup_promo_playwright.sh`](../../scripts/setup_promo_playwright.sh) | `pip install playwright` + `playwright install chromium` on the backend Python (`.venv` or `mcp_servers/promo_render/.venv`) |
 | [`scripts/setup-aion-env.sh`](../../scripts/setup-aion-env.sh) | Env wizard + `--prepare-runtime` → invokes `setup_core` → runtime extras |
 | [`scripts/upgrade-aion.sh`](../../scripts/upgrade-aion.sh) | Local upgrade or `--docker` → `upgrade_core` → runtime extras after `sync_config` / `sync_mcp_servers` |
@@ -68,7 +68,7 @@ For production: start from `fs_policy.example.yaml`, adapt allowlist and paths, 
 | Category | Executables |
 |-----------|------------|
 | Python office/docx | `python`, `python3` — only scripts under `scripts/`, `workspace/`, `uploads/`, `derived/` (no `-c` / `-m`) |
-| Semantic SQL | `wren` — necessary for Postgres queries and MDL integration |
+
 | Text | `grep`, `wc`, `sort`, `head`, `tail`, `cat`, `cut`, `tr`, `uniq`, `file` |
 | File system | `find`, `ls`, `du`, `cp`, `mv`, `mkdir`, `touch`, `zip`, `unzip` |
 | Documents | `pandoc`, `pdftoppm` |

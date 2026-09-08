@@ -4,7 +4,6 @@ from typing import Dict, Any, Optional
 from ..a2a.agent_card import get_agent_card
 from ..main import get_agent
 from ..agent_pipeline import AgentPipeline
-import json
 import uuid
 
 router = APIRouter(prefix="/a2a", tags=["agent-to-agent"])

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
-import { Save, Plus, FileCode, X, Trash2, AlertTriangle, Download, Upload } from "lucide-react";
+import { Save, Plus, FileCode, X, Trash2, AlertTriangle, Download, Upload, Wand2, Sparkles } from "lucide-react";
 import { PageToast, ToastState } from "@/components/PageToast";
 import { BlockMarkdownEditor } from "@/components/BlockMarkdownEditor";
 import { HeaderDropdown } from "@/components/HeaderDropdown";
@@ -24,6 +24,90 @@ export default function SkillsPage() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const [tagInput, setTagInput] = useState("");
+
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardPrompt, setWizardPrompt] = useState("");
+  const [wizardLoading, setWizardLoading] = useState(false);
+
+  const handleRunWizard = async () => {
+    if (!wizardPrompt.trim()) return;
+    setWizardLoading(true);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/skills/wizard-generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: wizardPrompt }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Generazione skill wizard fallita");
+      }
+      const data = await res.json();
+      setSelectedSkill({
+        name: data.name || "custom_skill",
+        content: data.content || "",
+        metadata: {
+          description: data.description || "",
+          tags: Array.isArray(data.tags) ? data.tags : [],
+          status: data.status || "draft",
+        },
+      });
+      setTagInput(Array.isArray(data.tags) ? data.tags.join(", ") : "");
+      setIsWizardOpen(false);
+      setWizardPrompt("");
+      setToast({
+        message: `Skill "${data.name || "skill"}" generata con successo! Revisiona e salva.`,
+        variant: "success",
+      });
+    } catch (e: any) {
+      setToast({ message: "Errore Skill Wizard: " + e.message, variant: "error" });
+    } finally {
+      setWizardLoading(false);
+    }
+  };
+
+  const [inlineRefinePrompt, setInlineRefinePrompt] = useState("");
+  const [refineLoading, setRefineLoading] = useState(false);
+
+  const handleRefineSkill = async (promptOverride?: string) => {
+    const targetPrompt = promptOverride || inlineRefinePrompt;
+    if (!targetPrompt.trim() || !selectedSkill) return;
+    setRefineLoading(true);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/skills/wizard-refine`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: targetPrompt,
+          current_skill: selectedSkill,
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Modifica skill fallita");
+      }
+      const data = await res.json();
+      setSelectedSkill({
+        name: data.name || selectedSkill.name,
+        content: data.content || selectedSkill.content,
+        metadata: {
+          description: data.description || selectedSkill.metadata?.description || "",
+          tags: Array.isArray(data.tags) ? data.tags : selectedSkill.metadata?.tags || [],
+          status: data.status || selectedSkill.metadata?.status || "draft",
+        },
+      });
+      setTagInput(Array.isArray(data.tags) ? data.tags.join(", ") : "");
+      setInlineRefinePrompt("");
+      setToast({
+        message: `Skill "${data.name || selectedSkill.name}" modificata dall'IA! Revisiona ed effettua il salvataggio.`,
+        variant: "success",
+      });
+    } catch (e: any) {
+      setToast({ message: "Errore Modifica AI Skill: " + e.message, variant: "error" });
+    } finally {
+      setRefineLoading(false);
+    }
+  };
 
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState("");
@@ -144,8 +228,8 @@ export default function SkillsPage() {
       const res = await apiFetch(`${apiBase()}/admin/profiles`);
       if (!res.ok) throw new Error("Error loading profiles");
       const profiles = await res.json();
-      
-      const referencingProfiles = profiles.filter((p: any) => 
+
+      const referencingProfiles = profiles.filter((p: any) =>
         p.skills?.includes(name) || p.critical_skills?.includes(name)
       ).map((p: any) => p.name);
 
@@ -170,7 +254,7 @@ export default function SkillsPage() {
       const res = await apiFetch(
         `${apiBase()}/admin/skills/${encodeURIComponent(name)}`,
         {
-        method: "DELETE"
+          method: "DELETE"
         }
       );
       if (!res.ok) throw new Error("Error during deletion");
@@ -244,19 +328,19 @@ export default function SkillsPage() {
         });
         if (!res.ok) throw new Error("Import failed");
         const data = await res.json();
-        
+
         // Controllo duplicati
         const isDuplicate = skills.includes(data.name);
 
         if (isDuplicate) {
-          setToast({ 
-            message: `Warning: a skill named "${data.name}" already exists. It has been loaded into the editor; clicking SAVE will overwrite the existing file.`, 
-            variant: "warning" 
+          setToast({
+            message: `Warning: a skill named "${data.name}" already exists. It has been loaded into the editor; clicking SAVE will overwrite the existing file.`,
+            variant: "warning"
           });
         } else {
-          setToast({ 
-            message: `Skill "${data.name}" loaded into the editor. Review and click SAVE to confirm.`, 
-            variant: "success" 
+          setToast({
+            message: `Skill "${data.name}" loaded into the editor. Review and click SAVE to confirm.`,
+            variant: "success"
           });
         }
 
@@ -312,6 +396,12 @@ export default function SkillsPage() {
           searchPlaceholder="Search protocols..."
           emptyLabel="No protocols found"
           actions={[
+            {
+              icon: <Wand2 className="w-4 h-4" />,
+              label: "AI Wizard Generator",
+              onClick: () => setIsWizardOpen(true),
+              colorClass: "text-purple-400 hover:bg-purple-600/10 font-bold",
+            },
             {
               icon: <Plus className="w-4 h-4" />,
               label: "New Skill",
@@ -389,6 +479,71 @@ export default function SkillsPage() {
       {selectedSkill ? (
         <main className="flex-1 p-6 lg:p-10 overflow-y-auto">
           <div className="max-w-[1600px] mx-auto flex flex-col gap-6 lg:gap-8">
+
+            {/* INLINE AI SKILL CO-PILOT ASSISTANT BAR */}
+            <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 via-[#121216] to-purple-950/20 p-4 space-y-3 shadow-xl backdrop-blur-md">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-purple-400 font-bold text-xs uppercase tracking-wider">
+                  <Wand2 className="w-4 h-4 animate-pulse" />
+                  <span>AI Skill Co-Pilot — Modifica in tempo reale la skill selezionata</span>
+                </div>
+                <span className="text-[11px] text-purple-300/70 italic hidden sm:inline">
+                  Legge lo stato ed il contenuto attuale della skill ed aggiorna il protocollo in tempo reale
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={inlineRefinePrompt}
+                  onChange={(e) => setInlineRefinePrompt(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleRefineSkill();
+                  }}
+                  placeholder="Chiedi all'IA di modificare questa skill... (es: 'Aggiungi la gestione degli errori e la validazione dei dati di input')"
+                  className="flex-1 bg-black/60 border border-purple-500/30 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
+                />
+                <button
+                  type="button"
+                  onClick={() => handleRefineSkill()}
+                  disabled={refineLoading || !inlineRefinePrompt.trim()}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-900/30 disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap"
+                >
+                  {refineLoading ? (
+                    <>
+                      <Sparkles className="w-4 h-4 animate-spin" />
+                      <span>Aggiornamento in corso...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4" />
+                      <span>Applica con IA</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
+              {/* QUICK REFINEMENT CHIPS */}
+              <div className="flex items-center gap-2 flex-wrap pt-0.5">
+                <span className="text-[11px] text-gray-400 font-medium">Azione rapida:</span>
+                {[
+                  { label: "📝 + Validazione Input", prompt: "Aggiungi la sezione di validazione formale per i dati di input." },
+                  { label: "⚠️ + Gestione Errori & Fallback", prompt: "Aggiungi istruzioni di gestione delle eccezioni e strategie di fallback." },
+                  { label: "📊 + Output Formattato JSON", prompt: "Formatta la sezione di output richiedendo risposte in formato JSON strutturato." },
+                  { label: "🔍 + Logging Dettagliato", prompt: "Aggiungi passaggi procedurali per la registrazione dei log e del tracciamento." },
+                ].map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => handleRefineSkill(chip.prompt)}
+                    disabled={refineLoading}
+                    className="px-2.5 py-1 rounded-lg bg-purple-900/20 border border-purple-500/25 text-purple-300 hover:bg-purple-800/40 hover:border-purple-400 text-xs transition-all cursor-pointer font-medium disabled:opacity-50"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
 
@@ -606,6 +761,96 @@ export default function SkillsPage() {
               >
                 I understand
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI SKILL WIZARD MODAL */}
+      {isWizardOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-xl rounded-2xl bg-[#121212] border border-purple-500/40 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2 text-purple-400 font-bold text-lg">
+                <Wand2 className="w-5 h-5 animate-pulse" />
+                <span>AI Skill Creation Wizard</span>
+              </div>
+              <button
+                onClick={() => setIsWizardOpen(false)}
+                className="text-gray-400 hover:text-white p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Descrivi la procedura o la regola speciale che desideri trasformare in una Skill. L'IA genererà un protocollo Markdown completo con metadati YAML pronti per l'editing. Il contenuto verrà generato rigorosamente in <b className="text-white">Inglese</b>.
+            </p>
+
+            {/* QUICK SUGGESTION CHIPS FOR SKILLS */}
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
+                💡 Suggerimenti per la skill:
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { label: "📑 Validazione Documenti", add: " Includi regole dettagliate per la validazione di documenti ed allegati." },
+                  { label: "🔄 Riconciliazione Dati", add: " Includi la procedura passo-passo per il controllo e la riconciliazione tra due fonti dati." },
+                  { label: "⚡ Gestione Errori & Fallback", add: " Specifica le regole di fallback in caso di errore di esecuzione o tool vuoto." },
+                ].map((chip) => (
+                  <button
+                    key={chip.label}
+                    type="button"
+                    onClick={() => {
+                      if (!wizardPrompt.includes(chip.add.trim())) {
+                        setWizardPrompt((prev) => (prev ? prev + chip.add : chip.add.trim()));
+                      }
+                    }}
+                    className="px-2.5 py-1 rounded-lg bg-purple-950/40 border border-purple-500/30 text-purple-300 hover:bg-purple-900/60 hover:border-purple-400 text-xs transition-all cursor-pointer font-medium"
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <textarea
+              rows={4}
+              value={wizardPrompt}
+              onChange={(e) => setWizardPrompt(e.target.value)}
+              placeholder="Es: Crea una skill per la riconciliazione delle fatture mensili con gli ordini d'acquisto Odoo..."
+              className="w-full bg-black/60 border border-white/10 rounded-xl p-3.5 text-sm text-white placeholder:text-gray-600 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none resize-none"
+            />
+
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] text-gray-500 italic">
+                Output generato in Inglese (LLM Native)
+              </span>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setIsWizardOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-gray-400 hover:text-white"
+                >
+                  Annulla
+                </button>
+                <button
+                  onClick={handleRunWizard}
+                  disabled={wizardLoading || !wizardPrompt.trim()}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg disabled:opacity-50 transition-all cursor-pointer shadow-purple-900/30"
+                >
+                  {wizardLoading ? (
+                    <>
+                      <Sparkles className="w-4 h-4 animate-spin" />
+                      <span>Generazione Skill (EN)...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wand2 className="w-4 h-4" />
+                      <span>Genera Skill con IA</span>
+                    </>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>

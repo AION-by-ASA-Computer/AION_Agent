@@ -395,7 +395,6 @@ def _migrate_docker_data_paths_in_env(
         report.log_ok(f"Migrate Docker data paths (dry-run): {len(actions)} rewrite(s)")
         return 0
 
-    import shutil
     from datetime import datetime, timezone
 
     ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
@@ -491,29 +490,17 @@ _SQL_QM_ENV_DEFAULTS: dict[str, str] = {
     "AION_SQL_QM_REVIEW_THRESHOLD": "0.82",
     "AION_SQL_QM_INJECT_THRESHOLD": "0.80",
     "AION_SQL_QM_AUTO_LEARN": "0",
-    "AION_SQL_QM_SEARCH_BEFORE_RUN": "1",
     "AION_SQL_QM_NATIVE_TOOLS": "1",
     "AION_SQL_QM_AUTO_VERIFY_THRESHOLD": "3",
     "AION_SQL_QM_TOOL_TIMEOUT_SEC": "60",
 }
 
-_MEMPALACE_NAV_ENV_DEFAULTS: dict[str, str] = {
-    "AION_MEMPALACE_NAV_ENABLED": "1",
-    "AION_MEMPALACE_NAV_PRE_TURN_INJECT": "0",
-    "AION_MEMPALACE_NAV_INJECT_THRESHOLD": "0.75",
-    "AION_MEMPALACE_NAV_AUTO_LEARN": "0",
-    "AION_MEMPALACE_PROJECT_WING_PREFIX": "wing_proj_",
-    "AION_MEMPALACE_NAV_SEARCH_LIMIT": "5",
-    "AION_MEMPALACE_DEDUP_THRESHOLD": "0.87",
-    "AION_MEMPALACE_WEAK_MEMORY_THRESHOLD": "0.4",
-    "AION_MEMPALACE_NAV_AUTO_KG": "0",
-    "AION_LTM_MIN_IMPORTANCE": "2",
-    "AION_AGENT_MIN_REASONING_CHARS_WITHOUT_TOOL": "2500",
-    "AION_AGENT_MAX_REASONING_WITHOUT_TOOL": "0",
-    "AION_SQL_QM_PARAMETERIZE": "1",
-}
-
+# Legacy MemPalace navigation removed — use Mnemos + migrate_mempalace_to_mnemos_env.py
 _MNEMOS_ENV_DEFAULTS: dict[str, str] = {
+    "AION_MNEMOS_RECALL_LIMIT": "10",
+    "AION_MNEMOS_NATIVE_TOOLS": "1",
+    "AION_MNEMOS_READONLY_TOOLS": "0",
+    "AION_MNEMOS_RECALL_LIMIT_EXPOSED": "1",
     "AION_MNEMOS_EMBEDDING_RECALL": "1",
     "AION_MNEMOS_EMBED_ON_BULK": "1",
     "AION_MNEMOS_EMBEDDING_MIN_SCORE": "0.25",
@@ -523,6 +510,8 @@ _MNEMOS_ENV_DEFAULTS: dict[str, str] = {
     "AION_MNEMOS_RANK_W_RECENCY": "0.3",
     "AION_MNEMOS_RANK_W_IMPORTANCE": "0.2",
     "AION_MNEMOS_DREAM_ENABLED": "1",
+    "AION_MNEMOS_DREAM_HOUR": "3",
+    "AION_MNEMOS_DREAM_INTERVAL_SEC": "86400",
 }
 
 _MCP_POOL_ENV_DEFAULTS: dict[str, str] = {
@@ -550,6 +539,12 @@ _PROFILE_ENV_DEFAULTS: dict[str, str] = {
     "AION_PROFILE_LEGACY_NAME_LOOKUP": "0",
 }
 
+_SESSION_CLEANUP_ENV_DEFAULTS: dict[str, str] = {
+    "AION_SESSION_CLEANUP_MAX_AGE_DAYS": "15",
+    "AION_SESSION_CLEANUP_INTERVAL_SEC": "86400",
+    "AION_SESSION_CLEANUP_HARD_DELETE": "0",
+}
+
 _SKILL_VIEW_ENV_DEFAULTS: dict[str, str] = {
     "AION_SKILL_VIEW_ENFORCE_PROFILE": "1",
 }
@@ -562,12 +557,35 @@ _SKILL_LIFECYCLE_ENV_DEFAULTS: dict[str, str] = {
 _CONTEXT_COMPRESS_ENV_DEFAULTS: dict[str, str] = {
     "AION_MODEL_MAX_CONTEXT": "131072",
     "AION_CONTEXT_COMPRESS_ENABLED": "1",
-    "AION_CONTEXT_COMPRESS_THRESHOLD": "0.5",
+    "AION_CONTEXT_COMPRESS_THRESHOLD": "0.80",
     "AION_CONTEXT_COMPRESS_MODEL_WINDOW": "131072",
-    "AION_CONTEXT_COMPRESS_KEEP_LAST": "6",
-    "AION_CONTEXT_COMPRESS_MAX_ROUNDS": "3",
+    "AION_CONTEXT_COMPRESS_KEEP_LAST": "12",
+    "AION_CONTEXT_COMPRESS_MAX_ROUNDS": "2",
     "AION_CONTEXT_COMPRESS_RESERVE_OUTPUT": "1",
-    "AION_CONTEXT_COMPRESS_FIXED_OVERHEAD": "4096",
+    "AION_CONTEXT_COMPRESS_FIXED_OVERHEAD": "8192",
+    "AION_CONTEXT_COMPRESS_MID_TURN": "1",
+    "AION_CONTEXT_COMPRESS_MID_TURN_RATIO": "0.92",
+    "AION_CONTEXT_COMPRESS_MID_TURN_MIN_SEC": "15",
+    "AION_CONTEXT_COMPRESS_SUMMARY_MAX_TOKENS": "4096",
+}
+
+_HARNESS_V2_ENV_DEFAULTS: dict[str, str] = {
+    "AION_HARNESS_V2_MESSAGES": "1",
+    "AION_HARNESS_V2_INJECTIONS": "1",
+    "AION_HARNESS_V2_COMPACTION": "1",
+    "AION_HARNESS_V2_PROVIDER": "1",
+    "AION_HARNESS_V2_TOOLS": "1",
+    "AION_HARNESS_V2_TURN": "1",
+}
+
+_OPTIMAL_TOOL_FORMAT_ENV_DEFAULTS: dict[str, str] = {
+    "AION_TOOL_RESULT_FORMAT": "toon",
+    "AION_TOOL_WEB_FETCH_MAX_CHARS": "48000",
+    "AION_TOOL_WEB_SEARCH_MAX_CHARS": "12000",
+    "AION_TOON_WEB_SEARCH_SNIPPET_CHARS": "1200",
+    "AION_WEB_FETCH_OFFLOAD_MAX_CHARS": "200000",
+    "AION_WEB_TOOL_COMPACT_AFTER": "4",
+    "AION_TOOL_CIRCUIT_BREAKER_ENABLED": "1",
 }
 
 _AGENT_MODE_ENV_DEFAULTS = {
@@ -609,6 +627,30 @@ _TOOL_RUNTIME_ENV_DEFAULTS: dict[str, str] = {
 _DEPRECATED_ENV_REMOVE: tuple[str, ...] = (
     "AION_ARTIFACT_STRATEGY",
     "AION_CRON_DB_PATH",
+    "AION_LLM_HEALTHCHECK_TIMEOUT",
+    "AION_LTM_WAKE_TTL",
+    "AION_QUERY_MEMORY_DB_PATH",
+    "AION_SQL_QM_SEARCH_BEFORE_RUN",
+    "AION_APPROVAL_DB_PATH",
+    "AION_ORCH_PLAN_POLL_SEC",
+    "AION_BENCHMARK_SUBPROCESS_PYTHON",
+    "AION_OPTUNA_STORAGE",
+    "AION_WIKIPEDIA_EXTRACT_FALLBACK_MIN_CHARS",
+    "AION_WIKIPEDIA_FETCH_MODE",
+    "AION_MEMORY_STACK",
+    "AION_CHROMA_SHARED_EMBEDDING_CACHE",
+    "AION_PI_TOOL_CIRCUIT_BREAKER_MAX",
+    "NEXT_PUBLIC_AION_CHAT_UI_DEBUG",
+    "POSTGRES_HOST",
+    "AION_LME_V2_DOWNLOAD_SCREENSHOTS",
+    "AION_CHAINLIT_PASSWORD_AUTH",
+    "CHAINLIT_AUTH_SECRET",
+    "AION_SETUP_CHAINLIT_IDENTIFIER",
+    "AION_SETUP_CHAINLIT_PASSWORD",
+    "AION_WREN_HOME",
+    "AION_WREN_PROJECT_PATH",
+    "AION_WREN_EXEC_TIMEOUT_SEC",
+    "WREN_HOME",
 )
 
 _TOOL_OFFLOAD_ENV_DEFAULTS: dict[str, str] = {
@@ -775,36 +817,10 @@ def _patch_sql_query_memory_config(py_exec: str, dry_run: bool, report: Report) 
 def _ensure_mempalace_nav_env_keys(
     env_path: Path, *, dry_run: bool, report: Report
 ) -> int:
-    if not env_path.is_file():
-        report.log_ok("MemPalace navigation env defaults: .env assente, skip")
-        return 0
-    entries = _parse_env_simple(env_path)
-    keys_file = {k for k, _, _ in entries if k}
-    missing = [
-        (k, v) for k, v in _MEMPALACE_NAV_ENV_DEFAULTS.items() if k not in keys_file
-    ]
-    if not missing:
-        report.log_ok("MemPalace navigation env defaults: chiavi già presenti")
-        return 0
-    if dry_run:
-        report.log_ok(
-            f"MemPalace navigation env defaults: aggiungerebbe {len(missing)} chiavi (dry-run)"
-        )
-        return 0
-    block = (
-        "\n# --- MemPalace navigazione ERP (append da upgrade-aion): wing_proj_{project} allineato a SQL QM ---\n"
-        + "\n".join(f"{k}={v}" for k, v in missing)
-        + "\n"
+    """Deprecated — MemPalace env keys are no longer added (use Mnemos)."""
+    report.log_ok(
+        "MemPalace navigation env: skip (deprecated — scripts/migrate_mempalace_to_mnemos_env.py)"
     )
-    try:
-        env_path.write_text(
-            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
-            encoding="utf-8",
-        )
-    except Exception as e:
-        report.log_fail(f"MemPalace navigation env defaults: scrittura fallita: {e}")
-        return 3
-    report.log_ok(f"MemPalace navigation env defaults: aggiunte {len(missing)} chiavi")
     return 0
 
 
@@ -992,22 +1008,9 @@ def _ensure_skill_view_env_keys(
 
 
 def _patch_mempalace_navigation_config(
-    py_exec: str, dry_run: bool, report: Report
+    py_exec: str, dry_run: bool, report: Report, *, env_file: str | Path = ".env"
 ) -> None:
-    patch_script = ROOT / "scripts" / "patch_mempalace_navigation_config.py"
-    if not patch_script.is_file():
-        report.log_warn(
-            "patch_mempalace_navigation_config.py missing — skip MemPalace nav patch"
-        )
-        return
-    if dry_run:
-        report.log_ok("MemPalace navigation config patch skipped in dry-run")
-        return
-    rc = _run([py_exec, str(patch_script), "--force-skills", "--force-profile-sync"])
-    if rc == 0:
-        report.log_ok("MemPalace navigation config (skills + postgres profile)")
-    else:
-        report.log_warn("MemPalace navigation config patch exited non-zero")
+    pass
 
 
 def _ensure_context_compress_env_keys(
@@ -1044,6 +1047,66 @@ def _ensure_context_compress_env_keys(
         return 3
     report.log_ok(f"Context compress env defaults: aggiunte {len(missing)} chiavi")
     return 0
+
+
+def _ensure_env_defaults_from_map(
+    env_path: Path,
+    *,
+    defaults: dict[str, str],
+    block_title: str,
+    dry_run: bool,
+    report: Report,
+    ok_label: str,
+) -> int:
+    if not env_path.is_file():
+        report.log_ok(f"{ok_label}: .env assente, skip")
+        return 0
+    entries = _parse_env_simple(env_path)
+    keys_file = {k for k, _, _ in entries if k}
+    missing = [(k, v) for k, v in defaults.items() if k not in keys_file]
+    if not missing:
+        report.log_ok(f"{ok_label}: chiavi già presenti")
+        return 0
+    if dry_run:
+        report.log_ok(f"{ok_label}: aggiungerebbe {len(missing)} chiavi (dry-run)")
+        return 0
+    block = f"\n# --- {block_title} ---\n" + "\n".join(
+        f"{k}={v}" for k, v in missing
+    ) + "\n"
+    try:
+        env_path.write_text(
+            env_path.read_text(encoding="utf-8").rstrip() + "\n" + block,
+            encoding="utf-8",
+        )
+    except Exception as e:
+        report.log_fail(f"{ok_label}: scrittura fallita: {e}")
+        return 3
+    report.log_ok(f"{ok_label}: aggiunte {len(missing)} chiavi")
+    return 0
+
+
+def _ensure_harness_v2_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
+    return _ensure_env_defaults_from_map(
+        env_path,
+        defaults=_HARNESS_V2_ENV_DEFAULTS,
+        block_title="Harness v2 (append da upgrade-aion)",
+        dry_run=dry_run,
+        report=report,
+        ok_label="Harness v2 env defaults",
+    )
+
+
+def _ensure_optimal_tool_format_env_keys(
+    env_path: Path, *, dry_run: bool, report: Report
+) -> int:
+    return _ensure_env_defaults_from_map(
+        env_path,
+        defaults=_OPTIMAL_TOOL_FORMAT_ENV_DEFAULTS,
+        block_title="Tool format / web tuning (append da upgrade-aion)",
+        dry_run=dry_run,
+        report=report,
+        ok_label="Optimal tool format env defaults",
+    )
 
 
 def _ensure_cron_env_keys(env_path: Path, *, dry_run: bool, report: Report) -> int:
@@ -1477,6 +1540,16 @@ def _docker_upgrade(args, report: Report) -> int:
     )
     if rc != 0:
         return rc
+    rc = _ensure_harness_v2_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
+    if rc != 0:
+        return rc
+    rc = _ensure_optimal_tool_format_env_keys(
+        Path(args.env_file), dry_run=args.dry_run, report=report
+    )
+    if rc != 0:
+        return rc
     rc = _ensure_skill_lifecycle_env_keys(
         Path(args.env_file), dry_run=args.dry_run, report=report
     )
@@ -1524,7 +1597,9 @@ def _docker_upgrade(args, report: Report) -> int:
 
     _ensure_skill_packages(sys.executable, args.dry_run, report, force_mcp=True)
     _patch_sql_query_memory_config(sys.executable, args.dry_run, report)
-    _patch_mempalace_navigation_config(sys.executable, args.dry_run, report)
+    _patch_mempalace_navigation_config(
+        sys.executable, args.dry_run, report, env_file=args.env_file
+    )
 
     extras = ROOT / "scripts/runtime_extras_setup.py"
     if extras.is_file() and not args.dry_run:
@@ -1760,6 +1835,16 @@ def main() -> int:
         )
         if rc != 0:
             return rc
+        rc = _ensure_harness_v2_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
+        if rc != 0:
+            return rc
+        rc = _ensure_optimal_tool_format_env_keys(
+            Path(args.env_file), dry_run=args.dry_run, report=report
+        )
+        if rc != 0:
+            return rc
         rc = _ensure_skill_view_env_keys(
             Path(args.env_file), dry_run=args.dry_run, report=report
         )
@@ -1813,7 +1898,9 @@ def main() -> int:
             return rc
 
         _ensure_skill_packages(py_exec, args.dry_run, report, force_mcp=True)
-        _patch_mempalace_navigation_config(py_exec, args.dry_run, report)
+        _patch_mempalace_navigation_config(
+            py_exec, args.dry_run, report, env_file=args.env_file
+        )
         _patch_sql_query_memory_config(py_exec, args.dry_run, report)
 
         extras = ROOT / "scripts/runtime_extras_setup.py"
@@ -1878,11 +1965,17 @@ def main() -> int:
                 report.log_ok("Seed MCP integration configs (idempotent)")
 
         if args.with_legacy:
+            def _find_mig_script(s_name: str) -> str:
+                p = ROOT / "scripts" / "migration" / s_name
+                if p.exists():
+                    return str(p)
+                return str(ROOT / "scripts" / s_name)
+
             for script in (
                 "migrate_to_aion_db.py",
                 "migrate_fs_to_storage.py",
             ):
-                rc = _run([py_exec, str(ROOT / "scripts" / script), "--dry-run"])
+                rc = _run([py_exec, _find_mig_script(script), "--dry-run"])
                 if rc != 0:
                     report.log_fail(f"Legacy dry-run {script}")
                     return rc
@@ -1891,7 +1984,7 @@ def main() -> int:
                     "migrate_to_aion_db.py",
                     "migrate_fs_to_storage.py",
                 ):
-                    rc = _run([py_exec, str(ROOT / "scripts" / script)])
+                    rc = _run([py_exec, _find_mig_script(script)])
                     if rc != 0:
                         report.log_fail(f"Legacy apply {script}")
                         return rc
@@ -1913,7 +2006,7 @@ def main() -> int:
                     ):
                         report.log_warn("Destructive migration cancelled by user")
                     else:
-                        rc = _run([py_exec, str(ROOT / "scripts/unify_memory.py")])
+                        rc = _run([py_exec, _find_mig_script("unify_memory.py")])
                         if rc != 0:
                             report.log_fail("Destructive unify_memory")
                             return rc
@@ -1956,10 +2049,6 @@ def main() -> int:
         print("Next steps:")
         print("  ./scripts/dev-api.sh                       # backend FastAPI (:8001)")
         print("  cd chat-ui && pnpm dev                     # client primario (:8003)")
-        print(
-            "  python scripts/bootstrap_db_navigation_mempalace.py --project default"
-            "  # seed wing_proj_* (once, MCP mempalace up)"
-        )
         print("  ./scripts/setup_promo_playwright.sh        # promo PNG (if skipped)")
         print("  # Exec policy dev: ./scripts/upgrade-aion.sh --enable-fs-policy-dev")
         print(

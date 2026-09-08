@@ -70,11 +70,35 @@ def _env_float(name: str, default: float) -> float:
 
 def _extract_pdf_via_pymu4llm(path) -> str:
     try:
+        import fitz
+
+        doc = fitz.open(str(path))
+        pages_text = []
+        for i, page in enumerate(doc):
+            t = page.get_text("text").strip()
+            if t:
+                pages_text.append(f"--- PAGE {i + 1} ---\n{t}")
+            else:
+                try:
+                    import pymupdf4llm
+
+                    pages_text.append(
+                        f"--- PAGE {i + 1} ---\n"
+                        + pymupdf4llm.to_markdown(str(path), pages=[i])
+                    )
+                except Exception:
+                    pass
+        if pages_text:
+            return "\n\n".join(pages_text)
+    except Exception as e:
+        logger.warning(f"fitz text extraction failed: {e}")
+
+    try:
         import pymupdf4llm
 
         return pymupdf4llm.to_markdown(str(path))
     except ImportError:
-        return "Error pymypdf4llm not installed"
+        return "Error pymupdf4llm not installed"
 
 
 def _extract_image_via_pytesseract(path) -> str:
@@ -303,6 +327,21 @@ async def ocr_file(
 
     if mime == "application/pdf":
         try:
+            native_text = ""
+            try:
+                import fitz
+
+                doc_fitz = fitz.open(str(path))
+                pages_native = []
+                for idx, page_obj in enumerate(doc_fitz):
+                    nt = page_obj.get_text("text").strip()
+                    if nt:
+                        pages_native.append(f"--- NATIVE TEXT PAGE {idx + 1} ---\n{nt}")
+                if pages_native:
+                    native_text = "\n\n".join(pages_native)
+            except Exception as ex_fitz:
+                logger.warning(f"Native fitz text extraction warning: {ex_fitz}")
+
             from pdf2image import convert_from_path
 
             # Carichiamo le impostazioni o usiamo il parametro
@@ -343,12 +382,15 @@ async def ocr_file(
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             all_text = []
+            if native_text:
+                all_text.append(native_text)
+
             for i, res in enumerate(results):
                 page_no = start + i
                 if isinstance(res, Exception):
-                    all_text.append(f"--- PAGE {page_no} ERROR ---\n{res}")
+                    all_text.append(f"--- OCR PAGE {i + 1} ERROR ---\n{res}")
                 else:
-                    all_text.append(f"--- PAGE {page_no} ---\n{res}")
+                    all_text.append(f"--- OCR PAGE {i + 1} ---\n{res}")
 
             return "\n\n".join(all_text)
         except Exception as e:

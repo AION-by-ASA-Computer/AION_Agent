@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import time
 import uuid
@@ -9,7 +8,7 @@ from typing import Any, Dict, Optional
 from src.agent_pipeline import AgentPipeline
 from src.eval.evaluators import evaluate_case
 from src.eval.judge import evaluate_with_llm_judge
-from src.main import get_agent, set_event_loop
+from src.main import get_agent
 
 from .registry import mnemos_config_snapshot, write_run_config
 from .run_store import save_case_result, update_run_status

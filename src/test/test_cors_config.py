@@ -1,7 +1,5 @@
 """CORS settings: production must not use open wildcard by default."""
 
-import os
-
 import pytest
 
 from src.api.cors_config import resolve_cors_settings

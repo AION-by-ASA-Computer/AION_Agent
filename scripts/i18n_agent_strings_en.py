@@ -409,59 +409,6 @@ R(_sh, "Errore durante l'eliminazione di", "Error while deleting")
 R(_sh, "eliminata con successo da:", "deleted successfully from:")
 R(_sh, "eliminata tramite il registry.", "deleted via registry.")
 
-# --- mem0 ---
-_m0 = "mcp_servers_std/memory/mem0_server.py"
-R(
-    _m0,
-    "Cerca ricordi e fatti semantici nella memoria a lungo termine dell'agente.",
-    "Search semantic memories and facts in the agent long-term memory.",
-)
-R(
-    _m0,
-    "Utile per recuperare preferenze dell'utente, decisioni passate o fatti generali.",
-    "Useful to retrieve user preferences, past decisions, or general facts.",
-)
-R(
-    _m0,
-    "Nessun ricordo semanticamente simile trovato.",
-    "No semantically similar memory found.",
-)
-R(_m0, "Ricordi trovati in memoria:", "Memories found:")
-R(_m0, "(Rilevanza:", "(Relevance:")
-R(
-    _m0,
-    "Salva un nuovo fatto o una preferenza nella memoria a lungo termine.",
-    "Save a new fact or preference to long-term memory.",
-)
-R(
-    _m0,
-    "Usa questo tool quando l'utente comunica qualcosa di importante che deve essere ricordato.",
-    "Use when the user shares something important to remember.",
-)
-R(_m0, "Fatto memorizzato correttamente. ID:", "Fact stored successfully. ID:")
-R(
-    _m0,
-    "Visualizza tutti i fatti memorizzati per l'utente corrente.",
-    "List all facts stored for the current user.",
-)
-R(_m0, "La memoria è attualmente vuota.", "Memory is currently empty.")
-R(_m0, "Elenco completo della memoria semantica:", "Full semantic memory list:")
-R(
-    _m0,
-    "Elimina un fatto specifico dalla memoria utilizzando il suo ID.",
-    "Delete a specific fact from memory using its ID.",
-)
-R(
-    _m0,
-    "Ricordo {fact_id} eliminato con successo.",
-    "Memory {fact_id} deleted successfully.",
-)
-R(
-    _m0,
-    "ID non trovato o errore durante l'eliminazione.",
-    "ID not found or error during deletion.",
-)
-
 # --- ocr ---
 _ocr = "mcp_servers_std/ocr_mcp/server.py"
 R(_ocr, "AION_CHAT_SESSION_ID non impostato", "AION_CHAT_SESSION_ID not set")

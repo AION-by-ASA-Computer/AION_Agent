@@ -147,7 +147,7 @@ import { SessionCharts } from "@/components/chat/SessionCharts";
 import type { DockTab } from "@/lib/layout/dock-tab";
 
 type PlanPendingChunk = ChatChunk & { type: "orchestration_plan_pending" };
-type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research" | "long_run";
+type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research";
 type LiveArtifactMessage = {
   id: string;
   title: string;
@@ -2331,10 +2331,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     setIsSavingInfo(true);
     try {
       const activeProject = sqlQueryProject;
-      const projectWingName = `wing_proj_${activeProject}`;
-
       const instruction = t("chat.actions.memorize_instruction");
-      const prompt = `${instruction}\n\n[Active Project Context]\nActive SQL QueryMemory project slug: "${activeProject}"\nMemPalace project wing: "${projectWingName}"\n\n[Conversation Turn to Memorize]\n${turnDetails}`;
+      const prompt = `${instruction}\n\n[Active Project Context]\nActive SQL QueryMemory project slug: "${activeProject}"\n\n[Conversation Turn to Memorize]\n${turnDetails}`;
       await runChatRequest(prompt, {
         message_source: "internal_trigger",
         showUserBubble: false,
@@ -2512,8 +2510,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               meta.agent_mode === "plan" ||
               meta.agent_mode === "ask" ||
               meta.agent_mode === "debug" ||
-              meta.agent_mode === "deep_research" ||
-              meta.agent_mode === "long_run"
+              meta.agent_mode === "deep_research"
             ) {
               setAgentMode(meta.agent_mode as AgentMode);
               localStorage.setItem("aion_agent_mode", meta.agent_mode);

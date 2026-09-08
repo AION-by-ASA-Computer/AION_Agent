@@ -206,7 +206,21 @@ flowchart TD
 - Import profiles via YAML files with schema validation.
 - Associate MCP servers and enable/disable skills for each profile.
 
-### 4. Skill Management
+### 4. Evaluation & Metrics (Agent Telemetry)
+
+**Path:** `/metrics`
+
+**Features:**
+- **4 Real-Time KPI Cards & Sparklines:** Token consumption (input/output/reasoning breakdown and last turn stats), execution turn durations (average, last turn, P95 latency), total turns & failure rate, and total tool calls & success rate %.
+- **Granular Temporal Sparklines:** Dynamic trendline area and mini-bar charts with local timezone hover tooltips (`1h`, `6h`, `24h`, `7d`, `30d`, `all`).
+- **Agent Profile Breakdown Table:** Per-profile consumption table showing total tokens, input/output/reasoning split, turns, tool calls, success %, and average turn latency.
+- **User Breakdown & Profile Distribution Table:** Expandable user usage view detailing token footprints, turn activity, and per-profile distribution % with specific tool invocation breakdowns.
+- **Tool & MCP Execution Details:** Filterable and searchable table of tool executions across MCP servers with error counts and success rates.
+- **LLM Model Token Consumption:** Visual bar breakdown of prompt vs completion vs reasoning tokens consumed per model.
+- **MCP Error & Failure Diagnostics:** Chronological log of recent MCP errors with server origin, tool name, profile, local timestamp, and full error details.
+- **Prometheus Dual-Mode Indicator:** Real-time badge indicating whether telemetry is being aggregated via Prometheus backend query APIs or via in-process fallback buffers.
+
+### 5. Skill Management
 
 **Path:** `/skills`
 
@@ -287,16 +301,7 @@ flowchart TD
 - View the status of the execution pipeline hooks (e.g. `on_user_message`, `pre_llm_call`, `on_assistant_message`, `pre_tool_use`).
 - Perform hot reloading (hot reload) of logical extensions without interrupting the main server process.
 
-### 11. SOUL/MEMORY/USER Management (legacy)
-
-**Path:** `/profile-memory`
-
-**Features:**
-- Modify `SOUL.md` files (deprecated — use `instructions` in the YAML profile).
-- Modify `MEMORY.md` (deprecated — use MemPalace/LTM).
-- Modify `USER.md` (active and recommended to customize end user preferences).
-
-### 12. Audit and Security (Security Audit)
+### 11. Audit and Security (Security Audit)
 
 **Path:** `/security`
 
@@ -365,14 +370,13 @@ admin-ui/
 │   ├── page.tsx            # Home dashboard
 │   ├── users/              # User Management
 │   ├── profiles/           # Profile Management
+│   ├── metrics/            # Evaluation & Agent Metrics
 │   ├── skills/             # Skill Management
 │   ├── hub/                # MCP Hub (marketplace and wizard)
 │   ├── conversations/      # Interaction Ledger (chat monitoring)
 │   ├── schedules/          # Scheduled Cron Jobs
 │   ├── api-keys/           # API Keys Management
 │   ├── memory/             # LTM & Memory Management
-│   ├── plugins/            # Runtime Plugins & Hooks
-│   ├── profile-memory/     # Legacy SOUL/MEMORY/USER (deprecated)
 │   ├── security/           # Security Audit & Scans
 │   ├── system/             # Infrastructure integrity (System health)
 │   ├── first-setup/        # Initial setup wizard (LLM/embeddings/OCR probe)

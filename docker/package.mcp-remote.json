@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "name": "aion-mcp-remote-deps",
+  "description": "mcp-remote stdio proxy for remote-bridge MCP servers (ClickUp, Notion, …)",
+  "dependencies": {
+    "mcp-remote": "^0.1.38"
+  }
+}

@@ -1,6 +1,5 @@
 import requests
 import re
-from typing import Dict, Any, Optional
 
 
 class GrafanaTools:

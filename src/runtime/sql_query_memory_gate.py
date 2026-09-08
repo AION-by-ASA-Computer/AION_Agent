@@ -14,8 +14,7 @@ _EXPLORATION_TOOL_SUFFIXES = frozenset(
         "list_schemas",
         "search_known_sql",
         "sql_memory_search",
-        "mempalace_search",
-        "mempalace_list_drawers",
+        "memory_recall",
     }
 )
 

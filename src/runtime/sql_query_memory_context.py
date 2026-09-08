@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
@@ -27,7 +26,6 @@ class SqlQmTurnContext:
     profile_slug: str
     project_slug: str
     session_id: str
-    mempalace_writes_allowed: bool = True
     sql_cache_inject_active: bool = False
     sql_cache_schemas: tuple[str, ...] = ()
     sql_cache_hit_ids: tuple[int, ...] = ()
@@ -50,7 +48,6 @@ def set_sql_qm_turn_context(
     profile_slug: str,
     project_slug: Optional[str] = None,
     session_id: str,
-    mempalace_writes_allowed: bool = True,
     sql_cache_inject_active: bool = False,
     sql_cache_schemas: Optional[tuple[str, ...]] = None,
     sql_cache_hit_ids: Optional[tuple[int, ...]] = None,
@@ -68,7 +65,6 @@ def set_sql_qm_turn_context(
             profile_slug=profile_slug,
             project_slug=proj,
             session_id=session_id,
-            mempalace_writes_allowed=mempalace_writes_allowed,
             sql_cache_inject_active=sql_cache_inject_active,
             sql_cache_schemas=sql_cache_schemas or (),
             sql_cache_hit_ids=sql_cache_hit_ids or (),
@@ -98,7 +94,6 @@ def _update_session(session_id: str, **changes) -> None:
         "profile_slug": cur.profile_slug,
         "project_slug": cur.project_slug,
         "session_id": cur.session_id,
-        "mempalace_writes_allowed": cur.mempalace_writes_allowed,
         "sql_cache_inject_active": cur.sql_cache_inject_active,
         "sql_cache_schemas": cur.sql_cache_schemas,
         "sql_cache_hit_ids": cur.sql_cache_hit_ids,
@@ -129,10 +124,8 @@ def mark_execute_sql_used(session_id: str) -> None:
 
 
 def set_mempalace_writes_allowed(allowed: bool) -> None:
-    cur = get_sql_qm_turn_context()
-    if cur is None:
-        return
-    _update_session(cur.session_id, mempalace_writes_allowed=allowed)
+    """Deprecated no-op retained for backwards compatibility."""
+    pass
 
 
 def increment_list_tables_count(session_id: str) -> None:

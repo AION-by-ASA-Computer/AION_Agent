@@ -1,7 +1,5 @@
 """UI language resolution and prompt injection."""
 
-import os
-
 import pytest
 
 from src.memory.context_compressor import compaction_summary_prompt

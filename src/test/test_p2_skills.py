@@ -1,6 +1,5 @@
 """P2 Sprint 4 — skill distill, search draft filter, admin promote."""
 
-import textwrap
 from pathlib import Path
 
 import frontmatter

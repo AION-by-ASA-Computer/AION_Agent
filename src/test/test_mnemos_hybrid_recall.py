@@ -34,7 +34,7 @@ def test_rrf_merge_prefers_overlap():
     assert fused[0][0] == 20
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_recall_fts_fallback_without_embedding_service(mnemos_db, monkeypatch):
     monkeypatch.setenv("AION_MNEMOS_EMBEDDING_RECALL", "1")
     monkeypatch.delenv("AION_EMBEDDING_MODEL", raising=False)
@@ -49,7 +49,7 @@ async def test_recall_fts_fallback_without_embedding_service(mnemos_db, monkeypa
     assert "PostgreSQL" in rows[0]["content"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_recall_hybrid_with_mock_embedding(mnemos_db, monkeypatch):
     import numpy as np
 

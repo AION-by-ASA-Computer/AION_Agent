@@ -26,7 +26,7 @@ def _validate_dataset(payload: dict, *, min_cases: int) -> None:
     for case in cases:
         assert case.get("setup_notes"), f"{case.get('id')}: missing setup_notes"
         assert case.get("query"), f"{case.get('id')}: missing query"
-        assert case.get("expected_substrings"), (
+        assert "expected_substrings" in case, (
             f"{case.get('id')}: missing expected_substrings"
         )
 

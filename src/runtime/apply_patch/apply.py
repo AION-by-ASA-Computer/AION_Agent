@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Tuple
@@ -11,7 +10,6 @@ from .errors import PatchApplyError, PatchParseError
 from .parser import (
     AddHunk,
     DeleteHunk,
-    Hunk,
     UpdateChunk,
     UpdateHunk,
     parse_patch,

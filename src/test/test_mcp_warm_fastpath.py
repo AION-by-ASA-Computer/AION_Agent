@@ -13,8 +13,8 @@ def test_warm_skips_already_healthy_worker(monkeypatch):
         sid = "conv-1"
         mgr._session_ctx[sid] = ("generic_assistant", "demo", "default")
 
-        key = mgr._resolve_pool_key(sid, "memory")
-        worker = MCPStdioWorker(mgr, "memory", "")
+        key = mgr._resolve_pool_key(sid, "query_memory")
+        worker = MCPStdioWorker(mgr, "query_memory", "")
         worker._task = asyncio.create_task(asyncio.sleep(3600))
         worker._ready.set()
         worker._init_error = None
@@ -29,7 +29,7 @@ def test_warm_skips_already_healthy_worker(monkeypatch):
 
         monkeypatch.setattr(mgr, "_get_worker", _spy_get)
         await mgr.warm_session(
-            sid, ["memory"], profile_slug="generic_assistant", user_id="demo"
+            sid, ["query_memory"], profile_slug="generic_assistant", user_id="demo"
         )
         worker._task.cancel()
         try:

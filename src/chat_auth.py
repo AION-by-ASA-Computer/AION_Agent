@@ -1,8 +1,4 @@
-"""Password authentication for chat-ui (users table in ``AION_DB_URL``).
-
-Legacy env aliases ``AION_CHAINLIT_PASSWORD_AUTH`` / ``CHAINLIT_AUTH_SECRET`` are
-still read as fallback; ``scripts/upgrade_core.py`` migrates them to ``AION_CHAT_*``.
-"""
+"""Password authentication for chat-ui (users table in ``AION_DB_URL``)."""
 
 from __future__ import annotations
 
@@ -22,18 +18,12 @@ logger = logging.getLogger("aion.chat_auth")
 
 
 def password_auth_enabled() -> bool:
-    raw = (
-        os.getenv("AION_CHAT_PASSWORD_AUTH")
-        or os.getenv("AION_CHAINLIT_PASSWORD_AUTH")
-        or "0"
-    )
+    raw = os.getenv("AION_CHAT_PASSWORD_AUTH", "0")
     return raw.lower() in ("1", "true", "yes")
 
 
 def chat_auth_secret() -> str:
-    return (
-        os.getenv("AION_CHAT_AUTH_SECRET") or os.getenv("CHAINLIT_AUTH_SECRET") or ""
-    ).strip()
+    return (os.getenv("AION_CHAT_AUTH_SECRET") or "").strip()
 
 
 async def authenticate_user_password(
@@ -116,8 +106,7 @@ def warn_if_auth_misconfigured() -> None:
         return
     if not chat_auth_secret():
         logger.warning(
-            "AION_CHAT_PASSWORD_AUTH is enabled but AION_CHAT_AUTH_SECRET is unset "
-            "(legacy alias: CHAINLIT_AUTH_SECRET). "
+            "AION_CHAT_PASSWORD_AUTH is enabled but AION_CHAT_AUTH_SECRET is unset. "
             "Generate with: openssl rand -hex 32"
         )
 

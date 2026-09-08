@@ -692,7 +692,7 @@ def emergency_compact_messages(
         return None
 
     compressor = get_default_compressor()
-    threshold_ratio = float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_RATIO", "0.92"))
+    float(os.getenv("AION_CONTEXT_COMPRESS_MID_TURN_RATIO", "0.92"))
     max_prompt = compressor.max_prompt_tokens()
     target = int(max_prompt * (0.70 if aggressive else 0.82))
 

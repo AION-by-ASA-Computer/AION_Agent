@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { Plug, Plus, X } from "lucide-react";
 
 import type { CredentialField, Integration } from "@/components/integrations/types";
-import { apiBase } from "@/lib/config";
+import { apiBase, oauthCallbackRedirectUri } from "@/lib/config";
 import { jsonHeaders } from "@/lib/api/aion";
 import { oauthManagedFieldKeys, oauthProviderDisplayName } from "@/lib/integrations/oauthLabels";
 import { useT } from "@/lib/i18n/use-t";
@@ -73,7 +73,7 @@ export function CredentialConfigDialog({
   }
 
   async function handleOAuthLogin() {
-    const redirectUri = `${apiBase()}/v1/integrations/oauth/callback`;
+    const redirectUri = oauthCallbackRedirectUri();
     try {
       const res = await fetch(
         `${apiBase()}/v1/integrations/oauth/start?server_slug=${encodeURIComponent(integration.server_slug)}&redirect_uri=${encodeURIComponent(redirectUri)}`,

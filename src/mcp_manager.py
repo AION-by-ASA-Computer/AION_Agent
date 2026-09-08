@@ -83,7 +83,7 @@ _DEFAULT_SESSION_SCOPED_SERVERS = frozenset(
         "ocr",  # registry slug in config/mcp_registry.yaml (folder: ocr_mcp/)
         "ocr_mcp",  # legacy alias
         "skills_hub",
-        "memory",
+        "query_memory",
         "aion_subagents",
     }
 )
@@ -146,12 +146,6 @@ def _apply_call_session_env(
         ):
             backup[key] = os.environ.get(key)
             os.environ[key] = str(val)
-        from .agent_profile import profile_manager
-
-        profile = profile_manager.get_profile(slug)
-        if profile and getattr(profile, "wren_project_path", None):
-            backup["AION_WREN_PROJECT_PATH"] = os.environ.get("AION_WREN_PROJECT_PATH")
-            os.environ["AION_WREN_PROJECT_PATH"] = profile.wren_project_path
     return backup
 
 
@@ -362,27 +356,23 @@ class MCPStdioWorker:
                 raise ValueError(
                     f"MCP server '{self.server_name}' not found in registry"
                 )
-            command = config.get("command", "python")
-            if command == "python":
-                command = self._manager.get_python_exe(self.server_name)
-            elif isinstance(command, str) and (
-                "/" in command or os.path.sep in command
-            ):
-                cmd_path = Path(command)
-                if not cmd_path.is_absolute():
-                    cand = _repo_root() / command
-                    if cand.is_file():
-                        command = str(cand.resolve())
-            args = self._manager.resolve_stdio_args(list(config.get("args", [])))
+            command, args = self._manager.resolve_stdio_spawn_command(
+                self.server_name, config
+            )
             env = os.environ.copy()
-            project_root = os.getcwd()
+            repo_root_dir = str(_repo_root())
             env.setdefault("FASTMCP_LOG_LEVEL", "ERROR")
             env.setdefault("FASTMCP_SHOW_SERVER_BANNER", "false")
             env.setdefault("FASTMCP_CHECK_FOR_UPDATES", "off")
             env.setdefault("NO_COLOR", "1")
             env.setdefault("TQDM_DISABLE", "1")
             env.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-            env["PYTHONPATH"] = f"{project_root}:{env.get('PYTHONPATH', '')}"
+            existing_pp = (env.get("PYTHONPATH") or "").strip()
+            env["PYTHONPATH"] = (
+                f"{repo_root_dir}{os.pathsep}{existing_pp}"
+                if existing_pp
+                else repo_root_dir
+            )
             lookup_sid = self._chat_session_id or BOOTSTRAP_SESSION_ID
             env["AION_CHAT_SESSION_ID"] = self._chat_session_id or ""
             if self._pool_user_id:
@@ -408,11 +398,6 @@ class MCPStdioWorker:
             env["AION_CURRENT_PROFILE_SLUG"] = slug
             env["AION_CURRENT_USER_ID"] = uid
             env["AION_CURRENT_TENANT_ID"] = tid
-            from .agent_profile import profile_manager
-
-            profile = profile_manager.get_profile(slug)
-            if profile and getattr(profile, "wren_project_path", None):
-                env["AION_WREN_PROJECT_PATH"] = profile.wren_project_path
 
             if config.get("remote_url"):
                 env["MCP_REMOTE_URL"] = config["remote_url"]
@@ -1088,7 +1073,8 @@ class MCPManager:
     def server_exists(self, name: str) -> bool:
         return bool(name) and name in self._registry
 
-    def get_python_exe(self, server_name: str) -> str:
+    @staticmethod
+    def get_python_exe(server_name: str) -> str:
         venv_path = _repo_root() / "mcp_servers" / server_name / ".venv"
         if venv_path.exists():
             if sys.platform == "win32":
@@ -1145,6 +1131,28 @@ class MCPManager:
         return None
 
     @classmethod
+    def resolve_stdio_spawn_command(
+        cls, server_name: str, config: Dict[str, Any]
+    ) -> Tuple[str, List[str]]:
+        """Resolve process command + args for stdio / remote-bridge MCP servers."""
+        if (config.get("type") or "stdio").lower() == "remote-bridge":
+            from src.mcp_remote_install import resolve_remote_bridge_spawn
+
+            return resolve_remote_bridge_spawn(config)
+
+        command = config.get("command", "python")
+        if command == "python":
+            command = cls.get_python_exe(server_name)
+        elif isinstance(command, str) and ("/" in command or os.path.sep in command):
+            cmd_path = Path(command)
+            if not cmd_path.is_absolute():
+                cand = _repo_root() / command
+                if cand.is_file():
+                    command = str(cand.resolve())
+        args = cls.resolve_stdio_args(list(config.get("args", [])))
+        return command, args
+
+    @classmethod
     def resolve_stdio_args(cls, args: List[str]) -> List[str]:
         """Risolve path di file sotto ``mcp_servers/`` o repo root; non convertire flag."""
         root = _repo_root()
@@ -1184,10 +1192,9 @@ class MCPManager:
         if t in ("sse", "in_process"):
             return None
         if t == "remote-bridge":
-            local_path = os.path.join(
-                os.getcwd(), "node_modules", "mcp-remote", "dist", "proxy.js"
-            )
-            if os.path.exists(local_path):
+            from src.mcp_remote_install import mcp_remote_proxy_path
+
+            if mcp_remote_proxy_path():
                 if not shutil.which("node"):
                     return "node command not found. Node.js is required to run remote-bridge."
                 return None
@@ -1788,27 +1795,21 @@ class MCPManager:
                     yield session
 
         else:
-            command = config.get("command", "python")
-            if command == "python":
-                command = self.get_python_exe(name)
-            elif isinstance(command, str) and (
-                "/" in command or os.path.sep in command
-            ):
-                cmd_path = Path(command)
-                if not cmd_path.is_absolute():
-                    cand = _repo_root() / command
-                    if cand.is_file():
-                        command = str(cand.resolve())
-            args = self.resolve_stdio_args(list(config.get("args", [])))
+            command, args = self.resolve_stdio_spawn_command(name, config)
             env = os.environ.copy()
-            project_root = os.getcwd()
+            repo_root_dir = str(_repo_root())
             env.setdefault("FASTMCP_LOG_LEVEL", "WARNING")
             env.setdefault("FASTMCP_SHOW_SERVER_BANNER", "false")
             env.setdefault("FASTMCP_CHECK_FOR_UPDATES", "true")
             env.setdefault("NO_COLOR", "1")
             env.setdefault("TQDM_DISABLE", "1")
             env.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-            env["PYTHONPATH"] = f"{project_root}:{env.get('PYTHONPATH', '')}"
+            existing_pp = (env.get("PYTHONPATH") or "").strip()
+            env["PYTHONPATH"] = (
+                f"{repo_root_dir}{os.pathsep}{existing_pp}"
+                if existing_pp
+                else repo_root_dir
+            )
             if chat_session_id:
                 env["AION_CHAT_SESSION_ID"] = chat_session_id
                 ctx = self._session_ctx.get(

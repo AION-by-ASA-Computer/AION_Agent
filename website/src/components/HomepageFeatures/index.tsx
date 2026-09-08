@@ -22,7 +22,7 @@ const FeatureList: FeatureItem[] = [
     title: 'STM / LTM Memory',
     description: (
       <>
-        Session context, FTS history search, and LTM orchestration (MemPalace) for
+        Session context, FTS history search, and LTM orchestration (Mnemos) for
         consistent responses over time.
       </>
     ),

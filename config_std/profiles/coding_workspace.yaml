@@ -23,4 +23,4 @@ mcp_servers:
 - session_sandbox
 - code
 - skills_hub
-- memory
+- query_memory

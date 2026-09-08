@@ -1,5 +1,5 @@
 import { apiBase } from "../config";
-import { baseUserHeaders, jsonHeaders } from "./aion";
+import { baseUserHeaders } from "./aion";
 
 export type PlanExecutionActivity = {
   phase?: string;

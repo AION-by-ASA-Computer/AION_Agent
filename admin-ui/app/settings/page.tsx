@@ -704,41 +704,16 @@ export default function SettingsPage() {
     setSaving(true);
     setMessage(null);
 
-    // Validation when remote OCR is configured
+    // Basic validation when remote OCR is configured
     if (ocrMode === "remote") {
-      const probeBase = probeBaseUrlFromOcrServiceUrl(settings.AION_OCR_BASE_URL || "");
-      if (!probeBase) {
-        setMessage({ type: 'error', text: "OCR service base URL is required for remote vision OCR." });
-        setSaving(false);
-        return;
-      }
-      if (!probeBase.startsWith("http://") && !probeBase.startsWith("https://")) {
-        setMessage({ type: 'error', text: "OCR service URL must start with http:// or https://" });
-        setSaving(false);
-        return;
-      }
-      const apiKey = (settings.AION_OCR_API_KEY || "").trim();
-      if (!apiKey || apiKey === "EMPTY") {
-        setMessage({ type: 'error', text: "A non-empty API token is required for remote vision OCR." });
-        setSaving(false);
-        return;
-      }
-      if (!ocrConnectionTested) {
-        const ok = await probeOcrConnection();
-        if (!ok) {
+      const baseUrl = (settings.AION_OCR_BASE_URL || "").trim();
+      if (baseUrl) {
+        const probeBase = probeBaseUrlFromOcrServiceUrl(baseUrl);
+        if (!probeBase || (!probeBase.startsWith("http://") && !probeBase.startsWith("https://"))) {
+          setMessage({ type: 'error', text: "OCR service URL must start with http:// or https://" });
           setSaving(false);
           return;
         }
-      }
-      if (!(settings.AION_OCR_MODEL || "").trim()) {
-        setMessage({
-          type: 'error',
-          text: ocrManualModelEntry
-            ? "Enter the OCR model name manually — the endpoint did not list any models."
-            : "Select an OCR model from the list discovered by the connection test.",
-        });
-        setSaving(false);
-        return;
       }
 
       // Max tokens validation
@@ -773,27 +748,36 @@ export default function SettingsPage() {
     }
 
     // Embeddings validation when URL is set
-    if ((settings.AION_EMBEDDING_URL || "").trim()) {
-      const embProvider = settings.AION_EMBEDDINGS_PROVIDER || "openai";
-      if (embProvider !== "google" && !(settings.AION_EMBEDDINGS_API_KEY || "").trim()) {
-        setMessage({ type: 'error', text: "Embedding API Key is required." });
+    const embUrl = (settings.AION_EMBEDDING_URL || "").trim();
+    if (embUrl && !embUrl.startsWith("http://") && !embUrl.startsWith("https://")) {
+      setMessage({ type: 'error', text: "Embedding service URL must start with http:// or https://" });
+      setSaving(false);
+      return;
+    }
+
+    // Web fetch / search validations
+    if (settings.AION_WEB_FETCH_MAX_CHARS) {
+      const val = parseInt(settings.AION_WEB_FETCH_MAX_CHARS, 10);
+      if (isNaN(val) || val <= 0) {
+        setMessage({ type: 'error', text: "Fetch max chars must be a positive integer." });
         setSaving(false);
         return;
       }
-      if (!embConnectionTested) {
-        const ok = await probeEmbConnection();
-        if (!ok) {
-          setSaving(false);
-          return;
-        }
+    }
+
+    if (settings.AION_WEB_SEARCH_MAX_RESULTS) {
+      const val = parseInt(settings.AION_WEB_SEARCH_MAX_RESULTS, 10);
+      if (isNaN(val) || val <= 0) {
+        setMessage({ type: 'error', text: "Max results must be a positive integer." });
+        setSaving(false);
+        return;
       }
-      if (!(settings.AION_EMBEDDING_MODEL || "").trim()) {
-        setMessage({
-          type: 'error',
-          text: embManualModelEntry
-            ? "Enter the embedding model name manually — the endpoint did not list any models."
-            : "Select an embedding model from the list discovered by the connection test.",
-        });
+    }
+
+    if (settings.AION_WEB_SEARCH_TIMEOUT_SEC) {
+      const val = parseInt(settings.AION_WEB_SEARCH_TIMEOUT_SEC, 10);
+      if (isNaN(val) || val <= 0) {
+        setMessage({ type: 'error', text: "Search timeout must be a positive integer." });
         setSaving(false);
         return;
       }
@@ -850,43 +834,54 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 mb-1">
-            <SettingsIcon className="w-4 h-4 text-blue-500" />
-            <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">System Governance</h2>
+    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-16">
+      {/* Sticky Header Action Bar */}
+      <div className="sticky top-0 z-30 bg-[#0a0a0a]/95 backdrop-blur-md py-4 -my-4 border-b border-[#262626]/50 shadow-lg space-y-3">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <SettingsIcon className="w-4 h-4 text-blue-500" />
+              <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">System Governance</h2>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white">Kernel Configuration</h1>
+            <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Manage global environment variables and infrastructure protocols.</p>
           </div>
-          <h1 className="text-3xl font-black text-white">Kernel Configuration</h1>
-          <p className="text-gray-500 text-sm mt-1">Manage global environment variables and infrastructure protocols.</p>
+
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={saveSettings}
+              disabled={saving}
+              className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg ${saving
+                ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/20 active:scale-95 cursor-pointer'
+                }`}
+            >
+              {saving ? (
+                <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+              ) : <Save className="w-4 h-4" />}
+              {saving ? "Syncing..." : "Commit Changes"}
+            </button>
+          </div>
         </div>
 
-        <div className="flex gap-3">
-          <button
-            onClick={saveSettings}
-            disabled={saving}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg ${saving
-              ? 'bg-gray-800 text-gray-500 cursor-not-allowed'
-              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-blue-500/20 active:scale-95'
-              }`}
-          >
-            {saving ? (
-              <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-            ) : <Save className="w-4 h-4" />}
-            {saving ? "Syncing..." : "Commit Changes"}
-          </button>
-        </div>
+        {message && (
+          <div className={`p-3.5 rounded-xl flex items-start gap-3 border animate-in zoom-in duration-200 ${message.type === 'success'
+            ? 'bg-green-500/10 border-green-500/30 text-green-400'
+            : 'bg-red-500/10 border-red-500/30 text-red-400'
+            }`}>
+            {message.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertTriangle className="w-5 h-5 shrink-0" />}
+            <div className="text-sm font-medium flex-1">{message.text}</div>
+            <button
+              type="button"
+              onClick={() => setMessage(null)}
+              className="text-gray-400 hover:text-white p-0.5"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
       </div>
-
-      {message && (
-        <div className={`p-4 rounded-2xl flex items-start gap-3 border animate-in zoom-in duration-300 ${message.type === 'success'
-          ? 'bg-green-500/10 border-green-500/20 text-green-400'
-          : 'bg-red-500/10 border-red-500/20 text-red-400'
-          }`}>
-          {message.type === 'success' ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <AlertTriangle className="w-5 h-5 shrink-0" />}
-          <div className="text-sm font-medium">{message.text}</div>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
@@ -1278,54 +1273,61 @@ export default function SettingsPage() {
             />
             <ConfigInput
               label="Tavily API key"
-              value={settings.AION_TAVILY_API_KEY || ""}
+              value={settings.AION_TAVILY_API_KEY ?? ""}
               onChange={(v) => handleUpdate("AION_TAVILY_API_KEY", v)}
               description="Mascherata dopo il salvataggio in lettura"
             />
             <ConfigInput
               label="Brave Search API key"
-              value={settings.AION_BRAVE_SEARCH_API_KEY || ""}
+              value={settings.AION_BRAVE_SEARCH_API_KEY ?? ""}
               onChange={(v) => handleUpdate("AION_BRAVE_SEARCH_API_KEY", v)}
             />
             <ConfigInput
               label="SearXNG base URL"
-              value={settings.AION_SEARXNG_BASE_URL || ""}
+              value={settings.AION_SEARXNG_BASE_URL ?? ""}
               onChange={(v) => handleUpdate("AION_SEARXNG_BASE_URL", v)}
               description="Es. https://search.example.org (no trailing slash)"
             />
-            <ConfigInput
-              label="Default provider"
-              value={settings.AION_WEB_SEARCH_DEFAULT_PROVIDER || "tavily"}
-              onChange={(v) => handleUpdate("AION_WEB_SEARCH_DEFAULT_PROVIDER", v)}
-            />
+            <div className="space-y-1.5">
+              <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">Default Search Provider</label>
+              <select
+                value={settings.AION_WEB_SEARCH_DEFAULT_PROVIDER ?? "tavily"}
+                onChange={(e) => handleUpdate("AION_WEB_SEARCH_DEFAULT_PROVIDER", e.target.value)}
+                className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/20 outline-none transition-all font-mono cursor-pointer"
+              >
+                <option value="tavily">Tavily</option>
+                <option value="brave">Brave Search</option>
+                <option value="searxng">SearXNG</option>
+              </select>
+            </div>
             <ConfigInput
               label="Fallback order (CSV)"
-              value={settings.AION_WEB_SEARCH_FALLBACK_ORDER || "brave,searxng"}
+              value={settings.AION_WEB_SEARCH_FALLBACK_ORDER ?? "brave,searxng"}
               onChange={(v) => handleUpdate("AION_WEB_SEARCH_FALLBACK_ORDER", v)}
             />
             <ConfigInput
               label="Max results"
-              value={settings.AION_WEB_SEARCH_MAX_RESULTS || "8"}
+              value={settings.AION_WEB_SEARCH_MAX_RESULTS ?? "8"}
               onChange={(v) => handleUpdate("AION_WEB_SEARCH_MAX_RESULTS", v)}
             />
             <ConfigInput
               label="Search timeout (sec)"
-              value={settings.AION_WEB_SEARCH_TIMEOUT_SEC || "30"}
+              value={settings.AION_WEB_SEARCH_TIMEOUT_SEC ?? "30"}
               onChange={(v) => handleUpdate("AION_WEB_SEARCH_TIMEOUT_SEC", v)}
             />
             <ConfigInput
               label="Fetch max chars"
-              value={settings.AION_WEB_FETCH_MAX_CHARS || "120000"}
+              value={settings.AION_WEB_FETCH_MAX_CHARS ?? "120000"}
               onChange={(v) => handleUpdate("AION_WEB_FETCH_MAX_CHARS", v)}
             />
             <ConfigInput
               label="Fetch allowlist regex (optional)"
-              value={settings.AION_WEB_FETCH_ALLOWLIST_REGEX || ""}
+              value={settings.AION_WEB_FETCH_ALLOWLIST_REGEX ?? ""}
               onChange={(v) => handleUpdate("AION_WEB_FETCH_ALLOWLIST_REGEX", v)}
             />
             <ConfigInput
               label="Org allowed hosts (CSV, optional *.suffix)"
-              value={settings.AION_WEB_SEARCH_ALLOWED_HOSTS || ""}
+              value={settings.AION_WEB_SEARCH_ALLOWED_HOSTS ?? ""}
               onChange={(v) => handleUpdate("AION_WEB_SEARCH_ALLOWED_HOSTS", v)}
               description="Soffitto domini per web_search / web_fetch_page quando enforcement attivo"
             />
@@ -1341,7 +1343,7 @@ export default function SettingsPage() {
             />
             <ConfigInput
               label="Native tool registry path"
-              value={settings.AION_NATIVE_TOOL_REGISTRY_PATH || "config/native_tool_registry.yaml"}
+              value={settings.AION_NATIVE_TOOL_REGISTRY_PATH ?? "config/native_tool_registry.yaml"}
               onChange={(v) => handleUpdate("AION_NATIVE_TOOL_REGISTRY_PATH", v)}
             />
           </div>
@@ -1480,6 +1482,51 @@ export default function SettingsPage() {
           </div>
         </section>
 
+        {/* Session Cleanup & Retention */}
+        <section className="glass-card p-6 border-[#262626] hover:border-emerald-500/30 transition-colors group">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20 group-hover:scale-110 transition-transform">
+              <Database className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div>
+              <h3 className="font-bold text-white">Session Cleanup & Retention</h3>
+              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Automated Session & Workspace Purge</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <ConfigInput
+              label="Session Retention Max Age in Days (AION_SESSION_CLEANUP_MAX_AGE_DAYS)"
+              value={settings.AION_SESSION_CLEANUP_MAX_AGE_DAYS ?? "15"}
+              onChange={(v) => handleUpdate("AION_SESSION_CLEANUP_MAX_AGE_DAYS", v)}
+              description="Maximum age in days before inactive sessions and workspace sandboxes are cleaned up (0 to disable automatic cleanup)."
+            />
+
+            <ConfigInput
+              label="Cleanup Job Interval in Seconds (AION_SESSION_CLEANUP_INTERVAL_SEC)"
+              value={settings.AION_SESSION_CLEANUP_INTERVAL_SEC ?? "86400"}
+              onChange={(v) => handleUpdate("AION_SESSION_CLEANUP_INTERVAL_SEC", v)}
+              description="Execution frequency in seconds of the background purge task (minimum 60 seconds, e.g. 86400 for 24 hours)."
+            />
+
+            <ConfigToggle
+              label="Hard Delete Sessions & Attachments (AION_SESSION_CLEANUP_HARD_DELETE)"
+              enabled={settings.AION_SESSION_CLEANUP_HARD_DELETE === "1"}
+              onChange={(e) => handleUpdate("AION_SESSION_CLEANUP_HARD_DELETE", e ? "1" : "0")}
+            />
+
+            <div className="p-3.5 bg-emerald-500/5 border border-emerald-500/20 rounded-xl text-xs text-slate-400 space-y-1">
+              <div className="flex items-center gap-1.5 font-bold text-emerald-400">
+                <Info className="w-3.5 h-3.5 shrink-0" />
+                <span>Automatic Purge Policy</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                When enabled, the background task deletes old session folders under <span className="font-mono text-slate-300">data/sessions/</span> and cleans database conversations. Hard delete permanently purges messages and file attachments.
+              </p>
+            </div>
+          </div>
+        </section>
+
         {/* OCR Document Processing */}
         <section className="glass-card p-6 border-[#262626] hover:border-amber-500/30 transition-colors group md:col-span-2">
           <div className="flex items-center gap-3 mb-6">
@@ -1553,7 +1600,7 @@ export default function SettingsPage() {
                       handleUpdate("AION_OCR_API_KEY", e.target.value);
                       resetOcrProbeState();
                     }}
-                    placeholder="Bearer token (any non-empty value if auth is disabled)"
+                    placeholder="Enter OCR API Key"
                     className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl pl-4 pr-10 py-2.5 text-sm text-gray-200 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 outline-none transition-all font-mono"
                     autoComplete="new-password"
                   />
@@ -1571,16 +1618,16 @@ export default function SettingsPage() {
                   type="button"
                   onClick={probeOcrConnection}
                   disabled={ocrProbing}
-                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-semibold hover:bg-amber-500/20 transition-all disabled:opacity-50"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-semibold hover:bg-amber-500/20 transition-all disabled:opacity-50 cursor-pointer"
                 >
-                  {ocrProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                  Test connection & discover models
+                  {ocrProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Eye className="w-4 h-4" />}
+                  Test OCR connection & discover models
                 </button>
                 {ocrConnectionTested && ocrProbeLatencyMs != null && (
                   <span className="text-xs text-emerald-400 font-mono">
                     Connection OK · {ocrProbeLatencyMs}ms
                     {ocrDiscoveredModelIds.length > 0
-                      ? ` · ${ocrDiscoveredModelIds.length} vision/OCR models`
+                      ? ` · ${ocrDiscoveredModelIds.length} vision models`
                       : " · enter model manually"}
                   </span>
                 )}
@@ -1588,7 +1635,7 @@ export default function SettingsPage() {
               {!ocrConnectionTested ? (
                 <div className="p-4 rounded-xl border border-dashed border-[#262626] bg-[#0a0a0a]/60 text-sm text-gray-500 flex items-start gap-3">
                   <Info className="w-5 h-5 shrink-0 mt-0.5 text-gray-600" />
-                  <span>Test the vision OCR endpoint to discover models.</span>
+                  <span>Test the OCR vision endpoint to discover models before saving.</span>
                 </div>
               ) : ocrManualModelEntry ? (
                 <div className="space-y-1.5">
@@ -1598,7 +1645,7 @@ export default function SettingsPage() {
                     value={settings.AION_OCR_MODEL || ""}
                     onChange={(e) => handleUpdate("AION_OCR_MODEL", e.target.value)}
                     className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 outline-none transition-all font-mono"
-                    placeholder="e.g. zai-org/GLM-OCR"
+                    placeholder="e.g. THUDM/glm-4v-9b"
                   />
                 </div>
               ) : (
@@ -1778,6 +1825,7 @@ export default function SettingsPage() {
               {/* Save policy changes */}
               <div className="flex justify-end pt-2">
                 <button
+                  type="button"
                   onClick={saveFsPolicy}
                   disabled={policySaving}
                   className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold transition-all shadow-lg cursor-pointer ${policySaving
@@ -1788,7 +1836,7 @@ export default function SettingsPage() {
                   {policySaving ? (
                     <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                   ) : <Save className="w-4 h-4" />}
-                  {policySaving ? "Committing Changes..." : "Commit Changes"}
+                  {policySaving ? "Saving Policy..." : "Save Policy"}
                 </button>
               </div>
             </div>
@@ -1798,6 +1846,7 @@ export default function SettingsPage() {
               Filesystem Policy is disabled. All filesystem and command execution restrictions are off.
               <div className="flex justify-center mt-4">
                 <button
+                  type="button"
                   onClick={saveFsPolicy}
                   disabled={policySaving}
                   className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold bg-amber-600 hover:bg-amber-500 text-white transition-all active:scale-95 cursor-pointer"
@@ -1805,7 +1854,7 @@ export default function SettingsPage() {
                   {policySaving ? (
                     <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
                   ) : <Save className="w-4 h-4" />}
-                  {policySaving ? "Committing Changes..." : "Commit Changes"}
+                  {policySaving ? "Saving Policy..." : "Save Policy"}
                 </button>
               </div>
             </div>
@@ -1865,8 +1914,9 @@ function ConfigToggle({ label, enabled, onChange }: { label: string, enabled: bo
     <div className="flex items-center justify-between p-3 bg-white/5 rounded-xl border border-white/10 hover:border-white/20 transition-colors">
       <span className="text-xs font-bold text-gray-400 uppercase tracking-tight">{label}</span>
       <button
+        type="button"
         onClick={() => onChange(!enabled)}
-        className={`w-10 h-5 rounded-full transition-all flex items-center px-1 ${enabled ? 'bg-blue-600' : 'bg-gray-700'}`}
+        className={`w-10 h-5 rounded-full transition-all flex items-center px-1 cursor-pointer ${enabled ? 'bg-blue-600' : 'bg-gray-700'}`}
       >
         <div className={`w-3 h-3 bg-white rounded-full transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0'}`} />
       </button>

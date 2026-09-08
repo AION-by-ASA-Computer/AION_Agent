@@ -108,9 +108,6 @@ exec:
       argv_prefix: []
       validate_path_positions: [2, 3, 4, 5]
 
-    # --- Wren CLI (semantic SQL / MDL; skill: config/skills/wren/SKILL.md) ---
-    - executable: "wren"
-      argv_prefix: []
 
 limits:
   max_file_read_bytes: 2097152

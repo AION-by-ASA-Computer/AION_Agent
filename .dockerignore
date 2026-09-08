@@ -89,3 +89,7 @@ website/.docusaurus
 
 # Docker artifacts di altri stage (evitiamo ricorsioni)
 docker-compose*.override.yml
+
+# Local MCP servers and configuration overrides
+mcp_servers/
+config/

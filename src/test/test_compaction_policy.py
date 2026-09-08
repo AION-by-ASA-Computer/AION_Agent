@@ -2,7 +2,6 @@
 
 from haystack.dataclasses import ChatMessage
 
-from src.haystack_chat import chat_message_text
 from src.runtime.compaction import find_valid_cut_index, is_valid_cut_index
 
 

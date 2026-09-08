@@ -5,9 +5,8 @@ import os
 import time
 import sys
 import logging
-import yaml
 from collections import OrderedDict
-from typing import List, Optional, Dict, Any, Tuple
+from typing import Optional, Dict, Any, Tuple
 
 from sqlalchemy import select
 from . import aion_env  # noqa: F401 â€” carica `.env` prima di altri moduli locali
@@ -19,7 +18,6 @@ from src.runtime.aion_agent import (
 )
 from src.runtime.llm_lite_llm_adapter import LiteLLMChatGeneratorWrapper
 from haystack.utils import Secret
-from .config import config
 from .agent_profile import profile_manager
 from .runtime.tool_events import tool_event_bus
 from .runtime.stream_sync import StreamSync
@@ -232,7 +230,11 @@ def _aion_mcp_tool_run(
     inject(carrier)
     kwargs["_trace_context"] = carrier
 
-    loop = _GLOBAL_LOOP or asyncio.get_event_loop()
+    try:
+        loop = _GLOBAL_LOOP or asyncio.get_event_loop()
+    except RuntimeError:
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
 
     # Signal the streaming pipeline that we need to sync before running the tool
     loop.call_soon_threadsafe(
@@ -253,20 +255,6 @@ def _aion_mcp_tool_run(
                 "Turn cancelled: agent stopped by guard-rail or user interrupt."
             ),
         )
-
-    # Agent DB: inject session identity so the LLM cannot omit user_id / tenant / conversation_id.
-    if server_name == "agent_db":
-        ctx = mcp_manager._session_ctx.get(session_id)
-        if ctx:
-            if len(ctx) == 3:
-                _slug, uid, tid = ctx
-            else:
-                _slug, uid = ctx
-                tid = "default"
-            # Hard overwrite to enforce session-bound identity (prevent spoofed payload values).
-            kwargs["user_id"] = uid
-            kwargs["tenant_id"] = tid
-            kwargs["conversation_id"] = session_id
 
     dedupe_fp: Optional[str] = None
     # Guard against repeated mutating tool calls with identical payload in short window.
@@ -335,6 +323,8 @@ def _aion_mcp_tool_run(
             tool_name=tool_name,
             event_type="tool_error" if is_error else "tool_end",
         )
+        "error" if is_error else "ok"
+
         # SSE/UI first — mid-turn compaction can block on the agent thread when sync enabled.
         if is_error:
             loop.call_soon_threadsafe(
@@ -493,7 +483,10 @@ def _aion_mcp_tool_run(
 
                 pre_ctx = HookContext(
                     event="pre_tool_use",
-                    tenant_id=tenant_id,
+                    tenant_id=(
+                        user_id if user_id and user_id != "default" else tenant_id
+                    )
+                    or "default",
                     conversation_id=session_id,
                     user_id=user_id,
                     profile=profile,
@@ -538,7 +531,6 @@ def _aion_mcp_tool_run(
                     "postgres_query",
                 ):
                     from .runtime.sql_query_memory_context import (
-                        get_sql_qm_turn_context,
                         record_last_success,
                     )
                     from .memory.sql_query_memory.fingerprint import (
@@ -589,7 +581,10 @@ def _aion_mcp_tool_run(
 
                     post_ctx = HookContext(
                         event="post_tool_use",
-                        tenant_id=tenant_id,
+                        tenant_id=(
+                            user_id if user_id and user_id != "default" else tenant_id
+                        )
+                        or "default",
                         conversation_id=session_id,
                         user_id=user_id,
                         profile=profile,
@@ -597,7 +592,9 @@ def _aion_mcp_tool_run(
                             "tool_name": tool_name,
                             "server_name": server_name,
                             "input": tool_input,
-                            "status": "error" if is_err else "success",
+                            "status": "error" if is_err else "ok",
+                            "error": normalized if is_err else None,
+                            "result": normalized,
                         },
                     )
                     asyncio.run_coroutine_threadsafe(
@@ -646,7 +643,10 @@ def _aion_mcp_tool_run(
 
                     post_ctx = HookContext(
                         event="post_tool_use",
-                        tenant_id=tenant_id,
+                        tenant_id=(
+                            user_id if user_id and user_id != "default" else tenant_id
+                        )
+                        or "default",
                         conversation_id=session_id,
                         user_id=user_id,
                         profile=profile,
@@ -790,7 +790,7 @@ def _build_chat_generation_kwargs() -> Tuple[Dict[str, Any], str]:
     try:
         from src.runtime.llm_limits import resolve_chat_max_tokens
 
-        max_t = resolve_chat_max_tokens(long_run=False)
+        max_t = resolve_chat_max_tokens()
         gen_kw["max_tokens"] = max_t
         max_tokens_sig = str(max_t)
     except Exception:
@@ -1240,25 +1240,6 @@ async def _finish_get_agent_build(
                     len(removed_names),
                     ", ".join(sorted(removed_names)),
                 )
-    elif resolved_agent_mode == "long_run":
-        from src.runtime.long_run_mode import long_run_blocked_tool_names
-
-        _blocked_names = long_run_blocked_tool_names()
-        if _blocked_names:
-            allowed_tools = []
-            removed_names = []
-            for t in tools:
-                if getattr(t, "name", None) in _blocked_names:
-                    removed_names.append(t.name)
-                else:
-                    allowed_tools.append(t)
-            tools = allowed_tools
-            if removed_names:
-                logger.info(
-                    "Long Run Mode: removed %d tools from agent list: %s",
-                    len(removed_names),
-                    ", ".join(sorted(removed_names)),
-                )
 
     from .runtime.sql_query_memory_tools import profile_wants_sql_query_memory
 
@@ -1368,10 +1349,12 @@ async def _finish_get_agent_build(
     # Se llm_provider_name Ã¨ specificato, carica il provider dal database
     if llm_provider_name:
         logger.info("Caricamento provider LLM dal database: %s", llm_provider_name)
-        from src.api.llm_providers import LlmProviderPublic
         from src.data.engine import get_async_session_maker
         from src.data.models import LlmProvider
-        from src.runtime.credential_store import decrypt_value
+        from src.runtime.credential_store import (
+            CredentialDecryptionError,
+            decrypt_value,
+        )
 
         async with get_async_session_maker()() as session:
             row = (
@@ -1404,7 +1387,18 @@ async def _finish_get_agent_build(
                 )
                 provider_timeout = row.timeout
                 if row.api_key_encrypted:
-                    api_key = decrypt_value(row.api_key_encrypted)
+                    try:
+                        api_key = decrypt_value(row.api_key_encrypted)
+                    except CredentialDecryptionError as exc:
+                        logger.error(
+                            "Provider LLM %s: impossibile decifrare api_key (%s)",
+                            llm_provider_name,
+                            exc,
+                        )
+                        raise RuntimeError(
+                            f"Chiave API del provider LLM '{llm_provider_name}' non "
+                            f"decifrabile: {exc}"
+                        ) from exc
                     api_key_secret = Secret.from_token(api_key)
                 else:
                     api_key_secret = Secret.from_token(

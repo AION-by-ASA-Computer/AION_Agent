@@ -6,7 +6,6 @@ import os
 from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
-from pydantic import BaseModel
 
 from src.api.auth_login import require_admin_role
 from src.api.cron_schemas import (
@@ -21,7 +20,6 @@ from src.identity import sanitize_user_id
 from src.runtime import cron_db
 from src.runtime.cron_runner import execute_job
 from src.runtime.cron_scheduler import register_job, reschedule_job, unregister_job
-from src.runtime.cron_tools import cron_tools_enabled
 
 router = APIRouter(prefix="/cron-jobs", tags=["admin-cron"])
 

@@ -26,7 +26,7 @@ fi
 source "$VENV_DIR/bin/activate"
 
 cd "$ROOT"
-if [[ ! -f "$ROOT/mcp_servers/agent_db/db_manager.py" ]] && [[ -f "$ROOT/scripts/sync_mcp_servers.py" ]]; then
+if [[ ! -f "$ROOT/mcp_servers/session_sandbox/server.py" ]] && [[ -f "$ROOT/scripts/sync_mcp_servers.py" ]]; then
   echo "[AION] mcp_servers/ incompleta — sync da mcp_servers_std/"
   python "$ROOT/scripts/sync_mcp_servers.py"
 fi

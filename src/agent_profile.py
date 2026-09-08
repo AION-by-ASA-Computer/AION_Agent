@@ -15,7 +15,6 @@ from .runtime.profile_schema import (
     ProfileSchema,
     ProfileValidationIssue,
     ProfileValidationReport,
-    log_validation_report,
     validate_profile_references,
 )
 from .runtime.skill_alias import resolve_skill_alias  # noqa: F401 — P2.4
@@ -133,9 +132,7 @@ def migrate_profiles_to_write_dir(*, dry_run: bool = False) -> int:
 
 
 # Full inlined bodies when AION_SKILL_SYSTEM_PROMPT_MODE=index unless overridden per profile.
-DEFAULT_CRITICAL_SKILL_NAMES = frozenset(
-    {"core_protocol", "artifact_protocol", "agent_db_protocol"}
-)
+DEFAULT_CRITICAL_SKILL_NAMES = frozenset({"core_protocol", "artifact_protocol"})
 
 # Always inlined for every profile (global golden rules, thinking contract, anti-loop).
 ALWAYS_CRITICAL_SKILL_NAMES = frozenset({"core_protocol"})
@@ -163,7 +160,6 @@ class AgentProfile:
         slug: Optional[str] = None,
         critical_skills: Optional[List[str]] = None,
         native_tool_groups: Optional[List[str]] = None,
-        wren_project_path: Optional[str] = None,
         max_agent_steps: Optional[int] = None,
     ):
         self.name = name
@@ -174,7 +170,6 @@ class AgentProfile:
         self.native_tool_groups = list(native_tool_groups or [])
         self.slug = slug or name.replace(" ", "_").lower()
         self.critical_skills = critical_skills
-        self.wren_project_path = (wren_project_path or "").strip() or None
         self.max_agent_steps = max_agent_steps
 
     def _resolved_critical_skill_names(self) -> frozenset:
@@ -398,7 +393,6 @@ class ProfileManager:
             slug=stem_low,
             critical_skills=schema.critical_skills,
             native_tool_groups=schema.native_tool_groups,
-            wren_project_path=schema.wren_project_path,
             max_agent_steps=schema.max_agent_steps,
         )
 

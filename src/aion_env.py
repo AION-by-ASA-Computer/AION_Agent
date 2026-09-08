@@ -17,12 +17,12 @@ if _root_s not in sys.path:
 def _ensure_mcp_servers_from_std() -> None:
     """
     ``mcp_servers/`` è gitignored e va popolata da ``mcp_servers_std/`` (come config/ da config_std/).
-    Se manca un modulo critico (es. agent_db), esegue sync_mcp_servers in modalità safe.
+    Se manca un modulo critico (es. session_sandbox), esegue sync_mcp_servers in modalità safe.
     """
-    marker = _ROOT / "mcp_servers" / "agent_db" / "db_manager.py"
+    marker = _ROOT / "mcp_servers" / "session_sandbox" / "server.py"
     if marker.is_file():
         return
-    std_marker = _ROOT / "mcp_servers_std" / "agent_db" / "db_manager.py"
+    std_marker = _ROOT / "mcp_servers_std" / "session_sandbox" / "server.py"
     if not std_marker.is_file():
         return
     script = _ROOT / "scripts" / "sync_mcp_servers.py"
@@ -97,9 +97,64 @@ if (
         os.environ["OTEL_METRICS_EXPORTER"] = "otlp"
         os.environ["OTEL_LOGS_EXPORTER"] = "none"
 
+        # Setup standard OTel MeterProvider early so OpenLit registers its metrics on it
+        try:
+            from opentelemetry import metrics as otel_metrics
+            from opentelemetry.sdk.metrics import MeterProvider as OTelMeterProvider
+            from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+            from opentelemetry.sdk.resources import Resource
+
+            resource = Resource.create(
+                {
+                    "service.name": service_name,
+                    "service.version": "3.0.0",
+                    "deployment.environment": os.getenv("AION_ENV", "dev"),
+                }
+            )
+
+            readers = []
+            if protocol == "http":
+                from opentelemetry.exporter.otlp.proto.http.metric_exporter import (
+                    OTLPMetricExporter as OTLPHTTPMetricExporter,
+                )
+
+                exporter = OTLPHTTPMetricExporter(endpoint=otlp_endpoint)
+            else:
+                from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import (
+                    OTLPMetricExporter,
+                )
+
+                exporter = OTLPMetricExporter(endpoint=otlp_endpoint)
+
+            export_interval_str = os.getenv(
+                "AION_OTEL_METRIC_EXPORT_INTERVAL"
+            ) or os.getenv("OTEL_METRIC_EXPORT_INTERVAL")
+            try:
+                export_interval = (
+                    int(export_interval_str) if export_interval_str else 5000
+                )
+            except ValueError:
+                export_interval = 5000
+
+            readers.append(
+                PeriodicExportingMetricReader(
+                    exporter, export_interval_millis=export_interval
+                )
+            )
+
+            meter_provider = OTelMeterProvider(
+                resource=resource,
+                metric_readers=readers,
+            )
+            otel_metrics.set_meter_provider(meter_provider)
+        except Exception:
+            pass
+
         import openlit
 
-        openlit.init()
+        openlit.init(
+            otlp_endpoint=otlp_endpoint,
+        )
         os.environ["AION_OPENLIT_ACTIVE"] = "1"
     except ImportError:
         pass

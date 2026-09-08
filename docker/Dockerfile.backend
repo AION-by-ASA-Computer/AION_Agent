@@ -90,14 +90,22 @@ COPY --from=uv-bin /uv /uvx /usr/local/bin/
 
 WORKDIR /app
 
+# mcp-remote proxy for remote-bridge MCP servers (ClickUp, Notion, GitHub Copilot, …)
+COPY docker/package.mcp-remote.json ./package.json
+RUN npm install --omit=dev
+
 # Application code (runtime dirs config/ and mcp_servers/ come from sync at boot)
 COPY src/              ./src/
 COPY mcp_servers_std/  ./mcp_servers_std/
 COPY config_std/       ./config_std/
 COPY migrations/       ./migrations/
 COPY scripts/          ./scripts/
-COPY wre[n]/            ./wren/
 COPY alembic.ini       ./
+# Needed at runtime inside the image (GHCR mode has no host bind-mount of the repo):
+#   version.json                     -> _read_version() in upgrade_core.py / sync_config.py
+#   requirements-sandbox-skills.txt  -> _ensure_skill_packages() during reconcile
+COPY version.json      ./
+COPY requirements-sandbox-skills.txt ./
 COPY docker/backend-entrypoint.sh /usr/local/bin/aion-backend-entrypoint.sh
 
 RUN sed -i 's/\r$//' /usr/local/bin/aion-backend-entrypoint.sh \
@@ -107,7 +115,7 @@ RUN sed -i 's/\r$//' /usr/local/bin/aion-backend-entrypoint.sh \
 
 # Writable runtime directories (mounted as volume in compose, created here as fallback)
 RUN mkdir -p /app/data /app/data/sessions /app/data/profiles \
-    /app/data/skills/generated /app/data/agent_dbs
+    /app/data/skills/generated
 
 EXPOSE 8001
 

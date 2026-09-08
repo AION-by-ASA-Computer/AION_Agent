@@ -13,7 +13,7 @@ def test_exec_failure_surfaces_stderr_not_generic_tool_error() -> None:
         "exit_code": 1,
         "stderr": "Error: project pins profile 'aion-alibr' but it doesn't exist",
         "stdout": "",
-        "command": ["wren", "--sql", "SELECT 1"],
+        "command": ["python", "scripts/office/unpack.py"],
     }
     is_err, normalized = classify_tool_result_text(
         json.dumps(payload), "sandbox_exec_allowlisted"

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 import pytest
 from fastapi import UploadFile
@@ -29,7 +28,7 @@ def data_dir(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_run_auto_ingest_writes_pages(data_dir):
     sid = "sess_auto_ingest"
-    pdf_bytes = BytesIO()
+    BytesIO()
     path = build_rumore_decreto_pdf(data_dir / "src.pdf", pages=30)
     meta = save_upload(sid, "decreto.pdf", path.read_bytes())
 
@@ -64,7 +63,6 @@ async def test_schedule_auto_ingest_skips_non_pdf(data_dir):
 async def test_upload_endpoint_schedules_ingest(data_dir, monkeypatch):
     monkeypatch.setenv("AION_DOC_AUTO_INGEST", "1")
     from src.api.session_uploads import upload_session_files
-    from src.api.auth_login import ChatAuthIdentity
 
     sid = "sess_upload_ep"
     pdf = build_rumore_decreto_pdf(data_dir / "u.pdf", pages=15)

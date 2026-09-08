@@ -24,16 +24,15 @@ _EXPLORATION_TOOL_SUFFIXES = frozenset(
 )
 _SAVE_TOOL_SUFFIXES = frozenset(
     {
-        "mempalace_add_drawer",
+        "memory_note",
         "sql_memory_save",
         "save_successful_sql",
-        "mempalace_kg_add",
     }
 )
 
 _REMINDER = (
     "\n\n[exploration_reminder] Previous data turn explored the database but did not persist "
-    "discoveries — follow datasource_memory_protocol step 5 (sql_memory_save + mempalace_add_drawer) "
+    "discoveries — follow datasource_memory_protocol step 5 (sql_memory_save + memory_note) "
     "before the final answer.\n"
 )
 

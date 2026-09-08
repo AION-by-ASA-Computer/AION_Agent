@@ -1,8 +1,7 @@
 """Regression: SerializableMCPTool must not raise NameError on _USE_POOL during hot reload."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
-import pytest
 
 from src.mcp_manager import SerializableMCPTool, mcp_manager
 
@@ -13,9 +12,10 @@ def test_serializable_mcp_tool_use_pool_lookup():
 
     assert hasattr(mm, "_USE_POOL")
 
-    tool = SerializableMCPTool("memory", "test_tool", "sess-1")
+    tool = SerializableMCPTool("query_memory", "test_tool", "sess-1")
 
     mock_loop = MagicMock()
+    mock_loop.is_closed.return_value = False
     mock_future = MagicMock()
     mock_future.result.return_value = "ok"
 

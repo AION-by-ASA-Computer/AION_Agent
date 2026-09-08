@@ -385,7 +385,18 @@ async def get_conversation_chat_ui(
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
         r = await session.get(Conversation, conv_id)
-        if not r or r.tenant_id != tenant or r.user_id != user_id:
+        if not r:
+            # Lazy chat route: /c/{uuid} exists before first POST /chat creates the row.
+            return {
+                "id": conv_id,
+                "user_id": user_id,
+                "profile_slug": None,
+                "title": None,
+                "message_count": 0,
+                "metadata": {},
+                "is_new": True,
+            }
+        if r.tenant_id != tenant or r.user_id != user_id:
             raise HTTPException(404, "Not found")
         return {
             "id": r.id,

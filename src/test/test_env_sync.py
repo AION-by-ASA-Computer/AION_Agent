@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import os
 
-import pytest
 
 from src.runtime.env_sync import (
     RUNTIME_ENV_NAME,

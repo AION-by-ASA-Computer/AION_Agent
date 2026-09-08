@@ -14,7 +14,7 @@ Usage
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, Optional
 
 
 # Event-type categories for quick classification

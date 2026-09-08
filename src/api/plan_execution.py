@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
@@ -14,7 +13,6 @@ from pydantic import BaseModel, Field
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.api.research import resolve_research_owner
-from src.identity import sanitize_user_id
 from src.plan_execution.handler import (
     get_plan_execution_handler,
     plan_execution_enabled,

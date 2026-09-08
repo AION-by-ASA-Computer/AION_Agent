@@ -35,12 +35,6 @@ class AionSettings(BaseSettings):
     chat_max_tokens: int = Field(
         8192, description="Max response tokens per chat turn (AION_CHAT_MAX_TOKENS)."
     )
-    long_run_max_tokens: Optional[int] = Field(
-        None,
-        description=(
-            "Max response tokens for Long Run (Pi). When unset, uses chat_max_tokens."
-        ),
-    )
     context_window: int = Field(
         131072,
         description="Model context window in tokens (AION_CONTEXT_WINDOW).",
@@ -125,6 +119,17 @@ class AionSettings(BaseSettings):
     )
     cors_allow_wildcard: bool = Field(
         False, description="Allow wildcard (*) CORS origins (dev escape hatch)."
+    )
+
+    # Session cleanup
+    session_cleanup_max_age_days: int = Field(
+        15, description="Max session age in days before auto-cleanup (0=disabled)."
+    )
+    session_cleanup_interval_sec: int = Field(
+        86400, description="Seconds between session cleanup runs."
+    )
+    session_cleanup_hard_delete: bool = Field(
+        False, description="Hard delete session record and sandbox files on cleanup."
     )
 
     # STM / memory
@@ -217,13 +222,6 @@ class AionSettings(BaseSettings):
     @field_validator("stm_token_budget", mode="before")
     @classmethod
     def _coerce_stm_token_budget(cls, v):
-        if v is None or (isinstance(v, str) and v.strip() == ""):
-            return None
-        return v
-
-    @field_validator("long_run_max_tokens", mode="before")
-    @classmethod
-    def _coerce_long_run_max_tokens(cls, v):
         if v is None or (isinstance(v, str) and v.strip() == ""):
             return None
         return v

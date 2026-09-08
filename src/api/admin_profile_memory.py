@@ -1,5 +1,5 @@
 # src/api/admin_profile_memory.py
-"""CRUD SOUL / MEMORY / USER per profilo (pannello admin)."""
+"""CRUD preferenze utente (USER.md) per profilo."""
 
 from __future__ import annotations
 
@@ -12,13 +12,7 @@ from pydantic import BaseModel, Field
 
 from ..agent_profile import profile_manager
 from ..identity import sanitize_user_id
-from ..memory.memory_files import (
-    ProfileMemoryBundle,
-    profile_operative_memory_file,
-    soul_bounded_file,
-    soul_read_path,
-    soul_write_path,
-)
+from ..memory.memory_files import ProfileMemoryBundle
 
 router = APIRouter(prefix="/profile-memory", tags=["admin-profile-memory"])
 
@@ -56,20 +50,8 @@ def _list_user_ids_for_profile(profile_slug: str) -> List[str]:
     return out
 
 
-class SoulBody(BaseModel):
-    content: str = Field(default="")
-
-
-class MemoryBody(BaseModel):
-    content: str = Field(default="")
-
-
 class UserBody(BaseModel):
     content: str = Field(default="")
-
-
-def _project_root() -> Path:
-    return Path(__file__).resolve().parents[2]
 
 
 @router.get("/{profile_slug}/meta")
@@ -78,85 +60,12 @@ async def memory_meta(
     _auth: None = Depends(_optional_memory_auth),
 ) -> Dict[str, Any]:
     _require_profile(profile_slug)
-    read_p = soul_read_path(profile_slug)
-    write_p = soul_write_path(profile_slug)
-    mem_p = (
-        _project_root()
-        / Path(os.getenv("AION_PROFILE_STATE_DIR", "data/profiles"))
-        / profile_slug
-        / "MEMORY.md"
-    )
     users = _list_user_ids_for_profile(profile_slug)
     return {
         "profile_slug": profile_slug,
-        "soul_read_path": str(read_p) if read_p else None,
-        "soul_write_path": str(write_p),
-        "soul_exists": bool(read_p and read_p.is_file()),
-        "memory_path": str(mem_p),
-        "memory_max_chars": int(os.getenv("AION_MEMORY_FILE_MAX_CHARS", "2200")),
         "user_max_chars": int(os.getenv("AION_USER_FILE_MAX_CHARS", "1400")),
-        "soul_max_chars": int(os.getenv("AION_SOUL_FILE_MAX_CHARS", "12000")),
         "users": users,
-        "soul_memory_user_split_enabled": os.getenv(
-            "AION_SOUL_MEMORY_USER_SPLIT", "0"
-        ).lower()
-        in ("1", "true", "yes"),
     }
-
-
-@router.get("/{profile_slug}/soul")
-async def get_soul(
-    profile_slug: str,
-    _auth: None = Depends(_optional_memory_auth),
-) -> Dict[str, str]:
-    _require_profile(profile_slug)
-    p = soul_read_path(profile_slug)
-    content = ""
-    if p and p.is_file():
-        content = p.read_text(encoding="utf-8")
-    return {"content": content, "path": str(soul_write_path(profile_slug))}
-
-
-@router.put("/{profile_slug}/soul")
-async def put_soul(
-    profile_slug: str,
-    body: SoulBody,
-    _auth: None = Depends(_optional_memory_auth),
-) -> Dict[str, Any]:
-    _require_profile(profile_slug)
-    bf = soul_bounded_file(profile_slug)
-    res = bf.replace(body.content)
-    if not res.get("success"):
-        raise HTTPException(status_code=400, detail=res.get("error", "write failed"))
-    return res
-
-
-@router.get("/{profile_slug}/memory")
-async def get_memory(
-    profile_slug: str,
-    _auth: None = Depends(_optional_memory_auth),
-) -> Dict[str, Any]:
-    _require_profile(profile_slug)
-    m = profile_operative_memory_file(profile_slug)
-    return {
-        "content": m.read(),
-        "path": str(m.path),
-        "max_chars": m.max_chars,
-    }
-
-
-@router.put("/{profile_slug}/memory")
-async def put_memory(
-    profile_slug: str,
-    body: MemoryBody,
-    _auth: None = Depends(_optional_memory_auth),
-) -> Dict[str, Any]:
-    _require_profile(profile_slug)
-    m = profile_operative_memory_file(profile_slug)
-    res = m.replace(body.content)
-    if not res.get("success"):
-        raise HTTPException(status_code=400, detail=res.get("error", "write failed"))
-    return res
 
 
 def _enforce_user_or_admin_auth(

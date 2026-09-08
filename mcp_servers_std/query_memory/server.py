@@ -83,10 +83,7 @@ async def search_known_query(
     This tool is EXCLUSIVELY for Prometheus/PromQL queries —
     Do NOT use it to search past conversations or generic memory.
     To search chat history, use `session_search`.
-    To search facts and preferences, use `mempalace_search` on the mempalace server.
-
-    Compare `request` (natural language) with previously saved PromQL queries
-    via cosine similarity on embeddings. Returns matches sorted by relevance.
+    To search facts and preferences, use `memory_recall` (Mnemos).
     """
     results = await memory.search(
         request, limit=5, namespace=namespace, verified_only=verified_only
@@ -111,7 +108,7 @@ async def save_successful_query(
     [PROMQL CACHE ONLY] Save a verified PromQL query to the cache for future use.
     This tool is EXCLUSIVELY for Prometheus/PromQL queries —
     Do NOT use it to save conversations, generic facts, or user preferences.
-    To persist facts and preferences, use `mempalace_save` on the mempalace server.
+    To persist facts and preferences, use `memory_note` (Mnemos).
     Use is_verified=True only if the PromQL query already produced correct results.
     """
     success = await memory.add(

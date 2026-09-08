@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import os
-
-import pytest
 
 from src.memory.mnemos.fts import (
     build_discriminative_query,

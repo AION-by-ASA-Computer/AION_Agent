@@ -35,12 +35,9 @@ _DEFAULT_DENY_PREFIXES = (
     "AION_SETUP_",
 )
 
-# Exec allowlist forwards only these AION_* keys (wren and audit-safe ids).
+# Exec allowlist forwards only these AION_* keys (audit-safe ids).
 _EXEC_AION_ALLOWLIST = frozenset(
     {
-        "AION_WREN_HOME",
-        "AION_WREN_PROJECT_PATH",
-        "AION_WREN_EXEC_TIMEOUT_SEC",
         "AION_CHAT_SESSION_ID",
         "AION_CURRENT_PROFILE_SLUG",
         "AION_CURRENT_USER_ID",
@@ -99,7 +96,6 @@ def scrub_secrets_from_env(env: Dict[str, str]) -> None:
             "AION_CHAT_AUTH_SECRET",
             "AION_ORCHESTRATION_INTERNAL_SECRET",
             "AION_CHAT_UI_INTERNAL_SECRET",
-            "AION_AGENT_DB_EMBED_SECRET",
             "AION_API_KEY_BOOTSTRAP",
         }
     )
@@ -185,8 +181,6 @@ def build_exec_env(
     from ..tools.session_exec import (  # noqa: WPS433 — avoid circular at import
         _extend_path_for_exec,
         _parse_dotenv_file,
-        _resolve_wren_home,
-        _resolve_wren_project_home,
         _exe_matches,
     )
     from ..tools.session_venv import session_venv_dir
@@ -236,14 +230,5 @@ def build_exec_env(
         for key, val in os.environ.items():
             if key.upper() in win_keys:
                 env[key] = val
-
-    if argv and _exe_matches("wren", argv[0]):
-        wren_home = _resolve_wren_home()
-        env["WREN_HOME"] = str(wren_home)
-        project_home = _resolve_wren_project_home()
-        if project_home is not None:
-            env["WREN_PROJECT_HOME"] = str(project_home)
-            for k, v in _parse_dotenv_file(project_home / ".env").items():
-                env.setdefault(k, v)
 
     return env

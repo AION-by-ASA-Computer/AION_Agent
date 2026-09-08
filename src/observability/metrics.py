@@ -1,4 +1,6 @@
 import logging
+import os
+import socket
 from prometheus_client import (
     Counter as PromCounter,
     Histogram as PromHistogram,
@@ -6,6 +8,17 @@ from prometheus_client import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def get_instance_id() -> str:
+    """Returns the unique instance identifier for this AION deployment."""
+    inst = os.getenv("AION_INSTANCE_ID") or os.getenv("AION_HOST_ID")
+    if inst and inst.strip():
+        return inst.strip()
+    try:
+        return socket.gethostname() or "default-instance"
+    except Exception:
+        return "default-instance"
 
 
 class OTelPrometheusCounter:
@@ -26,6 +39,8 @@ class OTelPrometheusCounter:
                 logger.warning(f"Failed to create OTel counter {self.name}: {e}")
 
     def labels(self, **kwargs):
+        if "instance_id" in self.labelnames and "instance_id" not in kwargs:
+            kwargs["instance_id"] = get_instance_id()
         prom_child = self.prom_metric.labels(**kwargs)
         return OTelPrometheusCounterChild(self, prom_child, kwargs)
 
@@ -75,6 +90,8 @@ class OTelPrometheusHistogram:
                 logger.warning(f"Failed to create OTel histogram {self.name}: {e}")
 
     def labels(self, **kwargs):
+        if "instance_id" in self.labelnames and "instance_id" not in kwargs:
+            kwargs["instance_id"] = get_instance_id()
         prom_child = self.prom_metric.labels(**kwargs)
         return OTelPrometheusHistogramChild(self, prom_child, kwargs)
 
@@ -132,6 +149,8 @@ class OTelPrometheusGauge:
                 logger.warning(f"Failed to create OTel gauge {self.name}: {e}")
 
     def labels(self, **kwargs):
+        if "instance_id" in self.labelnames and "instance_id" not in kwargs:
+            kwargs["instance_id"] = get_instance_id()
         prom_child = self.prom_metric.labels(**kwargs)
         return OTelPrometheusGaugeChild(self, prom_child, kwargs)
 
@@ -193,17 +212,42 @@ Counter = OTelPrometheusCounter
 Histogram = OTelPrometheusHistogram
 Gauge = OTelPrometheusGauge
 
-# Counters
+# ==============================================================================
+# METRICS CLASSIFICATION & SCOPE GUIDANCE:
+# 📊 BOTH (Grafana Dashboard + Admin UI):
+#    - aion_messages_total (User & Assistant turn count)
+#    - aion_tool_calls_total (Cumulative tool calls by status & server)
+#    - aion_turn_duration_seconds (Histogram of end-to-end turn latencies)
+#    - aion_last_turn_duration_seconds (Gauge of most recent turn duration)
+#    - aion_llm_tokens_total (Cumulative prompt/completion/reasoning tokens)
+#    - aion_llm_turn_tokens (Turn-level token usage gauge)
+#    - aion_agent_failures_total (Total failure breakdown by error type)
+#
+# 📈 GRAFANA EXCLUSIVE (Detailed infrastructure & performance metrics):
+#    - aion_tool_call_duration_seconds (Tool execution histogram buckets)
+#    - aion_session_cache_size_bytes (Session workspace disk footprint)
+#    - aion_llm_turn_calls (LLM invocations per turn gauge)
+#    - aion_mcp_server_healthy (MCP server binary health gauge: 1=healthy, 0=down)
+#    - aion_mcp_pool_workers (Persistent stdio pool worker gauge)
+#
+# 💻 ADMIN UI EXCLUSIVE (Calculated in-memory or via REST API):
+#    - last_turn_tool_calls (Detailed list of tool & MCP calls in the last turn)
+#    - tool_usage_series (Time-series data points for tool usage over time)
+# ==============================================================================
+
+# --- [BOTH] Messages processed counter ---
 aion_messages_total = Counter(
     "aion_messages_total",
     "Total messages processed",
-    ["tenant_id", "profile", "role", "finish_reason"],
+    ["instance_id", "tenant_id", "profile", "role", "finish_reason"],
 )
 
+# --- [BOTH] Tool invocations counter ---
 aion_tool_calls_total = Counter(
     "aion_tool_calls_total",
     "Total tool invocations",
     [
+        "instance_id",
         "tenant_id",
         "profile",
         "tool_name",
@@ -212,14 +256,22 @@ aion_tool_calls_total = Counter(
     ],  # status: ok | error | blocked
 )
 
-# Histograms
+# --- [BOTH] End-to-end turn duration histogram ---
 aion_turn_duration_seconds = Histogram(
     "aion_turn_duration_seconds",
     "End-to-end turn duration",
-    ["tenant_id", "profile"],
+    ["instance_id", "tenant_id", "profile"],
     buckets=[0.5, 1, 2, 5, 10, 20, 30, 60, 120],
 )
 
+# --- [BOTH] Duration of the last execution turn ---
+aion_last_turn_duration_seconds = Gauge(
+    "aion_last_turn_duration_seconds",
+    "Duration of the last execution turn in seconds",
+    ["instance_id", "tenant_id", "profile"],
+)
+
+# --- [GRAFANA ONLY] Tool call execution latency histogram ---
 aion_tool_call_duration_seconds = Histogram(
     "aion_tool_call_duration_seconds",
     "Tool execution duration",
@@ -227,17 +279,19 @@ aion_tool_call_duration_seconds = Histogram(
     buckets=[0.05, 0.1, 0.25, 0.5, 0.75, 1.0, 2.5, 5.0, 10.0, 30.0],
 )
 
+# --- [GRAFANA ONLY] Local session disk footprint gauge ---
 aion_session_cache_size_bytes = Gauge(
     "aion_session_cache_size_bytes",
     "Local session file cache footprint",
-    ["tenant_id"],
+    ["instance_id", "tenant_id"],
 )
 
-# Observability metrics
+# --- [BOTH] LLM token usage counter (prompt, completion, reasoning) ---
 aion_llm_tokens_total = Counter(
     "aion_llm_tokens_total",
     "LLM token usage",
     [
+        "instance_id",
         "tenant_id",
         "profile",
         "model",
@@ -245,10 +299,12 @@ aion_llm_tokens_total = Counter(
     ],  # token_type: prompt | completion | reasoning
 )
 
+# --- [BOTH] LLM tokens used in the last turn ---
 aion_llm_turn_tokens = Gauge(
     "aion_llm_turn_tokens",
     "LLM tokens used in the last turn",
     [
+        "instance_id",
         "tenant_id",
         "profile",
         "model",
@@ -256,28 +312,33 @@ aion_llm_turn_tokens = Gauge(
     ],  # token_type: prompt | completion | reasoning
 )
 
+# --- [GRAFANA ONLY] LLM calls made per turn ---
 aion_llm_turn_calls = Gauge(
     "aion_llm_turn_calls",
     "Number of LLM calls made in the last turn",
-    ["tenant_id", "profile"],
+    ["instance_id", "tenant_id", "profile"],
 )
 
+# --- [BOTH] Total agent turn failures counter ---
 aion_agent_failures_total = Counter(
     "aion_agent_failures_total",
     "Total agent turn failures",
     [
+        "instance_id",
         "tenant_id",
         "profile",
         "error_type",
     ],  # error_type: timeout | error | cancelled | ...
 )
 
+# --- [GRAFANA ONLY] MCP server binary status gauge ---
 aion_mcp_server_healthy = Gauge(
     "aion_mcp_server_healthy",
     "MCP Server health status (1=healthy, 0=unhealthy)",
     ["mcp_server"],
 )
 
+# --- [GRAFANA ONLY] Persistent stdio worker pool size ---
 aion_mcp_pool_workers = Gauge(
     "aion_mcp_pool_workers",
     "Number of persistent MCP stdio workers in the in-process pool",

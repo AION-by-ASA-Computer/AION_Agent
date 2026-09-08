@@ -12,7 +12,6 @@ from haystack.tools import Tool
 from src.memory.sql_query_memory import sql_query_memory, sql_query_memory_enabled
 from src.runtime.sql_query_memory_context import get_sql_qm_turn_context
 from src.runtime.sql_query_project_scope import (
-    bound_sql_project,
     project_scope_enforced,
     verify_user_project_access,
 )

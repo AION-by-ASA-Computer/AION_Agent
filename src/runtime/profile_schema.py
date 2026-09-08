@@ -28,7 +28,6 @@ class ProfileSchema(BaseModel):
     mcp_servers: List[str] = Field(default_factory=list)
     critical_skills: Optional[List[str]] = None
     native_tool_groups: List[str] = Field(default_factory=list)
-    wren_project_path: Optional[str] = None
     max_agent_steps: Optional[int] = None
     agent: Optional[Dict[str, Any]] = None
 
@@ -68,7 +67,6 @@ class ProfileSchema(BaseModel):
             mcp_servers=list(data.get("mcp_servers") or []),
             critical_skills=critical_skills,
             native_tool_groups=list(data.get("native_tool_groups") or []),
-            wren_project_path=(data.get("wren_project_path") or None),
             max_agent_steps=max_agent_steps,
             agent=agent_cfg if isinstance(agent_cfg, dict) else None,
         )

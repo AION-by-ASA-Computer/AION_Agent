@@ -6,7 +6,6 @@ import asyncio
 import json
 import logging
 import re
-import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request

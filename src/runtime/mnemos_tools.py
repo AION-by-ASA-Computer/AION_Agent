@@ -183,8 +183,9 @@ def build_memory_note_tool(session_id: str, user_id: str, profile=None) -> Tool:
     return Tool(
         name="memory_note",
         description=(
-            "Persist a durable memory note when the user explicitly asks to remember "
-            "something in this turn."
+            "Persist a durable memory note (facts, user preferences, decisions, lessons learned). "
+            "MUST be called whenever saving or memorizing information for the active user or project. "
+            "Do NOT merely output text stating you memorized it without calling this tool."
         ),
         function=memory_note,
         parameters={

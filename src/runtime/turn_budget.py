@@ -30,24 +30,6 @@ class TurnBudget:
     ) -> "TurnBudget":
         import os
 
-        mode = (agent_mode or "normal").strip().lower()
-        if mode == "long_run":
-            from src.runtime.long_run_mode import long_run_turn_budget
-
-            lr = long_run_turn_budget()
-            base = cls._load_reasoning_limits(reasoning_effort)
-            return cls(
-                turn_timeout=lr.turn_timeout,
-                max_tool_calls=lr.max_tool_calls,
-                max_tool_events=lr.max_tool_events,
-                max_stream_events=int(
-                    os.getenv("AION_STREAM_EVENTS_MAX_PER_TURN", "0")
-                ),
-                no_progress_timeout=lr.no_progress_timeout,
-                max_reasoning_chars=base["max_reasoning_chars"],
-                max_reasoning_events=base["max_reasoning_events"],
-            )
-
         # Prioritize os.getenv to allow dynamic test/runtime overrides
         max_tool_calls_raw = os.getenv("AION_TOOL_CALLS_MAX_PER_TURN")
         if max_tool_calls_raw is not None and max_tool_calls_raw.strip() != "":

@@ -7,8 +7,6 @@ import os
 # Abilita esplicitamente la scrittura per i test
 os.environ["AION_SKILL_WRITE_ENABLED"] = "1"
 
-from pathlib import Path
-import pytest
 
 from src.skill_registry import skill_registry
 from mcp_servers.skills_hub.server import skill_save, skill_delete

@@ -18,8 +18,18 @@ export type ConnectorOAuthSetupHints = {
   scopes: string[];
 };
 
+function absoluteApiBase(): string {
+  const base = apiBase();
+  if (/^https?:\/\//i.test(base)) return base;
+  if (typeof window !== "undefined") {
+    const path = base.startsWith("/") ? base : `/${base}`;
+    return `${window.location.origin}${path}`;
+  }
+  return base;
+}
+
 export function defaultOAuthRedirectUri(): string {
-  return `${apiBase()}/v1/integrations/oauth/callback`;
+  return `${absoluteApiBase().replace(/\/$/, "")}/v1/integrations/oauth/callback`;
 }
 
 export function connectorOAuthSetupHints(

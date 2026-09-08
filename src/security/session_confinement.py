@@ -27,7 +27,7 @@ import sqlite3
 import sys
 import sysconfig
 from pathlib import Path
-from typing import Callable, Optional, Sequence
+from typing import Optional, Sequence
 
 logger = logging.getLogger("aion.security.confinement")
 

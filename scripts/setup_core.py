@@ -17,7 +17,6 @@ SYNC_RUNTIME_ENV = ROOT / "scripts" / "sync_runtime_env.py"
 RUNTIME_EXTRAS = ROOT / "scripts" / "runtime_extras_setup.py"
 ENSURE_SKILL_PACKAGES = ROOT / "scripts" / "ensure_skill_packages.py"
 PATCH_SQL_QM_CONFIG = ROOT / "scripts" / "patch_sql_query_memory_config.py"
-PATCH_MEMPALACE_NAV_CONFIG = ROOT / "scripts" / "patch_mempalace_navigation_config.py"
 VENV_DIR = ROOT / ".venv"
 REQ = ROOT / "requirements.txt"
 
@@ -147,19 +146,6 @@ def main() -> int:
                     "[warn] runtime_extras_setup exited non-zero (optional promo/fs steps)",
                     file=sys.stderr,
                 )
-        if PATCH_MEMPALACE_NAV_CONFIG.is_file() and not args.dry_run:
-            rc = _run(
-                [
-                    py_exec,
-                    str(PATCH_MEMPALACE_NAV_CONFIG),
-                    "--force-skills",
-                    "--force-profile-sync",
-                ]
-            )
-            if rc != 0:
-                print(
-                    "[warn] patch_mempalace_navigation_config failed", file=sys.stderr
-                )
         if PATCH_SQL_QM_CONFIG.is_file() and not args.dry_run:
             rc = _run([py_exec, str(PATCH_SQL_QM_CONFIG)])
             if rc != 0:
@@ -220,10 +206,13 @@ def main() -> int:
                     spec.loader.exec_module(up_mod)
                     rep = up_mod.Report()
                     up_mod._ensure_sql_qm_env_keys(out_path, dry_run=False, report=rep)
-                    up_mod._ensure_mempalace_nav_env_keys(
+                    up_mod._ensure_mnemos_env_keys(
                         out_path, dry_run=False, report=rep
                     )
-                    up_mod._ensure_mnemos_env_keys(
+                    up_mod._ensure_harness_v2_env_keys(
+                        out_path, dry_run=False, report=rep
+                    )
+                    up_mod._ensure_optimal_tool_format_env_keys(
                         out_path, dry_run=False, report=rep
                     )
                     up_mod._ensure_skill_view_env_keys(
@@ -237,7 +226,7 @@ def main() -> int:
                     )
             except Exception as exc:
                 print(
-                    f"[warn] memory env defaults (SQL QM / MemPalace nav): {exc}",
+                    f"[warn] memory env defaults (Mnemos / harness): {exc}",
                     file=sys.stderr,
                 )
 
