@@ -647,7 +647,7 @@ if [ -n "$EXISTING_VOLUME" ]; then
         echo ""
         echo "Opzioni:"
         echo "  1) Fresh start (cancella il vecchio DB):"
-        echo "     AION_RESET_DATA=1 $0 $*"
+        echo "     AION_RESET_DATA=1 bash $0 $*"
         echo ""
         echo "  2) Mantenere il DB (usare la chiave precedente):"
         echo "     Recupera AION_CREDENTIAL_ENCRYPTION_KEY dal .env della vecchia installazione, poi:"
