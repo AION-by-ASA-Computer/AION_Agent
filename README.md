@@ -100,6 +100,12 @@ AION_REUSE_DATA=1 AION_CREDENTIAL_ENCRYPTION_KEY="<your_old_key>" curl -fsSL htt
 For more options, run `bash -s -- --help`.
 See [docs/opensource/releases.md](docs/opensource/releases.md) for version information.
 
+**Upgrade an existing GHCR installation** (run from the installation directory):
+```bash
+curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash -s -- upgrade
+```
+This creates a backup, upgrades hop-by-hop through every intermediate version, and rolls back automatically if a health check fails.
+
 ### Development compose (hot reload)
 
 API + chat-ui + Redis only — run admin-ui and docs via `pnpm dev` when needed:

@@ -24,6 +24,7 @@ import { adminPath } from "@/lib/paths";
 import { getStoredUserId, setStoredAuth } from "@/lib/auth/storage";
 import { resetAuthStatusCache } from "@/lib/auth/status";
 import { AdminBrand } from "@/components/brand/AdminBrand";
+import { VersionUpdateBanner } from "@/components/VersionUpdateBanner";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
@@ -126,6 +127,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
         </header>
+        <VersionUpdateBanner className="mx-8 mt-4" />
         <div className="p-8 w-full max-w-[96rem] mx-auto">{children}</div>
       </main>
     </>

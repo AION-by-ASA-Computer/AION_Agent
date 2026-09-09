@@ -49,6 +49,7 @@ from .cron_admin import router as cron_admin_router
 from .admin_query_memory import router as admin_query_memory_router
 from .llm_providers import router as llm_providers_router
 from .metrics_api import router as metrics_router
+from .version_check import router as version_check_router
 from ..runtime.redis_client import redis_status
 from ..data.engine import get_async_session_maker
 from ..mcp_connector_catalog import (
@@ -289,6 +290,7 @@ router.include_router(cron_admin_router)
 router.include_router(admin_query_memory_router)
 router.include_router(llm_providers_router)
 router.include_router(metrics_router)
+router.include_router(version_check_router)
 
 
 def _project_root() -> Path:
