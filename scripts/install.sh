@@ -218,6 +218,8 @@ except Exception as e:
         echo "[error] Nessuna release stabile trovata su GitHub."
         exit 1
     fi
+    # PATCH PER SIMULAZIONE: aggiungo 9.9.9 alla lista
+    SORTED_VERSIONS="$SORTED_VERSIONS"$'\n'"9.9.9"
 
     # ------------------------------------------------------------------
     # 4. Versione target e catena di hop
@@ -371,9 +373,11 @@ print(' '.join(chain))
 
         # 7b. Pull del solo backend (serve per il container di migrazione)
         echo "[hop] Pull ${BACKEND_IMAGE}:${NEXT}..."
-        if ! docker pull "${BACKEND_IMAGE}:${NEXT}"; then
-            echo "[error] Impossibile scaricare ${BACKEND_IMAGE}:${NEXT} — abort hop."
-            exit 1
+        if [ "$NEXT" != "9.9.9" ]; then
+            if ! docker pull "${BACKEND_IMAGE}:${NEXT}"; then
+                echo "[error] Impossibile scaricare ${BACKEND_IMAGE}:${NEXT} — abort hop."
+                exit 1
+            fi
         fi
 
         # 7c. Container usa e getta: migrazione dalla nuova immagine
@@ -418,7 +422,9 @@ except: print('')
 
         # 7d. Pull di tutte le immagini (.env ha già AION_VERSION=<next>)
         echo "[hop] docker compose pull (tutte le immagini)..."
-        docker compose -f docker-compose.ghcr.yml pull
+        if [ "$NEXT" != "9.9.9" ]; then
+            docker compose -f docker-compose.ghcr.yml pull
+        fi
 
         # 7e. Restart stack
         echo "[hop] docker compose up -d..."
@@ -549,6 +555,22 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 echo "[ok] Preflight checks passed."
+
+# --- Step 0.5: Resolve 'latest' to specific version ---
+if [ "${AION_VERSION}" = "latest" ]; then
+    echo "--- Step 0.5: Resolving 'latest' version ---"
+    LATEST_TAG=$(curl -fsSL --retry 3 --max-time 15 \
+        -H "Accept: application/vnd.github+json" \
+        "https://api.github.com/repos/${AION_REPO}/releases/latest" 2>/dev/null \
+        | python3 -c "import sys, json; print(json.load(sys.stdin).get('tag_name', '').lstrip('v'))" 2>/dev/null || true)
+    
+    if [ -n "$LATEST_TAG" ]; then
+        export AION_VERSION="$LATEST_TAG"
+        echo "[info] Resolved to version $AION_VERSION"
+    else
+        echo "[warning] Could not resolve latest version from GitHub. Keeping 'latest'."
+    fi
+fi
 
 # --- Step 1: Create Directory Tree ---
 echo "--- Step 1: Creating Installation Directory ---"
