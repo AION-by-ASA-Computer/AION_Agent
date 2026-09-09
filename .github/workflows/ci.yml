@@ -208,3 +208,13 @@ jobs:
           tags: aion-website:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Build Sandbox Image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          file: docker/Dockerfile.sandbox
+          push: false
+          tags: aion-sandbox:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
