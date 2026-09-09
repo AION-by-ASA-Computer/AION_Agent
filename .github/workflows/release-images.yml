@@ -49,6 +49,9 @@ jobs:
             file: docker/Dockerfile.website
             build_args: |
               DOCUSAURUS_BASE_URL=/docs/
+          - image: aion-sandbox
+            file: docker/Dockerfile.sandbox
+            build_args: ""
     steps:
       - name: Parse release version
         id: ver

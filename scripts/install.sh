@@ -419,6 +419,8 @@ except: print('')
         # 7d. Pull di tutte le immagini (.env ha già AION_VERSION=<next>)
         echo "[hop] docker compose pull (tutte le immagini)..."
         docker compose -f docker-compose.ghcr.yml pull
+        echo "[hop] docker pull sandbox image..."
+        docker pull "ghcr.io/aion-by-asa-computer/aion-sandbox:${NEXT}" || true
 
         # 7e. Restart stack
         echo "[hop] docker compose up -d..."
@@ -669,6 +671,7 @@ redis_password = secrets.token_hex(32)
 
 config = {
     'AION_VERSION': os.environ.get('AION_VERSION', 'latest'),
+    'AION_SANDBOX_CONTAINER_IMAGE': f"ghcr.io/aion-by-asa-computer/aion-sandbox:{os.environ.get('AION_VERSION', 'latest')}",
     'AION_SANDBOX_HOST_DATA_DIR': os.path.join(os.environ['AION_INSTALL_DIR'], 'data'),
     'AION_PODMAN_SOCKET_HOST': f"/run/user/{os.getuid()}/podman/podman.sock",
     'AION_REDIS_URL': f"redis://:{redis_password}@redis:6379/0",
@@ -808,6 +811,8 @@ echo "[ok] Wrote .aion-install.json"
 if [ "$AION_SKIP_START" -eq 0 ]; then
     echo "--- Step 6: Starting Stack ---"
     docker compose -f docker-compose.ghcr.yml pull
+    echo "[info] Pulling sandbox image..."
+    docker pull "ghcr.io/aion-by-asa-computer/aion-sandbox:${AION_VERSION}" || true
     docker compose -f docker-compose.ghcr.yml up -d --no-build --remove-orphans
     
     echo "Waiting for backend to be healthy..."

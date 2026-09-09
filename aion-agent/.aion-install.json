@@ -1,0 +1,7 @@
+{
+  "version": "1.5.1",
+  "installed_at": "2026-09-09T15:24:53Z",
+  "compose_file": "docker-compose.ghcr.yml",
+  "install_dir": "/Users/LucaDago/Desktop/agent.nosync/AION_Agent/aion-agent",
+  "repo": "AION-by-ASA-Computer/AION_Agent"
+}
