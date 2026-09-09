@@ -218,8 +218,6 @@ except Exception as e:
         echo "[error] Nessuna release stabile trovata su GitHub."
         exit 1
     fi
-    # PATCH PER SIMULAZIONE: aggiungo 9.9.9 alla lista
-    SORTED_VERSIONS="$SORTED_VERSIONS"$'\n'"9.9.9"
 
     # ------------------------------------------------------------------
     # 4. Versione target e catena di hop
@@ -373,11 +371,9 @@ print(' '.join(chain))
 
         # 7b. Pull del solo backend (serve per il container di migrazione)
         echo "[hop] Pull ${BACKEND_IMAGE}:${NEXT}..."
-        if [ "$NEXT" != "9.9.9" ]; then
-            if ! docker pull "${BACKEND_IMAGE}:${NEXT}"; then
-                echo "[error] Impossibile scaricare ${BACKEND_IMAGE}:${NEXT} — abort hop."
-                exit 1
-            fi
+        if ! docker pull "${BACKEND_IMAGE}:${NEXT}"; then
+            echo "[error] Impossibile scaricare ${BACKEND_IMAGE}:${NEXT} — abort hop."
+            exit 1
         fi
 
         # 7c. Container usa e getta: migrazione dalla nuova immagine
@@ -422,9 +418,7 @@ except: print('')
 
         # 7d. Pull di tutte le immagini (.env ha già AION_VERSION=<next>)
         echo "[hop] docker compose pull (tutte le immagini)..."
-        if [ "$NEXT" != "9.9.9" ]; then
-            docker compose -f docker-compose.ghcr.yml pull
-        fi
+        docker compose -f docker-compose.ghcr.yml pull
 
         # 7e. Restart stack
         echo "[hop] docker compose up -d..."
