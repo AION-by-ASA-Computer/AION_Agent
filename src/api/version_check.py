@@ -10,6 +10,7 @@ Nessuna autenticazione GitHub richiesta: l'API pubblica consente 60 req/ora
 per IP. La cache in-memory di 5 minuti garantisce al massimo ~12 chiamate/ora
 indipendentemente dal numero di admin connessi.
 """
+
 import logging
 import os
 import time
