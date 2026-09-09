@@ -72,27 +72,63 @@ else
 fi
 export AION_REF
 
-# --- Error Handling ---
-trap 'echo "[error] Installation failed at step: $BASH_COMMAND"' ERR
-
 # ===========================================================================
-# FUNZIONE: do_upgrade — modalità upgrade GHCR
+# FUNZIONE: do_upgrade — modalità upgrade GHCR (v2: container usa e getta)
 # ===========================================================================
 # Flusso:
 #   1. Precondizioni (.env + docker-compose.ghcr.yml nella CWD)
 #   2. Legge AION_VERSION corrente dal .env
 #   3. Interroga GitHub API /releases (lista completa, ordinata per semver)
 #   4. Calcola catena di hop da current (escluso) a target (incluso)
-#   5. Acquisisce lock data/.upgrade.lock
-#   6. Backup via scripts/aion_backup.py
-#   7. Loop hop: fetch files → upgrade script → aggiorna .env → pull+up → health-check
+#   5. Acquisisce lock data/.upgrade.lock (bash puro, nessun download Python)
+#   6. Backup file host (via container immagine corrente)
+#      Backup volume Docker aion_data (via docker run --rm alpine tar)
+#   7. Loop hop: fetch infra files → docker pull backend:<next> →
+#      docker run --rm <new image> upgrade_runner.py →
+#      docker compose pull → up -d → health-check
 #   8. Aggiorna .aion-install.json
 #   9. Rilascia lock + riepilogo
 # ===========================================================================
+
+# ---------------------------------------------------------------------------
+# Lock helpers — bash puro, nessun Python, nessun download esterno
+# ---------------------------------------------------------------------------
+_lock_acquire() {
+    local lock_file="$1"
+    mkdir -p "$(dirname "$lock_file")"
+    if [ -f "$lock_file" ]; then
+        local pid
+        pid=$(python3 -c "
+import json, sys
+try:
+    d = json.load(open('$lock_file'))
+    print(int(d.get('pid', 0)))
+except:
+    print(0)
+" 2>/dev/null || echo 0)
+        if [ "$pid" -gt 0 ] && kill -0 "$pid" 2>/dev/null; then
+            echo "[error] Upgrade già in corso (PID $pid)."
+            echo "        Rimuovere $lock_file manualmente se il processo non esiste più."
+            return 1
+        fi
+        echo "[info] Lock stale trovato (PID $pid non attivo) — rimosso."
+        rm -f "$lock_file"
+    fi
+    printf '{"pid":%d,"started_at":%d}\n' "$$" "$(date +%s)" > "$lock_file"
+    echo "[ok] Lock acquisito: $lock_file"
+    return 0
+}
+
+_lock_release() {
+    rm -f "$1"
+}
+
 do_upgrade() {
     echo ""
-    echo "=== AION Agent — Modalità Upgrade GHCR ==="
+    echo "=== AION Agent — Modalità Upgrade GHCR (v2) ==="
     echo ""
+
+    local BACKEND_IMAGE="ghcr.io/aion-by-asa-computer/aion-backend"
 
     # ------------------------------------------------------------------
     # 1. Precondizioni
@@ -110,7 +146,7 @@ do_upgrade() {
         exit 1
     fi
 
-    # Legge CADDY_HTTP_PORT dal .env locale se non già impostato
+    # Legge CADDY_HTTP_PORT dal .env locale se non già impostato dall'environment
     if [ -z "${CADDY_HTTP_PORT:-}" ]; then
         CADDY_HTTP_PORT=$(python3 -c "
 import re
@@ -156,7 +192,6 @@ except: print('')
         exit 1
     fi
 
-    # Estrae e ordina le versioni per semver crescente
     SORTED_VERSIONS=$(python3 -c "
 import json, sys
 try:
@@ -187,12 +222,10 @@ except Exception as e:
     # ------------------------------------------------------------------
     # 4. Versione target e catena di hop
     # ------------------------------------------------------------------
-    # Se --version è stato specificato, usalo; altrimenti l'ultima release
     if [ "${AION_VERSION:-latest}" = "latest" ]; then
         TARGET_VERSION=$(echo "$SORTED_VERSIONS" | tail -n1)
     else
         TARGET_VERSION="$AION_VERSION"
-        # Verifica che il target esista nell'elenco
         if ! echo "$SORTED_VERSIONS" | grep -qx "$TARGET_VERSION"; then
             echo "[error] Versione '$TARGET_VERSION' non trovata nelle release pubblicate."
             echo "        Release disponibili:"
@@ -201,20 +234,15 @@ except Exception as e:
         fi
     fi
 
-    # Verifica che il target sia > corrente
     SEMVER_CHECK=$(python3 -c "
-import sys
 def parse(v):
     try: return tuple(int(x) for x in v.split('.'))
     except: return (0,0,0)
 current = parse('${CURRENT_VERSION}')
 target  = parse('${TARGET_VERSION}')
-if target > current:
-    print('upgrade')
-elif target == current:
-    print('same')
-else:
-    print('downgrade')
+if target > current:   print('upgrade')
+elif target == current: print('same')
+else:                  print('downgrade')
 " 2>/dev/null || echo "same")
 
     if [ "$SEMVER_CHECK" = "same" ]; then
@@ -229,9 +257,7 @@ else:
         exit 1
     fi
 
-    # Costruisce la catena: versioni tra current (escluso) e target (incluso)
     HOP_CHAIN=$(python3 -c "
-import sys
 def parse(v):
     try: return tuple(int(x) for x in v.split('.'))
     except: return (0,0,0)
@@ -247,58 +273,73 @@ print(' '.join(chain))
         exit 1
     fi
 
-    echo "[info] Versione target:   $TARGET_VERSION"
+    echo "[info] Versione target:     $TARGET_VERSION"
     echo "[info] Hop da attraversare: $HOP_CHAIN"
     echo ""
 
     # ------------------------------------------------------------------
-    # 5. Lock
+    # 5. Lock (bash puro — nessun download Python dall'esterno)
     # ------------------------------------------------------------------
     LOCK_FILE="data/.upgrade.lock"
     mkdir -p data
 
-    LOCK_ARGS="--lock-file $LOCK_FILE --stale-sec 7200"
-    [ "$AION_YES" -eq 1 ] && LOCK_ARGS="$LOCK_ARGS --yes"
-
-    # Scarica upgrade_lib.py se assente (installazione curl-only)
-    if [ ! -f "scripts/upgrade_lib.py" ]; then
-        echo "[info] Scarico scripts/upgrade_lib.py..."
-        mkdir -p scripts
-        if ! curl -fsSL --retry 3 \
-            "https://raw.githubusercontent.com/${AION_REPO}/main/scripts/upgrade_lib.py" \
-            -o scripts/upgrade_lib.py 2>/dev/null; then
-            echo "[error] Impossibile scaricare upgrade_lib.py"
-            exit 1
-        fi
+    if ! _lock_acquire "$LOCK_FILE"; then
+        exit 1
     fi
-
-    python3 scripts/upgrade_lib.py lock-acquire $LOCK_ARGS || exit 1
-    echo "[ok] Lock acquisito: $LOCK_FILE"
 
     # Rilascia il lock in caso di uscita anticipata (ERR trap o Ctrl+C)
-    trap 'python3 scripts/upgrade_lib.py lock-release --lock-file "'"$LOCK_FILE"'" 2>/dev/null; echo "[info] Lock rilasciato (trap)."' EXIT
+    trap '_lock_release "$LOCK_FILE"; echo "[info] Lock rilasciato (trap EXIT)."' EXIT
 
     # ------------------------------------------------------------------
-    # 6. Backup pre-upgrade (un solo backup, stato pre-upgrade)
+    # 6a. Backup file host (via container dell'immagine CORRENTE)
+    #     Usa la versione pre-upgrade così il backup riflette lo stato attuale
     # ------------------------------------------------------------------
-    echo "--- Backup pre-upgrade ---"
-    if [ ! -f "scripts/aion_backup.py" ]; then
-        echo "[info] Scarico scripts/aion_backup.py..."
-        if ! curl -fsSL --retry 3 \
-            "https://raw.githubusercontent.com/${AION_REPO}/main/scripts/aion_backup.py" \
-            -o scripts/aion_backup.py 2>/dev/null; then
-            echo "[warning] Impossibile scaricare aion_backup.py — backup saltato."
+    echo "--- Backup pre-upgrade: file host ---"
+    mkdir -p data/_backups
+    BACKUP_OK=0
+
+    if docker image inspect "${BACKEND_IMAGE}:${CURRENT_VERSION}" >/dev/null 2>&1; then
+        BACKUP_OUT=$(docker run --rm \
+            -v "$PWD/.env:/app/.env:ro" \
+            -v "$PWD/config:/app/config:ro" \
+            -v "$PWD/data:/app/data:rw" \
+            --entrypoint python3 \
+            "${BACKEND_IMAGE}:${CURRENT_VERSION}" \
+            scripts/aion_backup.py --output /app/data/_backups 2>/dev/null || true)
+        if [ -n "$BACKUP_OUT" ]; then
+            echo "[ok] Backup file host: $BACKUP_OUT"
+            BACKUP_OK=1
+        else
+            echo "[warning] Backup file host non riuscito — si continua ugualmente."
         fi
+    else
+        echo "[warning] Immagine ${BACKEND_IMAGE}:${CURRENT_VERSION} non in locale — backup file host saltato."
     fi
 
-    BACKUP_PATH=""
-    if [ -f "scripts/aion_backup.py" ]; then
-        BACKUP_PATH=$(python3 scripts/aion_backup.py --output data/_backups 2>/dev/null || true)
-        if [ -n "$BACKUP_PATH" ]; then
-            echo "[ok] Backup creato: $BACKUP_PATH"
+    # ------------------------------------------------------------------
+    # 6b. Backup volume Docker (aion_data → tar.gz)
+    #     Identifica il nome del volume con prefisso progetto docker compose
+    # ------------------------------------------------------------------
+    echo "--- Backup pre-upgrade: volume Docker ---"
+    COMPOSE_PROJECT=$(docker compose -f docker-compose.ghcr.yml config --format json 2>/dev/null \
+        | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('name','aion-agent'))" \
+        2>/dev/null || echo "aion-agent")
+    VOLUME_NAME="${COMPOSE_PROJECT}_aion_data"
+    VOLUME_BACKUP_FILE="data/_backups/aion_volume_$(date -u +%Y%m%d_%H%M%S).tar.gz"
+
+    if docker volume inspect "$VOLUME_NAME" >/dev/null 2>&1; then
+        if docker run --rm \
+            -v "${VOLUME_NAME}:/volume:ro" \
+            -v "$PWD/data/_backups:/backup" \
+            alpine \
+            tar -czpf "/backup/$(basename "$VOLUME_BACKUP_FILE")" \
+                --numeric-owner -C /volume . 2>/dev/null; then
+            echo "[ok] Backup volume Docker: $VOLUME_BACKUP_FILE"
         else
-            echo "[warning] Backup non riuscito — si continua ugualmente."
+            echo "[warning] Backup volume non riuscito — si continua ugualmente."
         fi
+    else
+        echo "[warning] Volume $VOLUME_NAME non trovato — backup volume saltato."
     fi
 
     # ------------------------------------------------------------------
@@ -312,9 +353,8 @@ print(' '.join(chain))
         echo "--- Hop: $PREV_VERSION → $NEXT ---"
         NEXT_REF="v${NEXT}"
 
-        # 7a. Re-fetch file top-level dal ref della versione di arrivo
-        echo "[hop] Aggiorno file infrastrutturali..."
-        FETCH_ERRORS=0
+        # 7a. Aggiorna file infrastrutturali dall'host (non sono nell'immagine)
+        echo "[hop] Aggiorno file infrastrutturali da ${NEXT_REF}..."
         for SRC in \
             "docker-compose.ghcr.yml" \
             "docker/Caddyfile" \
@@ -325,66 +365,66 @@ print(' '.join(chain))
             if ! curl -fsSL --retry 3 \
                 "https://raw.githubusercontent.com/${AION_REPO}/${NEXT_REF}/${SRC}" \
                 -o "$SRC" 2>/dev/null; then
-                echo "[warning] Impossibile aggiornare $SRC per $NEXT_REF — si usa la versione esistente."
-                FETCH_ERRORS=$((FETCH_ERRORS + 1))
+                echo "[warning] Impossibile aggiornare $SRC per ${NEXT_REF} — si usa la versione esistente."
             fi
         done
 
-        # 7b. Aggiorna upgrade_lib.py alla versione del hop
-        curl -fsSL --retry 3 \
-            "https://raw.githubusercontent.com/${AION_REPO}/${NEXT_REF}/scripts/upgrade_lib.py" \
-            -o scripts/upgrade_lib.py 2>/dev/null || true
-
-        # 7c. Scarica lo script di upgrade per-versione (404 = no-op silenzioso)
-        UPGRADE_SCRIPT="scripts/upgrades/${NEXT}.py"
-        mkdir -p scripts/upgrades
-        HTTP_STATUS=$(curl -o "$UPGRADE_SCRIPT" -w "%{http_code}" -fsSL --retry 2 \
-            "https://raw.githubusercontent.com/${AION_REPO}/${NEXT_REF}/scripts/upgrades/${NEXT}.py" \
-            2>/dev/null || echo "000")
-
-        # 7d. Esegue lo script di upgrade se scaricato con successo
-        if [ "$HTTP_STATUS" = "200" ] && [ -f "$UPGRADE_SCRIPT" ]; then
-            echo "[hop] Eseguo upgrade script per $NEXT..."
-            python3 - << PYEOF
-import sys, importlib.util
-from pathlib import Path
-sys.path.insert(0, str(Path('scripts').resolve()))
-from upgrade_lib import UpgradeContext
-env_path = Path('.env')
-ctx = UpgradeContext(
-    env_path=env_path,
-    config_dir=Path('config'),
-    install_dir=Path('.').resolve(),
-)
-spec = importlib.util.spec_from_file_location('upgrade_version', 'scripts/upgrades/${NEXT}.py')
-mod = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(mod)
-mod.upgrade(ctx)
-print('[hop] Upgrade script completato.')
-PYEOF
-        else
-            echo "[hop] Nessuno script di upgrade per $NEXT (no-op)."
-            # Rimuove il file vuoto/parziale se il download non è andato a buon fine
-            [ "$HTTP_STATUS" != "200" ] && rm -f "$UPGRADE_SCRIPT" || true
+        # 7b. Pull del solo backend (serve per il container di migrazione)
+        echo "[hop] Pull ${BACKEND_IMAGE}:${NEXT}..."
+        if ! docker pull "${BACKEND_IMAGE}:${NEXT}"; then
+            echo "[error] Impossibile scaricare ${BACKEND_IMAGE}:${NEXT} — abort hop."
+            exit 1
         fi
 
-        # 7e. Aggiorna AION_VERSION=<next> nel .env (preserva tutte le altre chiavi)
-        echo "[hop] Aggiorno AION_VERSION=$NEXT nel .env..."
-        python3 scripts/upgrade_lib.py rewrite-key \
-            --env-file .env \
-            --key AION_VERSION \
-            --value "$NEXT" || {
-            echo "[error] Impossibile aggiornare AION_VERSION nel .env — abort."
-            exit 1
-        }
+        # 7c. Container usa e getta: migrazione dalla nuova immagine
+        #     Il container ha accesso al pieno stack Python + config_std/ + mcp_servers_std/
+        #     Monta .env, config/, mcp_servers/, data/ in lettura/scrittura
+        #     Al termine: AION_VERSION=<next> sarà già scritto nel .env montato
+        echo "[hop] Eseguo container migrazione ${NEXT}..."
+        mkdir -p config mcp_servers
 
-        # 7f. Pull + restart
-        echo "[hop] docker compose pull..."
+        if ! docker run --rm \
+            -v "$PWD/.env:/app/.env:rw" \
+            -v "$PWD/config:/app/config:rw" \
+            -v "$PWD/mcp_servers:/app/mcp_servers:rw" \
+            -v "$PWD/data:/app/data:rw" \
+            --entrypoint python3 \
+            "${BACKEND_IMAGE}:${NEXT}" \
+            scripts/upgrade_runner.py --from "${PREV_VERSION}" --to "${NEXT}"; then
+            echo ""
+            echo "[error] Il container di migrazione per hop ${PREV_VERSION} → ${NEXT} è uscito con errore."
+            echo "        Vedere il log sopra per diagnosticare."
+            echo "        AION_VERSION nel .env potrebbe non essere ancora aggiornata."
+            echo "        Correggere il problema e rieseguire 'install.sh upgrade'."
+            exit 1
+        fi
+
+        # Verifica che AION_VERSION sia stata aggiornata dal container
+        UPDATED_VERSION=$(python3 -c "
+import re
+try:
+    txt = open('.env').read()
+    m = re.search(r'^AION_VERSION=(.+)$', txt, re.MULTILINE)
+    print(m.group(1).strip() if m else '')
+except: print('')
+" 2>/dev/null || true)
+
+        if [ "$UPDATED_VERSION" != "$NEXT" ]; then
+            echo "[error] AION_VERSION nel .env è '$UPDATED_VERSION' invece di '$NEXT'."
+            echo "        Il container di migrazione non ha completato correttamente."
+            exit 1
+        fi
+        echo "[ok] AION_VERSION aggiornata a $NEXT nel .env."
+
+        # 7d. Pull di tutte le immagini (.env ha già AION_VERSION=<next>)
+        echo "[hop] docker compose pull (tutte le immagini)..."
         docker compose -f docker-compose.ghcr.yml pull
+
+        # 7e. Restart stack
         echo "[hop] docker compose up -d..."
         docker compose -f docker-compose.ghcr.yml up -d --no-build --remove-orphans
 
-        # 7g. Health check (riusa la stessa logica già in install.sh)
+        # 7f. Health check: 36 × 5s = 3 minuti max
         echo "[hop] Health check backend..."
         HOP_HEALTHY=0
         for i in {1..36}; do
@@ -403,19 +443,19 @@ PYEOF
 
         if [ "$HOP_HEALTHY" -eq 0 ]; then
             echo ""
-            echo "[error] Health check fallito per hop $PREV_VERSION → $NEXT."
-            echo "        AION_VERSION nel .env è già stato aggiornato a $NEXT."
+            echo "[error] Health check fallito per hop ${PREV_VERSION} → ${NEXT}."
+            echo "        AION_VERSION nel .env è già aggiornata a ${NEXT}."
             echo "        Un nuovo run di 'install.sh upgrade' riprenderà da qui."
             echo "        Per diagnosticare: docker compose -f docker-compose.ghcr.yml logs backend"
             exit 1
         fi
 
-        # 7h. Log alembic (read-only, solo informativo)
+        # 7g. Log migrazioni Alembic (read-only, informativo)
         echo "[hop] Stato migrazioni Alembic:"
         docker compose -f docker-compose.ghcr.yml exec -T backend \
             alembic current 2>/dev/null || echo "[info] alembic current non disponibile."
 
-        HOP_SUMMARY="$HOP_SUMMARY $PREV_VERSION→$NEXT[ok]"
+        HOP_SUMMARY="$HOP_SUMMARY ${PREV_VERSION}→${NEXT}[ok]"
         PREV_VERSION="$NEXT"
     done
 
@@ -438,8 +478,7 @@ EOF
     # ------------------------------------------------------------------
     # 9. Rilascia lock + riepilogo
     # ------------------------------------------------------------------
-    python3 scripts/upgrade_lib.py lock-release --lock-file "$LOCK_FILE" 2>/dev/null || true
-    # Rimuovi il trap EXIT per evitare doppio rilascio
+    _lock_release "$LOCK_FILE"
     trap - EXIT
 
     echo ""
@@ -447,7 +486,7 @@ EOF
     echo "  Versione precedente : $CURRENT_VERSION"
     echo "  Versione installata : $TARGET_VERSION"
     echo "  Hop attraversati    :$HOP_SUMMARY"
-    [ -n "$BACKUP_PATH" ] && echo "  Backup pre-upgrade  : $BACKUP_PATH"
+    echo "  Backup pre-upgrade  : data/_backups/"
     echo "  Chat UI             : http://localhost:${CADDY_HTTP_PORT}/"
     echo "  Admin UI            : http://localhost:${CADDY_HTTP_PORT}/admin"
     echo "=========================="
@@ -482,6 +521,9 @@ fi
 # ===========================================================================
 # INSTALL (modalità predefinita — codice originale invariato)
 # ===========================================================================
+
+# --- Error Handling (solo modalità install) ---
+trap 'echo "[error] Installation failed at step: $BASH_COMMAND"' ERR
 
 # --- Step 0: Preflight ---
 echo "--- Step 0: Preflight Checks ---"
