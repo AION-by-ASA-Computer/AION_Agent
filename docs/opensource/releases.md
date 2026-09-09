@@ -100,6 +100,54 @@ curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/mai
 curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash -s -- --version 1.0.0
 ```
 
+### Upgrade di un'installazione GHCR esistente
+
+Per aggiornare un'installazione già esistente **senza reinstallare**, eseguire il
+comando dalla directory di installazione (dove vivono `.env` e
+`docker-compose.ghcr.yml`):
+
+```bash
+# Upgrade all'ultima versione stabile:
+curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash -s -- upgrade
+
+# Upgrade a una versione specifica (salta le intermedie in automatico via hop):
+curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash -s -- upgrade --version 1.6.0
+
+# Modalità non-interattiva (CI / automazione):
+curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash -s -- upgrade --yes
+```
+
+Il comando esegue automaticamente:
+
+- **Backup** — crea un archivio `data/_backups/aion_backup_<ts>.tar.gz` prima di toccare qualsiasi file.
+- **Hop sequenziali** — attraversa ogni versione intermedia in ordine (mai un salto diretto). Se da `1.4.0` si va a `1.6.0`, il percorso è `1.4.0 → 1.5.0 → 1.6.0`.
+- **Lock** — impedisce run concorrenti (`data/.upgrade.lock`).
+- **Aggiornamento selettivo del `.env`** — modifica solo `AION_VERSION`; tutte le personalizzazioni restano intatte.
+- **`docker pull + up -d`** — aggiorna le immagini e riavvia i container.
+- **Health check** — verifica che il backend risponda su `/api/health` dopo ogni hop.
+- **Idempotenza** — se un hop fallisce, lo script si ferma. Un nuovo `upgrade` riprende esattamente dall'hop successivo a quello già applicato.
+
+`config/` e `mcp_servers/` locali non vengono mai sovrascritti.
+
+#### Nota per i contributor (file di upgrade per-versione)
+
+Quando una release introduce chiavi `.env` nuove, rinominate o rimosse, aggiungere
+`scripts/upgrades/<nuova_versione>.py` nella stessa PR:
+
+```python
+# scripts/upgrades/1.6.0.py
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from upgrade_lib import UpgradeContext
+
+def upgrade(ctx: UpgradeContext) -> None:
+    ctx.ensure_env_key("AION_NEW_FEATURE_FLAG", "0")
+    ctx.rename_env_key("AION_OLD_NAME", "AION_NEW_NAME")
+```
+
+Vedere `scripts/upgrades/README.md` per la documentazione completa del contratto.
+
 ### Build locally (default)
 
 ```bash
