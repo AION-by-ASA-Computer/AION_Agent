@@ -40,8 +40,7 @@ Call `doc_ingest(relative_path="uploads/<file>.pdf")` **only if**:
 - or the user re-uploaded with `force=True`.
 
 Never call `ocr_file` on the whole PDF. Never write custom extraction scripts.
-
-Leave `write_full` off. A `full.txt` is exactly the file grep would skip.
+Extraction automatically generates `derived/docs/<slug>/full.txt` (consolidated) and individual page files `derived/docs/<slug>/pages/pNNNN.txt`.
 
 ## Step 2 — Identity gate (do not skip)
 
@@ -80,17 +79,19 @@ Widen the pattern before you run it. One spelling is never enough:
 If a search returns `truncated: true`, narrow the glob to a page range and repeat —
 do not accept a truncated result set as complete.
 
-## Step 4 — Read every hit, plus one page either side
+## Step 4 — Read content and citations
 
-For each distinct page in the hit list:
+Read the consolidated text from `derived/docs/<slug>/full.txt` using `sandbox_read_file_chunk`:
 
 ```
-sandbox_read_file_chunk(relative_path="derived/docs/<slug>/pages/p0101.txt")
+sandbox_read_file_chunk(
+    relative_path="derived/docs/<slug>/full.txt",
+    offset_lines=0,
+    max_lines=500
+)
 ```
 
-Always read `page-1` and `page+1` as well. Clauses run across page breaks: a
-prescription that starts at the bottom of one page and ends on the next is silently
-truncated if you only read the page that matched.
+To read around specific grep hits on page `N`, locate the marker `=== PAGE N ===` in `full.txt` or read the relevant chunk.
 
 ## Step 4b — Evidence images (mandatory for Word deliverables)
 

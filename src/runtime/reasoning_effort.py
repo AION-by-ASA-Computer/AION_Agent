@@ -101,6 +101,32 @@ def merge_generation_kwargs(
             eb.pop("thinking_token_budget", None)
 
     eb["chat_template_kwargs"] = ctk
+
+    # Anti-loop protection: support repetition_penalty / presence_penalty for reasoning models (e.g. vLLM)
+    rep_penalty = os.getenv("AION_REPETITION_PENALTY")
+    if rep_penalty:
+        try:
+            eb["repetition_penalty"] = float(rep_penalty)
+        except ValueError:
+            pass
+    elif "repetition_penalty" not in eb and effort != "min":
+        # Default gentle repetition penalty for thinking models to break out of degenerate thought loops
+        eb["repetition_penalty"] = 1.05
+
+    pres_penalty = os.getenv("AION_PRESENCE_PENALTY")
+    if pres_penalty:
+        try:
+            out["presence_penalty"] = float(pres_penalty)
+        except ValueError:
+            pass
+
+    freq_penalty = os.getenv("AION_FREQUENCY_PENALTY")
+    if freq_penalty:
+        try:
+            out["frequency_penalty"] = float(freq_penalty)
+        except ValueError:
+            pass
+
     out["extra_body"] = eb
     return out
 

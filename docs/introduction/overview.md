@@ -18,7 +18,7 @@ This documentation describes the **AION Agent** repository: FastAPI API, Haystac
 | [Configuration](../configuration/environment.md) | `.env`, YAML, skills and USER (SOUL/MEMORY deprecated) |
 | [API and runtime](../api-and-runtime/rest-api.md) | FastAPI, `/chat`, pipeline |
 | [Client](../clients/chat-ui.md) | Chat UI, [Admin UI](../clients/admin-ui.md) and [SDK & Widget](../clients/sdk-and-widget.md) |
-| [Memory](../memory/stm-ltm-and-query.md) | SQLite, FTS, MemPalace, query memory |
+| [Memory](../memory/stm-ltm-and-query.md) | STM/FTS, Mnemos LTM, SQL & PromQL QueryMemory, Compaction |
 | [MCP](../mcp/registry.md) | Registry and connected servers |
 | [Security and identity](../security/identity-and-chat-auth.md) | Users, Chat auth, hardening |
 | [Learning Hermes](../learning/hermes-features.md) | Context compression, skill distillation, nudge |

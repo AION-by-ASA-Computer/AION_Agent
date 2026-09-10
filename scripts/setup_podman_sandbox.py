@@ -58,7 +58,11 @@ def _fail(msg: str, code: int = 1) -> None:
 
 
 def _run(
-    cmd: List[str], *, check: bool = True, capture: bool = False
+    cmd: List[str],
+    *,
+    check: bool = True,
+    capture: bool = False,
+    cwd: Optional[str] = None,
 ) -> subprocess.CompletedProcess:
     _log(f"  $ {' '.join(cmd)}")
     return subprocess.run(
@@ -66,6 +70,7 @@ def _run(
         check=check,
         text=True,
         capture_output=capture,
+        cwd=cwd,
     )
 
 

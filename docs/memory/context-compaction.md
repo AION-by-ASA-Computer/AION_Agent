@@ -1,12 +1,12 @@
 ---
-sidebar_position: 4
+sidebar_position: 6
 title: Context Compaction
-description: How AION automatically compresses the conversation context when it approaches the LLM token window limit.
+description: How AION automatically compresses conversation context when it approaches the LLM token window limit.
 ---
 
 # Context Compaction
 
-When a conversation grows long enough to approach the LLM's token window limit, AION automatically **compacts** it: old messages are summarized into a single compact block and the originals are deleted from the database, while the most recent messages are preserved intact.
+When a conversation grows long enough to approach the LLM's token window limit, AION automatically **compacts** it: old messages are summarized into a single compact block and the originals are deleted from the active STM database, while the most recent messages are preserved intact.
 
 This mechanism has two independent levels that can both activate in the same turn.
 
@@ -16,17 +16,17 @@ This mechanism has two independent levels that can both activate in the same tur
 
 ```mermaid
 flowchart TD
-    A[User sends message] --> B[Pre-turn compaction\nturn_context.py]
-    B --> C{"tokens ≥ trigger\nor force_compact?"}
+    A[User sends message] --> B["Pre-turn compaction<br/>turn_context.py"]
+    B --> C{"tokens ≥ trigger<br/>or force_compact?"}
     C -->|No| D[No compaction → continue]
-    C -->|Yes| E[precompact_flush → LTM]
+    C -->|Yes| E["precompact_flush → Mnemos LTM<br/>(Extracts durable facts before delete)"]
     E --> F[LLM summarizes transcript]
-    F --> G["persist_stm_compaction\nDELETE old rows + INSERT summary block"]
+    F --> G["persist_stm_compaction<br/>DELETE old rows + INSERT summary block"]
     G --> H[Reload STM window]
     H --> I[Agent LLM loop]
-    I --> J{"Tool call exceeds\n92% budget?"}
+    I --> J{"Tool call exceeds<br/>92% budget?"}
     J -->|No| K[Continue loop]
-    J -->|Yes| L[Mid-turn compaction\nturn_compaction.py]
+    J -->|Yes| L["Mid-turn compaction<br/>turn_compaction.py"]
     L --> M[Compact in-place on Haystack State]
     M --> N[Schedule async DB persist]
     N --> K
@@ -52,7 +52,7 @@ Runs **before** every turn, as part of `build_turn_context()` in [`turn_context.
 | `AION_CONTEXT_COMPRESS_MAX_ROUNDS` | `3` | Max in-memory compression rounds |
 
 Compaction activates if:
-```
+```text
 total_tokens >= trigger  OR  total_tokens >= max_prompt
 ```
 It also activates unconditionally when `force_compact=True` (set by the `/compact` slash command via Redis).
@@ -64,8 +64,8 @@ It also activates unconditionally when `force_compact=True` (set by the `/compac
 3. **SSE notification** — emits `context_compacting { active: true }` to the client so the UI shows a loading indicator.
 4. **DB-first path** (preferred):
    - `fetch_messages_for_compaction()` retrieves all rows from the DB **except** the last `keep_last_n`, enriched with `timeline_json`, `reasoning`, and `tool_name`.
-   - `precompact_flush()` writes extracted facts to **LTM (MemPalace)** before deletion so information is not lost.
-   - The LLM generates a summary via `summarize_transcript()`.
+   - `precompact_flush()` extracts durable facts and writes them to **Mnemos LTM** (`ltm_notes` table) before deletion so critical context is never lost.
+   - The LLM generates a structured summary via `summarize_transcript()`.
    - `persist_stm_compaction()` executes:
      - `DELETE` of old messages
      - `INSERT` of a single compacted block at `seq = min_seq_tail - 1`
@@ -73,20 +73,20 @@ It also activates unconditionally when `force_compact=True` (set by the `/compac
 5. **In-memory fallback** (if DB is empty): `compress_until_fits()` loops up to `max_rounds`, replacing the head with a summary and keeping the tail.
 6. **SSE notification** — emits `context_compacting { active: false }`.
 
-### What is preserved — precompact_flush and LTM
+### What is preserved — `precompact_flush` and Mnemos LTM
 
 Before deletion, [`ltm_orchestrator.precompact_flush()`](../../src/memory/ltm_orchestrator.py) runs `extract_and_persist()` in `batch` mode. This:
-- Sends the transcript to the LLM for structured fact extraction (entities, decisions, errors, file names).
-- Writes the extracted facts permanently into **MemPalace** (the long-term memory store).
-- Optionally calls the `mempalace_precompact_flush` MCP tool for custom server-side logic.
+- Sends the transcript to the LLM for structured fact extraction (entities, decisions, conventions, configurations) using the `ltm_note_extraction` skill.
+- Writes the extracted facts permanently into **Mnemos LTM** (`ltm_notes` table in `data/aion.db`).
+- Associates notes with the active `project_slug` or user scope.
 
-Individual messages may no longer exist in the `messages` table after compaction, but the agent can still access extracted information via its LTM retrieval tools.
+Individual messages may no longer exist in the `messages` table after compaction, but the agent can still access extracted knowledge via `memory_recall` or server-side wake-up.
 
 ---
 
 ## Level 2 — Mid-Turn Compaction
 
-Runs **inside** the agent loop, between an LLM step and the next, triggered by callbacks in [`agent_pipeline.py`](../../src/agent_pipeline.py).
+Runs **inside** the agent loop, between an LLM step and the next, triggered by callbacks in [`turn_compaction.py`](../../src/runtime/turn_compaction.py).
 
 ### Triggers
 
@@ -115,14 +115,14 @@ With `AION_HARNESS_V2_COMPACTION=1`, head/tail splits use `find_valid_cut_index(
 
 ### Tool output truncation
 
-Before considering mid-turn compaction, `maybe_compact_after_tool()` always truncates tool output:
-```
+Before considering mid-turn compaction, `maybe_compact_after_tool()` always processes and caps tool output:
+```text
 cap = AION_TOOL_RESULT_MAX_CHARS  (default: 24,000 chars)
 head = text[:cap//2]
 tail = text[-(cap//4):]
 note = "[AION: output {tool} troncato — N characters omitted…]"
 ```
-Exception: `mempalace_*` tools and outputs smaller than 800 chars **do not trigger** compaction (only truncation).
+**Exceptions:** Native memory tools (`memory_*`, e.g. `memory_recall`, `memory_note`, `memory_forget`) and outputs smaller than 800 chars **do not trigger** mid-turn compaction.
 
 ### Mid-turn env vars
 
@@ -156,7 +156,7 @@ The slash command `/compact` ([`slash.py`](../../src/runtime/slash.py)):
 
 The block inserted into the DB and displayed in the UI has this structure:
 
-```
+```text
 [AION COMPACTION — contesto precedente sintetizzato] (N turni precedenti)
 - The user asked to implement feature X...
 - A bug was found in module Y and resolved...
@@ -195,7 +195,7 @@ mid_turn_compact session=a846c38a messages 15→8 tokens 85000→12000
 ```
 
 ### 2. Chat UI (real-time)
-During compaction the UI receives a `context_compacting` SSE event and shows a brief **"Compacting context…"** shimmer on the agent status indicator.
+During compaction the UI receives a `context_compacting` SSE event and shows a brief **"Compacting context…"** indicator on the agent status bar.
 
 After the turn completes, scroll to the top of the chat: old individual messages are replaced by a single summary block starting with `[AION COMPACTION — contesto precedente sintetizzato]`.
 
@@ -221,7 +221,7 @@ Both levels of compaction (and regular post-turn LTM extraction) call the helper
 | `complete_json_async()` | Async wrapper around `complete_json_sync` | `ltm_orchestrator.extract_and_persist()` |
 | `complete_text_sync()` | Synchronous LLM call → returns plain text | `context_compressor.summarize_transcript()`, mid-turn `compact_agent_messages_in_place()` |
 
-All three functions use `LiteLLMChatGeneratorWrapper` exclusively — direct `requests.post` HTTP calls were removed in favour of the unified LiteLLM adapter to ensure consistent provider routing.
+All functions use `LiteLLMChatGeneratorWrapper` exclusively with unified provider routing.
 
 ---
 
@@ -234,7 +234,7 @@ All three functions use `LiteLLMChatGeneratorWrapper` exclusively — direct `re
 | [`src/runtime/turn_compaction.py`](../../src/runtime/turn_compaction.py) | Mid-turn compaction, tool truncation, `ContextVar` runtime |
 | [`src/memory/context_compressor.py`](../../src/memory/context_compressor.py) | `ContextCompressor`: budgets, thresholds, LLM summary, `format_compaction_block` |
 | [`src/data/history_bridge.py`](../../src/data/history_bridge.py) | `fetch_messages_for_compaction()`, `persist_stm_compaction()` |
-| [`src/memory/ltm_orchestrator.py`](../../src/memory/ltm_orchestrator.py) | `precompact_flush()` → LTM batch save before pruning |
+| [`src/memory/ltm_orchestrator.py`](../../src/memory/ltm_orchestrator.py) | `precompact_flush()` → Mnemos LTM batch save before pruning |
 | [`src/memory/llm_extract.py`](../../src/memory/llm_extract.py) | `complete_json_sync/async`, `complete_text_sync` — unified LiteLLM helpers |
 | [`src/runtime/slash.py`](../../src/runtime/slash.py) | `/compact` command, Redis flag |
 | [`src/runtime/redis_client.py`](../../src/runtime/redis_client.py) | `redis_set_force_compact` / `redis_consume_force_compact` |

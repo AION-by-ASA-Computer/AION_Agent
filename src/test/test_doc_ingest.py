@@ -67,7 +67,7 @@ def test_slugify_strips_upload_prefix():
     assert slugify_document_name("___.pdf") == "document"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_writes_one_file_per_page(sample_pdf, session_root):
     manifest = await ingest_document(sample_pdf, session_root, budget_sec=600)
 
@@ -85,7 +85,7 @@ async def test_writes_one_file_per_page(sample_pdf, session_root):
     assert "[53]" in target.read_text(encoding="utf-8")
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_manifest_is_persisted_and_small(sample_pdf, session_root):
     manifest = await ingest_document(sample_pdf, session_root, budget_sec=600)
 
@@ -98,7 +98,7 @@ async def test_manifest_is_persisted_and_small(sample_pdf, session_root):
     assert len(json.dumps(manifest, ensure_ascii=False)) < 4000
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_page_files_stay_greppable(sample_pdf, session_root):
     """Every page must sit below the grep size cap that silently skips files."""
     from src.tools.session_fs_tools import _grep_max_file_bytes, grep_content
@@ -119,7 +119,7 @@ async def test_page_files_stay_greppable(sample_pdf, session_root):
     assert len(hits) == PAGE_COUNT - len(BLANK_PAGES)
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_grep_hit_filename_carries_page_number(sample_pdf, session_root):
     from src.tools.session_fs_tools import grep_content
 
@@ -134,7 +134,7 @@ async def test_grep_hit_filename_carries_page_number(sample_pdf, session_root):
     assert hits[0]["file"].endswith(f"p{PRESCRIPTION_PAGE:04d}.txt")
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_partial_run_reports_resume_point(sample_pdf, session_root):
     ticks = iter(range(0, 10_000))
     manifest = await ingest_document(
@@ -147,7 +147,7 @@ async def test_partial_run_reports_resume_point(sample_pdf, session_root):
     assert "doc_ingest again with first_page=5" in manifest["next_step"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_second_call_resumes_and_skips_existing(sample_pdf, session_root):
     ticks = iter(range(0, 10_000))
     first = await ingest_document(
@@ -165,14 +165,14 @@ async def test_second_call_resumes_and_skips_existing(sample_pdf, session_root):
     )
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_ocr_runs_only_on_pages_without_text_layer(sample_pdf, session_root):
     seen: list[int] = []
 
     async def fake_ocr(page_no: int, image_bytes: bytes, mime: str) -> str:
         seen.append(page_no)
-        assert image_bytes[:4] == b"\x89PNG"
-        assert mime == "image/png"
+        assert len(image_bytes) > 0
+        assert mime in ("image/png", "image/jpeg")
         return f"OCR PAGINA {page_no}"
 
     manifest = await ingest_document(
@@ -188,7 +188,7 @@ async def test_ocr_runs_only_on_pages_without_text_layer(sample_pdf, session_roo
     assert recovered.read_text(encoding="utf-8") == "OCR PAGINA 7"
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_min_text_chars_controls_the_ocr_trigger(sample_pdf, session_root):
     """A page is sent to OCR only when its text layer is below the threshold."""
     seen: list[int] = []
@@ -208,7 +208,7 @@ async def test_min_text_chars_controls_the_ocr_trigger(sample_pdf, session_root)
     assert seen == [1, 2, 3, 4, 5]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_ocr_mode_always_bypasses_the_text_layer(sample_pdf, session_root):
     seen: list[int] = []
 
@@ -230,7 +230,7 @@ async def test_ocr_mode_always_bypasses_the_text_layer(sample_pdf, session_root)
     assert manifest["text_layer_pages"] == 0
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_ocr_failure_keeps_the_text_layer(sample_pdf, session_root):
     async def failing_ocr(page_no, image_bytes, mime):
         raise RuntimeError("OCR service unreachable")
@@ -249,7 +249,7 @@ async def test_ocr_failure_keeps_the_text_layer(sample_pdf, session_root):
     assert "OCR failed for page 7" in blank.read_text(encoding="utf-8")
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_ocr_mode_never_reports_empty_pages(sample_pdf, session_root):
     async def unexpected_ocr(page_no, image_bytes, mime):  # pragma: no cover
         raise AssertionError("OCR must not run with ocr_mode='never'")
@@ -267,25 +267,26 @@ async def test_ocr_mode_never_reports_empty_pages(sample_pdf, session_root):
     assert manifest["empty_pages_count"] == len(BLANK_PAGES)
 
 
-@pytest.mark.asyncio
-async def test_full_text_is_opt_in(sample_pdf, session_root):
+@pytest.mark.anyio
+async def test_full_text_is_generated_by_default(sample_pdf, session_root):
     default = await ingest_document(sample_pdf, session_root, budget_sec=600)
     root = session_root / "derived" / "docs" / default["slug"]
-    assert not (root / "full.txt").exists()
-    assert default["full_text"] is None
-
-    with_full = await ingest_document(
-        sample_pdf, session_root, budget_sec=600, write_full=True
-    )
     full = root / "full.txt"
     assert full.exists()
-    assert with_full["full_text"].endswith("full.txt")
+    assert default["full_text"].endswith("full.txt")
     body = full.read_text(encoding="utf-8")
     assert "=== PAGE 101 ===" in body
     assert "[53]" in body
 
+    # write_full=False opts out
+    without_full = await ingest_document(
+        sample_pdf, session_root, budget_sec=600, write_full=False, force=True
+    )
+    assert not (root / "full.txt").exists()
+    assert without_full["full_text"] is None
 
-@pytest.mark.asyncio
+
+@pytest.mark.anyio
 async def test_force_reextracts_pages(sample_pdf, session_root):
     manifest = await ingest_document(sample_pdf, session_root, budget_sec=600)
     stale = _pages_dir(session_root, manifest["slug"]) / "p0101.txt"
@@ -303,7 +304,7 @@ async def test_force_reextracts_pages(sample_pdf, session_root):
     assert "[53]" in stale.read_text(encoding="utf-8")
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_page_range_limits_extraction(sample_pdf, session_root):
     manifest = await ingest_document(
         sample_pdf, session_root, budget_sec=600, first_page=10, last_page=12
@@ -317,13 +318,13 @@ async def test_page_range_limits_extraction(sample_pdf, session_root):
     assert names == ["p0010.txt", "p0011.txt", "p0012.txt"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_first_page_excerpt_supports_identity_check(sample_pdf, session_root):
     manifest = await ingest_document(sample_pdf, session_root, budget_sec=600)
     assert "PAGINA 1" in manifest["first_page_excerpt"]
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_invalid_inputs_return_structured_errors(
     sample_pdf, session_root, tmp_path
 ):

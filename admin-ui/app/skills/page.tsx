@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
-import { Save, Plus, FileCode, X, Trash2, AlertTriangle, Download, Upload, Wand2, Sparkles } from "lucide-react";
+import { Save, Plus, FileCode, X, Trash2, AlertTriangle, Download, Upload, Wand2, Sparkles, ChevronUp, ChevronDown } from "lucide-react";
 import { PageToast, ToastState } from "@/components/PageToast";
 import { BlockMarkdownEditor } from "@/components/BlockMarkdownEditor";
 import { HeaderDropdown } from "@/components/HeaderDropdown";
@@ -28,6 +28,10 @@ export default function SkillsPage() {
   const [isWizardOpen, setIsWizardOpen] = useState(false);
   const [wizardPrompt, setWizardPrompt] = useState("");
   const [wizardLoading, setWizardLoading] = useState(false);
+
+  const [inlineRefinePrompt, setInlineRefinePrompt] = useState("");
+  const [refineLoading, setRefineLoading] = useState(false);
+  const [isCopilotOpen, setIsCopilotOpen] = useState(true);
 
   const handleRunWizard = async () => {
     if (!wizardPrompt.trim()) return;
@@ -65,9 +69,6 @@ export default function SkillsPage() {
       setWizardLoading(false);
     }
   };
-
-  const [inlineRefinePrompt, setInlineRefinePrompt] = useState("");
-  const [refineLoading, setRefineLoading] = useState(false);
 
   const handleRefineSkill = async (promptOverride?: string) => {
     const targetPrompt = promptOverride || inlineRefinePrompt;
@@ -147,7 +148,6 @@ export default function SkillsPage() {
       const names = Object.keys(data).sort();
       setSkills(names);
       if (names.length > 0 && !selectedSkill) {
-        // Automatically fetch details for the first skill in the list
         const detailRes = await apiFetch(
           `${apiBase()}/admin/skills/${encodeURIComponent(names[0])}`
         );
@@ -178,37 +178,71 @@ export default function SkillsPage() {
   };
 
   const handleNewSkill = () => {
-    setTagInput("");
+    const defaultTemplate = `# [Skill Name]
+
+## Overview
+Briefly describe what this skill does and when the agent should use it.
+
+## Quick Reference
+| Scenario / Intent | Action / Strategy |
+| :--- | :--- |
+| **Common Use Case** | Standard execution pattern |
+| **Edge Case / Error** | Handling strategy |
+
+## Core Workflow & Protocol
+1. **Analyze Requirements**: Parse parameters and validate state.
+2. **Execute Actions**: Run necessary commands or tools.
+3. **Verify & Report**: Confirm results and summarize.
+
+## Error Handling & Edge Cases
+- **Missing Parameters**: Ask for clarification or use sensible defaults.
+- **Failures**: Provide clear diagnostics and suggested recovery actions.
+`;
+
     setSelectedSkill({
       name: "",
-      content: "# New Protocol\n\nDescribe the specialized agent protocol here...\n",
-      metadata: { description: "", tags: [] },
+      content: defaultTemplate,
+      metadata: {
+        description: "",
+        tags: [],
+        status: "draft",
+      }
     });
+    setTagInput("");
   };
 
-
-
   const handleSave = async () => {
-    if (!selectedSkill) return;
-    if (!selectedSkill.name.trim()) {
-      setToast({ message: "Please enter a valid protocol name before saving.", variant: "error" });
+    if (!selectedSkill || !selectedSkill.name.trim()) {
+      setToast({ message: "Please specify a skill name.", variant: "warning" });
       return;
     }
 
     setLoading(true);
     try {
+      const tagsArray = tagInput.split(",").map(t => t.trim()).filter(Boolean);
+
+      const payload = {
+        name: selectedSkill.name.trim(),
+        content: selectedSkill.content,
+        metadata: {
+          ...(selectedSkill.metadata || {}),
+          tags: tagsArray,
+        }
+      };
+
       const res = await apiFetch(`${apiBase()}/admin/skills`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name: selectedSkill.name.toLowerCase().replace(/\s+/g, "_"),
-          content: selectedSkill.content,
-          metadata: selectedSkill.metadata
-        })
+        body: JSON.stringify(payload)
       });
-      if (!res.ok) throw new Error("Save failed");
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Error saving skill");
+      }
+
       await fetchSkills();
-      setToast({ message: "Protocol saved successfully!", variant: "success" });
+      setToast({ message: `Skill "${selectedSkill.name}" saved successfully!`, variant: "success" });
     } catch (e: any) {
       setToast({ message: "Save failed: " + e.message, variant: "error" });
     } finally {
@@ -217,65 +251,52 @@ export default function SkillsPage() {
   };
 
   const handleDelete = async (name: string) => {
-    const isSaved = skills.includes(name);
-    if (!isSaved) {
-      setSelectedSkill(null);
-      return;
-    }
+    if (!name) return;
 
-    setLoading(true);
     try {
-      const res = await apiFetch(`${apiBase()}/admin/profiles`);
-      if (!res.ok) throw new Error("Error loading profiles");
-      const profiles = await res.json();
-
-      const referencingProfiles = profiles.filter((p: any) =>
-        p.skills?.includes(name) || p.critical_skills?.includes(name)
-      ).map((p: any) => p.name);
-
-      if (referencingProfiles.length > 0) {
-        setBlockingProfiles(referencingProfiles);
-        setIsBlockedModalOpen(true);
-        return;
-      }
-
-      setIsDeleteModalOpen(true);
-      setDeleteConfirmInput("");
-    } catch (e: any) {
-      setToast({ message: "Error checking profiles: " + e.message, variant: "error" });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const executeDelete = async (name: string) => {
-    setLoading(true);
-    try {
-      const res = await apiFetch(
-        `${apiBase()}/admin/skills/${encodeURIComponent(name)}`,
-        {
-          method: "DELETE"
+      const checkRes = await apiFetch(`${apiBase()}/admin/skills/${encodeURIComponent(name)}/references`);
+      if (checkRes.ok) {
+        const refData = await checkRes.json();
+        if (refData.used_by_profiles && refData.used_by_profiles.length > 0) {
+          setBlockingProfiles(refData.used_by_profiles);
+          setIsBlockedModalOpen(true);
+          return;
         }
-      );
-      if (!res.ok) throw new Error("Error during deletion");
-      fetchSkills();
-      if (selectedSkill?.name === name) setSelectedSkill(null);
+      }
+    } catch (e) {
+      console.warn("Could not check skill references:", e);
+    }
+
+    setDeleteConfirmInput("");
+    setIsDeleteModalOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedSkill) return;
+    const name = selectedSkill.name;
+
+    setLoading(true);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/skills/${encodeURIComponent(name)}`, {
+        method: "DELETE"
+      });
+      if (!res.ok) throw new Error("Delete failed");
+
       setIsDeleteModalOpen(false);
-      setDeleteConfirmInput("");
-      setToast({ message: "Skill successfully deleted!", variant: "success" });
+      setSelectedSkill(null);
+      await fetchSkills();
+      setToast({ message: `Skill "${name}" deleted.`, variant: "success" });
     } catch (e: any) {
-      setToast({ message: "Deletion failed: " + e.message, variant: "error" });
+      setToast({ message: "Delete failed: " + e.message, variant: "error" });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleExport = async (skill: any) => {
+  const handleExport = async (skill: { name: string }) => {
     if (!skill || !skill.name) return;
     try {
-      const res = await apiFetch(
-        `${apiBase()}/admin/skills/${encodeURIComponent(skill.name)}/export`
-      );
+      const res = await apiFetch(`${apiBase()}/admin/skills/${encodeURIComponent(skill.name)}/export`);
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -328,8 +349,6 @@ export default function SkillsPage() {
         });
         if (!res.ok) throw new Error("Import failed");
         const data = await res.json();
-
-        // Controllo duplicati
         const isDuplicate = skills.includes(data.name);
 
         if (isDuplicate) {
@@ -346,7 +365,6 @@ export default function SkillsPage() {
 
         setSelectedSkill(data);
         setTagInput((data.metadata?.tags || []).join(", "));
-
       } catch (err: any) {
         setToast({ message: "Error during import: " + err.message, variant: "error" });
       } finally {
@@ -359,140 +377,153 @@ export default function SkillsPage() {
   return (
     <div className="min-h-screen w-full bg-[#050505] text-slate-200 font-sans flex flex-col">
 
-      <div className="space-y-3 pb-4">
+      <div className="space-y-3 pb-4 px-6 pt-4">
         <h2 className="text-3xl font-extrabold tracking-tight text-white font-sans">Skill Registry</h2>
         <p className="text-md text-gray-400 max-w-xl mt-2 font-sans">
           Manage agent competence and edit specialized protocol markdown files.
         </p>
       </div>
 
-      {/* ==========================================
-          HEADER: WORKSPACE CONTROLS & PROTOCOL SWITCHER
-          ========================================== */}
-      <header className="flex items-center justify-between px-6 py-4 bg-[#0a0a0a] border-b border-slate-800/80 sticky top-16 z-40">
-
-        <div className="flex items-center gap-3 mr-4">
-          <label className="text-xs text-slate-500 uppercase tracking-wide">Status</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as "" | "draft" | "verified")}
-            className="bg-[#111] border border-slate-700 text-sm rounded px-2 py-1 text-slate-200"
-          >
-            <option value="">All</option>
-            <option value="draft">Draft</option>
-            <option value="verified">Verified</option>
-          </select>
-        </div>
-
-        {/* Protocol Switcher */}
-        <HeaderDropdown
-          triggerIcon={<FileCode className="w-5 h-5" />}
-          triggerLabelTop="Active Protocol"
-          triggerLabelMain={selectedSkill ? (selectedSkill.name || "New Protocol") : "Select Protocol..."}
-          items={skills.map((sName) => ({ key: sName, label: sName }))}
-          selectedKey={selectedSkill?.name}
-          itemIcon={<FileCode className="w-4 h-4" />}
-          onItemSelect={(key) => handleEdit(key)}
-          searchPlaceholder="Search protocols..."
-          emptyLabel="No protocols found"
-          actions={[
-            {
-              icon: <Wand2 className="w-4 h-4" />,
-              label: "AI Wizard Generator",
-              onClick: () => setIsWizardOpen(true),
-              colorClass: "text-purple-400 hover:bg-purple-600/10 font-bold",
-            },
-            {
-              icon: <Plus className="w-4 h-4" />,
-              label: "New Skill",
-              onClick: handleNewSkill,
-              colorClass: "text-blue-400 hover:bg-blue-600/10",
-            },
-            {
-              icon: <Upload className="w-4 h-4" />,
-              label: "Import Skill",
-              onClick: handleImport,
-              colorClass: "text-emerald-400 hover:bg-emerald-600/10",
-            },
-          ]}
-        />
-
-        {/* Global Actions */}
-        <div className="flex items-center gap-3">
-          {selectedSkill && (
-            <>
-              {/* Export Current Skill */}
-              <button
-                onClick={() => handleExport(selectedSkill)}
-                title="Export Current Skill"
-                className="p-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+      <header className="flex flex-col gap-3 px-6 py-3.5 bg-[#0a0a0a]/95 border-b border-slate-800/80 sticky top-16 z-40 backdrop-blur-xl shadow-2xl">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <label className="text-xs text-slate-500 uppercase tracking-wide">Status</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value as "" | "draft" | "verified")}
+                className="bg-[#111] border border-slate-700 text-sm rounded px-2 py-1 text-slate-200"
               >
-                <Download className="w-5 h-5" />
-              </button>
+                <option value="">All</option>
+                <option value="draft">Draft</option>
+                <option value="verified">Verified</option>
+              </select>
+            </div>
 
-              {/* Delete Skill */}
-              <button
-                onClick={() => handleDelete(selectedSkill.name)}
-                title="Delete Skill"
-                className="p-2.5 rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-500 transition-colors"
-              >
-                <Trash2 className="w-5 h-5" />
-              </button>
+            <HeaderDropdown
+              triggerIcon={<FileCode className="w-5 h-5" />}
+              triggerLabelTop="Active Protocol"
+              triggerLabelMain={selectedSkill ? (selectedSkill.name || "New Protocol") : "Select Protocol..."}
+              items={skills.map((sName) => ({ key: sName, label: sName }))}
+              selectedKey={selectedSkill?.name}
+              itemIcon={<FileCode className="w-4 h-4" />}
+              onItemSelect={(key) => handleEdit(key)}
+              searchPlaceholder="Search protocols..."
+              emptyLabel="No protocols found"
+              actions={[
+                {
+                  icon: <Wand2 className="w-4 h-4" />,
+                  label: "AI Wizard Generator",
+                  onClick: () => setIsWizardOpen(true),
+                  colorClass: "text-purple-400 hover:bg-purple-600/10 font-bold",
+                },
+                {
+                  icon: <Plus className="w-4 h-4" />,
+                  label: "New Skill",
+                  onClick: handleNewSkill,
+                  colorClass: "text-blue-400 hover:bg-blue-600/10",
+                },
+                {
+                  icon: <Upload className="w-4 h-4" />,
+                  label: "Import Skill",
+                  onClick: handleImport,
+                  colorClass: "text-emerald-400 hover:bg-emerald-600/10",
+                },
+              ]}
+            />
+          </div>
 
-              {selectedSkill.name && skillMeta[selectedSkill.name]?.status === "draft" && (
+          <div className="flex items-center gap-3">
+            {selectedSkill && (
+              <>
                 <button
-                  onClick={() => handlePromote(selectedSkill.name)}
-                  disabled={loading}
-                  className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm transition-all disabled:opacity-50"
+                  type="button"
+                  onClick={() => setIsCopilotOpen((prev) => !prev)}
+                  title={isCopilotOpen ? "Nascondi AI Co-Pilot" : "Mostra AI Co-Pilot"}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    isCopilotOpen
+                      ? "bg-purple-600/25 border-purple-500/50 text-purple-200 shadow-md shadow-purple-950/50"
+                      : "bg-white/5 border-white/10 text-slate-400 hover:text-purple-300 hover:bg-purple-900/20 hover:border-purple-500/30"
+                  }`}
                 >
-                  Promote to verified
+                  <Wand2 className={`w-3.5 h-3.5 ${isCopilotOpen ? "text-purple-400 animate-pulse" : "text-slate-400"}`} />
+                  <span>AI Co-Pilot</span>
+                  {isCopilotOpen ? (
+                    <ChevronUp className="w-3.5 h-3.5 text-purple-400 transition-transform" />
+                  ) : (
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 transition-transform" />
+                  )}
                 </button>
-              )}
 
-              {/* Save Configuration */}
+                <button
+                  onClick={() => handleExport(selectedSkill)}
+                  title="Export Current Skill"
+                  className="p-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
+                >
+                  <Download className="w-5 h-5" />
+                </button>
+
+                <button
+                  onClick={() => handleDelete(selectedSkill.name)}
+                  title="Delete Skill"
+                  className="p-2.5 rounded-lg text-slate-400 hover:bg-red-500/10 hover:text-red-500 transition-colors"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+
+                {selectedSkill.name && skillMeta[selectedSkill.name]?.status === "draft" && (
+                  <button
+                    onClick={() => handlePromote(selectedSkill.name)}
+                    disabled={loading}
+                    className="flex items-center gap-2 bg-emerald-700 hover:bg-emerald-600 text-white px-4 py-2.5 rounded-lg font-bold text-sm transition-all disabled:opacity-50"
+                  >
+                    Promote to verified
+                  </button>
+                )}
+
+                <button
+                  onClick={handleSave}
+                  disabled={loading}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-bold text-sm transition-all shadow-[0_0_15px_rgba(59,130,246,0.2)] disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" /> {loading ? "Saving..." : "Save Configuration"}
+                </button>
+              </>
+            )}
+
+            {skills.length > 0 && (
               <button
-                onClick={handleSave}
-                disabled={loading}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-lg font-bold text-sm transition-all shadow-[0_0_15px_rgba(59,130,246,0.2)] disabled:opacity-50"
+                onClick={handleExportAll}
+                title="Export All Skills"
+                className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-lg font-semibold text-xs transition-all"
               >
-                <Save className="w-4 h-4" /> {loading ? "Saving..." : "Save Configuration"}
+                <Download className="w-3.5 h-3.5" /> Export All
               </button>
-            </>
-          )}
-
-          {/* Export All Skills */}
-          {skills.length > 0 && (
-            <button
-              onClick={handleExportAll}
-              title="Export All Skills"
-              className="flex items-center gap-2 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 rounded-lg font-semibold text-xs transition-all"
-            >
-              <Download className="w-3.5 h-3.5" /> Export All
-            </button>
-          )}
+            )}
+          </div>
         </div>
-      </header>
 
-      {/* ==========================================
-          MAIN EDITOR: LAYOUT ORIZZONTALE
-          ========================================== */}
-      {selectedSkill ? (
-        <main className="flex-1 p-6 lg:p-10 overflow-y-auto">
-          <div className="max-w-[1600px] mx-auto flex flex-col gap-6 lg:gap-8">
-
-            {/* INLINE AI SKILL CO-PILOT ASSISTANT BAR */}
-            <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 via-[#121216] to-purple-950/20 p-4 space-y-3 shadow-xl backdrop-blur-md">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-purple-400 font-bold text-xs uppercase tracking-wider">
-                  <Wand2 className="w-4 h-4 animate-pulse" />
-                  <span>AI Skill Co-Pilot — Modifica in tempo reale la skill selezionata</span>
+        {selectedSkill && isCopilotOpen && (
+          <div className="pt-2.5 border-t border-purple-500/20 animate-in fade-in slide-in-from-top-1 duration-200">
+            <div className="rounded-xl border border-purple-500/30 bg-gradient-to-r from-purple-950/50 via-[#121218]/95 to-indigo-950/40 p-3 px-4 flex flex-col xl:flex-row xl:items-center justify-between gap-3 shadow-inner shadow-purple-950/30 backdrop-blur-md">
+              <div className="flex items-center justify-between xl:justify-start gap-2 text-purple-400 font-bold text-xs uppercase tracking-wider shrink-0">
+                <div className="flex items-center gap-2">
+                  <div className="p-1 rounded-lg bg-purple-500/20 border border-purple-500/30">
+                    <Wand2 className="w-3.5 h-3.5 text-purple-300 animate-pulse" />
+                  </div>
+                  <span>AI Skill Co-Pilot</span>
                 </div>
-                <span className="text-[11px] text-purple-300/70 italic hidden sm:inline">
-                  Legge lo stato ed il contenuto attuale della skill ed aggiorna il protocollo in tempo reale
-                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsCopilotOpen(false)}
+                  title="Nascondi Co-Pilot"
+                  className="xl:hidden p-1 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </button>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex-1 flex items-center gap-2 max-w-3xl">
                 <input
                   type="text"
                   value={inlineRefinePrompt}
@@ -500,54 +531,66 @@ export default function SkillsPage() {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") handleRefineSkill();
                   }}
-                  placeholder="Chiedi all'IA di modificare questa skill... (es: 'Aggiungi la gestione degli errori e la validazione dei dati di input')"
-                  className="flex-1 bg-black/60 border border-purple-500/30 rounded-xl px-4 py-2.5 text-sm text-white placeholder:text-gray-500 focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
+                  placeholder="Chiedi all'IA di modificare questa skill... (es: 'Aggiungi validazione dati e fallback')"
+                  className="flex-1 bg-black/60 border border-purple-500/30 rounded-xl px-3.5 py-2 text-xs text-white placeholder:text-gray-500 focus:border-purple-400 focus:ring-1 focus:ring-purple-400/30 outline-none transition-all"
                 />
                 <button
                   type="button"
                   onClick={() => handleRefineSkill()}
                   disabled={refineLoading || !inlineRefinePrompt.trim()}
-                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-lg shadow-purple-900/30 disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap"
+                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs shadow-md shadow-purple-900/30 disabled:opacity-50 transition-all cursor-pointer whitespace-nowrap"
                 >
                   {refineLoading ? (
                     <>
-                      <Sparkles className="w-4 h-4 animate-spin" />
-                      <span>Aggiornamento in corso...</span>
+                      <Sparkles className="w-3.5 h-3.5 animate-spin" />
+                      <span>Applico...</span>
                     </>
                   ) : (
                     <>
-                      <Wand2 className="w-4 h-4" />
-                      <span>Applica con IA</span>
+                      <Wand2 className="w-3.5 h-3.5" />
+                      <span>Applica</span>
                     </>
                   )}
                 </button>
               </div>
 
-              {/* QUICK REFINEMENT CHIPS */}
-              <div className="flex items-center gap-2 flex-wrap pt-0.5">
-                <span className="text-[11px] text-gray-400 font-medium">Azione rapida:</span>
-                {[
-                  { label: "📝 + Validazione Input", prompt: "Aggiungi la sezione di validazione formale per i dati di input." },
-                  { label: "⚠️ + Gestione Errori & Fallback", prompt: "Aggiungi istruzioni di gestione delle eccezioni e strategie di fallback." },
-                  { label: "📊 + Output Formattato JSON", prompt: "Formatta la sezione di output richiedendo risposte in formato JSON strutturato." },
-                  { label: "🔍 + Logging Dettagliato", prompt: "Aggiungi passaggi procedurali per la registrazione dei log e del tracciamento." },
-                ].map((chip) => (
-                  <button
-                    key={chip.label}
-                    type="button"
-                    onClick={() => handleRefineSkill(chip.prompt)}
-                    disabled={refineLoading}
-                    className="px-2.5 py-1 rounded-lg bg-purple-900/20 border border-purple-500/25 text-purple-300 hover:bg-purple-800/40 hover:border-purple-400 text-xs transition-all cursor-pointer font-medium disabled:opacity-50"
-                  >
-                    {chip.label}
-                  </button>
-                ))}
+              <div className="flex items-center gap-2 shrink-0 justify-between xl:justify-end">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {[
+                    { label: "📝 Validazione", prompt: "Aggiungi la sezione di validazione formale per i dati di input." },
+                    { label: "⚠️ Errori & Fallback", prompt: "Aggiungi istruzioni di gestione delle eccezioni e strategie di fallback." },
+                    { label: "📊 JSON Output", prompt: "Formatta la sezione di output richiedendo risposte in formato JSON strutturato." },
+                    { label: "🔍 Logging", prompt: "Aggiungi passaggi procedurali per la registrazione dei log e del tracciamento." },
+                  ].map((chip) => (
+                    <button
+                      key={chip.label}
+                      type="button"
+                      onClick={() => handleRefineSkill(chip.prompt)}
+                      disabled={refineLoading}
+                      className="px-2.5 py-1 rounded-lg bg-purple-900/30 border border-purple-500/25 text-purple-300 hover:bg-purple-800/50 hover:border-purple-400 text-xs transition-all cursor-pointer font-medium disabled:opacity-50"
+                    >
+                      {chip.label}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsCopilotOpen(false)}
+                  title="Nascondi Co-Pilot"
+                  className="hidden xl:flex items-center justify-center p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer ml-1"
+                >
+                  <ChevronUp className="w-4 h-4" />
+                </button>
               </div>
             </div>
+          </div>
+        )}
+      </header>
 
+      {selectedSkill ? (
+        <main className="flex-1 p-6 lg:p-10 overflow-y-auto">
+          <div className="max-w-[1600px] mx-auto flex flex-col gap-6 lg:gap-8">
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-
-              {/* COLONNA EDITOR (Full width for editor focus) */}
               <div className="lg:col-span-12 flex flex-col gap-6">
 
                 <div className="grid grid-cols-1 gap-6">
@@ -704,7 +747,7 @@ export default function SkillsPage() {
                 Cancel
               </button>
               <button
-                onClick={() => executeDelete(selectedSkill.name)}
+                onClick={confirmDelete}
                 disabled={deleteConfirmInput !== selectedSkill.name || loading}
                 className="bg-red-600 hover:bg-red-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition-all flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-red-600/20 cursor-pointer"
               >

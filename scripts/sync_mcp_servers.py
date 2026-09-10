@@ -42,7 +42,7 @@ def sync_mcp_servers(force: bool = False) -> None:
     dst_dir = root / "mcp_servers"
 
     _ver = _read_version(root)
-    print(f"\n🔄  AION Sync MCP Servers  —  {_ver}\n")
+    print(f"\n[AION] Sync MCP Servers - {_ver}\n")
     print(f"    source : {src_dir}")
     print(f"    target : {dst_dir}")
     print(

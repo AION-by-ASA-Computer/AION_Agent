@@ -72,20 +72,21 @@ def _ingest_sync(session_id: str, relative_path: str) -> dict[str, Any]:
     resume_from = 1
     manifest: dict[str, Any] = {"ok": False}
 
-    async def _run_once(start: int) -> dict[str, Any]:
+    async def _run_once(start: int, mode: str = "never") -> dict[str, Any]:
         return await ingest_document(
             path,
             root,
             first_page=start,
             last_page=max_pages,
-            ocr_mode="never",
+            ocr_mode=mode,
             budget_sec=budget,
             force=False,
-            write_full=False,
+            write_full=True,
         )
 
+    # 1. Fast text-layer pass
     for _ in range(50):
-        manifest = asyncio.run(_run_once(resume_from))
+        manifest = asyncio.run(_run_once(resume_from, mode="never"))
         if not manifest.get("ok"):
             return manifest
         if not manifest.get("partial"):
@@ -94,6 +95,23 @@ def _ingest_sync(session_id: str, relative_path: str) -> dict[str, Any]:
         if not nxt or int(nxt) <= resume_from:
             break
         resume_from = int(nxt)
+
+    # 2. If empty pages were detected (e.g. scanned PDF), run OCR pass automatically in background
+    if manifest.get("ok") and manifest.get("empty_pages_count", 0) > 0:
+        logger.info(
+            "Auto-ingest: %d empty pages detected in %s, running OCR auto-pass",
+            manifest.get("empty_pages_count", 0),
+            relative_path,
+        )
+        resume_from = 1
+        for _ in range(50):
+            manifest = asyncio.run(_run_once(resume_from, mode="auto"))
+            if not manifest.get("ok") or not manifest.get("partial"):
+                break
+            nxt = manifest.get("resume_from")
+            if not nxt or int(nxt) <= resume_from:
+                break
+            resume_from = int(nxt)
 
     return manifest
 

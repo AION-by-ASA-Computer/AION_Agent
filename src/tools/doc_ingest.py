@@ -11,18 +11,23 @@ large documents workable:
 * ``read_file_chunk`` loads a whole file before slicing it, so reading one page
   costs kilobytes instead of the entire document.
 
-Extraction is idempotent and deadline-aware: pages already on disk are skipped and
-a run that hits ``budget_sec`` returns ``partial`` plus ``resume_from`` instead of
-being killed by the MCP bridge timeout.
+Extraction is idempotent, concurrent, and deadline-aware: pages already on disk are skipped,
+OCR is executed with parallel worker concurrency (Semaphore), and a run that hits
+``budget_sec`` returns ``partial`` plus ``resume_from`` instead of being killed by the MCP bridge timeout.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import os
 import re
 import time
 from pathlib import Path
-from typing import Awaitable, Callable, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+
+logger = logging.getLogger("aion.doc_ingest")
 
 __all__ = ["ingest_document", "slugify_document_name", "DOCS_SUBDIR"]
 
@@ -34,7 +39,11 @@ _NON_SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 # Below this many characters a page is treated as having no usable text layer.
 DEFAULT_MIN_TEXT_CHARS = 60
-DEFAULT_OCR_DPI = 200
+DEFAULT_OCR_DPI = int(os.getenv("AION_OCR_DPI", "150"))
+DEFAULT_OCR_CONCURRENCY = int(os.getenv("AION_OCR_CONCURRENCY", "6"))
+DEFAULT_OCR_FORMAT = os.getenv("AION_OCR_FORMAT", "jpeg")
+DEFAULT_OCR_QUALITY = int(os.getenv("AION_OCR_JPEG_QUALITY", "85"))
+
 _EXCERPT_CHARS = 400
 _MAX_LISTED_EMPTY_PAGES = 50
 
@@ -79,6 +88,80 @@ def _rebuild_full_text(
     return written
 
 
+async def _extract_single_page(
+    doc: Any,
+    page_no: int,
+    pages_dir: Path,
+    *,
+    ocr_mode: str,
+    ocr_page: Optional[OcrCallback],
+    min_text_chars: int,
+    ocr_dpi: int,
+    ocr_format: str,
+    ocr_quality: int,
+    sem: asyncio.Semaphore,
+) -> Dict[str, Any]:
+    """Process one PDF page (native text extraction or concurrent OCR)."""
+    target = pages_dir / _page_filename(page_no)
+
+    try:
+        page = doc.load_page(page_no - 1)
+    except Exception as exc:
+        err_msg = f"[Error loading page {page_no}: {exc}]"
+        target.write_text(err_msg, encoding="utf-8")
+        return {
+            "page_no": page_no,
+            "text": err_msg,
+            "used_ocr": False,
+            "ocr_failed": True,
+            "is_empty": False,
+        }
+
+    text = ""
+    if ocr_mode != "always":
+        try:
+            text = page.get_text("text") or ""
+        except Exception:
+            text = ""
+
+    used_ocr = False
+    ocr_failed = False
+    needs_ocr = ocr_mode == "always" or (
+        ocr_mode == "auto" and len(text.strip()) < min_text_chars
+    )
+
+    if needs_ocr and ocr_page is not None:
+        try:
+            pixmap = page.get_pixmap(dpi=ocr_dpi)
+            if ocr_format.lower() in ("jpeg", "jpg"):
+                img_bytes = pixmap.tobytes("jpeg", jpg_quality=ocr_quality)
+                mime = "image/jpeg"
+            else:
+                img_bytes = pixmap.tobytes("png")
+                mime = "image/png"
+
+            async with sem:
+                ocr_text = await ocr_page(page_no, img_bytes, mime)
+                if ocr_text and ocr_text.strip():
+                    text = ocr_text
+                    used_ocr = True
+        except Exception as exc:
+            if not text.strip():
+                text = f"[OCR failed for page {page_no}: {exc}]"
+                ocr_failed = True
+
+    target.write_text(text, encoding="utf-8")
+    is_empty = not bool(text.strip()) and not ocr_failed
+
+    return {
+        "page_no": page_no,
+        "text": text,
+        "used_ocr": used_ocr,
+        "ocr_failed": ocr_failed,
+        "is_empty": is_empty,
+    }
+
+
 async def ingest_document(
     src_path: Path,
     session_root: Path,
@@ -88,18 +171,18 @@ async def ingest_document(
     ocr_mode: str = "auto",
     budget_sec: float = 90.0,
     force: bool = False,
-    write_full: bool = False,
+    write_full: bool = True,
     ocr_page: Optional[OcrCallback] = None,
     min_text_chars: int = DEFAULT_MIN_TEXT_CHARS,
     ocr_dpi: int = DEFAULT_OCR_DPI,
+    ocr_concurrency: int = DEFAULT_OCR_CONCURRENCY,
     clock: Callable[[], float] = time.monotonic,
 ) -> dict:
     """Extract ``src_path`` into ``<session_root>/derived/docs/<slug>/pages``.
 
     ``ocr_mode`` is one of ``auto`` (OCR only pages whose text layer is shorter
-    than ``min_text_chars``), ``never`` or ``always``. OCR is performed through
-    ``ocr_page``; when it is not supplied, pages without a text layer are written
-    empty and reported in ``empty_pages``.
+    than ``min_text_chars``), ``never`` or ``always``. OCR is performed concurrently
+    through ``ocr_page`` with ``ocr_concurrency`` parallel slots.
     """
     started = clock()
 
@@ -159,72 +242,104 @@ async def ingest_document(
         partial = False
         resume_from: Optional[int] = None
 
-        for page_no in range(start, end + 1):
-            if clock() - started >= budget_sec:
-                partial = True
-                resume_from = page_no
+        concurrency = max(1, ocr_concurrency)
+        sem = asyncio.Semaphore(concurrency)
+        batch_size = max(1, concurrency)
+
+        pages_to_process = list(range(start, end + 1))
+        idx = 0
+
+        while idx < len(pages_to_process):
+            # Collect up to batch_size pages that fit within the budget
+            batch_page_numbers = []
+            while idx < len(pages_to_process) and len(batch_page_numbers) < batch_size:
+                pno = pages_to_process[idx]
+                if clock() - started >= budget_sec:
+                    partial = True
+                    resume_from = pno
+                    break
+                batch_page_numbers.append(pno)
+                idx += 1
+
+            if not batch_page_numbers:
                 break
 
-            target = pages_dir / _page_filename(page_no)
-            if target.is_file() and not force:
-                skipped += 1
-                body = target.read_text(encoding="utf-8", errors="replace")
-                chars_total += len(body)
-                if not body.strip():
-                    empty_pages.append(page_no)
-                if page_no == start and not first_excerpt:
-                    first_excerpt = body.strip()[:_EXCERPT_CHARS]
-                continue
-
-            page = doc.load_page(page_no - 1)
-            text = ""
-            if ocr_mode != "always":
-                try:
-                    text = page.get_text("text") or ""
-                except Exception:  # noqa: BLE001 - fall through to OCR / empty
-                    text = ""
-
-            used_ocr = False
-            ocr_failed = False
-            needs_ocr = ocr_mode == "always" or (
-                ocr_mode == "auto" and len(text.strip()) < min_text_chars
-            )
-            if needs_ocr and ocr_page is not None:
-                try:
-                    pixmap = page.get_pixmap(dpi=ocr_dpi)
-                    ocr_text = await ocr_page(
-                        page_no, pixmap.tobytes("png"), "image/png"
+            pending_tasks = []
+            for pno in batch_page_numbers:
+                target = pages_dir / _page_filename(pno)
+                if target.is_file() and not force:
+                    body = target.read_text(encoding="utf-8", errors="replace")
+                    should_reextract_with_ocr = (
+                        ocr_mode == "always"
+                        or (ocr_mode == "auto" and len(body.strip()) < min_text_chars)
                     )
-                    if ocr_text and ocr_text.strip():
-                        text = ocr_text
-                        used_ocr = True
-                except Exception as exc:  # noqa: BLE001 - keep the text layer we have
-                    if not text.strip():
-                        # A placeholder must never be mistaken for extracted content:
-                        # the page is reported as failed, not as a text-layer page.
-                        text = f"[OCR failed for page {page_no}: {exc}]"
-                        ocr_failed = True
+                    if not should_reextract_with_ocr:
+                        skipped += 1
+                        chars_total += len(body)
+                        if not body.strip():
+                            empty_pages.append(pno)
+                        if pno == start and not first_excerpt:
+                            first_excerpt = body.strip()[:_EXCERPT_CHARS]
+                        continue
 
-            target.write_text(text, encoding="utf-8")
-            written += 1
-            chars_total += len(text)
-            if ocr_failed:
-                ocr_failed_pages.append(page_no)
-            elif used_ocr:
-                ocr_pages += 1
-            elif text.strip():
-                text_layer_pages += 1
-            else:
-                empty_pages.append(page_no)
-            if page_no == start and not first_excerpt:
-                first_excerpt = text.strip()[:_EXCERPT_CHARS]
+                pending_tasks.append(
+                    _extract_single_page(
+                        doc,
+                        pno,
+                        pages_dir,
+                        ocr_mode=ocr_mode,
+                        ocr_page=ocr_page,
+                        min_text_chars=min_text_chars,
+                        ocr_dpi=ocr_dpi,
+                        ocr_format=DEFAULT_OCR_FORMAT,
+                        ocr_quality=DEFAULT_OCR_QUALITY,
+                        sem=sem,
+                    )
+                )
+
+            if pending_tasks:
+                results = await asyncio.gather(*pending_tasks, return_exceptions=True)
+                for res in results:
+                    if isinstance(res, Exception):
+                        logger.warning("Page extraction error in batch: %s", res)
+                        continue
+                    pno = res["page_no"]
+                    text = res["text"]
+                    written += 1
+                    chars_total += len(text)
+                    if res["ocr_failed"]:
+                        ocr_failed_pages.append(pno)
+                    elif res["used_ocr"]:
+                        ocr_pages += 1
+                    elif not res["is_empty"]:
+                        text_layer_pages += 1
+                    else:
+                        empty_pages.append(pno)
+
+                    if pno == start and not first_excerpt:
+                        first_excerpt = text.strip()[:_EXCERPT_CHARS]
+
+            if partial:
+                break
+
+            if idx < len(pages_to_process) and (clock() - started >= budget_sec):
+                partial = True
+                resume_from = pages_to_process[idx]
+                break
+
+        # Sort page tracking lists for deterministic output
+        empty_pages.sort()
+        ocr_failed_pages.sort()
 
         rel_root = f"{DOCS_SUBDIR}/{slug}"
         full_rel = None
-        if write_full and not partial:
-            full_path = root / "full.txt"
-            _rebuild_full_text(pages_dir, full_path, list(range(start, end + 1)))
-            full_rel = f"{rel_root}/full.txt"
+        full_path = root / "full.txt"
+        if write_full:
+            _rebuild_full_text(pages_dir, full_path, list(range(1, pages_total + 1)))
+            if full_path.is_file() and full_path.stat().st_size > 0:
+                full_rel = f"{rel_root}/full.txt"
+        else:
+            full_path.unlink(missing_ok=True)
 
         manifest = {
             "ok": True,
@@ -259,6 +374,12 @@ async def ingest_document(
                 f"Budget of {budget_sec:.0f}s reached at page {resume_from}. Call "
                 f"doc_ingest again with first_page={resume_from} to resume; pages "
                 "already written are skipped."
+            )
+        elif full_rel:
+            manifest["next_step"] = (
+                f"The complete document text is consolidated in '{full_rel}'. "
+                "Read it with sandbox_read_file_chunk or search with sandbox_grep_content. "
+                "Do NOT read individual page files one by one."
             )
         else:
             manifest["next_step"] = (

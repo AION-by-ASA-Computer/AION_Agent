@@ -21,7 +21,7 @@ The source code remains the source of truth. These pages are organized **by func
 | [Deployment](./deployment/docker.md) | [Docker Compose](./deployment/docker.md): multi-tenant prod stack, customer onboarding. |
 | [API and runtime](./api-and-runtime/rest-api.md) | FastAPI/SSE, [agent pipeline](./api-and-runtime/agent-pipeline.md) |
 | [Clients](./clients/chat-ui.md) | [Chat UI](./clients/chat-ui.md), [Admin UI](./clients/admin-ui.md), [SDK & Widget](./clients/sdk-and-widget.md) |
-| [Memory](./memory/stm-ltm-and-query.md) | STM/LTM, [FTS / session_search](./memory/chat-history-and-fts.md), [Structured Memory](./memory/structured-memory.md) |
+| [Memory](./memory/stm-ltm-and-query.md) | [Conceptual Model](./memory/stm-ltm-and-query.md), [Mnemos LTM](./memory/mnemos.md), [Projects & LTM](./memory/structured-memory.md), [Chat History & FTS](./memory/chat-history-and-fts.md), [Context Compaction](./memory/context-compaction.md) |
 | [MCP](./mcp/registry.md) | Registry and servers |
 | [Security](./security/identity-and-chat-auth.md) | Identity, chat login, enterprise roadmap |
 | [Learning (Hermes)](./learning/hermes-features.md) | Compression, distill, nudge, approval |

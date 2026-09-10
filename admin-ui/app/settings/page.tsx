@@ -464,6 +464,10 @@ export default function SettingsPage() {
         AION_OCR_MAX_TOKENS: "",
         AION_OCR_TIMEOUT: "",
         AION_OCR_MAX_IMAGE_BYTES: "",
+        AION_OCR_CONCURRENCY: "",
+        AION_OCR_DPI: "",
+        AION_OCR_FORMAT: "",
+        AION_OCR_JPEG_QUALITY: "",
       }));
     }
   };
@@ -745,6 +749,36 @@ export default function SettingsPage() {
           return;
         }
       }
+
+      // Concurrency validation
+      if (settings.AION_OCR_CONCURRENCY) {
+        const val = parseInt(settings.AION_OCR_CONCURRENCY, 10);
+        if (isNaN(val) || val <= 0) {
+          setMessage({ type: 'error', text: "OCR Parallel Concurrency must be a positive integer." });
+          setSaving(false);
+          return;
+        }
+      }
+
+      // DPI validation
+      if (settings.AION_OCR_DPI) {
+        const val = parseInt(settings.AION_OCR_DPI, 10);
+        if (isNaN(val) || val <= 0) {
+          setMessage({ type: 'error', text: "OCR Rendering DPI must be a positive integer." });
+          setSaving(false);
+          return;
+        }
+      }
+
+      // JPEG Quality validation
+      if (settings.AION_OCR_JPEG_QUALITY) {
+        const val = parseInt(settings.AION_OCR_JPEG_QUALITY, 10);
+        if (isNaN(val) || val < 1 || val > 100) {
+          setMessage({ type: 'error', text: "OCR JPEG Quality must be an integer between 1 and 100." });
+          setSaving(false);
+          return;
+        }
+      }
     }
 
     // Embeddings validation when URL is set
@@ -792,6 +826,10 @@ export default function SettingsPage() {
       payloadSettings.AION_OCR_MAX_TOKENS = "";
       payloadSettings.AION_OCR_TIMEOUT = "";
       payloadSettings.AION_OCR_MAX_IMAGE_BYTES = "";
+      payloadSettings.AION_OCR_CONCURRENCY = "";
+      payloadSettings.AION_OCR_DPI = "";
+      payloadSettings.AION_OCR_FORMAT = "";
+      payloadSettings.AION_OCR_JPEG_QUALITY = "";
     }
 
     try {
@@ -1666,20 +1704,65 @@ export default function SettingsPage() {
               )}
               {ocrConnectionTested && (settings.AION_OCR_MODEL || "").trim() && (
                 <>
-                  <ConfigInput
-                    label="OCR Max Tokens (AION_OCR_MAX_TOKENS)"
-                    value={settings.AION_OCR_MAX_TOKENS || ""}
-                    onChange={(v) => handleUpdate("AION_OCR_MAX_TOKENS", v)}
-                  />
-                  <ConfigInput
-                    label="OCR Timeout in Seconds (AION_OCR_TIMEOUT)"
-                    value={settings.AION_OCR_TIMEOUT || ""}
-                    onChange={(v) => handleUpdate("AION_OCR_TIMEOUT", v)}
-                  />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <ConfigInput
+                      label="OCR Max Tokens (AION_OCR_MAX_TOKENS)"
+                      value={settings.AION_OCR_MAX_TOKENS || ""}
+                      onChange={(v) => handleUpdate("AION_OCR_MAX_TOKENS", v)}
+                      description="Maximum output tokens generated per OCR page."
+                    />
+                    <ConfigInput
+                      label="OCR Timeout in Seconds (AION_OCR_TIMEOUT)"
+                      value={settings.AION_OCR_TIMEOUT || ""}
+                      onChange={(v) => handleUpdate("AION_OCR_TIMEOUT", v)}
+                      description="Per-page vision request timeout in seconds."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <ConfigInput
+                      label="OCR Parallel Concurrency (AION_OCR_CONCURRENCY)"
+                      value={settings.AION_OCR_CONCURRENCY || ""}
+                      onChange={(v) => handleUpdate("AION_OCR_CONCURRENCY", v)}
+                      description="Number of parallel OCR workers for multi-page documents (default: 6)."
+                    />
+                    <ConfigInput
+                      label="OCR Rendering DPI (AION_OCR_DPI)"
+                      value={settings.AION_OCR_DPI || ""}
+                      onChange={(v) => handleUpdate("AION_OCR_DPI", v)}
+                      description="Resolution DPI for rasterizing PDF pages sent to OCR (default: 150)."
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-1.5 font-mono">
+                      <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+                        OCR Image Format (AION_OCR_FORMAT)
+                      </label>
+                      <select
+                        value={settings.AION_OCR_FORMAT || "jpeg"}
+                        onChange={(e) => handleUpdate("AION_OCR_FORMAT", e.target.value)}
+                        className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20 outline-none transition-all font-mono cursor-pointer"
+                      >
+                        <option value="jpeg">jpeg (compressed, ~80% bandwidth saving)</option>
+                        <option value="png">png (lossless, larger payload)</option>
+                      </select>
+                      <p className="text-[11px] text-gray-500">Image format sent to the vision OCR service.</p>
+                    </div>
+
+                    <ConfigInput
+                      label="OCR JPEG Quality (AION_OCR_JPEG_QUALITY)"
+                      value={settings.AION_OCR_JPEG_QUALITY || ""}
+                      onChange={(v) => handleUpdate("AION_OCR_JPEG_QUALITY", v)}
+                      description="JPEG compression quality from 1 to 100 (default: 85)."
+                    />
+                  </div>
+
                   <ConfigInput
                     label="OCR Max Image Bytes (AION_OCR_MAX_IMAGE_BYTES)"
                     value={settings.AION_OCR_MAX_IMAGE_BYTES || ""}
                     onChange={(v) => handleUpdate("AION_OCR_MAX_IMAGE_BYTES", v)}
+                    description="Maximum payload size in bytes per image."
                   />
                 </>
               )}

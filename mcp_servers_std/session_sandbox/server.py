@@ -139,6 +139,47 @@ def sandbox_read_p7m_xml(relative_path: str, strip_base64_attachments: bool = Tr
 
 
 @mcp.tool()
+def sandbox_extract_docx_content(
+    relative_path: str,
+    extract_images: bool = True,
+    convert_pdf_pages: bool = False,
+    max_chars_summary: int = 1500,
+) -> str:
+    """
+    Extract clean structured text, mapped image references, and optional page-by-page PDF content from Word (.docx / .doc).
+
+    High-efficiency tool for analyzing Word documents of any size:
+    - Extracts heading outline, paragraphs, tables, and track changes.
+    - Saves clean text to `derived/extracted_text/<stem>_full.txt` (searchable with `sandbox_grep_content`).
+    - Saves structured JSON to `derived/extracted_text/<stem>_structure.json`.
+    - Extracts embedded images to `derived/extracted_images/<stem>/` and catalogs them with:
+      image_id, file path, parent chapter/heading, caption / adjacent text, docPr metadata.
+    - If convert_pdf_pages=True, converts to PDF via LibreOffice to map exact page numbers.
+
+    Args:
+        relative_path: Path to .docx or .doc file (e.g. 'uploads/report.docx' or 'derived/converted/report.docx').
+        extract_images: If True (default), extracts images to disk and builds contextual image references.
+        convert_pdf_pages: If True, renders PDF to extract page-by-page mapping and exact page numbers.
+        max_chars_summary: Number of preview characters returned in the summary.
+    """
+    import json
+    from src.tools.office_extract import extract_docx_content
+
+    try:
+        res = extract_docx_content(
+            _sid(),
+            relative_path,
+            extract_images=extract_images,
+            convert_pdf_pages=convert_pdf_pages,
+            max_chars_summary=max_chars_summary,
+        )
+        return json.dumps(res, ensure_ascii=False, indent=2)
+    except Exception as e:
+        return json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False)
+
+
+
+@mcp.tool()
 def sandbox_get_absolute_path(relative_path: str) -> str:
     """Get the host's absolute path of a session file/directory (uploads/, workspace/, derived/)."""
     from src.session_workspace import safe_resolve
@@ -479,6 +520,26 @@ def sandbox_read_file_chunk(
 
     try:
         rel = (relative_path or "").strip().replace("\\", "/").lstrip("/")
+
+        # Guardrail: Prevent agent from looping reading individual page files one by one
+        import re
+        if re.search(r"derived/docs/[^/]+/pages/p\d+\.txt", rel):
+            slug_root = rel.split("/pages/")[0]
+            full_txt = f"{slug_root}/full.txt"
+            return json.dumps(
+                {
+                    "ok": False,
+                    "error": "use_full_text",
+                    "message": (
+                        f"NON leggere le singole pagine '{rel}' una ad una. "
+                        f"Il testo consolidato di tutte le pagine è disponibile in '{full_txt}'. "
+                        f"Leggi direttamente il file unificato con sandbox_read_file_chunk(relative_path='{full_txt}', offset_lines=0, max_lines=500) "
+                        f"oppure cerca le sezioni rilevanti con sandbox_grep_content."
+                    ),
+                },
+                ensure_ascii=False,
+            )
+
         path = safe_resolve(_sid(), rel, must_exist=True)
 
         result = read_file_chunk(

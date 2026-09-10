@@ -12,7 +12,18 @@ import mimetypes
 import httpx
 import asyncio
 
-_ocr_lock = asyncio.Lock()
+_ocr_semaphore: asyncio.Semaphore | None = None
+
+
+def _get_ocr_concurrency() -> int:
+    return max(1, _env_int("AION_OCR_CONCURRENCY", 6))
+
+
+def _get_ocr_semaphore() -> asyncio.Semaphore:
+    global _ocr_semaphore
+    if _ocr_semaphore is None:
+        _ocr_semaphore = asyncio.Semaphore(_get_ocr_concurrency())
+    return _ocr_semaphore
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
 
@@ -116,8 +127,6 @@ async def _ocr_via_api_async(
     instruction: str,
     client: httpx.AsyncClient | None = None,
 ) -> str:
-    import httpx
-
     base = os.environ.get("AION_OCR_BASE_URL", "http://localhost:8000/ocr/v1").rstrip(
         "/"
     )
@@ -141,7 +150,8 @@ async def _ocr_via_api_async(
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {key}"}
 
     try:
-        async with _ocr_lock:
+        sem = _get_ocr_semaphore()
+        async with sem:
             if client:
                 r = await client.post(
                     f"{base}/chat/completions", json=payload, headers=headers
@@ -149,8 +159,12 @@ async def _ocr_via_api_async(
                 r.raise_for_status()
                 data = r.json()
             else:
+                limits = httpx.Limits(
+                    max_connections=20, max_keepalive_connections=10
+                )
                 async with httpx.AsyncClient(
-                    timeout=_env_float("AION_OCR_TIMEOUT", 120.0)
+                    timeout=_env_float("AION_OCR_TIMEOUT", 120.0),
+                    limits=limits,
                 ) as client_new:
                     r = await client_new.post(
                         f"{base}/chat/completions", json=payload, headers=headers
@@ -190,7 +204,7 @@ async def doc_ingest(
     ocr_mode: str = "auto",
     budget_sec: float = 90.0,
     force: bool = False,
-    write_full: bool = False,
+    write_full: bool = True,
 ) -> str:
     """
     Extract a PDF into one text file per page under derived/docs/<slug>/pages/.
@@ -200,11 +214,8 @@ async def doc_ingest(
     skips pages already extracted, and if it runs out of time it returns
     ``partial: true`` with ``resume_from`` so the next call continues where it stopped.
 
-    ``ocr_mode``: ``auto`` runs OCR only on pages with no usable text layer (cheap on
-    born-digital PDFs), ``never`` disables it, ``always`` forces OCR on every page.
-    ``write_full`` additionally concatenates everything into ``full.txt``; leave it off
-    unless you need sequential reading, because a single large file is skipped by
-    ``sandbox_grep_content`` above AION_GREP_MAX_FILE_BYTES.
+    ``write_full`` automatically concatenates all pages into ``derived/docs/<slug>/full.txt``
+    for fast sequential reading with ``sandbox_read_file_chunk`` (enabled by default).
 
     Returns a small JSON manifest: page counts, empty pages, the grep pattern to use,
     and an excerpt of the first page to confirm the document is the one requested.
@@ -224,33 +235,51 @@ async def doc_ingest(
             ensure_ascii=False,
         )
 
-    async def _ocr_page(page_no: int, image_bytes: bytes, mime: str) -> str:
-        return await _ocr_via_api_async(
-            image_bytes,
-            mime,
-            f"Page {page_no}: Extract all visible text. Preserve reading order.",
-        )
-
     use_ocr = ocr_mode != "never" and _is_advanced_ocr_enabled()
+    concurrency = _get_ocr_concurrency()
+    limits = httpx.Limits(
+        max_connections=concurrency * 2, max_keepalive_connections=concurrency
+    )
 
-    try:
-        manifest = await ingest_document(
-            path,
-            session_root(sid),
-            first_page=first_page,
-            last_page=last_page,
-            ocr_mode=ocr_mode,
-            budget_sec=_clamp_ingest_budget(budget_sec),
-            force=force,
-            write_full=write_full,
-            ocr_page=_ocr_page if use_ocr else None,
+    async with httpx.AsyncClient(
+        timeout=_env_float("AION_OCR_TIMEOUT", 120.0),
+        limits=limits,
+    ) as shared_client:
+
+        async def _ocr_page(page_no: int, image_bytes: bytes, mime: str) -> str:
+            return await _ocr_via_api_async(
+                image_bytes,
+                mime,
+                f"Page {page_no}: Extract all visible text. Preserve reading order.",
+                client=shared_client,
+            )
+
+        try:
+            manifest = await ingest_document(
+                path,
+                session_root(sid),
+                first_page=first_page,
+                last_page=last_page,
+                ocr_mode=ocr_mode,
+                budget_sec=_clamp_ingest_budget(budget_sec),
+                force=force,
+                write_full=write_full,
+                ocr_page=_ocr_page if use_ocr else None,
+            )
+        except Exception as e:
+            logger.exception("doc_ingest failed for %s", relative_path)
+            return json.dumps(
+                {"ok": False, "error": "ingest_failed", "message": str(e)},
+                ensure_ascii=False,
+            )
+
+    if manifest.get("ok") and not use_ocr and manifest.get("empty_pages_count"):
+        manifest["warning"] = (
+            f"{manifest['empty_pages_count']} page(s) have no text layer and OCR is "
+            "unavailable (ocr_mode=never or OCR service not configured). Those pages "
+            "are empty in the extraction."
         )
-    except Exception as e:
-        logger.exception("doc_ingest failed for %s", relative_path)
-        return json.dumps(
-            {"ok": False, "error": "ingest_failed", "message": str(e)},
-            ensure_ascii=False,
-        )
+    return json.dumps(manifest, ensure_ascii=False)
 
     if manifest.get("ok") and not use_ocr and manifest.get("empty_pages_count"):
         manifest["warning"] = (
@@ -355,31 +384,44 @@ async def ocr_file(
             end = min(end, start + max(1, span) - 1)
             images = convert_from_path(str(path), first_page=start, last_page=end)
 
-            # Limit parallel calls to avoid overloading the OCR server
-            sem = asyncio.Semaphore(5)
-
-            async def limited_ocr(img_data, mime, page_instr):
-                async with sem:
-                    return await _ocr_via_api_async(img_data, mime, page_instr)
-
-            tasks = []
-            for i, img in enumerate(images):
-                buf = BytesIO()
-                img.save(buf, format="JPEG", quality=85)
-                img_data = buf.getvalue()
-                tasks.append(
-                    limited_ocr(
-                        img_data, "image/jpeg", f"Page {start + i}: {instruction}"
-                    )
-                )
-
-            logger.info(
-                "Starting parallel OCR (limit 5) for pages %d-%d of %s",
-                start,
-                start + len(tasks) - 1,
-                path.name,
+            concurrency = _get_ocr_concurrency()
+            sem = asyncio.Semaphore(concurrency)
+            limits = httpx.Limits(
+                max_connections=concurrency * 2, max_keepalive_connections=concurrency
             )
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            async def limited_ocr(img_data, mime, page_instr, client):
+                async with sem:
+                    return await _ocr_via_api_async(
+                        img_data, mime, page_instr, client=client
+                    )
+
+            async with httpx.AsyncClient(
+                timeout=_env_float("AION_OCR_TIMEOUT", 120.0),
+                limits=limits,
+            ) as shared_client:
+                tasks = []
+                for i, img in enumerate(images):
+                    buf = BytesIO()
+                    img.save(buf, format="JPEG", quality=85)
+                    img_data = buf.getvalue()
+                    tasks.append(
+                        limited_ocr(
+                            img_data,
+                            "image/jpeg",
+                            f"Page {start + i}: {instruction}",
+                            shared_client,
+                        )
+                    )
+
+                logger.info(
+                    "Starting parallel OCR (limit %d) for pages %d-%d of %s",
+                    concurrency,
+                    start,
+                    start + len(tasks) - 1,
+                    path.name,
+                )
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
             all_text = []
             if native_text:

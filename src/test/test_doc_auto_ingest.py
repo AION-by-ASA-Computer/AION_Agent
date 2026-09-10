@@ -25,7 +25,7 @@ def data_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_run_auto_ingest_writes_pages(data_dir):
     sid = "sess_auto_ingest"
     BytesIO()
@@ -44,7 +44,7 @@ async def test_run_auto_ingest_writes_pages(data_dir):
     assert manifest.get("pages_total") == 30
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_schedule_auto_ingest_skips_non_pdf(data_dir):
     sid = "sess_txt"
     meta = save_upload(sid, "note.txt", b"hello world")
@@ -59,7 +59,7 @@ async def test_schedule_auto_ingest_skips_non_pdf(data_dir):
     assert not slug_dir.exists() or not any(slug_dir.rglob("pages"))
 
 
-@pytest.mark.asyncio
+@pytest.mark.anyio
 async def test_upload_endpoint_schedules_ingest(data_dir, monkeypatch):
     monkeypatch.setenv("AION_DOC_AUTO_INGEST", "1")
     from src.api.session_uploads import upload_session_files

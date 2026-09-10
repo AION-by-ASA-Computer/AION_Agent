@@ -688,11 +688,27 @@ class AgentPipeline:
                     excerpt = (manifest.get("first_page_excerpt") or "").strip()
                     if excerpt:
                         lines.append(f"- first_page_excerpt: {excerpt[:300]}")
+                    full_txt = manifest.get("full_text")
+                    if full_txt:
+                        lines.append(
+                            f"- full_text: `{full_txt}` (CONSOLIDATED FILE WITH ALL PAGES — READ THIS FILE)"
+                        )
                     hint = manifest.get("grep_hint") or (
                         f"sandbox_grep_content(pattern=..., relative_root='derived', "
                         f"glob_filter='docs/{slug}/pages/*.txt')"
                     )
                     lines.append(f"- search: {hint}")
+                    target_txt = full_txt or f"derived/docs/{slug}/full.txt"
+                    lines.append(
+                        "- WORKFLOW:\n"
+                        f"  1. Read `{target_txt}` in 1-2 macro-chunks with `sandbox_read_file_chunk(relative_path='{target_txt}', offset_lines=0, max_lines=500)` "
+                        "or search key sections (sommario, tabelle, conclusioni) with `sandbox_grep_content`. NEVER read individual pNNNN.txt page files in a loop.\n"
+                        "  2. Understand and synthesize the document's core content (context, key metrics, structured data, findings, and strategic conclusions).\n"
+                        "  3. Response/Output:\n"
+                        "     - IF the user explicitly asked for a Word document / file (.docx / report):\n"
+                        "       Generate the Word file using `docx-js` (`workspace/create_doc.js` via `sandbox_run_node_file`) or `python-docx` (`workspace/build_doc.py` via `sandbox_run_python_file`).\n"
+                        "     - OTHERWISE (if the user asked for a summary, answers, or data extraction in chat): provide the structured summary directly in your text response without creating a .docx file."
+                    )
                 elif mime.startswith("application/pdf") or rp.lower().endswith(".pdf"):
                     lines.append(
                         f"\n### PDF `{slug}`: extraction in progress or not started. "
