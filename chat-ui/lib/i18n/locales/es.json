@@ -231,15 +231,43 @@
       "saving_info_desc": "El agente está guardando la información a largo plazo…"
     },
     "tools": {
-      "attach_file": "Adjuntar Archivo",
-      "view_label": "Vista de Herramientas",
-      "select_view": "Seleccionar Vista de Herramientas",
+      "attach_file": "Adjuntar archivo",
+      "view_label": "Vista de herramientas",
+      "select_view": "Seleccionar vista de herramientas",
+      "compact": "Compacta",
+      "compact_desc": "Desplegable en la parte superior de la respuesta",
       "hide": "Ocultar",
       "partial": "Parcial",
       "full": "Completa",
       "plus_tooltip": "Adjuntar archivo o cambiar vista de herramientas",
       "drag_drop_title": "Arrastra los archivos aquí",
       "drag_drop_desc": "Arrastra y suelta documentos para adjuntarlos a esta conversación"
+    },
+    "tool": {
+      "running": "Ejecutando {{name}}…",
+      "web_search_running": "Búsqueda web en curso",
+      "web_search_done": "Búsqueda web completada",
+      "web_fetch_running": "Leyendo página",
+      "web_fetch_done": "Página leída",
+      "params": "Parámetros",
+      "result": "Resultado",
+      "result_error": "Error",
+      "waiting": "Esperando al servidor…"
+    },
+    "compact_activity": {
+      "searched_web": "Búsqueda en la web",
+      "reading_page": "Página leída",
+      "thought_process": "Razonamiento",
+      "thought_done": "Razonado",
+      "tool_executed": "{{name}} ejecutado",
+      "steps_count": "{{count}} pasos",
+      "and_other_steps": "y {{count}} pasos más",
+      "thinking_streaming": "Razonando…",
+      "searching_streaming": "Buscando en la web {{query}}…",
+      "running_tool_streaming": "Ejecutando {{name}}…",
+      "view_details": "Ver detalles",
+      "sources": "Fuentes",
+      "results_count": "{{count}} resultados"
     },
     "profile": {
       "label": "Perfil",

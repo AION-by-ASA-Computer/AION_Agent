@@ -592,6 +592,108 @@ class TestObservabilityMetrics(unittest.TestCase):
         self.assertEqual(res_otel.target, "otel")
         self.assertFalse(res_otel.success)
 
+    def test_profile_metrics_fallback_consistency(self):
+        """Verify that profile_metrics breakdown in fallback mode accurately reflects tokens, turns, and tools."""
+        from src.api.metrics_api import get_metrics_overview
+        import src.api.metrics_api as metrics_api
+
+        orig_query_prom = metrics_api._query_prometheus
+        metrics_api._query_prometheus = lambda *args, **kwargs: None
+
+        try:
+            # Clear counters
+            metrics.aion_llm_tokens_total.prom_metric._metrics.clear()
+            metrics.aion_messages_total.prom_metric._metrics.clear()
+            metrics.aion_tool_calls_total.prom_metric._metrics.clear()
+            metrics.aion_turn_duration_seconds.prom_metric._metrics.clear()
+
+            # Record tokens for admin on generic_assistant
+            metrics.aion_llm_tokens_total.labels(
+                instance_id="inst_1",
+                tenant_id="admin",
+                profile="generic_assistant",
+                model="gpt-4o",
+                token_type="prompt",
+            ).inc(134100)
+            metrics.aion_llm_tokens_total.labels(
+                instance_id="inst_1",
+                tenant_id="admin",
+                profile="generic_assistant",
+                model="gpt-4o",
+                token_type="completion",
+            ).inc(4600)
+            metrics.aion_llm_tokens_total.labels(
+                instance_id="inst_1",
+                tenant_id="admin",
+                profile="generic_assistant",
+                model="gpt-4o",
+                token_type="reasoning",
+            ).inc(866)
+
+            # Record 4 assistant turns
+            for _ in range(4):
+                metrics.aion_messages_total.labels(
+                    instance_id="inst_1",
+                    tenant_id="admin",
+                    profile="generic_assistant",
+                    role="assistant",
+                    finish_reason="stop",
+                ).inc(1)
+
+            # Record 5 tool calls
+            metrics.aion_tool_calls_total.labels(
+                instance_id="inst_1",
+                tenant_id="admin",
+                profile="generic_assistant",
+                tool_name="sandbox_read_text_file",
+                mcp_server="session_sandbox",
+                status="ok",
+            ).inc(5)
+
+            # Record turn duration
+            metrics.aion_turn_duration_seconds.labels(
+                instance_id="inst_1",
+                tenant_id="admin",
+                profile="generic_assistant",
+            ).observe(42.41)
+
+            overview = get_metrics_overview(time_range="1h")
+
+            # Check profile_metrics
+            self.assertEqual(len(overview.profile_metrics), 1)
+            pm = overview.profile_metrics[0]
+            self.assertEqual(pm.profile, "generic_assistant")
+            self.assertEqual(pm.total_tokens, 139566)
+            self.assertEqual(pm.prompt_tokens, 134100)
+            self.assertEqual(pm.completion_tokens, 4600)
+            self.assertEqual(pm.reasoning_tokens, 866)
+            self.assertEqual(pm.total_turns, 4)
+            self.assertEqual(pm.total_tool_calls, 5)
+            self.assertEqual(pm.tool_success_rate, 100.0)
+            self.assertAlmostEqual(pm.avg_turn_duration_seconds, 42.41, places=2)
+
+            # Check user_metrics
+            self.assertEqual(len(overview.user_metrics), 1)
+            um = overview.user_metrics[0]
+            self.assertEqual(um.user_id, "admin")
+            self.assertEqual(um.total_tokens, 139566)
+            self.assertEqual(um.prompt_tokens, 134100)
+            self.assertEqual(um.completion_tokens, 4600)
+            self.assertEqual(um.reasoning_tokens, 866)
+            self.assertEqual(um.total_turns, 4)
+            self.assertEqual(um.total_tool_calls, 5)
+
+            # Consistency check between user profile breakdown and agent profile breakdown
+            self.assertEqual(len(um.profile_breakdown), 1)
+            up = um.profile_breakdown[0]
+            self.assertEqual(up.profile, pm.profile)
+            self.assertEqual(up.total_tokens, pm.total_tokens)
+            self.assertEqual(up.total_turns, pm.total_turns)
+            self.assertEqual(up.total_tool_calls, pm.total_tool_calls)
+
+        finally:
+            metrics_api._query_prometheus = orig_query_prom
+
 
 if __name__ == "__main__":
     unittest.main()

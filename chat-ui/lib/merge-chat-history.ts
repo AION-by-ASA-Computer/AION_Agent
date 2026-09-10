@@ -13,6 +13,9 @@ export type MergeableChatMessage = {
     plan_id?: string;
     plan_task_id?: string;
   };
+  createdAt?: string;
+  completedAt?: string;
+  durationMs?: number;
 };
 
 function textLen(m: MergeableChatMessage): number {
@@ -24,7 +27,12 @@ export function preferRicherMessage<T extends MergeableChatMessage>(local: T, se
   const localText = textLen(local);
   const serverText = textLen(server);
   if (serverText > 0 && localText === 0) {
-    return server;
+    return {
+      ...server,
+      createdAt: local.createdAt || server.createdAt,
+      completedAt: local.completedAt || server.completedAt,
+      durationMs: local.durationMs ?? server.durationMs,
+    };
   }
 
   const localRicher =
@@ -33,7 +41,14 @@ export function preferRicherMessage<T extends MergeableChatMessage>(local: T, se
     (local.steps?.length ?? 0) > (server.steps?.length ?? 0) ||
     (local.artifacts?.length ?? 0) > (server.artifacts?.length ?? 0);
 
-  if (!localRicher) return server;
+  if (!localRicher) {
+    return {
+      ...server,
+      createdAt: local.createdAt || server.createdAt,
+      completedAt: local.completedAt || server.completedAt,
+      durationMs: local.durationMs ?? server.durationMs,
+    };
+  }
 
   return {
     ...server,
@@ -45,6 +60,9 @@ export function preferRicherMessage<T extends MergeableChatMessage>(local: T, se
     webSources: local.webSources?.length ? local.webSources : server.webSources,
     reasoningUnavailable: local.reasoningUnavailable ?? server.reasoningUnavailable,
     metadata: local.metadata ?? server.metadata,
+    createdAt: local.createdAt || server.createdAt,
+    completedAt: local.completedAt || server.completedAt,
+    durationMs: local.durationMs ?? server.durationMs,
   };
 }
 

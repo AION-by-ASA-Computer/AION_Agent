@@ -360,7 +360,7 @@
     "stream_recovery": "L'agente sta ancora elaborando questa chat sul server. Aggiornamento automatico…",
     "agent_status": {
       "thinking": "L'agente sta pensando…",
-      "working": "L'agente sta elaborando…",
+      "working": "L'agente sta pensando…",
       "compacting": "Compattazione in corso…",
       "compacting_desc": "Compattazione memoria a breve termine…",
       "saving_info": "Salvataggio informazioni in corso…",
@@ -400,6 +400,8 @@
       "attach_file": "Allega File",
       "view_label": "Vista Tools",
       "select_view": "Seleziona Vista Tools",
+      "compact": "Compatta",
+      "compact_desc": "Tendina in cima alla risposta",
       "hide": "Nascondi",
       "partial": "Parziale",
       "full": "Completa",
@@ -512,6 +514,21 @@
       "result": "Risultato",
       "result_error": "Errore",
       "waiting": "In attesa dal server…"
+    },
+    "compact_activity": {
+      "searched_web": "Cercato sul web",
+      "reading_page": "Letta pagina",
+      "thought_process": "Ragionamento",
+      "thought_done": "Ragionamento",
+      "tool_executed": "Eseguito {{name}}",
+      "steps_count": "{{count}} passaggi",
+      "and_other_steps": "e altri {{count}} passaggi",
+      "thinking_streaming": "L'agente sta pensando…",
+      "searching_streaming": "Sto cercando sul web {{query}}…",
+      "running_tool_streaming": "Esecuzione di {{name}}…",
+      "view_details": "Visualizza dettagli",
+      "sources": "Fonti",
+      "results_count": "{{count}} risultati"
     },
     "plan": {
       "task": {

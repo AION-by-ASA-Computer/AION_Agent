@@ -1264,6 +1264,8 @@ class AgentPipeline:
         sql_query_project: Optional[str] = None,
         plan_id: Optional[str] = None,
         plan_execution_task_id: Optional[str] = None,
+        tools_view: Optional[str] = None,
+        compact_mode: Optional[bool] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         logger.info(">>> [0] ENTERING run_stream for session %s", self.session_id)
@@ -1650,6 +1652,8 @@ class AgentPipeline:
                 plan_execution_task_id=plan_execution_task_id,
                 user_message_id=user_message_id,
                 assistant_message_id=assistant_message_id,
+                tools_view=tools_view,
+                compact_mode=compact_mode,
                 track_sse_callback=_ctx_sse_events.append,
             )
             for _ctx_evt in _ctx_sse_events:
@@ -3999,6 +4003,8 @@ class AgentPipeline:
         sql_query_project: Optional[str] = None,
         plan_id: Optional[str] = None,
         plan_execution_task_id: Optional[str] = None,
+        tools_view: Optional[str] = None,
+        compact_mode: Optional[bool] = None,
         metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Drain ``run_stream`` until a ``final`` chunk (sync / automation clients)."""
@@ -4016,6 +4022,8 @@ class AgentPipeline:
             sql_query_project=sql_query_project,
             plan_id=plan_id,
             plan_execution_task_id=plan_execution_task_id,
+            tools_view=tools_view,
+            compact_mode=compact_mode,
             metadata=metadata,
         ):
             if chunk["type"] == "final":

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ChevronRight, Brain } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
-import { ShimmerText } from "@/components/chat/ShimmerText";
+import { AgentWorkingShimmer } from "@/components/chat/ShimmerText";
 
 type Props = {
   content: string;
@@ -26,11 +26,7 @@ export function ReasoningDisclosure({ content, streaming = false }: Props) {
         aria-expanded={open}
       >
         <Brain size={14} className="shrink-0 opacity-80" aria-hidden />
-        {streaming && !text ? (
-          <ShimmerText className="text-xs font-medium">{t("chat.reasoning.streaming")}</ShimmerText>
-        ) : (
-          <span className="text-xs font-medium">{t("chat.reasoning.label")}</span>
-        )}
+        <span className="text-xs font-medium">{t("chat.reasoning.label")}</span>
         <ChevronRight
           size={13}
           className={cn("ml-auto shrink-0 opacity-70 transition-transform duration-200", open && "rotate-90")}

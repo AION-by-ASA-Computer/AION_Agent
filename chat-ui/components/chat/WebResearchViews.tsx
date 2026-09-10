@@ -72,7 +72,7 @@ export function WebSourcesBar({ cards, messageId }: { cards: WebSourceCard[]; me
   );
 }
 
-export type ToolsViewMode = "hidden" | "partial" | "full";
+export type ToolsViewMode = "compact" | "hidden" | "partial" | "full";
 
 function ToolParamsBlock({ input }: { input: unknown }) {
   const t = useT();

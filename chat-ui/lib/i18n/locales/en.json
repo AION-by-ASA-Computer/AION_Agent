@@ -360,7 +360,7 @@
     "stream_recovery": "The agent is still working on this chat on the server. Refreshing automatically…",
     "agent_status": {
       "thinking": "The agent is thinking…",
-      "working": "The agent is working…",
+      "working": "The agent is thinking…",
       "compacting": "Compacting context…",
       "compacting_desc": "Compacting short-term memory…",
       "saving_info": "Saving information…",
@@ -400,6 +400,8 @@
       "attach_file": "Attach File",
       "view_label": "Tools View",
       "select_view": "Select Tools View",
+      "compact": "Compact",
+      "compact_desc": "Compact dropdown at top of reply",
       "hide": "Hide",
       "partial": "Partial",
       "full": "Full",
@@ -512,6 +514,21 @@
       "result": "Result",
       "result_error": "Error",
       "waiting": "Waiting for server…"
+    },
+    "compact_activity": {
+      "searched_web": "Searched the web",
+      "reading_page": "Read page",
+      "thought_process": "Thought process",
+      "thought_done": "Thought",
+      "tool_executed": "Executed {{name}}",
+      "steps_count": "{{count}} steps",
+      "and_other_steps": "and {{count}} other steps",
+      "thinking_streaming": "The agent is thinking…",
+      "searching_streaming": "Searching the web for {{query}}…",
+      "running_tool_streaming": "Running {{name}}…",
+      "view_details": "View details",
+      "sources": "Sources",
+      "results_count": "{{count}} results"
     },
     "plan": {
       "task": {

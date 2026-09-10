@@ -12,30 +12,7 @@ from haystack.dataclasses import ChatMessage
 from src.runtime.turn.turn_context import TurnContext, build_turn_context
 
 
-@pytest.mark.anyio
-async def test_build_turn_context_minimal(monkeypatch):
-    """build_turn_context assembles messages and returns a TurnContext dataclass."""
-    from src.settings import get_settings
-
-    get_settings.cache_clear()
-    monkeypatch.setenv("AION_CONTEXT_COMPRESS_ENABLED", "0")
-    monkeypatch.setenv("AION_STM_MAX_TURNS", "5")
-    get_settings.cache_clear()
-
-    emitted: List[Dict[str, Any]] = []
-    stm_msgs = [ChatMessage.from_user("prior turn")]
-
-    pipeline = MagicMock()
-    pipeline.session_id = "sess-turn-ctx"
-    pipeline.profile_name = "aion_std"
-    pipeline.user_id = "user-1"
-    pipeline.agent = object()
-    pipeline._format_attachments_block = MagicMock(return_value="")
-    pipeline._augment_user_input = AsyncMock(return_value="augmented hello")
-    pipeline._apply_context_compression = AsyncMock(
-        side_effect=lambda msgs, force=False, **kwargs: (list(msgs), False, False)
-    )
-
+def _apply_turn_context_mocks(monkeypatch, pipeline, stm_msgs):
     _ltm = SimpleNamespace(
         wake_up=AsyncMock(return_value=SimpleNamespace(blocks=[])),
         build_augmented_user_text=lambda u, _m, _w: u,
@@ -73,12 +50,40 @@ async def test_build_turn_context_minimal(monkeypatch):
         "src.memory.context_compressor.get_default_compressor",
         lambda: SimpleNamespace(
             max_message_tokens=lambda _oh: 4000,
+            max_prompt_tokens=lambda: 8000,
             should_compress=lambda *_a, **_k: False,
             total_with_overhead=lambda *_a, **_k: 500,
             compress_trigger_tokens=lambda: 6000,
             keep_last=4,
         ),
     )
+
+
+@pytest.mark.anyio
+async def test_build_turn_context_minimal(monkeypatch):
+    """build_turn_context assembles messages and returns a TurnContext dataclass."""
+    from src.settings import get_settings
+
+    get_settings.cache_clear()
+    monkeypatch.setenv("AION_CONTEXT_COMPRESS_ENABLED", "0")
+    monkeypatch.setenv("AION_STM_MAX_TURNS", "5")
+    get_settings.cache_clear()
+
+    emitted: List[Dict[str, Any]] = []
+    stm_msgs = [ChatMessage.from_user("prior turn")]
+
+    pipeline = MagicMock()
+    pipeline.session_id = "sess-turn-ctx"
+    pipeline.profile_name = "aion_std"
+    pipeline.user_id = "user-1"
+    pipeline.agent = object()
+    pipeline._format_attachments_block = MagicMock(return_value="")
+    pipeline._augment_user_input = AsyncMock(return_value="augmented hello")
+    pipeline._apply_context_compression = AsyncMock(
+        side_effect=lambda msgs, force=False, **kwargs: (list(msgs), False, False)
+    )
+
+    _apply_turn_context_mocks(monkeypatch, pipeline, stm_msgs)
 
     ctx = await build_turn_context(
         pipeline,
@@ -100,7 +105,7 @@ async def test_build_turn_context_minimal(monkeypatch):
     assert ctx.qm_project == "default"
     assert len(ctx.messages) >= 2
     assert ctx.context_stats["message_count"] == len(ctx.messages)
-    assert not emitted
+    assert any(e.get("type") == "context_budget" for e in emitted)
     get_settings.cache_clear()
 
 
@@ -184,45 +189,7 @@ async def test_build_turn_context_clears_loaded_skills_on_fresh_start(
         side_effect=lambda msgs, **kwargs: (list(msgs), False, False)
     )
 
-    # Mock history_manager.get_window to return an EMPTY list (fresh start)
-    monkeypatch.setattr(
-        "src.api.history.history_manager.get_window", AsyncMock(return_value=[])
-    )
-
-    _ltm = SimpleNamespace(
-        wake_up=AsyncMock(return_value=SimpleNamespace(blocks=[])),
-        build_augmented_user_text=lambda u, _m, _w: u,
-    )
-    monkeypatch.setattr("src.memory.ltm_orchestrator.ltm_orchestrator", _ltm)
-    monkeypatch.setattr(
-        "src.runtime.redis_client.redis_consume_force_compact",
-        AsyncMock(return_value=False),
-    )
-    monkeypatch.setattr(
-        "src.runtime.hooks.hook_registry.dispatch",
-        AsyncMock(return_value=SimpleNamespace(modified_payload={})),
-    )
-    monkeypatch.setattr(
-        "src.agent_profile.profile_manager.get_profile", lambda _name: None
-    )
-    monkeypatch.setattr(
-        "src.memory.context_compressor.estimate_agent_overhead_tokens",
-        lambda _agent: 100,
-    )
-    monkeypatch.setattr(
-        "src.memory.context_compressor.estimate_full_prompt_tokens",
-        lambda _agent, _msgs: {"total": 500, "max_prompt": 8000, "overhead": 100},
-    )
-    monkeypatch.setattr(
-        "src.memory.context_compressor.get_default_compressor",
-        lambda: SimpleNamespace(
-            max_message_tokens=lambda _oh: 4000,
-            should_compress=lambda *_a, **_k: False,
-            total_with_overhead=lambda *_a, **_k: 500,
-            compress_trigger_tokens=lambda: 6000,
-            keep_last=4,
-        ),
-    )
+    _apply_turn_context_mocks(monkeypatch, pipeline, [])
 
     # Assert that assets_dir exists before building the context
     assert assets_dir.is_dir()
@@ -242,5 +209,41 @@ async def test_build_turn_context_clears_loaded_skills_on_fresh_start(
         assistant_message_id="a-1",
     )
 
-    # Assert that assets_dir has been successfully cleared
+    # Assert that assets_dir has been wiped cleanly on fresh start
     assert not assets_dir.exists()
+
+
+@pytest.mark.anyio
+async def test_build_turn_context_compact_mode(monkeypatch):
+    """Verifica che in modalita compact venga iniettata l'istruzione compact_mode_instruction."""
+    pipeline = MagicMock()
+    pipeline.session_id = "sess-compact"
+    pipeline.profile_name = "aion_std"
+    pipeline.user_id = "user-1"
+    pipeline.agent = object()
+    pipeline._format_attachments_block = MagicMock(return_value="")
+    pipeline._augment_user_input = AsyncMock(return_value="augmented")
+    pipeline._apply_context_compression = AsyncMock(
+        side_effect=lambda msgs, **kwargs: (list(msgs), False, False)
+    )
+
+    _apply_turn_context_mocks(monkeypatch, pipeline, [])
+
+    ctx = await build_turn_context(
+        pipeline,
+        user_input="chi è AION?",
+        attachments=None,
+        turn_attachments=None,
+        message_source="user_input",
+        effective_agent_mode="chat",
+        sql_query_project=None,
+        plan_execution_task_id=None,
+        user_message_id="u-1",
+        assistant_message_id="a-1",
+        tools_view="compact",
+    )
+
+    keys = [layer["key"] for layer in ctx.prompt_inject_layers]
+    assert "compact_mode_instruction" in keys
+    instruction_layer = next(l for l in ctx.prompt_inject_layers if l["key"] == "compact_mode_instruction")
+    assert "COMPACT RESPONSE MODE GUIDELINES" in instruction_layer["text"]

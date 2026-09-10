@@ -231,15 +231,43 @@
       "saving_info_desc": "L'agent enregistre les informations à long terme…"
     },
     "tools": {
-      "attach_file": "Joindre un Fichier",
-      "view_label": "Vue des Outils",
-      "select_view": "Sélectionner la Vue des Outils",
+      "attach_file": "Joindre un fichier",
+      "view_label": "Affichage des outils",
+      "select_view": "Sélectionner l'affichage des outils",
+      "compact": "Compact",
+      "compact_desc": "Menu déroulant en haut de la réponse",
       "hide": "Masquer",
-      "partial": "Partielle",
-      "full": "Complète",
-      "plus_tooltip": "Ajouter un fichier ou modifier la vue des outils",
-      "drag_drop_title": "Déposer les fichiers ici",
-      "drag_drop_desc": "Glissez-déposez des documents pour les joindre à cette conversation"
+      "partial": "Partiel",
+      "full": "Complet",
+      "plus_tooltip": "Ajouter un fichier ou changer la vue des outils",
+      "drag_drop_title": "Déposez les fichiers ici",
+      "drag_drop_desc": "Glissez-déposez des fichiers pour les joindre à cette conversation"
+    },
+    "tool": {
+      "running": "Exécution de {{name}}…",
+      "web_search_running": "Recherche web en cours",
+      "web_search_done": "Recherche web terminée",
+      "web_fetch_running": "Lecture de la page en cours",
+      "web_fetch_done": "Page lue",
+      "params": "Paramètres",
+      "result": "Résultat",
+      "result_error": "Erreur",
+      "waiting": "En attente du serveur…"
+    },
+    "compact_activity": {
+      "searched_web": "Recherche sur le web",
+      "reading_page": "Page lue",
+      "thought_process": "Raisonnement",
+      "thought_done": "Raisonné",
+      "tool_executed": "{{name}} exécuté",
+      "steps_count": "{{count}} étapes",
+      "and_other_steps": "et {{count}} autres étapes",
+      "thinking_streaming": "En cours de réflexion…",
+      "searching_streaming": "Recherche sur le web {{query}}…",
+      "running_tool_streaming": "Exécution de {{name}}…",
+      "view_details": "Voir les détails",
+      "sources": "Sources",
+      "results_count": "{{count}} résultats"
     },
     "profile": {
       "label": "Profil",

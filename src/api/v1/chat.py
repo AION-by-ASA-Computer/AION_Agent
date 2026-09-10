@@ -89,6 +89,8 @@ async def _run_pipeline_in_background(
                 body.web_search_restrict_hosts
             ),
             sql_query_project=sql_project_resolved,
+            tools_view=body.tools_view,
+            compact_mode=body.compact_mode,
             metadata={
                 **(body.metadata or {}),
                 **(
@@ -229,6 +231,14 @@ class ChatStreamBody(BaseModel):
         default=None,
         description="Slug cassetto QueryMemory SQL (es. default, vendite, tecnico).",
     )
+    tools_view: Optional[str] = Field(
+        default=None,
+        description="Modalità di visualizzazione tool: compact, partial, full, hidden.",
+    )
+    compact_mode: Optional[bool] = Field(
+        default=None,
+        description="True se è attiva la modalità compatta.",
+    )
     llm_provider_name: Optional[str] = Field(
         default=None,
         description="Slug del provider LLM da usare per questa sessione (opzionale).",
@@ -265,6 +275,8 @@ class ChatSyncBody(BaseModel):
     plan_mode: Optional[bool] = None
     deep_research_mode: Optional[bool] = None
     sql_query_project: Optional[str] = None
+    tools_view: Optional[str] = None
+    compact_mode: Optional[bool] = None
     llm_provider_name: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
     timeout_seconds: Optional[float] = Field(

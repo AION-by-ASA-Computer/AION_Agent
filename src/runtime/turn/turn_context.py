@@ -105,6 +105,8 @@ async def build_turn_context(
     plan_execution_task_id: Optional[str],
     user_message_id: Optional[str],
     assistant_message_id: Optional[str],
+    tools_view: Optional[str] = None,
+    compact_mode: Optional[bool] = None,
     track_sse_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
 ) -> TurnContext:
     """Build the full turn context, emitting any SSE side-effects via *track_sse_callback*.
@@ -341,6 +343,22 @@ async def build_turn_context(
         _pre_augment,
         augmented_user,
     )
+
+    # Compact response mode: silence transitional filler phrases between tool calls
+    if (tools_view == "compact") or bool(compact_mode):
+        compact_instruction = (
+            "### COMPACT RESPONSE MODE GUIDELINES\n"
+            "- When executing tools or thinking/reasoning, do NOT output conversational transition filler phrases "
+            '(such as "Cerco ora...", "Sto verificando...", "Let me check...", "I will now search...").\n'
+            "- Execute all necessary tools and reasoning steps silently.\n"
+            "- Output ONLY the final, complete, and polished response directly to the user once all tool operations and thinking are finished."
+        )
+        augmented_user = _layer_inject(
+            _prompt_inject_layers,
+            "compact_mode_instruction",
+            compact_instruction,
+            augmented_user,
+        )
 
     # Pre-turn hooks (SQL QM, exploration tracker, datasource)
     from src.runtime.sql_query_memory_context import set_sql_qm_turn_context
