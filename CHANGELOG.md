@@ -5,6 +5,21 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.5.1...v1.5.1) (2026-09-10)
+
+
+### Features
+
+* add 9.9.9 version simulation and automatic 'latest' tag resolution in install script ([62d64d4](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/62d64d4cd7dc1500ed7beb526db0f1924c2759b1))
+* implement modular upgrade system with CLI subcommands and automated release handling ([15bfd7b](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/15bfd7bb6cdc49cdbdc365446545a5b9604d975f))
+* implement upgrade runner for GHCR-based installations and remove obsolete plan file ([b8ef726](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/b8ef72628459456fcd2d2d59b87cdd0c24c28044))
+* introduce GHCR-based standalone stack, sandbox build support, and automated environment tuning scripts ([6520cd4](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/6520cd45dc05bd50b4192afd81494b8b8d6d8ca7))
+
+
+### Bug Fixes
+
+* integrating and fixing upgrades between versions ([938bc62](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/938bc62b9806ce4afb8a22a00c4615c6b15711d9))
+
 ## [1.5.1](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.5.0...v1.5.1) (2026-09-08)
 
 
