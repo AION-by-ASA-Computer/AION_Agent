@@ -403,6 +403,30 @@ class MCPStdioWorker:
                 env["MCP_REMOTE_URL"] = config["remote_url"]
 
             _apply_mcp_home_isolation(env, uid)
+
+            # Per i server remote-bridge con autenticazione header-based (OAUTH_TOKEN),
+            # AION gestisce il token esclusivamente via --header al momento dello spawn.
+            # La cache OAuth di mcp-remote (.mcp-auth/) è quindi sempre obsoleta:
+            # contiene credenziali con `issuer` di vecchi tunnel Cloudflare o sessioni
+            # precedenti che causano il warning SEP-2352 e possono interferire con il
+            # flusso di autenticazione (mcp-remote tenta le credenziali cached prima
+            # dell'header, fallisce, e apre il browser inutilmente).
+            # Puliamo la cache prima di ogni spawn così mcp-remote usa solo l'header.
+            _auth_env = config.get("auth_env_var") or ""
+            if config.get("type") == "remote-bridge" and "OAUTH_TOKEN" in _auth_env:
+                _mcp_home = Path(env.get("HOME") or "")
+                if _mcp_home.is_dir():
+                    _mcp_auth_dir = _mcp_home / ".mcp-auth"
+                    if _mcp_auth_dir.is_dir():
+                        try:
+                            shutil.rmtree(_mcp_auth_dir, ignore_errors=True)
+                            logger.debug(
+                                "🧹 Rimossa cache mcp-remote OAuth per server='%s' user='%s' (path=%s)",
+                                self.server_name, uid, _mcp_auth_dir,
+                            )
+                        except Exception as _cache_err:
+                            logger.debug("Cache mcp-remote cleanup error: %s", _cache_err)
+
             if "env" in config:
                 from .runtime.credential_store import resolve_mcp_env_for_user
 
@@ -602,6 +626,58 @@ class MCPStdioWorker:
                 )
             if not self._ready.is_set():
                 self._ready.set()
+
+            # Se il worker era un remote-bridge ed è terminato inaspettatamente
+            # (tipicamente perché il token OAuth è scaduto e mcp-remote ha esaurito i retry),
+            # schedula un refresh OAuth immediato senza bloccare il finally.
+            # Il refresh aggiorna il token nel DB così che il prossimo spawn del worker
+            # (innescato dal _get_worker successivo) riceva il token fresco via header.
+            try:
+                cfg = self._manager.get_server_config(self.server_name) or {}
+                auth_env = cfg.get("auth_env_var") or ""
+                if (
+                    cfg.get("type") == "remote-bridge"
+                    and "OAUTH_TOKEN" in auth_env
+                    and self._pool_user_id
+                ):
+                    uid = self._pool_user_id
+                    tid = self._pool_tenant_id or "default"
+
+                    async def _try_oauth_refresh_after_crash(
+                        _uid: str, _sname: str, _tid: str
+                    ) -> None:
+                        try:
+                            from .runtime.credential_store import (
+                                refresh_oauth_access_token,
+                                _credential_is_expired,
+                                _get_credential_row,
+                            )
+                            # Controlla se il token è effettivamente scaduto prima di chiamare
+                            row = await _get_credential_row(_uid, _sname, "OAUTH_TOKEN", tenant_id=_tid)
+                            if row and _credential_is_expired(row.expires_at, updated_at=row.updated_at):
+                                logger.info(
+                                    "🔄 Worker remote-bridge '%s' terminato — token scaduto per user=%s, refresh immediato...",
+                                    _sname, _uid,
+                                )
+                                new_token = await refresh_oauth_access_token(_uid, _sname, tenant_id=_tid)
+                                if new_token:
+                                    logger.info(
+                                        "✅ Token rinnovato dopo crash worker per server=%s user=%s",
+                                        _sname, _uid,
+                                    )
+                                else:
+                                    logger.warning(
+                                        "⚠️ Refresh post-crash fallito per server=%s user=%s — sarà necessario un nuovo login",
+                                        _sname, _uid,
+                                    )
+                        except Exception as _exc:
+                            logger.debug("OAuth post-crash refresh error for %s: %s", _sname, _exc)
+
+                    asyncio.ensure_future(
+                        _try_oauth_refresh_after_crash(uid, self.server_name, tid)
+                    )
+            except Exception as _watchdog_exc:
+                logger.debug("OAuth watchdog setup error: %s", _watchdog_exc)
 
     async def list_tools(self):
         await self.start()
@@ -804,14 +880,48 @@ class MCPManager:
             pass
 
     async def _periodic_cleanup(self):
-        """Spegne i worker MCP inattivi oltre AION_MCP_POOL_IDLE_SEC (0 = disabilitato)."""
+        """Spegne i worker MCP inattivi oltre AION_MCP_POOL_IDLE_SEC (0 = disabilitato).
+
+        Il refresh OAuth viene eseguito ogni AION_MCP_OAUTH_REFRESH_INTERVAL_SEC (default 30s),
+        disaccoppiato dall'idle-eviction dei worker (ogni 60s). Questo garantisce che anche token
+        con TTL brevissimo (es. 5 minuti) vengano rinnovati in tempo.
+        """
         warn_threshold = 400
         try:
             warn_threshold = max(50, int(os.getenv("AION_MCP_POOL_WARN_SIZE", "400")))
         except ValueError:
             pass
+
+        # Tick separato per il refresh OAuth: più frequente dell'idle-eviction.
+        try:
+            _oauth_refresh_interval = max(
+                10.0, float(os.getenv("AION_MCP_OAUTH_REFRESH_INTERVAL_SEC", "30"))
+            )
+        except ValueError:
+            _oauth_refresh_interval = 30.0
+
+        _last_oauth_refresh: float = 0.0
+        _idle_cleanup_interval = 60.0  # invariato
+        _last_idle_cleanup: float = 0.0
+
         while True:
-            await asyncio.sleep(60)
+            # Sleep breve per poter rispettare entrambi i tick.
+            await asyncio.sleep(min(_oauth_refresh_interval, _idle_cleanup_interval) / 2)
+            now_mono = asyncio.get_event_loop().time()
+
+            # --- Tick OAuth refresh (ogni ~30s) ---
+            if (now_mono - _last_oauth_refresh) >= _oauth_refresh_interval:
+                _last_oauth_refresh = now_mono
+                try:
+                    await self._refresh_expiring_oauth_tokens()
+                except Exception as _oauth_exc:
+                    logger.error("Error in OAuth token refresh tick: %s", _oauth_exc)
+
+            # --- Tick idle-eviction (ogni ~60s) ---
+            if (now_mono - _last_idle_cleanup) < _idle_cleanup_interval:
+                continue
+            _last_idle_cleanup = now_mono
+
             try:
                 idle_sec = self._pool_idle_sec()
                 pool_n = self.pool_size()
@@ -855,13 +965,14 @@ class MCPManager:
             except Exception as e:
                 logger.error("Error in MCP pool cleanup: %s", e)
 
-            # OAuth token refresh per remote-bridge in scadenza
-            await self._refresh_expiring_oauth_tokens()
-
     async def _refresh_expiring_oauth_tokens(self) -> None:
-        """Rinnova token OAuth per remote-bridge in scadenza e riavvia i worker (anche idle)."""
-        ahead_sec = float(os.getenv("AION_MCP_OAUTH_REFRESH_AHEAD_SEC", "120"))
-        
+        """Rinnova token OAuth per remote-bridge in scadenza e riavvia i worker (anche idle).
+
+        Il buffer di look-ahead è configurabile via AION_MCP_OAUTH_REFRESH_AHEAD_SEC.
+        Default 240s (4 min) per coprire provider con TTL breve (es. 5 min come Keycloak).
+        """
+        ahead_sec = float(os.getenv("AION_MCP_OAUTH_REFRESH_AHEAD_SEC", "240"))
+
         try:
             from .runtime.credential_store import (
                 get_all_oauth_credentials, _credential_is_expired,
@@ -872,33 +983,42 @@ class MCPManager:
                 uid = row.user_id
                 tid = row.tenant_id
                 sname = row.server_slug
-                
-                # Check se scade a breve o se TTL scaduto
+
+                # Check se scade a breve (o già scaduto)
                 buf = int(ahead_sec) + OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS
                 if not _credential_is_expired(row.expires_at, updated_at=row.updated_at, buffer_seconds=buf):
                     continue
-                
+
                 cfg = self.get_server_config(sname) or {}
                 if cfg.get("type") != "remote-bridge":
                     continue
                 auth_env = cfg.get("auth_env_var") or ""
                 if "OAUTH_TOKEN" not in auth_env:
                     continue
-                
-                logger.info("🔄 OAuth token in scadenza per user=%s server=%s — refresh proattivo...", uid, sname)
+
+                logger.info(
+                    "🔄 OAuth token in scadenza per user=%s server=%s expires_at=%s — refresh proattivo...",
+                    uid, sname, row.expires_at,
+                )
                 new_token = await refresh_oauth_access_token(uid, sname, tenant_id=tid)
                 if new_token:
-                    # Riavvia esplicitamente i worker per ereditare l'header
+                    # Riavvia esplicitamente i worker per ereditare il nuovo header Bearer
                     stopped = await self.restart_workers_for_user(uid, server_slug=sname, tenant_id=tid)
-                    # Pulisci eventuali errori di load
+                    # Pulisci eventuali errori di warm registrati
                     for pool_sid, w_sname in list(self._warm_failures.keys()):
                         if w_sname == sname:
                             parsed = _parse_user_pool_key(pool_sid)
                             if parsed and parsed[0] == uid and parsed[1] == tid:
                                 self._clear_warm_failure(pool_sid, sname)
-                    logger.info("✅ Token rinnovato proattivamente e %d worker(s) riavviati per server=%s", stopped, sname)
+                    logger.info(
+                        "✅ Token rinnovato proattivamente — %d worker(s) riavviati per server=%s user=%s",
+                        stopped, sname, uid,
+                    )
                 else:
-                    logger.warning("⚠️ Refresh token proattivo fallito per user=%s server=%s", uid, sname)
+                    logger.warning(
+                        "⚠️ Refresh token proattivo fallito per user=%s server=%s — il worker rimane con il token scaduto",
+                        uid, sname,
+                    )
         except Exception as exc:
             logger.error("OAuth token refresh check failed: %s", exc)
 
@@ -1508,6 +1628,11 @@ class MCPManager:
                         pass
                     return
                 self._clear_warm_failure(pool_sid, name)
+                try:
+                    from .runtime.mcp_health import clear_mcp_load_errors
+                    clear_mcp_load_errors(chat_session_id, name)
+                except Exception:
+                    pass
 
         stdio_names = [n for n in server_names if self._is_stdio_server(n)]
         if stdio_names:
@@ -1628,7 +1753,7 @@ class MCPManager:
             raise
         except Exception as e:
             err_str = str(e).lower()
-            if "401" in err_str or "unauthorized" in err_str or "invalid_grant" in err_str or "authentication" in err_str:
+            if "401" in err_str or "403" in err_str or "unauthorized" in err_str or "invalid_grant" in err_str or "authentication" in err_str:
                 logger.warning("⚠️ Errore 401/Auth intercettato per %s in call_tool_pooled. Tento refresh forzato e retry...", server_name)
                 from .runtime.credential_store import refresh_oauth_access_token
                 

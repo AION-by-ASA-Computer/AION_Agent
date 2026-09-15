@@ -536,6 +536,15 @@ async def refresh_oauth_access_token(
             )
         return None
 
+    from src.runtime.oauth_token_exchange import token_expires_at as _calc_expires_at
+
+    new_expires_at = _calc_expires_at(token_data)
+    logger.info(
+        "✅ OAuth token rinnovato via refresh_token: user=%s server=%s new_expires_at=%s",
+        user_id,
+        server_slug,
+        new_expires_at.isoformat() if new_expires_at else "sconosciuto (expires_in assente)",
+    )
     return await _persist_oauth_tokens(
         user_id, server_slug, token_data, oauth_cfg, tenant_id=tenant_id
     )
@@ -697,7 +706,19 @@ async def resolve_user_credential_string(
             if val is not None:
                 return val
         env_name = f"{full_prefix}__{cred_key}"
-        return os.environ.get(env_name, obj)
+        resolved = os.environ.get(env_name)
+        if resolved:
+            return resolved
+        # Nessuna credenziale trovata (scaduta e refresh fallito, oppure mai configurata).
+        # Se è un token OAuth, lanciare un errore esplicito per bloccare lo spawn del worker
+        # invece di passare il placeholder letterale come Bearer token (che causa 401 + browser OAuth).
+        if cred_key == "OAUTH_TOKEN":
+            slug_display = lookup_slugs[0] if lookup_slugs else server_slug
+            raise RuntimeError(
+                f"MCP_AUTH_REQUIRED: il token OAuth per '{slug_display}' è scaduto e il rinnovo automatico è fallito. "
+                "Vai su Integrazioni per riautenticarti."
+            )
+        return obj
 
     m2 = _USER_CREDENTIAL_SIMPLE_RE.match(obj)
     if m2 and server_slug:

@@ -107,9 +107,41 @@ def test_resolve_oauth_redirect_uri_caddy_port_fallback(
 def test_chat_base_url_derives_from_oauth_redirect_base(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    """AION_CHAT_URL loopback is now used directly.
+
+    Previously _chat_base_url() fell through to _oauth_redirect_api_base() and
+    stripped '/api', returning the API host instead of the chat host.  After the
+    fix, AION_CHAT_URL is always honoured — even if it points to localhost.
+    AION_OAUTH_REDIRECT_BASE_URL only affects _resolve_oauth_redirect_uri(), not
+    the final redirect destination shown to the browser.
+    """
     monkeypatch.setenv("AION_CHAT_URL", "http://localhost:8003")
+    monkeypatch.delenv("AION_PUBLIC_CHAT_URL", raising=False)
     monkeypatch.setenv("AION_OAUTH_REDIRECT_BASE_URL", "https://agnt2.aion-asa.com/api")
-    assert mod._chat_base_url() == "https://agnt2.aion-asa.com"
+    # With the fix: returns AION_CHAT_URL (loopback is now accepted)
+    assert mod._chat_base_url() == "http://localhost:8003"
+
+
+def test_chat_base_url_loopback_chat_url_accepted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression test: AION_CHAT_URL=http://localhost:8003 must NOT be discarded.
+
+    Before the fix, the loopback filter silently skipped this value and fell
+    through to _oauth_redirect_api_base() which returned AION_PUBLIC_API_URL
+    (http://localhost:8001), causing the browser to land on the backend port
+    after OAuth login instead of the chat-ui port.
+    """
+    monkeypatch.setenv("AION_CHAT_URL", "http://localhost:8003")
+    monkeypatch.setenv("AION_PUBLIC_API_URL", "http://localhost:8001")
+    monkeypatch.delenv("AION_PUBLIC_CHAT_URL", raising=False)
+    monkeypatch.delenv("AION_OAUTH_REDIRECT_BASE_URL", raising=False)
+    monkeypatch.delenv("DOMAIN", raising=False)
+    result = mod._chat_base_url()
+    assert result == "http://localhost:8003", (
+        f"Expected http://localhost:8003 (chat-ui), got {result!r}. "
+        "This is the regression: the backend port 8001 must NOT be returned."
+    )
 
 
 def test_chat_base_url_prefers_explicit_public_chat_url(
