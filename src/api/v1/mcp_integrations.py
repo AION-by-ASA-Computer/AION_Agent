@@ -48,24 +48,25 @@ def _chat_base_url(request: Optional[Request] = None) -> str:
     """
     Browser-facing chat-ui base URL for OAuth return redirects.
 
-    In Docker prod ``AION_CHAT_URL=http://localhost:8003`` is wrong for the user's
-    browser — derive from ``AION_OAUTH_REDIRECT_BASE_URL`` / proxy headers when set.
-    """
-    explicit = (os.getenv("AION_CHAT_URL") or "").strip().rstrip("/")
-    if _is_absolute_http_url(explicit) and not _is_loopback_host_url(explicit):
-        return explicit
+    Priority (highest to lowest):
+    1. AION_PUBLIC_CHAT_URL — explicit public URL (always wins)
+    2. Proxy headers (x-forwarded-proto/host) — Caddy in Docker sets these
+    3. AION_CHAT_URL — accepted even if loopback (correct in local dev)
+    4. DOMAIN env var — Docker production with auto-TLS
+    5. Hard-coded fallback: http://localhost:8003
 
+    NOTE: We no longer skip AION_CHAT_URL when it points to localhost.
+    In local development ``AION_CHAT_URL=http://localhost:8003`` IS the
+    correct browser-facing URL.  For Docker deployments where the chat-ui
+    is only reachable internally (e.g. http://chat-ui:3000) the operator
+    must set AION_PUBLIC_CHAT_URL or rely on Caddy proxy headers.
+    """
+    # 1) Explicit public URL — highest priority, always wins
     public_chat = (os.getenv("AION_PUBLIC_CHAT_URL") or "").strip().rstrip("/")
     if _is_absolute_http_url(public_chat):
         return public_chat
 
-    api_base = _oauth_redirect_api_base(request)
-    if _is_absolute_http_url(api_base):
-        low = api_base.rstrip("/").lower()
-        if low.endswith("/api"):
-            return api_base.rstrip("/")[:-4]
-        return api_base.rstrip("/")
-
+    # 2) Caddy / reverse-proxy headers — browser-facing host/scheme
     if request is not None:
         fwd_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()
         fwd_host = request.headers.get("x-forwarded-host", "").split(",")[0].strip()
@@ -74,6 +75,12 @@ def _chat_base_url(request: Optional[Request] = None) -> str:
         if host and not host.startswith("backend:"):
             return f"{scheme}://{host}".rstrip("/")
 
+    # 3) AION_CHAT_URL — accepted even for loopback addresses (local dev)
+    explicit = (os.getenv("AION_CHAT_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(explicit):
+        return explicit
+
+    # 4) DOMAIN env var (Docker production)
     domain = (os.getenv("DOMAIN") or "").strip()
     if domain and domain not in (":80", "http://:80"):
         host = domain.lstrip("http://").lstrip("https://").strip("/")
@@ -83,8 +90,6 @@ def _chat_base_url(request: Optional[Request] = None) -> str:
             )
             return f"{scheme}://{host}"
 
-    if _is_absolute_http_url(explicit):
-        return explicit
     return "http://localhost:8003"
 
 
@@ -943,13 +948,63 @@ async def oauth_start(
                             ]
                             modified = True
 
-                    if await _oauth_dynamic_client_register(
-                        server_slug=server_slug,
-                        oauth_cfg=oauth_cfg,
-                        redirect_uri=redirect_uri,
-                        request=request,
+                    # ─── Dynamic Client Registration (RFC 7591) ──
+                    reg_endpoint = oauth_cfg.get("registration_endpoint") or (
+                        as_meta or {}
+                    ).get("registration_endpoint")
+                    if (
+                        _oauth_dynamic_registration_enabled()
+                        and reg_endpoint
+                        and not oauth_cfg.get("client_id")
                     ):
-                        modified = True
+                        try:
+                            async with httpx.AsyncClient(
+                                timeout=8.0, follow_redirects=True
+                            ) as hclient:
+                                reg_payload = {
+                                    "client_name": "AION Agent",
+                                    "redirect_uris": [redirect_uri],
+                                    "grant_types": ["authorization_code", "refresh_token"],
+                                    "response_types": ["code"],
+                                    "token_endpoint_auth_method": "none",
+                                }
+                                reg_resp = await hclient.post(
+                                    reg_endpoint,
+                                    json=reg_payload,
+                                    headers={"Content-Type": "application/json"},
+                                )
+                                if reg_resp.status_code in (200, 201):
+                                    reg_data = reg_resp.json()
+                                    new_client_id = reg_data.get("client_id")
+                                    if new_client_id:
+                                        oauth_cfg["client_id"] = new_client_id
+                                        oauth_cfg["client_id_source"] = (
+                                            "dynamic_registration"
+                                        )
+                                        if reg_data.get("client_secret"):
+                                            oauth_cfg["client_secret"] = reg_data[
+                                                "client_secret"
+                                            ]
+                                        modified = True
+                                        from src.runtime.mcp_oauth_audit import (
+                                            log_dynamic_client_registration,
+                                        )
+
+                                        log_dynamic_client_registration(
+                                            server_slug=server_slug,
+                                            registration_endpoint=reg_endpoint,
+                                            client_id=new_client_id,
+                                        )
+                                        logger.info(
+                                            "oauth_start: dynamic client registration OK slug=%s client_id=%s",
+                                            server_slug,
+                                            new_client_id,
+                                        )
+                        except Exception as reg_exc:
+                            logger.warning(
+                                "oauth_start: dynamic client registration failed: %s",
+                                reg_exc,
+                            )
 
             except Exception as disc_exc:
                 logger.warning(
