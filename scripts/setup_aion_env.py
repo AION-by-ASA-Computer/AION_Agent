@@ -465,11 +465,11 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
 
     print("\n=== Query memory / embeddings ===\n")
     provider_default = state.get("AION_EMBEDDINGS_PROVIDER", "openai").strip().lower()
-    if provider_default not in ("openai", "google"):
+    if provider_default not in ("openai", "vllm", "ollama", "google"):
         provider_default = "openai"
     provider = _prompt_choice(
         "Provider embeddings (AION_EMBEDDINGS_PROVIDER):",
-        ["openai", "google"],
+        ["openai", "vllm", "ollama", "google"],
         provider_default,
     )
     state["AION_EMBEDDINGS_PROVIDER"] = provider
@@ -486,11 +486,21 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
             or "localhost" in default_url
         ):
             default_url = f"https://generativelanguage.googleapis.com/v1beta/{default_model}:embedContent"
-    else:
+    elif provider == "ollama":
         if not default_model or "gemini" in default_model:
             default_model = "qwen3-embedding"
         if not default_url or "googleapis.com" in default_url:
             default_url = "http://localhost:11434/v1/embeddings"
+    elif provider == "vllm":
+        if not default_model or "gemini" in default_model:
+            default_model = "qwen3-embedding"
+        if not default_url or "googleapis.com" in default_url:
+            default_url = "http://localhost:8000/v1/embeddings"
+    else:
+        if not default_model or "gemini" in default_model:
+            default_model = "text-embedding-3-small"
+        if not default_url or "googleapis.com" in default_url:
+            default_url = "https://api.openai.com/v1/embeddings"
 
     state["AION_EMBEDDING_URL"] = _prompt_str(
         "URL servizio embeddings (AION_EMBEDDING_URL)",

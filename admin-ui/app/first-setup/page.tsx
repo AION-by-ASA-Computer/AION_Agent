@@ -271,9 +271,13 @@ export default function FirstSetupPage() {
       setError("Embedding service URL is required to test the connection.");
       return false;
     }
-    if (embForm.provider !== "google" && !embForm.api_key.trim()) {
-      setError("API Key is required to test the connection.");
-      return false;
+    const isSelfHosted = embForm.provider === "vllm" || embForm.provider === "ollama";
+    if (embForm.provider !== "google" && !isSelfHosted && !embForm.api_key.trim()) {
+      const host = probeBase.replace(/^https?:\/\//i, "").split(/[/:]/)[0].toLowerCase();
+      if (!["localhost", "127.0.0.1", "host.docker.internal", "gateway.docker.internal"].includes(host) && !host.endsWith(".local") && !host.endsWith(".internal")) {
+        setError("API Key is required to test the connection.");
+        return false;
+      }
     }
 
     setEmbProbing(true);
@@ -975,6 +979,8 @@ export default function FirstSetupPage() {
                       className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all cursor-pointer"
                     >
                       <option value="openai">OpenAI-Compatible</option>
+                      <option value="vllm">vLLM (Self-hosted)</option>
+                      <option value="ollama">Ollama</option>
                       <option value="google">Google (Gemini)</option>
                     </select>
                   </div>
@@ -992,7 +998,11 @@ export default function FirstSetupPage() {
                       placeholder={
                         embForm.provider === "google"
                           ? "https://generativelanguage.googleapis.com/v1beta/models"
-                          : "http://localhost:11434/v1/embeddings or https://api.openai.com/v1/embeddings"
+                          : embForm.provider === "ollama"
+                          ? "http://host.docker.internal:11434/v1/embeddings or http://localhost:11434/v1/embeddings"
+                          : embForm.provider === "vllm"
+                          ? "http://host.docker.internal:8000/v1/embeddings or http://localhost:8000/v1/embeddings"
+                          : "http://host.docker.internal:8000/v1/embeddings or https://api.openai.com/v1/embeddings"
                       }
                     />
                     <p className="text-[11px] text-gray-500">
@@ -1012,7 +1022,11 @@ export default function FirstSetupPage() {
                             resetEmbProbeState();
                           }}
                           className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                          placeholder="Enter API key"
+                          placeholder={
+                            ["vllm", "ollama"].includes(embForm.provider)
+                              ? "Optional for local / vLLM / Ollama"
+                              : "Enter API key"
+                          }
                           autoComplete="new-password"
                         />
                         <button

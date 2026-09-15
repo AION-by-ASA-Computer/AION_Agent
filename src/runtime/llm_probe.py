@@ -29,7 +29,9 @@ _OFFICIAL_VENDOR_HOSTS = frozenset(
     }
 )
 
-_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_LOOPBACK_HOSTS = frozenset(
+    {"localhost", "127.0.0.1", "::1", "host.docker.internal", "gateway.docker.internal"}
+)
 
 _URL_PROVIDER_HINTS: list[tuple[str, str]] = [
     ("api.openai.com", "openai"),
@@ -44,8 +46,12 @@ _URL_PROVIDER_HINTS: list[tuple[str, str]] = [
     ("aiplatform.googleapis.com", "vertex_ai"),
     ("localhost:11434", "ollama"),
     ("127.0.0.1:11434", "ollama"),
+    ("host.docker.internal:11434", "ollama"),
+    ("gateway.docker.internal:11434", "ollama"),
     ("localhost:1234", "openai"),
     ("localhost:8000", "openai"),
+    ("host.docker.internal:8000", "openai"),
+    ("gateway.docker.internal:8000", "openai"),
 ]
 
 _PROVIDER_DEFAULT_BASE_URL: dict[str, str] = {
@@ -54,6 +60,7 @@ _PROVIDER_DEFAULT_BASE_URL: dict[str, str] = {
     "gemini": "https://generativelanguage.googleapis.com/v1beta",
     "google": "https://generativelanguage.googleapis.com/v1beta",
     "ollama": "http://localhost:11434/v1",
+    "vllm": "http://localhost:8000/v1",
 }
 
 
@@ -122,7 +129,9 @@ def _is_private_or_local_host(host: str) -> bool:
     h = (host or "").strip().lower()
     if not h:
         return True
-    if h in ("localhost",):
+    if h in _LOOPBACK_HOSTS:
+        return True
+    if h.endswith((".local", ".internal", ".lan", ".home.arpa", ".docker")):
         return True
     if _is_ip_literal(h):
         ip = ipaddress.ip_address(h)
@@ -152,8 +161,8 @@ def resolve_probe_provider(provider: str, base_url: str) -> str:
     host = (urlparse(base_url).hostname or "").lower()
     netloc = urlparse(base_url).netloc or ""
 
-    # Loopback dev endpoints (Ollama/vLLM on the same machine) may keep a cloud label in the UI.
-    if host in _LOOPBACK_HOSTS:
+    # Loopback or local/private dev endpoints (Ollama/vLLM on the host or LAN) may keep a cloud label in the UI.
+    if host in _LOOPBACK_HOSTS or _is_private_or_local_host(host):
         if "11434" in netloc:
             return "ollama"
         return "vllm"
