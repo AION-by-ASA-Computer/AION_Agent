@@ -41,17 +41,32 @@ def test_should_use_catalog_fallback_self_hosted():
 def test_resolve_probe_provider_local_urls():
     assert resolve_probe_provider("openai", "http://localhost:11434/v1") == "ollama"
     assert resolve_probe_provider("openai", "http://127.0.0.1:8000/v1") == "vllm"
-    assert resolve_probe_provider("openai", "http://host.docker.internal:8000/v1") == "vllm"
-    assert resolve_probe_provider("openai", "http://gateway.docker.internal:11434/v1") == "ollama"
+    assert (
+        resolve_probe_provider("openai", "http://host.docker.internal:8000/v1")
+        == "vllm"
+    )
+    assert (
+        resolve_probe_provider("openai", "http://gateway.docker.internal:11434/v1")
+        == "ollama"
+    )
     assert resolve_probe_provider("openai", "http://192.168.1.10:8000/v1") == "vllm"
     assert resolve_probe_provider("openai", "https://api.openai.com/v1") == "openai"
 
 
 def test_private_lan_requires_self_hosted_provider():
     assert _is_allowed_probe_base_url("openai", "http://192.168.1.10:8000/v1") is True
-    assert _is_allowed_probe_base_url("openai", "http://host.docker.internal:8000/v1") is True
-    assert _is_allowed_probe_base_url("vllm", "http://host.docker.internal:8000/v1") is True
-    assert _is_allowed_probe_base_url("ollama", "http://host.docker.internal:11434/v1") is True
+    assert (
+        _is_allowed_probe_base_url("openai", "http://host.docker.internal:8000/v1")
+        is True
+    )
+    assert (
+        _is_allowed_probe_base_url("vllm", "http://host.docker.internal:8000/v1")
+        is True
+    )
+    assert (
+        _is_allowed_probe_base_url("ollama", "http://host.docker.internal:11434/v1")
+        is True
+    )
     assert _is_allowed_probe_base_url("vllm", "http://192.168.1.10:8000/v1") is True
     assert (
         _is_allowed_probe_base_url("vllm", "http://169.254.169.254/latest/meta-data")
