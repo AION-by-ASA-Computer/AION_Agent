@@ -87,27 +87,36 @@ def infer_litellm_provider(provider: str, base_url: str) -> str:
     litellm_p = normalize_litellm_provider(p, base_url)
     if litellm_p != p:
         return litellm_p
-    host = urlparse(base_url).netloc.lower()
+    parsed = urlparse(base_url)
+    netloc = (parsed.netloc or "").lower()
+    host = (parsed.hostname or "").lower()
     for hint, hinted in _URL_PROVIDER_HINTS:
-        if hint in host or host in hint:
-            return hinted
+        if ":" in hint:
+            if netloc == hint or netloc.endswith("." + hint):
+                return hinted
+        else:
+            if host == hint or host.endswith("." + hint):
+                return hinted
     return litellm_p
 
 
 def is_azure_openai_endpoint(base_url: str) -> bool:
-    host = urlparse(base_url).netloc.lower().split(":")[0]
+    host = (urlparse(base_url).hostname or "").lower()
     return host == "openai.azure.com" or host.endswith(".openai.azure.com")
 
 
 def is_official_vendor_endpoint(base_url: str) -> bool:
-    host = urlparse(base_url).netloc.lower().split(":")[0]
-    if host in ("localhost", "127.0.0.1", "0.0.0.0"):
+    host = (urlparse(base_url).hostname or "").lower()
+    if not host or host in ("localhost", "127.0.0.1", "0.0.0.0"):
         return False
     if is_azure_openai_endpoint(base_url):
         return True
     if host in _OFFICIAL_VENDOR_HOSTS:
         return True
-    return any(official in host for official in _OFFICIAL_VENDOR_HOSTS)
+    return any(
+        host == official or host.endswith("." + official)
+        for official in _OFFICIAL_VENDOR_HOSTS
+    )
 
 
 def should_use_catalog_fallback(provider: str, base_url: str) -> bool:
