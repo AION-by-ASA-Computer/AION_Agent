@@ -85,11 +85,26 @@ export function providerSupportsProbe(provider: string): boolean {
   return ["openai", "anthropic", "gemini", "ollama", "vllm", "google"].includes(provider);
 }
 
-const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+const LOOPBACK_HOSTS = new Set([
+  "localhost",
+  "127.0.0.1",
+  "::1",
+  "host.docker.internal",
+  "gateway.docker.internal",
+]);
 
 function isPrivateOrLocalHost(hostname: string): boolean {
   const h = (hostname || "").trim().toLowerCase();
   if (!h || LOOPBACK_HOSTS.has(h)) return true;
+  if (
+    h.endsWith(".local") ||
+    h.endsWith(".internal") ||
+    h.endsWith(".lan") ||
+    h.endsWith(".home.arpa") ||
+    h.endsWith(".docker")
+  ) {
+    return true;
+  }
   if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(h)) return true;
   if (/^169\.254\./.test(h)) return true;
   return false;
@@ -117,7 +132,10 @@ function resolveProbeProvider(provider: string, apiBaseUrl?: string | null): str
 }
 
 export function embeddingProviderToProbeProvider(provider: string): string {
-  return provider === "google" ? "gemini" : "openai";
+  const p = (provider || "openai").trim().toLowerCase();
+  if (p === "google" || p === "gemini") return "gemini";
+  if (p === "ollama" || p === "vllm") return p;
+  return "openai";
 }
 
 export function pickDefaultModel(ids: string[], kind: ModelProbeKind): string {

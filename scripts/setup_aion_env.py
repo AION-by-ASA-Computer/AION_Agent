@@ -39,6 +39,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from urllib.parse import urlparse
 
 _REPO_ROOT = Path(__file__).absolute().parents[1]
 if str(_REPO_ROOT) not in sys.path:
@@ -465,11 +466,11 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
 
     print("\n=== Query memory / embeddings ===\n")
     provider_default = state.get("AION_EMBEDDINGS_PROVIDER", "openai").strip().lower()
-    if provider_default not in ("openai", "google"):
+    if provider_default not in ("openai", "vllm", "ollama", "google"):
         provider_default = "openai"
     provider = _prompt_choice(
         "Provider embeddings (AION_EMBEDDINGS_PROVIDER):",
-        ["openai", "google"],
+        ["openai", "vllm", "ollama", "google"],
         provider_default,
     )
     state["AION_EMBEDDINGS_PROVIDER"] = provider
@@ -477,20 +478,30 @@ def _wizard_core(state: Dict[str, str]) -> Dict[str, str]:
     default_model = state.get("AION_EMBEDDING_MODEL", "")
     default_url = state.get("AION_EMBEDDING_URL", "")
 
+    parsed_default_url = urlparse(default_url if "://" in default_url else f"http://{default_url}") if default_url else None
+    default_host = (parsed_default_url.hostname or "").lower() if parsed_default_url else ""
+    is_google_host = default_host == "generativelanguage.googleapis.com" or default_host.endswith(".googleapis.com")
+
     if provider == "google":
-        if not default_model or default_model == "qwen3-embedding":
+        if not default_model or default_model in ("qwen3-embedding", "text-embedding-3-small"):
             default_model = "models/gemini-embedding-001"
-        if (
-            not default_url
-            or "embedding/v1" in default_url
-            or "localhost" in default_url
-        ):
+        if not default_url or not is_google_host:
             default_url = f"https://generativelanguage.googleapis.com/v1beta/{default_model}:embedContent"
-    else:
+    elif provider == "ollama":
         if not default_model or "gemini" in default_model:
             default_model = "qwen3-embedding"
-        if not default_url or "googleapis.com" in default_url:
+        if not default_url or is_google_host:
             default_url = "http://localhost:11434/v1/embeddings"
+    elif provider == "vllm":
+        if not default_model or "gemini" in default_model:
+            default_model = "qwen3-embedding"
+        if not default_url or is_google_host:
+            default_url = "http://localhost:8000/v1/embeddings"
+    else:
+        if not default_model or "gemini" in default_model:
+            default_model = "text-embedding-3-small"
+        if not default_url or is_google_host:
+            default_url = "https://api.openai.com/v1/embeddings"
 
     state["AION_EMBEDDING_URL"] = _prompt_str(
         "URL servizio embeddings (AION_EMBEDDING_URL)",
