@@ -6,7 +6,11 @@ import {
 } from "./filePreviewTools";
 import { coalesceTurnSegments } from "./coalesceTurnSegments";
 import { initialTurnState } from "./types";
-import { webSearchSourceRows } from "./webToolParse";
+import {
+  webSearchSourceRows,
+  parseWebFetchOutput,
+  webFetchUrlFromInput,
+} from "./webToolParse";
 import { toolOutputLooksLikeError } from "./toolOutputParse";
 
 /** Legacy <plan> token stripping — off when tool-first Plan Mode is default. */
@@ -363,6 +367,20 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
               title: row.title.slice(0, 500),
               url,
               provider: row.provider,
+            });
+          }
+        }
+      } else if (name === "web_fetch_page") {
+        const wf = parseWebFetchOutput(output || "");
+        const inputUrl = webFetchUrlFromInput(cur.input ?? ev.input);
+        const url = (wf?.url || inputUrl)?.trim();
+        if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+          const seen = new Set(next.webSourceCards.map((c) => c.url));
+          if (!seen.has(url)) {
+            next.webSourceCards.push({
+              index: next.webSourceCards.length + 1,
+              title: url,
+              url,
             });
           }
         }

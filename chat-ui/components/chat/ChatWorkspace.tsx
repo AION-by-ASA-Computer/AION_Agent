@@ -3870,10 +3870,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       messageId={activeMessageId || undefined}
                     />
                   )}
-
-                  {streaming && !isSavingInfo && turnVisual.webSourceCards.length > 0 ? (
-                    <WebSourcesBar cards={turnVisual.webSourceCards} messageId={activeMessageId || undefined} />
-                  ) : null}
                 </div>
               ) : null}
               {(postTurnCharts.length > 0 || postTurnFiles.length > 0) && (
