@@ -254,6 +254,21 @@ async def _get_credential_row(
         )
 
 
+async def get_all_oauth_credentials():
+    """Restituisce tutte le righe OAUTH_TOKEN dal DB (per il refresh proattivo)."""
+    async with get_async_session_maker()() as session:
+        return (
+            (
+                await session.execute(
+                    select(UserMcpCredential).where(
+                        UserMcpCredential.credential_key == "OAUTH_TOKEN"
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
 def credential_key_aliases(key: str) -> tuple[str, ...]:
     """All DB keys to try when resolving a logical credential key (incl. legacy aliases)."""
     return _credential_lookup_keys(key)
@@ -277,11 +292,17 @@ def _normalize_expiry(expires_at: Optional[datetime]) -> Optional[datetime]:
 
 def _credential_is_expired(
     expires_at: Optional[datetime],
+    updated_at: Optional[datetime] = None,
     *,
     buffer_seconds: int = OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS,
 ) -> bool:
     exp = _normalize_expiry(expires_at)
     if not exp:
+        # Se non c'è expires_at, usa updated_at per forzare un refresh proattivo (TTL di default 1h)
+        if updated_at:
+            upd = _normalize_expiry(updated_at)
+            if upd and upd < (datetime.now(timezone.utc) - timedelta(hours=1)):
+                return True
         return False
     return exp < (datetime.now(timezone.utc) + timedelta(seconds=buffer_seconds))
 
@@ -396,6 +417,24 @@ async def _persist_oauth_tokens(
     from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
 
     await invalidate_mcp_credentials_runtime(user_id, server_slug, tenant_id=tenant_id)
+
+    # Seed mcp-remote token cache to prevent browser from opening on token expiry.
+    # When mcp-remote finds a refresh_token in its local cache, it silently refreshes
+    # via HTTP (POST /token) instead of triggering the OAuth browser flow.
+    try:
+        from src.runtime.mcp_remote_cache import seed_mcp_remote_token_cache
+
+        await seed_mcp_remote_token_cache(
+            user_id,
+            server_slug,
+            token_data,
+            oauth_cfg,
+        )
+    except Exception as _seed_exc:
+        logger.debug(
+            "mcp-remote cache seed skipped for server=%s: %s", server_slug, _seed_exc
+        )
+
     return access_token
 
 
@@ -456,10 +495,11 @@ async def refresh_oauth_access_token(
         )
     except OAuthTokenExchangeError as exc:
         logger.warning(
-            "OAuth refresh failed: user=%s server=%s reason=%s",
+            "OAuth refresh failed: user=%s server=%s reason=%s status=%s",
             user_id,
             server_slug,
             exc,
+            exc.status_code,
         )
         from src.runtime.mcp_oauth_audit import append_mcp_oauth_audit
 
@@ -473,9 +513,38 @@ async def refresh_oauth_access_token(
                 "status_code": exc.status_code,
             },
         )
-        await _delete_oauth_credentials(user_id, server_slug, tenant_id=tenant_id)
+        # Elimina le credenziali OAuth solo se il server ha esplicitamente rifiutato
+        # il refresh_token come non valido (401 = token revocato/scaduto).
+        # Per errori 400 (es. client non registrato per grant refresh_token, errori di
+        # configurazione) o errori di rete (None), conserviamo il refresh_token:
+        # potrebbe funzionare dopo un re-login che aggiorna il client_id nel DB.
+        if exc.status_code == 401 or (exc.status_code == 400 and "invalid_grant" in getattr(exc, "body", "")):
+            logger.info(
+                "OAuth refresh: refresh_token revocato o scaduto (invalid_grant) per user=%s server=%s — "
+                "elimino le credenziali OAuth per forzare un nuovo login.",
+                user_id,
+                server_slug,
+            )
+            await _delete_oauth_credentials(user_id, server_slug, tenant_id=tenant_id)
+        else:
+            logger.info(
+                "OAuth refresh: errore non definitivo (status=%s) per user=%s server=%s — "
+                "conservo il refresh_token per nuovi tentativi.",
+                exc.status_code,
+                user_id,
+                server_slug,
+            )
         return None
 
+    from src.runtime.oauth_token_exchange import token_expires_at as _calc_expires_at
+
+    new_expires_at = _calc_expires_at(token_data)
+    logger.info(
+        "✅ OAuth token rinnovato via refresh_token: user=%s server=%s new_expires_at=%s",
+        user_id,
+        server_slug,
+        new_expires_at.isoformat() if new_expires_at else "sconosciuto (expires_in assente)",
+    )
     return await _persist_oauth_tokens(
         user_id, server_slug, token_data, oauth_cfg, tenant_id=tenant_id
     )
@@ -495,7 +564,7 @@ async def get_credential(
         )
         if not row:
             continue
-        if _credential_is_expired(row.expires_at):
+        if _credential_is_expired(row.expires_at, updated_at=row.updated_at):
             if (
                 auto_refresh_oauth
                 and lookup_key == "OAUTH_TOKEN"
@@ -546,7 +615,7 @@ async def list_credentials_hints(
         )
     res = []
     for r in rows:
-        is_expired = _credential_is_expired(r.expires_at)
+        is_expired = _credential_is_expired(r.expires_at, updated_at=r.updated_at)
         res.append(
             {
                 "key": r.credential_key,
@@ -601,7 +670,7 @@ async def get_all_credentials_for_server(
         )
     result: Dict[str, str] = {}
     for r in rows:
-        if _credential_is_expired(r.expires_at):
+        if _credential_is_expired(r.expires_at, updated_at=r.updated_at):
             continue
         result[r.credential_key] = decrypt_value(r.value_encrypted)
     return result
@@ -637,7 +706,19 @@ async def resolve_user_credential_string(
             if val is not None:
                 return val
         env_name = f"{full_prefix}__{cred_key}"
-        return os.environ.get(env_name, obj)
+        resolved = os.environ.get(env_name)
+        if resolved:
+            return resolved
+        # Nessuna credenziale trovata (scaduta e refresh fallito, oppure mai configurata).
+        # Se è un token OAuth, lanciare un errore esplicito per bloccare lo spawn del worker
+        # invece di passare il placeholder letterale come Bearer token (che causa 401 + browser OAuth).
+        if cred_key == "OAUTH_TOKEN":
+            slug_display = lookup_slugs[0] if lookup_slugs else server_slug
+            raise RuntimeError(
+                f"MCP_AUTH_REQUIRED: il token OAuth per '{slug_display}' è scaduto e il rinnovo automatico è fallito. "
+                "Vai su Integrazioni per riautenticarti."
+            )
+        return obj
 
     m2 = _USER_CREDENTIAL_SIMPLE_RE.match(obj)
     if m2 and server_slug:

@@ -746,6 +746,11 @@ async def build_mcp_tools(
             len(discovered_tools),
             [t.name for t in discovered_tools],
         )
+        try:
+            from .runtime.mcp_health import clear_mcp_load_errors
+            clear_mcp_load_errors(session_id, name)
+        except Exception:
+            pass
     except Exception as e:
         err = str(e).strip() or type(e).__name__
         logger.error("âŒ Handshake FAILED for %s: %s", name, err)
