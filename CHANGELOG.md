@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.5.2...v1.6.0) (2026-09-18)
+
+
+### Features
+
+* add LLM endpoint probing module, tests, admin UI pages, and set… ([8dbbf0a](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/8dbbf0ab596dd67f87b6c4dde8f86bb083f895fe))
+* add LLM endpoint probing module, tests, admin UI pages, and setup script ([6267a82](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/6267a821561c2cb679047d143df1325ec4ba9c2d))
+* add Model Context Protocol integration ([887eec8](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/887eec82e7d872131fb5a8fec7984dca9545f13c))
+
+
+### Bug Fixes
+
+* fix plane and email MCP ([d17b5da](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/d17b5dad7de3aa305d1d21b065eb4374270fa6df))
+* fix plane and email MCP ([d0ad52b](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/d0ad52b7001eb9a0c56a9fe47db9d92f7e1168c7))
+* **security:** resolve CodeQL incomplete URL substring sanitization alerts ([fc047c9](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/fc047c96162507f9b77e403b0208458cad61034f))
+
+
+### Documentation
+
+* add MCP integration documentation ([eaac14e](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/eaac14e4bbe77ec29b5ad15aeae129932d7644aa))
+
 ## [1.5.2](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.5.1...v1.5.2) (2026-09-10)
 
 
