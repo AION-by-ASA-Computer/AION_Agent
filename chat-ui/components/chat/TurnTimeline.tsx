@@ -8,6 +8,7 @@ import rehypeKatex from "rehype-katex";
 import { FileText, ListTodo } from "lucide-react";
 
 import { coalesceTurnSegments } from "@/lib/sse/coalesceTurnSegments";
+import { splitCompactTurn } from "@/lib/sse/splitCompactTurn";
 import type { TurnSegment } from "@/lib/sse/types";
 import { useT } from "@/lib/i18n/use-t";
 import type { ToolsViewMode } from "@/components/chat/WebResearchViews";
@@ -57,23 +58,12 @@ export function TurnTimeline({
   const isCompact = toolsView === "compact";
   const lastSeg = displaySegments[displaySegments.length - 1];
 
-  // Compact Mode (Claude-style dropdown for preparatory tools/reasoning + live streaming output below)
+  // Compact mode: process trail (reasoning/tools + interleaved working notes) vs final answer.
   if (isCompact) {
-    const prepSegments: TurnSegment[] = [];
-    const outputSegments: TurnSegment[] = [];
-
-    for (const seg of displaySegments) {
-      if (
-        seg.kind === "reasoning" ||
-        seg.kind === "tool" ||
-        seg.kind === "status" ||
-        seg.kind === "generating"
-      ) {
-        prepSegments.push(seg);
-      } else {
-        outputSegments.push(seg);
-      }
-    }
+    const { process: prepSegments, output: outputSegments } = splitCompactTurn(
+      displaySegments,
+      { streaming },
+    );
 
     return (
       <div className="space-y-2.5">
@@ -82,6 +72,9 @@ export function TurnTimeline({
             segments={prepSegments}
             streaming={streaming && outputSegments.length === 0}
             messageId={messageId}
+            conversationId={conversationId}
+            token={token}
+            isPlanArtifact={isPlanArtifact}
           />
         )}
 
@@ -132,6 +125,7 @@ export function TurnTimeline({
         })}
 
         {streaming &&
+          prepSegments.length === 0 &&
           (!lastSeg || lastSeg.kind !== "text" || !lastSeg.content) ? (
           <AgentWorkingShimmer label={t("chat.agent_status.thinking")} className="mt-1" />
         ) : null}

@@ -6,6 +6,7 @@ import { MermaidBlock } from "@/components/chat/MermaidBlock";
 
 type MarkdownCodeOptions = {
   streaming?: boolean;
+  variant?: "default" | "quiet";
 };
 
 export function markdownCodeComponents(opts: MarkdownCodeOptions = {}): Partial<Components> {
@@ -33,7 +34,12 @@ export function markdownCodeComponents(opts: MarkdownCodeOptions = {}): Partial<
       }
 
       return (
-        <MarkdownCodeBlock language={lang || "text"} code={codeContent} streaming={opts.streaming} />
+        <MarkdownCodeBlock
+          language={lang || "text"}
+          code={codeContent}
+          streaming={opts.streaming}
+          variant={opts.variant}
+        />
       );
     },
   };
