@@ -31,9 +31,8 @@ class TestResolveStdioScriptPath(unittest.TestCase):
         resolved = MCPManager.resolve_stdio_script_path("mcp_servers/demo/server.py")
         self.assertEqual(resolved, str(self.script.resolve()))
 
-    def test_resolves_absolute_path_under_repo(self):
-        resolved = MCPManager.resolve_stdio_script_path(str(self.script))
-        self.assertEqual(resolved, str(self.script.resolve()))
+    def test_rejects_absolute_path(self):
+        self.assertIsNone(MCPManager.resolve_stdio_script_path(str(self.script)))
 
     def test_rejects_path_traversal(self):
         outside = self.root.parent / "outside.py"

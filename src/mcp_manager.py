@@ -1180,18 +1180,23 @@ class MCPManager:
         root = _repo_root().resolve()
         return (root / "mcp_servers", root)
 
+    _SAFE_SCRIPT_REL = _re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9._/-]*\.py$")
+
     @staticmethod
     def _resolve_stdio_script_under_roots(arg: str) -> Optional[Path]:
         """Resolve ``arg`` only when the result stays under allowed repo roots."""
         if not arg or "\0" in arg:
             return None
-        raw = Path(arg)
-        if ".." in raw.parts:
+        rel = arg.strip().replace("\\", "/").lstrip("/")
+        if ".." in rel.split("/") or not MCPManager._SAFE_SCRIPT_REL.match(rel):
+            return None
+        raw = Path(rel)
+        if raw.is_absolute() or ".." in raw.parts:
             return None
         for base in MCPManager._stdio_script_allowed_roots():
             base_resolved = base.resolve()
             try:
-                candidate = (raw if raw.is_absolute() else base_resolved / raw).resolve()
+                candidate = (base_resolved / raw).resolve()
                 candidate.relative_to(base_resolved)
             except ValueError:
                 continue

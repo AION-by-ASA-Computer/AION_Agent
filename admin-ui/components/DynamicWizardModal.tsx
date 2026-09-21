@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
+import { resolveGithubMarketplaceUrl } from "@/lib/githubUrl";
 
 export interface EnvField {
   key: string;
@@ -250,22 +251,10 @@ export function DynamicWizardModal({
       return;
     }
 
-    const ghUrl =
-      tgt.url ||
-      (tgt.package_url?.startsWith("http") ? tgt.package_url : "") ||
-      (tgt.id?.startsWith("github:") ? `https://github.com/${tgt.id.replace("github:", "")}` : "");
+    const ghUrl = resolveGithubMarketplaceUrl(tgt);
 
-    const isAllowedGithubUrl = (url: string) => {
-      try {
-        const host = new URL(url).hostname.toLowerCase();
-        return host === "github.com" || host === "www.github.com";
-      } catch {
-        return false;
-      }
-    };
-
-    // If the item comes from GitHub or Claude Community, use the zero-clone GitHub analyzer
-    if (ghUrl && (isAllowedGithubUrl(ghUrl) || tgt.source === "Claude Community" || tgt.source === "GitHub")) {
+    // Validated github.com repo URL only — use the zero-clone GitHub analyzer
+    if (ghUrl) {
       setLoadingSchema(true);
       try {
         const res = await apiFetch(`${apiBase()}/admin/market/analyze-github`, {
