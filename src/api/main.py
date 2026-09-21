@@ -849,7 +849,10 @@ async def chat(
             effort_in = request.reasoning_effort
             thinking_in = request.thinking_enabled
             if raw_runtime:
-                if effort_in is None and raw_runtime.get("reasoning_effort") is not None:
+                if (
+                    effort_in is None
+                    and raw_runtime.get("reasoning_effort") is not None
+                ):
                     effort_in = str(raw_runtime.get("reasoning_effort"))
                 if thinking_in is None and "thinking_enabled" in raw_runtime:
                     thinking_in = bool(raw_runtime.get("thinking_enabled"))

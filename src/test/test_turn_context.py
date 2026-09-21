@@ -245,5 +245,9 @@ async def test_build_turn_context_compact_mode(monkeypatch):
 
     keys = [layer["key"] for layer in ctx.prompt_inject_layers]
     assert "compact_mode_instruction" in keys
-    instruction_layer = next(l for l in ctx.prompt_inject_layers if l["key"] == "compact_mode_instruction")
+    instruction_layer = next(
+        layer
+        for layer in ctx.prompt_inject_layers
+        if layer["key"] == "compact_mode_instruction"
+    )
     assert "COMPACT RESPONSE MODE GUIDELINES" in instruction_layer["text"]

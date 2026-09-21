@@ -76,7 +76,9 @@ def test_turn_budget_load_overrides(monkeypatch):
     monkeypatch.setenv("AION_TOOL_CALLS_MAX_PER_TURN", "24")
     from src.runtime.turn_budget import TurnBudget
 
-    budget = TurnBudget.load(overrides={"max_tool_calls": 3, "no_progress_timeout": 11.5})
+    budget = TurnBudget.load(
+        overrides={"max_tool_calls": 3, "no_progress_timeout": 11.5}
+    )
     assert budget.max_tool_calls == 3
     assert budget.no_progress_timeout == 11.5
 

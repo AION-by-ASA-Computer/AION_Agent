@@ -47,7 +47,9 @@ class BackgroundChatRun:
 _background_runs: Dict[str, BackgroundChatRun] = {}
 
 
-def _runtime_dict(payload: Optional[RuntimeSettingsPayload]) -> Optional[Dict[str, Any]]:
+def _runtime_dict(
+    payload: Optional[RuntimeSettingsPayload],
+) -> Optional[Dict[str, Any]]:
     if payload is None:
         return None
     raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()

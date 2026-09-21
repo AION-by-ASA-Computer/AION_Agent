@@ -168,9 +168,7 @@ def _build_user_warning(
                 f"o compatta la cronologia."
             )
         if ctx_total and int(ctx_total) > 20000:
-            base += (
-                f" Contesto stimato ~{ctx_total} token: il modello può troncare l'ultimo round."
-            )
+            base += f" Contesto stimato ~{ctx_total} token: il modello può troncare l'ultimo round."
         return base
     if code == "persisted_no_visible_text":
         return (
@@ -197,7 +195,9 @@ def _build_user_warning(
             f"Contest stimato ~{ctx_total} token: il modello può troncare l'ultimo round."
         )
     if max_agent_steps and llm_steps >= int(max_agent_steps):
-        parts.append(f"Raggiunto il limite di step agente ({llm_steps}/{max_agent_steps}).")
+        parts.append(
+            f"Raggiunto il limite di step agente ({llm_steps}/{max_agent_steps})."
+        )
     msg = " ".join(parts)
     if ctx_msg and int(ctx_msg) > 100:
         msg += (
@@ -205,9 +205,7 @@ def _build_user_warning(
             f"o compatta la cronologia."
         )
     if ctx_total and int(ctx_total) > 20000:
-        msg += (
-            f" Contesto stimato ~{ctx_total} token: il modello può troncare l'ultimo round."
-        )
+        msg += f" Contesto stimato ~{ctx_total} token: il modello può troncare l'ultimo round."
     return msg
 
 

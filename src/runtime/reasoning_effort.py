@@ -148,9 +148,7 @@ def _env_native_scale() -> Optional[Tuple[str, ...]]:
     raw = (os.getenv("AION_NATIVE_REASONING_EFFORT_VALUES") or "").strip()
     if not raw:
         return None
-    values = tuple(
-        part.strip().lower() for part in raw.split(",") if part.strip()
-    )
+    values = tuple(part.strip().lower() for part in raw.split(",") if part.strip())
     return values or None
 
 

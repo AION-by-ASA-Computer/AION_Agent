@@ -121,7 +121,9 @@ def test_vllm_generic_max_uses_xhigh_not_high():
     for model in ("Qwen/Qwen3-8B", "AIONQ35-35-Q8B", "local-custom-alias"):
         merged = merge_generation_kwargs({}, "max", model=model)
         assert merged["reasoning_effort"] == "xhigh"
-        assert merged["extra_body"]["chat_template_kwargs"]["reasoning_effort"] == "xhigh"
+        assert (
+            merged["extra_body"]["chat_template_kwargs"]["reasoning_effort"] == "xhigh"
+        )
 
 
 def test_compat_off_omits_native_effort():

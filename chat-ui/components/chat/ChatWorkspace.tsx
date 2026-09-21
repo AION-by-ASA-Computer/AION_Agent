@@ -77,6 +77,7 @@ import {
   turnStateFromHistoryMessage,
 } from "@/lib/sse/reducer";
 import { outcomeTextFromSegments } from "@/lib/sse/turnOutcomeMessage";
+import { formatTextWithCitations as formatCitationMarkers } from "@/lib/sse/citations";
 import {
   clearActiveStreamMarker,
   readActiveStreamMarker,
@@ -372,27 +373,7 @@ function planChunkFromRecord(value: unknown): PlanPendingChunk | null {
 
 
 function formatTextWithCitations(text: string, messageId?: string): string {
-  if (!text) return text;
-  // split by code blocks to avoid replacing inside them
-  const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
-  for (let i = 0; i < parts.length; i++) {
-    // even indices are outside code blocks
-    if (i % 2 === 0) {
-      const prefix = messageId ? `source-${messageId}` : "source";
-      // replace [1], [2], etc. avoiding negative lookbehinds for Safari compat
-      parts[i] = parts[i].replace(/(^|[^\[])\[(\d+)\](?!\(|\])/g, `$1[[$2]](#${prefix}-$2)`);
-      // Clean double brackets and URL-encode spaces in file paths for markdown link compatibility
-      parts[i] = parts[i].replace(/\[\[?([^\]]+)\]\]?\(([^)]+)\)/g, (match, label, url) => {
-        const cleanUrl = url.trim().startsWith("#") ? url.trim() : url.trim().replace(/ /g, "%20");
-        return `[${label.trim()}](${cleanUrl})`;
-      });
-      // Replace LaTeX display formula delimiters \[ \] with $$
-      parts[i] = parts[i].replace(/\\\[/g, "$$\n").replace(/\\\]/g, "\n$$");
-      // Replace LaTeX inline formula delimiters \( \) with $
-      parts[i] = parts[i].replace(/\\\(/g, "$").replace(/\\\)/g, "$");
-    }
-  }
-  return parts.join("");
+  return formatCitationMarkers(text, messageId);
 }
 
 const KhubViewerLoader = () => {
@@ -568,7 +549,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   }, [pdfUrl, userId, token]);
 
   const renderMarkdownLink = useCallback(({ node, className, href, children, ...props }: any) => {
-    if (href?.startsWith("#source-")) {
+    const childText = String(children ?? "").trim();
+    const isNumericCitationLabel = /^\d{1,3}$/.test(childText);
+    const isSourceAnchor = href?.startsWith("#source-");
+    const isLegacyNumericUrl =
+      isNumericCitationLabel && href && /^https?:\/\//i.test(href);
+    if (isSourceAnchor || isLegacyNumericUrl) {
       return (
         <a
           href={href}
@@ -576,7 +562,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           title={t("chat.go_to_source")}
           onClick={(e) => {
             e.preventDefault();
-            const el = document.getElementById(href.replace("#", ""));
+            let sourceHref = href || "";
+            if (!sourceHref.startsWith("#source-") && isLegacyNumericUrl) {
+              const msgEl = (e.currentTarget as HTMLElement).closest("[data-message-id]");
+              const mid = msgEl?.getAttribute("data-message-id");
+              if (mid) sourceHref = `#source-${mid}-${childText}`;
+            }
+            const el = document.getElementById(sourceHref.replace("#", ""));
             if (el) {
               el.scrollIntoView({ behavior: "smooth", block: "center" });
               el.classList.add("ring-2", "ring-primary", "ring-offset-2", "ring-offset-background");
@@ -619,7 +611,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
 
     return <a href={href} className={className} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
-  }, [handleKhubFileClick]);
+  }, [handleKhubFileClick, t]);
 
   // Sincronizza lo stato se la prop iniziale cambia (es. navigazione avanti/indietro del browser)
   useEffect(() => {
@@ -3894,6 +3886,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       messageId={activeMessageId || undefined}
                     />
                   )}
+                  {turnVisual.webSourceCards.length > 0 && activeMessageId ? (
+                    <WebSourcesBar
+                      cards={turnVisual.webSourceCards}
+                      messageId={activeMessageId}
+                    />
+                  ) : null}
                 </div>
               ) : null}
               {(postTurnCharts.length > 0 || postTurnFiles.length > 0) && (

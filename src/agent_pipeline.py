@@ -1757,9 +1757,9 @@ class AgentPipeline:
                 )
 
                 _gen = getattr(self.agent, "chat_generator", None)
-                _provider = str(
-                    getattr(_gen, "provider", "openai") or "openai"
-                ).strip().lower()
+                _provider = (
+                    str(getattr(_gen, "provider", "openai") or "openai").strip().lower()
+                )
                 _model = str(getattr(_gen, "model", "") or "")
                 _dialect = detect_reasoning_dialect(_model, _provider)
                 gen_kw = apply_runtime_to_generation_kwargs(

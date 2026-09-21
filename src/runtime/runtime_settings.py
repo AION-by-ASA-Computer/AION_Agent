@@ -364,7 +364,9 @@ def turn_budget_overrides(
     for src, dest in TURN_BUDGET_KEY_MAP.items():
         if src in runtime and runtime[src] is not None:
             out[dest] = runtime[src]
-    effort = str(resolved_effort or runtime.get("reasoning_effort") or "").strip().lower()
+    effort = (
+        str(resolved_effort or runtime.get("reasoning_effort") or "").strip().lower()
+    )
     if effort == "off":
         thinking_on = False
     elif resolved_effort is not None:

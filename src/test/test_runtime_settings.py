@@ -17,7 +17,10 @@ from src.runtime.runtime_settings import (
     turn_budget_overrides,
     turn_guard_overrides,
 )
-from src.runtime.runtime_settings_schema import HARD_MAX_AGENT_STEPS, MAX_PRESETS_PER_USER
+from src.runtime.runtime_settings_schema import (
+    HARD_MAX_AGENT_STEPS,
+    MAX_PRESETS_PER_USER,
+)
 from src.runtime.turn_budget import TurnBudget
 from src.runtime.turn_compaction import (
     bump_llm_step,
@@ -71,8 +74,13 @@ def test_profile_cap_limits_user_steps():
 
 
 def test_preset_limit_and_name():
-    presets = [{"id": str(i), "name": f"p{i}", "values": {"temperature": 0.1}} for i in range(25)]
-    blob = sanitize_user_blob({"values": {}, "presets": presets, "active_preset_id": "99"})
+    presets = [
+        {"id": str(i), "name": f"p{i}", "values": {"temperature": 0.1}}
+        for i in range(25)
+    ]
+    blob = sanitize_user_blob(
+        {"values": {}, "presets": presets, "active_preset_id": "99"}
+    )
     assert len(blob["presets"]) == MAX_PRESETS_PER_USER
     assert blob["active_preset_id"] is None
     with pytest.raises(ValueError):
@@ -127,7 +135,10 @@ def test_turn_budget_overrides():
 
 
 def test_generation_kwargs_keeps_reasoning_effort():
-    gen = {"reasoning_effort": "xhigh", "extra_body": {"chat_template_kwargs": {"enable_thinking": True}}}
+    gen = {
+        "reasoning_effort": "xhigh",
+        "extra_body": {"chat_template_kwargs": {"enable_thinking": True}},
+    }
     out = apply_runtime_to_generation_kwargs(
         gen,
         {"temperature": 0.2, "max_tokens": 1024, "top_k": 20, "seed": 7},

@@ -72,7 +72,9 @@ class CreatePresetBody(BaseModel):
 
 
 class PatchPresetBody(BaseModel):
-    name: Optional[str] = Field(default=None, min_length=1, max_length=PRESET_NAME_MAX_LEN)
+    name: Optional[str] = Field(
+        default=None, min_length=1, max_length=PRESET_NAME_MAX_LEN
+    )
     values: Optional[RuntimeSettingsPayload] = None
 
 
@@ -150,7 +152,9 @@ async def create_preset(
     presets: List[Dict[str, Any]] = list(blob.get("presets") or [])
     if len(presets) >= MAX_PRESETS_PER_USER:
         raise HTTPException(400, detail=f"Maximum {MAX_PRESETS_PER_USER} presets")
-    source = _payload_dict(body.values) if body.values is not None else blob.get("values")
+    source = (
+        _payload_dict(body.values) if body.values is not None else blob.get("values")
+    )
     try:
         preset = new_preset(body.name, source or {})
     except ValueError as exc:
@@ -164,7 +168,11 @@ async def create_preset(
     except LookupError:
         saved = blob
     schema_payload = public_schema_payload()
-    return {"ok": True, "preset": preset, "user": _user_public(saved, schema_payload["defaults"])}
+    return {
+        "ok": True,
+        "preset": preset,
+        "user": _user_public(saved, schema_payload["defaults"]),
+    }
 
 
 @router.patch("/presets/{preset_id}")
@@ -197,7 +205,11 @@ async def patch_preset(
     except LookupError:
         saved = blob
     schema_payload = public_schema_payload()
-    return {"ok": True, "preset": found, "user": _user_public(saved, schema_payload["defaults"])}
+    return {
+        "ok": True,
+        "preset": found,
+        "user": _user_public(saved, schema_payload["defaults"]),
+    }
 
 
 @router.delete("/presets/{preset_id}")
@@ -230,7 +242,9 @@ async def activate_preset(
 ) -> Dict[str, Any]:
     uid = _uid(auth, x_aion_user_id)
     blob = await load_user_runtime_blob(uid)
-    found = next((p for p in (blob.get("presets") or []) if p.get("id") == preset_id), None)
+    found = next(
+        (p for p in (blob.get("presets") or []) if p.get("id") == preset_id), None
+    )
     if found is None:
         raise HTTPException(404, detail="preset_not_found")
     blob["active_preset_id"] = preset_id
@@ -241,5 +255,3 @@ async def activate_preset(
         saved = blob
     schema_payload = public_schema_payload()
     return {"ok": True, "user": _user_public(saved, schema_payload["defaults"])}
-
-
