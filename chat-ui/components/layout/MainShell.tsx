@@ -1,11 +1,42 @@
 "use client";
 
-import { useEffect, type ReactNode } from "react";
+import { useEffect, Suspense, type ReactNode } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { ThreadSidebar } from "@/components/layout/ThreadSidebar";
-import { ShellProvider, useShellActions, useShellChrome, useSidebarOpen } from "@/lib/shell/shell-context";
+import {
+  ShellProvider,
+  parseTuningsTabFromQuery,
+  useShellActions,
+  useShellChrome,
+  useSidebarOpen,
+} from "@/lib/shell/shell-context";
 import { useIsLgUp } from "@/lib/hooks/use-breakpoint";
+import { loadRuntimeSettings } from "@/lib/runtime/runtime-settings-store";
+import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
+
+function TuningsDeepLink() {
+  const searchParams = useSearchParams();
+  const { openTunings } = useShellActions();
+
+  useEffect(() => {
+    const raw = searchParams.get("tunings") || searchParams.get("settings");
+    const tab = parseTuningsTabFromQuery(raw);
+    if (tab) openTunings(tab);
+  }, [searchParams, openTunings]);
+
+  return null;
+}
+
+function RuntimeSettingsLoader() {
+  const userId = useStoredUserId();
+  const token = useStoredToken();
+  useEffect(() => {
+    void loadRuntimeSettings(userId, token);
+  }, [userId, token]);
+  return null;
+}
 
 function MainShellInner({ children }: { children: ReactNode }) {
   const actions = useShellActions();
@@ -68,6 +99,10 @@ function MainShellInner({ children }: { children: ReactNode }) {
 export function MainShell({ children }: { children: ReactNode }) {
   return (
     <ShellProvider>
+      <Suspense fallback={null}>
+        <TuningsDeepLink />
+      </Suspense>
+      <RuntimeSettingsLoader />
       <MainShellInner>{children}</MainShellInner>
     </ShellProvider>
   );

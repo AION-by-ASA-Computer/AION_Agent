@@ -40,20 +40,30 @@ def test_stm_window_omits_reasoning_meta():
     assert msg.meta.get("reasoning") is None
 
 
-def test_merge_generation_kwargs_medium_sets_thinking_budget():
-    merged = merge_generation_kwargs({}, "medium")
+def test_merge_generation_kwargs_medium_sets_native_effort(monkeypatch):
+    monkeypatch.delenv("AION_THINKING_TOKEN_BUDGET", raising=False)
+    monkeypatch.delenv("AION_THINKING_TOKEN_BUDGET_MEDIUM", raising=False)
+    monkeypatch.delenv("AION_THINKING_TOKEN_BUDGET_MAX", raising=False)
+    monkeypatch.delenv("AION_REASONING_EFFORT_MAX_BUDGET", raising=False)
+    merged = merge_generation_kwargs({}, "medium", model="Qwen/Qwen3.8-Flash-Next")
     eb = merged.get("extra_body") or {}
     assert eb.get("chat_template_kwargs", {}).get("enable_thinking") is True
-    assert int(eb.get("thinking_token_budget", 0)) > 0
+    assert merged.get("reasoning_effort") == "medium"
+    assert eb.get("chat_template_kwargs", {}).get("reasoning_effort") == "medium"
+    assert "thinking_token_budget" not in eb
 
 
-def test_merge_generation_kwargs_min_disables_thinking():
+def test_merge_generation_kwargs_off_disables_thinking():
     merged = merge_generation_kwargs(
-        {"extra_body": {"thinking_token_budget": 999}}, "min"
+        {"extra_body": {"thinking_token_budget": 999}},
+        "off",
+        model="Qwen/Qwen3.8-Flash-Next",
     )
     eb = merged.get("extra_body") or {}
     assert eb.get("chat_template_kwargs", {}).get("enable_thinking") is False
     assert "thinking_token_budget" not in eb
+    assert "reasoning_effort" not in merged
+    assert "reasoning_effort" not in (eb.get("chat_template_kwargs") or {})
 
 
 def test_mysql_metadata_prompt_no_duplicate_datasource_overlay():

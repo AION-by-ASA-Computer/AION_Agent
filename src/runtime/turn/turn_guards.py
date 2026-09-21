@@ -45,6 +45,7 @@ class TurnGuards:
         loop_time_fn=None,
         budget: Optional["TurnBudget"] = None,
         reasoning_effort: Optional[str] = None,
+        guard_overrides: Optional[Dict[str, Any]] = None,
     ) -> None:
         from src.runtime.turn_budget import TurnBudget
 
@@ -73,14 +74,18 @@ class TurnGuards:
         self.max_reasoning_events_without_tool = int(
             os.getenv("AION_AGENT_MAX_REASONING_WITHOUT_TOOL", "0")
         )
-        self.reasoning_hard_stop = os.getenv(
-            "AION_REASONING_HARD_STOP", "0"
-        ).strip().lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        )
+        ovs = guard_overrides if isinstance(guard_overrides, dict) else {}
+        if "reasoning_hard_stop" in ovs and ovs["reasoning_hard_stop"] is not None:
+            self.reasoning_hard_stop = bool(ovs["reasoning_hard_stop"])
+        else:
+            self.reasoning_hard_stop = os.getenv(
+                "AION_REASONING_HARD_STOP", "0"
+            ).strip().lower() in (
+                "1",
+                "true",
+                "yes",
+                "on",
+            )
         self._turn_started_at = self._loop_time()
 
     def touch_progress(self) -> None:

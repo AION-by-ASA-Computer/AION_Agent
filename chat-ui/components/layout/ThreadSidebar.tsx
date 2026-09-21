@@ -14,6 +14,7 @@ import {
   PanelLeftOpen,
   Plug,
   Search,
+  SlidersHorizontal,
   Star,
   Trash2,
   X,
@@ -23,11 +24,14 @@ import { type ConversationSummary } from "@/lib/api/aion";
 import { apiBase } from "@/lib/config";
 import { BUCKET_ORDER, groupByBucket, type DateBucket } from "@/lib/date-groups";
 import type { ShellSection } from "@/lib/shell/use-conversation-threads";
+import { useShellActions } from "@/lib/shell/shell-context";
 import { cn } from "@/lib/cn";
 import { ChatBrand } from "../brand/ChatBrand";
 import { SidebarProfileMenu } from "./SidebarProfileMenu";
+import { SidebarTuningsPanel } from "@/components/settings/SidebarTuningsPanel";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { useT } from "@/lib/i18n/use-t";
+import { usePathname } from "next/navigation";
 
 function isFavorite(c: ConversationSummary) {
   return c.metadata?.favorite === true || c.metadata?.favorite === "true";
@@ -65,9 +69,18 @@ export function ThreadSidebar({
   onToggleCollapse?: () => void;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const token = useStoredToken();
   const isLoggedIn = Boolean(token);
   const t = useT();
+  const {
+    sidebarPanel,
+    tuningsTab,
+    openTunings,
+    closeTunings,
+    setTuningsTab,
+  } = useShellActions();
+  const tuningsOpen = sidebarPanel === "tunings";
 
   const [searchQuery, setSearchQuery] = useState("");
   const [profileLabel, setProfileLabel] = useState(userId);
@@ -142,7 +155,7 @@ export function ThreadSidebar({
   };
 
   const navItems: Array<{
-    section: ShellSection;
+    section: ShellSection | "tunings";
     href: string;
     icon: typeof MessageSquare;
     label: string;
@@ -150,7 +163,16 @@ export function ThreadSidebar({
     { section: "chat", href: chatHomeHref, icon: MessageSquare, label: t("sidebar.chat") },
     { section: "integrations", href: "/integrations", icon: Plug, label: t("sidebar.integrations") },
     { section: "schedules", href: "/schedules", icon: Clock, label: t("sidebar.schedules") },
+    { section: "tunings", href: "#tunings", icon: SlidersHorizontal, label: t("sidebar.tunings") },
   ];
+
+  const openTuningsPanel = () => {
+    if (isCollapsed) onToggleCollapse?.();
+    openTunings("runtime");
+    if (pathname.startsWith("/integrations") || pathname.startsWith("/schedules")) {
+      router.push(`${chatHomeHref}?tunings=runtime`);
+    }
+  };
 
   const conversationList = (
     <>
@@ -244,13 +266,34 @@ export function ThreadSidebar({
         <nav className="flex flex-col items-center gap-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = activeSection === item.section;
+            const active =
+              item.section === "tunings" ? tuningsOpen : !tuningsOpen && activeSection === item.section;
+            if (item.section === "tunings") {
+              return (
+                <button
+                  key={item.section}
+                  type="button"
+                  title={item.label}
+                  aria-label={item.label}
+                  onClick={openTuningsPanel}
+                  className={cn(
+                    "inline-flex h-9 w-9 items-center justify-center rounded-md transition",
+                    active
+                      ? "bg-primary/10 text-foreground"
+                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                >
+                  <Icon className="h-4 w-4" aria-hidden />
+                </button>
+              );
+            }
             return (
               <Link
                 key={item.section}
                 href={item.href}
                 title={item.label}
                 aria-label={item.label}
+                onClick={() => closeTunings()}
                 className={cn(
                   "inline-flex h-9 w-9 items-center justify-center rounded-md transition",
                   active
@@ -279,7 +322,7 @@ export function ThreadSidebar({
   }
 
   return (
-    <aside className="flex h-full w-full flex-col">
+    <aside className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="shrink-0">
         <div className="flex items-center justify-between px-4 pb-3 pt-4">
           <div className="min-w-0 flex-1">
@@ -310,17 +353,28 @@ export function ThreadSidebar({
         <nav className="mt-4 flex flex-col gap-0.5 px-2">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active = activeSection === item.section;
+            const active =
+              item.section === "tunings" ? tuningsOpen : !tuningsOpen && activeSection === item.section;
+            const className = cn(
+              "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition",
+              active
+                ? "bg-primary/10 font-medium text-foreground"
+                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+            );
+            if (item.section === "tunings") {
+              return (
+                <button key={item.section} type="button" onClick={openTuningsPanel} className={className}>
+                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                  <span className="truncate">{item.label}</span>
+                </button>
+              );
+            }
             return (
               <Link
                 key={item.section}
                 href={item.href}
-                className={cn(
-                  "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition",
-                  active
-                    ? "bg-primary/10 font-medium text-foreground"
-                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                )}
+                onClick={() => closeTunings()}
+                className={className}
               >
                 <Icon className="h-4 w-4 shrink-0" aria-hidden />
                 <span className="truncate">{item.label}</span>
@@ -330,6 +384,12 @@ export function ThreadSidebar({
         </nav>
       </div>
 
+      {tuningsOpen ? (
+        <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-sidebar-border/70 pt-4">
+          <SidebarTuningsPanel tab={tuningsTab} onTabChange={setTuningsTab} />
+        </div>
+      ) : (
+        <>
       <div className="mt-3 shrink-0 px-3 pb-2">
         <div className="flex items-center gap-2 rounded-lg border border-sidebar-border bg-background/40 px-2 py-1.5 focus-within:border-primary/50">
           <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
@@ -355,6 +415,8 @@ export function ThreadSidebar({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">{conversationList}</div>
+        </>
+      )}
 
       <div className="shrink-0">{profileFooter}</div>
     </aside>

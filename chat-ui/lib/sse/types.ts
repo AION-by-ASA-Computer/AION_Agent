@@ -60,7 +60,12 @@ export type ChatChunk =
   | { type: "orchestration_task_status";[k: string]: unknown }
   | { type: "presentation_preview"; relative_path?: string; title?: string; pdf_relative_path?: string }
   | { type: "final"; text?: string }
-  | { type: "turn_outcome"; code?: string; message?: string }
+  | {
+      type: "turn_outcome";
+      code?: string;
+      message?: string;
+      details?: Record<string, unknown>;
+    }
   | { type: "turn_status"; phase?: string; tool?: string; message?: string }
   | {
     type: "plan_phase";
@@ -153,6 +158,8 @@ type StatusSegment = {
   id: string;
   content: string;
   tone?: "info" | "warning";
+  outcomeCode?: string;
+  outcomeDetails?: Record<string, unknown>;
 };
 
 /** Transient indicator while plan or document artifact streams (not persisted). */

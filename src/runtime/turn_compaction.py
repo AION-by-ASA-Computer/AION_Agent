@@ -311,6 +311,12 @@ def set_turn_runtime(
             }
             if sid:
                 _TURN_RUNTIME_REGISTRY[sid] = rt
+        try:
+            steps = getattr(agent, "max_agent_steps", None)
+            if steps is not None:
+                rt["effective_max_agent_steps"] = int(steps)
+        except (TypeError, ValueError):
+            pass
     if _turn_runtime is not None:
         _turn_runtime.set(rt)
     try:
@@ -321,12 +327,22 @@ def set_turn_runtime(
         pass
 
 
-def bump_llm_step() -> int:
+def bump_llm_step(source: str = "stream") -> int:
+    """Count one LLM completion.
+
+    Streaming ``finish_reason`` and ``llm_call_audit`` both observe the same
+    completion. Distinct *source* values share the current step; the same
+    source calling again starts the next completion.
+    """
     rt = resolve_turn_runtime()
     if not isinstance(rt, dict):
         return 0
+    counted_by = rt.get("_llm_step_counted_by")
+    if counted_by and counted_by != source:
+        return int(rt.get("llm_steps") or 0)
     n = int(rt.get("llm_steps") or 0) + 1
     rt["llm_steps"] = n
+    rt["_llm_step_counted_by"] = source
     return n
 
 
@@ -1057,7 +1073,9 @@ def maybe_inject_max_steps_prompt() -> None:
     if rt.get("max_steps_injected"):
         return
     agent = rt.get("agent")
-    max_steps = getattr(agent, "max_agent_steps", None) if agent else None
+    max_steps = rt.get("effective_max_agent_steps")
+    if max_steps is None:
+        max_steps = getattr(agent, "max_agent_steps", None) if agent else None
     if not max_steps:
         return
     try:

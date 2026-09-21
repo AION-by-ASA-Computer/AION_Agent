@@ -19,7 +19,9 @@
       "profile": "Profile",
       "appearance": "Appearance",
       "security": "Security",
-      "instructions": "Instructions"
+      "instructions": "Instructions",
+      "runtime": "Runtime",
+      "presets": "Presets"
     },
     "profile": {
       "title": "Profile",
@@ -103,6 +105,58 @@
         "save": "Save Instructions",
         "saving": "Saving..."
       }
+    },
+    "runtime": {
+        "loading": "Loading runtime settings…",
+        "hint": "Env values are the starting defaults. Changes apply to the next turn.",
+        "reset_all": "Reset all",
+        "reset_field": "Reset field",
+        "server_default": "Server default: {{value}}",
+        "profile_cap": "This profile limits agent steps to {{value}}.",
+        "composer_thinking_hint": "Turn Thinking on/off and choose min/med/max from the + menu in the chat box.",
+      "group": {
+        "loop": "Agent loop",
+        "generation": "Generation",
+        "thinking": "Thinking",
+        "advanced": "Advanced"
+      },
+      "enum": {
+        "min": "Min",
+        "medium": "Medium",
+        "max": "Max"
+      },
+      "fields": {
+        "max_agent_steps": "Max agent steps",
+        "max_tool_calls": "Max tool calls",
+        "max_tool_events": "Max tool events",
+        "turn_timeout_sec": "Turn timeout (s)",
+        "no_progress_timeout_sec": "No-progress timeout (s)",
+        "max_tokens": "Max tokens",
+        "temperature": "Temperature",
+        "top_p": "Top P",
+        "top_k": "Top K",
+        "presence_penalty": "Presence penalty",
+        "frequency_penalty": "Frequency penalty",
+        "repetition_penalty": "Repetition penalty",
+        "seed": "Seed",
+        "thinking_enabled": "Thinking enabled",
+        "reasoning_effort": "Reasoning effort",
+        "thinking_token_budget": "Thinking token budget",
+        "reasoning_hard_stop": "Reasoning stream guard (hard-stop)",
+        "reasoning_max_chars": "Reasoning max chars",
+        "reasoning_max_events": "Reasoning max events",
+        "reasoning_min_chars": "Reasoning min chars",
+        "reasoning_min_events": "Reasoning min events",
+        "reasoning_max_level_chars": "Reasoning max-level chars",
+        "reasoning_max_level_events": "Reasoning max-level events"
+      }
+    },
+    "presets": {
+      "hint": "Save sidebar tuning as a preset (Thinking on/off and effort use the chat + menu).",
+      "name_placeholder": "Preset name",
+      "save_as": "Save as",
+      "save_active": "Save changes to active preset",
+      "empty": "No presets yet."
     }
   },
   "sidebar": {
@@ -111,6 +165,8 @@
     "no_conversations": "No conversations.",
     "delete_confirm": "Delete chat?",
     "settings": "Settings",
+    "tunings": "Tunings & parameters",
+    "tunings_section": "Turn parameters",
     "login": "Sign in",
     "integrations": "Integrations",
     "schedules": "Automations",
@@ -465,6 +521,13 @@
       "archived_context": "Earlier in conversation (not in active agent context)"
     },
     "error": "Error: {{msg}}",
+    "turn_outcome": {
+      "reasoning_budget_no_answer": "The turn stopped because reasoning exceeded the {{effort}} Thinking budget (~{{max_chars}} chars / {{max_events}} chunks in the first LLM step) before a visible reply. The Reasoning block only contains internal thought (~{{reasoning_len}} chars). Try: turn off Thinking from the + menu, lower the level, send «Continue», or adjust limits in sidebar Tuning.",
+      "reasoning_only_no_answer": "The model produced only internal reasoning (~{{reasoning_len}} chars) with no visible chat reply (Thinking: {{effort}}). Retry with a shorter prompt, turn off Thinking from the + menu, or ask explicitly for a final answer.",
+      "tools_without_final_answer": "The agent ran {{tool_calls}} tool calls but did not write a final summary in chat.",
+      "empty_final": "The turn ended with no visible reply text.",
+      "persisted_no_visible_text": "The turn saved messages (e.g. tool-only) with no visible assistant text."
+    },
     "history_load_error": "Could not load conversation history: {{msg}}",
     "session_preparing": "Preparing integrations and tools…",
     "mcp_errors_hint": "Some integrations failed to start. You can still chat with the tools that loaded.",

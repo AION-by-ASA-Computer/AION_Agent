@@ -99,6 +99,118 @@ def _summarize_messages(new_messages: Any) -> List[Dict[str, str]]:
     return out
 
 
+def _effort_label(effort: Optional[str]) -> str:
+    raw = (effort or "").strip().lower()
+    if raw in ("off", ""):
+        return "disattivato"
+    if raw == "min":
+        return "minimo"
+    if raw == "medium":
+        return "medio"
+    if raw == "max":
+        return "massimo"
+    return raw or "—"
+
+
+def _build_user_warning(
+    *,
+    code: str,
+    stop_reason: str,
+    tool_calls_count: int,
+    new_msg_count: int,
+    ctx_msg: Any,
+    ctx_total: Any,
+    max_agent_steps: Optional[int],
+    llm_steps: int,
+    reasoning_effort: Optional[str],
+    max_reasoning_chars: Optional[int],
+    max_reasoning_events: Optional[int],
+    reasoning_len: int,
+) -> str:
+    effort = _effort_label(reasoning_effort)
+    limits = ""
+    if max_reasoning_chars or max_reasoning_events:
+        limits = (
+            f" (soglia attiva: ~{max_reasoning_chars or '—'} caratteri"
+            f" / {max_reasoning_events or '—'} chunk di reasoning nel primo step LLM)"
+        )
+
+    if code == "reasoning_budget_no_answer":
+        return (
+            f"Il turno si è interrotto perché il modello ha superato il budget di ragionamento "
+            f"con Thinking **{effort}**{limits} prima di scrivere una risposta visibile in chat. "
+            f"Il blocco «Ragionamento» contiene solo il pensiero interno (~{reasoning_len} caratteri). "
+            f"Prova: disattiva Thinking dal menu **+**, abbassa il livello, scrivi «Continua» "
+            f"per riprendere, o riduci i limiti in Tuning e parametri (sidebar)."
+        )
+    if code == "reasoning_only_no_answer":
+        return (
+            f"Il modello ha generato solo ragionamento interno (~{reasoning_len} caratteri) "
+            f"senza produrre testo di risposta in chat (Thinking: **{effort}**). "
+            f"Riprova con un messaggio più breve, disattiva Thinking dal menu **+**, "
+            f"o chiedi esplicitamente una risposta finale."
+        )
+    if code == "tools_without_final_answer":
+        if stop_reason == "reasoning_budget":
+            base = (
+                f"Il turno è stato interrotto dal guard-rail sul reasoning (Thinking **{effort}**)"
+                f"{limits}. L'agente ha eseguito {tool_calls_count} chiamate tool ma non ha "
+                f"scritto un riepilogo finale. Usa «Continua» o chiedi un riepilogo dei risultati."
+            )
+        else:
+            base = (
+                f"L'agente ha eseguito {tool_calls_count} chiamate tool ma non ha scritto "
+                f"un riepilogo finale in chat."
+            )
+        if ctx_msg and int(ctx_msg) > 100:
+            base += (
+                f" Sessione molto lunga (~{ctx_msg} messaggi): prova una nuova chat "
+                f"o compatta la cronologia."
+            )
+        if ctx_total and int(ctx_total) > 20000:
+            base += (
+                f" Contesto stimato ~{ctx_total} token: il modello può troncare l'ultimo round."
+            )
+        return base
+    if code == "persisted_no_visible_text":
+        return (
+            f"Il turno ha salvato {new_msg_count} messaggi (es. solo tool) "
+            f"senza testo assistente finale visibile."
+        )
+    if code == "empty_final":
+        if stop_reason == "reasoning_budget":
+            return (
+                f"Risposta vuota: interrotto dal budget di reasoning (Thinking **{effort}**)"
+                f"{limits}."
+            )
+        return "Il turno è terminato senza testo di risposta in chat."
+
+    parts = [f"Il turno non ha prodotto una risposta completa in chat (esito: {code})."]
+    if stop_reason and stop_reason not in ("completed", ""):
+        parts.append(f"Motivo interno: {stop_reason}.")
+    if ctx_msg and int(ctx_msg) > 100:
+        parts.append(
+            f"Sessione molto lunga (~{ctx_msg} messaggi): prova una nuova chat o compatta la cronologia."
+        )
+    if ctx_total and int(ctx_total) > 20000:
+        parts.append(
+            f"Contest stimato ~{ctx_total} token: il modello può troncare l'ultimo round."
+        )
+    if max_agent_steps and llm_steps >= int(max_agent_steps):
+        parts.append(f"Raggiunto il limite di step agente ({llm_steps}/{max_agent_steps}).")
+    msg = " ".join(parts)
+    if ctx_msg and int(ctx_msg) > 100:
+        msg += (
+            f" Sessione molto lunga (~{ctx_msg} messaggi): prova una nuova chat "
+            f"o compatta la cronologia."
+        )
+    if ctx_total and int(ctx_total) > 20000:
+        msg += (
+            f" Contesto stimato ~{ctx_total} token: il modello può troncare l'ultimo round."
+        )
+    return msg
+
+
 def classify_turn_outcome(
     *,
     session_id: str,
@@ -113,6 +225,9 @@ def classify_turn_outcome(
     max_agent_steps: Optional[int] = None,
     llm_steps: int = 0,
     plan_intercepts: int = 0,
+    reasoning_effort: Optional[str] = None,
+    max_reasoning_chars: Optional[int] = None,
+    max_reasoning_events: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Return outcome code, metrics, and optional user-facing warning (Italian)."""
     final_len = len((final_text or "").strip())
@@ -155,7 +270,10 @@ def classify_turn_outcome(
     code = "ok"
     suggested_final_text: Optional[str] = None
     if final_len == 0 and reasoning_len > 200 and tool_calls_count == 0:
-        code = "reasoning_only_no_answer"
+        if stop_reason == "reasoning_budget":
+            code = "reasoning_budget_no_answer"
+        else:
+            code = "reasoning_only_no_answer"
     elif final_len == 0 and plan_intercepts > 0 and tool_calls_count > 0:
         code = "plan_created"
         suggested_final_text = (
@@ -182,42 +300,35 @@ def classify_turn_outcome(
         "msg"
     )
 
+    details = {
+        "reasoning_effort": (reasoning_effort or "").strip().lower() or None,
+        "max_reasoning_chars": max_reasoning_chars,
+        "max_reasoning_events": max_reasoning_events,
+        "reasoning_len": reasoning_len,
+        "stop_reason": stop_reason or None,
+        "tool_calls": tool_calls_count,
+    }
+
     warning: Optional[str] = None
     if code != "ok" and code != "plan_created":
-        parts = [
-            "The turn ended without a complete text reply in chat.",
-        ]
-        if code == "tools_without_final_answer":
-            parts.append(
-                f"The agent ran {tool_calls_count} tool calls but did not write a final summary."
-            )
-        elif code == "reasoning_only_no_answer":
-            parts.append("Internal reasoning was generated but no visible reply text.")
-        elif code == "persisted_no_visible_text":
-            parts.append(
-                f"Persisted {new_msg_count} messages (e.g. tool-only) with no final assistant text."
-            )
-        else:
-            parts.append(f"Outcome: {code}.")
-
-        if ctx_msg and int(ctx_msg) > 100:
-            parts.append(
-                f"Very long session (~{ctx_msg} messages): start a new chat or compact history."
-            )
-        if ctx_total and int(ctx_total) > 20000:
-            parts.append(
-                f"Estimated context ~{ctx_total} tokens): the model may truncate or skip the final round."
-            )
-        if max_agent_steps and llm_steps >= int(max_agent_steps):
-            parts.append(f"Agent step limit reached ({llm_steps}/{max_agent_steps}).")
-        parts.append(
-            "See `data/diagnostics/turns.jsonl` for details. "
-            "For structured memory import, retry in a new chat or add notes via the project memory panel."
+        warning = _build_user_warning(
+            code=code,
+            stop_reason=stop_reason,
+            tool_calls_count=tool_calls_count,
+            new_msg_count=new_msg_count,
+            ctx_msg=ctx_msg,
+            ctx_total=ctx_total,
+            max_agent_steps=max_agent_steps,
+            llm_steps=llm_steps,
+            reasoning_effort=reasoning_effort,
+            max_reasoning_chars=max_reasoning_chars,
+            max_reasoning_events=max_reasoning_events,
+            reasoning_len=reasoning_len,
         )
-        warning = " ".join(parts)
 
     return {
         "code": code,
+        "details": details,
         "session_id": session_id,
         "profile": profile,
         "stop_reason": stop_reason,

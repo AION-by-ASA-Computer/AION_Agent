@@ -76,6 +76,7 @@ import {
   segmentsForPersist,
   turnStateFromHistoryMessage,
 } from "@/lib/sse/reducer";
+import { outcomeTextFromSegments } from "@/lib/sse/turnOutcomeMessage";
 import {
   clearActiveStreamMarker,
   readActiveStreamMarker,
@@ -101,6 +102,10 @@ import { isToolOffloadSessionPath } from "@/lib/session-file-paths";
 import { ChatHeader } from "@/components/layout/ChatHeader";
 import { ContextBudgetBar, ContextBudgetGauge } from "@/components/chat/ContextBudgetBar";
 import { useShellActions, useSidebarOpen } from "@/lib/shell/shell-context";
+import {
+  getRuntimeValuesForTurn,
+  patchRuntimeValues,
+} from "@/lib/runtime/runtime-settings-store";
 import { cn } from "@/lib/cn";
 import { DeepResearchPanel } from "@/components/research/DeepResearchPanel";
 import { PlanExecutionChatBanner } from "@/components/plan/PlanExecutionChatBanner";
@@ -959,6 +964,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const handleToggleThinking = useCallback((enabled: boolean) => {
     setThinkingEnabled(enabled);
     localStorage.setItem("aion_last_thinking_enabled", String(enabled));
+    patchRuntimeValues({ thinking_enabled: enabled });
     if (messages.length > 0) {
       updateConversationMetadata(conversationId, { thinking_enabled: enabled }, userId, token)
         .catch((err) => console.error("Error saving thinking preference to DB:", err));
@@ -968,6 +974,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const handleReasoningEffortChange = useCallback((effort: "min" | "medium" | "max") => {
     setReasoningEffort(effort);
     localStorage.setItem("aion_last_reasoning_effort", effort);
+    patchRuntimeValues({ reasoning_effort: effort });
     if (messages.length > 0) {
       updateConversationMetadata(conversationId, { reasoning_effort: effort }, userId, token)
         .catch((err) => console.error("Error saving reasoning effort preference to DB:", err));
@@ -1945,6 +1952,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             compact_mode: toolsView === "compact",
             llm_provider_name: selectedProvider || undefined,
             metadata: opts?.metadata,
+            runtime: getRuntimeValuesForTurn(thinkingEnabled, reasoningEffort),
           },
           token,
           abortRef.current.signal
@@ -2130,7 +2138,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         let assistantText = strippedContent;
         const streamError =
           state.error && !isPlanGuardError ? state.error : null;
-        if (!assistantText.trim() && streamError) {
+        const outcomeWarning = outcomeTextFromSegments(state.segments, t);
+        if (!assistantText.trim() && outcomeWarning) {
+          assistantText = outcomeWarning;
+        } else if (!assistantText.trim() && streamError) {
           assistantText = t("chat.error", { msg: streamError });
         } else if (assistantText.trim() && streamError) {
           assistantText = `${assistantText}\n\n---\n${t("chat.error", { msg: streamError })}`;
@@ -2507,6 +2518,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     setThinkingEnabled(initialThinking);
     setReasoningEffort(initialEffort);
     setAgentMode(storedAgentMode as AgentMode);
+    patchRuntimeValues({
+      thinking_enabled: initialThinking,
+      reasoning_effort: initialEffort,
+    });
 
     // 2. Chiedi i dettagli della conversazione al DB per l'override specifico
     const cid = conversationId;
@@ -2522,13 +2537,22 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           }
           if (details.metadata) {
             const meta = details.metadata;
+            const thinkingPatch: {
+              thinking_enabled?: boolean;
+              reasoning_effort?: "min" | "medium" | "max";
+            } = {};
             if (typeof meta.thinking_enabled === "boolean") {
               setThinkingEnabled(meta.thinking_enabled);
               localStorage.setItem("aion_last_thinking_enabled", String(meta.thinking_enabled));
+              thinkingPatch.thinking_enabled = meta.thinking_enabled;
             }
             if (meta.reasoning_effort === "min" || meta.reasoning_effort === "medium" || meta.reasoning_effort === "max") {
               setReasoningEffort(meta.reasoning_effort as "min" | "medium" | "max");
               localStorage.setItem("aion_last_reasoning_effort", meta.reasoning_effort);
+              thinkingPatch.reasoning_effort = meta.reasoning_effort as "min" | "medium" | "max";
+            }
+            if (thinkingPatch.thinking_enabled !== undefined || thinkingPatch.reasoning_effort !== undefined) {
+              patchRuntimeValues(thinkingPatch);
             }
             if (
               meta.agent_mode === "normal" ||

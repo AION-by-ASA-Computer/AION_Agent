@@ -59,6 +59,22 @@ Backend (`.env`): `AION_CORS_ORIGINS` can list `http://localhost:8003`; default 
 - `GET /chat-ui/conversations/{id}/stream-status` — `/chat` turn still executing (reconnection after navigation)
 - `POST /v1/chat/stream` — extended with `user_message_id`, `assistant_message_id`, `message_source` (API key)
 - `GET /v1/integrations/status`, `GET /v1/integrations`, `POST /v1/integrations/credentials` — state and MCP credentials per user (Bearer chat; see [MCP Integrations (API)](../api-and-runtime/mcp-integrations-api.md))
+- `GET|PUT /v1/runtime-settings` — allowlisted turn limits and generation kwargs (sidebar Tunings)
+- `POST|PATCH|DELETE /v1/runtime-settings/presets` — per-user named snapshots (max 20)
+
+## Sidebar tunings (runtime + presets)
+
+**Tuning e parametri** (sidebar nav) opens a **sidebar panel** while the current chat stays in the main column. Deep-link: `/c/{id}?tunings=runtime` or `?tunings=presets`.
+
+- **Runtime** tab: data-driven sliders from `GET /v1/runtime-settings` (loop limits, sampling, thinking). `.env` values are the Reset defaults; the server clamps every field.
+- **Presets** tab: save / apply / rename / delete user-scoped snapshots stored in `users.metadata.runtime_settings`.
+- Composer Thinking / effort stays a shortcut into the same store. Each `POST /v1/chat/stream` sends `runtime` so the turn is deterministic.
+
+Hard ceilings (cannot be raised from the UI): 200 agent steps, 200 tool calls per turn. A profile YAML `max_agent_steps` can still cap lower.
+
+## User settings (`/settings`)
+
+Full-page route (profile menu → **Impostazioni**): profile, appearance, security, instructions (`USER.md`). Same layout as before the tunings panel — not embedded in the sidebar.
 
 ## My integrations
 
@@ -81,6 +97,8 @@ Path: `/integrations`. Panel for personal credentials on servers with `credentia
 | Post-turn charts | Yes (Recharts, data from `/sessions/.../charts`) |
 | New session files (uploads/workspace/derived) | Yes |
 | Profile + reasoning effort | Yes |
+| Sidebar tunings + presets | Yes (`SidebarTuningsPanel`, `GET/PUT /v1/runtime-settings`) |
+| User settings page `/settings` | Yes (profile, appearance, security, instructions) |
 | Plan approval listener → `internal_trigger` | Yes (SSE session events) |
 | Login DB users | Yes (`/auth/login`) |
 | Thread list `/chat-ui/conversations` | Yes |

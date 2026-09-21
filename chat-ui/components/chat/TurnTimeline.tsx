@@ -23,6 +23,7 @@ import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 import { sessionDownloadUrl } from "@/lib/api/aion";
 import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
 import { SafeErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { resolveTurnOutcomeMessage } from "@/lib/sse/turnOutcomeMessage";
 
 type Props = {
   segments: TurnSegment[];
@@ -161,21 +162,27 @@ export function TurnTimeline({
         }
         if (seg.kind === "status") {
           const warn = seg.tone === "warning";
+          const statusText = resolveTurnOutcomeMessage(
+            t,
+            seg.content,
+            seg.outcomeCode,
+            seg.outcomeDetails,
+          );
           return (
             <div
               key={seg.id}
               className={
                 warn
-                  ? "rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100"
+                  ? "rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-100"
                   : "rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
               }
               role="status"
               aria-live="polite"
             >
               {streaming && isLast ? (
-                <ShimmerText className="text-xs">{seg.content}</ShimmerText>
+                <ShimmerText className="text-xs">{statusText}</ShimmerText>
               ) : (
-                seg.content
+                statusText
               )}
             </div>
           );
