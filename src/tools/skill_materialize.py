@@ -238,7 +238,7 @@ def format_materialize_footer(result: MaterializeResult, slug: str = "") -> str:
         if slug and slug in OFFICE_SKILL_SLUGS:
             lines.append(
                 "Dopo unpack usa `workspace/unpacked/` come output dir; "
-                "leggi XML con `sandbox_read_text_file` / `sandbox_grep_content` (relative_root=workspace)."
+                "il testo principale .docx è in `workspace/unpacked/word/document.xml` (leggi con `sandbox_read_text_file` o cerca con `sandbox_grep_content`)."
             )
         if slug == "pptx":
             lines.append(

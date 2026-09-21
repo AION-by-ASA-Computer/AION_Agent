@@ -29,7 +29,9 @@ _OFFICIAL_VENDOR_HOSTS = frozenset(
     }
 )
 
-_LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+_LOOPBACK_HOSTS = frozenset(
+    {"localhost", "127.0.0.1", "::1", "host.docker.internal", "gateway.docker.internal"}
+)
 
 _URL_PROVIDER_HINTS: list[tuple[str, str]] = [
     ("api.openai.com", "openai"),
@@ -44,8 +46,12 @@ _URL_PROVIDER_HINTS: list[tuple[str, str]] = [
     ("aiplatform.googleapis.com", "vertex_ai"),
     ("localhost:11434", "ollama"),
     ("127.0.0.1:11434", "ollama"),
+    ("host.docker.internal:11434", "ollama"),
+    ("gateway.docker.internal:11434", "ollama"),
     ("localhost:1234", "openai"),
     ("localhost:8000", "openai"),
+    ("host.docker.internal:8000", "openai"),
+    ("gateway.docker.internal:8000", "openai"),
 ]
 
 _PROVIDER_DEFAULT_BASE_URL: dict[str, str] = {
@@ -54,6 +60,7 @@ _PROVIDER_DEFAULT_BASE_URL: dict[str, str] = {
     "gemini": "https://generativelanguage.googleapis.com/v1beta",
     "google": "https://generativelanguage.googleapis.com/v1beta",
     "ollama": "http://localhost:11434/v1",
+    "vllm": "http://localhost:8000/v1",
 }
 
 
@@ -80,27 +87,36 @@ def infer_litellm_provider(provider: str, base_url: str) -> str:
     litellm_p = normalize_litellm_provider(p, base_url)
     if litellm_p != p:
         return litellm_p
-    host = urlparse(base_url).netloc.lower()
+    parsed = urlparse(base_url)
+    netloc = (parsed.netloc or "").lower()
+    host = (parsed.hostname or "").lower()
     for hint, hinted in _URL_PROVIDER_HINTS:
-        if hint in host or host in hint:
-            return hinted
+        if ":" in hint:
+            if netloc == hint or netloc.endswith("." + hint):
+                return hinted
+        else:
+            if host == hint or host.endswith("." + hint):
+                return hinted
     return litellm_p
 
 
 def is_azure_openai_endpoint(base_url: str) -> bool:
-    host = urlparse(base_url).netloc.lower().split(":")[0]
+    host = (urlparse(base_url).hostname or "").lower()
     return host == "openai.azure.com" or host.endswith(".openai.azure.com")
 
 
 def is_official_vendor_endpoint(base_url: str) -> bool:
-    host = urlparse(base_url).netloc.lower().split(":")[0]
-    if host in ("localhost", "127.0.0.1", "0.0.0.0"):
+    host = (urlparse(base_url).hostname or "").lower()
+    if not host or host in ("localhost", "127.0.0.1", "0.0.0.0"):
         return False
     if is_azure_openai_endpoint(base_url):
         return True
     if host in _OFFICIAL_VENDOR_HOSTS:
         return True
-    return any(official in host for official in _OFFICIAL_VENDOR_HOSTS)
+    return any(
+        host == official or host.endswith("." + official)
+        for official in _OFFICIAL_VENDOR_HOSTS
+    )
 
 
 def should_use_catalog_fallback(provider: str, base_url: str) -> bool:
@@ -122,7 +138,9 @@ def _is_private_or_local_host(host: str) -> bool:
     h = (host or "").strip().lower()
     if not h:
         return True
-    if h in ("localhost",):
+    if h in _LOOPBACK_HOSTS:
+        return True
+    if h.endswith((".local", ".internal", ".lan", ".home.arpa", ".docker")):
         return True
     if _is_ip_literal(h):
         ip = ipaddress.ip_address(h)
@@ -152,8 +170,8 @@ def resolve_probe_provider(provider: str, base_url: str) -> str:
     host = (urlparse(base_url).hostname or "").lower()
     netloc = urlparse(base_url).netloc or ""
 
-    # Loopback dev endpoints (Ollama/vLLM on the same machine) may keep a cloud label in the UI.
-    if host in _LOOPBACK_HOSTS:
+    # Loopback or local/private dev endpoints (Ollama/vLLM on the host or LAN) may keep a cloud label in the UI.
+    if host in _LOOPBACK_HOSTS or _is_private_or_local_host(host):
         if "11434" in netloc:
             return "ollama"
         return "vllm"

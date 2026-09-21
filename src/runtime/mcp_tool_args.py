@@ -219,10 +219,25 @@ def prepare_mcp_tool_arguments(
 
     # Automatically resolve save_path for download_attachment to the session sandbox
     t_name = tool_name.lower().replace("-", "_")
-    if (
-        t_name == "download_attachment" or t_name.endswith("_download_attachment")
-    ) and "save_path" in args:
-        val = args["save_path"]
+    if t_name == "download_attachment" or t_name.endswith("_download_attachment"):
+        val = args.get("save_path")
+        if not val or not isinstance(val, str) or not val.strip():
+            filename = (
+                args.get("attachment_name")
+                or args.get("attachment_filename")
+                or args.get("filename")
+                or args.get("name")
+                or "downloaded_attachment"
+            )
+            import os
+
+            clean_name = os.path.basename(str(filename).strip().replace("\\", "/"))
+            val = (
+                f"uploads/{clean_name}"
+                if clean_name
+                else "uploads/downloaded_attachment"
+            )
+
         if isinstance(val, str):
             cleaned = val.strip().replace("\\", "/").lstrip("/")
             import re
@@ -251,7 +266,9 @@ def prepare_mcp_tool_arguments(
                     resolved = safe_resolve(sid, cleaned, must_exist=False)
                     args["save_path"] = str(resolved.absolute())
                 except Exception:
-                    pass
+                    args["save_path"] = cleaned
+            else:
+                args["save_path"] = cleaned
 
     base_tool = (tool_name or "").split("-")[-1].strip().lower()
     if base_tool == "sandbox_write_workspace_file" and _has_value(args.get("content")):
