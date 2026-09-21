@@ -13,6 +13,7 @@ import { useT } from "@/lib/i18n/use-t";
 import type { ToolsViewMode } from "@/components/chat/WebResearchViews";
 import { AssistantToolStepBlock } from "@/components/chat/WebResearchViews";
 import { CodeArtifactBlock } from "@/components/chat/CodeArtifactBlock";
+import { PiiReviewArtifactBlock } from "@/components/chat/PiiReviewArtifactBlock";
 import { ReasoningDisclosure } from "@/components/chat/ReasoningDisclosure";
 import { ShimmerText } from "@/components/chat/ShimmerText";
 import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
@@ -35,6 +36,7 @@ type Props = {
   : never;
   formatTextWithCitations?: (text: string, messageId?: string) => string;
   messageId?: string;
+  onPiiAction?: (action: "confirm" | "reject", finalPrompt?: string) => void;
 };
 
 export function TurnTimeline({
@@ -47,6 +49,7 @@ export function TurnTimeline({
   renderMarkdownLink,
   formatTextWithCitations = (t) => t,
   messageId,
+  onPiiAction,
 }: Props) {
   const t = useT();
   const displaySegments = coalesceTurnSegments(segments);
@@ -180,6 +183,15 @@ export function TurnTimeline({
           );
         }
         if (seg.kind === "artifact") {
+          if (seg.artType === "pii_review") {
+            return (
+              <PiiReviewArtifactBlock
+                key={seg.id}
+                content={seg.buffer}
+                onAction={onPiiAction}
+              />
+            );
+          }
           const planCheck = isPlanArtifact
             ? isPlanArtifact(
               { identifier: seg.id, type: seg.artType, title: seg.title },

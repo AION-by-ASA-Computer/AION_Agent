@@ -263,6 +263,7 @@ async def _fetch_live_model_ids(
     key = (api_key or "").strip()
     if key and key.lower() not in ("none", "placeholder-token"):
         headers["Authorization"] = f"Bearer {key}"
+        headers["X-API-Key"] = key
     endpoint = base_url.rstrip("/") + "/models"
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.get(endpoint, headers=headers)
@@ -308,6 +309,33 @@ async def probe_llm_connection(
 
     try:
         live_ids = await _fetch_live_model_ids(base_url, api_key)
+    except httpx.HTTPStatusError as e:
+        logger.warning("Live /models probe returned HTTP %s for %s", e.response.status_code, base_url)
+        if not catalog:
+            status = e.response.status_code
+            detail = ""
+            try:
+                body_json = e.response.json()
+                if isinstance(body_json, dict) and "error" in body_json:
+                    detail = str(body_json["error"])
+                elif isinstance(body_json, dict) and "detail" in body_json:
+                    detail = str(body_json["detail"])
+                else:
+                    detail = e.response.text[:100]
+            except Exception:
+                detail = e.response.text[:100]
+            
+            if status in (401, 403):
+                msg = f"Authentication failed (HTTP {status})."
+            else:
+                msg = f"Endpoint returned HTTP {status}."
+            
+            if detail:
+                msg += f" Detail: {detail.strip()}"
+                
+            raise ValueError(msg) from e
+        warning = f"Live probe failed (HTTP {e.response.status_code}), showing LiteLLM catalog only."
+        models_source = "catalog"
     except Exception as e:
         logger.exception("Live /models probe failed for %s", base_url)
         if not catalog:

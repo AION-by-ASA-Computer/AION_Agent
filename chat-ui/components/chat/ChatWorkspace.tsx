@@ -1717,6 +1717,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     });
   }, []);
 
+
+
   const handleCancelPlanExecution = useCallback(async () => {
     const rid = (planExecAdoptRunId || "").trim();
     if (!rid) return;
@@ -2278,6 +2280,21 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       abortStreamRecovery,
     ]
   );
+  const handlePiiAction = useCallback(async (action: "confirm" | "reject", finalPrompt?: string) => {
+    if (action === "confirm" && finalPrompt) {
+      if (streaming || streamRecoveryRef.current) {
+        await stopActiveStream();
+      }
+      try {
+        await refreshThreads();
+      } catch (e: unknown) {
+        console.error("refreshThreads", e);
+      }
+      void runChatRequest(finalPrompt, {
+        metadata: { pii_confirmed: true }
+      });
+    }
+  }, [streaming, stopActiveStream, refreshThreads, runChatRequest]);
 
   const handleMemorize = useCallback(async (msgId: string) => {
     const msgIdx = messages.findIndex((msg) => msg.id === msgId);
@@ -3383,6 +3400,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         )}
                       >
                         <TurnTimeline
+                          onPiiAction={handlePiiAction}
                           segments={segmentsForMessage({
                             segments: (m as ChatMessage).segments,
                             reasoning: (m as ChatMessage).reasoning,
@@ -3506,6 +3524,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           (m.reasoning || (m.steps && m.steps.length > 0) || (m.artifacts && m.artifacts.length > 0) || m.content) ? (
                           <div className={cn(afterUser ? "mb-2" : "mb-3")}>
                             <TurnTimeline
+                              onPiiAction={handlePiiAction}
                               segments={segmentsForMessage({
                                 segments: m.segments,
                                 reasoning: m.reasoning,
@@ -3781,6 +3800,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
                   {!isSavingInfo && (
                     <TurnTimeline
+                      onPiiAction={handlePiiAction}
                       key={streamEpoch}
                       segments={turnVisual.segments}
                       toolsView={toolsView}

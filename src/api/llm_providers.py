@@ -87,6 +87,8 @@ _SAFE_PROBE_VALUE_ERROR_PREFIXES = (
     "API base URL is required",
     "API base URL is not allowed",
     "Endpoint unreachable",
+    "Authentication failed",
+    "Endpoint returned HTTP",
 )
 
 
