@@ -28,6 +28,21 @@ def normalize_litellm_provider(
     return p
 
 
+def format_litellm_model_string(
+    provider: str, model_name: str, api_base_url: Optional[str] = None
+) -> str:
+    """
+    Constructs the correct LiteLLM model string (e.g. openai/huggingface/model-id).
+    Ensures that the correct LiteLLM provider prefix is present, even if the model name
+    already contains slashes (like HuggingFace repo IDs).
+    """
+    litellm_provider = normalize_litellm_provider(provider, api_base_url)
+    prefix = f"{litellm_provider}/"
+    if not model_name.startswith(prefix):
+        return f"{litellm_provider}/{model_name}"
+    return model_name
+
+
 def resolve_llm_credentials() -> Tuple[str, str, str]:
     """
     Returns (api_url, model_name, api_key).
@@ -86,11 +101,7 @@ def resolve_llm_credentials() -> Tuple[str, str, str]:
                         api_key = os.getenv("AION_LLM_API_KEY", "placeholder-token")
 
                     if api_base_url:
-                        full_model = (
-                            f"{provider}/{model_name}"
-                            if "/" not in model_name
-                            else model_name
-                        )
+                        full_model = format_litellm_model_string(provider, model_name, api_base_url)
                         url = api_base_url.strip().rstrip("/")
                         if not url.startswith(("http://", "https://")):
                             url = "http://" + url

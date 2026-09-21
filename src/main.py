@@ -1380,10 +1380,9 @@ async def _finish_get_agent_build(
                 litellm_provider = normalize_litellm_provider(
                     row.provider, provider_api_base
                 )
-                provider_model = (
-                    f"{litellm_provider}/{row.model_name}"
-                    if "/" not in row.model_name
-                    else row.model_name
+                from src.runtime.llm_adapter import format_litellm_model_string
+                provider_model = format_litellm_model_string(
+                    row.provider, row.model_name, provider_api_base
                 )
                 provider_timeout = row.timeout
                 if row.api_key_encrypted:
