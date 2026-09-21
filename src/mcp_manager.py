@@ -1195,9 +1195,12 @@ class MCPManager:
             return None
         for base in MCPManager._stdio_script_allowed_roots():
             base_resolved = base.resolve()
+            candidate = (base_resolved / raw).resolve(strict=False)
             try:
-                candidate = (base_resolved / raw).resolve()
-                candidate.relative_to(base_resolved)
+                if os.path.commonpath([str(base_resolved), str(candidate)]) != str(
+                    base_resolved
+                ):
+                    continue
             except ValueError:
                 continue
             if candidate.is_file() and candidate.suffix == ".py":
