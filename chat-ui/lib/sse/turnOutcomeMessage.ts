@@ -1,6 +1,6 @@
-import type { TFunction } from "@/lib/i18n/use-t";
 import type { TurnSegment } from "@/lib/sse/types";
 
+type TranslateFn = (key: string, vars?: Record<string, string | number>) => string;
 type OutcomeDetails = Record<string, unknown> | undefined;
 
 function detailStr(details: OutcomeDetails, key: string, fallback = "—"): string {
@@ -11,7 +11,7 @@ function detailStr(details: OutcomeDetails, key: string, fallback = "—"): stri
 
 /** Prefer i18n template when outcomeCode is known; fallback to server message. */
 export function resolveTurnOutcomeMessage(
-  t: TFunction,
+  t: TranslateFn,
   content: string,
   outcomeCode?: string,
   outcomeDetails?: OutcomeDetails,
@@ -30,7 +30,7 @@ export function resolveTurnOutcomeMessage(
 }
 
 /** Last warning status segment (turn_outcome or stream error), with i18n when possible. */
-export function outcomeTextFromSegments(segments: TurnSegment[], t: TFunction): string {
+export function outcomeTextFromSegments(segments: TurnSegment[], t: TranslateFn): string {
   for (let i = segments.length - 1; i >= 0; i--) {
     const seg = segments[i];
     if (seg.kind === "status" && seg.tone === "warning" && seg.content.trim()) {
