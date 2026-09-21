@@ -84,7 +84,7 @@ if [[ "$dry_run" -ne 1 ]]; then
   extra+=(--prepare-runtime)
 fi
 if [[ "$dry_run" -eq 1 ]]; then
-  forwarded+=(--dry-run)
+  forwarded+=(--dry-run --non-interactive)
 fi
 
 print_banner
