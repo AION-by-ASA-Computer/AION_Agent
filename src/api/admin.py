@@ -3094,17 +3094,14 @@ async def probe_mcp_server(name: str):
             "tool_count": 0,
         }
 
-    except Exception as e:
+    except Exception:
         logger.exception("MCP probe failed for %s", name)
-        raw_msg = str(e).strip() or type(e).__name__
-        classified = classify_mcp_error(raw_msg, cfg)
         return {
             "ok": False,
             "server_slug": name,
-            "error_type": classified["error_type"],
-            "error": classified["error"],
-            "hint": classified["hint"],
-            "raw_error": raw_msg,
+            "error_type": "probe_failed",
+            "error": "MCP probe failed. Check server logs for details.",
+            "hint": "Verify MCP server configuration and try again.",
             "tools": [],
             "tool_count": 0,
         }

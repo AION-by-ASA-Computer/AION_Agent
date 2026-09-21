@@ -2,7 +2,7 @@
   "name": "aion-agent-root",
   "private": true,
   "devDependencies": {
-    "postcss": "8.5.10"
+    "postcss": "8.5.28"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -14,7 +14,8 @@
     "overrides": {
       "serialize-javascript": "^7.0.3",
       "shell-quote": "^1.8.4",
-      "algoliasearch": "5.59.0"
+      "algoliasearch": "5.59.0",
+      "postcss": "8.5.28"
     }
   }
 }
