@@ -41,6 +41,14 @@ jobs:
           uv pip install -r requirements.txt
           uv run python scripts/setup_core.py --non-interactive --skip-promo-playwright
 
+      - name: Setup and upgrade script smoke (dry-run)
+        run: |
+          chmod +x scripts/setup-aion-env.sh scripts/upgrade-aion.sh
+          uv run python scripts/setup_core.py --non-interactive --dry-run --skip-promo-playwright
+          uv run python scripts/upgrade_core.py --dry-run --skip-backup --skip-promo-playwright
+          ./scripts/setup-aion-env.sh --dry-run
+          ./scripts/upgrade-aion.sh --dry-run
+
       - name: Lint (Ruff)
         run: |
           uv pip install 'ruff==0.16.0'

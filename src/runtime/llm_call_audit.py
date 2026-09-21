@@ -159,7 +159,7 @@ def _system_prompt_from_turn() -> str:
 def _next_step(session_id: str) -> int:
     from src.runtime.turn_compaction import bump_llm_step
 
-    step = bump_llm_step()
+    step = bump_llm_step("audit")
     if step > 0:
         return step
     # Fallback when turn runtime is missing (unit tests).

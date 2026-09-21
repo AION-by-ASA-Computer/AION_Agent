@@ -27,6 +27,7 @@ class TurnBudget:
         message_source: str = "user_input",
         reasoning_effort: Optional[str] = None,
         agent_mode: Optional[str] = None,
+        overrides: Optional[Dict[str, Any]] = None,
     ) -> "TurnBudget":
         import os
 
@@ -79,14 +80,42 @@ class TurnBudget:
 
         reasoning = cls._load_reasoning_limits(reasoning_effort)
 
+        ov = overrides if isinstance(overrides, dict) else {}
+
+        def _ov_int(key: str, fallback: int) -> int:
+            raw = ov.get(key)
+            if raw is None:
+                return fallback
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                return fallback
+
+        def _ov_float(key: str, fallback: float) -> float:
+            raw = ov.get(key)
+            if raw is None:
+                return fallback
+            try:
+                return float(raw)
+            except (TypeError, ValueError):
+                return fallback
+
         return cls(
-            turn_timeout=float(os.getenv("AION_AGENT_TURN_TIMEOUT", "600")),
-            max_tool_calls=max_tool_calls,
-            max_tool_events=int(os.getenv("AION_TOOL_EVENTS_MAX_PER_TURN", "60")),
+            turn_timeout=_ov_float(
+                "turn_timeout", float(os.getenv("AION_AGENT_TURN_TIMEOUT", "600"))
+            ),
+            max_tool_calls=_ov_int("max_tool_calls", max_tool_calls),
+            max_tool_events=_ov_int(
+                "max_tool_events", int(os.getenv("AION_TOOL_EVENTS_MAX_PER_TURN", "60"))
+            ),
             max_stream_events=max_stream_events,
-            no_progress_timeout=no_progress_timeout,
-            max_reasoning_chars=reasoning["max_reasoning_chars"],
-            max_reasoning_events=reasoning["max_reasoning_events"],
+            no_progress_timeout=_ov_float("no_progress_timeout", no_progress_timeout),
+            max_reasoning_chars=_ov_int(
+                "max_reasoning_chars", reasoning["max_reasoning_chars"]
+            ),
+            max_reasoning_events=_ov_int(
+                "max_reasoning_events", reasoning["max_reasoning_events"]
+            ),
         )
 
     @staticmethod
@@ -95,7 +124,11 @@ class TurnBudget:
 
         from src.runtime.reasoning_effort import effective_reasoning_effort
 
-        effort = effective_reasoning_effort(reasoning_effort)
+        raw = (reasoning_effort or "").strip().lower()
+        if raw == "off":
+            effort = "min"
+        else:
+            effort = effective_reasoning_effort(reasoning_effort)
         base_chars = int(os.getenv("AION_REASONING_MAX_CHARS", "20000"))
         base_events = int(os.getenv("AION_REASONING_MAX_EVENTS", "240"))
 

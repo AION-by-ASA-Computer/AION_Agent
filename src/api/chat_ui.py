@@ -206,7 +206,9 @@ async def get_conversation_stream_status_chat_ui(
 
     async with get_async_session_maker()() as session:
         conv = await session.get(Conversation, conv_id)
-        if not conv or conv.tenant_id != tenant or conv.user_id != user_id:
+        if not conv:
+            return {"active": False}
+        if conv.tenant_id != tenant or conv.user_id != user_id:
             raise HTTPException(404, "Conversation not found")
 
     from src.runtime.redis_client import redis_get_stream_active

@@ -12,6 +12,36 @@ import {
 
 import { useConversationThreads } from "./use-conversation-threads";
 
+export type SidebarPanel = "threads" | "tunings";
+export type SidebarTuningsTab = "runtime" | "presets";
+
+export const TUNINGS_TABS: SidebarTuningsTab[] = ["runtime", "presets"];
+
+export function parseTuningsTab(raw: string | null | undefined): SidebarTuningsTab {
+  const v = (raw || "").trim().toLowerCase();
+  if (v === "presets" || v === "preset") return "presets";
+  return "runtime";
+}
+
+/** Returns null when the query refers to full-page settings (profile, appearance, …). */
+export function parseTuningsTabFromQuery(raw: string | null | undefined): SidebarTuningsTab | null {
+  const v = (raw || "").trim().toLowerCase();
+  if (!v) return null;
+  if (v === "presets" || v === "preset") return "presets";
+  if (v === "runtime" || v === "tuning" || v === "tunings") return "runtime";
+  if (
+    v === "profile" ||
+    v === "appearance" ||
+    v === "security" ||
+    v === "instructions" ||
+    v === "user-md" ||
+    v === "account"
+  ) {
+    return null;
+  }
+  return "runtime";
+}
+
 export type ShellActions = ReturnType<typeof useConversationThreads> & {
   setHeader: (node: ReactNode) => void;
   setDock: (node: ReactNode) => void;
@@ -22,6 +52,11 @@ export type ShellActions = ReturnType<typeof useConversationThreads> & {
   setSidebarOpen: (open: boolean) => void;
   setDockCloseHandler: (handler: (() => void) | null) => void;
   invokeDockClose: () => void;
+  sidebarPanel: SidebarPanel;
+  tuningsTab: SidebarTuningsTab;
+  openTunings: (tab?: SidebarTuningsTab) => void;
+  closeTunings: () => void;
+  setTuningsTab: (tab: SidebarTuningsTab) => void;
 };
 
 export type ShellChromeState = {
@@ -40,6 +75,8 @@ export function ShellProvider({ children }: { children: ReactNode }) {
   const [dock, setDockState] = useState<ReactNode>(null);
   const [dockOpen, setDockOpenState] = useState(false);
   const [sidebarOpen, setSidebarOpenState] = useState(false);
+  const [sidebarPanel, setSidebarPanel] = useState<SidebarPanel>("threads");
+  const [tuningsTab, setTuningsTabState] = useState<SidebarTuningsTab>("runtime");
   const dockCloseRef = useRef<(() => void) | null>(null);
 
   const setDockCloseHandler = useCallback((handler: (() => void) | null) => {
@@ -90,6 +127,26 @@ export function ShellProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const openTunings = useCallback((tab?: SidebarTuningsTab) => {
+    if (tab) setTuningsTabState(tab);
+    setSidebarPanel("tunings");
+    setSidebarOpenState(true);
+    try {
+      localStorage.setItem("aion-chat-sidebar-open", "1");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const closeTunings = useCallback(() => {
+    setSidebarPanel("threads");
+  }, []);
+
+  const setTuningsTab = useCallback((tab: SidebarTuningsTab) => {
+    setTuningsTabState(tab);
+    setSidebarPanel("tunings");
+  }, []);
+
   const actions = useMemo<ShellActions>(
     () => ({
       ...threads,
@@ -102,6 +159,11 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       setSidebarOpen,
       setDockCloseHandler,
       invokeDockClose,
+      sidebarPanel,
+      tuningsTab,
+      openTunings,
+      closeTunings,
+      setTuningsTab,
     }),
     [
       threads,
@@ -114,6 +176,11 @@ export function ShellProvider({ children }: { children: ReactNode }) {
       setSidebarOpen,
       setDockCloseHandler,
       invokeDockClose,
+      sidebarPanel,
+      tuningsTab,
+      openTunings,
+      closeTunings,
+      setTuningsTab,
     ],
   );
 

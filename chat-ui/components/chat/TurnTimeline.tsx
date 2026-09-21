@@ -8,18 +8,22 @@ import rehypeKatex from "rehype-katex";
 import { FileText, ListTodo } from "lucide-react";
 
 import { coalesceTurnSegments } from "@/lib/sse/coalesceTurnSegments";
+import { splitCompactTurn } from "@/lib/sse/splitCompactTurn";
 import type { TurnSegment } from "@/lib/sse/types";
 import { useT } from "@/lib/i18n/use-t";
 import type { ToolsViewMode } from "@/components/chat/WebResearchViews";
 import { AssistantToolStepBlock } from "@/components/chat/WebResearchViews";
+import { CompactTurnActivity } from "@/components/chat/CompactTurnActivity";
 import { CodeArtifactBlock } from "@/components/chat/CodeArtifactBlock";
 import { ReasoningDisclosure } from "@/components/chat/ReasoningDisclosure";
-import { ShimmerText } from "@/components/chat/ShimmerText";
+import { ShimmerText, AgentWorkingShimmer } from "@/components/chat/ShimmerText";
 import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
 import { artifactLanguage } from "@/lib/artifacts";
 import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 import { sessionDownloadUrl } from "@/lib/api/aion";
 import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
+import { SafeErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { resolveTurnOutcomeMessage } from "@/lib/sse/turnOutcomeMessage";
 
 type Props = {
   segments: TurnSegment[];
@@ -52,7 +56,83 @@ export function TurnTimeline({
   const displaySegments = coalesceTurnSegments(segments);
   if (!displaySegments.length) return null;
 
+  const isCompact = toolsView === "compact";
   const lastSeg = displaySegments[displaySegments.length - 1];
+
+  // Compact mode: process trail (reasoning/tools + interleaved working notes) vs final answer.
+  if (isCompact) {
+    const { process: prepSegments, output: outputSegments } = splitCompactTurn(
+      displaySegments,
+      { streaming },
+    );
+
+    return (
+      <div className="space-y-2.5">
+        {prepSegments.length > 0 && (
+          <CompactTurnActivity
+            segments={prepSegments}
+            streaming={streaming && outputSegments.length === 0}
+            messageId={messageId}
+            conversationId={conversationId}
+            token={token}
+            isPlanArtifact={isPlanArtifact}
+          />
+        )}
+
+        {outputSegments.map((seg, idx) => {
+          const isLast = idx === outputSegments.length - 1;
+          if (seg.kind === "artifact") {
+            const planCheck = isPlanArtifact
+              ? isPlanArtifact(
+                { identifier: seg.id, type: seg.artType, title: seg.title },
+                seg.buffer,
+              )
+              : false;
+            if (planCheck) return null;
+            const artifactStreaming = streaming && isLast && !seg.savedPath;
+            return (
+              <CodeArtifactBlock
+                key={seg.id}
+                id={`artifact-${seg.id}`}
+                title={seg.title || seg.id}
+                language={artifactLanguage(seg.artType, seg.savedPath || "")}
+                code={seg.buffer}
+                savedPath={seg.savedPath}
+                downloadUrl={
+                  seg.savedPath && conversationId && token
+                    ? sessionDownloadUrl(conversationId, seg.savedPath, token)
+                    : undefined
+                }
+                execution={seg.execution}
+                defaultOpen={!planCheck && !seg.savedPath}
+                streaming={artifactStreaming}
+              />
+            );
+          }
+          if (seg.kind === "text" && Boolean(seg.content)) {
+            return (
+              <div key={seg.id} className="prose-chat">
+                <TextSegment
+                  content={seg.content.trimStart()}
+                  streaming={streaming}
+                  isLast={isLast}
+                  renderMarkdownLink={renderMarkdownLink}
+                  formatTextWithCitations={(txt: string) => formatTextWithCitations(txt, messageId)}
+                />
+              </div>
+            );
+          }
+          return null;
+        })}
+
+        {streaming &&
+          prepSegments.length === 0 &&
+          (!lastSeg || lastSeg.kind !== "text" || !lastSeg.content) ? (
+          <AgentWorkingShimmer label={t("chat.agent_status.thinking")} className="mt-1" />
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-2.5">
@@ -82,21 +162,27 @@ export function TurnTimeline({
         }
         if (seg.kind === "status") {
           const warn = seg.tone === "warning";
+          const statusText = resolveTurnOutcomeMessage(
+            t,
+            seg.content,
+            seg.outcomeCode,
+            seg.outcomeDetails,
+          );
           return (
             <div
               key={seg.id}
               className={
                 warn
-                  ? "rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100"
+                  ? "rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-100"
                   : "rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
               }
               role="status"
               aria-live="polite"
             >
               {streaming && isLast ? (
-                <ShimmerText className="text-xs">{seg.content}</ShimmerText>
+                <ShimmerText className="text-xs">{statusText}</ShimmerText>
               ) : (
-                seg.content
+                statusText
               )}
             </div>
           );
@@ -114,18 +200,7 @@ export function TurnTimeline({
         if (seg.kind === "tool") {
           if (seg.name === "thinking") {
             if (seg.status === "running") {
-              return (
-                <div
-                  key={seg.id}
-                  className="rounded-lg border border-border/50 bg-muted/25 px-3 py-2 text-xs"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <ShimmerText className="text-xs">
-                    {t("chat.agent_status.working")}
-                  </ShimmerText>
-                </div>
-              );
+              return <AgentWorkingShimmer key={seg.id} />;
             }
             return null;
           }
@@ -208,7 +283,7 @@ export function TurnTimeline({
             />
           );
         }
-        if (seg.kind === "text" && seg.content.trim()) {
+        if (seg.kind === "text" && Boolean(seg.content)) {
           return (
             <div key={seg.id} className="prose-chat">
               <TextSegment
@@ -225,18 +300,14 @@ export function TurnTimeline({
       })}
       {streaming &&
         displaySegments.length > 0 &&
-        lastSeg?.kind === "reasoning" &&
-        !displaySegments.some((s) => s.kind === "tool" && s.status === "running") ? (
-        <ShimmerText className="mt-1 text-sm">{t("chat.agent_status.working")}</ShimmerText>
+        (!lastSeg || lastSeg.kind !== "text" || !lastSeg.content) ? (
+        <AgentWorkingShimmer label={t("chat.agent_status.thinking")} className="mt-1" />
       ) : null}
     </div>
   );
 }
 
-/** Shimmer label while the agent has not started visible output yet. */
-export function AgentWorkingShimmer({ label }: { label: string }) {
-  return <ShimmerText className="py-2 leading-relaxed">{label}</ShimmerText>;
-}
+export { AgentWorkingShimmer } from "@/components/chat/ShimmerText";
 
 const TextSegment = memo(function TextSegment({
   content,
@@ -261,15 +332,25 @@ const TextSegment = memo(function TextSegment({
     ...(renderMarkdownLink ? { a: renderMarkdownLink } : {}),
   }), [streaming, isLast, renderMarkdownLink]);
 
+  const katexPlugins = useMemo(() => [[rehypeKatex, { throwOnError: false, strict: false }]] as any, []);
+
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkMath]}
-      rehypePlugins={[rehypeKatex]}
-      disallowedElements={["script"]}
-      unwrapDisallowed
-      components={components}
+    <SafeErrorBoundary
+      fallback={
+        <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+          {formatTextWithCitations(content)}
+        </div>
+      }
     >
-      {formatTextWithCitations(content)}
-    </ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={katexPlugins}
+        disallowedElements={["script"]}
+        unwrapDisallowed
+        components={components}
+      >
+        {formatTextWithCitations(content)}
+      </ReactMarkdown>
+    </SafeErrorBoundary>
   );
 });

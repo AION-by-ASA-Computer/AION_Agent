@@ -132,10 +132,10 @@ export function AppShell({
       <aside
         style={isLgUp && isSidebarOpen ? { width: "var(--sidebar-w)" } : undefined}
         className={cn(
-          "flex min-h-0 flex-col overflow-hidden bg-sidebar/95 text-sidebar-foreground backdrop-blur supports-[backdrop-filter]:bg-sidebar/80",
+          "flex h-full min-h-0 flex-col overflow-hidden bg-sidebar/95 text-sidebar-foreground backdrop-blur supports-[backdrop-filter]:bg-sidebar/80",
           "transition-[transform,width,opacity,border-color] duration-300 ease-out",
-          // Mobile / tablet: fixed drawer
-          "fixed inset-y-0 left-0 z-50 w-[min(88vw,16rem)] shadow-xl lg:static lg:z-auto lg:w-auto lg:shadow-none",
+          // Mobile / tablet: fixed drawer (same width as desktop)
+          "fixed inset-y-0 left-0 z-50 w-[min(88vw,var(--sidebar-w))] shadow-xl lg:static lg:z-auto lg:w-auto lg:shadow-none",
           isSidebarOpen
             ? "translate-x-0 border-r border-border/40 opacity-100"
             : "-translate-x-full border-r-0 opacity-0 pointer-events-none lg:pointer-events-auto",

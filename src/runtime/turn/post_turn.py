@@ -23,6 +23,9 @@ async def finalize_turn_outcome(
     pending_db_steps: List[Dict[str, Any]],
     timeline_builder: Any,
     plan_intercepts: int = 0,
+    reasoning_effort: Optional[str] = None,
+    max_reasoning_chars: Optional[int] = None,
+    max_reasoning_events: Optional[int] = None,
 ) -> tuple[str, Optional[Dict[str, Any]]]:
     """
     Classify turn outcome and optionally build tool-result fallback text.
@@ -62,6 +65,9 @@ async def finalize_turn_outcome(
         max_agent_steps=getattr(agent, "max_agent_steps", None),
         llm_steps=llm_steps_done,
         plan_intercepts=plan_intercepts,
+        reasoning_effort=reasoning_effort,
+        max_reasoning_chars=max_reasoning_chars,
+        max_reasoning_events=max_reasoning_events,
     )
     record_turn_outcome(turn_outcome)
     if not final_text and turn_outcome.get("code") == "plan_created":
@@ -71,11 +77,23 @@ async def finalize_turn_outcome(
     warn = turn_outcome.get("user_visible_warning")
     sse_chunk: Optional[Dict[str, Any]] = None
     if warn:
+        code = turn_outcome.get("code")
+        details = turn_outcome.get("details") or {}
+        if not final_text:
+            final_text = str(warn).strip()
+        if timeline_builder is not None:
+            try:
+                timeline_builder.apply_turn_outcome(
+                    str(warn),
+                    code=str(code) if code else None,
+                    details=details if isinstance(details, dict) else {},
+                )
+            except Exception as tl_exc:
+                logger.debug("timeline turn_outcome skipped: %s", tl_exc)
         sse_chunk = {
             "type": "turn_outcome",
-            "code": turn_outcome.get("code"),
+            "code": code,
             "message": warn,
+            "details": details,
         }
-        if not final_text:
-            final_text = warn
     return final_text, sse_chunk

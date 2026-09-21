@@ -581,6 +581,22 @@ def get_metrics_overview(
     user_metrics_map: Dict[str, Dict[str, Any]] = {}
     mcp_call_errors: List[MCPCallError] = []
 
+    def _ensure_profile_entry(p_slug: str) -> Dict[str, Any]:
+        if p_slug not in profile_metrics_map:
+            profile_metrics_map[p_slug] = {
+                "profile": p_slug,
+                "prompt_tokens": 0,
+                "completion_tokens": 0,
+                "reasoning_tokens": 0,
+                "total_tokens": 0,
+                "total_turns": 0,
+                "total_tool_calls": 0,
+                "successful_tool_calls": 0,
+                "tool_success_rate": 100.0,
+                "avg_turn_duration_seconds": 0.0,
+            }
+        return profile_metrics_map[p_slug]
+
     def _ensure_user_entry(u_id: str) -> Dict[str, Any]:
         if u_id not in user_metrics_map:
             user_metrics_map[u_id] = {
@@ -692,26 +708,14 @@ def get_metrics_overview(
             p = r.get("metric", {}).get("profile", "default")
             ttype = r.get("metric", {}).get("token_type", "prompt")
             val = int(round(float(r.get("value", [0, 0])[1])))
-            if p not in profile_metrics_map:
-                profile_metrics_map[p] = {
-                    "profile": p,
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "reasoning_tokens": 0,
-                    "total_tokens": 0,
-                    "total_turns": 0,
-                    "total_tool_calls": 0,
-                    "successful_tool_calls": 0,
-                    "tool_success_rate": 100.0,
-                    "avg_turn_duration_seconds": 0.0,
-                }
+            p_entry = _ensure_profile_entry(p)
             if ttype == "prompt":
-                profile_metrics_map[p]["prompt_tokens"] += val
+                p_entry["prompt_tokens"] += val
             elif ttype == "completion":
-                profile_metrics_map[p]["completion_tokens"] += val
+                p_entry["completion_tokens"] += val
             elif ttype == "reasoning":
-                profile_metrics_map[p]["reasoning_tokens"] += val
-            profile_metrics_map[p]["total_tokens"] += val
+                p_entry["reasoning_tokens"] += val
+            p_entry["total_tokens"] += val
 
         # Per-user token breakdown
         if time_range == "all":
@@ -763,20 +767,8 @@ def get_metrics_overview(
         for r in res_prof_turns:
             p = r.get("metric", {}).get("profile", "default")
             val = int(round(float(r.get("value", [0, 0])[1])))
-            if p not in profile_metrics_map:
-                profile_metrics_map[p] = {
-                    "profile": p,
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "reasoning_tokens": 0,
-                    "total_tokens": 0,
-                    "total_turns": 0,
-                    "total_tool_calls": 0,
-                    "successful_tool_calls": 0,
-                    "tool_success_rate": 100.0,
-                    "avg_turn_duration_seconds": 0.0,
-                }
-            profile_metrics_map[p]["total_turns"] += val
+            p_entry = _ensure_profile_entry(p)
+            p_entry["total_turns"] += val
 
         res_user_turns = _query_prometheus(user_turn_query) or []
         for r in res_user_turns:
@@ -801,20 +793,8 @@ def get_metrics_overview(
             val_str = r.get("value", [0, 0])[1]
             if val_str != "NaN":
                 p_avg = round(float(val_str), 2)
-                if p not in profile_metrics_map:
-                    profile_metrics_map[p] = {
-                        "profile": p,
-                        "prompt_tokens": 0,
-                        "completion_tokens": 0,
-                        "reasoning_tokens": 0,
-                        "total_tokens": 0,
-                        "total_turns": 0,
-                        "total_tool_calls": 0,
-                        "successful_tool_calls": 0,
-                        "tool_success_rate": 100.0,
-                        "avg_turn_duration_seconds": 0.0,
-                    }
-                profile_metrics_map[p]["avg_turn_duration_seconds"] = p_avg
+                p_entry = _ensure_profile_entry(p)
+                p_entry["avg_turn_duration_seconds"] = p_avg
 
         res_user_dur = (
             _query_prometheus(
@@ -959,22 +939,10 @@ def get_metrics_overview(
             val = int(round(float(r.get("value", [0, 0])[1])))
             if val <= 0:
                 continue
-            if p not in profile_metrics_map:
-                profile_metrics_map[p] = {
-                    "profile": p,
-                    "prompt_tokens": 0,
-                    "completion_tokens": 0,
-                    "reasoning_tokens": 0,
-                    "total_tokens": 0,
-                    "total_turns": 0,
-                    "total_tool_calls": 0,
-                    "successful_tool_calls": 0,
-                    "tool_success_rate": 100.0,
-                    "avg_turn_duration_seconds": 0.0,
-                }
-            profile_metrics_map[p]["total_tool_calls"] += val
+            p_entry = _ensure_profile_entry(p)
+            p_entry["total_tool_calls"] += val
             if st in ("ok", "success"):
-                profile_metrics_map[p]["successful_tool_calls"] += val
+                p_entry["successful_tool_calls"] += val
 
         res_user_tools = _query_prometheus(user_tool_query) or []
         for r in res_user_tools:
@@ -1243,6 +1211,15 @@ def get_metrics_overview(
                         token_usage_by_model[model]["reasoning"] += val
                     total_tokens += val
 
+                    p_entry = _ensure_profile_entry(p_slug)
+                    if ttype == "prompt":
+                        p_entry["prompt_tokens"] += val
+                    elif ttype == "completion":
+                        p_entry["completion_tokens"] += val
+                    elif ttype == "reasoning":
+                        p_entry["reasoning_tokens"] += val
+                    p_entry["total_tokens"] += val
+
                     u_entry = _ensure_user_entry(u_id)
                     up_entry = _ensure_user_profile_entry(u_id, p_slug)
                     if ttype == "prompt":
@@ -1277,6 +1254,8 @@ def get_metrics_overview(
                     if role == "assistant":
                         val = int(metric._value.get())
                         total_turns += val
+                        p_entry = _ensure_profile_entry(p_slug)
+                        p_entry["total_turns"] += val
                         u_entry = _ensure_user_entry(u_id)
                         up_entry = _ensure_user_profile_entry(u_id, p_slug)
                         u_entry["total_turns"] += val
@@ -1309,6 +1288,12 @@ def get_metrics_overview(
                     if val <= 0:
                         continue
 
+                    from src.observability.hooks_emitter import (
+                        resolve_mcp_server_dynamically,
+                    )
+
+                    mserver = resolve_mcp_server_dynamically(tname, mserver)
+
                     key = f"{mserver}:{tname}"
                     if key not in tool_dict:
                         tool_dict[key] = {
@@ -1325,22 +1310,10 @@ def get_metrics_overview(
                         tool_dict[key]["error_count"] += val
 
                     # Update per-profile metrics map in local fallback
-                    if p_slug not in profile_metrics_map:
-                        profile_metrics_map[p_slug] = {
-                            "profile": p_slug,
-                            "prompt_tokens": 0,
-                            "completion_tokens": 0,
-                            "reasoning_tokens": 0,
-                            "total_tokens": 0,
-                            "total_turns": 0,
-                            "total_tool_calls": 0,
-                            "successful_tool_calls": 0,
-                            "tool_success_rate": 100.0,
-                            "avg_turn_duration_seconds": 0.0,
-                        }
-                    profile_metrics_map[p_slug]["total_tool_calls"] += val
+                    p_entry = _ensure_profile_entry(p_slug)
+                    p_entry["total_tool_calls"] += val
                     if st in ("ok", "success"):
-                        profile_metrics_map[p_slug]["successful_tool_calls"] += val
+                        p_entry["successful_tool_calls"] += val
 
                     u_entry = _ensure_user_entry(u_id)
                     up_entry = _ensure_user_profile_entry(u_id, p_slug)
@@ -1407,20 +1380,8 @@ def get_metrics_overview(
                 )
                 if h_count > 0:
                     p_avg = round(float(h_sum) / float(h_count), 2)
-                    if p_slug not in profile_metrics_map:
-                        profile_metrics_map[p_slug] = {
-                            "profile": p_slug,
-                            "prompt_tokens": 0,
-                            "completion_tokens": 0,
-                            "reasoning_tokens": 0,
-                            "total_tokens": 0,
-                            "total_turns": 0,
-                            "total_tool_calls": 0,
-                            "successful_tool_calls": 0,
-                            "tool_success_rate": 100.0,
-                            "avg_turn_duration_seconds": 0.0,
-                        }
-                    profile_metrics_map[p_slug]["avg_turn_duration_seconds"] = p_avg
+                    p_entry = _ensure_profile_entry(p_slug)
+                    p_entry["avg_turn_duration_seconds"] = p_avg
                     u_entry = _ensure_user_entry(u_id)
                     u_entry["avg_turn_duration_seconds"] = p_avg
         except Exception as e:
@@ -1492,8 +1453,10 @@ def get_metrics_overview(
             )
         )
 
-    # Sort profile metrics descending by total tokens
-    profile_metrics_list.sort(key=lambda x: x.total_tokens, reverse=True)
+    # Sort profile metrics descending by total tokens, turns, and tool calls
+    profile_metrics_list.sort(
+        key=lambda x: (x.total_tokens, x.total_turns, x.total_tool_calls), reverse=True
+    )
 
     # Build user_metrics list
     user_metrics_list: List[UserMetricSummary] = []

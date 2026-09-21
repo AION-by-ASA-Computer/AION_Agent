@@ -279,6 +279,70 @@ class TimelineBuilder:
                     self._append_text(visible)
             return
 
+        if ctype == "turn_outcome":
+            msg = chunk.get("message")
+            if isinstance(msg, str) and msg.strip():
+                self.apply_turn_outcome(
+                    msg.strip(),
+                    code=str(chunk.get("code") or "") or None,
+                    details=chunk.get("details")
+                    if isinstance(chunk.get("details"), dict)
+                    else {},
+                )
+            return
+
+        if ctype == "error":
+            msg = chunk.get("content") or chunk.get("message")
+            if isinstance(msg, str) and msg.strip():
+                self._upsert_status(msg.strip(), tone="warning")
+            return
+
+    def apply_turn_outcome(
+        self,
+        message: str,
+        *,
+        code: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        text = (message or "").strip()
+        if not text:
+            return
+        seg: Dict[str, Any] = {
+            "kind": "status",
+            "id": "live_turn_status",
+            "content": text,
+            "tone": "warning",
+        }
+        if code:
+            seg["outcomeCode"] = code
+        if details:
+            seg["outcomeDetails"] = details
+        self._upsert_status_segment(seg)
+
+    def _upsert_status(self, content: str, *, tone: str = "info") -> None:
+        self._upsert_status_segment(
+            {
+                "kind": "status",
+                "id": "live_turn_status",
+                "content": content,
+                "tone": tone,
+            }
+        )
+
+    def _upsert_status_segment(self, seg: Dict[str, Any]) -> None:
+        idx = next(
+            (
+                i
+                for i, s in enumerate(self.segments)
+                if s.get("kind") == "status" and s.get("id") == "live_turn_status"
+            ),
+            -1,
+        )
+        if idx >= 0:
+            self.segments[idx] = seg
+        else:
+            self.segments.append(seg)
+
     def to_list(self) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
         for seg in self.segments:

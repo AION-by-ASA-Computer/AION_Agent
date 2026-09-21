@@ -170,7 +170,7 @@ def _text_completion_generation_kwargs(
     if disable_reasoning:
         from src.runtime.reasoning_effort import merge_generation_kwargs
 
-        return merge_generation_kwargs(kwargs, "min")
+        return merge_generation_kwargs(kwargs, "off")
     return kwargs
 
 

@@ -6,7 +6,11 @@ import {
 } from "./filePreviewTools";
 import { coalesceTurnSegments } from "./coalesceTurnSegments";
 import { initialTurnState } from "./types";
-import { webSearchSourceRows } from "./webToolParse";
+import {
+  webSearchSourceRows,
+  parseWebFetchOutput,
+  webFetchUrlFromInput,
+} from "./webToolParse";
 import { toolOutputLooksLikeError } from "./toolOutputParse";
 
 /** Legacy <plan> token stripping — off when tool-first Plan Mode is default. */
@@ -90,6 +94,28 @@ function upsertStatusSegment(
   ];
 }
 
+function upsertTurnOutcomeSegment(
+  segments: TurnSegment[],
+  content: string,
+  outcomeCode?: string,
+  outcomeDetails?: Record<string, unknown>,
+): TurnSegment[] {
+  const trimmed = content.trim();
+  if (!trimmed) return segments;
+  const without = segments.filter((s) => s.kind !== "status" || s.id !== LIVE_STATUS_ID);
+  return [
+    ...without,
+    {
+      kind: "status",
+      id: LIVE_STATUS_ID,
+      content: trimmed,
+      tone: "warning",
+      outcomeCode,
+      outcomeDetails,
+    },
+  ];
+}
+
 function latestToolKeyForName(state: TurnState, name: string): string | undefined {
   for (let i = state.toolOrder.length - 1; i >= 0; i -= 1) {
     const key = state.toolOrder[i];
@@ -136,6 +162,9 @@ function applyStreamError(
         ? chunk.content.trim()
         : fallback;
   next.error = message;
+  if (message.trim()) {
+    next.segments = upsertStatusSegment(next.segments, message.trim(), "warning");
+  }
   return next;
 }
 
@@ -366,6 +395,20 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
             });
           }
         }
+      } else if (name === "web_fetch_page") {
+        const wf = parseWebFetchOutput(output || "");
+        const inputUrl = webFetchUrlFromInput(cur.input ?? ev.input);
+        const url = (wf?.url || inputUrl)?.trim();
+        if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+          const seen = new Set(next.webSourceCards.map((c) => c.url));
+          if (!seen.has(url)) {
+            next.webSourceCards.push({
+              index: next.webSourceCards.length + 1,
+              title: url,
+              url,
+            });
+          }
+        }
       }
     } else if (et === "tool_error") {
       const id = resolveToolId(next, ev, name);
@@ -552,12 +595,19 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
   }
 
   if (cType === "turn_outcome") {
-    const msg =
-      typeof (chunk as { message?: unknown }).message === "string"
-        ? (chunk as { message: string }).message
-        : "";
+    const outcome = chunk as {
+      message?: unknown;
+      code?: unknown;
+      details?: unknown;
+    };
+    const msg = typeof outcome.message === "string" ? outcome.message : "";
+    const code = typeof outcome.code === "string" ? outcome.code : undefined;
+    const details =
+      outcome.details && typeof outcome.details === "object"
+        ? (outcome.details as Record<string, unknown>)
+        : undefined;
     if (msg.trim()) {
-      next.segments = upsertStatusSegment(next.segments, msg.trim(), "warning");
+      next.segments = upsertTurnOutcomeSegment(next.segments, msg.trim(), code, details);
     }
     return next;
   }
@@ -714,7 +764,9 @@ export function segmentsForPersist(segments: TurnSegment[]): TurnSegment[] {
     .filter(
       (seg) =>
         seg.kind !== "generating" &&
-        (seg.kind !== "status" || seg.id.startsWith("plan_")),
+        (seg.kind !== "status" ||
+          seg.id.startsWith("plan_") ||
+          Boolean((seg as { outcomeCode?: string }).outcomeCode)),
     )
     .map((seg) => {
       if (seg.kind === "tool") {

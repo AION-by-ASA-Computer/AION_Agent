@@ -14,7 +14,61 @@
     "back": "Retour",
     "tab": {
       "account": "Profil & Compte",
-      "usermd": "Profils"
+      "usermd": "Profils",
+      "profile": "Profil",
+      "appearance": "Apparence",
+      "security": "Sécurité",
+      "instructions": "Instructions",
+      "runtime": "Runtime",
+      "presets": "Préréglages"
+    },
+    "runtime": {
+      "loading": "Chargement des paramètres runtime…",
+      "hint": "Les valeurs .env sont les défauts de départ. Les changements s’appliquent au tour suivant.",
+      "reset_all": "Tout réinitialiser",
+      "reset_field": "Réinitialiser le champ",
+      "server_default": "Défaut serveur : {{value}}",
+      "profile_cap": "Ce profil limite les étapes à {{value}}.",
+      "composer_thinking_hint": "Activez/désactivez Thinking et choisissez min/moyen/max via le menu + dans la zone de chat.",
+      "group": {
+        "loop": "Boucle agent",
+        "generation": "Génération",
+        "thinking": "Thinking",
+        "advanced": "Avancé"
+      },
+      "enum": { "min": "Min", "medium": "Moyen", "max": "Max" },
+      "fields": {
+        "max_agent_steps": "Étapes agent max",
+        "max_tool_calls": "Appels d’outils max",
+        "max_tool_events": "Événements d’outils max",
+        "turn_timeout_sec": "Timeout du tour (s)",
+        "no_progress_timeout_sec": "Timeout sans progrès (s)",
+        "max_tokens": "Tokens max",
+        "temperature": "Temperature",
+        "top_p": "Top P",
+        "top_k": "Top K",
+        "presence_penalty": "Presence penalty",
+        "frequency_penalty": "Frequency penalty",
+        "repetition_penalty": "Repetition penalty",
+        "seed": "Seed",
+        "thinking_enabled": "Thinking activé",
+        "reasoning_effort": "Effort de raisonnement",
+        "thinking_token_budget": "Budget tokens thinking",
+        "reasoning_hard_stop": "Garde-fou reasoning (arrêt automatique)",
+        "reasoning_max_chars": "Reasoning max caractères",
+        "reasoning_max_events": "Reasoning max événements",
+        "reasoning_min_chars": "Reasoning min caractères",
+        "reasoning_min_events": "Reasoning min événements",
+        "reasoning_max_level_chars": "Reasoning max-level caractères",
+        "reasoning_max_level_events": "Reasoning max-level événements"
+      }
+    },
+    "presets": {
+      "hint": "Enregistrez les valeurs runtime actuelles comme préréglage.",
+      "name_placeholder": "Nom du préréglage",
+      "save_as": "Enregistrer sous",
+      "save_active": "Enregistrer le préréglage actif",
+      "empty": "Aucun préréglage."
     },
     "section": {
       "profile": {
@@ -70,6 +124,8 @@
     "no_conversations": "Aucune conversation.",
     "delete_confirm": "Supprimer le chat ?",
     "settings": "Paramètres",
+    "tunings": "Réglages et paramètres",
+    "tunings_section": "Paramètres du tour",
     "login": "Se connecter",
     "integrations": "Mes intégrations",
     "schedules": "Automatisations",
@@ -231,15 +287,47 @@
       "saving_info_desc": "L'agent enregistre les informations à long terme…"
     },
     "tools": {
-      "attach_file": "Joindre un Fichier",
-      "view_label": "Vue des Outils",
-      "select_view": "Sélectionner la Vue des Outils",
+      "attach_file": "Joindre un fichier",
+      "view_label": "Affichage des outils",
+      "select_view": "Sélectionner l'affichage des outils",
+      "compact": "Compact",
+      "compact_desc": "Menu déroulant en haut de la réponse",
       "hide": "Masquer",
-      "partial": "Partielle",
-      "full": "Complète",
-      "plus_tooltip": "Ajouter un fichier ou modifier la vue des outils",
-      "drag_drop_title": "Déposer les fichiers ici",
-      "drag_drop_desc": "Glissez-déposez des documents pour les joindre à cette conversation"
+      "partial": "Partiel",
+      "full": "Complet",
+      "plus_tooltip": "Ajouter un fichier ou changer la vue des outils",
+      "drag_drop_title": "Déposez les fichiers ici",
+      "drag_drop_desc": "Glissez-déposez des fichiers pour les joindre à cette conversation"
+    },
+    "tool": {
+      "running": "Exécution de {{name}}…",
+      "web_search_running": "Recherche web en cours",
+      "web_search_done": "Recherche web terminée",
+      "web_fetch_running": "Lecture de la page en cours",
+      "web_fetch_done": "Page lue",
+      "params": "Paramètres",
+      "result": "Résultat",
+      "result_error": "Erreur",
+      "waiting": "En attente du serveur…"
+    },
+    "compact_activity": {
+      "searched_web": "Recherche sur le web",
+      "reading_page": "Lu",
+      "thought_process": "Réflexion",
+      "thought_done": "Réflexion",
+      "tool_executed": "Exécuté {{name}}",
+      "wrote_file": "Écrit {{title}}",
+      "writing_file": "Écriture de {{title}}…",
+      "steps_count": "{{count}} étapes",
+      "and_other_steps": "et {{count}} autres étapes",
+      "thinking_streaming": "En cours de réflexion…",
+      "searching_streaming": "Recherche sur le web {{query}}…",
+      "running_tool_streaming": "Exécution de {{name}}…",
+      "view_details": "Voir les détails",
+      "expand_all": "Tout développer",
+      "collapse_all": "Tout réduire",
+      "sources": "Sources",
+      "results_count": "{{count}} résultats"
     },
     "profile": {
       "label": "Profil",

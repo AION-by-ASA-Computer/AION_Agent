@@ -14,7 +14,61 @@
     "back": "Volver",
     "tab": {
       "account": "Perfil y Cuenta",
-      "usermd": "Perfiles"
+      "usermd": "Perfiles",
+      "profile": "Perfil",
+      "appearance": "Apariencia",
+      "security": "Seguridad",
+      "instructions": "Instrucciones",
+      "runtime": "Runtime",
+      "presets": "Presets"
+    },
+    "runtime": {
+      "loading": "Cargando ajustes de runtime…",
+      "hint": "Los valores .env son los valores iniciales. Los cambios se aplican en el siguiente turno.",
+      "reset_all": "Restablecer todo",
+      "reset_field": "Restablecer campo",
+      "server_default": "Valor del servidor: {{value}}",
+      "profile_cap": "Este perfil limita los pasos a {{value}}.",
+      "composer_thinking_hint": "Activa/desactiva Thinking y elige min/med/max desde el menú + del cuadro de chat.",
+      "group": {
+        "loop": "Bucle del agente",
+        "generation": "Generación",
+        "thinking": "Thinking",
+        "advanced": "Avanzado"
+      },
+      "enum": { "min": "Mín", "medium": "Medio", "max": "Máx" },
+      "fields": {
+        "max_agent_steps": "Pasos máximos del agente",
+        "max_tool_calls": "Llamadas máximas a tools",
+        "max_tool_events": "Eventos máximos de tools",
+        "turn_timeout_sec": "Timeout del turno (s)",
+        "no_progress_timeout_sec": "Timeout sin progreso (s)",
+        "max_tokens": "Tokens máximos",
+        "temperature": "Temperature",
+        "top_p": "Top P",
+        "top_k": "Top K",
+        "presence_penalty": "Presence penalty",
+        "frequency_penalty": "Frequency penalty",
+        "repetition_penalty": "Repetition penalty",
+        "seed": "Seed",
+        "thinking_enabled": "Thinking activado",
+        "reasoning_effort": "Esfuerzo de razonamiento",
+        "thinking_token_budget": "Presupuesto de tokens de thinking",
+        "reasoning_hard_stop": "Guardia de reasoning (parada automática)",
+        "reasoning_max_chars": "Reasoning máx. caracteres",
+        "reasoning_max_events": "Reasoning máx. eventos",
+        "reasoning_min_chars": "Reasoning mín. caracteres",
+        "reasoning_min_events": "Reasoning mín. eventos",
+        "reasoning_max_level_chars": "Reasoning max-level caracteres",
+        "reasoning_max_level_events": "Reasoning max-level eventos"
+      }
+    },
+    "presets": {
+      "hint": "Guarda los valores runtime actuales como preset y reutilízalos.",
+      "name_placeholder": "Nombre del preset",
+      "save_as": "Guardar como",
+      "save_active": "Guardar cambios del preset activo",
+      "empty": "Aún no hay presets."
     },
     "section": {
       "profile": {
@@ -70,6 +124,8 @@
     "no_conversations": "Sin conversaciones.",
     "delete_confirm": "¿Eliminar chat?",
     "settings": "Configuración",
+    "tunings": "Tuning y parámetros",
+    "tunings_section": "Parámetros del turno",
     "login": "Iniciar sesión",
     "integrations": "Mis integraciones",
     "schedules": "Automatizaciones",
@@ -231,15 +287,47 @@
       "saving_info_desc": "El agente está guardando la información a largo plazo…"
     },
     "tools": {
-      "attach_file": "Adjuntar Archivo",
-      "view_label": "Vista de Herramientas",
-      "select_view": "Seleccionar Vista de Herramientas",
+      "attach_file": "Adjuntar archivo",
+      "view_label": "Vista de herramientas",
+      "select_view": "Seleccionar vista de herramientas",
+      "compact": "Compacta",
+      "compact_desc": "Desplegable en la parte superior de la respuesta",
       "hide": "Ocultar",
       "partial": "Parcial",
       "full": "Completa",
       "plus_tooltip": "Adjuntar archivo o cambiar vista de herramientas",
       "drag_drop_title": "Arrastra los archivos aquí",
       "drag_drop_desc": "Arrastra y suelta documentos para adjuntarlos a esta conversación"
+    },
+    "tool": {
+      "running": "Ejecutando {{name}}…",
+      "web_search_running": "Búsqueda web en curso",
+      "web_search_done": "Búsqueda web completada",
+      "web_fetch_running": "Leyendo página",
+      "web_fetch_done": "Página leída",
+      "params": "Parámetros",
+      "result": "Resultado",
+      "result_error": "Error",
+      "waiting": "Esperando al servidor…"
+    },
+    "compact_activity": {
+      "searched_web": "Búsqueda en la web",
+      "reading_page": "Leído",
+      "thought_process": "Pensamiento",
+      "thought_done": "Pensamiento",
+      "tool_executed": "Ejecutado {{name}}",
+      "wrote_file": "Escrito {{title}}",
+      "writing_file": "Escribiendo {{title}}…",
+      "steps_count": "{{count}} pasos",
+      "and_other_steps": "y {{count}} pasos más",
+      "thinking_streaming": "Razonando…",
+      "searching_streaming": "Buscando en la web {{query}}…",
+      "running_tool_streaming": "Ejecutando {{name}}…",
+      "view_details": "Ver detalles",
+      "expand_all": "Expandir todo",
+      "collapse_all": "Contraer todo",
+      "sources": "Fuentes",
+      "results_count": "{{count}} resultados"
     },
     "profile": {
       "label": "Perfil",

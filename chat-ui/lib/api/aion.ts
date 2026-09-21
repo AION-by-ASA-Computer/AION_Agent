@@ -187,9 +187,13 @@ export type ChatRequestBody = {
   deep_research_mode?: boolean;
   /** SQL QueryMemory project slug (cassetti). */
   sql_query_project?: string;
+  /** Tools view mode: compact, partial, full, hidden. */
+  tools_view?: "compact" | "hidden" | "partial" | "full";
+  compact_mode?: boolean;
   /** LLM provider slug to use for this chat session. */
   llm_provider_name?: string;
   metadata?: Record<string, any>;
+  runtime?: Record<string, unknown>;
 };
 
 
