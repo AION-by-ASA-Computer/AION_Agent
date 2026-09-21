@@ -245,6 +245,7 @@
     "pat_hint": "OAuth nicht verfügbar. Fügen Sie Ihren Personal Access Token (PAT) ein.",
     "pat_placeholder": "Token hier einfügen…",
     "field_error": "Pflichtfelder fehlen",
+    "advanced_settings": "Erweiterte Einstellungen",
     "save_error": "Speichern fehlgeschlagen",
     "org_managed": "Von Ihrer Organisation verwaltet — keine persönliche Einrichtung nötig.",
     "per_user_hint": "Geben Sie Ihre persönlichen Zugangsdaten für diese Integration ein.",

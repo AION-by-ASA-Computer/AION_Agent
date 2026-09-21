@@ -116,7 +116,14 @@ def suggest_registry_env_for_per_user(
         key = field.get("key")
         if not key:
             continue
-        out[str(key)] = f"${{AION_USER_{prefix}__{key}}}"
+        k_str = str(key).strip()
+        if k_str.startswith("AION_USER_") and "__" in k_str:
+            base_key = k_str.split("__", 1)[1]
+        else:
+            base_key = k_str
+        ph = f"${{AION_USER_{prefix}__{base_key}}}"
+        out[base_key] = ph
+        out[f"AION_USER_{prefix}__{base_key}"] = ph
     return out
 
 
@@ -126,7 +133,12 @@ def suggest_registry_env_for_org_shared(schema: List[Dict[str, Any]]) -> Dict[st
         key = field.get("key")
         if not key:
             continue
-        out[str(key)] = f"${{{key}}}"
+        k_str = str(key).strip()
+        if k_str.startswith("AION_USER_") and "__" in k_str:
+            base_key = k_str.split("__", 1)[1]
+        else:
+            base_key = k_str
+        out[base_key] = f"${{{base_key}}}"
     return out
 
 
@@ -630,11 +642,37 @@ def merge_suggested_env_into_registry(
     preview = build_integration_preview(server_slug, credential_mode=credential_mode)
     if not preview.get("ok"):
         return preview
+    cfg = mcp_manager.get_server_config(server_slug) or {}
+    env = dict(cfg.get("env") or {})
+
     schema = (
         credential_schema
         if credential_schema is not None
         else (preview.get("credential_schema") or [])
     )
+
+    if not schema and env:
+        schema = []
+        for k in env.keys():
+            k_str = str(k).strip()
+            if not k_str or k_str.startswith("_"):
+                continue
+            if k_str.startswith("AION_USER_") and "__" in k_str:
+                base_key = k_str.split("__", 1)[1]
+            else:
+                base_key = k_str
+            if not any(str(f.get("key") or "").strip() == base_key for f in schema):
+                schema.append(
+                    {
+                        "key": base_key,
+                        "label": base_key.replace("_", " ").title(),
+                        "type": "password"
+                        if re.search(r"TOKEN|SECRET|PASSWORD|KEY", base_key, re.I)
+                        else "text",
+                        "required": True,
+                    }
+                )
+
     if env_override:
         suggested, norm_warnings = normalize_env_override(
             env_override, credential_mode, server_slug
@@ -650,9 +688,12 @@ def merge_suggested_env_into_registry(
     else:
         suggested = {}
         preview_warnings = preview.get("warnings") or []
-    cfg = mcp_manager.get_server_config(server_slug) or {}
-    env = dict(cfg.get("env") or {})
+
     if force_replace_schema_env and suggested:
+        if credential_mode == "org_shared":
+            for k in list(env.keys()):
+                if k.startswith("AION_USER_"):
+                    env.pop(k, None)
         for k, v in suggested.items():
             env[k] = v
     elif preserve_existing_keys:

@@ -64,6 +64,8 @@ services:
       AION_API_HOST: 0.0.0.0
       AION_API_PORT: "8001"
       AION_DATA_DIR: /app/data
+      UV_CACHE_DIR: /app/data/cache/uv
+      npm_config_cache: /app/data/cache/npm
       # Sync config_std/ + mcp_servers_std/ -> runtime dirs at container start
       AION_SYNC_ON_BOOT: ${AION_SYNC_ON_BOOT:-1}
       # Writable MCP registry overlay (mcp_registry.yaml in config/ stays from sync)

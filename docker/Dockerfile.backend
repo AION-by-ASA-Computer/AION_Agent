@@ -64,9 +64,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 # - poppler-utils for pdf2image
 # - libmagic1 for python-magic style detection
 # - tini for clean PID 1 (handles SIGTERM for MCP subprocesses)
-# - nodejs and npm for Node-based MCP servers (e.g. toolbox-postgres)
+# - nodejs 24.x and npm for Node-based MCP servers
 # - git for MCP Hub install-github (marketplace git clone)
 RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
     && apt-get install -y --no-install-recommends \
     tesseract-ocr \
     tesseract-ocr-ita \
@@ -76,7 +78,6 @@ RUN apt-get update \
     curl \
     git \
     nodejs \
-    npm \
     podman \
     libreoffice-writer-nogui \
     && rm -rf /var/lib/apt/lists/*

@@ -529,9 +529,31 @@ async def repair_mcp_integrity_issue(issue: Dict[str, Any]) -> Dict[str, Any]:
         mode = await _credential_mode_for_slug(slug)
         if mode not in ("per_user", "org_shared"):
             mode = "per_user"
+
+        db_schema = None
+        async with get_async_session_maker()() as session:
+            row = (
+                (
+                    await session.execute(
+                        select(McpServerConfig).where(
+                            McpServerConfig.server_slug == slug
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if row and row.credential_schema_json:
+                try:
+                    db_schema = json.loads(row.credential_schema_json)
+                except Exception:
+                    db_schema = None
+
         result = await apply_integration_config(
             slug,
             credential_mode=mode,
+            credential_schema=db_schema,
+            schema_override=bool(db_schema),
             apply_suggested_env=True,
             force_replace_schema_env=True,
             sync_db=False,

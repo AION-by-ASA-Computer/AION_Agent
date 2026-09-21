@@ -67,6 +67,7 @@ def build_remote_bridge_registry_config(
     name: str,
     description: str = "",
     auth_type: str = "oauth2",
+    credential_mode: str = "per_user",
 ) -> Dict[str, Any]:
     slug = re.sub(r"[^a-z0-9]+", "_", name.lower()).strip("_").upper()
 
@@ -75,20 +76,34 @@ def build_remote_bridge_registry_config(
         url,
     ]
     env: Dict[str, str] = {}
+    auth_key = ""
 
     if auth_type == "oauth2":
-        env_var = f"AION_USER_{slug}__OAUTH_TOKEN"
-        args.extend(["--header", "Authorization: Bearer ${" + env_var + "}"])
-        env[env_var] = "${" + env_var + "}"
+        auth_key = "OAUTH_TOKEN"
     elif auth_type == "api-key":
-        env_var = f"AION_USER_{slug}__API_KEY"
-        args.extend(["--header", "Authorization: Bearer ${" + env_var + "}"])
-        env[env_var] = "${" + env_var + "}"
+        auth_key = "API_KEY"
     elif auth_type == "basic":
-        env_var = f"AION_USER_{slug}__BASIC_AUTH"
-        args.extend(["--header", "Authorization: Basic ${" + env_var + "}"])
-        env[env_var] = "${" + env_var + "}"
-    # auth_type "none": no Authorization header
+        auth_key = "BASIC_AUTH"
+
+    env_var = f"AION_USER_{slug}__{auth_key}" if auth_key else ""
+
+    if auth_key:
+        if credential_mode == "per_user":
+            args.extend(
+                ["--header", "Authorization: Bearer ${" + env_var + "}"]
+                if auth_type != "basic"
+                else ["--header", "Authorization: Basic ${" + env_var + "}"]
+            )
+            env[auth_key] = "${" + env_var + "}"
+            env[env_var] = "${" + env_var + "}"
+        elif credential_mode == "org_shared":
+            args.extend(
+                ["--header", "Authorization: Bearer ${" + auth_key + "}"]
+                if auth_type != "basic"
+                else ["--header", "Authorization: Basic ${" + auth_key + "}"]
+            )
+            env[auth_key] = "${" + auth_key + "}"
+        # auth_type "none" or credential_mode "none": no auth header
 
     config: Dict[str, Any] = {
         "type": "remote-bridge",
@@ -99,6 +114,6 @@ def build_remote_bridge_registry_config(
         "aion_market_install": "remote",
         "description": description,
     }
-    if auth_type != "none":
+    if auth_type != "none" and env_var:
         config["auth_env_var"] = env_var
     return config

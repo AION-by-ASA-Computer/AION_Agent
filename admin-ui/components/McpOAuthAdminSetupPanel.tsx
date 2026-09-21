@@ -111,8 +111,7 @@ export function McpOAuthAdminSetupPanel({
             <p className="text-[11px] leading-relaxed text-gray-400">
               This remote MCP server supports standard OAuth discovery (often with dynamic client
               registration). Users authenticate in chat-ui →{" "}
-              <span className="font-semibold text-white">My Integrations</span>. Keep policy{" "}
-              <span className="font-mono text-indigo-300">per_user</span>.
+              <span className="font-semibold text-white">My Integrations</span>.
             </p>
             {oauthConfig.client_id_source === "dynamic_registration" && oauthConfig.client_id ? (
               <p className="mt-2 text-[10px] font-medium text-amber-300/90">

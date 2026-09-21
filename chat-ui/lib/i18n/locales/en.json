@@ -340,6 +340,7 @@
     "pat_hint": "Paste a personal access token (PAT) here if the service does not support OAuth.",
     "pat_placeholder": "Paste your token here…",
     "field_error": "Missing required fields",
+    "advanced_settings": "Advanced settings",
     "save_error": "Could not save",
     "org_managed": "Managed by your organization — no personal setup required.",
     "per_user_hint": "Enter your personal credentials for this integration.",

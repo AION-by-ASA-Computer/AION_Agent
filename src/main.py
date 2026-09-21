@@ -21,7 +21,7 @@ from haystack.utils import Secret
 from .agent_profile import profile_manager
 from .runtime.tool_events import tool_event_bus
 from .runtime.stream_sync import StreamSync
-from .mcp_manager import mcp_manager
+from .mcp_manager import mcp_manager, BOOTSTRAP_SESSION_ID
 from .skill_registry import skill_registry
 
 logger = logging.getLogger(__name__)
@@ -719,8 +719,13 @@ async def build_mcp_tools(
 
         return build_orchestration_haystack_tools(session_id, user_id)
 
+    if session_id:
+        mcp_manager.set_session_context(
+            session_id, ("generic_assistant", user_id or "default", "default")
+        )
+
     try:
-        list_timeout = float(os.getenv("AION_MCP_LIST_TOOLS_TIMEOUT_SEC", "30"))
+        list_timeout = float(os.getenv("AION_MCP_LIST_TOOLS_TIMEOUT_SEC", "90"))
         # Session-scoped pool: stesso stdio per tutta la chat (AION_MCP_POOL=1)
         async with mcp_manager.session_context(
             name, chat_session_id=session_id
@@ -729,7 +734,24 @@ async def build_mcp_tools(
                 session.list_tools(), timeout=list_timeout
             )
 
+        enabled_tools = server_config.get("enabled_tools")
+        enabled_set = (
+            set(enabled_tools)
+            if isinstance(enabled_tools, (list, set, tuple))
+            else None
+        )
+        is_probe = bool(
+            session_id
+            and ("probe" in session_id.lower() or session_id == BOOTSTRAP_SESSION_ID)
+        )
+
         for mcp_tool in tools_result.tools:
+            if (
+                enabled_set is not None
+                and not is_probe
+                and mcp_tool.name not in enabled_set
+            ):
+                continue
             fn = _register_mcp_tool_function(name, mcp_tool.name, session_id)
             haystack_tool = Tool(
                 name=mcp_tool.name,
@@ -739,7 +761,14 @@ async def build_mcp_tools(
             )
             discovered_tools.append(haystack_tool)
 
-        logger.info(f"âœ… Discovered {len(discovered_tools)} tools from {name}")
+        filter_note = (
+            f" (filtered to {len(discovered_tools)} enabled)"
+            if enabled_set is not None and not is_probe
+            else ""
+        )
+        logger.info(
+            f"✅ Discovered {len(discovered_tools)} tools from {name}{filter_note}"
+        )
         logger.info(
             "mcp_tools_discovered server=%s count=%d tools=%s",
             name,
@@ -896,40 +925,11 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
     except Exception as ex:
         logger.debug("MCP user preference filter skipped: %s", ex)
 
-    try:
-        profile_slugs = set(profile.mcp_servers or [])
-        async with get_async_session_maker()() as session:
-            enabled_rows = (
-                (
-                    await session.execute(
-                        select(McpServerConfig.server_slug).where(
-                            McpServerConfig.is_enabled_for_users.is_(True)
-                        )
-                    )
-                )
-                .scalars()
-                .all()
-            )
-        for slug in enabled_rows:
-            if (
-                slug
-                and slug not in profile_slugs
-                and mcp_manager.get_server_config(slug)
-            ):
-                if slug in (ORCHESTRATION_BUILTIN_SERVER, CRON_BUILTIN_SERVER):
-                    continue
-                logger.warning(
-                    "MCP '%s' abilitato in chat ma assente da profile.mcp_servers (%s); "
-                    "aggiungilo al profilo per esporre i tool all'agente.",
-                    slug,
-                    profile.name,
-                )
-    except Exception as ex:
-        logger.debug("MCP profile/integration check skipped: %s", ex)
+    profile_slugs = set(profile.mcp_servers or [])
 
     mcp_discover_names = [
         server_name
-        for server_name in profile.mcp_servers or []
+        for server_name in profile_slugs
         if server_name not in (ORCHESTRATION_BUILTIN_SERVER, CRON_BUILTIN_SERVER)
         and server_name not in skip_slugs
     ]

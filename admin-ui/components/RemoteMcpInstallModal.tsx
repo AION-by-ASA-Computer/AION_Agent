@@ -296,9 +296,16 @@ export function RemoteMcpInstallModal({
             ) : (
               <ShieldCheck className="w-4 h-4" />
             )}
-            Validate endpoint
+            {probing ? "Probing endpoint..." : "Validate endpoint"}
           </button>
         </div>
+
+        {probing && (
+          <div className="flex items-center gap-2.5 rounded-xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-xs text-sky-200 animate-pulse">
+            <Loader2 className="w-4 h-4 text-sky-400 animate-spin shrink-0" />
+            <span>Connecting to remote endpoint and discovering auth &amp; capabilities...</span>
+          </div>
+        )}
 
         {probeError && (
           <p className="text-sm text-red-400 flex items-start gap-2">

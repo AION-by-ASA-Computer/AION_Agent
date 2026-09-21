@@ -1,9 +1,11 @@
 export type CredentialField = {
   key: string;
   label: string;
-  type: "text" | "password" | "oauth";
+  type: "text" | "password" | "boolean" | "oauth";
+  category?: "basic" | "advanced";
   required: boolean;
   description?: string;
+  default_value?: string | boolean;
   /** Placeholder per env registry: ${AION_USER_SLUG__KEY} */
   env_placeholder?: string;
   registry_env_key?: string;

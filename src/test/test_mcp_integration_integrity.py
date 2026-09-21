@@ -59,66 +59,69 @@ def test_build_suggested_env_yaml_block():
     assert yaml.startswith("env:")
 
 
-@pytest.mark.asyncio
-async def test_migrate_credentials_merges_duplicate_keys(integrity_db: str) -> None:
+def test_migrate_credentials_merges_duplicate_keys(integrity_db: str) -> None:
     from sqlalchemy import func, select
+    import asyncio
 
     from src.data.engine import get_async_session_maker
 
-    async with get_async_session_maker()() as session:
-        session.add(
-            UserMcpCredential(
-                id=new_uuid7_str(),
-                user_id="demo",
-                tenant_id="default",
-                server_slug="clickup",
-                credential_key="CLICKUP_API_KEY",
-                value_encrypted=encrypt_value("newer-key"),
+    async def run() -> None:
+        async with get_async_session_maker()() as session:
+            session.add(
+                UserMcpCredential(
+                    id=new_uuid7_str(),
+                    user_id="demo",
+                    tenant_id="default",
+                    server_slug="clickup",
+                    credential_key="CLICKUP_API_KEY",
+                    value_encrypted=encrypt_value("newer-key"),
+                )
             )
-        )
-        session.add(
-            UserMcpCredential(
-                id=new_uuid7_str(),
-                user_id="demo",
-                tenant_id="default",
-                server_slug="clickup-mcp-server",
-                credential_key="CLICKUP_API_KEY",
-                value_encrypted=encrypt_value("older-key"),
+            session.add(
+                UserMcpCredential(
+                    id=new_uuid7_str(),
+                    user_id="demo",
+                    tenant_id="default",
+                    server_slug="clickup-mcp-server",
+                    credential_key="CLICKUP_API_KEY",
+                    value_encrypted=encrypt_value("older-key"),
+                )
             )
-        )
-        session.add(
-            UserMcpCredential(
-                id=new_uuid7_str(),
-                user_id="admin",
-                tenant_id="default",
-                server_slug="clickup-mcp-server",
-                credential_key="OAUTH_TOKEN",
-                value_encrypted=encrypt_value("oauth"),
+            session.add(
+                UserMcpCredential(
+                    id=new_uuid7_str(),
+                    user_id="admin",
+                    tenant_id="default",
+                    server_slug="clickup-mcp-server",
+                    credential_key="OAUTH_TOKEN",
+                    value_encrypted=encrypt_value("oauth"),
+                )
             )
-        )
-        await session.commit()
+            await session.commit()
 
-    result = await migrate_credentials_to_slug("clickup-mcp-server", "clickup")
-    assert result["deleted_duplicates"] == 1
-    assert result["migrated"] == 1
-    assert result["total"] == 2
+        result = await migrate_credentials_to_slug("clickup-mcp-server", "clickup")
+        assert result["deleted_duplicates"] == 1
+        assert result["migrated"] == 1
+        assert result["total"] == 2
 
-    async with get_async_session_maker()() as session:
-        rows = (
-            await session.execute(
-                select(
-                    UserMcpCredential.server_slug, UserMcpCredential.credential_key
-                ).where(UserMcpCredential.user_id.in_(["demo", "admin"]))
-            )
-        ).all()
-        orphan_count = (
-            await session.execute(
-                select(func.count())
-                .select_from(UserMcpCredential)
-                .where(UserMcpCredential.server_slug == "clickup-mcp-server")
-            )
-        ).scalar_one()
-    assert orphan_count == 0
-    assert ("clickup", "CLICKUP_API_KEY") in rows
-    assert ("clickup", "OAUTH_TOKEN") in rows
-    assert ("clickup-mcp-server", "CLICKUP_API_KEY") not in rows
+        async with get_async_session_maker()() as session:
+            rows = (
+                await session.execute(
+                    select(
+                        UserMcpCredential.server_slug, UserMcpCredential.credential_key
+                    ).where(UserMcpCredential.user_id.in_(["demo", "admin"]))
+                )
+            ).all()
+            orphan_count = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(UserMcpCredential)
+                    .where(UserMcpCredential.server_slug == "clickup-mcp-server")
+                )
+            ).scalar_one()
+
+        assert len(rows) == 2
+        assert orphan_count == 0
+        assert all(r[0] == "clickup" for r in rows)
+
+    asyncio.run(run())

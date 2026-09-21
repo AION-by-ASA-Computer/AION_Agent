@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 import time
+import json
 import logging
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set
@@ -113,11 +114,219 @@ class CredentialDiscoveryResult:
     remote_oauth_token_url: Optional[str] = None
 
 
+_BOOLEAN_KEY_RE = re.compile(
+    r"(^ENABLE_|^USE_|^DISABLE_|^ALLOW_|^REQUIRE_|^IS_|^AUTO_|^DEBUG$|_SSL$|_TLS$|_SECURE$|_ENABLED$|_DISABLED$|_DEBUG$)",
+    re.I,
+)
+
+_SECRET_KEY_RE = re.compile(
+    r"(TOKEN|SECRET|PASSWORD|PASS|API_KEY|APIKEY|ACCESS_KEY|PRIVATE_KEY|CLIENT_SECRET|AUTH|BEARER|OAUTH)",
+    re.I,
+)
+
+_BASIC_KEY_RE = re.compile(
+    r"(^(EMAIL|USER|USERNAME|LOGIN|ACCOUNT|ID|CLIENT_ID|TOKEN|API_KEY|SECRET|PASSWORD|PASS|PAT|ACCESS_TOKEN)$|_EMAIL$|_USERNAME$|_PASSWORD$|_TOKEN$|_API_KEY$|_SECRET$|_PAT$)",
+    re.I,
+)
+
+_ACRONYMS = frozenset(
+    {
+        "IMAP",
+        "SMTP",
+        "SSL",
+        "TLS",
+        "API",
+        "URL",
+        "URI",
+        "ID",
+        "SSH",
+        "HTTP",
+        "HTTPS",
+        "JSON",
+        "SQL",
+        "DB",
+        "PAT",
+        "OAUTH",
+    }
+)
+
+_FRIENDLY_METADATA_MAP: Dict[str, Dict[str, Any]] = {
+    "IMAP_HOST": {
+        "label": "Server Posta in Arrivo (IMAP)",
+        "description": "Indirizzo del server IMAP (es. imap.gmail.com, outlook.office365.com)",
+        "category": "advanced",
+        "type": "text",
+    },
+    "IMAP_PORT": {
+        "label": "Porta IMAP",
+        "description": "Porta per la connessione IMAP (predefinita: 993 per SSL)",
+        "category": "advanced",
+        "type": "text",
+        "default_value": "993",
+    },
+    "SMTP_HOST": {
+        "label": "Server Posta in Uscita (SMTP)",
+        "description": "Indirizzo del server SMTP (es. smtp.gmail.com, smtp.office365.com)",
+        "category": "advanced",
+        "type": "text",
+    },
+    "SMTP_PORT": {
+        "label": "Porta SMTP",
+        "description": "Porta per la connessione SMTP (predefinita: 587 o 465)",
+        "category": "advanced",
+        "type": "text",
+        "default_value": "587",
+    },
+    "EMAIL": {
+        "label": "Indirizzo Email",
+        "description": "Il tuo indirizzo email completo",
+        "category": "basic",
+        "type": "text",
+    },
+    "EMAIL_ADDRESS": {
+        "label": "Indirizzo Email",
+        "description": "Il tuo indirizzo email completo",
+        "category": "basic",
+        "type": "text",
+    },
+    "EMAIL_USER": {
+        "label": "Nome Utente / Email",
+        "description": "Nome utente o email per l'accesso",
+        "category": "basic",
+        "type": "text",
+    },
+    "PASSWORD": {
+        "label": "Password / App Password",
+        "description": "Password dell'account o Password per le App (consigliata se hai il 2FA)",
+        "category": "basic",
+        "type": "password",
+    },
+    "EMAIL_PASSWORD": {
+        "label": "Password / App Password",
+        "description": "Password dell'account o Password per le App (consigliata se hai il 2FA)",
+        "category": "basic",
+        "type": "password",
+    },
+    "APP_PASSWORD": {
+        "label": "Password per le App",
+        "description": "Password applicativa generata nelle impostazioni di sicurezza dell'account",
+        "category": "basic",
+        "type": "password",
+    },
+    "USE_SSL": {
+        "label": "Connessione Sicura (SSL/TLS)",
+        "description": "Abilita crittografia SSL/TLS per la trasmissione sicura dei dati",
+        "category": "advanced",
+        "type": "boolean",
+        "default_value": "true",
+    },
+    "ENABLE_SSL": {
+        "label": "Connessione Sicura (SSL)",
+        "description": "Abilita crittografia SSL per la connessione",
+        "category": "advanced",
+        "type": "boolean",
+        "default_value": "true",
+    },
+    "ENABLE_TLS": {
+        "label": "Connessione Sicura (TLS)",
+        "description": "Abilita crittografia TLS per la connessione",
+        "category": "advanced",
+        "type": "boolean",
+        "default_value": "true",
+    },
+    "ENABLE_ATTACHMENT_DOWNLOAD": {
+        "label": "Scarica Allegati",
+        "description": "Consente all'agente di scaricare e analizzare i file allegati",
+        "category": "advanced",
+        "type": "boolean",
+        "default_value": "true",
+    },
+    "FOLDER": {
+        "label": "Cartella di Posta",
+        "description": "Cartella email di default (es. INBOX)",
+        "category": "advanced",
+        "type": "text",
+        "default_value": "INBOX",
+    },
+    "MAILBOX": {
+        "label": "Casella di Posta",
+        "description": "Nome della casella di posta (es. INBOX)",
+        "category": "advanced",
+        "type": "text",
+        "default_value": "INBOX",
+    },
+    "API_KEY": {
+        "label": "Chiave API",
+        "description": "Chiave API segreta generata dalla piattaforma",
+        "category": "basic",
+        "type": "password",
+    },
+    "API_TOKEN": {
+        "label": "Token API",
+        "description": "Token di autorizzazione per accedere al servizio",
+        "category": "basic",
+        "type": "password",
+    },
+    "ACCESS_TOKEN": {
+        "label": "Token di Accesso",
+        "description": "Token personale per autenticare le richieste",
+        "category": "basic",
+        "type": "password",
+    },
+    "PERSONAL_ACCESS_TOKEN": {
+        "label": "Personal Access Token",
+        "description": "Token personale generato nelle impostazioni sviluppatore",
+        "category": "basic",
+        "type": "password",
+    },
+    "PAT": {
+        "label": "Personal Access Token",
+        "description": "Token personale generato nelle impostazioni sviluppatore",
+        "category": "basic",
+        "type": "password",
+    },
+    "CLIENT_ID": {
+        "label": "Client ID",
+        "description": "Identificativo client dell'applicazione",
+        "category": "basic",
+        "type": "text",
+    },
+    "CLIENT_SECRET": {
+        "label": "Client Secret",
+        "description": "Secret dell'applicazione",
+        "category": "basic",
+        "type": "password",
+    },
+    "USERNAME": {
+        "label": "Nome Utente",
+        "description": "Nome utente del tuo account",
+        "category": "basic",
+        "type": "text",
+    },
+    "USER": {
+        "label": "Nome Utente",
+        "description": "Nome utente del tuo account",
+        "category": "basic",
+        "type": "text",
+    },
+}
+
+
+def _clean_prefix(key: str) -> str:
+    cleaned = key
+    for prefix in ("MCP_EMAIL_SERVER_", "MCP_SERVER_", "MCP_"):
+        if cleaned.startswith(prefix) and len(cleaned) > len(prefix):
+            return cleaned[len(prefix) :]
+    return cleaned
+
+
 def _should_skip_env(key: str) -> bool:
     if not key or len(key) < 2:
         return True
     if key in _SKIP_ENV:
         return True
+    if key.startswith("AION_"):
+        return not _is_credential_key(key)
     return any(key.startswith(p) for p in _SKIP_PREFIXES)
 
 
@@ -125,8 +334,46 @@ def _is_credential_key(key: str) -> bool:
     return bool(_CREDENTIAL_KEY_RE.search(key))
 
 
-def _field_type(key: str) -> str:
-    return "password" if _is_credential_key(key) else "text"
+_NUMBER_KEY_RE = re.compile(
+    r"(PORT$|TIMEOUT$|_LIMIT$|_RETRIES$|_MAX_|_MIN_|^PORT$|^TIMEOUT$)",
+    re.I,
+)
+
+
+def _field_type(key: str, default_val: Any = None) -> str:
+    cleaned = _clean_prefix(key)
+    if cleaned in _FRIENDLY_METADATA_MAP and "type" in _FRIENDLY_METADATA_MAP[cleaned]:
+        return str(_FRIENDLY_METADATA_MAP[cleaned]["type"])
+    if key in _FRIENDLY_METADATA_MAP and "type" in _FRIENDLY_METADATA_MAP[key]:
+        return str(_FRIENDLY_METADATA_MAP[key]["type"])
+    if default_val is not None and str(default_val).strip().lower() in (
+        "true",
+        "false",
+    ):
+        return "boolean"
+    if _BOOLEAN_KEY_RE.search(cleaned):
+        return "boolean"
+    if _SECRET_KEY_RE.search(cleaned):
+        return "password"
+    if _NUMBER_KEY_RE.search(cleaned):
+        return "number"
+    if default_val is not None and str(default_val).strip().isdigit():
+        return "number"
+    return "text"
+
+
+def _field_category(key: str) -> str:
+    cleaned = _clean_prefix(key)
+    if (
+        cleaned in _FRIENDLY_METADATA_MAP
+        and "category" in _FRIENDLY_METADATA_MAP[cleaned]
+    ):
+        return str(_FRIENDLY_METADATA_MAP[cleaned]["category"])
+    if key in _FRIENDLY_METADATA_MAP and "category" in _FRIENDLY_METADATA_MAP[key]:
+        return str(_FRIENDLY_METADATA_MAP[key]["category"])
+    if _BASIC_KEY_RE.search(cleaned):
+        return "basic"
+    return "advanced"
 
 
 def _keys_from_text(text: str) -> Set[str]:
@@ -164,26 +411,62 @@ def _keys_from_registry_env(env: Dict[str, Any]) -> Set[str]:
 
 
 def _label_for_env_key(key: str) -> str:
-    for prefix in ("MCP_EMAIL_SERVER_", "MCP_"):
-        if key.startswith(prefix) and len(key) > len(prefix):
-            return key[len(prefix) :].replace("_", " ").strip().title()
-    return key.replace("_", " ").title()
+    cleaned = _clean_prefix(key)
+    if cleaned in _FRIENDLY_METADATA_MAP and "label" in _FRIENDLY_METADATA_MAP[cleaned]:
+        return str(_FRIENDLY_METADATA_MAP[cleaned]["label"])
+    if key in _FRIENDLY_METADATA_MAP and "label" in _FRIENDLY_METADATA_MAP[key]:
+        return str(_FRIENDLY_METADATA_MAP[key]["label"])
 
-
-def _schema_from_keys(keys: List[str]) -> List[Dict[str, Any]]:
-    schema: List[Dict[str, Any]] = []
-    for k in keys:
-        if k.startswith("AION_USER_"):
+    words = cleaned.split("_")
+    formatted_words: List[str] = []
+    for w in words:
+        if not w:
             continue
-        schema.append(
-            {
-                "key": k,
-                "label": _label_for_env_key(k),
-                "type": _field_type(k),
-                "required": True,
-                "description": None,
-            }
+        u = w.upper()
+        if u in _ACRONYMS:
+            formatted_words.append(u)
+        else:
+            formatted_words.append(w.capitalize())
+    return " ".join(formatted_words) if formatted_words else key
+
+
+def _schema_from_keys(
+    keys: List[str],
+    defaults: Optional[Dict[str, Any]] = None,
+    static_org_keys: Optional[Set[str]] = None,
+) -> List[Dict[str, Any]]:
+    schema: List[Dict[str, Any]] = []
+    defaults = defaults or {}
+    static_org_keys = static_org_keys or set()
+    for k in keys:
+        if k.startswith("AION_USER_") or k in static_org_keys:
+            continue
+        cleaned = _clean_prefix(k)
+        meta = (
+            _FRIENDLY_METADATA_MAP.get(cleaned) or _FRIENDLY_METADATA_MAP.get(k) or {}
         )
+        ftype = meta.get("type") or _field_type(k, defaults.get(k))
+        fcat = meta.get("category") or _field_category(k)
+        desc = meta.get("description")
+        default_v = defaults.get(k) or meta.get("default_value")
+
+        is_required = True
+        if ftype == "boolean":
+            is_required = False
+        elif fcat == "advanced" and default_v is not None:
+            is_required = False
+
+        field_dict: Dict[str, Any] = {
+            "key": k,
+            "label": meta.get("label") or _label_for_env_key(k),
+            "type": ftype,
+            "category": fcat,
+            "required": is_required,
+            "description": desc,
+        }
+        if default_v is not None:
+            field_dict["default_value"] = default_v
+        schema.append(field_dict)
     return schema
 
 
@@ -647,6 +930,11 @@ def resolve_remote_bridge_auth_env_var(cfg: dict) -> Optional[str]:
     return token_key
 
 
+def clear_discovery_cache() -> None:
+    """Svuota la cache in-memory del discovery delle credenziali."""
+    _DISCOVERY_CACHE.clear()
+
+
 def discover_mcp_credentials(
     server_slug: str,
     server_config: Optional[Dict[str, Any]] = None,
@@ -654,8 +942,9 @@ def discover_mcp_credentials(
     """
     Analizza file installati e registry per proporre schema credenziali e modalità.
     """
-    # Fast path: reuse discovery result for the same slug within this request.
-    cached = _DISCOVERY_CACHE.get(server_slug)
+    # Fast path: reuse discovery result for the same slug + config within this request.
+    cache_key = f"{server_slug}::{json.dumps(server_config, sort_keys=True, default=str) if server_config else ''}"
+    cached = _DISCOVERY_CACHE.get(cache_key)
     if cached is not None:
         return cached
 
@@ -692,7 +981,7 @@ def discover_mcp_credentials(
                 sources=["remote_discovery"],
                 remote_auth_type="no-remote",
             )
-            _DISCOVERY_CACHE[server_slug] = _res
+            _DISCOVERY_CACHE[cache_key] = _res
             return _res
 
         headers = remote.get("headers") or []
@@ -770,12 +1059,27 @@ def discover_mcp_credentials(
             remote_oauth_token_url=final_res.get("oauth_token_url"),
             has_env_auth=(mode_hint != "none" and auth_type != "unreachable"),
         )
-        _DISCOVERY_CACHE[server_slug] = _res
+        _DISCOVERY_CACHE[cache_key] = _res
         return _res
 
     env = cfg.get("env") if isinstance(cfg.get("env"), dict) else {}
     keys: Set[str] = set()
     sources: List[str] = []
+    defaults: Dict[str, Any] = {}
+    static_org_keys: Set[str] = set()
+
+    for k, v in env.items():
+        if isinstance(k, str) and k.strip():
+            k_clean = k.strip()
+            if (
+                isinstance(v, str)
+                and v.strip()
+                and not (
+                    v.strip().startswith("${AION_USER_")
+                    or _AION_USER_KEY_RE.match(v.strip())
+                )
+            ):
+                static_org_keys.add(k_clean)
 
     registry_keys = _keys_from_registry_env(env)
     if registry_keys:
@@ -787,9 +1091,16 @@ def discover_mcp_credentials(
         for env_name in (".env.example", ".env.sample", ".env.template"):
             ef = mcp_dir / env_name
             if ef.is_file():
-                keys |= _keys_from_text(
-                    ef.read_text(encoding="utf-8", errors="replace")
-                )
+                content = ef.read_text(encoding="utf-8", errors="replace")
+                keys |= _keys_from_text(content)
+                for line in content.splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and "=" in line:
+                        ek, _, ev = line.partition("=")
+                        ek = ek.strip()
+                        ev = ev.strip().strip("'\"")
+                        if ek and ev:
+                            defaults[ek] = ev
                 sources.append(env_name)
                 break
 
@@ -832,13 +1143,15 @@ def discover_mcp_credentials(
 
     _res = CredentialDiscoveryResult(
         env_keys=cred_keys,
-        schema=_schema_from_keys(cred_keys),
+        schema=_schema_from_keys(
+            cred_keys, defaults=defaults, static_org_keys=static_org_keys
+        ),
         credential_mode_hint=mode_hint,
         sources=sources,
         config_file_auth=config_file_auth,
         has_env_auth=has_env_auth,
     )
-    _DISCOVERY_CACHE[server_slug] = _res
+    _DISCOVERY_CACHE[cache_key] = _res
     return _res
 
 
@@ -847,7 +1160,7 @@ def merge_schema_sources(
     catalog_schema: List[Dict[str, Any]],
     discovered_schema: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
-    """Catalogo opzionale (config/) + discovery; discovery riempie i buchi."""
+    """Catalogo opzionale (config/) + discovery; discovery riempie i buchi unendo i campi semantici."""
     if catalog_schema and not discovered_schema:
         return catalog_schema
     if discovered_schema and not catalog_schema:
@@ -858,9 +1171,17 @@ def merge_schema_sources(
     for row in discovered_schema:
         k = str(row.get("key") or "").strip()
         if k:
-            by_key[k] = row
+            by_key[k] = dict(row)
     for row in catalog_schema:
         k = str(row.get("key") or "").strip()
         if k:
-            by_key[k] = row
+            if k in by_key:
+                # Merge: catalog overrides specific fields, but keeps inferred type/category if missing
+                merged = dict(by_key[k])
+                for field_k, field_v in row.items():
+                    if field_v is not None:
+                        merged[field_k] = field_v
+                by_key[k] = merged
+            else:
+                by_key[k] = dict(row)
     return [by_key[k] for k in sorted(by_key.keys())]

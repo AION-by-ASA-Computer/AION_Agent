@@ -38,14 +38,21 @@ def resolve_connector_catalog_path() -> Path | None:
 def infer_connector_id_for_registry_name(
     registry_name: str, catalog: Dict[str, Any]
 ) -> str | None:
-    """
-    Associa un nome server MCP nel registry (es. ``clickup-mcp-server``) a un ``id`` del catalogo connettori,
-    usando ``mcp_name_hints`` se presenti, altrimenti l'id del connettore come hint debole.
-    Preferisce il hint più lungo che compare nel nome (meno ambiguo).
-    """
+    """Inferisce l'id connettore dal nome del server MCP nel registry (catalog hints)."""
     n = (registry_name or "").lower().replace("_", "-")
+    clean_name = re.sub(r"^(github|smithery|npm|uvx)-", "", n)
+
+    # 1. Match esatto sull'id connettore
+    for c in catalog.get("connectors") or []:
+        if not isinstance(c, dict):
+            continue
+        cid = str(c.get("id") or "").strip().lower()
+        if cid and (cid == n or cid == clean_name):
+            return cid
+
     winner: str | None = None
     win_len = 0
+
     for c in catalog.get("connectors") or []:
         if not isinstance(c, dict):
             continue
@@ -61,7 +68,15 @@ def infer_connector_id_for_registry_name(
         for h in hints:
             if len(h) < 3:
                 continue
-            if h in n:
+            # Evita falso positivo per "github" su repo GitHub generici
+            if (
+                (h == "github" or cid_s == "github")
+                and clean_name != "github"
+                and clean_name != "mcp-server-github"
+                and not clean_name.startswith("github-")
+            ):
+                continue
+            if h in clean_name:
                 if len(h) > win_len:
                     win_len = len(h)
                     winner = cid_s

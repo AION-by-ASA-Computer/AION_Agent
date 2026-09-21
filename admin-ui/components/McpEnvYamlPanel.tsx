@@ -10,7 +10,7 @@ type Props = {
   className?: string;
 };
 
-export function McpEnvYamlPanel({ yaml, title = "Snippet env per registry (YAML)", className }: Props) {
+export function McpEnvYamlPanel({ yaml, title = "Registry env snippet (YAML)", className }: Props) {
   const [copied, setCopied] = useState(false);
 
   async function copy() {
@@ -37,14 +37,14 @@ export function McpEnvYamlPanel({ yaml, title = "Snippet env per registry (YAML)
           className="focus-ring inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[0.714em] font-semibold text-foreground transition hover:bg-muted"
         >
           {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
-          {copied ? "Copiato" : "Copia"}
+          {copied ? "Copied" : "Copy"}
         </button>
       </div>
       <pre className="overflow-x-auto whitespace-pre-wrap break-all rounded-xl border border-border/60 bg-background/60 p-3 font-mono text-[0.786em] leading-relaxed text-foreground">
         {yaml}
       </pre>
       <p className="text-[0.714em] text-muted-foreground">
-        Incolla nel blocco <span className="font-mono">env:</span> del registry o usa «Applica env suggerito».
+        Paste into the <span className="font-mono">env:</span> block of the registry or click &quot;Apply suggested env&quot;.
       </p>
     </div>
   );

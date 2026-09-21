@@ -245,6 +245,7 @@
     "pat_hint": "OAuth no disponible. Pegue su Personal Access Token (PAT) a continuación.",
     "pat_placeholder": "Pegue su token aquí…",
     "field_error": "Faltan campos obligatorios",
+    "advanced_settings": "Configuración avanzada",
     "save_error": "No se pudo guardar",
     "org_managed": "Gestionado por su organización — no requiere configuración personal.",
     "per_user_hint": "Introduzca sus credenciales personales para esta integración.",

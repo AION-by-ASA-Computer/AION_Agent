@@ -92,45 +92,96 @@ async def probe_mcp_server(
         }
 
 
+def classify_mcp_error(
+    error_msg: str, cfg: Optional[Dict[str, Any]] = None
+) -> Dict[str, str]:
+    """Classifies an MCP error message into category, user-friendly description, and actionable hint."""
+    cfg = cfg or {}
+    low = (error_msg or "").lower()
+
+    # 1. Timeout / Unreachable
+    if (
+        "timeout" in low
+        or "timed out" in low
+        or "taskgroup" in low
+        or "sub-exception" in low
+        or "connection refused" in low
+        or "econnrefused" in low
+    ):
+        return {
+            "error_type": "timeout",
+            "category": "Connection Timeout / Unreachable",
+            "error": "The MCP server is unreachable or timed out during handshake.",
+            "hint": "Check that the endpoint is active, network is reachable, and the server starts within the timeout limit.",
+        }
+
+    # 2. Host environment / Missing executable / Module not found
+    if (
+        "not found" in low
+        or "enoent" in low
+        or "command not found" in low
+        or "cannot find module" in low
+        or "modulenotfounderror" in low
+        or "no such file" in low
+    ):
+        cmd = cfg.get("command") or ""
+        return {
+            "error_type": "executable_missing",
+            "category": "Host Environment / Executable Error",
+            "error": f"Executable or package dependency not found ({cmd or 'runtime'}).",
+            "hint": f"Ensure '{cmd or 'runtime'}' and required dependencies are installed on the server and available in PATH.",
+        }
+
+    # 3. Authentication / Unauthorized
+    if (
+        "401" in low
+        or "403" in low
+        or "unauthorized" in low
+        or "forbidden" in low
+        or "invalid_client" in low
+        or "invalid_grant" in low
+        or "api key" in low
+    ):
+        return {
+            "error_type": "auth_failed",
+            "category": "Authentication Failed",
+            "error": "Invalid, expired, or missing API credentials / OAuth token.",
+            "hint": "Verify credentials in MCP Hub (Org env) or user profile integrations.",
+        }
+
+    # 4. Process crash / Syntax error / Script failure
+    if (
+        "exit code" in low
+        or "closed" in low
+        or "process terminated" in low
+        or "traceback" in low
+        or "syntaxerror" in low
+        or "typeerror" in low
+    ):
+        return {
+            "error_type": "process_crashed",
+            "category": "MCP Process Crash",
+            "error": f"MCP server process crashed during initialization ({error_msg[:160]}).",
+            "hint": "Check server command line arguments, runtime parameters, and server logs.",
+        }
+
+    # 5. General error
+    return {
+        "error_type": "general_error",
+        "category": "MCP Connection Error",
+        "error": error_msg[:200] if error_msg else "Unknown probe error occurred.",
+        "hint": "Check command, arguments, environment variables, and logs in MCP Hub.",
+    }
+
+
 def _clean_error_message(msg: str) -> str:
-    low = msg.lower()
-    if "taskgroup" in low or "sub-exception" in low:
-        return "Server non raggiungibile (connessione rifiutata o timeout)"
-    return msg
+    classified = classify_mcp_error(msg)
+    return classified["error"]
 
 
 def _hint_for_error(server_slug: str, cfg: Dict[str, Any], msg: str) -> str:
-    low = msg.lower()
-    if "taskgroup" in low or "sub-exception" in low:
-        return (
-            "Il server MCP remoto non è raggiungibile. Verifica che il servizio "
-            "sia attivo all'endpoint configurato e che non ci siano problemi di rete."
-        )
-    if "401" in low or "unauthorized" in low or "forbidden" in low or "403" in low:
-        return (
-            "Invalid or expired API credentials. Open My Integrations, "
-            "update the token/key for this connector, or disable it in the profile."
-        )
-    if "warm timeout" in low or "initialization timed out" in low or "timed out" in low:
-        return (
-            "MCP server did not respond in time. Check command/args in MCP Hub "
-            "or temporarily disable the integration from the profile."
-        )
-    args = cfg.get("args") or []
-    if (
-        "cannot find module" in low
-        or "module_not_found" in low
-        or "no such file" in low
-    ):
-        if cfg.get("command") == "node" and args:
-            return (
-                "Registry points to Node.js but the project is likely Python. "
-                "In Admin → MCP Hub → Edit: use «uv run … stdio» or «uvx mcp-email-server@latest stdio», "
-                "or rerun the wizard after updating AION."
-            )
-    if "enoent" in low and "uv" in low:
-        return "Install uv (https://docs.astral.sh/uv/) on the backend server or use command: uvx in the registry."
-    return "Check command/args in MCP Hub and that credentials in My Integrations are complete."
+    classified = classify_mcp_error(msg, cfg)
+    return classified["hint"]
 
 
 def format_session_mcp_errors(
