@@ -1472,7 +1472,7 @@ def _docker_upgrade(args, report: Report) -> int:
     env_file = ROOT / args.env_file
     if not env_file.exists():
         report.log_warn(
-            f".env not found at {env_file} — copy .env.docker.example or run setup-aion-env.sh --docker"
+            f".env not found at {env_file} — copy .env.example or run ./scripts/setup-aion-env.sh --docker"
         )
 
     compose_cmd = ["docker", "compose", "-f", str(compose_file)]

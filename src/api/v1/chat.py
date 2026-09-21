@@ -15,9 +15,14 @@ from sse_starlette.sse import EventSourceResponse
 
 from src.agent_pipeline import AgentPipeline
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
+from src.api.v1.runtime_settings import RuntimeSettingsPayload
 from src.identity import sanitize_user_id
 from src.main import get_agent, set_event_loop
-from src.runtime.reasoning_effort import effective_reasoning_effort
+from src.runtime.reasoning_effort import resolve_turn_reasoning
+from src.runtime.runtime_settings import (
+    profile_step_cap,
+    resolve_turn_runtime_settings,
+)
 from src.runtime.redis_client import redis_clear_stream_cancel, redis_set_stream_cancel
 from src.api.web_search_params import normalize_web_search_restrict_hosts
 
@@ -40,6 +45,46 @@ class BackgroundChatRun:
 
 
 _background_runs: Dict[str, BackgroundChatRun] = {}
+
+
+def _runtime_dict(
+    payload: Optional[RuntimeSettingsPayload],
+) -> Optional[Dict[str, Any]]:
+    if payload is None:
+        return None
+    raw = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
+    out = {k: v for k, v in raw.items() if v is not None}
+    return out or None
+
+
+def _thinking_from_runtime(
+    body_effort: Optional[str],
+    body_thinking: Optional[bool],
+    runtime: Optional[Dict[str, Any]],
+) -> tuple[Optional[str], Optional[bool]]:
+    effort = body_effort
+    thinking = body_thinking
+    if runtime:
+        if effort is None and runtime.get("reasoning_effort") is not None:
+            effort = str(runtime.get("reasoning_effort"))
+        if thinking is None and "thinking_enabled" in runtime:
+            thinking = bool(runtime.get("thinking_enabled"))
+    return effort, thinking
+
+
+async def _clamped_runtime(
+    runtime: Optional[Dict[str, Any]],
+    uid: str,
+    profile_name: str,
+) -> Dict[str, Any]:
+    from src.settings import get_settings
+
+    return await resolve_turn_runtime_settings(
+        runtime,
+        uid,
+        profile_max_agent_steps=profile_step_cap(profile_name),
+        context_window=get_settings().context_window,
+    )
 
 
 async def _run_pipeline_in_background(
@@ -71,10 +116,12 @@ async def _run_pipeline_in_background(
             user_id=uid,
             agent_mode=resolved_agent_mode,
         )
-        if body.thinking_enabled is False:
-            resolved_effort = "min"
-        else:
-            resolved_effort = effective_reasoning_effort(body.reasoning_effort)
+        raw_runtime = _runtime_dict(body.runtime)
+        effort_in, thinking_in = _thinking_from_runtime(
+            body.reasoning_effort, body.thinking_enabled, raw_runtime
+        )
+        resolved_effort = resolve_turn_reasoning(effort_in, thinking_in)
+        clamped = await _clamped_runtime(raw_runtime, uid, profile_name)
 
         async for chunk in pipeline.run_stream(
             body.message,
@@ -99,6 +146,7 @@ async def _run_pipeline_in_background(
                     else {}
                 ),
             },
+            runtime=clamped,
         ):
             event_data = {"event": "message", "data": json.dumps(chunk)}
             run.history.append(event_data)
@@ -244,6 +292,10 @@ class ChatStreamBody(BaseModel):
         description="Slug del provider LLM da usare per questa sessione (opzionale).",
     )
     metadata: Optional[Dict[str, Any]] = None
+    runtime: Optional[RuntimeSettingsPayload] = Field(
+        default=None,
+        description="Allowlisted turn overrides (steps, sampling, thinking).",
+    )
 
     class Config:
         populate_by_name = True
@@ -279,6 +331,7 @@ class ChatSyncBody(BaseModel):
     compact_mode: Optional[bool] = None
     llm_provider_name: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    runtime: Optional[RuntimeSettingsPayload] = None
     timeout_seconds: Optional[float] = Field(
         default=300.0,
         ge=1.0,
@@ -822,10 +875,11 @@ async def chat_sync(
         conversation_project=conversation_project,
     )
 
-    if body.thinking_enabled is False:
-        resolved_effort = "min"
-    else:
-        resolved_effort = effective_reasoning_effort(body.reasoning_effort)
+    raw_runtime = _runtime_dict(body.runtime)
+    effort_in, thinking_in = _thinking_from_runtime(
+        body.reasoning_effort, body.thinking_enabled, raw_runtime
+    )
+    resolved_effort = resolve_turn_reasoning(effort_in, thinking_in)
 
     timeout = float(body.timeout_seconds or 300.0)
 
@@ -845,6 +899,7 @@ async def chat_sync(
             user_id=uid,
             agent_mode=resolved_agent_mode,
         )
+        clamped = await _clamped_runtime(raw_runtime, uid, profile_name)
         result = await asyncio.wait_for(
             pipeline.run(
                 body.message,
@@ -863,6 +918,7 @@ async def chat_sync(
                         else {}
                     ),
                 },
+                runtime=clamped,
             ),
             timeout=timeout,
         )

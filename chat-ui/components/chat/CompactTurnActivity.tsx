@@ -1,17 +1,22 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
   Globe,
   Search,
   Brain,
   Terminal,
-  ChevronDown,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 import { AgentWorkingShimmer } from "@/components/chat/ShimmerText";
+import { MarkdownCodeBlock } from "@/components/chat/MarkdownCodeBlock";
 import type { TurnSegment, ToolStepStatus } from "@/lib/sse/types";
 import {
   parseWebSearchOutput,
@@ -20,7 +25,9 @@ import {
   webFetchUrlFromInput,
 } from "@/lib/sse/webToolParse";
 import { formatToolInput, toolInputPreview } from "@/lib/sse/formatToolInput";
-
+import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
+import { artifactLanguage } from "@/lib/artifacts";
+import { sessionDownloadUrl } from "@/lib/api/aion";
 import { SafeErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 function webHostLabel(url?: string | null): string {
@@ -66,11 +73,28 @@ function FaviconImage({ url, className }: { url?: string | null; className?: str
   );
 }
 
+function StepIcon({ children }: { children: ReactNode }) {
+  return (
+    <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center text-muted-foreground/80">
+      {children}
+    </span>
+  );
+}
+
+function isExpandableSegment(seg: TurnSegment): boolean {
+  if (seg.kind === "reasoning" || seg.kind === "artifact") return true;
+  if (seg.kind !== "tool") return false;
+  return seg.name !== "web_search" && seg.name !== "web_fetch_page" && seg.name !== "thinking";
+}
+
 type Props = {
   segments: TurnSegment[];
   streaming?: boolean;
   messageId?: string;
   defaultOpen?: boolean;
+  conversationId?: string;
+  token?: string | null;
+  isPlanArtifact?: (art: { identifier: string; type?: string; title?: string }, buffer: string) => boolean;
 };
 
 export function CompactTurnActivity(props: Props) {
@@ -92,216 +116,174 @@ export function CompactTurnActivity(props: Props) {
 function CompactTurnActivityInner({
   segments,
   streaming = false,
-  messageId,
   defaultOpen = false,
+  conversationId,
+  token,
+  isPlanArtifact,
 }: Props) {
   const t = useT();
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
 
-  // Group and inspect preparatory items
-  const {
-    webSearches,
-    webFetches,
-    reasoningSegments,
-    otherTools,
-    activeRunningStep,
-  } = useMemo(() => {
-    const webSearches: Array<{
-      id: string;
-      query: string;
-      results: Array<{ title: string; url: string; snippet?: string }>;
-      provider?: string;
-      error?: string;
-      status: ToolStepStatus;
-      rawInput: unknown;
-      rawOutput?: string;
-    }> = [];
-
-    const webFetches: Array<{
-      id: string;
-      url: string;
-      error?: string;
-      status: ToolStepStatus;
-      rawInput: unknown;
-      rawOutput?: string;
-    }> = [];
-
-    const reasoningSegments: Array<{
-      id: string;
-      content: string;
-    }> = [];
-
-    const otherTools: Array<{
-      id: string;
-      name: string;
-      input: unknown;
-      output?: string;
-      error?: string;
-      isError?: boolean;
-      status: ToolStepStatus;
-      tokens_in?: number;
-      tokens_out?: number;
-    }> = [];
-
-    let activeRunningStep: {
-      type: "search" | "fetch" | "reasoning" | "tool";
-      name?: string;
-      label: string;
-    } | null = null;
+  const { visibleSegments, activeRunningStep, webSearches, otherTools, reasoningSegments } = useMemo(() => {
+    const visible: TurnSegment[] = [];
+    const webSearches: Array<{ query: string }> = [];
+    const otherTools: Array<{ name: string }> = [];
+    const reasoningSegments: TurnSegment[] = [];
+    let activeRunningStep: { label: string } | null = null;
 
     for (const seg of segments) {
       if (seg.kind === "reasoning") {
-        const trimmed = (seg.content || "").trim();
-        if (trimmed) {
-          reasoningSegments.push({
-            id: seg.id,
-            content: trimmed,
-          });
+        if (seg.content.trim()) {
+          visible.push(seg);
+          reasoningSegments.push(seg);
         }
-      } else if (seg.kind === "status") {
+        continue;
+      }
+      if (seg.kind === "status") {
         if (streaming && !activeRunningStep) {
           activeRunningStep = {
-            type: "reasoning",
             label: seg.content?.trim() || t("chat.agent_status.thinking"),
           };
         }
-      } else if (seg.kind === "generating") {
-        if (streaming && !activeRunningStep) {
-          activeRunningStep = {
-            type: "reasoning",
-            label: seg.title?.trim() || t("chat.agent_status.thinking"),
-          };
+        if (streaming) visible.push(seg);
+        continue;
+      }
+      if (seg.kind === "generating") {
+        if (streaming) {
+          visible.push(seg);
+          if (!activeRunningStep) {
+            activeRunningStep = {
+              label: seg.title?.trim()
+                ? t("chat.compact_activity.writing_file", { title: seg.title })
+                : t("chat.agent_status.thinking"),
+            };
+          }
         }
-      } else if (seg.kind === "tool") {
+        continue;
+      }
+      if (seg.kind === "tool") {
         if (seg.name === "thinking") {
           if (seg.status === "running") {
-            activeRunningStep = {
-              type: "reasoning",
-              label: t("chat.agent_status.thinking"),
-            };
+            activeRunningStep = { label: t("chat.agent_status.thinking") };
           }
           continue;
         }
-
+        visible.push(seg);
         if (seg.name === "web_search") {
           const ws = parseWebSearchOutput(seg.output || "");
-          const inputQ = webSearchQueryFromInput(seg.input);
-          const effectiveQ = ws?.query || inputQ || "";
-          const effectiveResults = ws?.results?.filter((r) => r && r.url) || [];
-
-          webSearches.push({
-            id: seg.id,
-            query: effectiveQ,
-            results: effectiveResults,
-            provider: ws?.provider,
-            error: ws?.error || seg.error,
-            status: seg.status,
-            rawInput: seg.input,
-            rawOutput: seg.output,
-          });
-
+          const query = ws?.query || webSearchQueryFromInput(seg.input) || "";
+          webSearches.push({ query });
           if (seg.status === "running") {
             activeRunningStep = {
-              type: "search",
               label: t("chat.compact_activity.searching_streaming", {
-                query: effectiveQ ? `"${truncate(effectiveQ, 40)}"` : "",
+                query: query ? `"${truncate(query, 40)}"` : "",
               }),
             };
           }
         } else if (seg.name === "web_fetch_page") {
           const wf = parseWebFetchOutput(seg.output || "");
-          const inputU = webFetchUrlFromInput(seg.input);
-          const effectiveU = wf?.url || inputU || "";
-
-          webFetches.push({
-            id: seg.id,
-            url: effectiveU,
-            error: wf?.error || seg.error,
-            status: seg.status,
-            rawInput: seg.input,
-            rawOutput: seg.output,
-          });
-
+          const url = wf?.url || webFetchUrlFromInput(seg.input) || "";
           if (seg.status === "running") {
             activeRunningStep = {
-              type: "fetch",
-              label: t("chat.compact_activity.reading_page") + (effectiveU ? ` ${webHostLabel(effectiveU)}` : "…"),
+              label:
+                t("chat.compact_activity.reading_page") +
+                (url ? ` ${webHostLabel(url)}` : "…"),
             };
           }
         } else {
-          otherTools.push({
-            id: seg.id,
-            name: seg.name,
-            input: seg.input,
-            output: seg.output,
-            error: seg.error,
-            isError: seg.isError,
-            status: seg.status,
-            tokens_in: seg.tokens_in,
-            tokens_out: seg.tokens_out,
-          });
-
+          otherTools.push({ name: seg.name });
           if (seg.status === "running") {
             activeRunningStep = {
-              type: "tool",
-              name: seg.name,
               label: t("chat.compact_activity.running_tool_streaming", { name: seg.name }),
             };
           }
         }
+        continue;
+      }
+      if (seg.kind === "text") {
+        if (seg.content.trim()) visible.push(seg);
+        continue;
+      }
+      if (seg.kind === "artifact") {
+        const planCheck = isPlanArtifact
+          ? isPlanArtifact(
+              { identifier: seg.id, type: seg.artType, title: seg.title },
+              seg.buffer,
+            )
+          : false;
+        if (!planCheck) visible.push(seg);
       }
     }
 
     return {
-      webSearches,
-      webFetches,
-      reasoningSegments,
-      otherTools,
+      visibleSegments: visible,
       activeRunningStep,
+      webSearches,
+      otherTools,
+      reasoningSegments,
     };
-  }, [segments, streaming, t]);
+  }, [segments, streaming, t, isPlanArtifact]);
 
-  const totalStepsCount =
-    webSearches.length +
-    webFetches.length +
-    reasoningSegments.length +
-    otherTools.length;
+  const totalStepsCount = visibleSegments.length;
 
-  if (totalStepsCount === 0 && !streaming && !activeRunningStep) {
-    return null;
-  }
+  const expandableIds = useMemo(
+    () => visibleSegments.filter(isExpandableSegment).map((seg) => seg.id),
+    [visibleSegments],
+  );
 
-  // Generate the main single-line summary header (Claude-style)
+  const allDetailsExpanded =
+    expandableIds.length > 0 && expandableIds.every((id) => expandedIds.has(id));
+
+  const toggleDetail = useCallback((id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const toggleAllDetails = useCallback(() => {
+    setExpandedIds((prev) => {
+      const allOpen = expandableIds.length > 0 && expandableIds.every((id) => prev.has(id));
+      return allOpen ? new Set() : new Set(expandableIds);
+    });
+  }, [expandableIds]);
+
   const headerSummary = useMemo(() => {
     if (streaming && activeRunningStep) {
-      return {
-        prefix: "",
-        query: activeRunningStep.label,
-        isStreaming: true,
-      };
+      return { prefix: "", query: activeRunningStep.label, isStreaming: true };
     }
 
-    if (webSearches.length === 1 && webFetches.length === 0 && otherTools.length === 0 && reasoningSegments.length === 0) {
+    if (
+      webSearches.length === 1 &&
+      otherTools.length === 0 &&
+      reasoningSegments.length === 0 &&
+      totalStepsCount === 1
+    ) {
       return {
         prefix: t("chat.compact_activity.searched_web"),
-        query: webSearches[0].query ? `${webSearches[0].query}` : "",
+        query: webSearches[0].query || "",
         isStreaming: false,
       };
     }
 
     if (webSearches.length > 0) {
       const mainQ = webSearches[0].query;
-      const otherCount = totalStepsCount - 1;
+      const otherCount = Math.max(0, totalStepsCount - 1);
       if (otherCount > 0) {
         return {
           prefix: t("chat.compact_activity.searched_web"),
-          query: mainQ ? `${truncate(mainQ, 35)} ${t("chat.compact_activity.and_other_steps", { count: otherCount })}` : t("chat.compact_activity.steps_count", { count: totalStepsCount }),
+          query: mainQ
+            ? `${truncate(mainQ, 35)} ${t("chat.compact_activity.and_other_steps", { count: otherCount })}`
+            : t("chat.compact_activity.steps_count", { count: totalStepsCount }),
           isStreaming: false,
         };
       }
       return {
         prefix: t("chat.compact_activity.searched_web"),
-        query: mainQ ? `${mainQ}` : "",
+        query: mainQ || "",
         isStreaming: false,
       };
     }
@@ -322,137 +304,174 @@ function CompactTurnActivityInner({
       };
     }
 
+    const onlyStep = visibleSegments[0];
+    if (visibleSegments.length === 1 && onlyStep?.kind === "artifact") {
+      return {
+        prefix: t("chat.compact_activity.wrote_file", { title: onlyStep.title || onlyStep.id }),
+        query: "",
+        isStreaming: false,
+      };
+    }
+
     return {
       prefix: t("chat.compact_activity.steps_count", { count: totalStepsCount }),
       query: "",
       isStreaming: false,
     };
-  }, [streaming, activeRunningStep, webSearches, webFetches, otherTools, reasoningSegments, totalStepsCount, t]);
+  }, [
+    streaming,
+    activeRunningStep,
+    webSearches,
+    otherTools,
+    reasoningSegments,
+    totalStepsCount,
+    visibleSegments,
+    t,
+  ]);
+
+  if (totalStepsCount === 0 && !streaming && !activeRunningStep) {
+    return null;
+  }
 
   return (
-    <div className="mb-3 text-sm">
-      {/* Compact Header Button */}
-      <button
-        type="button"
-        onClick={() => setIsOpen((prev) => !prev)}
-        className={cn(
-          "group flex items-center gap-1.5 py-1 px-1.5 -ml-1.5 rounded-lg text-left transition-colors duration-150 select-none",
-          "text-muted-foreground hover:text-foreground hover:bg-muted/40",
-          isOpen && "text-foreground"
-        )}
-        aria-expanded={isOpen}
-      >
-        {headerSummary.isStreaming ? (
-          <AgentWorkingShimmer label={headerSummary.query} />
-        ) : (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground/90 transition-colors group-hover:text-foreground">
-            <span className="font-normal text-muted-foreground">{headerSummary.prefix}</span>
-            {headerSummary.query ? (
-              <span className="font-medium text-foreground/90">{headerSummary.query}</span>
-            ) : null}
-            <ChevronRight
-              size={13}
-              className={cn(
-                "shrink-0 opacity-60 transition-transform duration-200 ml-0.5 group-hover:opacity-100",
-                isOpen && "rotate-90"
-              )}
-              aria-hidden
-            />
-          </div>
-        )}
-      </button>
+    <div className="mb-2 text-[13px] leading-5">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          className={cn(
+            "focus-ring group inline-flex min-w-0 max-w-full items-center gap-1 rounded-md py-0.5 pr-1 text-left select-none",
+            "text-muted-foreground transition-colors duration-150 hover:text-foreground",
+          )}
+          aria-expanded={isOpen}
+        >
+          {headerSummary.isStreaming ? (
+            <AgentWorkingShimmer label={headerSummary.query} />
+          ) : (
+            <span className="min-w-0 truncate">
+              <span>{headerSummary.prefix}</span>
+              {headerSummary.query ? (
+                <span className="text-foreground/80">
+                  {headerSummary.prefix ? " " : ""}
+                  {headerSummary.query}
+                </span>
+              ) : null}
+            </span>
+          )}
+          <ChevronRight
+            size={14}
+            className={cn(
+              "shrink-0 opacity-50 transition-transform duration-200 group-hover:opacity-80",
+              isOpen && "rotate-90",
+            )}
+            aria-hidden
+          />
+        </button>
+        {isOpen && expandableIds.length > 0 ? (
+          <button
+            type="button"
+            onClick={toggleAllDetails}
+            className={cn(
+              "focus-ring inline-flex shrink-0 items-center gap-1 rounded-md px-1.5 py-0.5",
+              "text-[12px] text-muted-foreground/80 transition-colors hover:bg-muted/50 hover:text-foreground",
+            )}
+            aria-pressed={allDetailsExpanded}
+          >
+            {allDetailsExpanded ? (
+              <ChevronsDownUp size={13} aria-hidden />
+            ) : (
+              <ChevronsUpDown size={13} aria-hidden />
+            )}
+            <span>
+              {allDetailsExpanded
+                ? t("chat.compact_activity.collapse_all")
+                : t("chat.compact_activity.expand_all")}
+            </span>
+          </button>
+        ) : null}
+      </div>
 
-      {/* Expanded Accordion Container (Screenshot 2 Style) */}
       <div
         className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-200 ease-out",
-          isOpen ? "grid-rows-[1fr] opacity-100 mt-2" : "grid-rows-[0fr] opacity-0"
+          "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+          isOpen ? "grid-rows-[1fr] opacity-100 mt-1.5" : "grid-rows-[0fr] opacity-0",
         )}
       >
         <div className="min-h-0 overflow-hidden">
-          <div className="rounded-2xl border border-border/50 bg-card/60 dark:bg-[#1c1c1c]/90 p-3.5 shadow-sm space-y-3">
-            {/* 1. Web Searches & Results List */}
-            {webSearches.map((ws, sIdx) => (
-              <div key={ws.id || sIdx} className="space-y-1.5">
-                {webSearches.length > 1 || ws.query ? (
-                  <div className="flex items-center gap-2 px-1 text-[0.78rem] text-muted-foreground">
-                    <Search className="size-3.5 text-primary/70 shrink-0" aria-hidden />
-                    <span className="font-medium text-foreground/80 truncate">
-                      {ws.query || t("chat.compact_activity.searched_web")}
-                    </span>
-                    {ws.provider ? (
-                      <span className="ml-auto rounded-md border border-border/40 bg-muted/40 px-1.5 py-0.2 text-[0.68rem] text-muted-foreground uppercase">
-                        {ws.provider}
-                      </span>
-                    ) : null}
+          <div className="ml-1.5 space-y-2.5 border-l border-border/70 pl-4">
+            {visibleSegments.map((seg) => {
+              if (seg.kind === "reasoning") {
+                return (
+                  <CompactReasoningItem
+                    key={seg.id}
+                    content={seg.content}
+                    open={expandedIds.has(seg.id)}
+                    onToggle={() => toggleDetail(seg.id)}
+                  />
+                );
+              }
+              if (seg.kind === "status") {
+                return (
+                  <div key={seg.id} className="text-[13px] text-muted-foreground">
+                    {seg.content}
                   </div>
-                ) : null}
-
-                {ws.error ? (
-                  <div className="rounded-lg bg-destructive/10 border border-destructive/20 px-3 py-2 text-xs text-destructive">
-                    {ws.error}
+                );
+              }
+              if (seg.kind === "generating") {
+                return (
+                  <div key={seg.id} className="flex items-start gap-2 text-muted-foreground">
+                    <StepIcon>
+                      <FileText size={14} aria-hidden />
+                    </StepIcon>
+                    <AgentWorkingShimmer
+                      label={
+                        seg.title?.trim()
+                          ? t("chat.compact_activity.writing_file", { title: seg.title })
+                          : t("chat.agent_status.thinking")
+                      }
+                    />
                   </div>
-                ) : null}
-
-                {ws.results.length > 0 ? (
-                  <div className="divide-y divide-border/30 rounded-xl border border-border/40 bg-background/50 overflow-hidden">
-                    {ws.results.slice(0, 20).map((r, rIdx) => (
-                      <a
-                        key={`${r.url}-${rIdx}`}
-                        href={r.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="group flex items-center justify-between gap-3 px-3 py-2 text-xs transition-colors hover:bg-muted/40"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                          <FaviconImage url={r.url} />
-                          <span className="truncate font-normal text-[0.82rem] text-foreground/90 group-hover:text-primary transition-colors">
-                            {r.title || r.url}
-                          </span>
-                        </div>
-                        <span className="shrink-0 text-[0.72rem] text-muted-foreground/80 font-mono">
-                          {webHostLabel(r.url)}
-                        </span>
-                      </a>
-                    ))}
-                  </div>
-                ) : !ws.error && ws.status === "done" ? (
-                  <p className="px-2 text-xs text-muted-foreground italic">
-                    {t("chat.compact_activity.results_count", { count: 0 })}
-                  </p>
-                ) : null}
-              </div>
-            ))}
-
-            {/* 2. Web Page Fetches */}
-            {webFetches.map((wf, fIdx) => (
-              <div key={wf.id || fIdx} className="rounded-xl border border-border/40 bg-background/40 px-3 py-2 text-xs flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2 min-w-0 flex-1">
-                  <FaviconImage url={wf.url} />
-                  <a
-                    href={wf.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="truncate text-primary hover:underline font-medium"
-                  >
-                    {wf.url}
-                  </a>
-                </div>
-                <span className="shrink-0 text-[0.72rem] text-muted-foreground font-mono">
-                  {webHostLabel(wf.url)}
-                </span>
-              </div>
-            ))}
-
-            {/* 3. Reasoning (Thinking) Blocks */}
-            {reasoningSegments.map((rs, rIdx) => (
-              <CompactReasoningItem key={rs.id || rIdx} content={rs.content} />
-            ))}
-
-            {/* 4. Other Tool Invocations */}
-            {otherTools.map((tool, tIdx) => (
-              <CompactToolItem key={tool.id || tIdx} tool={tool} />
-            ))}
+                );
+              }
+              if (seg.kind === "text") {
+                return <CompactProcessMarkdown key={seg.id} content={seg.content} />;
+              }
+              if (seg.kind === "artifact") {
+                return (
+                  <CompactArtifactItem
+                    key={seg.id}
+                    title={seg.title || seg.id}
+                    language={artifactLanguage(seg.artType, seg.savedPath || "")}
+                    code={seg.buffer}
+                    savedPath={seg.savedPath}
+                    downloadUrl={
+                      seg.savedPath && conversationId && token
+                        ? sessionDownloadUrl(conversationId, seg.savedPath, token)
+                        : undefined
+                    }
+                    open={expandedIds.has(seg.id)}
+                    onToggle={() => toggleDetail(seg.id)}
+                  />
+                );
+              }
+              if (seg.kind === "tool") {
+                if (seg.name === "web_search") {
+                  return <CompactWebSearchItem key={seg.id} seg={seg} />;
+                }
+                if (seg.name === "web_fetch_page") {
+                  return <CompactWebFetchItem key={seg.id} seg={seg} />;
+                }
+                return (
+                  <CompactToolItem
+                    key={seg.id}
+                    tool={seg}
+                    open={expandedIds.has(seg.id)}
+                    onToggle={() => toggleDetail(seg.id)}
+                  />
+                );
+              }
+              return null;
+            })}
           </div>
         </div>
       </div>
@@ -460,39 +479,208 @@ function CompactTurnActivityInner({
   );
 }
 
-function CompactReasoningItem({ content }: { content: string }) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
+function CompactProcessMarkdown({ content }: { content: string }) {
+  const components = useMemo(
+    () => markdownCodeComponents({ variant: "quiet" }),
+    [],
+  );
   const text = content.trim();
   if (!text) return null;
 
   return (
-    <div className="rounded-xl border border-border/40 bg-background/40 overflow-hidden">
+    <div className="prose-chat text-[13px] leading-relaxed text-muted-foreground [&_p]:text-muted-foreground">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} disallowedElements={["script"]} unwrapDisallowed components={components}>
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
+}
+
+function CompactReasoningItem({
+  content,
+  open,
+  onToggle,
+}: {
+  content: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const t = useT();
+  const text = content.trim();
+  if (!text) return null;
+  const long = text.length > 900;
+
+  return (
+    <div className="min-w-0">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-foreground/90 transition-colors hover:bg-muted/30"
+        onClick={onToggle}
+        className="focus-ring group mb-1 inline-flex items-center gap-2 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        aria-expanded={open}
       >
-        <div className="flex items-center gap-2">
-          <Brain className="size-3.5 text-primary/80 shrink-0" aria-hidden />
-          <span>{t("chat.compact_activity.thought_process")}</span>
-        </div>
-        <ChevronDown className={cn("size-3.5 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
+        <StepIcon>
+          <Brain size={14} aria-hidden />
+        </StepIcon>
+        <span>{t("chat.compact_activity.thought_process")}</span>
+        <ChevronRight
+          size={13}
+          className={cn("opacity-50 transition-transform duration-200", open && "rotate-90")}
+          aria-hidden
+        />
       </button>
-
-      {open && (
-        <div className="border-t border-border/30 bg-muted/15 p-3">
-          <div className="max-h-60 overflow-y-auto whitespace-pre-wrap font-sans text-xs leading-relaxed text-muted-foreground">
-            {text}
-          </div>
+      {open ? (
+        <div
+          className={cn(
+            "whitespace-pre-wrap text-[13px] leading-relaxed text-muted-foreground/90",
+            long && "max-h-72 overflow-y-auto pr-1",
+          )}
+        >
+          {text}
         </div>
-      )}
+      ) : null}
+    </div>
+  );
+}
+
+function CompactWebSearchItem({ seg }: { seg: Extract<TurnSegment, { kind: "tool" }> }) {
+  const t = useT();
+  const ws = parseWebSearchOutput(seg.output || "");
+  const query = ws?.query || webSearchQueryFromInput(seg.input) || "";
+  const results = ws?.results?.filter((r) => r && r.url) || [];
+
+  return (
+    <div className="min-w-0 space-y-1.5">
+      <div className="flex items-start gap-2 text-[13px] text-muted-foreground">
+        <StepIcon>
+          <Search size={14} aria-hidden />
+        </StepIcon>
+        <div className="min-w-0">
+          <span>{t("chat.compact_activity.searched_web")}</span>
+          {query ? <span className="text-foreground/80"> {query}</span> : null}
+        </div>
+      </div>
+      {ws?.error ? (
+        <p className="pl-6 text-[12px] text-destructive">{ws.error}</p>
+      ) : null}
+      {results.length > 0 ? (
+        <div className="space-y-0.5 pl-6">
+          {results.slice(0, 12).map((r, rIdx) => (
+            <a
+              key={`${r.url}-${rIdx}`}
+              href={r.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="group flex items-center gap-2 py-0.5 text-[13px] text-foreground/85 transition-colors hover:text-foreground"
+            >
+              <FaviconImage url={r.url} />
+              <span className="min-w-0 flex-1 truncate">{r.title || r.url}</span>
+              <span className="shrink-0 text-[11px] text-muted-foreground/75">
+                {webHostLabel(r.url)}
+              </span>
+            </a>
+          ))}
+        </div>
+      ) : seg.status === "done" && !ws?.error ? (
+        <p className="pl-6 text-[12px] text-muted-foreground/80">
+          {t("chat.compact_activity.results_count", { count: 0 })}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function CompactWebFetchItem({ seg }: { seg: Extract<TurnSegment, { kind: "tool" }> }) {
+  const t = useT();
+  const wf = parseWebFetchOutput(seg.output || "");
+  const url = wf?.url || webFetchUrlFromInput(seg.input) || "";
+
+  return (
+    <div className="flex items-start gap-2 text-[13px] text-muted-foreground">
+      <StepIcon>
+        <Globe size={14} aria-hidden />
+      </StepIcon>
+      <div className="min-w-0">
+        <span>{t("chat.compact_activity.reading_page")}</span>
+        {url ? (
+          <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-1 text-foreground/80 hover:underline"
+          >
+            {webHostLabel(url) || url}
+          </a>
+        ) : null}
+        {wf?.error ? <p className="text-[12px] text-destructive">{wf.error}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function CompactArtifactItem({
+  title,
+  language,
+  code,
+  savedPath,
+  downloadUrl,
+  open,
+  onToggle,
+}: {
+  title: string;
+  language: string;
+  code: string;
+  savedPath?: string;
+  downloadUrl?: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const t = useT();
+
+  return (
+    <div className="min-w-0">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="focus-ring group inline-flex max-w-full items-center gap-2 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        aria-expanded={open}
+      >
+        <StepIcon>
+          <FileText size={14} aria-hidden />
+        </StepIcon>
+        <span className="min-w-0 truncate">
+          {t("chat.compact_activity.wrote_file", { title })}
+        </span>
+        <ChevronRight
+          size={13}
+          className={cn("shrink-0 opacity-50 transition-transform duration-200", open && "rotate-90")}
+          aria-hidden
+        />
+      </button>
+      {open ? (
+        <div className="pl-6 pt-1">
+          {downloadUrl ? (
+            <a
+              href={downloadUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mb-1 inline-block text-[12px] text-muted-foreground hover:text-foreground hover:underline"
+            >
+              {savedPath || title}
+            </a>
+          ) : null}
+          {code.trim() ? (
+            <MarkdownCodeBlock language={language} code={code} variant="quiet" />
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
 
 function CompactToolItem({
   tool,
+  open,
+  onToggle,
 }: {
   tool: {
     name: string;
@@ -504,70 +692,60 @@ function CompactToolItem({
     tokens_in?: number;
     tokens_out?: number;
   };
+  open: boolean;
+  onToggle: () => void;
 }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
   const preview = toolInputPreview(tool.input);
   const formattedInput = formatToolInput(tool.input);
 
   return (
-    <div className={cn(
-      "rounded-xl border border-border/40 bg-background/40 overflow-hidden",
-      tool.isError && "border-destructive/30 bg-destructive/5"
-    )}>
+    <div className="min-w-0">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-xs font-medium text-foreground/90 transition-colors hover:bg-muted/30"
+        onClick={onToggle}
+        className={cn(
+          "focus-ring group inline-flex max-w-full items-center gap-2 text-left text-[13px] transition-colors",
+          tool.isError ? "text-destructive" : "text-muted-foreground hover:text-foreground",
+        )}
+        aria-expanded={open}
       >
-        <div className="flex items-center gap-2 min-w-0 flex-1">
-          <Terminal className="size-3.5 text-primary/70 shrink-0" aria-hidden />
-          <span className="font-mono font-semibold text-xs">{tool.name}</span>
-          {preview ? (
-            <span className="truncate text-muted-foreground text-[0.75rem] font-normal">
-              ({preview})
-            </span>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {tool.tokens_in !== undefined && tool.tokens_out !== undefined ? (
-            <span className="text-[0.65rem] font-mono text-muted-foreground">
-              {tool.tokens_in}/{tool.tokens_out} tkn
-            </span>
-          ) : null}
-          <ChevronDown className={cn("size-3.5 text-muted-foreground transition-transform duration-200", open && "rotate-180")} />
-        </div>
+        <StepIcon>
+          <Terminal size={14} aria-hidden />
+        </StepIcon>
+        <span className="min-w-0 truncate">
+          {t("chat.compact_activity.tool_executed", { name: tool.name })}
+          {preview ? <span className="font-normal text-muted-foreground/80"> {preview}</span> : null}
+        </span>
+        <ChevronRight
+          size={13}
+          className={cn("shrink-0 opacity-50 transition-transform duration-200", open && "rotate-90")}
+          aria-hidden
+        />
       </button>
 
-      {open && (
-        <div className="border-t border-border/30 bg-muted/15 p-3 space-y-2 text-xs">
+      {open ? (
+        <div className="space-y-2 pl-6 pt-1.5 text-[12px]">
           {formattedInput ? (
             <div>
-              <div className="text-[0.7rem] uppercase font-semibold text-muted-foreground tracking-wider mb-1">
-                {t("chat.tool.params")}
-              </div>
-              <pre className="max-h-36 overflow-auto whitespace-pre-wrap rounded-lg border border-border/40 bg-background/70 p-2 font-mono text-[0.75rem] text-foreground/90">
+              <div className="mb-1 text-[11px] text-muted-foreground">{t("chat.tool.params")}</div>
+              <pre className="max-h-36 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/40 p-2 font-mono text-[12px] text-foreground/85">
                 {formattedInput}
               </pre>
             </div>
           ) : null}
-
           {tool.output ? (
             <div>
-              <div className="text-[0.7rem] uppercase font-semibold text-muted-foreground tracking-wider mb-1">
-                {t("chat.tool.result")}
-              </div>
-              <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg border border-border/40 bg-background/70 p-2 font-mono text-[0.75rem] text-foreground/90">
+              <div className="mb-1 text-[11px] text-muted-foreground">{t("chat.tool.result")}</div>
+              <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-muted/40 p-2 font-mono text-[12px] text-foreground/85">
                 {tool.output}
               </pre>
             </div>
           ) : tool.error ? (
-            <div className="text-destructive text-xs font-medium">
-              {tool.error}
-            </div>
+            <div className="text-destructive">{tool.error}</div>
           ) : null}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

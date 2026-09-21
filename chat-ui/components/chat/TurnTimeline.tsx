@@ -8,6 +8,7 @@ import rehypeKatex from "rehype-katex";
 import { FileText, ListTodo } from "lucide-react";
 
 import { coalesceTurnSegments } from "@/lib/sse/coalesceTurnSegments";
+import { splitCompactTurn } from "@/lib/sse/splitCompactTurn";
 import type { TurnSegment } from "@/lib/sse/types";
 import { useT } from "@/lib/i18n/use-t";
 import type { ToolsViewMode } from "@/components/chat/WebResearchViews";
@@ -22,6 +23,7 @@ import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 import { sessionDownloadUrl } from "@/lib/api/aion";
 import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
 import { SafeErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { resolveTurnOutcomeMessage } from "@/lib/sse/turnOutcomeMessage";
 
 type Props = {
   segments: TurnSegment[];
@@ -57,23 +59,12 @@ export function TurnTimeline({
   const isCompact = toolsView === "compact";
   const lastSeg = displaySegments[displaySegments.length - 1];
 
-  // Compact Mode (Claude-style dropdown for preparatory tools/reasoning + live streaming output below)
+  // Compact mode: process trail (reasoning/tools + interleaved working notes) vs final answer.
   if (isCompact) {
-    const prepSegments: TurnSegment[] = [];
-    const outputSegments: TurnSegment[] = [];
-
-    for (const seg of displaySegments) {
-      if (
-        seg.kind === "reasoning" ||
-        seg.kind === "tool" ||
-        seg.kind === "status" ||
-        seg.kind === "generating"
-      ) {
-        prepSegments.push(seg);
-      } else {
-        outputSegments.push(seg);
-      }
-    }
+    const { process: prepSegments, output: outputSegments } = splitCompactTurn(
+      displaySegments,
+      { streaming },
+    );
 
     return (
       <div className="space-y-2.5">
@@ -82,6 +73,9 @@ export function TurnTimeline({
             segments={prepSegments}
             streaming={streaming && outputSegments.length === 0}
             messageId={messageId}
+            conversationId={conversationId}
+            token={token}
+            isPlanArtifact={isPlanArtifact}
           />
         )}
 
@@ -132,6 +126,7 @@ export function TurnTimeline({
         })}
 
         {streaming &&
+          prepSegments.length === 0 &&
           (!lastSeg || lastSeg.kind !== "text" || !lastSeg.content) ? (
           <AgentWorkingShimmer label={t("chat.agent_status.thinking")} className="mt-1" />
         ) : null}
@@ -167,21 +162,27 @@ export function TurnTimeline({
         }
         if (seg.kind === "status") {
           const warn = seg.tone === "warning";
+          const statusText = resolveTurnOutcomeMessage(
+            t,
+            seg.content,
+            seg.outcomeCode,
+            seg.outcomeDetails,
+          );
           return (
             <div
               key={seg.id}
               className={
                 warn
-                  ? "rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-900 dark:text-amber-100"
+                  ? "rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-900 dark:text-amber-100"
                   : "rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground"
               }
               role="status"
               aria-live="polite"
             >
               {streaming && isLast ? (
-                <ShimmerText className="text-xs">{seg.content}</ShimmerText>
+                <ShimmerText className="text-xs">{statusText}</ShimmerText>
               ) : (
-                seg.content
+                statusText
               )}
             </div>
           );

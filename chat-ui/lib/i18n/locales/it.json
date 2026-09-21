@@ -19,7 +19,9 @@
       "profile": "Profilo",
       "appearance": "Aspetto",
       "security": "Sicurezza",
-      "instructions": "Istruzioni"
+      "instructions": "Istruzioni",
+      "runtime": "Runtime",
+      "presets": "Preset"
     },
     "profile": {
       "title": "Profilo",
@@ -103,6 +105,58 @@
         "save": "Salva Istruzioni",
         "saving": "Salvataggio..."
       }
+    },
+    "runtime": {
+      "loading": "Caricamento impostazioni runtime…",
+      "hint": "I valori .env sono i default iniziali. Le modifiche valgono dal turno successivo.",
+      "reset_all": "Ripristina tutto",
+      "reset_field": "Ripristina campo",
+      "server_default": "Default server: {{value}}",
+      "profile_cap": "Questo profilo limita gli step a {{value}}.",
+      "composer_thinking_hint": "Attiva/disattiva Thinking e scegli min/med/max dal menu + nel box della chat.",
+      "group": {
+        "loop": "Loop agente",
+        "generation": "Generazione",
+        "thinking": "Thinking",
+        "advanced": "Avanzate"
+      },
+      "enum": {
+        "min": "Min",
+        "medium": "Medio",
+        "max": "Max"
+      },
+      "fields": {
+        "max_agent_steps": "Step massimi agente",
+        "max_tool_calls": "Chiamate tool massime",
+        "max_tool_events": "Eventi tool massimi",
+        "turn_timeout_sec": "Timeout turno (s)",
+        "no_progress_timeout_sec": "Timeout senza progresso (s)",
+        "max_tokens": "Token massimi",
+        "temperature": "Temperature",
+        "top_p": "Top P",
+        "top_k": "Top K",
+        "presence_penalty": "Presence penalty",
+        "frequency_penalty": "Frequency penalty",
+        "repetition_penalty": "Repetition penalty",
+        "seed": "Seed",
+        "thinking_enabled": "Thinking attivo",
+        "reasoning_effort": "Sforzo di ragionamento",
+        "thinking_token_budget": "Budget token thinking",
+        "reasoning_hard_stop": "Guard-rail reasoning (interruzione automatica)",
+        "reasoning_max_chars": "Reasoning max caratteri",
+        "reasoning_max_events": "Reasoning max eventi",
+        "reasoning_min_chars": "Reasoning min caratteri",
+        "reasoning_min_events": "Reasoning min eventi",
+        "reasoning_max_level_chars": "Reasoning max-level caratteri",
+        "reasoning_max_level_events": "Reasoning max-level eventi"
+      }
+    },
+    "presets": {
+      "hint": "Salva i tuning della sidebar come preset (on/off Thinking e livello dal menu + della chat).",
+      "name_placeholder": "Nome preset",
+      "save_as": "Salva come",
+      "save_active": "Salva modifiche al preset attivo",
+      "empty": "Nessun preset."
     }
   },
   "sidebar": {
@@ -111,6 +165,8 @@
     "no_conversations": "Nessuna conversazione.",
     "delete_confirm": "Cancella chat?",
     "settings": "Impostazioni",
+    "tunings": "Tuning e parametri",
+    "tunings_section": "Parametri turno",
     "login": "Accedi",
     "integrations": "Integrazioni",
     "schedules": "Automazioni",
@@ -466,6 +522,13 @@
       "archived_context": "Precedente nella conversazione (non nel contesto attivo dell'agente)"
     },
     "error": "Errore: {{msg}}",
+    "turn_outcome": {
+      "reasoning_budget_no_answer": "Il turno si è interrotto perché il modello ha superato il budget di ragionamento con Thinking {{effort}} (soglia ~{{max_chars}} caratteri / {{max_events}} chunk nel primo step LLM) prima di una risposta visibile. Nel blocco «Ragionamento» c'è solo il pensiero interno (~{{reasoning_len}} caratteri). Prova: disattiva Thinking dal menu +, abbassa il livello, scrivi «Continua», o regola i limiti in Tuning e parametri.",
+      "reasoning_only_no_answer": "Il modello ha generato solo ragionamento interno (~{{reasoning_len}} caratteri) senza testo di risposta in chat (Thinking: {{effort}}). Riprova con un messaggio più breve, disattiva Thinking dal menu +, o chiedi esplicitamente una risposta finale.",
+      "tools_without_final_answer": "L'agente ha eseguito {{tool_calls}} chiamate tool ma non ha scritto un riepilogo finale in chat.{{stop_reason}}",
+      "empty_final": "Il turno è terminato senza testo di risposta in chat.",
+      "persisted_no_visible_text": "Il turno ha salvato messaggi (es. solo tool) senza testo assistente finale visibile."
+    },
     "history_load_error": "Impossibile caricare la cronologia: {{msg}}",
     "session_preparing": "Preparazione integrazioni e strumenti…",
     "mcp_errors_hint": "Alcune integrazioni non sono partite. La chat può continuare con gli strumenti disponibili.",
@@ -518,16 +581,20 @@
     },
     "compact_activity": {
       "searched_web": "Cercato sul web",
-      "reading_page": "Letta pagina",
+      "reading_page": "Letto",
       "thought_process": "Ragionamento",
       "thought_done": "Ragionamento",
       "tool_executed": "Eseguito {{name}}",
+      "wrote_file": "Scritto {{title}}",
+      "writing_file": "Scrittura di {{title}}…",
       "steps_count": "{{count}} passaggi",
       "and_other_steps": "e altri {{count}} passaggi",
       "thinking_streaming": "L'agente sta pensando…",
       "searching_streaming": "Sto cercando sul web {{query}}…",
       "running_tool_streaming": "Esecuzione di {{name}}…",
       "view_details": "Visualizza dettagli",
+      "expand_all": "Espandi tutto",
+      "collapse_all": "Comprimi tutto",
       "sources": "Fonti",
       "results_count": "{{count}} risultati"
     },

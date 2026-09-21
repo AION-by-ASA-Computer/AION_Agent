@@ -24,18 +24,23 @@ export function MarkdownCodeBlock({
   language = "text",
   streaming = false,
   className,
+  variant = "default",
 }: {
   code: string;
   language?: string;
   streaming?: boolean;
   className?: string;
+  variant?: "default" | "quiet";
 }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
   const [highlight, setHighlight] = useState<{ key: string; html: string } | null>(null);
   const lang = useMemo(() => normalizeLanguage(language), [language]);
   const shouldHighlight =
-    !streaming && code.trim().length > 0 && code.length <= MAX_HIGHLIGHT_CHARS;
+    variant !== "quiet" &&
+    !streaming &&
+    code.trim().length > 0 &&
+    code.length <= MAX_HIGHLIGHT_CHARS;
   const highlightKey = `${lang}:${code}`;
   const html = highlight?.key === highlightKey ? highlight.html : "";
 
@@ -68,6 +73,33 @@ export function MarkdownCodeBlock({
       setCopied(false);
     }
   };
+
+  if (variant === "quiet") {
+    return (
+      <div
+        className={cn(
+          "not-prose group/code my-1.5 overflow-hidden rounded-lg bg-muted/45",
+          className,
+        )}
+      >
+        <div className="flex items-center justify-between gap-2 px-2.5 py-1">
+          <span className="font-mono text-[11px] text-muted-foreground">{lang}</span>
+          <button
+            type="button"
+            className="focus-ring inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+            onClick={() => void copy()}
+            aria-label={t("chat.actions.copy")}
+          >
+            {copied ? <Check size={12} aria-hidden /> : <Copy size={12} aria-hidden />}
+            {copied ? t("chat.actions.copied") : t("chat.actions.copy")}
+          </button>
+        </div>
+        <pre className="m-0 max-h-64 overflow-auto whitespace-pre-wrap break-words px-2.5 pb-2.5 font-mono text-[12px] leading-relaxed text-foreground/85">
+          <code>{code}</code>
+        </pre>
+      </div>
+    );
+  }
 
   return (
     <div

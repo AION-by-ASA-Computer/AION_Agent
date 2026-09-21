@@ -74,6 +74,27 @@ def test_plan_created_without_final_text():
     assert "Plan" in out["suggested_final_text"]
 
 
+def test_reasoning_budget_no_answer_italian_details():
+    out = classify_turn_outcome(
+        session_id="sess",
+        profile="generic_assistant",
+        stop_reason="reasoning_budget",
+        final_text="",
+        full_reasoning="x" * 2100,
+        tool_calls_count=0,
+        tool_events_count=0,
+        new_messages=[],
+        reasoning_effort="min",
+        max_reasoning_chars=2000,
+        max_reasoning_events=30,
+    )
+    assert out["code"] == "reasoning_budget_no_answer"
+    warn = out.get("user_visible_warning") or ""
+    assert "minimo" in warn.lower() or "min" in warn.lower()
+    assert "2000" in warn
+    assert out["details"]["reasoning_effort"] == "min"
+
+
 def test_reasoning_budget_with_tools_suggests_continue():
     out = classify_turn_outcome(
         session_id="sess",

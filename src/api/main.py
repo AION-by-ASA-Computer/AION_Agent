@@ -5,7 +5,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 import src.aion_env  # noqa: F401 — carica `.env` prima delle altre importazioni
-from typing import List, Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
 from fastapi import Depends, FastAPI, Header, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -15,7 +15,11 @@ from sse_starlette.sse import EventSourceResponse
 from src.agent_pipeline import AgentPipeline
 from src.main import get_agent
 from src.identity import sanitize_user_id
-from src.runtime.reasoning_effort import effective_reasoning_effort
+from src.runtime.reasoning_effort import resolve_turn_reasoning
+from src.runtime.runtime_settings import (
+    profile_step_cap,
+    resolve_turn_runtime_settings,
+)
 from src.chart_queue import chart_queue
 from src.runtime.redis_client import redis_set_stream_cancel
 from .admin import router as admin_router
@@ -639,6 +643,10 @@ class ChatRequest(BaseModel):
         default=None,
         description="Slug cassetto QueryMemory SQL per questa conversazione.",
     )
+    runtime: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Allowlisted turn overrides (steps, sampling, thinking).",
+    )
 
 
 # --- Globals ---
@@ -835,10 +843,28 @@ async def chat(
                 user_id=user_id,
                 agent_mode=resolved_agent_mode,
             )
-            if request.thinking_enabled is False:
-                resolved_effort = "min"
-            else:
-                resolved_effort = effective_reasoning_effort(request.reasoning_effort)
+            raw_runtime = (
+                dict(request.runtime) if isinstance(request.runtime, dict) else None
+            )
+            effort_in = request.reasoning_effort
+            thinking_in = request.thinking_enabled
+            if raw_runtime:
+                if (
+                    effort_in is None
+                    and raw_runtime.get("reasoning_effort") is not None
+                ):
+                    effort_in = str(raw_runtime.get("reasoning_effort"))
+                if thinking_in is None and "thinking_enabled" in raw_runtime:
+                    thinking_in = bool(raw_runtime.get("thinking_enabled"))
+            resolved_effort = resolve_turn_reasoning(effort_in, thinking_in)
+            from src.settings import get_settings as _get_settings
+
+            clamped = await resolve_turn_runtime_settings(
+                raw_runtime,
+                user_id,
+                profile_max_agent_steps=profile_step_cap(profile_name),
+                context_window=_get_settings().context_window,
+            )
             async for chunk in pipeline.run_stream(
                 request.message,
                 attachments=att,
@@ -852,6 +878,7 @@ async def chat(
                     request.web_search_restrict_hosts
                 ),
                 sql_query_project=sql_project_resolved,
+                runtime=clamped,
             ):
                 yield {"event": "message", "data": json.dumps(chunk)}
         except Exception as e:

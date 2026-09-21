@@ -193,6 +193,7 @@ export type ChatRequestBody = {
   /** LLM provider slug to use for this chat session. */
   llm_provider_name?: string;
   metadata?: Record<string, any>;
+  runtime?: Record<string, unknown>;
 };
 
 

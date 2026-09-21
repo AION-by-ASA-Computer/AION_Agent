@@ -351,6 +351,9 @@ async def build_turn_context(
             "- When executing tools or thinking/reasoning, do NOT output conversational transition filler phrases "
             '(such as "Cerco ora...", "Sto verificando...", "Let me check...", "I will now search...").\n'
             "- Execute all necessary tools and reasoning steps silently.\n"
+            "- Intermediate working notes, patches, and code produced while using tools belong to the hidden "
+            "process trail. Do not paste them again in the final answer.\n"
+            "- If the user asked you to generate or show a script or file, that deliverable belongs in the final answer.\n"
             "- Output ONLY the final, complete, and polished response directly to the user once all tool operations and thinking are finished."
         )
         augmented_user = _layer_inject(

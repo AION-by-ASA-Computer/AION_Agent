@@ -263,18 +263,32 @@ If the Opik library is installed and configured:
 2. Otherwise **`AION_THINKING_ENABLED`**: `0` / `false` / `off` → `min`; `1` / `true` / `on` → `medium`.
 3. Otherwise **`medium`**.
 
-| Value | Effect (current turn) |
-|------|-----------------------|
-| `min` | `extra_body.chat_template_kwargs.enable_thinking = false`; `thinking_token_budget` removed from the turn. |
-| `medium` | No override: the generator's `generation_kwargs` remain (env / init). |
-| `max` | `enable_thinking = true`; if **`AION_REASONING_EFFORT_MAX_BUDGET`** (integer) is set, `thinking_token_budget` is sent for that turn (same vLLM caveats as the global budget). |
+Every turn maps the UI level onto the **native** engine field for **whichever model is selected**, not only Qwen3.8. Detection reads `chat_generator.model` (the provider model id). Leave `AION_NATIVE_REASONING_*` empty.
+
+The chat-ui **Disable** item is not the same as **min**:
+
+| UI | Typical native payload (OpenAI-compat / vLLM) | Exceptions |
+|----|-----------------------------------------------|------------|
+| Disable (`thinking_enabled=false`) | `enable_thinking=false`. Native `reasoning_effort` omitted (Qwen3.8 rejects `none`). | OpenAI o-series → `low`; GPT-5 → `none`. |
+| `min` | `reasoning_effort=low` + thinking on. | Anthropic / Gemini → small `thinking.budget_tokens`. |
+| `medium` | `reasoning_effort=medium` + thinking on. | Anthropic / Gemini → `thinking.budget_tokens`. |
+| `max` | `reasoning_effort=xhigh` + thinking on (`high` 500s on Qwen 3.5/3.8 templates, including custom aliases). | OpenAI o-series → `high`. |
+
+The same native string is written so it survives LiteLLM → Haystack → OpenAI SDK → vLLM:
+
+1. Top-level `generation_kwargs.reasoning_effort`.
+2. `extra_body.reasoning_effort`.
+3. `extra_body.chat_template_kwargs.reasoning_effort` ([vLLM #54616](https://github.com/vllm-project/vllm/issues/54616)).
+4. `allowed_openai_params=["reasoning_effort"]` (Haystack LiteLLM uses `drop_params=True`).
+
+`AION_NATIVE_REASONING_EFFORT_VALUES` / `AION_NATIVE_REASONING_DIALECT` are **optional**. The default vLLM scale is already `low,medium,xhigh`. Set the values override only if the engine rejects `xhigh` and wants `high`.
 
 The pipeline constructs a **complete `generation_kwargs`** for the turn (not just `extra_body`), so the Haystack merge does not clear `max_tokens` or other fields defined in init.
 
-The model can emit **many** tokens in the `reasoning` channel before the useful text. It is not an application loop: without a dedicated limit, vLLM applies only general constraints (including `max_tokens` on the **entire** completion, reasoning + response).
+The model can emit **many** tokens in the `reasoning` channel before the useful text. It is not an application loop: without a dedicated limit, vLLM applies only general constraints (including `max_tokens` on the **entire** completion, reasoning + response). Native `reasoning_effort` is the preferred control. `thinking_token_budget` remains an optional **hard cap**, not the UI mapping.
 
-- **`AION_THINKING_TOKEN_BUDGET`**: if set, AION sends `thinking_token_budget` in **`extra_body`**. **Without a value**, AION does not send it (prevents the API error if the server does not yet expose an initialized `ReasoningConfig` for the budget).
-- **`AION_VLLM_EXTRA_BODY`**: optional JSON object, merged with `extra_body` (keys defined here take precedence over the default budget, except that `thinking_token_budget` is set with `setdefault` if missing).
+- **`AION_THINKING_TOKEN_BUDGET`**: if set, AION sends `thinking_token_budget` in **`extra_body`**. **Without a value**, AION does not send it (prevents a silent 1024/2048 cut and the API error if the server does not yet expose an initialized `ReasoningConfig` for the budget).
+- **`AION_VLLM_EXTRA_BODY`**: optional JSON object, merged into the generator's `extra_body` at init (`setdefault` for `thinking_token_budget` if you also set the env budget). Per-turn native `reasoning_effort` still overwrites thinking flags.
 - **vLLM Server**: for **streaming reasoning**, **`--reasoning-parser qwen3`** is required; see [Reasoning outputs (vLLM)](https://docs.vllm.ai/en/latest/features/reasoning_outputs/).
 - **`AION_CHAT_MAX_TOKENS`**: remains the global ceiling of the completion; the thinking budget prevents almost all of the budget from being consumed by the internal monologue.
 
@@ -339,9 +353,32 @@ Chat UI: **Thinking (CoT)** switch off always sends `reasoning_effort=min` to th
 | `AION_CONTEXT_COMPRESS_KEEP_LAST` | `6` | Always keep the last 6 messages intact |
 | `AION_DEFAULT_REASONING_EFFORT` | (empty → see below) | If the JSON **omits** `reasoning_effort`: `min` / `medium` / `max` |
 | `AION_THINKING_ENABLED` | `1` | Fallback if `AION_DEFAULT_REASONING_EFFORT` is not set: `0`/`off`→`min`, `1`/`on`→`medium` |
-| `AION_THINKING_TOKEN_BUDGET` | (empty) | `extra_body.thinking_token_budget`; your vLLM build may require initialized `--reasoning-config` (see below) |
+| `AION_NATIVE_REASONING_DIALECT` | (empty → auto) | Optional. Force family if the served model id is a custom alias |
+| `AION_NATIVE_REASONING_EFFORT_VALUES` | (empty → auto) | Optional. Override native scale (e.g. `low,medium,high`) if the engine rejects `xhigh` |
+| `AION_THINKING_TOKEN_BUDGET` | (empty) | Optional hard cap `extra_body.thinking_token_budget`; empty = native effort only (vLLM may require `--reasoning-config` if you set a budget) |
 | `AION_REASONING_EFFORT_MAX_BUDGET` | (empty) | Only with `reasoning_effort=max`: thinking budget on the single turn (override of `thinking_token_budget` in `extra_body` for that request) |
 | `AION_VLLM_EXTRA_BODY` | (empty) | JSON merge in `extra_body` for additional vendor parameters |
+
+### Per-user runtime settings (chat-ui sidebar tunings)
+
+`.env` / `AionSettings` remain the **starting defaults**. Authenticated users can override an **allowlisted** subset from the chat-ui **Tuning e parametri** sidebar panel (the conversation stays visible). Account settings remain on `/settings`. Secrets, LLM URLs, DB/Redis, MCP, and free-form `extra_body` are never exposed.
+
+| Mechanism | Role |
+|-----------|------|
+| `GET /v1/runtime-settings` | Schema + env defaults + the caller's stored values/presets |
+| `PUT /v1/runtime-settings` | Clamp + persist `users.metadata.runtime_settings` |
+| Preset CRUD `/v1/runtime-settings/presets` | Max 20 named snapshots per user |
+| `POST /v1/chat/stream` field `runtime` | Per-turn snapshot (request > stored user values > env) |
+
+The pipeline applies the clamped snapshot **without rebuilding the cached agent**:
+
+1. `agent.max_agent_steps` is mutated for the turn and restored afterwards (not part of the agent cache key).
+2. `TurnBudget.load(overrides=…)` uses the snapshot for tool-call / timeout / reasoning caps.
+3. Sampling (`temperature`, `top_p`, `max_tokens`, penalties, `seed`) is merged into `generation_kwargs`. `top_k` / `repetition_penalty` go in `extra_body` only for vLLM-style dialects.
+
+Hard caps (server-side, not raisable by the client): max 200 agent steps, 200 tool calls. A YAML profile `max_agent_steps` still wins as an upper bound. `llm_steps` in the turn-outcome warning uses a single bump per LLM completion (stream end and audit share the same counter) compared to the **effective** step cap of that turn.
+
+Optional env defaults (omit to keep LiteLLM-safe built-ins): `AION_TEMPERATURE` (0.7), `AION_TOP_P` (1), `AION_TOP_K`, `AION_PRESENCE_PENALTY`, `AION_FREQUENCY_PENALTY`, `AION_REPETITION_PENALTY`, `AION_SEED`.
 
 ---
 

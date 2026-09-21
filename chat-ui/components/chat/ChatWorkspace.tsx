@@ -76,6 +76,8 @@ import {
   segmentsForPersist,
   turnStateFromHistoryMessage,
 } from "@/lib/sse/reducer";
+import { outcomeTextFromSegments } from "@/lib/sse/turnOutcomeMessage";
+import { formatTextWithCitations as formatCitationMarkers } from "@/lib/sse/citations";
 import {
   clearActiveStreamMarker,
   readActiveStreamMarker,
@@ -101,6 +103,10 @@ import { isToolOffloadSessionPath } from "@/lib/session-file-paths";
 import { ChatHeader } from "@/components/layout/ChatHeader";
 import { ContextBudgetBar, ContextBudgetGauge } from "@/components/chat/ContextBudgetBar";
 import { useShellActions, useSidebarOpen } from "@/lib/shell/shell-context";
+import {
+  getRuntimeValuesForTurn,
+  patchRuntimeValues,
+} from "@/lib/runtime/runtime-settings-store";
 import { cn } from "@/lib/cn";
 import { DeepResearchPanel } from "@/components/research/DeepResearchPanel";
 import { PlanExecutionChatBanner } from "@/components/plan/PlanExecutionChatBanner";
@@ -367,27 +373,7 @@ function planChunkFromRecord(value: unknown): PlanPendingChunk | null {
 
 
 function formatTextWithCitations(text: string, messageId?: string): string {
-  if (!text) return text;
-  // split by code blocks to avoid replacing inside them
-  const parts = text.split(/(```[\s\S]*?```|`[^`]+`)/g);
-  for (let i = 0; i < parts.length; i++) {
-    // even indices are outside code blocks
-    if (i % 2 === 0) {
-      const prefix = messageId ? `source-${messageId}` : "source";
-      // replace [1], [2], etc. avoiding negative lookbehinds for Safari compat
-      parts[i] = parts[i].replace(/(^|[^\[])\[(\d+)\](?!\(|\])/g, `$1[[$2]](#${prefix}-$2)`);
-      // Clean double brackets and URL-encode spaces in file paths for markdown link compatibility
-      parts[i] = parts[i].replace(/\[\[?([^\]]+)\]\]?\(([^)]+)\)/g, (match, label, url) => {
-        const cleanUrl = url.trim().startsWith("#") ? url.trim() : url.trim().replace(/ /g, "%20");
-        return `[${label.trim()}](${cleanUrl})`;
-      });
-      // Replace LaTeX display formula delimiters \[ \] with $$
-      parts[i] = parts[i].replace(/\\\[/g, "$$\n").replace(/\\\]/g, "\n$$");
-      // Replace LaTeX inline formula delimiters \( \) with $
-      parts[i] = parts[i].replace(/\\\(/g, "$").replace(/\\\)/g, "$");
-    }
-  }
-  return parts.join("");
+  return formatCitationMarkers(text, messageId);
 }
 
 const KhubViewerLoader = () => {
@@ -563,7 +549,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   }, [pdfUrl, userId, token]);
 
   const renderMarkdownLink = useCallback(({ node, className, href, children, ...props }: any) => {
-    if (href?.startsWith("#source-")) {
+    const childText = String(children ?? "").trim();
+    const isNumericCitationLabel = /^\d{1,3}$/.test(childText);
+    const isSourceAnchor = href?.startsWith("#source-");
+    const isLegacyNumericUrl =
+      isNumericCitationLabel && href && /^https?:\/\//i.test(href);
+    if (isSourceAnchor || isLegacyNumericUrl) {
       return (
         <a
           href={href}
@@ -571,7 +562,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           title={t("chat.go_to_source")}
           onClick={(e) => {
             e.preventDefault();
-            const el = document.getElementById(href.replace("#", ""));
+            let sourceHref = href || "";
+            if (!sourceHref.startsWith("#source-") && isLegacyNumericUrl) {
+              const msgEl = (e.currentTarget as HTMLElement).closest("[data-message-id]");
+              const mid = msgEl?.getAttribute("data-message-id");
+              if (mid) sourceHref = `#source-${mid}-${childText}`;
+            }
+            const el = document.getElementById(sourceHref.replace("#", ""));
             if (el) {
               el.scrollIntoView({ behavior: "smooth", block: "center" });
               el.classList.add("ring-2", "ring-primary", "ring-offset-2", "ring-offset-background");
@@ -614,7 +611,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
 
     return <a href={href} className={className} target="_blank" rel="noopener noreferrer" {...props}>{children}</a>;
-  }, [handleKhubFileClick]);
+  }, [handleKhubFileClick, t]);
 
   // Sincronizza lo stato se la prop iniziale cambia (es. navigazione avanti/indietro del browser)
   useEffect(() => {
@@ -959,6 +956,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const handleToggleThinking = useCallback((enabled: boolean) => {
     setThinkingEnabled(enabled);
     localStorage.setItem("aion_last_thinking_enabled", String(enabled));
+    patchRuntimeValues({ thinking_enabled: enabled });
     if (messages.length > 0) {
       updateConversationMetadata(conversationId, { thinking_enabled: enabled }, userId, token)
         .catch((err) => console.error("Error saving thinking preference to DB:", err));
@@ -968,6 +966,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const handleReasoningEffortChange = useCallback((effort: "min" | "medium" | "max") => {
     setReasoningEffort(effort);
     localStorage.setItem("aion_last_reasoning_effort", effort);
+    patchRuntimeValues({ reasoning_effort: effort });
     if (messages.length > 0) {
       updateConversationMetadata(conversationId, { reasoning_effort: effort }, userId, token)
         .catch((err) => console.error("Error saving reasoning effort preference to DB:", err));
@@ -1945,6 +1944,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             compact_mode: toolsView === "compact",
             llm_provider_name: selectedProvider || undefined,
             metadata: opts?.metadata,
+            runtime: getRuntimeValuesForTurn(thinkingEnabled, reasoningEffort),
           },
           token,
           abortRef.current.signal
@@ -2130,7 +2130,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         let assistantText = strippedContent;
         const streamError =
           state.error && !isPlanGuardError ? state.error : null;
-        if (!assistantText.trim() && streamError) {
+        const outcomeWarning = outcomeTextFromSegments(state.segments, t);
+        if (!assistantText.trim() && outcomeWarning) {
+          assistantText = outcomeWarning;
+        } else if (!assistantText.trim() && streamError) {
           assistantText = t("chat.error", { msg: streamError });
         } else if (assistantText.trim() && streamError) {
           assistantText = `${assistantText}\n\n---\n${t("chat.error", { msg: streamError })}`;
@@ -2507,6 +2510,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     setThinkingEnabled(initialThinking);
     setReasoningEffort(initialEffort);
     setAgentMode(storedAgentMode as AgentMode);
+    patchRuntimeValues({
+      thinking_enabled: initialThinking,
+      reasoning_effort: initialEffort,
+    });
 
     // 2. Chiedi i dettagli della conversazione al DB per l'override specifico
     const cid = conversationId;
@@ -2522,13 +2529,22 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           }
           if (details.metadata) {
             const meta = details.metadata;
+            const thinkingPatch: {
+              thinking_enabled?: boolean;
+              reasoning_effort?: "min" | "medium" | "max";
+            } = {};
             if (typeof meta.thinking_enabled === "boolean") {
               setThinkingEnabled(meta.thinking_enabled);
               localStorage.setItem("aion_last_thinking_enabled", String(meta.thinking_enabled));
+              thinkingPatch.thinking_enabled = meta.thinking_enabled;
             }
             if (meta.reasoning_effort === "min" || meta.reasoning_effort === "medium" || meta.reasoning_effort === "max") {
               setReasoningEffort(meta.reasoning_effort as "min" | "medium" | "max");
               localStorage.setItem("aion_last_reasoning_effort", meta.reasoning_effort);
+              thinkingPatch.reasoning_effort = meta.reasoning_effort as "min" | "medium" | "max";
+            }
+            if (thinkingPatch.thinking_enabled !== undefined || thinkingPatch.reasoning_effort !== undefined) {
+              patchRuntimeValues(thinkingPatch);
             }
             if (
               meta.agent_mode === "normal" ||
@@ -3870,6 +3886,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       messageId={activeMessageId || undefined}
                     />
                   )}
+                  {turnVisual.webSourceCards.length > 0 && activeMessageId ? (
+                    <WebSourcesBar
+                      cards={turnVisual.webSourceCards}
+                      messageId={activeMessageId}
+                    />
+                  ) : null}
                 </div>
               ) : null}
               {(postTurnCharts.length > 0 || postTurnFiles.length > 0) && (

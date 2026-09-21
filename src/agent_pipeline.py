@@ -249,7 +249,7 @@ def _handle_haystack_stream_chunk(chunk: Any, *, from_async: bool) -> None:
         try:
             from src.runtime.turn_compaction import bump_llm_step
 
-            _step = bump_llm_step()
+            _step = bump_llm_step("stream")
         except Exception:
             pass
         _agent_debug_log(
@@ -1267,9 +1267,18 @@ class AgentPipeline:
         tools_view: Optional[str] = None,
         compact_mode: Optional[bool] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        runtime: Optional[Dict[str, Any]] = None,
     ) -> AsyncGenerator[Dict[str, Any], None]:
         logger.info(">>> [0] ENTERING run_stream for session %s", self.session_id)
         self._llm_provider_name = (metadata or {}).get("llm_provider_name")
+        self._turn_runtime_settings = dict(runtime or {})
+        _prev_max_agent_steps = getattr(self.agent, "max_agent_steps", None)
+        _runtime_steps = self._turn_runtime_settings.get("max_agent_steps")
+        if _runtime_steps is not None:
+            try:
+                self.agent.max_agent_steps = int(_runtime_steps)
+            except (TypeError, ValueError):
+                pass
         cancel_checker_task: Optional[asyncio.Task] = None
         from src.runtime.web_search_context import (
             WebSearchRequestContext,
@@ -1548,7 +1557,7 @@ class AgentPipeline:
                     "session_id": self.session_id[:12],
                     "profile": self.profile_name,
                     "reasoning_effort": reasoning_effort,
-                    "thinking_enabled": reasoning_effort != "min",
+                    "thinking_enabled": reasoning_effort != "off",
                     "max_agent_steps": getattr(self.agent, "max_agent_steps", None),
                     "user_input_preview": (user_input or "")[:80],
                 },
@@ -1740,6 +1749,27 @@ class AgentPipeline:
                 )
             else:
                 gen_kw = generation_kwargs_for_agent(self.agent, reasoning_effort)
+
+            try:
+                from src.runtime.reasoning_effort import detect_reasoning_dialect
+                from src.runtime.runtime_settings import (
+                    apply_runtime_to_generation_kwargs,
+                )
+
+                _gen = getattr(self.agent, "chat_generator", None)
+                _provider = (
+                    str(getattr(_gen, "provider", "openai") or "openai").strip().lower()
+                )
+                _model = str(getattr(_gen, "model", "") or "")
+                _dialect = detect_reasoning_dialect(_model, _provider)
+                gen_kw = apply_runtime_to_generation_kwargs(
+                    gen_kw,
+                    self._turn_runtime_settings,
+                    vllm_extra=_dialect != "openai_reasoning"
+                    and _provider not in ("anthropic", "google"),
+                )
+            except Exception as _rt_gen_exc:
+                logger.debug("runtime generation kwargs merge skipped: %s", _rt_gen_exc)
 
             # Always refresh system prompt so cached agents get the current date
             # and any profile changes.  The harness_v2_injections flag used to
@@ -2087,6 +2117,10 @@ class AgentPipeline:
             full_response, full_reasoning, tool_calls_log = [], [], []
             from src.runtime.turn.turn_guards import TurnGuards
             from src.runtime.turn_budget import TurnBudget
+            from src.runtime.runtime_settings import (
+                turn_budget_overrides,
+                turn_guard_overrides,
+            )
 
             turn_guards = TurnGuards(
                 message_source=_msg_src,
@@ -2095,7 +2129,12 @@ class AgentPipeline:
                     message_source=_msg_src,
                     reasoning_effort=reasoning_effort,
                     agent_mode=effective_agent_mode,
+                    overrides=turn_budget_overrides(
+                        self._turn_runtime_settings,
+                        resolved_effort=reasoning_effort,
+                    ),
                 ),
+                guard_overrides=turn_guard_overrides(self._turn_runtime_settings),
             )
             max_reasoning_chars = turn_guards.max_reasoning_chars
             max_reasoning_events = turn_guards.max_reasoning_events
@@ -3828,15 +3867,11 @@ class AgentPipeline:
                         pending_db_steps=pending_db_steps,
                         timeline_builder=timeline_builder,
                         plan_intercepts=plan_intercepts,
+                        reasoning_effort=reasoning_effort,
+                        max_reasoning_chars=max_reasoning_chars,
+                        max_reasoning_events=max_reasoning_events,
                     )
                     if _outcome_chunk:
-                        if (
-                            _outcome_chunk.get("message")
-                            and not "".join(full_response).strip()
-                        ):
-                            yield _track_sse(
-                                {"type": "token", "content": _outcome_chunk["message"]}
-                            )
                         yield _track_sse(_outcome_chunk)
                     elif final_text and not "".join(full_response).strip():
                         yield _track_sse({"type": "token", "content": final_text})
@@ -3964,6 +3999,11 @@ class AgentPipeline:
             )
             yield {"type": "error", "content": str(e)}
         finally:
+            if _prev_max_agent_steps is not None:
+                try:
+                    self.agent.max_agent_steps = _prev_max_agent_steps
+                except Exception:
+                    pass
             try:
                 from src.runtime.mnemos_context import clear_mnemos_turn_context
 
@@ -4006,6 +4046,7 @@ class AgentPipeline:
         tools_view: Optional[str] = None,
         compact_mode: Optional[bool] = None,
         metadata: Optional[Dict[str, Any]] = None,
+        runtime: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Drain ``run_stream`` until a ``final`` chunk (sync / automation clients)."""
         error_message = ""
@@ -4025,6 +4066,7 @@ class AgentPipeline:
             tools_view=tools_view,
             compact_mode=compact_mode,
             metadata=metadata,
+            runtime=runtime,
         ):
             if chunk["type"] == "final":
                 return {
