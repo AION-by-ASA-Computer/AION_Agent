@@ -154,7 +154,7 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
     if sub in LISTABLE_SUBDIRS:
         if sub == "tool_results":
             return _list_tool_results_files(session_id)
-        d = root / sub
+        d = safe_resolve(session_id, sub, must_exist=False)
         if not d.is_dir():
             return []
         all_names = set(p.name for p in d.iterdir() if p.is_file())
@@ -194,7 +194,7 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
         raise ValueError(
             f"subdir deve essere uno tra: {', '.join(sorted(LISTABLE_SUBDIRS))}"
         )
-    d = root / sub
+    d = safe_resolve(session_id, sub, must_exist=False)
     if not d.is_dir():
         return []
     out = []
