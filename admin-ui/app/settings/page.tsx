@@ -400,9 +400,13 @@ export default function SettingsPage() {
       setMessage({ type: "error", text: "Embedding service URL is required to test the connection." });
       return false;
     }
-    if (embProvider !== "google" && !(settings.AION_EMBEDDINGS_API_KEY || "").trim()) {
-      setMessage({ type: "error", text: "Embedding API Key is required to test the connection." });
-      return false;
+    const isSelfHosted = embProvider === "vllm" || embProvider === "ollama";
+    if (embProvider !== "google" && !isSelfHosted && !(settings.AION_EMBEDDINGS_API_KEY || "").trim()) {
+      const host = probeBase.replace(/^https?:\/\//i, "").split(/[/:]/)[0].toLowerCase();
+      if (!["localhost", "127.0.0.1", "host.docker.internal", "gateway.docker.internal"].includes(host) && !host.endsWith(".local") && !host.endsWith(".internal")) {
+        setMessage({ type: "error", text: "Embedding API Key is required to test the connection." });
+        return false;
+      }
     }
 
     setEmbProbing(true);
@@ -1380,6 +1384,8 @@ export default function SettingsPage() {
                 className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono appearance-none cursor-pointer"
               >
                 <option value="openai">OpenAI-Compatible</option>
+                <option value="vllm">vLLM (Self-hosted)</option>
+                <option value="ollama">Ollama</option>
                 <option value="google">Google</option>
               </select>
             </div>
@@ -1396,7 +1402,11 @@ export default function SettingsPage() {
                 placeholder={
                   (settings.AION_EMBEDDINGS_PROVIDER || "openai") === "google"
                     ? "https://generativelanguage.googleapis.com/v1beta/models"
-                    : "http://localhost:11434/v1/embeddings or https://api.openai.com/v1/embeddings"
+                    : (settings.AION_EMBEDDINGS_PROVIDER || "openai") === "ollama"
+                    ? "http://host.docker.internal:11434/v1/embeddings or http://localhost:11434/v1/embeddings"
+                    : (settings.AION_EMBEDDINGS_PROVIDER || "openai") === "vllm"
+                    ? "http://host.docker.internal:8000/v1/embeddings or http://localhost:8000/v1/embeddings"
+                    : "http://host.docker.internal:8000/v1/embeddings or https://api.openai.com/v1/embeddings"
                 }
               />
               <p className="text-[11px] text-gray-500">
@@ -1414,7 +1424,11 @@ export default function SettingsPage() {
                       handleUpdate("AION_EMBEDDINGS_API_KEY", e.target.value);
                       resetEmbProbeState();
                     }}
-                    placeholder="Enter Embedding API Key"
+                    placeholder={
+                      ["vllm", "ollama"].includes(settings.AION_EMBEDDINGS_PROVIDER || "")
+                        ? "Optional for local / vLLM / Ollama"
+                        : "Enter Embedding API Key"
+                    }
                     className="w-full bg-[#0d0d0d] border border-[#262626] rounded-xl pl-4 pr-10 py-2.5 text-sm text-gray-200 focus:border-blue-500/50 focus:ring-1 focus:ring-blue-500/20 outline-none transition-all font-mono"
                     autoComplete="new-password"
                   />

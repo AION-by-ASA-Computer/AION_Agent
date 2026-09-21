@@ -135,3 +135,36 @@ def test_trace_context_preserved():
     )
     assert err is None
     assert args["_trace_context"] == {"traceparent": "00-abc"}
+
+
+def test_download_attachment_auto_injects_save_path_from_attachment_name():
+    args, err = prepare_mcp_tool_arguments(
+        "download_attachment",
+        {
+            "email_id": "34",
+            "attachment_name": "Progetto_Agente_AI.docx",
+        },
+    )
+    assert err is None
+    assert "save_path" in args
+    assert (
+        args["save_path"].endswith("uploads/Progetto_Agente_AI.docx")
+        or args["save_path"] == "uploads/Progetto_Agente_AI.docx"
+    )
+
+
+def test_download_attachment_normalizes_custom_save_path():
+    args, err = prepare_mcp_tool_arguments(
+        "download_attachment",
+        {
+            "email_id": "34",
+            "attachment_name": "report.pdf",
+            "save_path": "report.pdf",
+        },
+    )
+    assert err is None
+    assert "save_path" in args
+    assert (
+        args["save_path"].endswith("uploads/report.pdf")
+        or args["save_path"] == "uploads/report.pdf"
+    )
