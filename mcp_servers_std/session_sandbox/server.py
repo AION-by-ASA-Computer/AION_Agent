@@ -47,9 +47,10 @@ def sandbox_list_files(subdir: str = "uploads", recursive: bool = False) -> str:
         root_rel = subdir.strip().replace("\\", "/").strip("/")
         if root_rel == ".":
             root_rel = ""
-        if root_rel not in SESSION_CONTENT_ROOTS:
+        top = root_rel.split("/", 1)[0] if root_rel else ""
+        if root_rel and root_rel not in SESSION_CONTENT_ROOTS and top not in (SESSION_CONTENT_ROOTS - {""}):
             allowed = ", ".join(sorted(SESSION_CONTENT_ROOTS))
-            return f"Error: subdir must be one of: {allowed}"
+            return f"Error: subdir must be one of or under: {allowed}"
 
         sroot = session_root(_sid())
         root = safe_resolve(_sid(), root_rel, must_exist=False)

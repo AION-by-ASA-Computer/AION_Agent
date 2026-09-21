@@ -107,6 +107,9 @@ services:
       # Writable runtime overlay (synced from *_std at boot; local customizations persist)
       - ./config:/app/config
       - ./mcp_servers:/app/mcp_servers
+      # Persistent uvx/uv cache: evita il re-download di plane-mcp-server e altri pacchetti
+      # ad ogni riavvio del container (cold-start MCP timeout fix)
+      - uv_cache:/root/.cache/uv
     expose:
       - "8001"
     networks: [ aion_net ]
@@ -192,3 +195,4 @@ volumes:
   caddy_data:
   caddy_config:
   redis_data:
+  uv_cache:  # Cache uvx/uv per MCP stdio servers (plane, email, …) — persiste tra riavvii
