@@ -758,6 +758,29 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     return activeProfileRow?.name || profile;
   }, [activeProfileRow, profile]);
 
+  /** Tool MCP effettivamente invocati dall'agente in questa conversazione,
+   *  derivati dai segmenti SSE persistiti — aggiornati in tempo reale. */
+  const usedTools = useMemo(() => {
+    const toolMap = new Map<string, { callCount: number; hasError: boolean }>();
+    for (const m of messages) {
+      if (m.role !== "assistant" || !m.segments) continue;
+      for (const seg of m.segments) {
+        if (seg.kind !== "tool") continue;
+        const cur = toolMap.get(seg.name) ?? { callCount: 0, hasError: false };
+        toolMap.set(seg.name, {
+          callCount: cur.callCount + 1,
+          hasError: cur.hasError || seg.status === "error",
+        });
+      }
+    }
+    return Array.from(toolMap.entries()).map(([name, v]) => ({ name, ...v }));
+  }, [messages]);
+
+  const activeProfileSkills = useMemo(
+    () => activeProfileRow?.skills ?? [],
+    [activeProfileRow]
+  );
+
   const showSqlQueryMemory = useMemo(
     () => hasSqlQueryMemory(activeProfileRow),
     [activeProfileRow]
@@ -3278,6 +3301,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         selectedProvider={selectedProvider}
         providersLoading={providersLoading}
         onProviderChange={setSelectedProvider}
+        usedTools={usedTools}
+        activeProfileSkills={activeProfileSkills}
       />,
     );
   }, [
@@ -3297,6 +3322,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     llmProviders,
     selectedProvider,
     providersLoading,
+    usedTools,
+    activeProfileSkills,
   ]);
 
   useLayoutEffect(() => {
@@ -4454,6 +4481,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               </div>
                             ) : null}
                           </div>
+
 
                           <div className="my-1 border-t border-border/45" />
                           <button

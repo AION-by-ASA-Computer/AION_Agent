@@ -340,6 +340,14 @@
       "select": "Modell auswählen",
       "switch": "Modell wechseln"
     },
+    "capabilities": {
+      "label": "Werkzeuge & Fähigkeiten",
+      "tools_used": "Verwendete Werkzeuge",
+      "skills": "Aktive Fähigkeiten",
+      "no_tools": "Noch keine Werkzeuge in diesem Chat verwendet.",
+      "no_skills": "Keine Fähigkeiten konfiguriert.",
+      "realtime_hint": "Wird während der Unterhaltung live aktualisiert."
+    },
     "edit": {
       "placeholder": "Nachricht bearbeiten...",
       "save_send": "Speichern & Senden",

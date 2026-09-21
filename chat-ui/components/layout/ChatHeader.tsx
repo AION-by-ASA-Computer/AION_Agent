@@ -3,6 +3,7 @@
 import { Copy, PanelLeft, PanelRight } from "lucide-react";
 import { useCallback, useState, useRef, useEffect } from "react";
 import { ModelSelectChip, type LlmProviderOption } from "@/components/chat/ModelSelectChip";
+import { CapabilitiesChip, type UsedTool } from "@/components/layout/CapabilitiesChip";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
@@ -22,6 +23,8 @@ export function ChatHeader({
   selectedProvider,
   providersLoading,
   onProviderChange,
+  usedTools,
+  activeProfileSkills,
 }: {
   conversationId: string;
   profiles?: unknown[];
@@ -39,6 +42,10 @@ export function ChatHeader({
   selectedProvider?: string | null;
   providersLoading?: boolean;
   onProviderChange?: (slug: string | null) => void;
+  /** Tool MCP effettivamente invocati nella conversazione corrente (dai segmenti SSE). */
+  usedTools?: UsedTool[];
+  /** Skill configurate nel profilo attivo. */
+  activeProfileSkills?: string[];
 }) {
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -159,6 +166,10 @@ export function ChatHeader({
             placement="below"
           />
         ) : null}
+        <CapabilitiesChip
+          usedTools={usedTools ?? []}
+          skills={activeProfileSkills ?? []}
+        />
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">

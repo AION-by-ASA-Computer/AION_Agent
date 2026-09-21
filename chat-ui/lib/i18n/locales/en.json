@@ -496,6 +496,14 @@
       "switch": "Switch Model",
       "default_hint": "Default model for this server."
     },
+    "capabilities": {
+      "label": "Tools & Skills",
+      "tools_used": "Tools used",
+      "skills": "Active skills",
+      "no_tools": "No tools used in this chat yet.",
+      "no_skills": "No skills configured.",
+      "realtime_hint": "Updated live during the conversation."
+    },
     "empty": {
       "title": "What can I help you with?",
       "subtitle": "Ask anything, attach a file, or turn on web search. Answers stream in as they're written.",

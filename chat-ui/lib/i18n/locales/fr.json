@@ -340,6 +340,14 @@
       "select": "Sélectionner le modèle",
       "switch": "Changer de modèle"
     },
+    "capabilities": {
+      "label": "Outils & Compétences",
+      "tools_used": "Outils utilisés",
+      "skills": "Compétences actives",
+      "no_tools": "Aucun outil utilisé dans ce chat pour l'instant.",
+      "no_skills": "Aucune compétence configurée.",
+      "realtime_hint": "Mise à jour en temps réel pendant la conversation."
+    },
     "edit": {
       "placeholder": "Modifier le message...",
       "save_send": "Sauvegarder et Envoyer",
