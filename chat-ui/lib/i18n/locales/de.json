@@ -346,7 +346,10 @@
       "skills": "Aktive Fähigkeiten",
       "no_tools": "Noch keine Werkzeuge in diesem Chat verwendet.",
       "no_skills": "Keine Fähigkeiten konfiguriert.",
-      "realtime_hint": "Wird während der Unterhaltung live aktualisiert."
+      "realtime_hint": "Wird während der Unterhaltung live aktualisiert.",
+      "skill_loaded": "Geladen",
+      "skill_failed": "Nicht gefunden",
+      "skill_pending": "Ausstehend"
     },
     "edit": {
       "placeholder": "Nachricht bearbeiten...",

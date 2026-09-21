@@ -502,7 +502,10 @@
       "skills": "Skill attive",
       "no_tools": "Nessun tool usato in questa chat.",
       "no_skills": "Nessuna skill configurata.",
-      "realtime_hint": "Aggiornato in tempo reale durante la chat."
+      "realtime_hint": "Aggiornato in tempo reale durante la chat.",
+      "skill_loaded": "Caricata",
+      "skill_failed": "Non trovata",
+      "skill_pending": "In attesa"
     },
     "empty": {
       "title": "Come posso aiutarti?",

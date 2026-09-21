@@ -502,7 +502,10 @@
       "skills": "Active skills",
       "no_tools": "No tools used in this chat yet.",
       "no_skills": "No skills configured.",
-      "realtime_hint": "Updated live during the conversation."
+      "realtime_hint": "Updated live during the conversation.",
+      "skill_loaded": "Loaded",
+      "skill_failed": "Not found",
+      "skill_pending": "Pending"
     },
     "empty": {
       "title": "What can I help you with?",

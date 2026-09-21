@@ -5,12 +5,14 @@ import {
   BookOpen,
   CheckCircle2,
   ChevronDown,
+  Circle,
   Wrench,
   XCircle,
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
+import type { SkillStatus } from "@/components/chat/ChatWorkspace";
 
 export type UsedTool = {
   name: string;
@@ -24,19 +26,44 @@ function formatSlug(slug: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+const SKILL_STATE_CONFIG = {
+  loaded: {
+    icon: CheckCircle2,
+    iconClass: "text-emerald-500",
+    badgeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+    badgeKey: "chat.capabilities.skill_loaded",
+  },
+  failed: {
+    icon: XCircle,
+    iconClass: "text-rose-500",
+    badgeClass: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+    badgeKey: "chat.capabilities.skill_failed",
+  },
+  pending: {
+    icon: Circle,
+    iconClass: "text-muted-foreground/40",
+    badgeClass: "bg-muted/60 text-muted-foreground/60",
+    badgeKey: "chat.capabilities.skill_pending",
+  },
+} as const;
+
 export function CapabilitiesChip({
   usedTools,
-  skills,
+  skillStatuses,
 }: {
   usedTools: UsedTool[];
-  skills: string[];
+  skillStatuses: SkillStatus[];
 }) {
   const t = useT();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   const totalTools = usedTools.length;
-  const hasAny = totalTools > 0 || skills.length > 0;
+  const hasAny = totalTools > 0 || skillStatuses.length > 0;
+
+  // Conta skill per stato per il badge del trigger
+  const loadedCount = skillStatuses.filter((s) => s.loadState === "loaded").length;
+  const failedCount = skillStatuses.filter((s) => s.loadState === "failed").length;
 
   useEffect(() => {
     if (!open) return;
@@ -58,7 +85,9 @@ export function CapabilitiesChip({
 
   if (!hasAny) return null;
 
-  const hasErrors = usedTools.some((t) => t.hasError);
+  const hasToolErrors = usedTools.some((t) => t.hasError);
+  const hasSkillErrors = failedCount > 0;
+  const hasErrors = hasToolErrors || hasSkillErrors;
 
   return (
     <div ref={ref} className="relative">
@@ -130,17 +159,9 @@ export function CapabilitiesChip({
                   >
                     <div className="flex items-center gap-1.5 min-w-0">
                       {tool.hasError ? (
-                        <XCircle
-                          size={13}
-                          className="shrink-0 text-rose-500"
-                          aria-hidden
-                        />
+                        <XCircle size={13} className="shrink-0 text-rose-500" aria-hidden />
                       ) : (
-                        <CheckCircle2
-                          size={13}
-                          className="shrink-0 text-emerald-500"
-                          aria-hidden
-                        />
+                        <CheckCircle2 size={13} className="shrink-0 text-emerald-500" aria-hidden />
                       )}
                       <span className="truncate text-[0.786em] font-medium text-foreground">
                         {formatSlug(tool.name)}
@@ -159,7 +180,7 @@ export function CapabilitiesChip({
 
           <div className="my-1.5 border-t border-border/40" />
 
-          {/* ── Section: Skills ── */}
+          {/* ── Section: Skills with load state ── */}
           <div className="px-3 pb-3 pt-1">
             <div className="mb-1.5 flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -168,29 +189,60 @@ export function CapabilitiesChip({
                   {t("chat.capabilities.skills")}
                 </span>
               </div>
-              {skills.length > 0 && (
-                <span className="rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[0.65em] font-bold tabular-nums text-amber-500">
-                  {skills.length}
-                </span>
+              {skillStatuses.length > 0 && (
+                <div className="flex items-center gap-1">
+                  {loadedCount > 0 && (
+                    <span className="rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[0.65em] font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+                      {loadedCount}✓
+                    </span>
+                  )}
+                  {failedCount > 0 && (
+                    <span className="rounded-full bg-rose-500/15 px-1.5 py-0.5 text-[0.65em] font-bold tabular-nums text-rose-600 dark:text-rose-400">
+                      {failedCount}✗
+                    </span>
+                  )}
+                </div>
               )}
             </div>
 
-            {skills.length === 0 ? (
+            {skillStatuses.length === 0 ? (
               <p className="py-1.5 text-[0.75em] text-muted-foreground/70 italic">
                 {t("chat.capabilities.no_skills")}
               </p>
             ) : (
               <ul className="space-y-0.5">
-                {skills.map((skill) => (
-                  <li
-                    key={skill}
-                    className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 hover:bg-muted/40 transition-colors"
-                  >
-                    <span className="truncate text-[0.786em] font-medium text-foreground">
-                      {formatSlug(skill)}
-                    </span>
-                  </li>
-                ))}
+                {skillStatuses.map((skill) => {
+                  const cfg = SKILL_STATE_CONFIG[skill.loadState];
+                  const Icon = cfg.icon;
+                  return (
+                    <li
+                      key={skill.name}
+                      className="flex items-center justify-between rounded-lg px-1.5 py-1 hover:bg-muted/40 transition-colors"
+                    >
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <Icon size={13} className={cn("shrink-0", cfg.iconClass)} aria-hidden />
+                        <span
+                          className={cn(
+                            "truncate text-[0.786em] font-medium",
+                            skill.loadState === "pending"
+                              ? "text-muted-foreground"
+                              : "text-foreground",
+                          )}
+                        >
+                          {formatSlug(skill.name)}
+                        </span>
+                      </div>
+                      <span
+                        className={cn(
+                          "ml-2 shrink-0 rounded-full px-1.5 py-0.5 text-[0.65em] font-medium",
+                          cfg.badgeClass,
+                        )}
+                      >
+                        {t(cfg.badgeKey)}
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
