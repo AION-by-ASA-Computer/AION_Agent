@@ -3243,11 +3243,11 @@ async def probe_candidate_endpoint(body: CandidateProbeBody):
             "tool_count": 0,
             "tools": [],
         }
-    except Exception as e:
-        logger.warning("Candidate probe failed: %s", e)
+    except Exception:
+        logger.exception("Candidate probe failed")
         return {
             "ok": False,
-            "error": str(e),
+            "error": "Candidate probe failed. Check server logs for details.",
             "tool_count": 0,
             "tools": [],
         }

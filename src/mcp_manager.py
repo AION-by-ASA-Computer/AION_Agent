@@ -1176,24 +1176,36 @@ class MCPManager:
             )
 
     @staticmethod
+    def _stdio_script_allowed_roots() -> Tuple[Path, ...]:
+        root = _repo_root().resolve()
+        return (root / "mcp_servers", root)
+
+    @staticmethod
+    def _resolve_stdio_script_under_roots(arg: str) -> Optional[Path]:
+        """Resolve ``arg`` only when the result stays under allowed repo roots."""
+        if not arg or "\0" in arg:
+            return None
+        raw = Path(arg)
+        if ".." in raw.parts:
+            return None
+        for base in MCPManager._stdio_script_allowed_roots():
+            base_resolved = base.resolve()
+            try:
+                candidate = (raw if raw.is_absolute() else base_resolved / raw).resolve()
+                candidate.relative_to(base_resolved)
+            except ValueError:
+                continue
+            if candidate.is_file() and candidate.suffix == ".py":
+                return candidate
+        return None
+
+    @staticmethod
     def resolve_stdio_script_path(arg: str) -> Optional[str]:
         """Absolute path to a stdio MCP entrypoint script, or None if not found."""
         if not isinstance(arg, str) or arg.startswith("-") or not arg.endswith(".py"):
             return None
-        if os.path.isabs(arg) and os.path.isfile(arg):
-            return arg
-        root = _repo_root()
-        cwd = os.getcwd()
-        candidates = [
-            os.path.abspath(os.path.join(cwd, "mcp_servers", arg)),
-            os.path.abspath(os.path.join(root, "mcp_servers", arg)),
-            os.path.abspath(os.path.join(cwd, arg)),
-            os.path.abspath(os.path.join(root, arg)),
-        ]
-        for path in candidates:
-            if os.path.isfile(path):
-                return path
-        return None
+        resolved = MCPManager._resolve_stdio_script_under_roots(arg)
+        return str(resolved) if resolved else None
 
     @classmethod
     def resolve_stdio_spawn_command(
