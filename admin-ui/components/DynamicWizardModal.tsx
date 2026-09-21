@@ -255,8 +255,17 @@ export function DynamicWizardModal({
       (tgt.package_url?.startsWith("http") ? tgt.package_url : "") ||
       (tgt.id?.startsWith("github:") ? `https://github.com/${tgt.id.replace("github:", "")}` : "");
 
+    const isAllowedGithubUrl = (url: string) => {
+      try {
+        const host = new URL(url).hostname.toLowerCase();
+        return host === "github.com" || host === "www.github.com";
+      } catch {
+        return false;
+      }
+    };
+
     // If the item comes from GitHub or Claude Community, use the zero-clone GitHub analyzer
-    if (ghUrl && (ghUrl.includes("github.com") || tgt.source === "Claude Community" || tgt.source === "GitHub")) {
+    if (ghUrl && (isAllowedGithubUrl(ghUrl) || tgt.source === "Claude Community" || tgt.source === "GitHub")) {
       setLoadingSchema(true);
       try {
         const res = await apiFetch(`${apiBase()}/admin/market/analyze-github`, {
