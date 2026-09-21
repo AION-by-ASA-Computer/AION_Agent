@@ -3,8 +3,20 @@ import re
 import requests
 import logging
 from typing import List, Dict, Any, Optional
+from urllib.parse import urlparse
 
 logger = logging.getLogger("aion.marketplaces")
+
+_GITHUB_HOSTS = frozenset({"github.com", "www.github.com"})
+
+
+def is_github_host_url(url: str) -> bool:
+    """True when ``url`` hostname is github.com (not a substring match)."""
+    try:
+        host = (urlparse(url).hostname or "").lower()
+        return host in _GITHUB_HOSTS
+    except Exception:
+        return False
 
 
 def parse_github_owner_repo(item: Dict[str, Any]) -> Optional[tuple[str, str]]:
@@ -395,7 +407,7 @@ class AwesomeListAdapter(MarketplaceAdapter):
                                 "description": desc or "No description",
                                 "url": tool_url,
                                 "install_type": "git"
-                                if "github.com" in tool_url
+                                if is_github_host_url(tool_url)
                                 else "stdio",
                                 "has_smithery_schema": False,
                                 "schema_source": "ai_analysis",
