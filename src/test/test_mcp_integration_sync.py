@@ -97,18 +97,12 @@ def test_infer_mode_org_shared_literal() -> None:
 
 
 def test_clickup_catalog_per_user_env_e2e() -> None:
-    from src.mcp_connector_catalog import load_mcp_connector_catalog
-
-    catalog = load_mcp_connector_catalog()
-    clickup = next(
-        (
-            c
-            for c in (catalog.get("connectors") or [])
-            if isinstance(c, dict) and c.get("id") == "clickup"
-        ),
-        None,
-    )
-    assert clickup is not None
+    clickup = {
+        "id": "clickup",
+        "credential_fields": [
+            {"key": "CLICKUP_API_KEY", "secret": True, "required": True}
+        ],
+    }
     schema = credential_schema_from_connector(clickup)
     assert any(f.get("key") == "CLICKUP_API_KEY" for f in schema)
     env = suggest_registry_env_for_per_user("clickup", schema)

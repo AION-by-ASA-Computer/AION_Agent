@@ -74,7 +74,7 @@ export function McpIntegrityBanner({ onRepaired, className }: Props) {
         )}
       >
         <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-        Controllo integrità MCP…
+        Checking MCP integrity…
       </div>
     );
   }
@@ -88,7 +88,7 @@ export function McpIntegrityBanner({ onRepaired, className }: Props) {
         )}
       >
         <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
-        Integrità MCP: nessun problema rilevato
+        MCP Integrity: no issues detected
       </div>
     );
   }
@@ -108,13 +108,13 @@ export function McpIntegrityBanner({ onRepaired, className }: Props) {
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
           <div>
             <p className="font-semibold text-amber-900 dark:text-amber-200">
-              Integrità MCP — {report.issue_count} problemi
-              {errors > 0 ? ` (${errors} errori` : ""}
-              {warnings > 0 ? `${errors > 0 ? ", " : " ("}${warnings} avvisi` : ""}
+              MCP Integrity — {report.issue_count} issue{report.issue_count === 1 ? "" : "s"}
+              {errors > 0 ? ` (${errors} error${errors === 1 ? "" : "s"}` : ""}
+              {warnings > 0 ? `${errors > 0 ? ", " : " ("}${warnings} warning${warnings === 1 ? "" : "s"}` : ""}
               {errors > 0 || warnings > 0 ? ")" : ""}
             </p>
             <p className="mt-0.5 text-xs text-amber-900/80 dark:text-amber-200/80">
-              Credenziali orfane, policy disallineate o env non coerenti con lo schema.
+              Orphan credentials, misaligned policies, or environment variables inconsistent with schema.
             </p>
           </div>
         </div>
@@ -125,7 +125,7 @@ export function McpIntegrityBanner({ onRepaired, className }: Props) {
           className="focus-ring inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-background/60 px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-muted disabled:opacity-50 dark:text-amber-200"
         >
           {repairing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
-          Ripara automaticamente
+          Auto-repair
         </button>
       </div>
       <ul className="max-h-36 space-y-1.5 overflow-y-auto text-xs text-amber-900/90 dark:text-amber-100/90">
@@ -138,7 +138,7 @@ export function McpIntegrityBanner({ onRepaired, className }: Props) {
           </li>
         ))}
         {report.issues.length > 8 ? (
-          <li className="text-amber-800/70 dark:text-amber-300/60">…e altri {report.issues.length - 8}</li>
+          <li className="text-amber-800/70 dark:text-amber-300/60">…and {report.issues.length - 8} more</li>
         ) : null}
       </ul>
     </div>

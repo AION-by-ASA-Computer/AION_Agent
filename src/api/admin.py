@@ -21,6 +21,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 import urllib.parse
 from sse_starlette.sse import EventSourceResponse
+from ..mcp_remote_install import build_remote_bridge_registry_config
+from ..runtime.mcp_health import (
+    classify_mcp_error,
+    clear_mcp_load_errors,
+    get_last_mcp_load_errors,
+)
 
 
 class FlowList(list):
@@ -1284,10 +1290,16 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
         schema_for_env = None
         if body.schema_override and body.credential_schema is not None:
             schema_for_env = body.credential_schema
+        elif row and row.credential_schema_json:
+            try:
+                schema_for_env = json.loads(row.credential_schema_json)
+            except Exception:
+                schema_for_env = None
         merge_suggested_env_into_registry(
             server_slug,
             mode_after,
             credential_schema=schema_for_env,
+            force_replace_schema_env=True,
         )
 
     return {"ok": True}
@@ -1976,10 +1988,32 @@ async def admin_apply_suggested_env(
         raise HTTPException(
             status_code=400, detail="credential_mode must be per_user or org_shared"
         )
+    db_schema = None
+    async with get_async_session_maker()() as session:
+        row = (
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == server_slug
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+        if row and row.credential_schema_json:
+            try:
+                db_schema = json.loads(row.credential_schema_json)
+            except Exception:
+                db_schema = None
+
     result = await apply_integration_config(
         server_slug,
         credential_mode=credential_mode,
+        credential_schema=db_schema,
+        schema_override=bool(db_schema),
         apply_suggested_env=True,
+        force_replace_schema_env=True,
         sync_db=False,
     )
     if not result.get("ok"):
@@ -2080,8 +2114,587 @@ async def admin_mcp_integrity_repair_all():
 
 @router.get("/market/search")
 async def search_market(q: str = ""):
-    """Searches across integrated MCP marketplaces."""
+    """Searches across integrated MCP marketplaces (Smithery, Glama, GitHub, etc.)."""
     return hub_aggregator.search_all(q)
+
+
+@router.get("/market/config")
+async def get_market_config(
+    qualified_name: Optional[str] = None,
+    item_id: Optional[str] = None,
+):
+    """Recupera lo schema di configurazione normalizzato per un server MCP (Smithery o registry)."""
+    target_name = qualified_name or item_id or ""
+    if not target_name:
+        raise HTTPException(
+            status_code=400, detail="qualified_name o item_id obbligatorio"
+        )
+
+    from ..marketplaces.smithery_client import (
+        get_smithery_server_details,
+        extract_normalized_envs_from_schema,
+    )
+
+    details = get_smithery_server_details(target_name)
+    if not details:
+        raise HTTPException(
+            status_code=404, detail=f"Dettagli non trovati per {target_name}"
+        )
+
+    normalized_envs = extract_normalized_envs_from_schema(details)
+    connections = details.get("connections") or []
+    runtime = "node"
+    deployment_url = (details.get("deploymentUrl") or "").strip()
+    is_remote = bool(details.get("remote")) or bool(deployment_url)
+
+    if (
+        connections
+        and isinstance(connections, list)
+        and isinstance(connections[0], dict)
+    ):
+        runtime = connections[0].get("runtime") or "node"
+        if not deployment_url:
+            deployment_url = (connections[0].get("deploymentUrl") or "").strip()
+        if connections[0].get("type") in ("http", "sse"):
+            is_remote = True
+
+    q_name = (details.get("qualifiedName") or target_name).strip()
+    if is_remote and not deployment_url:
+        clean_host_slug = q_name.replace("/", "--").replace("@", "")
+        deployment_url = f"https://{clean_host_slug}.run.tools"
+
+    auth_type = "oauth2"
+    credential_mode = "per_user"
+
+    if is_remote and deployment_url:
+        install_type = "remote"
+        runner = "node"
+        command_args = ["node_modules/mcp-remote/dist/proxy.js", deployment_url]
+        package_url = deployment_url
+
+        try:
+            from ..mcp_credential_discovery import probe_remote_url_sync
+            import asyncio
+
+            probe_info = await asyncio.to_thread(
+                probe_remote_url_sync, deployment_url, {}
+            )
+            if probe_info:
+                auth_type = probe_info.get("type") or "oauth2"
+                credential_mode = probe_info.get("credential_mode") or (
+                    "per_user" if auth_type == "oauth2" else "org_shared"
+                )
+                if not normalized_envs and probe_info.get("credential_schema"):
+                    for item in probe_info["credential_schema"]:
+                        normalized_envs.append(
+                            {
+                                "key": item.get("key") or "OAUTH_TOKEN",
+                                "description": item.get("label")
+                                or f"Token per {q_name}",
+                                "required": bool(item.get("required", True)),
+                                "is_secret": True,
+                                "default": "",
+                                "type": "password",
+                            }
+                        )
+        except Exception as exc:
+            logger.debug(
+                "Probe remote url for market/config failed (%s): %s",
+                deployment_url,
+                exc,
+            )
+    else:
+        install_type = "zero-install"
+        runner = "uvx" if runtime == "python" else "npx"
+        clean_pkg = (
+            q_name.split("/")[-1]
+            if ("/" in q_name and not q_name.startswith("@"))
+            else q_name
+        )
+        if runtime == "python":
+            runner = "uvx"
+            command_args = [clean_pkg]
+            package_url = clean_pkg
+        else:
+            runner = "npx"
+            command_args = ["-y", clean_pkg]
+            package_url = clean_pkg
+
+    return {
+        "qualified_name": q_name,
+        "display_name": details.get("displayName") or target_name,
+        "description": details.get("description") or "",
+        "icon_url": details.get("iconUrl") or "",
+        "runtime": runtime,
+        "runner": runner,
+        "is_remote": is_remote,
+        "install_type": install_type,
+        "deployment_url": deployment_url,
+        "remote_url": deployment_url if is_remote else "",
+        "auth_type": auth_type,
+        "credential_mode": credential_mode,
+        "package_url": package_url,
+        "command_args": command_args,
+        "required_envs": normalized_envs,
+    }
+
+
+class GitHubAnalyzeBody(BaseModel):
+    url: str = Field(..., description="URL repository GitHub")
+
+
+@router.post("/market/analyze-github")
+async def analyze_github_endpoint(body: GitHubAnalyzeBody):
+    """Analizza un repository GitHub MCP senza clonare su disco tramite LLM Structured Output."""
+    from ..marketplaces.github_raw_analyzer import analyze_github_mcp_repo
+
+    try:
+        res = await analyze_github_mcp_repo(body.url)
+        return {
+            "status": "success",
+            "package_url": res.package_url,
+            "runner": res.runner,
+            "description": res.description,
+            "command_args": res.command_args,
+            "required_envs": [
+                {
+                    "key": e.key,
+                    "description": e.description,
+                    "is_secret": e.is_secret,
+                    "required": e.required,
+                    "default": e.default,
+                }
+                for e in res.required_envs
+            ],
+            "cli_args": [
+                {
+                    "name": a.name,
+                    "description": a.description,
+                    "required": a.required,
+                    "default": a.default,
+                    "placeholder": a.placeholder,
+                }
+                for a in res.cli_args
+            ],
+        }
+    except Exception as exc:
+        logger.exception("analyze-github failed for %s", body.url)
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+class ZeroInstallRequest(BaseModel):
+    server_slug: str
+    display_name: Optional[str] = None
+    description: Optional[str] = None
+    runner: str = "npx"  # "npx" | "uvx" | "node"
+    package_url: str
+    envs: Dict[str, str] = Field(default_factory=dict)
+    secret_keys: List[str] = Field(default_factory=list)
+    schema_fields: Optional[List[Dict[str, Any]]] = None
+    command_args: Optional[List[str]] = None
+    icon_url: Optional[str] = None
+    # github_source: se True, i command_args vanno rispettati così come sono
+    github_source: bool = False
+    # credential_mode: "none" | "org_shared" (condivise organizzazione) | "per_user" (personali)
+    credential_mode: Optional[str] = "org_shared"
+    is_remote: bool = False
+    remote_url: Optional[str] = None
+    auth_type: Optional[str] = None
+    enabled_tools: Optional[List[str]] = None
+
+
+@router.post("/market/install-zero")
+async def install_zero_endpoint(body: ZeroInstallRequest):
+    """Installa un MCP server in modalità Zero-Install o Remote-Bridge salvando i secret cifrati in aion.db."""
+    import re
+    from ..runtime.credential_store import set_credential
+    from ..data.engine import get_async_session_maker
+    from ..data.models import McpServerConfig
+    from ..data.ids import new_uuid7_str
+    from sqlalchemy import select
+
+    raw_slug = (body.server_slug or "").strip().lower()
+    slug = re.sub(r"[^a-z0-9_-]+", "_", raw_slug).strip("_")
+    if not slug:
+        slug = "mcp_custom"
+
+    runner = body.runner.strip().lower()
+    if runner not in ("npx", "uvx", "node", "remote"):
+        runner = "npx"
+
+    pkg = body.package_url.strip()
+    if not pkg:
+        pkg = slug
+
+    is_remote_server = (
+        body.is_remote
+        or bool(body.remote_url)
+        or runner in ("remote", "remote-bridge")
+        or pkg.startswith(("http://", "https://"))
+    )
+
+    if is_remote_server:
+        remote_url = (body.remote_url or pkg).strip()
+        auth_type = (body.auth_type or "oauth2").strip().lower()
+        if auth_type not in ("none", "oauth2", "api-key", "basic"):
+            auth_type = "oauth2"
+
+        cred_mode = (body.credential_mode or "").strip().lower()
+        if cred_mode not in ("org_shared", "per_user", "none"):
+            cred_mode = (
+                "per_user"
+                if auth_type == "oauth2"
+                else ("org_shared" if auth_type != "none" else "none")
+            )
+
+        from ..mcp_integration_sync import (
+            sync_mcp_server_config_from_registry,
+            suggest_registry_env_for_per_user,
+            suggest_registry_env_for_org_shared,
+        )
+
+        schema_fields: List[Dict[str, Any]] = []
+        if body.schema_fields:
+            for sf in body.schema_fields:
+                k = str(sf.get("key") or "").strip()
+                if not k:
+                    continue
+                is_sec = sf.get("is_secret", True)
+                req_val = sf.get("required")
+                schema_fields.append(
+                    {
+                        "key": k,
+                        "label": sf.get("label")
+                        or sf.get("description")
+                        or k.replace("_", " ").title(),
+                        "required": bool(req_val) if req_val is not None else True,
+                        "is_secret": is_sec,
+                        "type": "password" if is_sec else "text",
+                    }
+                )
+        elif auth_type != "none":
+            auth_key = (
+                "OAUTH_TOKEN"
+                if auth_type == "oauth2"
+                else ("API_KEY" if auth_type == "api-key" else "BASIC_AUTH")
+            )
+            schema_fields.append(
+                {
+                    "key": auth_key,
+                    "label": "Token OAuth"
+                    if auth_type == "oauth2"
+                    else ("Chiave API" if auth_type == "api-key" else "Basic Auth"),
+                    "required": True,
+                    "is_secret": True,
+                    "type": "password",
+                }
+            )
+
+        # Build remote bridge config with the selected credential mode
+        remote_config = build_remote_bridge_registry_config(
+            remote_url,
+            slug,
+            body.description or f"MCP remoto connesso a {remote_url}",
+            auth_type=auth_type,
+            credential_mode=cred_mode,
+        )
+
+        # Build clean environment map according to credential mode
+        if cred_mode == "per_user":
+            env_map = suggest_registry_env_for_per_user(slug, schema_fields)
+            remote_config["env"] = {**remote_config.get("env", {}), **env_map}
+        elif cred_mode == "org_shared":
+            env_map = suggest_registry_env_for_org_shared(schema_fields)
+            remote_config["env"] = {**remote_config.get("env", {}), **env_map}
+            for k, val in (body.envs or {}).items():
+                key_clean = str(k).strip()
+                val_str = str(val).strip()
+                if key_clean and val_str:
+                    await set_credential(
+                        "default", slug, key_clean, val_str, tenant_id="default"
+                    )
+                    await set_credential(
+                        "org_shared", slug, key_clean, val_str, tenant_id="default"
+                    )
+                    remote_config["env"][key_clean] = f"${{{key_clean}}}"
+        else:  # none
+            remote_config["env"] = {}
+
+        # Registra in mcp_registry.local.yaml
+        mcp_manager.load_registry()
+        config: Dict[str, Any] = {
+            "description": (body.description or f"MCP remoto {slug}")[:2000],
+            "source_id": f"remote:{slug}",
+            "remotes": [{"type": "sse", "url": remote_url}],
+            "aion_market_install": "remote",
+            **remote_config,
+        }
+        mcp_manager._registry_local[slug] = config
+        mcp_manager._rebuild_merged()
+        mcp_manager.save_registry()
+
+        async with get_async_session_maker()() as session:
+            existing = (
+                await session.execute(
+                    select(McpServerConfig).where(McpServerConfig.server_slug == slug)
+                )
+            ).scalar_one_or_none()
+
+            schema_json = json.dumps(schema_fields)
+
+            if existing:
+                existing.display_name = body.display_name or slug
+                existing.description = body.description or ""
+                existing.is_enabled_for_users = True
+                existing.credential_mode = cred_mode
+                existing.requires_user_credentials = cred_mode == "per_user"
+                existing.credential_schema_json = schema_json
+                if body.icon_url:
+                    existing.icon_url = body.icon_url
+            else:
+                cfg_row = McpServerConfig(
+                    id=new_uuid7_str(),
+                    server_slug=slug,
+                    display_name=body.display_name or slug,
+                    description=body.description or "",
+                    icon_url=body.icon_url,
+                    is_enabled_for_users=True,
+                    requires_user_credentials=(cred_mode == "per_user"),
+                    credential_mode=cred_mode,
+                    credential_schema_json=schema_json,
+                )
+                session.add(cfg_row)
+            await session.commit()
+
+        await sync_mcp_server_config_from_registry(slug)
+
+        return {
+            "status": "success",
+            "server_slug": slug,
+            "display_name": body.display_name or slug,
+            "runner": "node",
+            "package_url": remote_url,
+            "credential_mode": cred_mode,
+            "is_remote": True,
+            "remote_url": remote_url,
+        }
+
+    # Standard Zero-Install (npx / uvx)
+    # Se è un pacchetto npm con formato owner/pkg senza @, aggiungi la @ per renderlo uno scoped package valido
+    if (
+        runner == "npx"
+        and "/" in pkg
+        and not pkg.startswith("@")
+        and not pkg.startswith("http")
+    ):
+        pkg = f"@{pkg}"
+
+    # Costruisci il comando di esecuzione diretto nativo
+    if body.command_args:
+        # Se i command_args contengono @smithery/cli run (che richiede login/OAuth interattivo), converti in npx diretto se pacchetto npm valido
+        if (
+            len(body.command_args) >= 4
+            and "@smithery/cli" in str(body.command_args[1])
+            and body.command_args[2] == "run"
+        ):
+            target_pkg = body.command_args[3]
+            clean_pkg = (
+                f"@{target_pkg}"
+                if ("/" in target_pkg and not target_pkg.startswith("@"))
+                else target_pkg
+            )
+            args = ["-y", clean_pkg]
+        else:
+            args = list(body.command_args)
+    elif runner == "uvx":
+        clean_pkg = (
+            pkg.split("/")[-1] if ("/" in pkg and not pkg.startswith("@")) else pkg
+        )
+        args = [clean_pkg]
+    else:
+        clean_pkg = f"@{pkg}" if ("/" in pkg and not pkg.startswith("@")) else pkg
+        args = ["-y", clean_pkg]
+
+    cred_mode = (body.credential_mode or "").strip().lower()
+    from ..mcp_integration_sync import (
+        suggest_registry_env_for_per_user,
+        suggest_registry_env_for_org_shared,
+    )
+
+    # Costruisci schema_fields
+    schema_fields: List[Dict[str, Any]] = []
+    if body.schema_fields:
+        for sf in body.schema_fields:
+            k = str(sf.get("key") or "").strip()
+            if not k:
+                continue
+            is_sec = sf.get("is_secret", True)
+            req_val = sf.get("required")
+            schema_fields.append(
+                {
+                    "key": k,
+                    "label": sf.get("label")
+                    or sf.get("description")
+                    or k.replace("_", " ").title(),
+                    "required": bool(req_val) if req_val is not None else True,
+                    "is_secret": is_sec,
+                    "type": "password" if is_sec else "text",
+                }
+            )
+
+    # Elabora eventuali valori passati in body.envs (aggiungendoli allo schema se non presenti)
+    for k, val in body.envs.items():
+        key_clean = str(k).strip()
+        if not key_clean:
+            continue
+        is_secret = key_clean in body.secret_keys or any(
+            x in key_clean.lower()
+            for x in ("key", "token", "secret", "password", "auth", "pwd")
+        )
+
+        if not any(f["key"] == key_clean for f in schema_fields):
+            schema_fields.append(
+                {
+                    "key": key_clean,
+                    "label": key_clean.replace("_", " ").title(),
+                    "required": True,
+                    "is_secret": is_secret,
+                    "type": "password" if is_secret else "text",
+                }
+            )
+
+    # Costruisci il dizionario env per il registry in base alla modalità credenziali
+    env_dict: Dict[str, str] = {}
+    if cred_mode == "per_user":
+        # In modalità per_user utilizziamo rigorosamente lo standard ${AION_USER_<SLUG_PREFIX>__<KEY>}
+        env_dict = suggest_registry_env_for_per_user(slug, schema_fields)
+    elif cred_mode == "org_shared":
+        # In modalità org_shared: placeholder ${KEY} per i secret, o valore letterale per i non-secret se specificato
+        env_dict = suggest_registry_env_for_org_shared(schema_fields)
+        for k, val in body.envs.items():
+            key_clean = str(k).strip()
+            val_str = str(val).strip()
+            if not key_clean or not val_str:
+                continue
+            is_secret = key_clean in body.secret_keys or any(
+                x in key_clean.lower()
+                for x in ("key", "token", "secret", "password", "auth", "pwd")
+            )
+            if is_secret:
+                # Salva cifrato in DB sia per "default" che per "org_shared"
+                await set_credential(
+                    "default", slug, key_clean, val_str, tenant_id="default"
+                )
+                await set_credential(
+                    "org_shared", slug, key_clean, val_str, tenant_id="default"
+                )
+                env_dict[key_clean] = f"${{{key_clean}}}"
+            else:
+                env_dict[key_clean] = val_str
+    else:
+        # None
+        env_dict = {}
+
+    # Registra in mcp_registry.local.yaml
+    mcp_manager.load_registry()
+    config: Dict[str, Any] = {
+        "command": runner,
+        "args": args,
+        "env": env_dict,
+        "description": (body.description or f"Zero-Install MCP {slug} via {runner}")[
+            :2000
+        ],
+        "aion_market_install": "zero-install",
+        "zero_package": pkg,
+    }
+    if body.enabled_tools is not None:
+        config["enabled_tools"] = [
+            str(t).strip() for t in body.enabled_tools if str(t).strip()
+        ]
+    mcp_manager._registry_local[slug] = config
+    mcp_manager._rebuild_merged()
+    mcp_manager.save_registry()
+    from ..main import clear_agent_cache
+
+    clear_agent_cache()
+
+    # Determina la modalità delle credenziali (org_shared vs per_user)
+    cred_mode = (body.credential_mode or "").strip().lower()
+    if cred_mode not in ("org_shared", "per_user", "none"):
+        cred_mode = (
+            "org_shared"
+            if body.secret_keys or any(f["is_secret"] for f in schema_fields)
+            else "none"
+        )
+
+    # Aggiorna record McpServerConfig in DB aion.db
+    async with get_async_session_maker()() as session:
+        existing = (
+            await session.execute(
+                select(McpServerConfig).where(McpServerConfig.server_slug == slug)
+            )
+        ).scalar_one_or_none()
+
+        schema_json = json.dumps(schema_fields)
+
+        if existing:
+            existing.display_name = body.display_name or slug
+            existing.description = body.description or ""
+            existing.is_enabled_for_users = True
+            existing.credential_mode = cred_mode
+            existing.requires_user_credentials = cred_mode == "per_user"
+            existing.credential_schema_json = schema_json
+            if body.icon_url:
+                existing.icon_url = body.icon_url
+        else:
+            cfg_row = McpServerConfig(
+                id=new_uuid7_str(),
+                server_slug=slug,
+                display_name=body.display_name or slug,
+                description=body.description or "",
+                icon_url=body.icon_url,
+                is_enabled_for_users=True,
+                requires_user_credentials=(cred_mode == "per_user"),
+                credential_mode=cred_mode,
+                credential_schema_json=schema_json,
+            )
+            session.add(cfg_row)
+        await session.commit()
+
+    return {
+        "status": "success",
+        "server_slug": slug,
+        "display_name": body.display_name or slug,
+        "runner": runner,
+        "package_url": pkg,
+        "credential_mode": cred_mode,
+    }
+
+
+@router.delete("/market/uninstall-zero/{server_slug}")
+async def uninstall_zero_endpoint(server_slug: str):
+    """Disinstalla un MCP zero-install, rimuove dal registry e cancella i secret da aion.db."""
+    from ..data.engine import get_async_session_maker
+    from ..data.models import McpServerConfig, UserMcpCredential
+    from sqlalchemy import delete
+
+    slug = server_slug.strip()
+    mcp_manager.load_registry()
+    if slug in mcp_manager._registry_local:
+        mcp_manager._registry_local.pop(slug, None)
+        mcp_manager._rebuild_merged()
+        mcp_manager.save_registry()
+
+    async with get_async_session_maker()() as session:
+        await session.execute(
+            delete(UserMcpCredential).where(UserMcpCredential.server_slug == slug)
+        )
+        await session.execute(
+            delete(McpServerConfig).where(McpServerConfig.server_slug == slug)
+        )
+        await session.commit()
+
+    return {"status": "success", "server_slug": slug}
 
 
 # --- SECURITY & TRUST ---
@@ -2248,194 +2861,12 @@ async def install_mcp(req: MCPInstallRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-from ..mcp_remote_install import build_remote_bridge_registry_config  # noqa: F401 — re-export
-
-
-async def _install_market_record(target: Dict[str, Any], *, item_id: str = "") -> str:
-    """Installa un record marketplace (da ricerca o URL GitHub manuale). Ritorna lo slug."""
-    from ..runtime.mcp_installer import mcp_installer, market_safe_dir_name
-
-    ok, err_msg = await mcp_installer.install_from_market(target)
-    if not ok:
-        logger.error(
-            "market install failed id=%s name=%r install_type=%r: %s",
-            item_id,
-            target.get("name"),
-            target.get("install_type"),
-            err_msg,
-        )
-        code = 400 if target.get("install_type") == "stdio" else 500
-        raise HTTPException(status_code=code, detail=err_msg or "Installazione fallita")
-
-    name = market_safe_dir_name(target)
-    catalog = load_mcp_connector_catalog()
-    linked_cid = infer_connector_id_for_registry_name(name, catalog)
-
-    sid = item_id or str(target.get("id") or "")
-    config: Dict[str, Any] = {
-        "description": target.get("description"),
-        "source_id": sid,
-    }
-    if linked_cid:
-        config["aion_connector_id"] = linked_cid
-
-    if target.get("install_type") == "binary":
-        script_path = os.path.join("bin", name)
-        if not mcp_manager.install_stdio_server(name, script_path):
-            raise HTTPException(
-                status_code=500,
-                detail=f"Binario non trovato dopo download: {script_path}",
-            )
-        mcp_manager.update_server_config(
-            name,
-            {
-                **config,
-                "aion_market_install": "binary",
-                "aion_market_binary_path": f"bin/{name}".replace("\\", "/"),
-            },
-        )
-    elif target.get("install_type") == "git":
-        os.path.join("mcp_servers", name)
-        clone_rel = f"mcp_servers/{name}".replace("\\", "/")
-        config["aion_market_install"] = "git"
-        config["aion_market_clone_path"] = clone_rel
-        from ..mcp_registry_normalize import detect_stdio_entrypoint
-
-        try:
-            cmd, args = detect_stdio_entrypoint(name)
-            config["command"] = cmd
-            config["args"] = args
-        except FileNotFoundError:
-            logger.warning(
-                "git install %s: entrypoint non rilevato, normalize post-install", name
-            )
-        mcp_manager._registry_local[name] = config
-        mcp_manager._rebuild_merged()
-        mcp_manager.save_registry()
-    elif target.get("install_type") == "npx":
-        config["aion_market_install"] = "npx"
-        config.update(
-            {
-                "command": "npx",
-                "args": npx_invoke_args(target),
-            }
-        )
-        mcp_manager._registry_local[name] = config
-        mcp_manager._rebuild_merged()
-        mcp_manager.save_registry()
-    elif target.get("install_type") == "remote":
-        remotes = target.get("remotes") or []
-        config["remotes"] = remotes
-        config["_meta"] = target.get("_meta") or {}
-        sse_url = ""
-        for r in remotes:
-            if isinstance(r, dict) and r.get("type") in (
-                "sse",
-                "streamable-http",
-                "streamable_http",
-            ):
-                sse_url = r.get("url") or ""
-                break
-        if not sse_url and remotes:
-            sse_url = remotes[0].get("url") if isinstance(remotes[0], dict) else ""
-
-        import asyncio
-        from ..mcp_credential_discovery import probe_remote_url_sync
-
-        auth_type = str(target.get("auth_type") or "").strip().lower() or "oauth2"
-        if sse_url and not target.get("auth_type"):
-            try:
-                meta = target.get("_meta") or {}
-                probe_res = await asyncio.to_thread(
-                    probe_remote_url_sync, sse_url, meta
-                )
-                auth_type = probe_res.get("type") or "oauth2"
-                if auth_type not in ("none", "oauth2", "api-key", "basic"):
-                    auth_type = "oauth2"
-            except Exception as e:
-                logger.warning(
-                    "Failed to probe remote URL %s: %s. Defaulting to oauth2",
-                    sse_url,
-                    e,
-                )
-
-        remote_config = build_remote_bridge_registry_config(
-            sse_url, name, target.get("description") or "", auth_type=auth_type
-        )
-        config.update(remote_config)
-        if target.get("aion_connector_id"):
-            config["aion_connector_id"] = target["aion_connector_id"]
-        mcp_manager._registry_local[name] = config
-        mcp_manager._rebuild_merged()
-        mcp_manager.save_registry()
-
-    from ..mcp_integration_sync import sync_mcp_server_config_from_registry
-
-    from ..mcp_registry_normalize import normalize_and_apply_env_after_install
-
-    await sync_mcp_server_config_from_registry(name)
-    try:
-        await normalize_and_apply_env_after_install(name)
-    except Exception as ex:
-        logger.warning("post-install normalize failed for %s: %s", name, ex)
-    return name
-
-
-async def _install_marketplace_item(item_id: str) -> str:
-    """Installa voce marketplace e registra in registry locale. Ritorna lo slug del server."""
-    target = _find_marketplace_item(item_id)
-    if not target:
-        raise HTTPException(
-            status_code=404,
-            detail=(
-                f"Voce marketplace non trovata per id={item_id!r}. "
-                "Esegui di nuovo la ricerca e premi Install, oppure installa da URL GitHub."
-            ),
-        )
-    return await _install_market_record(target, item_id=item_id)
-
-
-class GitHubInstallBody(BaseModel):
-    url: str = Field(..., min_length=8, description="https://github.com/owner/repo")
-    display_name: Optional[str] = None
-
-
-@router.post("/market/install-github")
-async def install_from_github_url(body: GitHubInstallBody):
-    """Clone e registra un server MCP da URL GitHub (non richiede presenza nel marketplace)."""
-    from ..marketplaces.market_adapters import build_github_market_item
-
-    target = build_github_market_item(body.url.strip(), display_name=body.display_name)
-    if not target:
-        raise HTTPException(
-            status_code=400,
-            detail="URL non valida. Usa https://github.com/owner/repo o github:owner/repo",
-        )
-    try:
-        name = await _install_market_record(target, item_id=str(target.get("id") or ""))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(
-            "install-github failed url=%r id=%r",
-            body.url,
-            target.get("id"),
-        )
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    return {
-        "status": "success",
-        "name": name,
-        "server_slug": name,
-        "url": target.get("url"),
-    }
-
-
 class RemoteInstallBody(BaseModel):
     url: str = Field(..., min_length=8, description="URL del server MCP remoto")
     display_name: Optional[str] = None
     auth_type: Optional[str] = Field(
         None,
-        description="none | oauth2 | api-key | basic — se assente, rilevato via probe",
+        description="none | oauth2 | api-key | basic — se assente, rilevato via probe o default oauth2",
     )
     connector_id: Optional[str] = Field(
         None, description="id catalogo connettore (aion_connector_id)"
@@ -2452,7 +2883,6 @@ class RemoteProbeBody(BaseModel):
 async def probe_remote_mcp(body: RemoteProbeBody):
     """Valida un endpoint MCP remoto (auth, OAuth discovery) senza installare."""
     import asyncio
-
     from ..mcp_credential_discovery import probe_remote_url_sync
 
     url = body.url.strip()
@@ -2470,13 +2900,15 @@ async def probe_remote_mcp(body: RemoteProbeBody):
 @router.post("/market/install-remote")
 async def install_from_remote_url(body: RemoteInstallBody):
     """Installa e registra un server MCP remoto da un URL diretto (usando mcp-remote bridge)."""
+    import re
+    from ..mcp_integration_sync import sync_mcp_server_config_from_registry
+
     url = body.url.strip()
     if not (url.startswith("http://") or url.startswith("https://")):
         raise HTTPException(
             status_code=400, detail="L'URL deve iniziare con http:// o https://"
         )
 
-    # Estrae il nome dell'host o un valore di default
     if not body.display_name:
         try:
             parsed = urllib.parse.urlparse(url)
@@ -2491,38 +2923,30 @@ async def install_from_remote_url(body: RemoteInstallBody):
     else:
         default_name = body.display_name.strip()
 
-    target = {
-        "id": f"remote:{default_name.lower()}",
-        "name": default_name,
-        "source": "Remote URL",
+    slug = re.sub(r"[^a-z0-9_-]+", "_", default_name.lower()).strip("_") or "remote_mcp"
+    auth_type = str(body.auth_type or "").strip().lower() or "oauth2"
+    if auth_type not in ("none", "oauth2", "api-key", "basic"):
+        auth_type = "oauth2"
+
+    remote_config = build_remote_bridge_registry_config(
+        url, slug, f"MCP remoto connesso a {url}", auth_type=auth_type
+    )
+    mcp_manager.load_registry()
+    config = {
         "description": f"MCP remoto connesso a {url}",
-        "url": url,
-        "install_type": "remote",
+        "source_id": f"remote:{slug}",
         "remotes": [{"type": "sse", "url": url}],
+        **remote_config,
     }
-    if body.auth_type:
-        at = body.auth_type.strip().lower()
-        if at in ("none", "oauth2", "api-key", "basic"):
-            target["auth_type"] = at
     if body.connector_id:
-        target["aion_connector_id"] = body.connector_id.strip()
-    try:
-        name = await _install_market_record(target, item_id=str(target.get("id") or ""))
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception(
-            "install-remote failed url=%r id=%r", body.url, target.get("id")
-        )
-        raise HTTPException(status_code=500, detail=str(e)) from e
-    return {"status": "success", "name": name, "server_slug": name, "url": url}
+        config["aion_connector_id"] = body.connector_id.strip()
 
+    mcp_manager._registry_local[slug] = config
+    mcp_manager._rebuild_merged()
+    mcp_manager.save_registry()
+    await sync_mcp_server_config_from_registry(slug)
 
-@router.post("/market/install")
-async def install_from_market(item_id: str):
-    """Installs a tool from the marketplace by its ID."""
-    name = await _install_marketplace_item(item_id)
-    return {"status": "success", "name": name}
+    return {"status": "success", "name": slug, "server_slug": slug, "url": url}
 
 
 @router.post("/mcp/install-from-catalog")
@@ -2540,142 +2964,6 @@ async def install_mcp_from_catalog_endpoint(connector_id: str):
         preview = {**preview, "connector_id": preview.get("aion_connector_id")}
         preview.pop("connector", None)
     return {"status": "success", **result, "integration_preview": preview}
-
-
-class McpInstallWizardStartBody(BaseModel):
-    server_slug: Optional[str] = None
-    market_item_id: Optional[str] = None
-    admin_message: Optional[str] = None
-
-
-class McpInstallWizardCommitBody(BaseModel):
-    server_slug: str
-    registry_patch: Dict[str, Any]
-    policy: Dict[str, Any]
-
-
-@router.post("/mcp/install-wizard/start")
-async def mcp_install_wizard_start(body: McpInstallWizardStartBody):
-    """Installa da marketplace (opz.) e propone policy/env per un server nel registry."""
-    from ..mcp_integration_sync import build_integration_preview
-
-    market_id = (body.market_item_id or "").strip()
-    slug = (body.server_slug or "").strip()
-
-    if market_id:
-        slug = await _install_marketplace_item(market_id)
-    elif not slug:
-        raise HTTPException(
-            status_code=400, detail="server_slug or market_item_id required"
-        )
-
-    mcp_manager.load_registry()
-    if slug not in mcp_manager._registry:
-        raise HTTPException(status_code=404, detail=f"Server '{slug}' not in registry")
-
-    # Normalizza command/args se mancanti (es. progetti TS senza dist/ dopo git clone)
-    from ..mcp_registry_normalize import normalize_installed_server_registry
-
-    try:
-        normalize_installed_server_registry(slug)
-    except Exception:
-        pass  # non bloccare il wizard per errori di normalizzazione
-
-    advise_body = McpIntegrationAdviseBody(
-        server_slug=slug,
-        admin_message=body.admin_message,
-    )
-    advise = await admin_advise_mcp_integration(advise_body)
-    preview = build_integration_preview(slug)
-    if isinstance(preview, dict) and preview.get("connector"):
-        preview = {k: v for k, v in preview.items() if k != "connector"}
-    registry_cfg = mcp_manager._registry.get(slug) or {}
-    return {
-        "status": "success",
-        "server_slug": slug,
-        "registry_config": registry_cfg,
-        "preview": preview,
-        "advise": advise,
-    }
-
-
-@router.post("/mcp/install-wizard/commit")
-async def mcp_install_wizard_commit(body: McpInstallWizardCommitBody):
-    """Salva registry + policy in un'unica operazione (pipeline unificato)."""
-    from ..mcp_integration_sync import apply_integration_config
-
-    slug = body.server_slug.strip()
-    mcp_manager.load_registry()
-    if slug not in mcp_manager._registry:
-        raise HTTPException(status_code=404, detail="Server not in registry")
-
-    policy = body.policy or {}
-    mode = policy.get("credential_mode", "none")
-    if mode not in ("none", "org_shared", "per_user"):
-        mode = "none"
-    schema_override = bool(policy.get("schema_override", False))
-    cred_schema = policy.get("credential_schema") if schema_override else None
-    env_override = (
-        policy.get("suggested_env")
-        if isinstance(policy.get("suggested_env"), dict)
-        else None
-    )
-    oauth_config = (
-        policy.get("oauth_config")
-        if isinstance(policy.get("oauth_config"), dict)
-        else None
-    )
-
-    result = await apply_integration_config(
-        slug,
-        credential_mode=mode,
-        credential_schema=cred_schema,
-        env_override=env_override,
-        apply_suggested_env=bool(policy.get("apply_suggested_env")),
-        schema_override=schema_override,
-        registry_patch=body.registry_patch,
-        is_enabled_for_users=policy.get("is_enabled_for_users"),
-        requires_user_credentials=policy.get("requires_user_credentials"),
-        user_may_disable=policy.get("user_may_disable"),
-        display_name=policy.get("display_name"),
-        oauth_config=oauth_config,
-        sync_db=True,
-    )
-    if not result.get("ok"):
-        raise HTTPException(status_code=400, detail=result.get("error", "Apply failed"))
-
-    async with get_async_session_maker()() as session:
-        exists = (
-            (
-                await session.execute(
-                    select(McpServerConfig.id).where(
-                        McpServerConfig.server_slug == slug
-                    )
-                )
-            )
-            .scalars()
-            .first()
-        )
-    if not exists:
-        create_body = McpIntegrationCreate(
-            server_slug=slug,
-            display_name=policy.get("display_name") or slug.replace("_", " ").title(),
-            is_enabled_for_users=bool(policy.get("is_enabled_for_users")),
-            credential_mode=mode,
-            requires_user_credentials=bool(
-                policy.get("requires_user_credentials", mode == "per_user")
-            ),
-            credential_schema=cred_schema or [],
-            user_may_disable=policy.get("user_may_disable", True),
-            oauth_config=oauth_config,
-        )
-        await admin_create_mcp_integration(create_body)
-
-    return {
-        "status": "success",
-        "server_slug": slug,
-        **{k: v for k, v in result.items() if k != "ok"},
-    }
 
 
 @router.post("/mcp/{name}/probe")
@@ -2701,7 +2989,9 @@ async def probe_mcp_server(name: str):
                 return {
                     "ok": False,
                     "server_slug": name,
-                    "error": "node command not found. Node.js is required to run remote-bridge.",
+                    "error_type": "executable_missing",
+                    "error": "Node.js executable ('node') not found on system PATH.",
+                    "hint": "Install Node.js on the host to run remote-bridge MCP servers.",
                     "tools": [],
                     "tool_count": 0,
                 }
@@ -2710,35 +3000,260 @@ async def probe_mcp_server(name: str):
                 return {
                     "ok": False,
                     "server_slug": name,
-                    "error": "npx command not found and local mcp-remote not installed. Node.js/npm is required.",
+                    "error_type": "executable_missing",
+                    "error": "npx command not found and local mcp-remote not installed.",
+                    "hint": "Install Node.js/npm on the host or build node_modules.",
                     "tools": [],
                     "tool_count": 0,
                 }
+
+    # Clear previous recorded probe errors for this server and reset probe pool session
+    clear_mcp_load_errors("mcp-probe", name)
+    await mcp_manager.release_session("mcp-probe")
+
     try:
+        # Per i server in modalità per-utente (${AION_USER_...}), iniettiamo valori fittizi di test
+        # con tipo semantico coerente (porta, email, booleani, rate limit) per consentire l'handshake e list_tools
+        probe_cfg = dict(cfg)
+        if "env" in probe_cfg and isinstance(probe_cfg["env"], dict):
+            from src.runtime.credential_store import generate_probe_mock_value
+
+            mock_env = {}
+            for k, v in probe_cfg["env"].items():
+                if isinstance(v, str) and "${AION_USER_" in v:
+                    mock_env[k] = generate_probe_mock_value(k)
+                else:
+                    mock_env[k] = v
+            probe_cfg["env"] = mock_env
+
         tools = await build_mcp_tools(
-            name, cfg, session_id="mcp-probe", user_id="admin-probe"
+            name, probe_cfg, session_id="mcp-probe", user_id="admin-probe"
         )
-        return {
-            "ok": True,
-            "server_slug": name,
-            "tool_count": len(tools),
-            "tools": [
-                {
-                    "name": getattr(t, "name", ""),
-                    "description": getattr(t, "description", "") or "",
-                }
-                for t in tools
-            ],
-        }
-    except Exception as e:
-        logger.exception("MCP probe failed for %s", name)
+
+        enabled_tools_list = cfg.get("enabled_tools")
+        enabled_set = (
+            set(enabled_tools_list)
+            if isinstance(enabled_tools_list, (list, set, tuple))
+            else None
+        )
+
+        # Controlliamo se sono stati scoperti tool validi
+        if tools and len(tools) > 0:
+            return {
+                "ok": True,
+                "server_slug": name,
+                "tool_count": len(tools),
+                "enabled_tools": enabled_tools_list,
+                "tools": [
+                    {
+                        "name": getattr(tool_item, "name", ""),
+                        "description": getattr(tool_item, "description", "") or "",
+                        "enabled": (
+                            enabled_set is None
+                            or getattr(tool_item, "name", "") in enabled_set
+                        ),
+                    }
+                    for tool_item in tools
+                ],
+            }
+
+        # Se sono stati scoperti 0 tool, verifichiamo se build_mcp_tools ha registrato un errore
+        recorded_errors = get_last_mcp_load_errors("mcp-probe")
+        raw_error = recorded_errors.get(name)
+
+        if raw_error:
+            classified = classify_mcp_error(raw_error, cfg)
+            return {
+                "ok": False,
+                "server_slug": name,
+                "error_type": classified["error_type"],
+                "error": classified["error"],
+                "hint": classified["hint"],
+                "raw_error": raw_error,
+                "tools": [],
+                "tool_count": 0,
+            }
+
+        if t == "in_process":
+            return {
+                "ok": True,
+                "server_slug": name,
+                "tool_count": 0,
+                "note": "Native in-process server: tools are registered directly in the API runtime.",
+                "tools": [],
+            }
+
+        # 0 tools trovati e nessun crash esplicito: connessione riuscita ma schema vuoto
         return {
             "ok": False,
             "server_slug": name,
-            "error": str(e),
+            "error_type": "empty_tools",
+            "error": "The MCP server connected successfully, but registered 0 tools.",
+            "hint": "Check if this MCP requires specific configuration arguments or environment flags to expose tools.",
             "tools": [],
             "tool_count": 0,
         }
+
+    except Exception as e:
+        logger.exception("MCP probe failed for %s", name)
+        raw_msg = str(e).strip() or type(e).__name__
+        classified = classify_mcp_error(raw_msg, cfg)
+        return {
+            "ok": False,
+            "server_slug": name,
+            "error_type": classified["error_type"],
+            "error": classified["error"],
+            "hint": classified["hint"],
+            "raw_error": raw_msg,
+            "tools": [],
+            "tool_count": 0,
+        }
+
+
+class ToolsConfigBody(BaseModel):
+    enabled_tools: Optional[List[str]] = None
+
+
+@router.post("/mcp/{name}/tools-config")
+async def set_mcp_tools_config(name: str, body: ToolsConfigBody):
+    """Imposta la lista dei tool abilitati (enabled_tools) per un server MCP."""
+    from ..main import clear_agent_cache
+
+    mcp_manager.load_registry()
+    if name not in mcp_manager._registry:
+        raise HTTPException(
+            status_code=404, detail=f"Server MCP '{name}' non trovato nel registry"
+        )
+
+    cfg = mcp_manager._registry_local.get(name) or dict(
+        mcp_manager._registry.get(name) or {}
+    )
+    if body.enabled_tools is not None:
+        clean_list = [str(t).strip() for t in body.enabled_tools if str(t).strip()]
+        cfg["enabled_tools"] = clean_list
+    else:
+        cfg.pop("enabled_tools", None)
+
+    mcp_manager._registry_local[name] = cfg
+    mcp_manager._rebuild_merged()
+    mcp_manager.save_registry()
+    clear_agent_cache()
+
+    return {
+        "status": "success",
+        "server_slug": name,
+        "enabled_tools": cfg.get("enabled_tools"),
+    }
+
+
+class CandidateProbeBody(BaseModel):
+    runner: str = "npx"
+    package_url: str
+    command_args: Optional[List[str]] = None
+    envs: Dict[str, str] = Field(default_factory=dict)
+    secret_keys: List[str] = Field(default_factory=list)
+    is_remote: bool = False
+    remote_url: Optional[str] = None
+    auth_type: Optional[str] = None
+
+
+@router.post("/market/probe-candidate")
+async def probe_candidate_endpoint(body: CandidateProbeBody):
+    """Esegue un probe temporaneo su una configurazione candidata MCP prima di salvarla."""
+    from ..main import build_mcp_tools
+
+    runner = body.runner.strip().lower()
+    if runner not in ("npx", "uvx", "node", "remote"):
+        runner = "npx"
+
+    pkg = body.package_url.strip()
+    is_remote_server = (
+        body.is_remote
+        or bool(body.remote_url)
+        or runner in ("remote", "remote-bridge")
+        or pkg.startswith(("http://", "https://"))
+    )
+
+    if is_remote_server:
+        remote_url = (body.remote_url or pkg).strip()
+        temp_cfg: Dict[str, Any] = {
+            "command": "node",
+            "args": ["node_modules/mcp-remote/dist/proxy.js", remote_url],
+            "type": "remote-bridge",
+            "remote_url": remote_url,
+            "env": dict(body.envs),
+        }
+    else:
+        if (
+            runner == "npx"
+            and "/" in pkg
+            and not pkg.startswith("@")
+            and not pkg.startswith("http")
+        ):
+            pkg = f"@{pkg}"
+        extra_args = list(body.command_args) if body.command_args else []
+        if runner == "uvx":
+            clean_pkg = (
+                pkg.split("/")[-1] if ("/" in pkg and not pkg.startswith("@")) else pkg
+            )
+            if extra_args and extra_args[0] == clean_pkg:
+                args = extra_args
+            else:
+                args = [clean_pkg] + extra_args
+        else:
+            clean_pkg = f"@{pkg}" if ("/" in pkg and not pkg.startswith("@")) else pkg
+            if extra_args and (
+                extra_args[0] == clean_pkg
+                or (len(extra_args) > 1 and extra_args[1] == clean_pkg)
+            ):
+                args = extra_args
+            else:
+                args = ["-y", clean_pkg] + extra_args
+        temp_cfg = {
+            "command": runner,
+            "args": args,
+            "env": dict(body.envs),
+        }
+
+    mcp_manager._registry["__candidate_probe__"] = temp_cfg
+    try:
+        tools = await build_mcp_tools(
+            "__candidate_probe__",
+            temp_cfg,
+            session_id="mcp-probe-candidate",
+            user_id="admin-probe",
+        )
+        if tools and len(tools) > 0:
+            return {
+                "ok": True,
+                "tool_count": len(tools),
+                "tools": [
+                    {
+                        "name": getattr(tool_item, "name", ""),
+                        "description": getattr(tool_item, "description", "") or "",
+                    }
+                    for tool_item in tools
+                ],
+            }
+        recorded_errors = get_last_mcp_load_errors("mcp-probe-candidate")
+        raw_error = recorded_errors.get("__candidate_probe__")
+        return {
+            "ok": False,
+            "error": raw_error or "Nessun tool rilevato durante il test.",
+            "tool_count": 0,
+            "tools": [],
+        }
+    except Exception as e:
+        logger.warning("Candidate probe failed: %s", e)
+        return {
+            "ok": False,
+            "error": str(e),
+            "tool_count": 0,
+            "tools": [],
+        }
+    finally:
+        mcp_manager._registry.pop("__candidate_probe__", None)
+        await mcp_manager.release_session("mcp-probe-candidate")
 
 
 @router.put("/mcp/{name}")

@@ -7,6 +7,9 @@ import yaml
 import asyncio
 import logging
 import atexit
+import threading
+import re as _re
+from functools import lru_cache
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from contextlib import asynccontextmanager
@@ -96,6 +99,85 @@ def _user_pool_enabled() -> bool:
         return bool(get_settings().mcp_user_pool)
     except Exception:
         return os.getenv("AION_MCP_USER_POOL", "1").lower() not in ("0", "false", "no")
+
+
+# ---------------------------------------------------------------------------
+# PyPI MCP compat detection for uvx packages
+# ---------------------------------------------------------------------------
+
+# Sentinel values for the cache
+_MCP_COMPAT_UNKNOWN = "unknown"
+_MCP_COMPAT_V1 = "v1"  # requires mcp<2 (old FastMCP / mcp 1.x)
+_MCP_COMPAT_V2 = "v2"  # requires mcp>=2 (new MCP SDK)
+_MCP_COMPAT_ANY = "any"  # no specific mcp dependency, don't inject --with
+
+# Thread-safe in-process cache: package_name → compat sentinel
+_pypi_mcp_compat_lock = threading.Lock()
+_pypi_mcp_compat_cache: Dict[str, str] = {}
+
+
+def _detect_uvx_mcp_compat(package_name: str) -> str:
+    """
+    Legge il campo ``requires-dist`` del pacchetto su PyPI per capire
+    quale versione di ``mcp`` richiede.
+
+    Ritorna uno dei sentinel _MCP_COMPAT_*:
+      - _MCP_COMPAT_V1  → il pacchetto richiede mcp<2 (es. mcp>=1.0,<2)
+      - _MCP_COMPAT_V2  → il pacchetto richiede mcp>=2 (es. mcp[cli]>=2.0.0,<3)
+      - _MCP_COMPAT_ANY → nessuna dipendenza mcp dichiarata → non iniettiamo --with
+      - _MCP_COMPAT_UNKNOWN → errore PyPI → gestiamo come v1 (fallback sicuro)
+    """
+    pkg = (package_name or "").strip()
+    if not pkg:
+        return _MCP_COMPAT_UNKNOWN
+
+    with _pypi_mcp_compat_lock:
+        cached = _pypi_mcp_compat_cache.get(pkg)
+        if cached is not None:
+            return cached
+
+    result = _MCP_COMPAT_UNKNOWN
+    try:
+        import requests
+
+        resp = requests.get(
+            f"https://pypi.org/pypi/{pkg}/json",
+            timeout=6,
+            headers={"Accept": "application/json"},
+        )
+        if resp.status_code == 404:
+            result = _MCP_COMPAT_ANY  # Pacchetto non su PyPI (locale/monorepo)
+        elif resp.status_code == 200:
+            data = resp.json()
+            requires_dist = (data.get("info") or {}).get("requires_dist") or []
+            mcp_req: Optional[str] = None
+            for req in requires_dist or []:
+                # Cerca "mcp" o "mcp[cli]" come dipendenza (case insensitive)
+                if _re.match(r"(?i)^mcp(\[|[;,\s>=<!]|$)", req):
+                    mcp_req = req
+                    break
+
+            if mcp_req is None:
+                result = _MCP_COMPAT_ANY
+            elif _re.search(r">=\s*2", mcp_req):
+                result = _MCP_COMPAT_V2
+            elif _re.search(r"<\s*2", mcp_req) or _re.search(
+                r">=?\s*1[^0-9.]", mcp_req
+            ):
+                result = _MCP_COMPAT_V1
+            else:
+                result = _MCP_COMPAT_ANY
+    except Exception as exc:
+        logger.debug("PyPI mcp compat check failed for '%s': %s", pkg, exc)
+        result = _MCP_COMPAT_UNKNOWN  # fallback: trattato come v1 nel caller
+
+    with _pypi_mcp_compat_lock:
+        _pypi_mcp_compat_cache[pkg] = result
+
+    logger.debug(
+        "uvx mcp compat '%s' → %s (req: %s)", pkg, result, locals().get("mcp_req")
+    )
+    return result
 
 
 def _session_scoped_servers() -> frozenset[str]:
@@ -224,10 +306,31 @@ def _apply_mcp_home_isolation(env: Dict[str, Any], uid: str) -> None:
 
 
 def _adjust_stdio_spawn_env(process_env: Dict[str, Any], command: str) -> None:
-    """Evita che la venv del backend interferisca con ``uv run`` / ``uvx`` nei sottoprocessi MCP."""
+    """Evita che la venv del backend interferisca con ``uv run`` / ``uvx`` nei sottoprocessi MCP e imposta cache condivisa."""
     base = os.path.basename(str(command or "")).lower()
     if base in ("uv", "uvx"):
         process_env.pop("VIRTUAL_ENV", None)
+
+    # Condividi la cache globale di uv per avvii istantanei (Zero-Install cold start fix)
+    try:
+        cache_root = data_root() / "cache"
+        (cache_root / "uv").mkdir(parents=True, exist_ok=True)
+        process_env["UV_CACHE_DIR"] = str(cache_root / "uv")
+    except Exception:
+        pass
+
+    # Per npx: usa una directory cache dedicata ai server MCP, separata dalla cache
+    # npm globale del sistema. Questo evita contaminazioni con pacchetti installati
+    # in altri contesti (build-time, develop) e previene la propagazione di versioni
+    # con dipendenze corrotte (es. zod missing). La cache è persistente tra riavvii
+    # del container (a differenza di /tmp) per mantenere avvii veloci.
+    if base == "npx":
+        try:
+            mcp_npm_cache = data_root() / "cache" / "npm-mcp"
+            mcp_npm_cache.mkdir(parents=True, exist_ok=True)
+            process_env["npm_config_cache"] = str(mcp_npm_cache)
+        except Exception:
+            pass
 
 
 def normalize_mcp_email_server_env(env: Dict[str, Any]) -> Dict[str, Any]:
@@ -279,16 +382,18 @@ def _merge_mcp_subprocess_env(
     """
     Unisce ``server_env`` (dal registry, già risolto con resolve_env_placeholders) nell'env del sottoprocesso.
 
-    Non sovrascrive con stringhe vuote: così un placeholder non risolto in YAML non cancella la stessa
-    variabile già presente in ``os.environ`` (tipico token solo in ``.env``).
+    Non sovrascrive con stringhe vuote o placeholder non risolti: così un placeholder opzionale non
+    configurato non viene passato come stringa vuota o letterale, permettendo al server MCP di usare i default.
     """
     if not server_env:
         return
     for k, v in server_env.items():
         if v is None:
             continue
-        if isinstance(v, str) and not v.strip():
-            continue
+        if isinstance(v, str):
+            s = v.strip()
+            if not s or "${AION_USER_" in s or s.startswith("${"):
+                continue
         process_env[k] = v
 
 
@@ -367,12 +472,20 @@ class MCPStdioWorker:
             env.setdefault("NO_COLOR", "1")
             env.setdefault("TQDM_DISABLE", "1")
             env.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-            existing_pp = (env.get("PYTHONPATH") or "").strip()
-            env["PYTHONPATH"] = (
-                f"{repo_root_dir}{os.pathsep}{existing_pp}"
-                if existing_pp
-                else repo_root_dir
+            is_local = (
+                self.server_name in _DEFAULT_SESSION_SCOPED_SERVERS
+                or any("mcp_servers" in str(a) or "src" in str(a) for a in args)
+                or str(command).endswith("python")
+                or str(command).endswith("python3")
+                or str(command).endswith("python.exe")
             )
+            if is_local:
+                existing_pp = (env.get("PYTHONPATH") or "").strip()
+                env["PYTHONPATH"] = (
+                    f"{repo_root_dir}{os.pathsep}{existing_pp}"
+                    if existing_pp
+                    else repo_root_dir
+                )
             lookup_sid = self._chat_session_id or BOOTSTRAP_SESSION_ID
             env["AION_CHAT_SESSION_ID"] = self._chat_session_id or ""
             if self._pool_user_id:
@@ -473,11 +586,12 @@ class MCPStdioWorker:
             logger.info(
                 "🔌 MCP pool: avvio persistente stdio per '%s'", self.server_name
             )
+
             async with stdio_client(server_params) as (read, write):
                 async with ClientSession(read, write) as session:
                     try:
                         # Handshake con timeout per evitare blocchi infiniti se il server è appeso
-                        init_timeout = float(os.getenv("AION_MCP_INIT_TIMEOUT", "60"))
+                        init_timeout = float(os.getenv("AION_MCP_INIT_TIMEOUT", "90"))
                         await asyncio.wait_for(
                             session.initialize(), timeout=init_timeout
                         )
@@ -1086,22 +1200,170 @@ class MCPManager:
         cls, server_name: str, config: Dict[str, Any]
     ) -> Tuple[str, List[str]]:
         """Resolve process command + args for stdio / remote-bridge MCP servers."""
-        if (config.get("type") or "stdio").lower() == "remote-bridge":
+        cfg_type = (config.get("type") or "stdio").lower()
+        if (
+            cfg_type == "remote-bridge"
+            or config.get("remote_url")
+            or config.get("aion_market_install") == "remote"
+        ):
             from src.mcp_remote_install import resolve_remote_bridge_spawn
 
             return resolve_remote_bridge_spawn(config)
 
         command = config.get("command", "python")
+        raw_args = cls.resolve_stdio_args(list(config.get("args", [])))
+        if (
+            str(command).endswith("npx")
+            and any("@smithery/cli" in str(a) for a in raw_args)
+            and "run" in raw_args
+        ):
+            # Converti invocazione remota Smithery CLI in esecuzione diretta del pacchetto npm
+            # per evitare prompt OAuth interattivi su run.tools e corruzione di stdout
+            try:
+                run_idx = raw_args.index("run")
+                if run_idx + 1 < len(raw_args):
+                    pkg_candidate = raw_args[run_idx + 1]
+                    clean_pkg = (
+                        pkg_candidate.split("/")[-1]
+                        if ("/" in pkg_candidate and not pkg_candidate.startswith("@"))
+                        else pkg_candidate
+                    )
+                    raw_args = ["-y", clean_pkg]
+            except Exception:
+                pass
+
+        # Fast-path per npx: se il pacchetto npm è già installato globalmente come
+        # binario nel PATH, usarlo direttamente (evita la cache npx potenzialmente
+        # corrotta e azzera il cold-start overhead di npm/npx).
+        if str(command).endswith("npx") and raw_args:
+            global_bin = cls._resolve_npx_global_binary(raw_args)
+            if global_bin is not None:
+                resolved_bin, remaining_args = global_bin
+                logger.debug(
+                    "npx fast-path: '%s' → usando binario globale '%s'",
+                    server_name,
+                    resolved_bin,
+                )
+                command = resolved_bin
+                raw_args = remaining_args
+
         if command == "python":
             command = cls.get_python_exe(server_name)
+            args = raw_args
+        elif command == "uvx" and raw_args:
+            # Se il binario Python è già installato nel venv di sistema, eseguilo direttamente (0ms overhead)
+            direct_bin = shutil.which(raw_args[0])
+            if direct_bin:
+                command = direct_bin
+                args = raw_args[1:]
+            else:
+                if "--with" in raw_args:
+                    # L'utente/config ha già specificato --with esplicito → rispettiamo
+                    args = raw_args
+                else:
+                    # Rileva automaticamente la versione di mcp richiesta dal pacchetto su PyPI
+                    pkg_for_compat = raw_args[0] if raw_args else ""
+                    compat = _detect_uvx_mcp_compat(pkg_for_compat)
+                    if compat == _MCP_COMPAT_V2:
+                        # Il pacchetto richiede mcp>=2 (es. awslabs, anthropic ufficiali)
+                        # Passiamo senza --with: uv risolverà le dipendenze correttamente
+                        args = raw_args
+                        logger.debug(
+                            "uvx '%s': mcp>=2 rilevato → avvio senza --with mcp<2",
+                            pkg_for_compat,
+                        )
+                    elif compat == _MCP_COMPAT_ANY:
+                        # Nessuna dipendenza mcp dichiarata → non iniettare nulla
+                        args = raw_args
+                    else:
+                        # _MCP_COMPAT_V1 o _MCP_COMPAT_UNKNOWN → fallback sicuro mcp<2
+                        # per mantenere compatibilità con server FastMCP legacy
+                        args = ["--with", "mcp<2", *raw_args]
+                        logger.debug(
+                            "uvx '%s': compat=%s → aggiunto --with mcp<2",
+                            pkg_for_compat,
+                            compat,
+                        )
+
         elif isinstance(command, str) and ("/" in command or os.path.sep in command):
             cmd_path = Path(command)
             if not cmd_path.is_absolute():
                 cand = _repo_root() / command
                 if cand.is_file():
                     command = str(cand.resolve())
-        args = cls.resolve_stdio_args(list(config.get("args", [])))
+            args = raw_args
+        else:
+            args = raw_args
+
+        if not Path(command).is_absolute():
+            resolved_bin = shutil.which(command)
+            if resolved_bin:
+                command = resolved_bin
+
         return command, args
+
+    @classmethod
+    def _resolve_npx_global_binary(
+        cls, args: List[str]
+    ) -> Optional[Tuple[str, List[str]]]:
+        """
+        Dato un set di args npx (es. ``["-y", "@modelcontextprotocol/server-filesystem", "/app/data"]``),
+        cerca se il pacchetto npm ha un binario installato globalmente nel PATH.
+
+        Strategia:
+        1. Estrae il nome del pacchetto npm dagli args (ignora flag come ``-y``, ``--quiet``, ecc.).
+        2. Converte il nome del pacchetto nel nome del binario (es.
+           ``@modelcontextprotocol/server-filesystem`` → ``mcp-server-filesystem``).
+        3. Usa ``shutil.which`` per verificare se il binario è disponibile.
+        4. Se trovato, restituisce (path_binario, args_rimanenti_dopo_pacchetto).
+
+        Returns ``None`` se il binario non è disponibile globalmente.
+        """
+        if not args:
+            return None
+
+        # Salta flag npx (es. -y, --quiet, --yes, --no-install, --prefer-offline)
+        pkg_idx = None
+        for i, a in enumerate(args):
+            if not a.startswith("-"):
+                pkg_idx = i
+                break
+
+        if pkg_idx is None:
+            return None
+
+        pkg_name = args[pkg_idx]
+        remaining = args[
+            pkg_idx + 1 :
+        ]  # args dopo il nome del pacchetto (es. path, flags)
+
+        # Genera candidati per il nome del binario:
+        # es. '@modelcontextprotocol/server-filesystem' -> 'mcp-server-filesystem'
+        # es. 'agentql-mcp' -> 'agentql-mcp'
+        candidates: List[str] = []
+
+        if pkg_name.startswith("@") and "/" in pkg_name:
+            # Scoped package: @scope/pkg-name -> pkg-name
+            bare = pkg_name.split("/", 1)[1]
+            # Rimuovi prefisso 'server-' standard e prova anche il nome diretto
+            candidates.append(bare)
+            # Es. '@modelcontextprotocol/server-filesystem' -> 'mcp-server-filesystem'
+            scope = pkg_name.split("/")[0].lstrip("@")
+            if scope == "modelcontextprotocol":
+                candidates.append(f"mcp-{bare}")
+        else:
+            # Unscoped: usa il nome direttamente
+            candidates.append(pkg_name)
+            # Rimuovi eventuale versione (@latest, @1.2.3)
+            if "@" in pkg_name:
+                candidates.append(pkg_name.split("@")[0])
+
+        for candidate in candidates:
+            found = shutil.which(candidate)
+            if found:
+                return (found, remaining)
+
+        return None
 
     @classmethod
     def resolve_stdio_args(cls, args: List[str]) -> List[str]:
@@ -1176,6 +1438,8 @@ class MCPManager:
     ) -> Tuple[str, str]:
         """Pool key: session-scoped servers isolate per chat; others share user pool."""
         if not _USE_POOL:
+            return (chat_session_id, server_name)
+        if "probe" in str(chat_session_id).lower():
             return (chat_session_id, server_name)
         if server_name in _session_scoped_servers() and chat_session_id:
             return (chat_session_id, server_name)
@@ -1751,16 +2015,24 @@ class MCPManager:
             repo_root_dir = str(_repo_root())
             env.setdefault("FASTMCP_LOG_LEVEL", "WARNING")
             env.setdefault("FASTMCP_SHOW_SERVER_BANNER", "false")
-            env.setdefault("FASTMCP_CHECK_FOR_UPDATES", "true")
+            env.setdefault("FASTMCP_CHECK_FOR_UPDATES", "off")
             env.setdefault("NO_COLOR", "1")
             env.setdefault("TQDM_DISABLE", "1")
             env.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
-            existing_pp = (env.get("PYTHONPATH") or "").strip()
-            env["PYTHONPATH"] = (
-                f"{repo_root_dir}{os.pathsep}{existing_pp}"
-                if existing_pp
-                else repo_root_dir
+            is_local = (
+                name in _DEFAULT_SESSION_SCOPED_SERVERS
+                or any("mcp_servers" in str(a) or "src" in str(a) for a in args)
+                or str(command).endswith("python")
+                or str(command).endswith("python3")
+                or str(command).endswith("python.exe")
             )
+            if is_local:
+                existing_pp = (env.get("PYTHONPATH") or "").strip()
+                env["PYTHONPATH"] = (
+                    f"{repo_root_dir}{os.pathsep}{existing_pp}"
+                    if existing_pp
+                    else repo_root_dir
+                )
             if chat_session_id:
                 env["AION_CHAT_SESSION_ID"] = chat_session_id
                 ctx = self._session_ctx.get(

@@ -481,6 +481,48 @@ async def refresh_oauth_access_token(
     )
 
 
+def _slug_variants(server_slug: str) -> list[str]:
+    """Genera varianti slug (originale, trattini, underscore)."""
+    slugs: list[str] = []
+    if server_slug:
+        s = server_slug.strip()
+        if s:
+            slugs.append(s)
+            s_dash = s.replace("_", "-")
+            if s_dash not in slugs:
+                slugs.append(s_dash)
+            s_under = s.replace("-", "_")
+            if s_under not in slugs:
+                slugs.append(s_under)
+    return slugs
+
+
+async def _get_server_credential_mode(server_slug: str) -> str:
+    """Restituisce la modalità credenziali del server MCP (per_user, org_shared, none)."""
+    slug_candidates = _slug_variants(server_slug)
+    try:
+        async with get_async_session_maker()() as session:
+            for s in slug_candidates:
+                row = (
+                    (
+                        await session.execute(
+                            select(McpServerConfig.credential_mode).where(
+                                McpServerConfig.server_slug == s
+                            )
+                        )
+                    )
+                    .scalars()
+                    .first()
+                )
+                if row:
+                    return str(row).strip().lower()
+    except Exception as exc:
+        logger.debug(
+            "Impossibile determinare credential_mode per %s: %s", server_slug, exc
+        )
+    return "org_shared"
+
+
 async def get_credential(
     user_id: str,
     server_slug: str,
@@ -489,38 +531,58 @@ async def get_credential(
     tenant_id: str = "default",
     auto_refresh_oauth: bool = True,
 ) -> Optional[str]:
-    for lookup_key in _credential_lookup_keys(key):
-        row = await _get_credential_row(
-            user_id, server_slug, lookup_key, tenant_id=tenant_id
+    mode = await _get_server_credential_mode(server_slug)
+
+    if mode == "per_user":
+        # Per server MCP strettamente personali (es. email personale):
+        # cerca ESCLUSIVAMENTE le credenziali configurate dall'utente corrente
+        lookup_user_ids = (
+            [user_id] if user_id and user_id not in ("default", "org_shared") else []
         )
-        if not row:
-            continue
-        if _credential_is_expired(row.expires_at):
-            if (
-                auto_refresh_oauth
-                and lookup_key == "OAUTH_TOKEN"
-                and key == "OAUTH_TOKEN"
-            ):
-                refreshed = await refresh_oauth_access_token(
-                    user_id, server_slug, tenant_id=tenant_id
+    else:
+        # Per server MCP di organizzazione / condivisi (org_shared):
+        # cerca prima override utente (se presente), poi fallback su default e org_shared
+        lookup_user_ids = [user_id] if user_id else ["default"]
+        for fallback_uid in ("default", "org_shared"):
+            if fallback_uid not in lookup_user_ids:
+                lookup_user_ids.append(fallback_uid)
+
+    slug_candidates = _slug_variants(server_slug)
+
+    for uid in lookup_user_ids:
+        for slug in slug_candidates:
+            for lookup_key in _credential_lookup_keys(key):
+                row = await _get_credential_row(
+                    uid, slug, lookup_key, tenant_id=tenant_id
                 )
-                if refreshed:
-                    return refreshed
-            logger.info(
-                "Credenziale scaduta: user=%s server=%s key=%s",
-                user_id,
-                server_slug,
-                lookup_key,
-            )
-            continue
-        if lookup_key != key:
-            logger.info(
-                "Credenziale risolta via alias: richiesta=%s trovata=%s server=%s",
-                key,
-                lookup_key,
-                server_slug,
-            )
-        return decrypt_value(row.value_encrypted)
+                if not row:
+                    continue
+                if _credential_is_expired(row.expires_at):
+                    if (
+                        auto_refresh_oauth
+                        and lookup_key == "OAUTH_TOKEN"
+                        and key == "OAUTH_TOKEN"
+                    ):
+                        refreshed = await refresh_oauth_access_token(
+                            uid, slug, tenant_id=tenant_id
+                        )
+                        if refreshed:
+                            return refreshed
+                    logger.info(
+                        "Credenziale scaduta: user=%s server=%s key=%s",
+                        uid,
+                        slug,
+                        lookup_key,
+                    )
+                    continue
+                if lookup_key != key:
+                    logger.info(
+                        "Credenziale risolta via alias: richiesta=%s trovata=%s server=%s",
+                        key,
+                        lookup_key,
+                        slug,
+                    )
+                return decrypt_value(row.value_encrypted)
     return None
 
 
@@ -614,38 +676,68 @@ async def resolve_user_credential_string(
     tenant_id: str,
     server_slug: str,
 ) -> str:
-    """Sostituisce un valore stringa se è interamente un placeholder ${AION_USER_*}."""
-    if not user_id or not user_credentials_enabled():
+    """Sostituisce un valore stringa se è un placeholder (${AION_USER_*} o ${KEY}) o corrisponde a una credenziale DB."""
+    if not isinstance(obj, str):
         return obj
+
+    effective_uid = user_id or "default"
 
     m = _USER_CREDENTIAL_RE.match(obj)
     if m:
         full_prefix = m.group(1)
         cred_key = m.group(2)
-        # Prefer explicit server_slug (spawn context); else hyphenated slug from env prefix.
         lookup_slugs: list[str] = []
         if server_slug:
-            lookup_slugs.append(server_slug)
+            lookup_slugs.extend(_slug_variants(server_slug))
         from_prefix = _server_slug_from_env_prefix(full_prefix)
-        if from_prefix and from_prefix not in lookup_slugs:
-            lookup_slugs.append(from_prefix)
+        if from_prefix:
+            for s in _slug_variants(from_prefix):
+                if s not in lookup_slugs:
+                    lookup_slugs.append(s)
         legacy_underscore = full_prefix[len("AION_USER_") :].lower()
-        if legacy_underscore and legacy_underscore not in lookup_slugs:
-            lookup_slugs.append(legacy_underscore)
+        if legacy_underscore:
+            for s in _slug_variants(legacy_underscore):
+                if s not in lookup_slugs:
+                    lookup_slugs.append(s)
         for slug in lookup_slugs:
-            val = await get_credential(user_id, slug, cred_key, tenant_id=tenant_id)
+            val = await get_credential(
+                effective_uid, slug, cred_key, tenant_id=tenant_id
+            )
             if val is not None:
                 return val
         env_name = f"{full_prefix}__{cred_key}"
-        return os.environ.get(env_name, obj)
+        val = os.environ.get(env_name)
+        if val is not None:
+            return val
+        return ""
 
     m2 = _USER_CREDENTIAL_SIMPLE_RE.match(obj)
     if m2 and server_slug:
         cred_key = m2.group(1)[len("AION_USER_") :]
-        val = await get_credential(user_id, server_slug, cred_key, tenant_id=tenant_id)
+        val = await get_credential(
+            effective_uid, server_slug, cred_key, tenant_id=tenant_id
+        )
         if val is not None:
             return val
-        return os.environ.get(m2.group(1), obj)
+        val = os.environ.get(m2.group(1))
+        if val is not None:
+            return val
+        return ""
+
+    # Gestione placeholder standard ${VAR_NAME} (es. ${EXA_API_KEY} o ${TAVILY_API_KEY})
+    if obj.startswith("${") and obj.endswith("}"):
+        var_name = obj[2:-1]
+        if server_slug:
+            val = await get_credential(
+                effective_uid, server_slug, var_name, tenant_id=tenant_id
+            )
+            if val is not None:
+                return val
+        env_val = os.environ.get(var_name)
+        if env_val is not None:
+            return env_val
+        # Se la variabile d'ambiente non è presente nell'host, svuota il placeholder per non passare '${VAR}' letterale
+        return ""
 
     if isinstance(obj, str) and "${AION_USER_" in obj:
         logger.warning(
@@ -658,6 +750,110 @@ async def resolve_user_credential_string(
     return obj
 
 
+def generate_probe_mock_value(var_name: str) -> str:
+    """Restituisce un valore fittizio con tipo semantico corretto per il probe admin."""
+    k_lower = var_name.lower()
+
+    # 1. Numeri / limiti / timeout / porte
+    if "port" in k_lower:
+        return "993" if "imap" in k_lower else "465"
+    if any(
+        x in k_lower
+        for x in (
+            "rate",
+            "limit",
+            "max",
+            "connection",
+            "message",
+            "count",
+            "timeout",
+            "delay",
+            "number",
+            "size",
+            "retry",
+            "interval",
+            "ttl",
+            "capacity",
+            "period",
+            "batch",
+        )
+    ):
+        return "10"
+
+    # 2. Booleani / flag
+    if any(
+        x in k_lower
+        for x in (
+            "ssl",
+            "tls",
+            "enable",
+            "verify",
+            "active",
+            "watch",
+            "bool",
+            "debug",
+            "secure",
+            "allow",
+            "reject",
+            "starttls",
+            "verbose",
+            "headless",
+        )
+    ):
+        return "true"
+
+    # 3. Host / URL
+    if "url" in k_lower or "uri" in k_lower:
+        return "https://example.com"
+    if "host" in k_lower or "server" in k_lower:
+        return "imap.example.com"
+
+    # 4. Password / secret / chiavi / token
+    if any(
+        x in k_lower
+        for x in (
+            "pass",
+            "pwd",
+            "secret",
+            "token",
+            "key",
+            "auth",
+            "api_key",
+            "apikey",
+        )
+    ):
+        return "probe_secret_key"
+
+    # 5. User / account / nomi
+    if any(
+        x in k_lower
+        for x in (
+            "username",
+            "user_name",
+            "login",
+            "account_name",
+            "full_name",
+            "author",
+            "owner",
+        )
+    ):
+        return "probe_user"
+
+    # 6. Email / indirizzi specifici
+    if (
+        "address" in k_lower
+        or k_lower.endswith("email")
+        or "mail_to" in k_lower
+        or "mail_from" in k_lower
+        or k_lower in ("email", "mail")
+        or "recipient" in k_lower
+        or "sender" in k_lower
+    ):
+        return "probe@example.com"
+
+    return "probe_test_val"
+
+
 async def resolve_mcp_env_for_user(
     env: Optional[Dict[str, Any]],
     *,
@@ -668,11 +864,17 @@ async def resolve_mcp_env_for_user(
     if not env:
         return {}
     out: Dict[str, Any] = {}
+    is_probe = user_id == "admin-probe" or "probe" in str(user_id).lower()
     for k, v in env.items():
         if isinstance(v, str):
-            out[k] = await resolve_user_credential_string(
+            val = await resolve_user_credential_string(
                 v, user_id=user_id, tenant_id=tenant_id, server_slug=server_slug
             )
+            # In sessione di probe dell'admin, se un placeholder non è risolto (o è vuoto),
+            # iniettiamo un valore mock per consentire al processo MCP di completare l'handshake e list_tools
+            if is_probe and (not val or "${AION_USER_" in str(val) or val == v):
+                val = generate_probe_mock_value(k)
+            out[k] = val
         else:
             out[k] = v
     return out

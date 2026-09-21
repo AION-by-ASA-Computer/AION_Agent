@@ -57,6 +57,8 @@ def build_github_market_item(
         "description": description or f"Repository GitHub {owner}/{repo}",
         "url": gh_url,
         "install_type": "git",
+        "has_smithery_schema": False,
+        "schema_source": "ai_analysis",
     }
 
 
@@ -124,6 +126,8 @@ class GlamaAdapter(MarketplaceAdapter):
                             "description": s.get("description"),
                             "url": f"https://github.com/{s.get('owner')}/{s.get('repo')}",
                             "install_type": "git",
+                            "has_smithery_schema": False,
+                            "schema_source": "ai_analysis",
                         }
                     )
             return results
@@ -216,7 +220,10 @@ class GoogleCloudAdapter(MarketplaceAdapter):
                 "name": "MCP Toolbox for Databases",
                 "source": "Google Cloud",
                 "description": "Securely connect AI agents to AlloyDB, Cloud SQL, Spanner, BigQuery, etc.",
+                "url": "https://github.com/GoogleCloudPlatform/mcp-toolbox",
                 "install_type": "binary",
+                "has_smithery_schema": False,
+                "schema_source": "preset",
                 "binary_urls": {
                     "darwin/arm64": "https://storage.googleapis.com/mcp-toolbox-for-databases/v1.1.0/darwin/arm64/toolbox",
                     "darwin/amd64": "https://storage.googleapis.com/mcp-toolbox-for-databases/v1.1.0/darwin/amd64/toolbox",
@@ -229,7 +236,10 @@ class GoogleCloudAdapter(MarketplaceAdapter):
                 "name": "MCP Toolbox (NPX)",
                 "source": "Google Cloud",
                 "description": "Run the Database Toolbox directly via NPX.",
+                "url": "https://www.npmjs.com/package/@toolbox-sdk/server",
                 "install_type": "npx",
+                "has_smithery_schema": False,
+                "schema_source": "preset",
                 "npx_args": ["-y", "@toolbox-sdk/server", "--stdio"],
             },
         ]
@@ -264,6 +274,8 @@ class ClaudeCommunityAdapter(MarketplaceAdapter):
                             "description": f"Official community server: {item['name']}",
                             "url": item["html_url"],
                             "install_type": "git",
+                            "has_smithery_schema": False,
+                            "schema_source": "ai_analysis",
                         }
                     )
             return results
@@ -310,6 +322,8 @@ class GitHubTopicAdapter(MarketplaceAdapter):
                     "url": repo.get("html_url"),
                     "stars": repo.get("stargazers_count"),
                     "install_type": "git",
+                    "has_smithery_schema": False,
+                    "schema_source": "ai_analysis",
                 }
             )
         return results
@@ -383,6 +397,8 @@ class AwesomeListAdapter(MarketplaceAdapter):
                                 "install_type": "git"
                                 if "github.com" in tool_url
                                 else "stdio",
+                                "has_smithery_schema": False,
+                                "schema_source": "ai_analysis",
                             }
                         )
             except Exception as e:
@@ -390,34 +406,74 @@ class AwesomeListAdapter(MarketplaceAdapter):
         return results
 
 
+class SmitheryAdapter(MarketplaceAdapter):
+    """
+    Adapter per Smithery Registry (https://api.smithery.ai).
+    """
+
+    def search(self, query: str) -> List[Dict[str, Any]]:
+        from .smithery_client import search_smithery_servers
+
+        try:
+            return search_smithery_servers(query)
+        except Exception as e:
+            logger.error(f"Smithery search failed: {e}")
+            return []
+
+
 class HubAggregator:
     def __init__(self):
         self.adapters = [
-            AwesomeListAdapter(),
-            # OfficialRegistryAdapter()  # Disabilitato: produce voci con install_type="stdio" senza metadati installabili
-            GlamaAdapter(),
+            SmitheryAdapter(),
             GoogleCloudAdapter(),
             ClaudeCommunityAdapter(),
             GitHubTopicAdapter(),
+            GlamaAdapter(),
+            AwesomeListAdapter(),
         ]
 
     def search_all(self, query: str) -> List[Dict[str, Any]]:
-        all_results = []
-        for adapter in self.adapters:
-            all_results.extend(adapter.search(query))
+        from concurrent.futures import ThreadPoolExecutor, as_completed
 
-        # Deduplicazione intelligente (per URL o Nome)
+        all_results: List[Dict[str, Any]] = []
+        with ThreadPoolExecutor(max_workers=len(self.adapters)) as executor:
+            future_to_adapter = {
+                executor.submit(adapter.search, query): adapter
+                for adapter in self.adapters
+            }
+            for future in as_completed(future_to_adapter):
+                try:
+                    res = future.result()
+                    if res and isinstance(res, list):
+                        all_results.extend(res)
+                except Exception as e:
+                    adapter = future_to_adapter[future]
+                    logger.warning(
+                        "Marketplace adapter %s search failed: %s",
+                        adapter.__class__.__name__,
+                        e,
+                    )
+
+        # Deduplicazione intelligente (per URL, ID o Nome)
         unique_results = []
+        seen_ids = set()
         seen_urls = set()
         seen_names = set()
 
         for res in all_results:
+            rid = res.get("id")
             url = res.get("url")
             name = res.get("name")
 
-            if (url and url in seen_urls) or (name and name.lower() in seen_names):
+            if (
+                (rid and rid in seen_ids)
+                or (url and url in seen_urls)
+                or (name and name.lower() in seen_names)
+            ):
                 continue
 
+            if rid:
+                seen_ids.add(rid)
             if url:
                 seen_urls.add(url)
             if name:

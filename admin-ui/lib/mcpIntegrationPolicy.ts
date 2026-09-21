@@ -75,11 +75,11 @@ export type IntegrationPolicyRow = {
 export function modeLabel(mode: CredentialMode): string {
   switch (mode) {
     case "per_user":
-      return "Per utente";
+      return "Per-user";
     case "org_shared":
-      return "Organizzazione";
+      return "Organization";
     default:
-      return "Nessuna";
+      return "None";
   }
 }
 
@@ -87,7 +87,7 @@ export function policyBadges(policy: IntegrationPolicyRow | undefined): string[]
   if (!policy) return [];
   const out: string[] = [];
   if (policy.is_enabled_for_users) out.push("Chat");
-  if (policy.credential_mode === "per_user") out.push("Per utente");
+  if (policy.credential_mode === "per_user") out.push("Per-user");
   else if (policy.credential_mode === "org_shared") out.push("Org");
   const n = policy.credential_schema?.length ?? 0;
   if (n > 0) out.push(`Schema ${n}`);

@@ -15,22 +15,25 @@ def _repo_root() -> Path:
 
 
 def resolve_mcp_server_dir(slug: str) -> Path | None:
-    """Directory del server in mcp_servers/<slug> (match esatto o parziale)."""
+    """Directory del server in mcp_servers/<slug> o mcp_server/<slug> (match esatto o parziale)."""
     repo_root = _repo_root()
-    mcp_dir = repo_root / "mcp_servers" / slug
-    if mcp_dir.is_dir():
-        return mcp_dir
-    servers_root = repo_root / "mcp_servers"
-    if not servers_root.is_dir():
-        return None
-    norm = slug.replace("-", "").replace("_", "").lower()
-    for d in sorted(servers_root.iterdir()):
-        if d.is_dir() and norm in d.name.replace("-", "").replace("_", "").lower():
-            return d
+    for root_name in ("mcp_servers", "mcp_server"):
+        mcp_dir = repo_root / root_name / slug
+        if mcp_dir.is_dir():
+            return mcp_dir
+        servers_root = repo_root / root_name
+        if servers_root.is_dir():
+            norm = slug.replace("-", "").replace("_", "").lower()
+            for d in sorted(servers_root.iterdir()):
+                if (
+                    d.is_dir()
+                    and norm in d.name.replace("-", "").replace("_", "").lower()
+                ):
+                    return d
     return None
 
 
-def read_mcp_server_files(slug: str, *, max_total: int = 5000) -> str:
+def read_mcp_server_files(slug: str, *, max_total: int = 6000) -> str:
     """Contesto testuale per LLM advise / discovery (markdown con sezioni)."""
     mcp_dir = resolve_mcp_server_dir(slug)
     if not mcp_dir:
@@ -47,7 +50,13 @@ def read_mcp_server_files(slug: str, *, max_total: int = 5000) -> str:
         parts.append(f"### README.md\n```markdown\n{content}\n```")
         total += len(content)
 
-    for env_name in (".env.example", ".env.sample", ".env.template", ".env"):
+    for env_name in (
+        ".env.example",
+        ".env.sample",
+        ".env.template",
+        ".env",
+        "env.example",
+    ):
         env_file = mcp_dir / env_name
         if env_file.is_file() and total < max_total:
             content = env_file.read_text(encoding="utf-8", errors="replace")
@@ -56,6 +65,18 @@ def read_mcp_server_files(slug: str, *, max_total: int = 5000) -> str:
             parts.append(f"### {env_name}\n```\n{content}\n```")
             total += len(content)
             break
+
+    for req_name in ("requirements.txt", "pyproject.toml"):
+        req_file = mcp_dir / req_name
+        if req_file.is_file() and total < max_total:
+            try:
+                content = req_file.read_text(encoding="utf-8", errors="replace")
+                if len(content) > 1000:
+                    content = content[:1000] + "\n... (truncated)"
+                parts.append(f"### {req_name}\n```\n{content}\n```")
+                total += len(content)
+            except Exception:
+                pass
 
     pkg = mcp_dir / "package.json"
     if pkg.is_file() and total < max_total:

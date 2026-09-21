@@ -59,9 +59,21 @@ export function matchConnectorRow(
     const hit = rows.find((r) => r.id === aionConnectorId);
     if (hit) return hit;
   }
-  const n = registryName.toLowerCase().replace(/_/g, "-");
+  const n = (registryName || "").toLowerCase().replace(/_/g, "-");
+  // Rimuovi prefissi di namespace origine come "github-", "smithery-", "npm-"
+  const cleanName = n.replace(/^(github|smithery|npm|uvx)-/, "");
+
+  // 1. Match esatto sull'id del connettore
+  const exactHit = rows.find((r) => {
+    const rId = String(r.id || "").toLowerCase().replace(/_/g, "-");
+    return rId && (rId === n || rId === cleanName);
+  });
+  if (exactHit) return exactHit;
+
   let best: Record<string, unknown> | null = null;
   let bestLen = 0;
+  const tokens = cleanName.split("-").filter(Boolean);
+
   for (const r of rows) {
     const hintsRaw = r.mcp_name_hints as string[] | undefined;
     const hints: string[] =
@@ -70,10 +82,18 @@ export function matchConnectorRow(
         : r.id
           ? [String(r.id).toLowerCase().replace(/_/g, "-")]
           : [];
+    const rId = String(r.id || "").toLowerCase();
     for (const h of hints) {
-      if (h.length >= 3 && n.includes(h) && h.length > bestLen) {
-        bestLen = h.length;
-        best = r;
+      if (h.length < 3) continue;
+      // Evita falsi positivi per "github" su repo ospitati su GitHub
+      if ((h === "github" || rId === "github") && cleanName !== "github" && cleanName !== "mcp-server-github" && !cleanName.startsWith("github-")) {
+        continue;
+      }
+      if (cleanName.includes(h)) {
+        if (h.length > bestLen) {
+          bestLen = h.length;
+          best = r;
+        }
       }
     }
   }

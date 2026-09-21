@@ -189,6 +189,7 @@
     "pat_hint": "OAuth non disponible. Collez votre Personal Access Token (PAT) ci-dessous.",
     "pat_placeholder": "Collez votre jeton ici…",
     "field_error": "Champs obligatoires manquants",
+    "advanced_settings": "Paramètres avancés",
     "save_error": "Échec de l'enregistrement",
     "org_managed": "Géré par votre organisation — aucune configuration personnelle requise.",
     "per_user_hint": "Saisissez vos identifiants personnels pour cette intégration.",

@@ -284,6 +284,7 @@
     "pat_hint": "Incolla qui un token di accesso personale (PAT) se il servizio non supporta OAuth.",
     "pat_placeholder": "Incolla qui il token…",
     "field_error": "Campi obbligatori mancanti",
+    "advanced_settings": "Impostazioni avanzate",
     "save_error": "Impossibile salvare",
     "org_managed": "Gestito dall'organizzazione — non serve configurazione personale.",
     "per_user_hint": "Inserisci le tue credenziali personali per questa integrazione.",

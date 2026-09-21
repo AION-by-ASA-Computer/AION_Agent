@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Globe, Settings2, Terminal, Trash2, Users, Wand2 } from "lucide-react";
+import { Box, Globe, Settings2, Terminal, Trash2, Users, Wand2, Wrench } from "lucide-react";
 import type { IntegrationPolicyRow } from "@/lib/mcpIntegrationPolicy";
 import { modeLabel, policyBadges } from "@/lib/mcpIntegrationPolicy";
 import type { McpIntegrityIssue } from "@/components/McpIntegrityBanner";
@@ -24,6 +24,7 @@ type Props = {
   onEdit: () => void;
   onProbe?: () => void;
   onWizard?: () => void;
+  onManageTools?: () => void;
   onDelete?: () => void;
 };
 
@@ -60,6 +61,7 @@ export function McpInstalledCard({
   onEdit,
   onProbe,
   onWizard,
+  onManageTools,
   onDelete,
 }: Props) {
   const badges = policyBadges(policy);
@@ -189,10 +191,22 @@ export function McpInstalledCard({
               onClick={onWizard}
               disabled={loading}
               className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-indigo-500/20 bg-indigo-500/10 px-3 py-2 text-xs font-bold text-indigo-300 hover:bg-indigo-500/20 disabled:opacity-50"
-              title="Wizard guidato"
+              title="Guided wizard"
             >
               <Wand2 className="h-3.5 w-3.5" aria-hidden />
               WIZARD
+            </button>
+          ) : null}
+          {!config.is_base && onManageTools ? (
+            <button
+              type="button"
+              onClick={onManageTools}
+              disabled={loading}
+              className="flex cursor-pointer items-center gap-1.5 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs font-bold text-amber-300 hover:bg-amber-500/20 disabled:opacity-50"
+              title="Manage Active Tools"
+            >
+              <Wrench className="h-3.5 w-3.5" aria-hidden />
+              TOOLS
             </button>
           ) : null}
           {!config.is_base && onProbe ? (
@@ -211,14 +225,14 @@ export function McpInstalledCard({
             className="flex cursor-pointer items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/10 px-4 py-2 text-xs font-bold text-blue-400 shadow-lg shadow-blue-500/5 transition-all hover:border-blue-500/40 hover:bg-blue-500/20"
           >
             <Settings2 className="h-3.5 w-3.5" aria-hidden />
-            CONFIGURA
+            CONFIGURE
           </button>
           {!config.is_base && onDelete ? (
             <button
               type="button"
               onClick={onDelete}
               className="cursor-pointer rounded-xl border border-red-500/20 bg-red-500/10 p-2 text-red-400 hover:bg-red-500/20"
-              title="Disinstalla"
+              title="Uninstall"
             >
               <Trash2 className="h-4 w-4" aria-hidden />
             </button>
