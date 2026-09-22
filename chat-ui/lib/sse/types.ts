@@ -43,6 +43,10 @@ export type ChatChunk =
   | { type: "tool_event"; event?: Record<string, unknown> }
   | { type: "artifact_start"; artifact?: Record<string, unknown> }
   | { type: "artifact_content"; content?: string; artifact_id?: string }
+  | {
+    type: "pii_messages_to_replace";
+    replacements?: Array<{ message_id: string; censored_content: string }>;
+  }
   | { type: "artifact_end"; artifact?: Record<string, unknown> }
   | {
     type: "orchestration_plan_pending";

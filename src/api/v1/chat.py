@@ -123,6 +123,9 @@ async def _run_pipeline_in_background(
         resolved_effort = resolve_turn_reasoning(effort_in, thinking_in)
         clamped = await _clamped_runtime(raw_runtime, uid, profile_name)
 
+        logger.info("BODY")
+        logger.info(body)
+
         async for chunk in pipeline.run_stream(
             body.message,
             attachments=att,
@@ -143,6 +146,16 @@ async def _run_pipeline_in_background(
                 **(
                     {"llm_provider_name": body.llm_provider_name}
                     if body.llm_provider_name
+                    else {}
+                ),
+                **(
+                    {"aion_privacy_filter_review_content": body.aion_privacy_filter_review_content}
+                    if body.aion_privacy_filter_review_content is not None
+                    else {}
+                ),
+                **(
+                    {"aion_pii_review_token": body.aion_pii_review_token}
+                    if getattr(body, "aion_pii_review_token", None) is not None
                     else {}
                 ),
             },
@@ -295,6 +308,14 @@ class ChatStreamBody(BaseModel):
     runtime: Optional[RuntimeSettingsPayload] = Field(
         default=None,
         description="Allowlisted turn overrides (steps, sampling, thinking).",
+    )
+    aion_privacy_filter_review_content: Optional[bool] = Field(
+        default=None,
+        description="Abilita il filtro PII strict review al gateway.",
+    )
+    aion_pii_review_token: Optional[str] = Field(
+        default=None,
+        description="Token opzionale per by-passare o confermare la review PII.",
     )
 
     class Config:
@@ -915,6 +936,16 @@ async def chat_sync(
                     **(
                         {"llm_provider_name": body.llm_provider_name}
                         if body.llm_provider_name
+                        else {}
+                    ),
+                    **(
+                        {"aion_privacy_filter_review_content": body.aion_privacy_filter_review_content}
+                        if getattr(body, "aion_privacy_filter_review_content", None) is not None
+                        else {}
+                    ),
+                    **(
+                        {"aion_pii_review_token": body.aion_pii_review_token}
+                        if getattr(body, "aion_pii_review_token", None) is not None
                         else {}
                     ),
                 },

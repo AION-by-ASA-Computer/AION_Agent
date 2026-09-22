@@ -56,11 +56,18 @@ export function ComposerOptionRow({
   }
 
   return (
-    <button
-      type="button"
+    <div
+      role="button"
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onClick?.();
+        }
+      }}
       className={cn(
-        "flex w-full items-start justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors",
+        "flex w-full items-start justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors cursor-pointer",
         selected
           ? "bg-primary/10 text-primary"
           : "text-foreground hover:bg-muted/55",
@@ -87,6 +94,6 @@ export function ComposerOptionRow({
         {trailing}
         {selected ? <Check size={12} aria-hidden /> : null}
       </div>
-    </button>
+    </div>
   );
 }

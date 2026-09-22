@@ -194,6 +194,8 @@ export type ChatRequestBody = {
   llm_provider_name?: string;
   metadata?: Record<string, any>;
   runtime?: Record<string, unknown>;
+  aion_privacy_filter_review_content?: boolean;
+  aion_pii_review_token?: string;
 };
 
 

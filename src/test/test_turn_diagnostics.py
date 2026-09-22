@@ -144,3 +144,18 @@ def test_log_turn_stop_accepts_snapshot_metrics(monkeypatch):
         llm_calls=20,
     )
     # WARNING log always fires; JSONL only when diagnostics enabled — no assert on captured
+
+def test_pii_review_created_without_final_text():
+    out = classify_turn_outcome(
+        session_id="sess",
+        profile="aion_std",
+        stop_reason="completed",
+        final_text="",
+        full_reasoning="",
+        tool_calls_count=0,
+        tool_events_count=0,
+        new_messages=[],
+        pii_review_intercepts=1,
+    )
+    assert out["code"] == "pii_review_created"
+    assert out.get("user_visible_warning") is None

@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star, Shield } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -1121,6 +1121,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   }, []);
 
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
+  const [piiReviewEnabled, setPiiReviewEnabled] = useState(false);
   const [webRestrictHosts, setWebRestrictHosts] = useState<string[]>([]);
   const [webRestrictModalOpen, setWebRestrictModalOpen] = useState(false);
   const [webRestrictDraft, setWebRestrictDraft] = useState<string[]>([]);
@@ -1891,6 +1892,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         /** Hide orchestration system prompts from the chat transcript. */
         showUserBubble?: boolean;
         metadata?: Record<string, any>;
+        aion_pii_review_token?: string;
+        /** Se fornito, usa questo ID per il messaggio utente invece di generarne uno nuovo.
+         *  Usato per il flusso PII confirm: sostituisce il messaggio originale invece di aggiungerne uno. */
+        userMessageIdOverride?: string;
       },
     ) => {
       const marker = readActiveStreamMarker(conversationId);
@@ -1921,7 +1926,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         return;
       }
 
-      let uidMsg = crypto.randomUUID();
+      let uidMsg = opts?.userMessageIdOverride ?? crypto.randomUUID();
       let aid = crypto.randomUUID();
       setActiveMessageId(aid);
 
@@ -1946,16 +1951,27 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       const userMessageCreatedAt = new Date().toISOString();
 
       if (opts?.showUserBubble !== false) {
-        setMessages((m) => [
-          ...m,
-          {
-            id: uidMsg,
-            role: "user",
-            content: message,
-            artifacts: userArtifacts.length ? userArtifacts : undefined,
-            createdAt: userMessageCreatedAt,
-          },
-        ]);
+        if (opts?.userMessageIdOverride) {
+          // Sostituisci il contenuto del messaggio utente originale in-place
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === opts.userMessageIdOverride
+                ? { ...m, content: message }
+                : m
+            )
+          );
+        } else {
+          setMessages((m) => [
+            ...m,
+            {
+              id: uidMsg,
+              role: "user",
+              content: message,
+              artifacts: userArtifacts.length ? userArtifacts : undefined,
+              createdAt: userMessageCreatedAt,
+            },
+          ]);
+        }
       }
 
       let state = newTurn();
@@ -2011,6 +2027,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             llm_provider_name: selectedProvider || undefined,
             metadata: opts?.metadata,
             runtime: getRuntimeValuesForTurn(thinkingEnabled, reasoningEffort),
+            aion_privacy_filter_review_content: piiReviewEnabled,
+            aion_pii_review_token: opts?.aion_pii_review_token,
           },
           token,
           abortRef.current.signal
@@ -2169,6 +2187,22 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             if (savedPath && !isPlan) {
               setDockTab("artifacts");
             }
+          }
+
+          if (chunk.type === "pii_messages_to_replace" && chunk.replacements) {
+            const repls = chunk.replacements;
+            setMessages((prev) => {
+              let changed = false;
+              const next = prev.map((m) => {
+                const r = repls.find((rep) => rep.message_id === m.id);
+                if (r && m.content !== r.censored_content) {
+                  changed = true;
+                  return { ...m, content: r.censored_content };
+                }
+                return m;
+              });
+              return changed ? next : prev;
+            });
           }
         });
 
@@ -2372,7 +2406,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       abortStreamRecovery,
     ]
   );
-  const handlePiiAction = useCallback(async (action: "confirm" | "reject", finalPrompt?: string) => {
+  const handlePiiAction = useCallback(async (
+    action: "confirm" | "reject",
+    finalPrompt?: string,
+    piiToken?: string,
+    assistantMessageId?: string,
+  ) => {
+    console.log("[ChatWorkspace] handlePiiAction called. action:", action, "token:", piiToken, "assistantMsgId:", assistantMessageId);
     if (action === "confirm" && finalPrompt) {
       if (streaming || streamRecoveryRef.current) {
         await stopActiveStream();
@@ -2382,11 +2422,35 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       } catch (e: unknown) {
         console.error("refreshThreads", e);
       }
+
+      // Trova il messaggio utente originale che precede la risposta contenente il blocco PII.
+      // Usiamo assistantMessageId per identificare il turno, poi cerchiamo il messaggio utente
+      // immediatamente precedente nell'array messages.
+      let originalUserMessageId: string | undefined;
+      if (assistantMessageId) {
+        const currentMessages = messages; // snapshot dal closure
+        const assistantIdx = currentMessages.findIndex((m) => m.id === assistantMessageId);
+        if (assistantIdx > 0) {
+          // Cerca il messaggio user più recente prima dell'assistente
+          for (let i = assistantIdx - 1; i >= 0; i--) {
+            if (currentMessages[i].role === "user") {
+              originalUserMessageId = currentMessages[i].id;
+              break;
+            }
+          }
+        }
+      }
+
+      console.log("[ChatWorkspace] runChatRequest with aion_pii_review_token:", piiToken, "originalUserMsgId:", originalUserMessageId);
       void runChatRequest(finalPrompt, {
-        metadata: { pii_confirmed: true }
+        metadata: { pii_confirmed: true },
+        aion_pii_review_token: piiToken,
+        ...(originalUserMessageId
+          ? { userMessageIdOverride: originalUserMessageId, showUserBubble: true }
+          : {}),
       });
     }
-  }, [streaming, stopActiveStream, refreshThreads, runChatRequest]);
+  }, [streaming, stopActiveStream, refreshThreads, runChatRequest, messages]);
 
   const handleMemorize = useCallback(async (msgId: string) => {
     const msgIdx = messages.findIndex((msg) => msg.id === msgId);
@@ -3538,6 +3602,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           isPlanArtifact={isPlanArtifact}
                           renderMarkdownLink={renderMarkdownLink}
                           formatTextWithCitations={formatTextWithCitations}
+                          messageId={(m as ChatMessage).id}
                         />
                       </div>
                     );
@@ -4545,6 +4610,32 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
 
                           <div className="my-1 border-t border-border/45" />
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setPiiReviewEnabled((prev) => !prev);
+                              setIsPlusOpen(false);
+                              closePlusSubMenus();
+                            }}
+                            onMouseEnter={() => {
+                              closePlusSubMenus();
+                            }}
+                            className={cn(
+                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                              piiReviewEnabled
+                                ? "bg-primary/10 text-primary"
+                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                            )}
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <Shield size={12} className="shrink-0" aria-hidden />
+                              <span className="truncate">PII Review</span>
+                            </div>
+                            {piiReviewEnabled ? (
+                              <Check size={12} className="shrink-0 text-primary" />
+                            ) : null}
+                          </button>
+
                           <button
                             type="button"
                             className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors text-left border border-transparent hover:border-primary/20"

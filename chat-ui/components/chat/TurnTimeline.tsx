@@ -40,7 +40,7 @@ type Props = {
   : never;
   formatTextWithCitations?: (text: string, messageId?: string) => string;
   messageId?: string;
-  onPiiAction?: (action: "confirm" | "reject", finalPrompt?: string) => void;
+  onPiiAction?: (action: "confirm" | "reject", finalPrompt?: string, token?: string, assistantMessageId?: string) => void;
 };
 
 export function TurnTimeline({
@@ -264,6 +264,7 @@ export function TurnTimeline({
                 key={seg.id}
                 content={seg.buffer}
                 onAction={onPiiAction}
+                assistantMessageId={messageId}
               />
             );
           }

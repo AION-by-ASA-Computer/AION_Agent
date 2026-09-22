@@ -142,6 +142,8 @@ class StreamLoop:
         self.artifact_parse_hits: int = 0
         self.artifact_salvage: int = 0
         self.plan_intercepts: int = 0
+        self.pii_review_intercepts: int = 0
+        self.pii_replacements: list = []
         self.plan_finalize_source: Optional[str] = None
         self.raw_token_fallback_chunks: int = 0
         self.llm_calls: int = 0
@@ -367,30 +369,36 @@ class StreamLoop:
             elif pe.event == ArtifactEvent.ARTIFACT_START:
                 had_only_text = False
                 self.artifact_parse_hits += 1
-                if (pe.artifact_type or "").strip().lower() == "plan":
+                art_type = (pe.artifact_type or "").strip().lower()
+                if art_type == "plan":
                     self.plan_intercepts += 1
-                yield self._track_sse(
-                    {
-                        "type": "artifact_start",
-                        "artifact": {
-                            "identifier": pe.artifact_id,
-                            "type": pe.artifact_type,
-                            "title": pe.artifact_title,
-                            "auto_execute": pe.auto_execute,
-                        },
-                    }
-                )
+                elif art_type == "pii_review":
+                    self.pii_review_intercepts += 1
+                
+                if art_type != "pii_replacements":
+                    yield self._track_sse(
+                        {
+                            "type": "artifact_start",
+                            "artifact": {
+                                "identifier": pe.artifact_id,
+                                "type": pe.artifact_type,
+                                "title": pe.artifact_title,
+                                "auto_execute": pe.auto_execute,
+                            },
+                        }
+                    )
             elif pe.event == ArtifactEvent.ARTIFACT_CONTENT:
                 had_only_text = False
                 if pe.content:
                     self.last_progress_at = self.loop.time()
-                yield self._track_sse(
-                    {
-                        "type": "artifact_content",
-                        "content": pe.content,
-                        "artifact_id": pe.artifact_id,
-                    }
-                )
+                if (pe.artifact_type or "").strip().lower() != "pii_replacements":
+                    yield self._track_sse(
+                        {
+                            "type": "artifact_content",
+                            "content": pe.content,
+                            "artifact_id": pe.artifact_id,
+                        }
+                    )
             elif pe.event == ArtifactEvent.ARTIFACT_END:
                 had_only_text = False
                 async for evt in self._finalize_artifact(pe):
@@ -1156,6 +1164,14 @@ class StreamLoop:
             )
             if pending:
                 yield self._track_sse(pending)
+        elif (pe.artifact_type or "").strip().lower() == "pii_replacements":
+            import json
+            try:
+                self.pii_replacements.extend(json.loads(pe.content or "[]"))
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("Failed to parse pii_replacements artifact: %s", e)
+            return  # Skip saving to disk and yielding artifact_end
         else:
             path, version = self.artifact_manager.save(
                 pe.artifact_id,

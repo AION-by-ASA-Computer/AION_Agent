@@ -1771,6 +1771,15 @@ class AgentPipeline:
             except Exception as _rt_gen_exc:
                 logger.debug("runtime generation kwargs merge skipped: %s", _rt_gen_exc)
 
+            if metadata and metadata.get("aion_privacy_filter_review_content") is not None:
+                eb = dict(gen_kw.get("extra_body") or {})
+                eb["aion_privacy_filter_review_content"] = metadata["aion_privacy_filter_review_content"]
+                gen_kw["extra_body"] = eb
+            if metadata and metadata.get("aion_pii_review_token") is not None:
+                eb = dict(gen_kw.get("extra_body") or {})
+                eb["aion_pii_review_token"] = metadata["aion_pii_review_token"]
+                gen_kw["extra_body"] = eb
+
             # Always refresh system prompt so cached agents get the current date
             # and any profile changes.  The harness_v2_injections flag used to
             # gate this, but that left agents built before the flag was enabled
@@ -2176,6 +2185,7 @@ class AgentPipeline:
             artifact_parse_hits = 0
             artifact_salvage = 0
             plan_intercepts = 0
+            pii_review_intercepts = 0
             plan_finalize_source: Optional[str] = None
             plan_text_fallback_count = 0
             raw_token_fallback_chunks = 0
@@ -2315,6 +2325,37 @@ class AgentPipeline:
                     artifact_parse_hits = _stream_loop.artifact_parse_hits
                     artifact_salvage = _stream_loop.artifact_salvage
                     plan_intercepts = _stream_loop.plan_intercepts
+                    pii_review_intercepts = getattr(_stream_loop, "pii_review_intercepts", 0)
+                    _pii_replacements_from_loop = getattr(_stream_loop, "pii_replacements", None)
+                    if _pii_replacements_from_loop:
+                        import re
+                        def _clean_prompt(text: str) -> str:
+                            if not text: return ""
+                            text = re.sub(r'(?i)\[session_memory\][\s\S]*?(?=--- runtime context|\[System instruction|$)', '', text)
+                            text = re.sub(r'--- runtime context[\s\S]*?--- end runtime context ---\n?', '', text)
+                            text = re.sub(r'\[System instruction[\s\S]*?(?=\n\n|$)', '', text)
+                            text = re.sub(r'Only after loading any required missing skills, proceed to execute the task\.\n*', '', text)
+                            return text.strip()
+                        
+                        cleaned_replacements = []
+                        for r in _pii_replacements_from_loop:
+                            cleaned = _clean_prompt(r.get("censored_content", ""))
+                            cleaned_replacements.append({
+                                "message_id": user_message_id,
+                                "censored_content": cleaned,
+                            })
+                            await turn_persist.history_manager.upsert_message_content(
+                                session_id=self.session_id,
+                                message_id=user_message_id,
+                                role="user",
+                                content=cleaned,
+                                user_id=self.user_id,
+                                profile_name=self.profile_name,
+                            )
+                        yield _track_sse({
+                            "type": "pii_messages_to_replace",
+                            "replacements": cleaned_replacements,
+                        })
                     raw_token_fallback_chunks = _stream_loop.raw_token_fallback_chunks
                     pending_write_artifacts = _stream_loop.pending_write_artifacts
                     assistant_message_persisted = (
@@ -2508,6 +2549,10 @@ class AgentPipeline:
                                             pe.artifact_type or ""
                                         ).strip().lower() == "plan":
                                             plan_intercepts += 1
+                                        elif (
+                                            pe.artifact_type or ""
+                                        ).strip().lower() == "pii_review":
+                                            pii_review_intercepts += 1
                                         yield _track_sse(
                                             {
                                                 "type": "artifact_start",
@@ -3867,6 +3912,7 @@ class AgentPipeline:
                         pending_db_steps=pending_db_steps,
                         timeline_builder=timeline_builder,
                         plan_intercepts=plan_intercepts,
+                        pii_review_intercepts=pii_review_intercepts,
                         reasoning_effort=reasoning_effort,
                         max_reasoning_chars=max_reasoning_chars,
                         max_reasoning_events=max_reasoning_events,

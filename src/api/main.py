@@ -647,6 +647,10 @@ class ChatRequest(BaseModel):
         default=None,
         description="Allowlisted turn overrides (steps, sampling, thinking).",
     )
+    aion_privacy_filter_review_content: Optional[bool] = Field(
+        default=None,
+        description="Flag per la PII Review (filtro privacy).",
+    )
 
 
 # --- Globals ---
