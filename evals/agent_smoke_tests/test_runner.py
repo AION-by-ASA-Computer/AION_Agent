@@ -942,7 +942,7 @@ async def run_single_test(
     outputs_dir_res = Path(outputs_dir).resolve()
     outputs_dir_res.mkdir(parents=True, exist_ok=True)
     raw_case_id = str(case.get("id", "unknown"))
-    safe_case_id = re.sub(r"[^a-zA-Z0-9_-]", "_", raw_case_id) or "unknown"
+    safe_case_id = _safe_report_test_id(raw_case_id)
     single_report_filename = f"report_{safe_case_id}.md"
     single_report_path = (outputs_dir_res / single_report_filename).resolve()
     single_report_content = format_single_test_markdown(test_result, outputs_dir_res)
@@ -1134,7 +1134,7 @@ async def run_smoke_tests(
     outputs_dir_res = Path(outputs_dir).resolve()
     outputs_dir_res.mkdir(parents=True, exist_ok=True)
     if test_id:
-        safe_test_id = re.sub(r"[^a-zA-Z0-9_-]", "_", str(test_id))
+        safe_test_id = _safe_report_test_id(test_id)
         report_filename = f"report_{safe_test_id}.md"
     else:
         report_filename = "report_suite_summary.md"

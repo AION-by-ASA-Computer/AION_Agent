@@ -100,7 +100,7 @@ async def list_reports() -> List[Dict[str, Any]]:
 @router.get("/reports/{filename}")
 async def get_report_content(filename: str) -> Dict[str, Any]:
     """Returns the content of a specific test report with strict path and filename validation."""
-    if not SAFE_REPORT_NAME_RE.match(filename):
+    if not SAFE_REPORT_NAME_RE.fullmatch(filename):
         raise HTTPException(status_code=400, detail="Invalid report filename format")
 
     safe_name = Path(filename).name
@@ -194,7 +194,7 @@ def resolve_diagnostic_file(
 
     # 2. Se viene specificato un session_id (validato con regex rigorosa)
     if session_id:
-        if not SAFE_ID_RE.match(session_id):
+        if not SAFE_ID_RE.fullmatch(session_id):
             return None
         for cand in [
             sessions_dir / session_id / clean,
@@ -220,7 +220,7 @@ def resolve_diagnostic_file(
     filename = Path(clean).name
     if (
         filename
-        and SAFE_ID_RE.match(filename.replace(".", "_"))
+        and SAFE_ID_RE.fullmatch(filename.replace(".", "_"))
         and sessions_dir.exists()
     ):
         for s_dir in sorted(
@@ -257,7 +257,7 @@ async def get_diagnostic_file(
     if not path or "\x00" in path or ".." in path:
         raise HTTPException(status_code=400, detail="Parametro path non valido")
 
-    if session_id and not SAFE_ID_RE.match(session_id):
+    if session_id and not SAFE_ID_RE.fullmatch(session_id):
         raise HTTPException(status_code=400, detail="Parametro session_id non valido")
 
     from src.session_workspace import data_root
@@ -320,13 +320,13 @@ async def run_diagnostics_tests(
     """
     Executes the Agent Smoke Test suite sequentially and streams status events via SSE with input validation.
     """
-    if test_id and not SAFE_ID_RE.match(test_id):
+    if test_id and not SAFE_ID_RE.fullmatch(test_id):
         raise HTTPException(
             status_code=400,
             detail="Invalid test_id parameter (alphanumeric, dash, underscore only)",
         )
 
-    if profile and not SAFE_ID_RE.match(profile):
+    if profile and not SAFE_ID_RE.fullmatch(profile):
         raise HTTPException(
             status_code=400,
             detail="Invalid profile parameter (alphanumeric, dash, underscore only)",
