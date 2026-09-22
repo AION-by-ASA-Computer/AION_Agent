@@ -18,6 +18,7 @@ import {
   Clock,
   MessageSquare,
   BarChart3,
+  FlaskConical,
 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { adminPath } from "@/lib/paths";
@@ -54,6 +55,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     { name: "Users Management", href: "/users", icon: Users },
     { name: "Agent Profiles", href: "/profiles", icon: Users },
     { name: "Evaluation & Metrics", href: "/metrics", icon: BarChart3 },
+    { name: "Smoke Tests", href: "/diagnostics", icon: FlaskConical },
     { name: "Skill Registry", href: "/skills", icon: Zap },
     { name: "MCP Hub", href: "/hub", icon: Globe },
     { name: "Conversations", href: "/conversations", icon: ClipboardList },
