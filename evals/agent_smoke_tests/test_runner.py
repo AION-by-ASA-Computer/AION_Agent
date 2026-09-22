@@ -20,6 +20,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import shutil
 import sys
 import time
@@ -956,6 +957,16 @@ def format_markdown_report(
     return "\n".join(lines)
 
 
+def _safe_report_test_id(test_id: str) -> str:
+    """
+    Validate test_id before using it in a filename.
+    Allows only alphanumerics, underscore, dash and dot.
+    """
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", test_id):
+        raise ValueError("Invalid test_id for report filename")
+    return test_id
+
+
 async def run_smoke_tests(
     config_path: Path = DEFAULT_CONFIG_PATH,
     outputs_dir: Path = DEFAULT_OUTPUTS_DIR,
@@ -985,7 +996,8 @@ async def run_smoke_tests(
 
     outputs_dir.mkdir(parents=True, exist_ok=True)
     if test_id:
-        report_filename = f"report_{test_id}.md"
+        safe_test_id = _safe_report_test_id(test_id)
+        report_filename = f"report_{safe_test_id}.md"
     else:
         report_filename = "report_suite_summary.md"
     report_path = outputs_dir / report_filename
