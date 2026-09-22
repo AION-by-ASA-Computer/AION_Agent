@@ -2186,6 +2186,7 @@ class AgentPipeline:
             artifact_salvage = 0
             plan_intercepts = 0
             pii_review_intercepts = 0
+            pii_replacements_intercepts = 0
             plan_finalize_source: Optional[str] = None
             plan_text_fallback_count = 0
             raw_token_fallback_chunks = 0
@@ -2326,6 +2327,7 @@ class AgentPipeline:
                     artifact_salvage = _stream_loop.artifact_salvage
                     plan_intercepts = _stream_loop.plan_intercepts
                     pii_review_intercepts = getattr(_stream_loop, "pii_review_intercepts", 0)
+                    pii_replacements_intercepts = getattr(_stream_loop, "pii_replacements_intercepts", 0)
                     _pii_replacements_from_loop = getattr(_stream_loop, "pii_replacements", None)
                     if _pii_replacements_from_loop:
                         import re
@@ -3913,6 +3915,7 @@ class AgentPipeline:
                         timeline_builder=timeline_builder,
                         plan_intercepts=plan_intercepts,
                         pii_review_intercepts=pii_review_intercepts,
+                        pii_replacements_intercepts=pii_replacements_intercepts,
                         reasoning_effort=reasoning_effort,
                         max_reasoning_chars=max_reasoning_chars,
                         max_reasoning_events=max_reasoning_events,

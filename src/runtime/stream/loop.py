@@ -143,6 +143,7 @@ class StreamLoop:
         self.artifact_salvage: int = 0
         self.plan_intercepts: int = 0
         self.pii_review_intercepts: int = 0
+        self.pii_replacements_intercepts: int = 0
         self.pii_replacements: list = []
         self.plan_finalize_source: Optional[str] = None
         self.raw_token_fallback_chunks: int = 0
@@ -374,6 +375,8 @@ class StreamLoop:
                     self.plan_intercepts += 1
                 elif art_type == "pii_review":
                     self.pii_review_intercepts += 1
+                elif art_type == "pii_replacements":
+                    self.last_progress_at = self.loop.time()
                 
                 if art_type != "pii_replacements":
                     yield self._track_sse(
@@ -1168,6 +1171,7 @@ class StreamLoop:
             import json
             try:
                 self.pii_replacements.extend(json.loads(pe.content or "[]"))
+                self.pii_replacements_intercepts += 1
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).warning("Failed to parse pii_replacements artifact: %s", e)

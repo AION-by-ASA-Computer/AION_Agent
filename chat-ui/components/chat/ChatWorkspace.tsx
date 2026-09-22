@@ -2035,6 +2035,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         );
 
         await consumeChatStream(stream, (chunk) => {
+
+          console.log("CHUNK RECEIVED", chunk)
+
           if (chunk.type === "turn_started") {
             const uid = String(chunk.user_message_id || uidMsg);
             const asst = String(chunk.assistant_message_id || aid);

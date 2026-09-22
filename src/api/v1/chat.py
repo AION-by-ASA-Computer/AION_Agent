@@ -123,8 +123,6 @@ async def _run_pipeline_in_background(
         resolved_effort = resolve_turn_reasoning(effort_in, thinking_in)
         clamped = await _clamped_runtime(raw_runtime, uid, profile_name)
 
-        logger.info("BODY")
-        logger.info(body)
 
         async for chunk in pipeline.run_stream(
             body.message,
@@ -161,6 +159,7 @@ async def _run_pipeline_in_background(
             },
             runtime=clamped,
         ):
+            # logger.info(f"[SSE CHUNK] {chunk}")
             event_data = {"event": "message", "data": json.dumps(chunk)}
             run.history.append(event_data)
             for q in list(run.queues):
