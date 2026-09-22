@@ -96,6 +96,20 @@ async def get_report_content(filename: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to read report: {ex}")
 
 
+def _resolve_file_within(base_dir: Path, candidate: Path) -> Optional[Path]:
+    """Resolve candidate and ensure it stays within base_dir and is an existing file."""
+    try:
+        base_resolved = base_dir.resolve()
+        candidate_resolved = candidate.resolve()
+        candidate_resolved.relative_to(base_resolved)
+    except Exception:
+        return None
+
+    if candidate_resolved.exists() and candidate_resolved.is_file():
+        return candidate_resolved
+    return None
+
+
 def resolve_diagnostic_file(
     raw_path: str, session_id: Optional[str] = None
 ) -> Optional[Path]:
@@ -119,26 +133,30 @@ def resolve_diagnostic_file(
     # 1. Path strutturato con prefisso sessions/
     if clean.startswith("data/sessions/") or clean.startswith("sessions/"):
         rel = clean.split("sessions/", 1)[1]
-        base_sessions = sessions_dir.resolve()
-        target = (base_sessions / rel).resolve()
+        target = _resolve_file_within(sessions_dir, sessions_dir / rel)
+        if target:
         try:
             target.relative_to(base_sessions)
         except ValueError:
             return None
-        if target.is_file() and target.exists():
-            return target
+        target = _resolve_file_within(sessions_dir, sessions_dir / session_id / clean)
+        if target:
 
-    # 2. Se viene specificato un session_id
-    if session_id:
+        target_ws = _resolve_file_within(
+            sessions_dir, sessions_dir / session_id / "workspace" / clean
+        )
+        if target_ws:
         target = (sessions_dir / session_id / clean).resolve()
-        if target.is_file() and target.exists():
-            return target
+        target_der = _resolve_file_within(
+            sessions_dir, sessions_dir / session_id / "derived" / clean
+        )
+        if target_der:
         target_ws = (sessions_dir / session_id / "workspace" / clean).resolve()
         if target_ws.is_file() and target_ws.exists():
             return target_ws
         target_der = (sessions_dir / session_id / "derived" / clean).resolve()
-        if target_der.is_file() and target_der.exists():
-            return target_der
+        target_out = _resolve_file_within(OUTPUTS_DIR, OUTPUTS_DIR / clean)
+        if target_out:
 
     # 3. Controlla in outputs/
     if OUTPUTS_DIR.exists():
@@ -153,8 +171,9 @@ def resolve_diagnostic_file(
             sessions_dir.glob("smoke_*"), key=lambda x: x.stat().st_mtime, reverse=True
         ):
             for candidate in [
-                s_dir / "workspace" / filename,
-                s_dir / "derived" / filename,
+                safe_candidate = _resolve_file_within(sessions_dir, candidate)
+                if safe_candidate:
+                    return safe_candidate
                 s_dir / "uploads" / filename,
                 s_dir / clean,
             ]:
