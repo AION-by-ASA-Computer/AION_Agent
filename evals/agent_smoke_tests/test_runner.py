@@ -1091,9 +1091,11 @@ def format_markdown_report(
 def _safe_report_test_id(test_id: str) -> str:
     """
     Validate test_id before using it in a filename.
-    Allows only alphanumerics, underscore, dash and dot.
+    Allows only alphanumerics, underscore, and dash.
     """
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+", test_id):
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", test_id):
+        raise ValueError("Invalid test_id for report filename")
+    if test_id in {".", ".."}:
         raise ValueError("Invalid test_id for report filename")
     return test_id
 
