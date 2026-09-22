@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import mimetypes
+import os
 import re
 import sys
 from datetime import datetime, timezone
@@ -41,17 +42,16 @@ SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 SAFE_REPORT_NAME_RE = re.compile(r"^report_[a-zA-Z0-9_-]+\.md$")
 
 
-def _is_safe_path(target: Path, allowed_bases: List[Path]) -> bool:
+def _is_safe_path(target: Path | str, allowed_bases: List[Path | str]) -> bool:
     """Verifies that a resolved target path resides strictly within one of the allowed base directories."""
     try:
-        t_res = target.resolve()
+        t_res = Path(target).resolve()
+        t_str = str(t_res)
         for base in allowed_bases:
-            b_res = base.resolve()
-            try:
-                t_res.relative_to(b_res)
+            b_res = Path(base).resolve()
+            b_str = str(b_res)
+            if os.path.commonpath([b_str, t_str]) == b_str:
                 return True
-            except ValueError:
-                continue
     except Exception:
         return False
     return False
@@ -121,17 +121,21 @@ async def get_report_content(filename: str) -> Dict[str, Any]:
         raise HTTPException(status_code=500, detail=f"Failed to read report: {ex}")
 
 
-def _resolve_file_within(base_dir: Path, candidate: Path) -> Optional[Path]:
+def _resolve_file_within(base_dir: Path | str, candidate: Path | str) -> Optional[Path]:
     """Resolve candidate and ensure it stays within base_dir and is an existing file."""
     try:
-        base_resolved = base_dir.resolve()
-        candidate_resolved = candidate.resolve()
-        candidate_resolved.relative_to(base_resolved)
+        base_resolved = Path(base_dir).resolve()
+        candidate_resolved = Path(candidate).resolve()
+        b_str = str(base_resolved)
+        c_str = str(candidate_resolved)
+        if (
+            os.path.commonpath([b_str, c_str]) == b_str
+            and candidate_resolved.is_file()
+            and candidate_resolved.exists()
+        ):
+            return candidate_resolved
     except Exception:
         return None
-
-    if candidate_resolved.exists() and candidate_resolved.is_file():
-        return candidate_resolved
     return None
 
 
@@ -162,12 +166,10 @@ def resolve_diagnostic_file(
     allowed_bases = [sessions_dir, outputs_dir]
 
     def _check(candidate: Path) -> Optional[Path]:
-        try:
-            res = candidate.resolve()
-            if res.is_file() and res.exists() and _is_safe_path(res, allowed_bases):
+        for base in allowed_bases:
+            res = _resolve_file_within(base, candidate)
+            if res is not None:
                 return res
-        except Exception:
-            pass
         return None
 
     # 1. Path strutturato con prefisso sessions/ o data/sessions/
@@ -245,16 +247,31 @@ async def get_diagnostic_file(
     if session_id and not SAFE_ID_RE.match(session_id):
         raise HTTPException(status_code=400, detail="Parametro session_id non valido")
 
+    from src.session_workspace import data_root
+
+    d_root = data_root().resolve()
+    sessions_dir = (d_root / "sessions").resolve()
+    outputs_dir = OUTPUTS_DIR.resolve()
+    allowed_bases = [sessions_dir, outputs_dir]
+
     target = resolve_diagnostic_file(path, session_id=session_id)
     if not target or not target.is_file() or not target.exists():
         raise HTTPException(
             status_code=404, detail="File deliverable non trovato o accesso negato"
         )
 
-    mime, _ = mimetypes.guess_type(target.name)
+    try:
+        target_resolved = target.resolve()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Path non valido")
+
+    if not _is_safe_path(target_resolved, allowed_bases):
+        raise HTTPException(status_code=403, detail="Accesso al path non consentito")
+
+    mime, _ = mimetypes.guess_type(target_resolved.name)
     return FileResponse(
-        target,
-        filename=target.name,
+        target_resolved,
+        filename=target_resolved.name,
         media_type=mime or "application/octet-stream",
         content_disposition_type="attachment" if download else "inline",
     )

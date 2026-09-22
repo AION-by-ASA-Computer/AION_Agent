@@ -110,17 +110,16 @@ async def ensure_db_ready():
 SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
-def _is_safe_path(target: Path, allowed_bases: List[Path]) -> bool:
+def _is_safe_path(target: Path | str, allowed_bases: List[Path | str]) -> bool:
     """Verifies that a resolved target path resides strictly within one of the allowed base directories."""
     try:
-        t_res = target.resolve()
+        t_res = Path(target).resolve()
+        t_str = str(t_res)
         for base in allowed_bases:
-            b_res = base.resolve()
-            try:
-                t_res.relative_to(b_res)
+            b_res = Path(base).resolve()
+            b_str = str(b_res)
+            if os.path.commonpath([b_str, t_str]) == b_str:
                 return True
-            except ValueError:
-                continue
     except Exception:
         return False
     return False
@@ -946,7 +945,9 @@ async def run_single_test(
     # Save standalone Markdown report for this test immediately (fixed name per test)
     outputs_dir_res = Path(outputs_dir).resolve()
     outputs_dir_res.mkdir(parents=True, exist_ok=True)
-    single_report_filename = f"report_{case_id}.md"
+    raw_case_id = str(case.get("id", "unknown"))
+    safe_case_id = re.sub(r"[^a-zA-Z0-9_-]", "_", raw_case_id) or "unknown"
+    single_report_filename = f"report_{safe_case_id}.md"
     single_report_path = (outputs_dir_res / single_report_filename).resolve()
     single_report_content = format_single_test_markdown(test_result, outputs_dir_res)
 
@@ -1135,7 +1136,7 @@ async def run_smoke_tests(
     outputs_dir_res = Path(outputs_dir).resolve()
     outputs_dir_res.mkdir(parents=True, exist_ok=True)
     if test_id:
-        safe_test_id = _safe_report_test_id(test_id)
+        safe_test_id = re.sub(r"[^a-zA-Z0-9_-]", "_", str(test_id))
         report_filename = f"report_{safe_test_id}.md"
     else:
         report_filename = "report_suite_summary.md"
@@ -1160,7 +1161,7 @@ async def run_smoke_tests(
     results: List[Dict[str, Any]] = []
 
     def flush_suite_report():
-        if results:
+        if results and _is_safe_path(report_path, [outputs_dir_res]):
             content = format_markdown_report(
                 results,
                 execution_mode="sequential",
