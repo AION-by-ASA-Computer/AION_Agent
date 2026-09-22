@@ -256,10 +256,20 @@ async def get_diagnostic_file(
             status_code=404, detail="File deliverable non trovato o accesso negato"
         )
 
-    mime, _ = mimetypes.guess_type(target.name)
+    from src.session_workspace import data_root
+
+    target_resolved = target.resolve()
+    sessions_dir = (data_root().resolve() / "sessions").resolve()
+    outputs_dir = OUTPUTS_DIR.resolve()
+    if not _is_safe_path(target_resolved, [sessions_dir, outputs_dir]):
+        raise HTTPException(
+            status_code=400, detail="Percorso file non autorizzato"
+        )
+
+    mime, _ = mimetypes.guess_type(target_resolved.name)
     return FileResponse(
-        target,
-        filename=target.name,
+        target_resolved,
+        filename=target_resolved.name,
         media_type=mime or "application/octet-stream",
         content_disposition_type="attachment" if download else "inline",
     )
