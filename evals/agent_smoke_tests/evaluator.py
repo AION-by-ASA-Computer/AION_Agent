@@ -109,8 +109,8 @@ def _has_approx_number(text: str, target: float, tolerance_pct: float = 2.0) -> 
         target_str_no_sep in text
         or target_thousands_eu in text
         or target_thousands_us in text
-        or f"{target_int//1000}k" in text.lower()
-        or f"{target_int//1000} k" in text.lower()
+        or f"{target_int // 1000}k" in text.lower()
+        or f"{target_int // 1000} k" in text.lower()
     ):
         return True
 
@@ -185,21 +185,36 @@ def evaluate_excel_test(
 ) -> EvaluationResult:
     """Evaluates Test 1: Analisi Dati Excel (100 pt)."""
     criteria: List[CriterionResult] = []
-    output_text = test_result.get("final_output", "") + " " + test_result.get("reasoning", "")
+    output_text = (
+        test_result.get("final_output", "") + " " + test_result.get("reasoning", "")
+    )
     tool_calls = test_result.get("tool_calls", [])
     gen_files = test_result.get("generated_files", [])
 
     # Find PNG images in workspace
-    png_files = [f for f in gen_files if f.get("name", "").lower().endswith(".png") or f.get("is_image")]
+    png_files = [
+        f
+        for f in gen_files
+        if f.get("name", "").lower().endswith(".png") or f.get("is_image")
+    ]
     if not png_files and session_dir and session_dir.exists():
         ws_dir = session_dir / "workspace"
         if ws_dir.exists():
-            png_files = [{"name": p.name, "size_bytes": p.stat().st_size} for p in ws_dir.rglob("*.png")]
+            png_files = [
+                {"name": p.name, "size_bytes": p.stat().st_size}
+                for p in ws_dir.rglob("*.png")
+            ]
 
     # 1. Tool execution (10 pt)
     python_calls = [
-        tc for tc in tool_calls
-        if (tc.get("tool") or tc.get("name") or "") in ["sandbox_run_python_file", "sandbox_execute_python", "sandbox_write_workspace_file"]
+        tc
+        for tc in tool_calls
+        if (tc.get("tool") or tc.get("name") or "")
+        in [
+            "sandbox_run_python_file",
+            "sandbox_execute_python",
+            "sandbox_write_workspace_file",
+        ]
     ]
     has_tool = len(python_calls) > 0
     criteria.append(
@@ -210,7 +225,9 @@ def evaluate_excel_test(
             points=10 if has_tool else 0,
             max_points=10,
             passed=has_tool,
-            details=f"Invocati {len(python_calls)} tool sandbox per calcoli e grafici" if has_tool else "Nessuna esecuzione sandbox rilevata",
+            details=f"Invocati {len(python_calls)} tool sandbox per calcoli e grafici"
+            if has_tool
+            else "Nessuna esecuzione sandbox rilevata",
         )
     )
 
@@ -229,7 +246,9 @@ def evaluate_excel_test(
             points=15 if has_net_rev else 0,
             max_points=15,
             passed=has_net_rev,
-            details="Rilevato valore corretto (~497k € 2025 / 954k € Totale)" if has_net_rev else "Valore fatturato netto non trovato o errato",
+            details="Rilevato valore corretto (~497k € 2025 / 954k € Totale)"
+            if has_net_rev
+            else "Valore fatturato netto non trovato o errato",
         )
     )
 
@@ -248,7 +267,9 @@ def evaluate_excel_test(
             points=10 if has_margin else 0,
             max_points=10,
             passed=has_margin,
-            details="Rilevato valore margine corretto (~275k € 2025 / 536k € Totale)" if has_margin else "Valore margine totale non trovato",
+            details="Rilevato valore margine corretto (~275k € 2025 / 536k € Totale)"
+            if has_margin
+            else "Valore margine totale non trovato",
         )
     )
 
@@ -273,14 +294,15 @@ def evaluate_excel_test(
             points=10 if has_aov else 0,
             max_points=10,
             passed=has_aov,
-            details="Rilevato AOV corretto (~3.502 € / 3.819 €)" if has_aov else "Valore AOV non trovato",
+            details="Rilevato AOV corretto (~3.502 € / 3.819 €)"
+            if has_aov
+            else "Valore AOV non trovato",
         )
     )
 
     # 5. Top Performer Agente (10 pt) -> Alessandro Riva
-    has_top_agent = (
-        "alessandro riva" in output_text.lower()
-        or ("riva" in output_text.lower() and "126" in output_text)
+    has_top_agent = "alessandro riva" in output_text.lower() or (
+        "riva" in output_text.lower() and "126" in output_text
     )
     criteria.append(
         CriterionResult(
@@ -290,7 +312,9 @@ def evaluate_excel_test(
             points=10 if has_top_agent else 0,
             max_points=10,
             passed=has_top_agent,
-            details="Identificato correttamente Alessandro Riva come top performer 2025 (~126k €)" if has_top_agent else "Miglior agente non identificato",
+            details="Identificato correttamente Alessandro Riva come top performer 2025 (~126k €)"
+            if has_top_agent
+            else "Miglior agente non identificato",
         )
     )
 
@@ -309,13 +333,22 @@ def evaluate_excel_test(
             points=10 if has_monthly else 0,
             max_points=10,
             passed=has_monthly,
-            details="Rilevato andamento mensile e picco a Maggio 2025" if has_monthly else "Mese di picco o trend mensile mancante",
+            details="Rilevato andamento mensile e picco a Maggio 2025"
+            if has_monthly
+            else "Mese di picco o trend mensile mancante",
         )
     )
 
     # 7. Top 5 SKU (10 pt)
     sku_matches = sum(
-        1 for sku in ["security-audit", "gateway-edge", "saas-platform", "training-onboarding", "ai-agent"]
+        1
+        for sku in [
+            "security-audit",
+            "gateway-edge",
+            "saas-platform",
+            "training-onboarding",
+            "ai-agent",
+        ]
         if sku in output_text.lower()
     )
     has_skus = sku_matches >= 2
@@ -327,13 +360,16 @@ def evaluate_excel_test(
             points=10 if has_skus else 0,
             max_points=10,
             passed=has_skus,
-            details=f"Trovati {sku_matches} prodotti top identificati (es. SECURITY-AUDIT)" if has_skus else "Classifica SKU incompleta",
+            details=f"Trovati {sku_matches} prodotti top identificati (es. SECURITY-AUDIT)"
+            if has_skus
+            else "Classifica SKU incompleta",
         )
     )
 
     # 8. Grafico 1: PNG generato o render_chart (10 pt)
     chart_tool_calls = [
-        tc for tc in tool_calls
+        tc
+        for tc in tool_calls
         if (tc.get("tool") or tc.get("name") or "") == "render_chart"
     ]
     has_img1 = len(png_files) >= 1 or len(chart_tool_calls) >= 1
@@ -345,12 +381,18 @@ def evaluate_excel_test(
             points=10 if has_img1 else 0,
             max_points=10,
             passed=has_img1,
-            details=f"Generato grafico: {png_files[0]['name'] if png_files else 'render_chart'}" if has_img1 else "Nessun grafico generato",
+            details=f"Generato grafico: {png_files[0]['name'] if png_files else 'render_chart'}"
+            if has_img1
+            else "Nessun grafico generato",
         )
     )
 
     # 9. Grafico 2: Secondo PNG generato o secondo render_chart (10 pt)
-    has_img2 = (len(png_files) + len(chart_tool_calls)) >= 2 or len(png_files) >= 1 or len(chart_tool_calls) >= 1
+    has_img2 = (
+        (len(png_files) + len(chart_tool_calls)) >= 2
+        or len(png_files) >= 1
+        or len(chart_tool_calls) >= 1
+    )
     criteria.append(
         CriterionResult(
             id="chart_line_trend",
@@ -359,15 +401,18 @@ def evaluate_excel_test(
             points=10 if has_img2 else 0,
             max_points=10,
             passed=has_img2,
-            details="Generato supporto grafico per visualizzazione trend" if has_img2 else "Secondo grafico mancante",
+            details="Generato supporto grafico per visualizzazione trend"
+            if has_img2
+            else "Secondo grafico mancante",
         )
     )
 
     # 10. Key Takeaways & Formattazione (5 pt)
     has_takeaways = (
-        ("takeaway" in output_text.lower() or "sintesi" in output_text.lower() or "punti chiave" in output_text.lower())
-        and ("•" in output_text or "-" in output_text or "*" in output_text)
-    )
+        "takeaway" in output_text.lower()
+        or "sintesi" in output_text.lower()
+        or "punti chiave" in output_text.lower()
+    ) and ("•" in output_text or "-" in output_text or "*" in output_text)
     criteria.append(
         CriterionResult(
             id="formatting_takeaways",
@@ -376,7 +421,9 @@ def evaluate_excel_test(
             points=5 if has_takeaways else 0,
             max_points=5,
             passed=has_takeaways,
-            details="Presenza di 3 bullet point di sintesi operativa ben formattati" if has_takeaways else "Bullet point di sintesi mancanti",
+            details="Presenza di 3 bullet point di sintesi operativa ben formattati"
+            if has_takeaways
+            else "Bullet point di sintesi mancanti",
         )
     )
 
@@ -400,13 +447,19 @@ def evaluate_pdf_test(
 ) -> EvaluationResult:
     """Evaluates Test 2: Estrazione RAG da PDF lungo (100 pt)."""
     criteria: List[CriterionResult] = []
-    output_text = test_result.get("final_output", "") + " " + test_result.get("reasoning", "")
+    output_text = (
+        test_result.get("final_output", "") + " " + test_result.get("reasoning", "")
+    )
     tool_calls = test_result.get("tool_calls", [])
 
     # 1. Consultazione PDF via Tool (10 pt)
     rag_tools = [
-        tc for tc in tool_calls
-        if any(k in (tc.get("tool") or tc.get("name") or "").lower() for k in ["pdf", "ocr", "read", "grep", "search", "python"])
+        tc
+        for tc in tool_calls
+        if any(
+            k in (tc.get("tool") or tc.get("name") or "").lower()
+            for k in ["pdf", "ocr", "read", "grep", "search", "python"]
+        )
     ]
     has_tools = len(rag_tools) > 0
     criteria.append(
@@ -417,14 +470,23 @@ def evaluate_pdf_test(
             points=10 if has_tools else 0,
             max_points=10,
             passed=has_tools,
-            details=f"Invocati {len(rag_tools)} tool di estrazione/lettura sul manuale" if has_tools else "Nessun tool di lettura invocato",
+            details=f"Invocati {len(rag_tools)} tool di estrazione/lettura sul manuale"
+            if has_tools
+            else "Nessun tool di lettura invocato",
         )
     )
 
     # 2. Sblocco Portiere Anteriori (15 pt) (maniglia meccanica / levetta davanti pulsanti)
     has_front_door = (
-        ("anteriore" in output_text.lower() or "anteriori" in output_text.lower() or "portiera" in output_text.lower())
-        and ("meccanic" in output_text.lower() or "levett" in output_text.lower() or "pulsant" in output_text.lower() or "finestrin" in output_text.lower() or "davanti" in output_text.lower())
+        "anteriore" in output_text.lower()
+        or "anteriori" in output_text.lower()
+        or "portiera" in output_text.lower()
+    ) and (
+        "meccanic" in output_text.lower()
+        or "levett" in output_text.lower()
+        or "pulsant" in output_text.lower()
+        or "finestrin" in output_text.lower()
+        or "davanti" in output_text.lower()
     )
     criteria.append(
         CriterionResult(
@@ -434,14 +496,22 @@ def evaluate_pdf_test(
             points=15 if has_front_door else 0,
             max_points=15,
             passed=has_front_door,
-            details="Identificata procedura con sblocco meccanico situato davanti ai comandi finestrino" if has_front_door else "Procedura sblocco anteriore non specificata",
+            details="Identificata procedura con sblocco meccanico situato davanti ai comandi finestrino"
+            if has_front_door
+            else "Procedura sblocco anteriore non specificata",
         )
     )
 
     # 3. Sblocco Portiere Posteriori (15 pt) (cavo / levetta sotto tasca o griglia)
     has_rear_door = (
         ("posterior" in output_text.lower() or "posteriore" in output_text.lower())
-        and ("cavo" in output_text.lower() or "tasca" in output_text.lower() or "sportellin" in output_text.lower() or "altoparlant" in output_text.lower() or "rilascio" in output_text.lower())
+        and (
+            "cavo" in output_text.lower()
+            or "tasca" in output_text.lower()
+            or "sportellin" in output_text.lower()
+            or "altoparlant" in output_text.lower()
+            or "rilascio" in output_text.lower()
+        )
     ) or ("sblocco manuale" in output_text.lower() and "cavo" in output_text.lower())
     criteria.append(
         CriterionResult(
@@ -451,14 +521,23 @@ def evaluate_pdf_test(
             points=15 if has_rear_door else 0,
             max_points=15,
             passed=has_rear_door,
-            details="Identificata procedura con cavo di rilascio meccanico (tasca/altoparlante)" if has_rear_door else "Procedura portiere posteriori mancante",
+            details="Identificata procedura con cavo di rilascio meccanico (tasca/altoparlante)"
+            if has_rear_door
+            else "Procedura portiere posteriori mancante",
         )
     )
 
     # 4. Frequenza Liquido Freni (Anni) (15 pt) (ogni 2 o 4 anni)
     has_brake_years = (
-        ("liquido freni" in output_text.lower() or "freni" in output_text.lower() or "brake" in output_text.lower())
-        and ("2 anni" in output_text.lower() or "4 anni" in output_text.lower() or "due anni" in output_text.lower() or "quattro anni" in output_text.lower() or "biennale" in output_text.lower())
+        "liquido freni" in output_text.lower()
+        or "freni" in output_text.lower()
+        or "brake" in output_text.lower()
+    ) and (
+        "2 anni" in output_text.lower()
+        or "4 anni" in output_text.lower()
+        or "due anni" in output_text.lower()
+        or "quattro anni" in output_text.lower()
+        or "biennale" in output_text.lower()
     )
     criteria.append(
         CriterionResult(
@@ -468,7 +547,9 @@ def evaluate_pdf_test(
             points=15 if has_brake_years else 0,
             max_points=15,
             passed=has_brake_years,
-            details="Specificato intervallo di manutenzione (ogni 2 o 4 anni)" if has_brake_years else "Intervallo temporale liquido freni non specificato",
+            details="Specificato intervallo di manutenzione (ogni 2 o 4 anni)"
+            if has_brake_years
+            else "Intervallo temporale liquido freni non specificato",
         )
     )
 
@@ -489,7 +570,9 @@ def evaluate_pdf_test(
             points=10 if has_humidity else 0,
             max_points=10,
             passed=has_humidity,
-            details="Specificato controllo percentuale umidità/contaminazione liquido freni" if has_humidity else "Dettaglio condizione umidità/test non menzionato",
+            details="Specificato controllo percentuale umidità/contaminazione liquido freni"
+            if has_humidity
+            else "Dettaglio condizione umidità/test non menzionato",
         )
     )
 
@@ -509,7 +592,9 @@ def evaluate_pdf_test(
             points=10 if has_page else 0,
             max_points=10,
             passed=has_page,
-            details="Citato esplicitamente il numero di pagina o riferimento" if has_page else "Numero di pagina non citato",
+            details="Citato esplicitamente il numero di pagina o riferimento"
+            if has_page
+            else "Numero di pagina non citato",
         )
     )
 
@@ -529,7 +614,9 @@ def evaluate_pdf_test(
             points=10 if has_section else 0,
             max_points=10,
             passed=has_section,
-            details="Citata sezione ufficiale ('Apertura e chiusura' / 'Manutenzione')" if has_section else "Sezione non citata",
+            details="Citata sezione ufficiale ('Apertura e chiusura' / 'Manutenzione')"
+            if has_section
+            else "Sezione non citata",
         )
     )
 
@@ -543,12 +630,16 @@ def evaluate_pdf_test(
             points=5 if not has_errors else 0,
             max_points=5,
             passed=not has_errors,
-            details="Nessun errore fatale durante l'interrogazione" if not has_errors else f"Rilevato errore: {test_result.get('error')}",
+            details="Nessun errore fatale durante l'interrogazione"
+            if not has_errors
+            else f"Rilevato errore: {test_result.get('error')}",
         )
     )
 
     # 9. Chiarezza e Struttura Procedurale (5 pt)
-    has_clarity = len(output_text.strip()) >= 200 and ("1." in output_text or "•" in output_text or "-" in output_text)
+    has_clarity = len(output_text.strip()) >= 200 and (
+        "1." in output_text or "•" in output_text or "-" in output_text
+    )
     criteria.append(
         CriterionResult(
             id="procedural_clarity",
@@ -557,7 +648,9 @@ def evaluate_pdf_test(
             points=5 if has_clarity else 0,
             max_points=5,
             passed=has_clarity,
-            details="Risposta strutturata ed esaustiva per l'utente finale" if has_clarity else "Risposta troppo breve o poco strutturata",
+            details="Risposta strutturata ed esaustiva per l'utente finale"
+            if has_clarity
+            else "Risposta troppo breve o poco strutturata",
         )
     )
 
@@ -577,7 +670,9 @@ def evaluate_pdf_test(
             points=5 if has_warning else 0,
             max_points=5,
             passed=has_warning,
-            details="Specificato l'uso in assenza di alimentazione elettrica" if has_warning else "Nota di sicurezza non evidenziata",
+            details="Specificato l'uso in assenza di alimentazione elettrica"
+            if has_warning
+            else "Nota di sicurezza non evidenziata",
         )
     )
 
@@ -601,7 +696,9 @@ def evaluate_word_test(
 ) -> EvaluationResult:
     """Evaluates Test 3: Generazione Word Strutturato (100 pt)."""
     criteria: List[CriterionResult] = []
-    output_text = test_result.get("final_output", "") + " " + test_result.get("reasoning", "")
+    output_text = (
+        test_result.get("final_output", "") + " " + test_result.get("reasoning", "")
+    )
     gen_files = test_result.get("generated_files", [])
 
     # Locate docx file in generated_files or session workspace
@@ -632,12 +729,16 @@ def evaluate_word_test(
             points=15 if has_file else 0,
             max_points=15,
             passed=has_file,
-            details=f"File generato con successo: {docx_path.name if docx_path else 'agenda_kickoff.docx'}" if has_file else "File .docx non trovato nel workspace",
+            details=f"File generato con successo: {docx_path.name if docx_path else 'agenda_kickoff.docx'}"
+            if has_file
+            else "File .docx non trovato nel workspace",
         )
     )
 
     # 2. Validità e Dimensione Formato Docx (10 pt)
-    is_valid_docx = docx_info.get("valid", False) and docx_info.get("size_bytes", 0) >= 3000
+    is_valid_docx = (
+        docx_info.get("valid", False) and docx_info.get("size_bytes", 0) >= 3000
+    )
     criteria.append(
         CriterionResult(
             id="file_validity",
@@ -646,7 +747,9 @@ def evaluate_word_test(
             points=10 if is_valid_docx else 0,
             max_points=10,
             passed=is_valid_docx,
-            details=f"Documento XML Word valido ({docx_info.get('size_bytes', 0)} bytes)" if is_valid_docx else "Struttura docx invalida o file vuoto",
+            details=f"Documento XML Word valido ({docx_info.get('size_bytes', 0)} bytes)"
+            if is_valid_docx
+            else "Struttura docx invalida o file vuoto",
         )
     )
 
@@ -665,7 +768,9 @@ def evaluate_word_test(
             points=10 if has_heading else 0,
             max_points=10,
             passed=has_heading,
-            details="Presenza di intestazione formattata per la riunione di Kickoff" if has_heading else "Intestazione Kickoff mancante nel documento",
+            details="Presenza di intestazione formattata per la riunione di Kickoff"
+            if has_heading
+            else "Intestazione Kickoff mancante nel documento",
         )
     )
 
@@ -684,7 +789,9 @@ def evaluate_word_test(
             points=10 if has_date else 0,
             max_points=10,
             passed=has_date,
-            details="Data '15 Ottobre' presente nel documento Word" if has_date else "Data '15 Ottobre' non trovata nel docx",
+            details="Data '15 Ottobre' presente nel documento Word"
+            if has_date
+            else "Data '15 Ottobre' non trovata nel docx",
         )
     )
 
@@ -698,13 +805,20 @@ def evaluate_word_test(
             points=15 if has_table else 0,
             max_points=15,
             passed=has_table,
-            details=f"Trovata tabella formattata con {docx_info.get('table_row_count', 0)} righe" if has_table else "Nessuna tabella trovata nel file docx",
+            details=f"Trovata tabella formattata con {docx_info.get('table_row_count', 0)} righe"
+            if has_table
+            else "Nessuna tabella trovata nel file docx",
         )
     )
 
     # 6. Colonna "Orario" (5 pt)
     table_headers_str = " ".join(docx_info.get("table_headers", [])).lower()
-    has_col_time = "orario" in table_headers_str or "ora" in table_headers_str or "time" in table_headers_str or "slot" in table_headers_str
+    has_col_time = (
+        "orario" in table_headers_str
+        or "ora" in table_headers_str
+        or "time" in table_headers_str
+        or "slot" in table_headers_str
+    )
     criteria.append(
         CriterionResult(
             id="col_time",
@@ -713,12 +827,20 @@ def evaluate_word_test(
             points=5 if has_col_time else 0,
             max_points=5,
             passed=has_col_time,
-            details="Colonna 'Orario' presente nell'intestazione tabella" if has_col_time else "Colonna 'Orario' non rilevata",
+            details="Colonna 'Orario' presente nell'intestazione tabella"
+            if has_col_time
+            else "Colonna 'Orario' non rilevata",
         )
     )
 
     # 7. Colonna "Argomento" (5 pt)
-    has_col_topic = "argomento" in table_headers_str or "tema" in table_headers_str or "topic" in table_headers_str or "descrizione" in table_headers_str or "attività" in table_headers_str
+    has_col_topic = (
+        "argomento" in table_headers_str
+        or "tema" in table_headers_str
+        or "topic" in table_headers_str
+        or "descrizione" in table_headers_str
+        or "attività" in table_headers_str
+    )
     criteria.append(
         CriterionResult(
             id="col_topic",
@@ -727,12 +849,20 @@ def evaluate_word_test(
             points=5 if has_col_topic else 0,
             max_points=5,
             passed=has_col_topic,
-            details="Colonna 'Argomento' presente nell'intestazione tabella" if has_col_topic else "Colonna 'Argomento' non rilevata",
+            details="Colonna 'Argomento' presente nell'intestazione tabella"
+            if has_col_topic
+            else "Colonna 'Argomento' non rilevata",
         )
     )
 
     # 8. Colonna "Relatore" (5 pt)
-    has_col_speaker = "relatore" in table_headers_str or "speaker" in table_headers_str or "responsabile" in table_headers_str or "presenter" in table_headers_str or "referente" in table_headers_str
+    has_col_speaker = (
+        "relatore" in table_headers_str
+        or "speaker" in table_headers_str
+        or "responsabile" in table_headers_str
+        or "presenter" in table_headers_str
+        or "referente" in table_headers_str
+    )
     criteria.append(
         CriterionResult(
             id="col_speaker",
@@ -741,7 +871,9 @@ def evaluate_word_test(
             points=5 if has_col_speaker else 0,
             max_points=5,
             passed=has_col_speaker,
-            details="Colonna 'Relatore' presente nell'intestazione tabella" if has_col_speaker else "Colonna 'Relatore' non rilevata",
+            details="Colonna 'Relatore' presente nell'intestazione tabella"
+            if has_col_speaker
+            else "Colonna 'Relatore' non rilevata",
         )
     )
 
@@ -755,14 +887,22 @@ def evaluate_word_test(
             points=10 if has_multiple_rows else 0,
             max_points=10,
             passed=has_multiple_rows,
-            details=f"Tabella compilata con {docx_info.get('table_row_count', 0)} righe di agenda" if has_multiple_rows else "Tabella incompleta (< 3 righe)",
+            details=f"Tabella compilata con {docx_info.get('table_row_count', 0)} righe di agenda"
+            if has_multiple_rows
+            else "Tabella incompleta (< 3 righe)",
         )
     )
 
     # 10. Elenco Materiali Preparatori (15 pt)
     has_materials = (
-        ("material" in combined_text.lower() or "preparator" in combined_text.lower() or "richiest" in combined_text.lower() or "document" in combined_text.lower())
-        and (len(docx_info.get("paragraphs", [])) >= 4 or "•" in combined_text or "-" in combined_text)
+        "material" in combined_text.lower()
+        or "preparator" in combined_text.lower()
+        or "richiest" in combined_text.lower()
+        or "document" in combined_text.lower()
+    ) and (
+        len(docx_info.get("paragraphs", [])) >= 4
+        or "•" in combined_text
+        or "-" in combined_text
     )
     criteria.append(
         CriterionResult(
@@ -772,7 +912,9 @@ def evaluate_word_test(
             points=15 if has_materials else 0,
             max_points=15,
             passed=has_materials,
-            details="Sezione con elenco puntato dei materiali richiesti ai partecipanti" if has_materials else "Elenco materiali preparatori mancante o incompleto",
+            details="Sezione con elenco puntato dei materiali richiesti ai partecipanti"
+            if has_materials
+            else "Elenco materiali preparatori mancante o incompleto",
         )
     )
 
@@ -806,7 +948,9 @@ def evaluate_generic_test(test_result: Dict[str, Any]) -> EvaluationResult:
             points=40 if status == "completed" else 0,
             max_points=40,
             passed=status == "completed",
-            details="Test completato con successo" if status == "completed" else f"Errore: {test_result.get('error')}",
+            details="Test completato con successo"
+            if status == "completed"
+            else f"Errore: {test_result.get('error')}",
         ),
         CriterionResult(
             id="tool_usage",
@@ -815,7 +959,9 @@ def evaluate_generic_test(test_result: Dict[str, Any]) -> EvaluationResult:
             points=30 if len(tools) > 0 else 0,
             max_points=30,
             passed=len(tools) > 0,
-            details=f"Invocati {len(tools)} tool" if len(tools) > 0 else "Nessun tool invocato",
+            details=f"Invocati {len(tools)} tool"
+            if len(tools) > 0
+            else "Nessun tool invocato",
         ),
         CriterionResult(
             id="output_presence",
@@ -824,7 +970,9 @@ def evaluate_generic_test(test_result: Dict[str, Any]) -> EvaluationResult:
             points=30 if len(output.strip()) > 50 else 0,
             max_points=30,
             passed=len(output.strip()) > 50,
-            details="Risposta finale generata" if len(output.strip()) > 50 else "Risposta vuota",
+            details="Risposta finale generata"
+            if len(output.strip()) > 50
+            else "Risposta vuota",
         ),
     ]
     total_score = sum(c.points for c in criteria)

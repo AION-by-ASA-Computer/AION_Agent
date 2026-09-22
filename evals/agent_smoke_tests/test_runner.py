@@ -19,14 +19,9 @@ import asyncio
 import json
 import logging
 import os
-<<<<<<< HEAD
-=======
 import re
-import shutil
->>>>>>> 06f7a3c73fde108c7cbe225b3b42fe1ce7143639
 import sys
 import time
-import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Set
@@ -49,7 +44,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 # Silence noisy OTEL warning if exporter is not configured
-if not os.environ.get("OTEL_LOGS_EXPORTER") or os.environ.get("OTEL_LOGS_EXPORTER") == "otlp":
+if (
+    not os.environ.get("OTEL_LOGS_EXPORTER")
+    or os.environ.get("OTEL_LOGS_EXPORTER") == "otlp"
+):
     os.environ["OTEL_LOGS_EXPORTER"] = "none"
 
 # MUST be first import to load .env correctly
@@ -156,42 +154,50 @@ def resolve_asset_path(rel_path: str) -> Optional[Path]:
     for candidate in candidates:
         try:
             cand_res = candidate.resolve()
-            if cand_res.exists() and cand_res.is_file() and _is_safe_path(cand_res, allowed_bases):
+            if (
+                cand_res.exists()
+                and cand_res.is_file()
+                and _is_safe_path(cand_res, allowed_bases)
+            ):
                 return cand_res
         except Exception:
             continue
     return None
 
 
-IGNORED_SESSION_FILE_NAMES = frozenset({
-    "_sandbox_last_run.py",
-    "package.json",
-    "package-lock.json",
-    "pnpm-lock.yaml",
-    "yarn.lock",
-    "tsconfig.json",
-    ".gitignore",
-    ".env",
-    "license",
-    "licence",
-    "contributing.md",
-    "governance.md",
-    "readme.md",
-    "index.d.ts",
-    "index.js",
-})
+IGNORED_SESSION_FILE_NAMES = frozenset(
+    {
+        "_sandbox_last_run.py",
+        "package.json",
+        "package-lock.json",
+        "pnpm-lock.yaml",
+        "yarn.lock",
+        "tsconfig.json",
+        ".gitignore",
+        ".env",
+        "license",
+        "licence",
+        "contributing.md",
+        "governance.md",
+        "readme.md",
+        "index.d.ts",
+        "index.js",
+    }
+)
 
-IGNORED_SESSION_DIR_PARTS = frozenset({
-    "node_modules",
-    "__pycache__",
-    ".cache",
-    ".npm",
-    ".venv",
-    ".git",
-    ".tmp",
-    "tool_results",
-    "docs",
-})
+IGNORED_SESSION_DIR_PARTS = frozenset(
+    {
+        "node_modules",
+        "__pycache__",
+        ".cache",
+        ".npm",
+        ".venv",
+        ".git",
+        ".tmp",
+        "tool_results",
+        "docs",
+    }
+)
 
 
 def is_user_deliverable_session_file(rel_to_session: str, p: Path) -> bool:
@@ -267,7 +273,17 @@ def collect_generated_files(
 
             try:
                 suffix = p.suffix.lower()
-                is_doc = suffix in [".docx", ".xlsx", ".pdf", ".csv", ".json", ".txt", ".md", ".html", ".xml"]
+                is_doc = suffix in [
+                    ".docx",
+                    ".xlsx",
+                    ".pdf",
+                    ".csv",
+                    ".json",
+                    ".txt",
+                    ".md",
+                    ".html",
+                    ".xml",
+                ]
                 is_image = suffix in [".png", ".jpg", ".jpeg", ".svg", ".webp", ".gif"]
                 is_code = suffix in [".py", ".js", ".ts", ".sh", ".sql"]
 
@@ -282,18 +298,20 @@ def collect_generated_files(
 
                 session_rel_path = f"data/sessions/{session_id}/{rel_to_session}"
 
-                found_files.append({
-                    "name": p.name,
-                    "suffix": suffix,
-                    "category": category,
-                    "is_image": is_image,
-                    "is_document": is_doc,
-                    "size_bytes": p.stat().st_size,
-                    "relative_to_outputs": session_rel_path,
-                    "session_path": session_rel_path,
-                    "abs_path": str(p.resolve()),
-                    "file_url": session_rel_path,
-                })
+                found_files.append(
+                    {
+                        "name": p.name,
+                        "suffix": suffix,
+                        "category": category,
+                        "is_image": is_image,
+                        "is_document": is_doc,
+                        "size_bytes": p.stat().st_size,
+                        "relative_to_outputs": session_rel_path,
+                        "session_path": session_rel_path,
+                        "abs_path": str(p.resolve()),
+                        "file_url": session_rel_path,
+                    }
+                )
             except Exception as e:
                 logger.warning("Could not inspect generated file %s: %s", p, e)
 
@@ -313,7 +331,9 @@ def format_generated_files_section(
     lines.append("### 📁 Documenti & File nel Workspace di Sessione")
     lines.append("")
     if session_id:
-        lines.append(f"> 📂 **Cartella Workspace (Sandbox):** `data/sessions/{session_id}/workspace`")
+        lines.append(
+            f"> 📂 **Cartella Workspace (Sandbox):** `data/sessions/{session_id}/workspace`"
+        )
         lines.append("")
 
     if files:
@@ -324,7 +344,9 @@ def format_generated_files_section(
             size_str = f"{size_kb:.1f} KB" if size_kb >= 1 else f"{f['size_bytes']} B"
             rel_link = f.get("session_path", f["name"])
             link_str = f"[{f['name']}]({rel_link})"
-            lines.append(f"| **{f['name']}** | {f['category']} | {size_str} | {link_str} |")
+            lines.append(
+                f"| **{f['name']}** | {f['category']} | {size_str} | {link_str} |"
+            )
         lines.append("")
 
     return lines
@@ -376,7 +398,11 @@ def format_timeline_section(timeline_events: List[Dict[str, Any]]) -> List[str]:
                 lines.append(f"  {pline}")
             lines.append("  ```")
 
-            status_text = "⚠️ **Completato con errore**" if is_err else "✓ **Eseguito con successo**"
+            status_text = (
+                "⚠️ **Completato con errore**"
+                if is_err
+                else "✓ **Eseguito con successo**"
+            )
             lines.append(f"- **Esito:** {status_text}")
 
             if result is not None:
@@ -407,20 +433,32 @@ def format_score_section(res: Dict[str, Any]) -> List[str]:
     summary = res.get("eval_summary", f"{score}/100")
     criteria = res.get("eval_criteria", [])
 
-    badge_icon = "🟢" if score >= 90 else ("🟡" if score >= 75 else ("🟠" if score >= 50 else "🔴"))
+    badge_icon = (
+        "🟢"
+        if score >= 90
+        else ("🟡" if score >= 75 else ("🟠" if score >= 50 else "🔴"))
+    )
 
-    lines.append(f"### 🎯 Valutazione Automatica & Punteggio: {badge_icon} **{score}/100** (Grado `{rating}`)")
+    lines.append(
+        f"### 🎯 Valutazione Automatica & Punteggio: {badge_icon} **{score}/100** (Grado `{rating}`)"
+    )
     lines.append("")
-    lines.append(f"> **Esito:** {'✅ Superato' if passed else '❌ Non Superato'} · **Riepilogo:** {summary}")
+    lines.append(
+        f"> **Esito:** {'✅ Superato' if passed else '❌ Non Superato'} · **Riepilogo:** {summary}"
+    )
     lines.append("")
 
     if criteria:
-        lines.append("| # | Criterio | Categoria | Punti | Dettagli Rilevati / Attesi | Esito |")
+        lines.append(
+            "| # | Criterio | Categoria | Punti | Dettagli Rilevati / Attesi | Esito |"
+        )
         lines.append("|---|---|---|:---:|---|:---:|")
         for idx, c in enumerate(criteria, start=1):
             status_icon = "✅ Superato" if c.get("passed") else "❌ Fallito"
             pts_str = f"**{c.get('points', 0)}** / {c.get('max_points', 0)}"
-            lines.append(f"| {idx} | **{c.get('name')}** | `{c.get('category')}` | {pts_str} | {c.get('details')} | {status_icon} |")
+            lines.append(
+                f"| {idx} | **{c.get('name')}** | `{c.get('category')}` | {pts_str} | {c.get('details')} | {status_icon} |"
+            )
         lines.append("")
 
     return lines
@@ -429,8 +467,16 @@ def format_score_section(res: Dict[str, Any]) -> List[str]:
 def format_single_test_markdown(res: Dict[str, Any], outputs_dir: Path) -> str:
     """Formats an individual, standalone Markdown report for a single test case."""
     now_iso = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    score_str = f" (Punteggio: {res.get('score', 0)}/100 [{res.get('rating', '')}])" if "score" in res else ""
-    status_str = f"✅ COMPLETATO{score_str}" if res.get("status") == "completed" else f"❌ FALLITO ({res.get('error')})"
+    score_str = (
+        f" (Punteggio: {res.get('score', 0)}/100 [{res.get('rating', '')}])"
+        if "score" in res
+        else ""
+    )
+    status_str = (
+        f"✅ COMPLETATO{score_str}"
+        if res.get("status") == "completed"
+        else f"❌ FALLITO ({res.get('error')})"
+    )
     session_id = res.get("session_id", "")
     asst_name = res.get("assistant", "generic_assistant")
     lines = [
@@ -446,13 +492,17 @@ def format_single_test_markdown(res: Dict[str, Any], outputs_dir: Path) -> str:
     if session_id:
         try:
             s_root = session_root(session_id)
-            lines.append(f"- **Cartella Sandbox Sessione:** [`data/sessions/{session_id}/workspace`]({s_root.resolve().as_uri()})")
+            lines.append(
+                f"- **Cartella Sandbox Sessione:** [`data/sessions/{session_id}/workspace`]({s_root.resolve().as_uri()})"
+            )
         except Exception:
             lines.append(f"- **Session ID:** `{session_id}`")
-    lines.extend([
-        f"- **Prompt Inviato:**",
-        f"  > {res.get('prompt', '')}",
-    ])
+    lines.extend(
+        [
+            f"- **Prompt Inviato:**",
+            f"  > {res.get('prompt', '')}",
+        ]
+    )
     if res.get("attachment"):
         lines.append(f"- **Allegato:** `{res['attachment']}`")
     lines.append("")
@@ -469,7 +519,9 @@ def format_single_test_markdown(res: Dict[str, Any], outputs_dir: Path) -> str:
     # Generated documents and artifacts
     files = res.get("generated_files", [])
     if files or session_id:
-        lines.extend(format_generated_files_section(files, outputs_dir, session_id=session_id))
+        lines.extend(
+            format_generated_files_section(files, outputs_dir, session_id=session_id)
+        )
         lines.append("---")
         lines.append("")
 
@@ -628,11 +680,13 @@ async def run_single_test(
         if current_reasoning_buffer:
             text = "".join(current_reasoning_buffer).strip()
             if text:
-                timeline.append({
-                    "type": "reasoning",
-                    "content": text,
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
-                })
+                timeline.append(
+                    {
+                        "type": "reasoning",
+                        "content": text,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
             current_reasoning_buffer = []
 
     try:
@@ -684,7 +738,11 @@ async def run_single_test(
             elif chunk_type == "tool_event":
                 evt_inner = chunk.get("event") or {}
                 evt_type = evt_inner.get("type")
-                tool_name = evt_inner.get("name") or evt_inner.get("tool_name") or "unknown_tool"
+                tool_name = (
+                    evt_inner.get("name")
+                    or evt_inner.get("tool_name")
+                    or "unknown_tool"
+                )
 
                 if evt_type == "tool_start":
                     flush_reasoning()
@@ -695,11 +753,13 @@ async def run_single_test(
                         pre_tool_thought = "".join(final_output_chunks).strip()
                         if pre_tool_thought:
                             reasoning_chunks.append(f"\n{pre_tool_thought}\n")
-                            timeline.append({
-                                "type": "reasoning",
-                                "content": pre_tool_thought,
-                                "timestamp": datetime.now(timezone.utc).isoformat(),
-                            })
+                            timeline.append(
+                                {
+                                    "type": "reasoning",
+                                    "content": pre_tool_thought,
+                                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                                }
+                            )
                             await emit(
                                 "reasoning",
                                 "Ragionamento",
@@ -729,7 +789,9 @@ async def run_single_test(
                             elif "query" in tool_input:
                                 param_summary = f" -> '{str(tool_input['query'])[:60]}'"
                             elif "command" in tool_input:
-                                param_summary = f" -> '{str(tool_input['command'])[:60]}'"
+                                param_summary = (
+                                    f" -> '{str(tool_input['command'])[:60]}'"
+                                )
                             elif "title" in tool_input:
                                 param_summary = f" -> '{str(tool_input['title'])[:60]}'"
                         print(f"  🛠️  Tool: {tool_name}{param_summary}", flush=True)
@@ -743,7 +805,11 @@ async def run_single_test(
 
                 elif evt_type in ("tool_end", "tool_error"):
                     is_err = evt_type == "tool_error" or evt_inner.get("error", False)
-                    result_raw = evt_inner.get("result") if "result" in evt_inner else evt_inner.get("error")
+                    result_raw = (
+                        evt_inner.get("result")
+                        if "result" in evt_inner
+                        else evt_inner.get("error")
+                    )
                     result_preview = str(result_raw or "")[:200]
 
                     if current_tool_call:
@@ -768,13 +834,18 @@ async def run_single_test(
 
                     if print_cli:
                         if is_err:
-                            print(f"     ⚠️ Tool completato con errore: {result_preview[:80]}", flush=True)
+                            print(
+                                f"     ⚠️ Tool completato con errore: {result_preview[:80]}",
+                                flush=True,
+                            )
                         else:
                             print(f"     ✓ Tool eseguito con successo", flush=True)
 
                     await emit(
                         "tool_result",
-                        f"Completato tool: {tool_name}" if not is_err else f"Errore tool: {tool_name}",
+                        f"Completato tool: {tool_name}"
+                        if not is_err
+                        else f"Errore tool: {tool_name}",
                         tool=tool_name,
                         error=is_err,
                         preview=result_preview,
@@ -783,7 +854,9 @@ async def run_single_test(
 
             # Errors
             elif chunk_type in ("error", "llm_error", "context_length_error"):
-                error_msg = str(chunk.get("content") or chunk.get("error") or "Unknown error")
+                error_msg = str(
+                    chunk.get("content") or chunk.get("error") or "Unknown error"
+                )
                 if print_cli:
                     print(f"  ❌ Errore agente: {error_msg}", flush=True)
                 await emit("test_error", f"Errore: {error_msg}", error=error_msg)
@@ -860,9 +933,15 @@ async def run_single_test(
     if print_cli:
         score_badge = f"🎯 Punteggio: {test_result.get('score', 0)}/100 [{test_result.get('rating', 'F')}] ({test_result.get('eval_summary', '')})"
         if status == "completed" and test_result.get("passed", True):
-            print(f"  ✅ COMPLETATO in {elapsed}s (Tool: {len(tool_calls)}) · {score_badge}\n", flush=True)
+            print(
+                f"  ✅ COMPLETATO in {elapsed}s (Tool: {len(tool_calls)}) · {score_badge}\n",
+                flush=True,
+            )
         else:
-            print(f"  ❌ {status.upper()} in {elapsed}s (Tool: {len(tool_calls)}) · {score_badge}\n", flush=True)
+            print(
+                f"  ❌ {status.upper()} in {elapsed}s (Tool: {len(tool_calls)}) · {score_badge}\n",
+                flush=True,
+            )
 
     # Save standalone Markdown report for this test immediately (fixed name per test)
     outputs_dir_res = Path(outputs_dir).resolve()
@@ -878,9 +957,13 @@ async def run_single_test(
             test_result["single_report_path"] = str(single_report_path)
             test_result["single_report_filename"] = single_report_filename
             if print_cli:
-                print(f"  📄 Report salvato: outputs/{single_report_filename}", flush=True)
+                print(
+                    f"  📄 Report salvato: outputs/{single_report_filename}", flush=True
+                )
         except Exception as ex:
-            logger.warning("Could not write single test report %s: %s", single_report_path, ex)
+            logger.warning(
+                "Could not write single test report %s: %s", single_report_path, ex
+            )
 
     await emit(
         "test_complete",
@@ -948,7 +1031,11 @@ def format_markdown_report(
         files = res.get("generated_files", [])
         session_id = res.get("session_id", "")
         if files or session_id:
-            lines.extend(format_generated_files_section(files, outputs_dir, session_id=session_id))
+            lines.extend(
+                format_generated_files_section(
+                    files, outputs_dir, session_id=session_id
+                )
+            )
             lines.append("")
 
         # Chronological timeline if available
@@ -962,7 +1049,9 @@ def format_markdown_report(
             if reasoning:
                 lines.append(reasoning)
             else:
-                lines.append("_Nessun log di reasoning separato catturato dal provider o non applicabile._")
+                lines.append(
+                    "_Nessun log di reasoning separato catturato dal provider o non applicabile._"
+                )
             lines.append("")
 
             lines.append("### 🛠️ Tool Calls")
@@ -973,7 +1062,9 @@ def format_markdown_report(
                     lines.append("- **Parametri:**")
                     params = tc.get("parameters") or {}
                     try:
-                        formatted_params = json.dumps(params, indent=2, ensure_ascii=False)
+                        formatted_params = json.dumps(
+                            params, indent=2, ensure_ascii=False
+                        )
                     except Exception:
                         formatted_params = str(params)
                     lines.append("  ```json")
@@ -1099,7 +1190,10 @@ async def run_smoke_tests(
             # Incrementally update suite report on disk immediately after each test finishes
             flush_suite_report()
             if is_cli:
-                print(f"  💾 Report suite aggiornato: outputs/{report_filename}\n", flush=True)
+                print(
+                    f"  💾 Report suite aggiornato: outputs/{report_filename}\n",
+                    flush=True,
+                )
 
     finally:
         report_content = flush_suite_report()
@@ -1240,7 +1334,10 @@ def main():
             )
         )
     except KeyboardInterrupt:
-        print("\n\n⚠️  Esecuzione interrotta dall'utente (Ctrl+C). Salvataggio report parziale completato.", flush=True)
+        print(
+            "\n\n⚠️  Esecuzione interrotta dall'utente (Ctrl+C). Salvataggio report parziale completato.",
+            flush=True,
+        )
         return
 
     total_elapsed = round(time.monotonic() - total_start, 2)
@@ -1251,11 +1348,19 @@ def main():
     print("=" * 60, flush=True)
     for r in results:
         status_sym = "✅" if r.get("status") == "completed" else "❌"
-        status_text = "OK" if r.get("status") == "completed" else f"FALLITO ({r.get('error')})"
+        status_text = (
+            "OK" if r.get("status") == "completed" else f"FALLITO ({r.get('error')})"
+        )
         asst_label = f"[{r.get('assistant', 'generic_assistant')}]"
-        print(f" {status_sym} [{r['id']}] {r['name']:<32} {asst_label} {r['duration_sec']}s  (Tools: {len(r.get('tool_calls', []))}) -> {status_text}", flush=True)
+        print(
+            f" {status_sym} [{r['id']}] {r['name']:<32} {asst_label} {r['duration_sec']}s  (Tools: {len(r.get('tool_calls', []))}) -> {status_text}",
+            flush=True,
+        )
     print("-" * 60, flush=True)
-    print(f" 🎉 Esito finale: {passed_count}/{len(results)} superati in {total_elapsed}s", flush=True)
+    print(
+        f" 🎉 Esito finale: {passed_count}/{len(results)} superati in {total_elapsed}s",
+        flush=True,
+    )
     for r in results:
         rep_name = r.get("single_report_filename") or f"report_{r['id']}.md"
         print(f" 📄 Report Markdown: outputs/{rep_name}", flush=True)
@@ -1264,4 +1369,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
