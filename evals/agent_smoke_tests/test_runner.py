@@ -110,6 +110,7 @@ async def ensure_db_ready():
 SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
+<<<<<<< HEAD
 def _is_safe_path(target: Path | str, allowed_bases: List[Path | str]) -> bool:
     """Verifies that a resolved target path resides strictly within one of the allowed base directories."""
     try:
@@ -120,6 +121,19 @@ def _is_safe_path(target: Path | str, allowed_bases: List[Path | str]) -> bool:
             b_str = str(b_res)
             if os.path.commonpath([b_str, t_str]) == b_str:
                 return True
+=======
+def _is_safe_path(target: Path, allowed_bases: List[Path]) -> bool:
+    """Verifies that a target path stays within one of the trusted base directories."""
+    try:
+        t_res = target.resolve(strict=False)
+        for base in allowed_bases:
+            try:
+                b_res = base.resolve(strict=True)
+                t_res.relative_to(b_res)
+                return True
+            except (FileNotFoundError, ValueError):
+                continue
+>>>>>>> 9611ed47814bd6d8c26d37cff557746678237604
     except Exception:
         return False
     return False
@@ -1092,9 +1106,11 @@ def format_markdown_report(
 def _safe_report_test_id(test_id: str) -> str:
     """
     Validate test_id before using it in a filename.
-    Allows only alphanumerics, underscore, dash and dot.
+    Allows only alphanumerics, underscore, and dash.
     """
-    if not re.fullmatch(r"[A-Za-z0-9_.-]+", test_id):
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", test_id):
+        raise ValueError("Invalid test_id for report filename")
+    if test_id in {".", ".."}:
         raise ValueError("Invalid test_id for report filename")
     return test_id
 

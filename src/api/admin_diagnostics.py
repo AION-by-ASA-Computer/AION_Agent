@@ -21,6 +21,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 logger = logging.getLogger("aion.api.diagnostics")
+SAFE_REL_PATH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 
@@ -157,7 +158,13 @@ def resolve_diagnostic_file(
     clean = re.sub(r"^file:/*(app/)?", "", clean)
     clean = clean.lstrip("/")
 
-    if not clean or ".." in clean or clean.startswith(("/", "\\")):
+    if (
+        not clean
+        or not SAFE_REL_PATH_RE.fullmatch(clean)
+        or ".." in clean
+        or clean.startswith(("/", "\\"))
+        or "//" in clean
+    ):
         return None
 
     d_root = data_root().resolve()
@@ -167,9 +174,15 @@ def resolve_diagnostic_file(
 
     def _check(candidate: Path) -> Optional[Path]:
         for base in allowed_bases:
+<<<<<<< HEAD
             res = _resolve_file_within(base, candidate)
             if res is not None:
                 return res
+=======
+            resolved = _resolve_file_within(base, candidate)
+            if resolved:
+                return resolved
+>>>>>>> 9611ed47814bd6d8c26d37cff557746678237604
         return None
 
     # 1. Path strutturato con prefisso sessions/ o data/sessions/
@@ -255,11 +268,12 @@ async def get_diagnostic_file(
     allowed_bases = [sessions_dir, outputs_dir]
 
     target = resolve_diagnostic_file(path, session_id=session_id)
-    if not target or not target.is_file() or not target.exists():
+    if not target:
         raise HTTPException(
             status_code=404, detail="File deliverable non trovato o accesso negato"
         )
 
+<<<<<<< HEAD
     try:
         target_resolved = target.resolve()
     except Exception:
@@ -267,6 +281,33 @@ async def get_diagnostic_file(
 
     if not _is_safe_path(target_resolved, allowed_bases):
         raise HTTPException(status_code=403, detail="Accesso al path non consentito")
+=======
+    from src.session_workspace import data_root
+
+    sessions_dir = (data_root().resolve() / "sessions").resolve()
+    outputs_dir = OUTPUTS_DIR.resolve()
+    try:
+        target = target.resolve(strict=True)
+    except Exception:
+        raise HTTPException(
+            status_code=404, detail="File deliverable non trovato o accesso negato"
+        )
+
+    if not any(_is_safe_path(target, [base]) for base in [sessions_dir, outputs_dir]) or not target.is_file():
+        raise HTTPException(
+            status_code=404, detail="File deliverable non trovato o accesso negato"
+        )
+
+    from src.session_workspace import data_root
+
+    target_resolved = target.resolve()
+    sessions_dir = (data_root().resolve() / "sessions").resolve()
+    outputs_dir = OUTPUTS_DIR.resolve()
+    if not _is_safe_path(target_resolved, [sessions_dir, outputs_dir]):
+        raise HTTPException(
+            status_code=400, detail="Percorso file non autorizzato"
+        )
+>>>>>>> 9611ed47814bd6d8c26d37cff557746678237604
 
     mime, _ = mimetypes.guess_type(target_resolved.name)
     return FileResponse(
