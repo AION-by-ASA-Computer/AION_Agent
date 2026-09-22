@@ -119,7 +119,12 @@ def resolve_diagnostic_file(
     # 1. Path strutturato con prefisso sessions/
     if clean.startswith("data/sessions/") or clean.startswith("sessions/"):
         rel = clean.split("sessions/", 1)[1]
-        target = (sessions_dir / rel).resolve()
+        base_sessions = sessions_dir.resolve()
+        target = (base_sessions / rel).resolve()
+        try:
+            target.relative_to(base_sessions)
+        except ValueError:
+            return None
         if target.is_file() and target.exists():
             return target
 
