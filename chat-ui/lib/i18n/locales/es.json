@@ -340,6 +340,17 @@
       "select": "Seleccionar modelo",
       "switch": "Cambiar modelo"
     },
+    "capabilities": {
+      "label": "Herramientas y Habilidades",
+      "tools_used": "Herramientas usadas",
+      "skills": "Habilidades activas",
+      "no_tools": "Aún no se han usado herramientas en este chat.",
+      "no_skills": "Sin habilidades configuradas.",
+      "realtime_hint": "Actualizado en vivo durante la conversación.",
+      "skill_loaded": "Cargada",
+      "skill_failed": "No encontrada",
+      "skill_pending": "Pendiente"
+    },
     "edit": {
       "placeholder": "Editar mensaje...",
       "save_send": "Guardar y Enviar",

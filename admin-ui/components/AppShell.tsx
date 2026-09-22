@@ -115,7 +115,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             <LogOut className="w-4 h-4" />
             Logout
           </button>
-          <div className="pt-2 text-md text-gray-600 px-4">v1.0.0 Production Ready</div>
+          <div className="pt-2 text-md text-gray-600 px-4">
+            {process.env.NEXT_PUBLIC_AION_VERSION ? `v${process.env.NEXT_PUBLIC_AION_VERSION}` : "VERSION_NOT_FOUND"} Production Ready
+          </div>
         </div>
       </aside>
       <main className="flex-1 overflow-auto bg-[#0a0a0a]">
