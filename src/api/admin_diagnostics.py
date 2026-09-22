@@ -47,11 +47,9 @@ def _is_safe_path(target: Path | str, allowed_bases: List[Path | str]) -> bool:
     """Verifies that a resolved target path resides strictly within one of the allowed base directories."""
     try:
         t_res = Path(target).resolve()
-        t_str = str(t_res)
         for base in allowed_bases:
             b_res = Path(base).resolve()
-            b_str = str(b_res)
-            if os.path.commonpath([b_str, t_str]) == b_str:
+            if t_res.is_relative_to(b_res):
                 return True
     except Exception:
         return False
@@ -76,21 +74,26 @@ async def list_reports() -> List[Dict[str, Any]]:
     """Lists all generated smoke test markdown reports."""
     OUTPUTS_DIR.mkdir(parents=True, exist_ok=True)
     reports = []
+    outputs_dir_resolved = OUTPUTS_DIR.resolve()
     for p in sorted(
         OUTPUTS_DIR.glob("report_*.md"), key=lambda x: x.stat().st_mtime, reverse=True
     ):
-        if not _is_safe_path(p, [OUTPUTS_DIR]):
+        try:
+            p_resolved = p.resolve(strict=True)
+            if not p_resolved.is_relative_to(outputs_dir_resolved):
+                continue
+            st = p_resolved.stat()
+            reports.append(
+                {
+                    "filename": p_resolved.name,
+                    "size_bytes": st.st_size,
+                    "modified_at": datetime.fromtimestamp(
+                        st.st_mtime, tz=timezone.utc
+                    ).isoformat(),
+                }
+            )
+        except Exception:
             continue
-        st = p.stat()
-        reports.append(
-            {
-                "filename": p.name,
-                "size_bytes": st.st_size,
-                "modified_at": datetime.fromtimestamp(
-                    st.st_mtime, tz=timezone.utc
-                ).isoformat(),
-            }
-        )
     return reports
 
 
@@ -100,8 +103,14 @@ async def get_report_content(filename: str) -> Dict[str, Any]:
     if not SAFE_REPORT_NAME_RE.match(filename):
         raise HTTPException(status_code=400, detail="Invalid report filename format")
 
-    target = (OUTPUTS_DIR / filename).resolve()
-    if not _is_safe_path(target, [OUTPUTS_DIR]):
+    safe_name = Path(filename).name
+    if safe_name != filename:
+        raise HTTPException(status_code=400, detail="Invalid report filename format")
+
+    outputs_dir_resolved = OUTPUTS_DIR.resolve()
+    target = (outputs_dir_resolved / safe_name).resolve()
+
+    if not target.is_relative_to(outputs_dir_resolved):
         raise HTTPException(status_code=400, detail="Path traversal detected")
 
     if not target.exists() or not target.is_file():
@@ -111,7 +120,7 @@ async def get_report_content(filename: str) -> Dict[str, Any]:
         content = target.read_text(encoding="utf-8")
         st = target.stat()
         return {
-            "filename": filename,
+            "filename": safe_name,
             "content": content,
             "size_bytes": st.st_size,
             "modified_at": datetime.fromtimestamp(
@@ -126,13 +135,10 @@ def _resolve_file_within(base_dir: Path | str, candidate: Path | str) -> Optiona
     """Resolve candidate and ensure it stays within base_dir and is an existing file."""
     try:
         base_resolved = Path(base_dir).resolve()
-        candidate_resolved = Path(candidate).resolve()
-        b_str = str(base_resolved)
-        c_str = str(candidate_resolved)
+        candidate_resolved = Path(candidate).resolve(strict=True)
         if (
-            os.path.commonpath([b_str, c_str]) == b_str
+            candidate_resolved.is_relative_to(base_resolved)
             and candidate_resolved.is_file()
-            and candidate_resolved.exists()
         ):
             return candidate_resolved
     except Exception:
@@ -259,7 +265,6 @@ async def get_diagnostic_file(
     d_root = data_root().resolve()
     sessions_dir = (d_root / "sessions").resolve()
     outputs_dir = OUTPUTS_DIR.resolve()
-    allowed_bases = [sessions_dir, outputs_dir]
 
     target = resolve_diagnostic_file(path, session_id=session_id)
     if not target:
@@ -268,16 +273,22 @@ async def get_diagnostic_file(
         )
 
     try:
-        target_resolved = target.resolve()
+        target_resolved = target.resolve(strict=True)
     except Exception:
-        raise HTTPException(status_code=400, detail="Path non valido")
+        raise HTTPException(status_code=404, detail="File non trovato")
 
-    if not _is_safe_path(target_resolved, allowed_bases):
+    if not (
+        target_resolved.is_relative_to(sessions_dir)
+        or target_resolved.is_relative_to(outputs_dir)
+    ):
         raise HTTPException(status_code=403, detail="Accesso al path non consentito")
+
+    if not target_resolved.is_file():
+        raise HTTPException(status_code=404, detail="File deliverable non trovato")
 
     mime, _ = mimetypes.guess_type(target_resolved.name)
     return FileResponse(
-        target_resolved,
+        str(target_resolved),
         filename=target_resolved.name,
         media_type=mime or "application/octet-stream",
         content_disposition_type="attachment" if download else "inline",

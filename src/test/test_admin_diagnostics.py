@@ -67,7 +67,7 @@ def test_markdown_report_formatting():
 
     report = format_markdown_report(fake_results, execution_mode="sequential")
     assert "## Test test_1_excel: Analisi Dati Excel" in report
-    assert "**Assistente:** Generic Assistant" in report
+    assert "**Profilo / Assistente:** `generic_assistant`" in report
     assert "**Tempo di esecuzione:** 12.5s" in report
     assert "### 🧠 Reasoning" in report
     assert "Ragionamento sul dataset..." in report

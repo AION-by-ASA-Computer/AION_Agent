@@ -114,11 +114,9 @@ def _is_safe_path(target: Path | str, allowed_bases: List[Path | str]) -> bool:
     """Verifies that a resolved target path resides strictly within one of the allowed base directories."""
     try:
         t_res = Path(target).resolve()
-        t_str = str(t_res)
         for base in allowed_bases:
             b_res = Path(base).resolve()
-            b_str = str(b_res)
-            if os.path.commonpath([b_str, t_str]) == b_str:
+            if t_res.is_relative_to(b_res):
                 return True
     except Exception:
         return False
@@ -149,14 +147,12 @@ def resolve_asset_path(rel_path: str) -> Optional[Path]:
         candidates.append(ASSETS_DIR / "Tesla_Owner_Manual.pdf")
         candidates.append(ASSETS_DIR / "manuale_tesla.pdf")
 
-    allowed_bases = [REPO_ROOT, SCRIPT_DIR, ASSETS_DIR]
+    allowed_bases = [REPO_ROOT.resolve(), SCRIPT_DIR.resolve(), ASSETS_DIR.resolve()]
     for candidate in candidates:
         try:
-            cand_res = candidate.resolve()
-            if (
-                cand_res.exists()
-                and cand_res.is_file()
-                and _is_safe_path(cand_res, allowed_bases)
+            cand_res = candidate.resolve(strict=True)
+            if cand_res.is_file() and any(
+                cand_res.is_relative_to(b) for b in allowed_bases
             ):
                 return cand_res
         except Exception:
@@ -951,7 +947,7 @@ async def run_single_test(
     single_report_path = (outputs_dir_res / single_report_filename).resolve()
     single_report_content = format_single_test_markdown(test_result, outputs_dir_res)
 
-    if _is_safe_path(single_report_path, [outputs_dir_res]):
+    if single_report_path.is_relative_to(outputs_dir_res):
         try:
             with open(single_report_path, "w", encoding="utf-8") as srf:
                 srf.write(single_report_content)
@@ -1144,7 +1140,7 @@ async def run_smoke_tests(
         report_filename = "report_suite_summary.md"
     report_path = (outputs_dir_res / report_filename).resolve()
 
-    if not _is_safe_path(report_path, [outputs_dir_res]):
+    if not report_path.is_relative_to(outputs_dir_res):
         raise ValueError("Report path traversal blocked")
 
     target_profile_label = profile or "Generic Assistant (da config)"
@@ -1163,7 +1159,7 @@ async def run_smoke_tests(
     results: List[Dict[str, Any]] = []
 
     def flush_suite_report():
-        if results and _is_safe_path(report_path, [outputs_dir_res]):
+        if results and report_path.is_relative_to(outputs_dir_res):
             content = format_markdown_report(
                 results,
                 execution_mode="sequential",
