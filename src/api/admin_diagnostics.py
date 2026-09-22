@@ -162,12 +162,10 @@ def resolve_diagnostic_file(
     allowed_bases = [sessions_dir, outputs_dir]
 
     def _check(candidate: Path) -> Optional[Path]:
-        try:
-            res = candidate.resolve()
-            if res.is_file() and res.exists() and _is_safe_path(res, allowed_bases):
-                return res
-        except Exception:
-            pass
+        for base in allowed_bases:
+            resolved = _resolve_file_within(base, candidate)
+            if resolved:
+                return resolved
         return None
 
     # 1. Path strutturato con prefisso sessions/ o data/sessions/
