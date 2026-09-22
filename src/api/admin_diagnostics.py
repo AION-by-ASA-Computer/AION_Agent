@@ -20,6 +20,7 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 logger = logging.getLogger("aion.api.diagnostics")
+SAFE_REL_PATH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 
@@ -153,7 +154,13 @@ def resolve_diagnostic_file(
     clean = re.sub(r"^file:/*(app/)?", "", clean)
     clean = clean.lstrip("/")
 
-    if not clean or ".." in clean or clean.startswith(("/", "\\")):
+    if (
+        not clean
+        or not SAFE_REL_PATH_RE.fullmatch(clean)
+        or ".." in clean
+        or clean.startswith(("/", "\\"))
+        or "//" in clean
+    ):
         return None
 
     d_root = data_root().resolve()
