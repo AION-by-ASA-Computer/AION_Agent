@@ -5,6 +5,41 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.5.2...v1.6.0) (2026-09-22)
+
+
+### Features
+
+* add CapabilitiesChip component to display used tools and active skills with localization ([a20e111](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/a20e111373af2d0fc9f3c1a4437c874f19356554))
+* add LLM endpoint probing module, tests, admin UI pages, and set… ([8dbbf0a](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/8dbbf0ab596dd67f87b6c4dde8f86bb083f895fe))
+* add LLM endpoint probing module, tests, admin UI pages, and setup script ([6267a82](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/6267a821561c2cb679047d143df1325ec4ba9c2d))
+* add Model Context Protocol integration ([887eec8](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/887eec82e7d872131fb5a8fec7984dca9545f13c))
+* add skill loading state tracking and UI indicators in capabilities chip ([3f04beb](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/3f04beb9c9a08d9ae4253a3c118be2580a465c1d))
+* **chat-ui:** enhance runtime settings and tunings panel integration ([5d90248](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/5d9024818c45d330354073ec602aabfb5b792c53))
+* **chat-ui:** keep intermediate process work in the compact dropdown ([696ddf9](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/696ddf9c6cceae8b1b4e58936beefccfc0d3bb5d))
+* **ci:** add dry-run setup and upgrade scripts to CI workflow ([557d635](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/557d635042092f6bb6e962ca9feaf193679d9dff))
+* compact tool call and reasoning ([008bf25](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/008bf25bdfa3f825120460ba51af84c6e2bb1c0a))
+* enhance CompactTurnActivity with activity icons and improved st… ([9e47256](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/9e472561a499bcf4079e839c900a8b67a6baba3b))
+* enhance CompactTurnActivity with activity icons and improved step tracking ([ea8b6e4](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/ea8b6e4476c513db7e305eb726417038a40db40b))
+* implement comprehensive UI/UX for agent chat, including timeline visualization, custom prompt instructions, and multi-language support. ([778264d](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/778264d84099e6e137ad1990a22cb3a355177bcd))
+* implement Model Context Protocol (MCP) integration, connector management, marketplace clients, and UI components ([2e28f25](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/2e28f25b0c0993744109625963ec47ed5f289437))
+* mcp refactor ([7b90b38](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7b90b38dbb85dfe3e4ce07ea6cc899a9b77c8023))
+* render dynamic version from environment variable in AppShell ([0123c63](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/0123c63d16c77d65433219a607f5034d6f315418))
+
+
+### Bug Fixes
+
+* **chat-ui:** streamline compact web tool streaming sources bar and web fetch reducer ([a5bdf10](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/a5bdf101f1fc0c319a95d2327a54f1ca71393190))
+* fix plane and email MCP ([d17b5da](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/d17b5dad7de3aa305d1d21b065eb4374270fa6df))
+* fix plane and email MCP ([d0ad52b](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/d0ad52b7001eb9a0c56a9fe47db9d92f7e1168c7))
+* **security:** resolve CodeQL incomplete URL substring sanitization alerts ([fc047c9](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/fc047c96162507f9b77e403b0208458cad61034f))
+* view tools and skills loaded in chat UI ([e6ae62c](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/e6ae62c4c70b4e787b695a5d2f50312f1ad97e41))
+
+
+### Documentation
+
+* add MCP integration documentation ([eaac14e](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/eaac14e4bbe77ec29b5ad15aeae129932d7644aa))
+
 ## [1.5.2](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.5.1...v1.5.2) (2026-09-10)
 
 
