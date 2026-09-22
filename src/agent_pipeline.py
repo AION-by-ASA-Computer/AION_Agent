@@ -301,6 +301,21 @@ def _handle_haystack_stream_chunk(chunk: Any, *, from_async: bool) -> None:
             ctx, {"type": "reasoning", "reasoning": reasoning}, from_async=from_async
         )
 
+    aion_event_type = meta.get("aion_event_type")
+    if aion_event_type:
+        sid = ctx.get("session_id")
+        if sid:
+            StreamSync.mark_busy(sid)
+        _emit_agent_stream_event(
+            ctx, 
+            {
+                "type": "aion_event", 
+                "event_type": aion_event_type, 
+                "data": meta.get("data")
+            }, 
+            from_async=from_async
+        )
+
     if chunk.content is not None and chunk.content != "":
         sid = ctx.get("session_id")
         if sid:

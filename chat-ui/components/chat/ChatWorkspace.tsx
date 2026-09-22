@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star, Shield } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star, Shield, ShieldAlert } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -1122,6 +1122,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [piiReviewEnabled, setPiiReviewEnabled] = useState(false);
+  const [piiReviewModal, setPiiReviewModal] = useState<{
+    isOpen: boolean;
+    censoredPrompt: string;
+    token?: string;
+  } | null>(null);
   const [webRestrictHosts, setWebRestrictHosts] = useState<string[]>([]);
   const [webRestrictModalOpen, setWebRestrictModalOpen] = useState(false);
   const [webRestrictDraft, setWebRestrictDraft] = useState<string[]>([]);
@@ -2097,6 +2102,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               updatePlanDockStreaming("streaming-plan", md, { title: "Execution Plan", type: "plan" });
             }
           }
+          if (chunk.type === "aion_event" && chunk.event_type === "pii_review") {
+            const data = chunk.data as Record<string, unknown> | undefined;
+            const censored = (data?.censored_prompt as string) || "";
+            const token = data?.pii_review_token as string | undefined;
+            setPiiReviewModal({ isOpen: true, censoredPrompt: censored, token });
+            // Fermiamo il processing dello stream, aspettiamo l'utente
+            return;
+          }
+
           if (chunk.type === "orchestration_plan_pending") {
             openPlanDockFromChunk(chunk as PlanPendingChunk);
           }
@@ -5122,6 +5136,63 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 </li>
               ))}
             </ul>
+          </div>
+        </div>
+      )}
+      {piiReviewModal?.isOpen && (
+        <div
+          className="fixed inset-0 z-[200] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm transition-all"
+          role="presentation"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-lg rounded-2xl border border-rose-500/30 bg-card p-6 shadow-2xl backdrop-blur-xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 border-b border-border/50 pb-4">
+              <div className="flex size-10 items-center justify-center rounded-full bg-rose-500/10 text-rose-500">
+                <ShieldAlert size={20} />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold text-rose-600 dark:text-rose-400">
+                  Revisione Sicurezza (PII)
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Il tuo messaggio conteneva dati sensibili. Puoi modificarlo prima di procedere.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-4">
+              <textarea
+                className="w-full min-h-[120px] p-3 text-sm bg-background border border-border/50 rounded-lg focus-ring text-foreground"
+                value={piiReviewModal.censoredPrompt}
+                onChange={(e) =>
+                  setPiiReviewModal({ ...piiReviewModal, censoredPrompt: e.target.value })
+                }
+              />
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setPiiReviewModal(null)}
+                  className="px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted rounded-lg transition-colors"
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handlePiiAction("confirm", piiReviewModal.censoredPrompt, piiReviewModal.token, aid);
+                    setPiiReviewModal(null);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-white bg-rose-600 hover:bg-rose-500 rounded-lg transition-colors"
+                >
+                  <Check size={16} />
+                  Conferma ed Invia
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

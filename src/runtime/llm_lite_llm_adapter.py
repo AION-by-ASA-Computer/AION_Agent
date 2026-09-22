@@ -44,6 +44,18 @@ try:
                 stream_chunk.meta["reasoning"] = reasoning
                 stream_chunk.meta["reasoning_content"] = reasoning
 
+        # AION Custom Events Support
+        aion_event_type = getattr(chunk, "aion_event_type", None)
+        if not aion_event_type and hasattr(chunk, "model_extra") and chunk.model_extra:
+            aion_event_type = chunk.model_extra.get("aion_event_type")
+        if aion_event_type:
+            if stream_chunk.meta is None:
+                stream_chunk.meta = {}
+            stream_chunk.meta["aion_event_type"] = aion_event_type
+            stream_chunk.meta["data"] = getattr(chunk, "data", None)
+            if not stream_chunk.meta["data"] and hasattr(chunk, "model_extra") and chunk.model_extra:
+                stream_chunk.meta["data"] = chunk.model_extra.get("data")
+
         return stream_chunk
 
     litellm_chat_mod._convert_litellm_chunk_to_streaming_chunk = (

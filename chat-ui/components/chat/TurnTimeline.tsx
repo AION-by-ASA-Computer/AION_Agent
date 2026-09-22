@@ -15,7 +15,6 @@ import type { ToolsViewMode } from "@/components/chat/WebResearchViews";
 import { AssistantToolStepBlock } from "@/components/chat/WebResearchViews";
 import { CompactTurnActivity } from "@/components/chat/CompactTurnActivity";
 import { CodeArtifactBlock } from "@/components/chat/CodeArtifactBlock";
-import { PiiReviewArtifactBlock } from "@/components/chat/PiiReviewArtifactBlock";
 import { ReasoningDisclosure } from "@/components/chat/ReasoningDisclosure";
 import { ShimmerText, AgentWorkingShimmer } from "@/components/chat/ShimmerText";
 import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
@@ -40,7 +39,6 @@ type Props = {
   : never;
   formatTextWithCitations?: (text: string, messageId?: string) => string;
   messageId?: string;
-  onPiiAction?: (action: "confirm" | "reject", finalPrompt?: string, token?: string, assistantMessageId?: string) => void;
 };
 
 export function TurnTimeline({
@@ -258,16 +256,7 @@ export function TurnTimeline({
           );
         }
         if (seg.kind === "artifact") {
-          if (seg.artType === "pii_review") {
-            return (
-              <PiiReviewArtifactBlock
-                key={seg.id}
-                content={seg.buffer}
-                onAction={onPiiAction}
-                assistantMessageId={messageId}
-              />
-            );
-          }
+
           const planCheck = isPlanArtifact
             ? isPlanArtifact(
               { identifier: seg.id, type: seg.artType, title: seg.title },

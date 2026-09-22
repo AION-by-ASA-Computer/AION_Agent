@@ -63,6 +63,7 @@ export type ChatChunk =
   }
   | { type: "orchestration_task_status";[k: string]: unknown }
   | { type: "presentation_preview"; relative_path?: string; title?: string; pdf_relative_path?: string }
+  | { type: "aion_event"; event_type: string; data?: Record<string, unknown> }
   | { type: "final"; text?: string }
   | {
       type: "turn_outcome";

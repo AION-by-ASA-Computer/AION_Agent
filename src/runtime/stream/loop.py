@@ -142,7 +142,6 @@ class StreamLoop:
         self.artifact_parse_hits: int = 0
         self.artifact_salvage: int = 0
         self.plan_intercepts: int = 0
-        self.pii_review_intercepts: int = 0
         self.pii_replacements_intercepts: int = 0
         self.pii_replacements: list = []
         self.plan_finalize_source: Optional[str] = None
@@ -334,6 +333,11 @@ class StreamLoop:
                     yield self._track_sse(chunk)
                     continue
 
+                # --- AION Custom Events ---
+                if ctype == "aion_event":
+                    yield self._track_sse(chunk)
+                    continue
+
                 # --- Tool events ---
                 if ctype == "tool_event":
                     should_break = False
@@ -373,8 +377,6 @@ class StreamLoop:
                 art_type = (pe.artifact_type or "").strip().lower()
                 if art_type == "plan":
                     self.plan_intercepts += 1
-                elif art_type == "pii_review":
-                    self.pii_review_intercepts += 1
                 elif art_type == "pii_replacements":
                     self.last_progress_at = self.loop.time()
                 
