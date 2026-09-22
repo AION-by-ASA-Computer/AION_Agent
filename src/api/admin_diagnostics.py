@@ -251,7 +251,23 @@ async def get_diagnostic_file(
         raise HTTPException(status_code=400, detail="Parametro session_id non valido")
 
     target = resolve_diagnostic_file(path, session_id=session_id)
-    if not target or not target.is_file() or not target.exists():
+    if not target:
+        raise HTTPException(
+            status_code=404, detail="File deliverable non trovato o accesso negato"
+        )
+
+    from src.session_workspace import data_root
+
+    sessions_dir = (data_root().resolve() / "sessions").resolve()
+    outputs_dir = OUTPUTS_DIR.resolve()
+    try:
+        target = target.resolve(strict=True)
+    except Exception:
+        raise HTTPException(
+            status_code=404, detail="File deliverable non trovato o accesso negato"
+        )
+
+    if not any(_is_safe_path(target, [base]) for base in [sessions_dir, outputs_dir]) or not target.is_file():
         raise HTTPException(
             status_code=404, detail="File deliverable non trovato o accesso negato"
         )
