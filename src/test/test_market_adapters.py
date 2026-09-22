@@ -1,7 +1,13 @@
 from src.marketplaces.market_adapters import (
+    is_github_host_url,
     npx_invoke_args,
     parse_github_owner_repo,
 )
+
+
+def test_is_github_host_url_rejects_substring_bypass():
+    assert is_github_host_url("https://github.com/owner/repo") is True
+    assert is_github_host_url("https://evil.com/github.com/repo") is False
 
 
 def test_parse_github_owner_repo_from_url():
