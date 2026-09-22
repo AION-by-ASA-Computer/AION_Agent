@@ -134,8 +134,17 @@ async def get_report_content(filename: str) -> Dict[str, Any]:
 def _resolve_file_within(base_dir: Path | str, candidate: Path | str) -> Optional[Path]:
     """Resolve candidate and ensure it stays within base_dir and is an existing file."""
     try:
-        base_resolved = Path(base_dir).resolve()
-        candidate_resolved = Path(candidate).resolve(strict=True)
+        base_resolved = Path(base_dir).resolve(strict=True)
+        candidate_path = Path(candidate)
+
+        # Resolve untrusted paths relative to trusted base to avoid direct filesystem
+        # resolution of attacker-controlled absolute/relative expressions.
+        if candidate_path.is_absolute():
+            combined = candidate_path
+        else:
+            combined = base_resolved / candidate_path
+
+        candidate_resolved = combined.resolve(strict=True)
         if (
             candidate_resolved.is_relative_to(base_resolved)
             and candidate_resolved.is_file()
@@ -272,24 +281,30 @@ async def get_diagnostic_file(
             status_code=404, detail="File deliverable non trovato o accesso negato"
         )
 
+    target_path = Path(target)
+    if target_path.is_absolute():
+        combined = target_path
+    else:
+        combined = outputs_dir / target_path
+
     try:
-        target_resolved = target.resolve(strict=True)
+        safe_target = combined.resolve(strict=True)
     except Exception:
         raise HTTPException(status_code=404, detail="File non trovato")
 
     if not (
-        target_resolved.is_relative_to(sessions_dir)
-        or target_resolved.is_relative_to(outputs_dir)
+        safe_target.is_relative_to(sessions_dir)
+        or safe_target.is_relative_to(outputs_dir)
     ):
         raise HTTPException(status_code=403, detail="Accesso al path non consentito")
 
-    if not target_resolved.is_file():
+    if not safe_target.is_file():
         raise HTTPException(status_code=404, detail="File deliverable non trovato")
 
-    mime, _ = mimetypes.guess_type(target_resolved.name)
+    mime, _ = mimetypes.guess_type(safe_target.name)
     return FileResponse(
-        str(target_resolved),
-        filename=target_resolved.name,
+        safe_target,
+        filename=safe_target.name,
         media_type=mime or "application/octet-stream",
         content_disposition_type="attachment" if download else "inline",
     )
