@@ -8,14 +8,13 @@ import asyncio
 import json
 import logging
 import mimetypes
-import os
 import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
@@ -35,6 +34,27 @@ OUTPUTS_DIR = SMOKE_TESTS_DIR / "outputs"
 
 class RunTestsRequest(BaseModel):
     test_id: Optional[str] = None
+    profile: Optional[str] = None
+
+
+SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+SAFE_REPORT_NAME_RE = re.compile(r"^report_[a-zA-Z0-9_-]+\.md$")
+
+
+def _is_safe_path(target: Path, allowed_bases: List[Path]) -> bool:
+    """Verifies that a resolved target path resides strictly within one of the allowed base directories."""
+    try:
+        t_res = target.resolve()
+        for base in allowed_bases:
+            b_res = base.resolve()
+            try:
+                t_res.relative_to(b_res)
+                return True
+            except ValueError:
+                continue
+    except Exception:
+        return False
+    return False
 
 
 @router.get("/config")
@@ -58,6 +78,8 @@ async def list_reports() -> List[Dict[str, Any]]:
     for p in sorted(
         OUTPUTS_DIR.glob("report_*.md"), key=lambda x: x.stat().st_mtime, reverse=True
     ):
+        if not _is_safe_path(p, [OUTPUTS_DIR]):
+            continue
         st = p.stat()
         reports.append(
             {
@@ -73,11 +95,14 @@ async def list_reports() -> List[Dict[str, Any]]:
 
 @router.get("/reports/{filename}")
 async def get_report_content(filename: str) -> Dict[str, Any]:
-    """Returns the content of a specific test report."""
-    if "/" in filename or "\\" in filename or ".." in filename:
-        raise HTTPException(status_code=400, detail="Invalid filename")
+    """Returns the content of a specific test report with strict path and filename validation."""
+    if not SAFE_REPORT_NAME_RE.match(filename):
+        raise HTTPException(status_code=400, detail="Invalid report filename format")
 
-    target = OUTPUTS_DIR / filename
+    target = (OUTPUTS_DIR / filename).resolve()
+    if not _is_safe_path(target, [OUTPUTS_DIR]):
+        raise HTTPException(status_code=400, detail="Path traversal detected")
+
     if not target.exists() or not target.is_file():
         raise HTTPException(status_code=404, detail="Report file not found")
 
@@ -103,58 +128,85 @@ def resolve_diagnostic_file(
     Risolve in modo sicuro file/immagini generati durante le sessioni di test fumo.
     Supporta URI file://, path assoluti/relativi sessione (data/sessions/.../workspace/...),
     path workspace diretti o semplici nomi file cercandoli nell'ultima sessione smoke.
+    Garantisce che qualsiasi percorso risolto ricada rigidamente all'interno di data/sessions o evals/.../outputs.
     """
     from src.session_workspace import data_root
 
-    clean = (raw_path or "").strip().replace("\\", "/")
+    if not raw_path or "\x00" in raw_path:
+        return None
+
+    clean = raw_path.strip().replace("\\", "/")
     clean = re.sub(r"^file:/*(app/)?", "", clean)
     clean = clean.lstrip("/")
 
-    if not clean or ".." in clean:
+    if not clean or ".." in clean or clean.startswith(("/", "\\")):
         return None
 
-    d_root = data_root()
-    sessions_dir = d_root / "sessions"
+    d_root = data_root().resolve()
+    sessions_dir = (d_root / "sessions").resolve()
+    outputs_dir = OUTPUTS_DIR.resolve()
+    allowed_bases = [sessions_dir, outputs_dir]
 
-    # 1. Path strutturato con prefisso sessions/
-    if clean.startswith("data/sessions/") or clean.startswith("sessions/"):
+    def _check(candidate: Path) -> Optional[Path]:
+        try:
+            res = candidate.resolve()
+            if res.is_file() and res.exists() and _is_safe_path(res, allowed_bases):
+                return res
+        except Exception:
+            pass
+        return None
+
+    # 1. Path strutturato con prefisso sessions/ o data/sessions/
+    if "sessions/" in clean:
         rel = clean.split("sessions/", 1)[1]
-        target = (sessions_dir / rel).resolve()
-        if target.is_file() and target.exists():
-            return target
+        found = _check(sessions_dir / rel)
+        if found:
+            return found
 
-    # 2. Se viene specificato un session_id
+    # 2. Se viene specificato un session_id (validato con regex rigorosa)
     if session_id:
-        target = (sessions_dir / session_id / clean).resolve()
-        if target.is_file() and target.exists():
-            return target
-        target_ws = (sessions_dir / session_id / "workspace" / clean).resolve()
-        if target_ws.is_file() and target_ws.exists():
-            return target_ws
-        target_der = (sessions_dir / session_id / "derived" / clean).resolve()
-        if target_der.is_file() and target_der.exists():
-            return target_der
+        if not SAFE_ID_RE.match(session_id):
+            return None
+        for cand in [
+            sessions_dir / session_id / clean,
+            sessions_dir / session_id / "workspace" / clean,
+            sessions_dir / session_id / "derived" / clean,
+        ]:
+            found = _check(cand)
+            if found:
+                return found
 
     # 3. Controlla in outputs/
-    if OUTPUTS_DIR.exists():
-        target_out = (OUTPUTS_DIR / clean).resolve()
-        if target_out.is_file() and target_out.exists():
-            return target_out
+    if "outputs/" in clean:
+        rel = clean.split("outputs/", 1)[1]
+        found = _check(outputs_dir / rel)
+        if found:
+            return found
+    if outputs_dir.exists():
+        found = _check(outputs_dir / clean)
+        if found:
+            return found
 
-    # 4. Cerca nelle directory sessioni smoke recenti
+    # 4. Cerca nelle directory sessioni smoke recenti solo per nome file singolo sicuro
     filename = Path(clean).name
-    if filename and sessions_dir.exists():
+    if (
+        filename
+        and SAFE_ID_RE.match(filename.replace(".", "_"))
+        and sessions_dir.exists()
+    ):
         for s_dir in sorted(
             sessions_dir.glob("smoke_*"), key=lambda x: x.stat().st_mtime, reverse=True
         ):
+            if not _is_safe_path(s_dir, [sessions_dir]):
+                continue
             for candidate in [
                 s_dir / "workspace" / filename,
                 s_dir / "derived" / filename,
                 s_dir / "uploads" / filename,
-                s_dir / clean,
             ]:
-                if candidate.is_file() and candidate.exists():
-                    return candidate
+                found = _check(candidate)
+                if found:
+                    return found
 
     return None
 
@@ -170,11 +222,19 @@ async def get_diagnostic_file(
     ),
 ):
     """
-    Restituisce o esegue lo stream di un file deliverable o grafico PNG generato durante i test.
+    Restituisce o esegue lo stream di un file deliverable o grafico PNG generato durante i test con controlli di sicurezza rigorosi.
     """
+    if not path or "\x00" in path or ".." in path:
+        raise HTTPException(status_code=400, detail="Parametro path non valido")
+
+    if session_id and not SAFE_ID_RE.match(session_id):
+        raise HTTPException(status_code=400, detail="Parametro session_id non valido")
+
     target = resolve_diagnostic_file(path, session_id=session_id)
     if not target or not target.is_file() or not target.exists():
-        raise HTTPException(status_code=404, detail="File deliverable non trovato")
+        raise HTTPException(
+            status_code=404, detail="File deliverable non trovato o accesso negato"
+        )
 
     mime, _ = mimetypes.guess_type(target.name)
     return FileResponse(
@@ -203,10 +263,25 @@ async def cancel_diagnostics() -> Dict[str, Any]:
 @router.get("/run-tests")
 async def run_diagnostics_tests(
     test_id: Optional[str] = Query(None, description="Run only a specific test ID"),
+    profile: Optional[str] = Query(
+        None, description="Profile slug or name to run the tests against"
+    ),
 ):
     """
-    Executes the Agent Smoke Test suite sequentially and streams status events via SSE.
+    Executes the Agent Smoke Test suite sequentially and streams status events via SSE with input validation.
     """
+    if test_id and not SAFE_ID_RE.match(test_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid test_id parameter (alphanumeric, dash, underscore only)",
+        )
+
+    if profile and not SAFE_ID_RE.match(profile):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid profile parameter (alphanumeric, dash, underscore only)",
+        )
+
     import asyncio
     from evals.agent_smoke_tests.test_runner import run_smoke_tests_stream
 
@@ -217,6 +292,7 @@ async def run_diagnostics_tests(
         try:
             async for evt in run_smoke_tests_stream(
                 test_id=test_id,
+                profile=profile,
                 config_path=CONFIG_FILE,
                 outputs_dir=OUTPUTS_DIR,
             ):

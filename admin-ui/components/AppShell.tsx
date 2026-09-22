@@ -14,7 +14,6 @@ import {
   ClipboardList,
   LogOut,
   KeyRound,
-  Plug2,
   Clock,
   MessageSquare,
   BarChart3,

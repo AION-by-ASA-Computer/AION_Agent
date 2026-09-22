@@ -20,7 +20,7 @@ import {
   Copy,
   RefreshCw,
   Terminal,
-  Activity,
+  FlaskConical,
   ChevronRight,
   Sparkles,
   BarChart3,
@@ -33,11 +33,19 @@ import { apiFetch } from "@/lib/api/headers";
 import { getStoredToken } from "@/lib/auth/storage";
 import { SessionCharts } from "./SessionCharts";
 import { MarkdownReportReader } from "./MarkdownReportReader";
+import { HeaderDropdown } from "@/components/HeaderDropdown";
+
+interface ProfileOption {
+  slug: string;
+  name: string;
+  description?: string;
+}
 
 interface LogEvent {
   id: string;
   test?: string;
   test_name?: string;
+  assistant?: string;
   step: string;
   message: string;
   timestamp: string;
@@ -68,6 +76,7 @@ interface LogEvent {
 interface TestStatus {
   id: string;
   name: string;
+  assistant?: string;
   status: "idle" | "running" | "completed" | "failed";
   duration_sec?: number;
   tool_count: number;
@@ -174,37 +183,42 @@ function MarkdownImage({ src, alt, ...props }: React.ImgHTMLAttributes<HTMLImage
 function MarkdownLink({ href, children, ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) {
   if (typeof href !== "string" || !href) return <a {...props}>{children}</a>;
 
-  const isFileUri = href.startsWith("file://");
-  const isSessionPath = href.includes("data/sessions/") || href.startsWith("workspace/") || href.startsWith("uploads/") || href.startsWith("derived/");
-
-  if (isFileUri || isSessionPath) {
-    const cleanPath = href.replace(/^file:\/\/\/?(app\/)?/, "");
-    const token = getStoredToken();
-    const downloadUrl = `${apiBase()}/admin/diagnostics/file?path=${encodeURIComponent(cleanPath)}&download=1&access_token=${token || ""}`;
-
+  const isExternal = href.startsWith("http://") || href.startsWith("https://");
+  if (isExternal) {
     return (
       <a
-        href={downloadUrl}
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 underline font-mono text-xs hover:bg-blue-950/30 px-1 py-0.5 rounded transition-colors"
+        className="text-blue-400 hover:text-blue-300 underline hover:underline transition-colors"
         {...props}
       >
-        <span>{children}</span>
-        <Download className="w-3 h-3 inline opacity-70" />
+        {children}
       </a>
     );
   }
 
+  if (href.startsWith("#") || href.startsWith("mailto:")) {
+    return <a href={href} {...props}>{children}</a>;
+  }
+
+  let cleanPath = href.replace(/^file:\/\/\/?(app\/)?/i, "");
+  cleanPath = cleanPath.replace(/^[./\\]+/, "");
+
+  const token = getStoredToken();
+  const downloadUrl = `${apiBase()}/admin/diagnostics/file?path=${encodeURIComponent(cleanPath)}&download=1&access_token=${token || ""}`;
+
   return (
     <a
-      href={href}
+      href={downloadUrl}
+      download
       target="_blank"
       rel="noopener noreferrer"
-      className="text-blue-400 hover:text-blue-300 underline hover:underline transition-colors"
+      className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 underline font-mono text-xs hover:bg-blue-950/30 px-1 py-0.5 rounded transition-colors"
       {...props}
     >
-      {children}
+      <span>{children}</span>
+      <Download className="w-3 h-3 inline opacity-70" />
     </a>
   );
 }
@@ -251,6 +265,10 @@ export default function DiagnosticsPage() {
   const [expandedLogs, setExpandedLogs] = useState<Record<string, boolean>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  const [profiles, setProfiles] = useState<ProfileOption[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<string>("generic_assistant");
+  const [loadingProfiles, setLoadingProfiles] = useState<boolean>(false);
+
   const [selectedTestModal, setSelectedTestModal] = useState<TestStatus | null>(null);
   const [modalActiveTab, setModalActiveTab] = useState<"final" | "eval" | "charts" | "files" | "timeline" | "reasoning">("final");
   const eventSourceRef = useRef<EventSource | null>(null);
@@ -260,6 +278,7 @@ export default function DiagnosticsPage() {
 
   useEffect(() => {
     fetchHistoryReports();
+    fetchProfiles();
   }, []);
 
   useEffect(() => {
@@ -267,6 +286,32 @@ export default function DiagnosticsPage() {
       logsEndRef.current.scrollIntoView({ behavior: "smooth" });
     }
   }, [logs, autoScroll]);
+
+  const fetchProfiles = async () => {
+    setLoadingProfiles(true);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/profiles`);
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          const mapped: ProfileOption[] = data.map((p: any) => ({
+            slug: p.slug || p.name.replace(/\s+/g, "_").toLowerCase(),
+            name: p.name || p.slug,
+            description: p.description || "",
+          }));
+          setProfiles(mapped);
+          const hasGeneric = mapped.some((p) => p.slug === "generic_assistant");
+          if (!hasGeneric && mapped.length > 0) {
+            setSelectedProfile(mapped[0].slug);
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch profiles:", e);
+    } finally {
+      setLoadingProfiles(false);
+    }
+  };
 
   const fetchHistoryReports = async () => {
     setLoadingHistory(true);
@@ -330,13 +375,14 @@ export default function DiagnosticsPage() {
 
     // Reset test statuses
     setTestsStatus({
-      test_1_excel: { id: "test_1_excel", name: "Excel Data Analysis", status: "idle", tool_count: 0, reasoning_chars: 0 },
-      test_2_pdf: { id: "test_2_pdf", name: "Long PDF Document RAG", status: "idle", tool_count: 0, reasoning_chars: 0 },
-      test_3_word: { id: "test_3_word", name: "Structured Word Generation", status: "idle", tool_count: 0, reasoning_chars: 0 },
+      test_1_excel: { id: "test_1_excel", name: "Excel Data Analysis", assistant: selectedProfile, status: "idle", tool_count: 0, reasoning_chars: 0 },
+      test_2_pdf: { id: "test_2_pdf", name: "Long PDF Document RAG", assistant: selectedProfile, status: "idle", tool_count: 0, reasoning_chars: 0 },
+      test_3_word: { id: "test_3_word", name: "Structured Word Generation", assistant: selectedProfile, status: "idle", tool_count: 0, reasoning_chars: 0 },
     });
 
     const token = getStoredToken();
-    const url = `${apiBase()}/admin/diagnostics/run-tests?access_token=${token || ""}`;
+    const profileParam = selectedProfile ? `&profile=${encodeURIComponent(selectedProfile)}` : "";
+    const url = `${apiBase()}/admin/diagnostics/run-tests?access_token=${token || ""}${profileParam}`;
 
     try {
       const eventSource = new EventSource(url);
@@ -350,6 +396,7 @@ export default function DiagnosticsPage() {
             id: evtId,
             test: data.test,
             test_name: data.test_name,
+            assistant: data.assistant,
             step: data.step,
             message: data.message || "",
             timestamp: data.timestamp || new Date().toISOString(),
@@ -435,12 +482,14 @@ export default function DiagnosticsPage() {
               const curr = prev[data.test] || {
                 id: data.test,
                 name: data.test_name || data.test,
+                assistant: data.assistant || selectedProfile,
                 status: "running",
                 tool_count: 0,
                 reasoning_chars: 0,
               };
 
               let nextStatus = curr.status;
+              let nextAssistant = data.assistant || curr.assistant || selectedProfile;
               let nextTools = curr.tool_count;
               let nextReasoning = curr.reasoning_chars;
               let nextFinalOutput = curr.final_output;
@@ -464,6 +513,7 @@ export default function DiagnosticsPage() {
                 nextToolCalls = data.tool_calls || nextToolCalls;
                 nextTimeline = data.timeline || nextTimeline;
                 nextFiles = data.generated_files || nextFiles;
+                if (data.assistant) nextAssistant = data.assistant;
                 if (data.tool_count !== undefined) nextTools = data.tool_count;
                 if (data.score !== undefined) nextScore = data.score;
                 if (data.max_score !== undefined) nextMaxScore = data.max_score;
@@ -488,6 +538,7 @@ export default function DiagnosticsPage() {
                 [data.test]: {
                   ...curr,
                   status: nextStatus,
+                  assistant: nextAssistant,
                   duration_sec: data.duration_sec ?? curr.duration_sec,
                   tool_count: nextTools,
                   reasoning_chars: nextReasoning,
@@ -573,28 +624,74 @@ export default function DiagnosticsPage() {
     URL.revokeObjectURL(url);
   };
 
+  const activeProfileObj = profiles.find((p) => p.slug === selectedProfile);
+
   return (
     <div className="space-y-6">
-      {/* Header section */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#262626] pb-5">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 border border-blue-500/20">
-              <Activity className="w-5 h-5" />
-            </span>
-            <h1 className="text-2xl font-bold tracking-tight text-white">Smoke Tests Diagnostics Suite</h1>
-          </div>
-          <p className="text-gray-400 text-sm mt-1">
-            End-to-end evaluation suite with real-time reasoning interception, tool calls, interactive charts, and markdown reports for <code className="text-blue-400 bg-blue-950/40 px-1.5 py-0.5 rounded text-xs border border-blue-800/40">Generic Assistant</code>.
-          </p>
+      {/* Page Title & Description */}
+      <div className="space-y-1 pb-1">
+        <div className="flex items-center gap-3">
+          <span className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 shadow-inner">
+            <FlaskConical className="w-5 h-5" />
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-white font-sans">
+            Smoke Tests Diagnostics Suite
+          </h1>
+        </div>
+        <p className="text-sm text-gray-400 max-w-3xl mt-1 font-sans">
+          End-to-end evaluation suite with real-time reasoning interception, tool calls, interactive charts, and markdown evaluation reports.
+        </p>
+      </div>
+
+      {/* ==========================================
+          CONTROL BAR: TARGET PROFILE SWITCHER & TEST CONTROLS
+          ========================================== */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-5 py-3.5 bg-[#0a0a0a]/95 border border-slate-800/80 backdrop-blur-xl shadow-xl rounded-2xl">
+        <div className="flex items-center gap-4 flex-wrap">
+          {/* Profile Switcher via HeaderDropdown */}
+          <HeaderDropdown
+            triggerIcon={<Terminal className="w-5 h-5" />}
+            triggerLabelTop="Target Test Profile"
+            triggerLabelMain={
+              loadingProfiles
+                ? "Loading..."
+                : activeProfileObj
+                  ? `${activeProfileObj.name} (${activeProfileObj.slug})`
+                  : selectedProfile || "Select Profile..."
+            }
+            items={
+              profiles.length > 0
+                ? profiles.map((p) => ({
+                  key: p.slug,
+                  label: `${p.name} (${p.slug})`,
+                }))
+                : [{ key: "generic_assistant", label: "Generic Assistant (generic_assistant)" }]
+            }
+            selectedKey={selectedProfile}
+            itemIcon={<Terminal className="w-4 h-4 text-blue-400" />}
+            onItemSelect={(key) => {
+              if (!isRunning) setSelectedProfile(key);
+            }}
+            searchPlaceholder="Search profiles..."
+            emptyLabel="No profiles found"
+            actions={[]}
+          />
+
+          {/* Active Profile Info / Description */}
+          {activeProfileObj?.description && (
+            <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-[#121212] border border-slate-800/80 text-xs text-gray-400 max-w-md truncate">
+              <Sparkles className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              <span className="truncate">{activeProfileObj.description}</span>
+            </div>
+          )}
         </div>
 
-        {/* Action controls */}
-        <div className="flex items-center gap-3">
+        {/* Primary Run / Stop Action */}
+        <div className="flex items-center gap-3 shrink-0">
           {isRunning ? (
             <button
               onClick={handleStopTests}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all shadow-lg bg-red-600 hover:bg-red-500 text-white hover:shadow-red-500/20 cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-bold text-sm transition-all shadow-lg bg-red-600 hover:bg-red-500 text-white hover:shadow-red-500/20 cursor-pointer animate-pulse"
             >
               <Square className="w-4 h-4 fill-current" />
               <span>Stop Test Suite</span>
@@ -602,14 +699,15 @@ export default function DiagnosticsPage() {
           ) : (
             <button
               onClick={handleRunTests}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all shadow-lg bg-blue-600 hover:bg-blue-500 text-white hover:shadow-blue-500/20 cursor-pointer"
+              disabled={loadingProfiles}
+              className="flex items-center gap-2 px-6 py-2.5 rounded-xl font-bold text-sm transition-all shadow-[0_0_15px_rgba(59,130,246,0.25)] bg-blue-600 hover:bg-blue-500 text-white hover:shadow-[0_0_20px_rgba(59,130,246,0.4)] disabled:opacity-50 cursor-pointer"
             >
-              <Play className="w-4 h-4" />
+              <Play className="w-4 h-4 fill-current" />
               <span>Run Test Suite</span>
             </button>
           )}
         </div>
-      </div>
+      </header>
 
       {/* Test scenario status cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -1180,8 +1278,14 @@ export default function DiagnosticsPage() {
                 </span>
                 <div>
                   <h3 className="text-base font-bold text-white">{selectedTestModal.name}</h3>
-                  <p className="text-xs text-gray-400">
-                    ID: <code className="text-emerald-400">{selectedTestModal.id}</code> &bull; Duration: {selectedTestModal.duration_sec}s &bull; Tools used: {selectedTestModal.tool_count}
+                  <p className="text-xs text-gray-400 flex items-center gap-2 flex-wrap mt-0.5">
+                    <span>ID: <code className="text-emerald-400 font-mono">{selectedTestModal.id}</code></span>
+                    <span>&bull;</span>
+                    <span>Profilo: <code className="text-blue-400 bg-blue-950/40 px-1 py-0.5 rounded text-[11px] border border-blue-800/40">{selectedTestModal.assistant || selectedProfile}</code></span>
+                    <span>&bull;</span>
+                    <span>Duration: {selectedTestModal.duration_sec}s</span>
+                    <span>&bull;</span>
+                    <span>Tools used: {selectedTestModal.tool_count}</span>
                   </p>
                 </div>
               </div>

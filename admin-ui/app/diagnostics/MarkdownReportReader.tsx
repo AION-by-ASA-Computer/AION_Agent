@@ -35,8 +35,8 @@ function MarkdownImage({ src, alt, ...props }: React.ComponentProps<"img">) {
   const rawSrc = typeof src === "string" ? src : "";
   let finalSrc = rawSrc;
   if (finalSrc && !finalSrc.startsWith("http://") && !finalSrc.startsWith("https://") && !finalSrc.startsWith("data:")) {
-    let cleanPath = finalSrc.replace(/^[./\\]+/, "");
-    cleanPath = cleanPath.replace(/^workspace[/\\]/, "").replace(/^admin[/\\]workspace[/\\]/, "");
+    let cleanPath = finalSrc.replace(/^file:\/\/\/?(app\/)?/i, "");
+    cleanPath = cleanPath.replace(/^[./\\]+/, "");
     const token = getStoredToken();
     finalSrc = `${apiBase()}/admin/diagnostics/file?path=${encodeURIComponent(cleanPath)}&access_token=${token || ""}`;
   }
@@ -70,26 +70,45 @@ function MarkdownImage({ src, alt, ...props }: React.ComponentProps<"img">) {
 
 // Custom Link Component
 function MarkdownLink({ href, children, ...props }: React.ComponentProps<"a">) {
-  const isExternal = href?.startsWith("http://") || href?.startsWith("https://");
-  let finalHref = href || "#";
+  const rawHref = typeof href === "string" ? href : "";
+  const isExternal = rawHref.startsWith("http://") || rawHref.startsWith("https://");
 
-  if (!isExternal && href && !href.startsWith("#") && !href.startsWith("mailto:")) {
-    let cleanPath = href.replace(/^[./\\]+/, "");
-    cleanPath = cleanPath.replace(/^workspace[/\\]/, "").replace(/^admin[/\\]workspace[/\\]/, "");
-    const token = getStoredToken();
-    finalHref = `${apiBase()}/admin/diagnostics/file?path=${encodeURIComponent(cleanPath)}&download=1&access_token=${token || ""}`;
+  if (isExternal) {
+    return (
+      <a
+        href={rawHref}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 underline underline-offset-2 hover:no-underline transition-colors font-medium"
+        {...props}
+      >
+        <span>{children}</span>
+        <ExternalLink className="w-3 h-3 opacity-70" />
+      </a>
+    );
   }
+
+  if (!rawHref || rawHref.startsWith("#") || rawHref.startsWith("mailto:")) {
+    return <a href={rawHref} {...props}>{children}</a>;
+  }
+
+  let cleanPath = rawHref.replace(/^file:\/\/\/?(app\/)?/i, "");
+  cleanPath = cleanPath.replace(/^[./\\]+/, "");
+
+  const token = getStoredToken();
+  const downloadUrl = `${apiBase()}/admin/diagnostics/file?path=${encodeURIComponent(cleanPath)}&download=1&access_token=${token || ""}`;
 
   return (
     <a
-      href={finalHref}
+      href={downloadUrl}
+      download
       target="_blank"
       rel="noopener noreferrer"
       className="inline-flex items-center gap-1 text-emerald-400 hover:text-emerald-300 underline underline-offset-2 hover:no-underline transition-colors font-medium"
       {...props}
     >
       <span>{children}</span>
-      {isExternal ? <ExternalLink className="w-3 h-3 opacity-70" /> : <Download className="w-3 h-3 opacity-70" />}
+      <Download className="w-3 h-3 opacity-70" />
     </a>
   );
 }

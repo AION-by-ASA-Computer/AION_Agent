@@ -18,11 +18,10 @@ import argparse
 import asyncio
 import json
 import logging
-import mimetypes
 import os
-import shutil
 import sys
 import time
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncGenerator, Dict, List, Optional, Set
@@ -105,15 +104,39 @@ async def ensure_db_ready():
         pass
 
 
+SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
+
+
+def _is_safe_path(target: Path, allowed_bases: List[Path]) -> bool:
+    """Verifies that a resolved target path resides strictly within one of the allowed base directories."""
+    try:
+        t_res = target.resolve()
+        for base in allowed_bases:
+            b_res = base.resolve()
+            try:
+                t_res.relative_to(b_res)
+                return True
+            except ValueError:
+                continue
+    except Exception:
+        return False
+    return False
+
+
 def resolve_asset_path(rel_path: str) -> Optional[Path]:
-    """Resolve an asset file path relative to SCRIPT_DIR or ASSETS_DIR with fallback."""
-    if not rel_path:
+    """Resolve an asset file path relative to SCRIPT_DIR or ASSETS_DIR with fallback, preventing path traversal."""
+    if not rel_path or "\x00" in rel_path:
         return None
-    p = Path(rel_path)
+
+    clean = rel_path.strip().replace("\\", "/").lstrip("/")
+    if ".." in clean or clean.startswith(("/", "\\")):
+        return None
+
+    p = Path(clean)
     candidates = [
-        SCRIPT_DIR / rel_path,
+        SCRIPT_DIR / clean,
         ASSETS_DIR / p.name,
-        REPO_ROOT / rel_path,
+        REPO_ROOT / clean,
     ]
     # Check fallback names for known assets
     base_name = p.name.lower()
@@ -124,18 +147,26 @@ def resolve_asset_path(rel_path: str) -> Optional[Path]:
         candidates.append(ASSETS_DIR / "Tesla_Owner_Manual.pdf")
         candidates.append(ASSETS_DIR / "manuale_tesla.pdf")
 
+    allowed_bases = [REPO_ROOT, SCRIPT_DIR, ASSETS_DIR]
     for candidate in candidates:
-        if candidate.exists() and candidate.is_file():
-            return candidate.resolve()
+        try:
+            cand_res = candidate.resolve()
+            if cand_res.exists() and cand_res.is_file() and _is_safe_path(cand_res, allowed_bases):
+                return cand_res
+        except Exception:
+            continue
     return None
 
 
 IGNORED_SESSION_FILE_NAMES = frozenset({
+    "_sandbox_last_run.py",
     "package.json",
     "package-lock.json",
     "pnpm-lock.yaml",
     "yarn.lock",
     "tsconfig.json",
+    ".gitignore",
+    ".env",
     "license",
     "licence",
     "contributing.md",
@@ -154,24 +185,21 @@ IGNORED_SESSION_DIR_PARTS = frozenset({
     ".git",
     ".tmp",
     "tool_results",
+    "docs",
 })
 
 
 def is_user_deliverable_session_file(rel_to_session: str, p: Path) -> bool:
     """
     Determines if a file in the session sandbox is a genuine user deliverable
-    (matching chat-ui's 'Nuovi file sessione' filter), rather than an internal tool offload,
-    package boilerplate, or sandbox dependency artifact.
+    (matching chat-ui's workspace file list), rather than an internal tool offload,
+    unpacked document pages, package boilerplate, or sandbox dependency artifact.
     """
     rel = rel_to_session.replace("\\", "/").strip("/")
     parts = rel.split("/")
 
-    # Only include files under workspace/ or derived/
-    if not (rel.startswith("workspace/") or rel.startswith("derived/")):
-        return False
-
-    # Exclude internal tool results offloading (L1 context offloading)
-    if rel.startswith("derived/tool_results/"):
+    # Strictly include only files under workspace/ (like chat-ui)
+    if not rel.startswith("workspace/"):
         return False
 
     # Exclude any hidden files/folders or dependency caches
@@ -179,7 +207,7 @@ def is_user_deliverable_session_file(rel_to_session: str, p: Path) -> bool:
         if part.startswith(".") or part in IGNORED_SESSION_DIR_PARTS:
             return False
 
-    # Exclude generic library/package files
+    # Exclude generic library/package/internal execution files
     file_name_lower = p.name.lower()
     if file_name_lower in IGNORED_SESSION_FILE_NAMES:
         return False
@@ -199,11 +227,13 @@ def collect_generated_files(
 ) -> List[Dict[str, Any]]:
     """
     Scans the session directory for user deliverable files generated during the test run
-    (matching chat-ui's 'Nuovi file sessione' filter) directly from the session sandbox
-    without copying them into outputs/, and returns structured metadata with links.
+    (strictly under workspace/, matching chat-ui's end-of-chat workspace deliverables).
     """
+    if not session_id or not SAFE_ID_RE.match(session_id):
+        return []
+
     try:
-        s_root = session_root(session_id)
+        s_root = session_root(session_id).resolve()
         if not s_root.exists():
             return []
     except Exception:
@@ -212,12 +242,9 @@ def collect_generated_files(
     initial = initial_files or set()
     found_files: List[Dict[str, Any]] = []
 
-    # Only scan workspace and derived subdirectories (like chat-ui)
-    for sub in ["workspace", "derived"]:
-        sub_dir = s_root / sub
-        if not sub_dir.exists() or not sub_dir.is_dir():
-            continue
-
+    # Only scan workspace subdirectory (strictly matching chat-ui user deliverables)
+    sub_dir = s_root / "workspace"
+    if sub_dir.exists() and sub_dir.is_dir():
         for p in sub_dir.rglob("*"):
             if not p.is_file():
                 continue
@@ -260,7 +287,7 @@ def collect_generated_files(
                     "relative_to_outputs": session_rel_path,
                     "session_path": session_rel_path,
                     "abs_path": str(p.resolve()),
-                    "file_url": p.resolve().as_uri(),
+                    "file_url": session_rel_path,
                 })
             except Exception as e:
                 logger.warning("Could not inspect generated file %s: %s", p, e)
@@ -273,7 +300,7 @@ def format_generated_files_section(
     outputs_dir: Optional[Path] = None,
     session_id: Optional[str] = None,
 ) -> List[str]:
-    """Formats generated files into a markdown table with clickable file links to session workspace."""
+    """Formats generated files into a markdown table with downloadable file links to session workspace."""
     lines: List[str] = []
     if not files and not session_id:
         return lines
@@ -281,20 +308,17 @@ def format_generated_files_section(
     lines.append("### 📁 Documenti & File nel Workspace di Sessione")
     lines.append("")
     if session_id:
-        try:
-            s_root = session_root(session_id)
-            lines.append(f"> 📂 **Cartella Sessione (Sandbox):** [`data/sessions/{session_id}/workspace`]({s_root.resolve().as_uri()})")
-            lines.append("")
-        except Exception:
-            pass
+        lines.append(f"> 📂 **Cartella Workspace (Sandbox):** `data/sessions/{session_id}/workspace`")
+        lines.append("")
 
     if files:
-        lines.append("| Nome File | Categoria | Dimensione | Percorso Sandbox / Link |")
+        lines.append("| Nome File | Categoria | Dimensione | Download Deliverable |")
         lines.append("|---|---|---|---|")
         for f in files:
             size_kb = f["size_bytes"] / 1024
             size_str = f"{size_kb:.1f} KB" if size_kb >= 1 else f"{f['size_bytes']} B"
-            link_str = f"[{f['name']}]({f['file_url']}) (`{f.get('session_path', f['name'])}`)"
+            rel_link = f.get("session_path", f["name"])
+            link_str = f"[{f['name']}]({rel_link})"
             lines.append(f"| **{f['name']}** | {f['category']} | {size_str} | {link_str} |")
         lines.append("")
 
@@ -403,12 +427,13 @@ def format_single_test_markdown(res: Dict[str, Any], outputs_dir: Path) -> str:
     score_str = f" (Punteggio: {res.get('score', 0)}/100 [{res.get('rating', '')}])" if "score" in res else ""
     status_str = f"✅ COMPLETATO{score_str}" if res.get("status") == "completed" else f"❌ FALLITO ({res.get('error')})"
     session_id = res.get("session_id", "")
+    asst_name = res.get("assistant", "generic_assistant")
     lines = [
         f"# Smoke Test Report: {res['name']}",
         "",
         f"- **ID Test:** `{res['id']}`",
         f"- **Data Esecuzione:** {res.get('timestamp') or now_iso}",
-        f"- **Assistente:** Generic Assistant (`{res.get('assistant', 'generic_assistant')}`)",
+        f"- **Profilo / Assistente:** `{asst_name}`",
         f"- **Stato:** {status_str}",
         f"- **Tempo di Esecuzione:** {res.get('duration_sec', 0)}s",
         f"- **Tool Chiamati:** {len(res.get('tool_calls', []))}",
@@ -484,6 +509,7 @@ def format_single_test_markdown(res: Dict[str, Any], outputs_dir: Path) -> str:
 async def run_single_test(
     case: Dict[str, Any],
     *,
+    profile_override: Optional[str] = None,
     outputs_dir: Path = DEFAULT_OUTPUTS_DIR,
     event_queue: Optional[asyncio.Queue] = None,
     session_prefix: str = "smoke",
@@ -494,20 +520,25 @@ async def run_single_test(
     tool calls with parameters in chronological order, collecting generated files,
     and writing a standalone Markdown report.
     """
-    case_id = case.get("id", "unknown_test")
+    raw_case_id = str(case.get("id", "unknown_test"))
+    case_id = re.sub(r"[^a-zA-Z0-9_-]", "_", raw_case_id)
     case_name = case.get("name", case_id)
-    assistant_name = case.get("assistant", "generic_assistant")
+
+    raw_assistant = profile_override or case.get("assistant", "generic_assistant")
+    assistant_name = re.sub(r"[^a-zA-Z0-9_-]", "_", str(raw_assistant))
+
     prompt = case.get("prompt", "")
     attachment_rel = case.get("attachment")
 
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
-    session_id = f"{session_prefix}_{case_id}_{timestamp_str}_{os.getpid()}"
+    clean_prefix = re.sub(r"[^a-zA-Z0-9_-]", "_", session_prefix)
+    session_id = f"{clean_prefix}_{case_id}_{timestamp_str}_{os.getpid()}"
 
     start_time = time.monotonic()
 
     if print_cli:
         print(f"\n=======================================================", flush=True)
-        print(f"▶ [{case_id}] {case_name}", flush=True)
+        print(f"▶ [{case_id}] {case_name} (Profilo: {assistant_name})", flush=True)
         print(f"=======================================================", flush=True)
 
     async def emit(step: str, message: str, **kwargs):
@@ -515,6 +546,7 @@ async def run_single_test(
             "status": "running",
             "test": case_id,
             "test_name": case_name,
+            "assistant": assistant_name,
             "step": step,
             "message": message,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -828,20 +860,22 @@ async def run_single_test(
             print(f"  ❌ {status.upper()} in {elapsed}s (Tool: {len(tool_calls)}) · {score_badge}\n", flush=True)
 
     # Save standalone Markdown report for this test immediately (fixed name per test)
-    outputs_dir.mkdir(parents=True, exist_ok=True)
+    outputs_dir_res = Path(outputs_dir).resolve()
+    outputs_dir_res.mkdir(parents=True, exist_ok=True)
     single_report_filename = f"report_{case_id}.md"
-    single_report_path = outputs_dir / single_report_filename
-    single_report_content = format_single_test_markdown(test_result, outputs_dir)
+    single_report_path = (outputs_dir_res / single_report_filename).resolve()
+    single_report_content = format_single_test_markdown(test_result, outputs_dir_res)
 
-    try:
-        with open(single_report_path, "w", encoding="utf-8") as srf:
-            srf.write(single_report_content)
-        test_result["single_report_path"] = str(single_report_path)
-        test_result["single_report_filename"] = single_report_filename
-        if print_cli:
-            print(f"  📄 Report salvato: outputs/{single_report_filename}", flush=True)
-    except Exception as ex:
-        logger.warning("Could not write single test report %s: %s", single_report_path, ex)
+    if _is_safe_path(single_report_path, [outputs_dir_res]):
+        try:
+            with open(single_report_path, "w", encoding="utf-8") as srf:
+                srf.write(single_report_content)
+            test_result["single_report_path"] = str(single_report_path)
+            test_result["single_report_filename"] = single_report_filename
+            if print_cli:
+                print(f"  📄 Report salvato: outputs/{single_report_filename}", flush=True)
+        except Exception as ex:
+            logger.warning("Could not write single test report %s: %s", single_report_path, ex)
 
     await emit(
         "test_complete",
@@ -856,6 +890,7 @@ async def run_single_test(
         passed=test_result.get("passed", False),
         eval_summary=test_result.get("eval_summary", ""),
         eval_criteria=test_result.get("eval_criteria", []),
+        assistant=assistant_name,
         tool_count=len(tool_calls),
         final_output=full_output,
         reasoning=full_reasoning,
@@ -888,8 +923,9 @@ def format_markdown_report(
     ]
 
     for res in results:
+        asst = res.get("assistant", "generic_assistant")
         lines.append(f"## Test {res['id']}: {res['name']}")
-        lines.append(f"**Assistente:** Generic Assistant")
+        lines.append(f"**Profilo / Assistente:** `{asst}`")
         lines.append(f"**Tempo di esecuzione:** {res['duration_sec']}s")
         if res.get("attachment"):
             lines.append(f"**Allegato:** `{res['attachment']}`")
@@ -960,6 +996,7 @@ async def run_smoke_tests(
     config_path: Path = DEFAULT_CONFIG_PATH,
     outputs_dir: Path = DEFAULT_OUTPUTS_DIR,
     test_id: Optional[str] = None,
+    profile: Optional[str] = None,
     event_queue: Optional[asyncio.Queue] = None,
     is_cli: bool = False,
 ) -> tuple[List[Dict[str, Any]], Path, str]:
@@ -972,31 +1009,43 @@ async def run_smoke_tests(
 
     set_event_loop(asyncio.get_running_loop())
 
-    if not config_path.exists():
-        raise FileNotFoundError(f"Config file not found at: {config_path}")
+    config_path_res = Path(config_path).resolve()
+    if not config_path_res.exists():
+        raise FileNotFoundError(f"Config file not found at: {config_path_res}")
 
-    with open(config_path, "r", encoding="utf-8") as f:
+    with open(config_path_res, "r", encoding="utf-8") as f:
         cases: List[Dict[str, Any]] = json.load(f)
 
     if test_id:
+        if not SAFE_ID_RE.match(test_id):
+            raise ValueError(f"Invalid test_id format: {test_id}")
         cases = [c for c in cases if c.get("id") == test_id]
         if not cases:
             raise ValueError(f"No test case found with id: {test_id}")
 
-    outputs_dir.mkdir(parents=True, exist_ok=True)
+    if profile and not SAFE_ID_RE.match(profile):
+        raise ValueError(f"Invalid profile format: {profile}")
+
+    outputs_dir_res = Path(outputs_dir).resolve()
+    outputs_dir_res.mkdir(parents=True, exist_ok=True)
     if test_id:
         report_filename = f"report_{test_id}.md"
     else:
         report_filename = "report_suite_summary.md"
-    report_path = outputs_dir / report_filename
+    report_path = (outputs_dir_res / report_filename).resolve()
 
+    if not _is_safe_path(report_path, [outputs_dir_res]):
+        raise ValueError("Report path traversal blocked")
+
+    target_profile_label = profile or "Generic Assistant (da config)"
     if event_queue is not None:
         await event_queue.put(
             {
                 "status": "running",
                 "step": "suite_start",
-                "message": f"Avvio suite di test (Sequenziale) - {len(cases)} test da eseguire",
+                "message": f"Avvio suite di test (Sequenziale) - {len(cases)} test da eseguire (Profilo: {target_profile_label})",
                 "test_count": len(cases),
+                "profile": target_profile_label,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         )
@@ -1008,11 +1057,14 @@ async def run_smoke_tests(
             content = format_markdown_report(
                 results,
                 execution_mode="sequential",
-                outputs_dir=outputs_dir,
+                outputs_dir=outputs_dir_res,
             )
-            with open(report_path, "w", encoding="utf-8") as rf:
-                rf.write(content)
-            return content
+            try:
+                with open(report_path, "w", encoding="utf-8") as rf:
+                    rf.write(content)
+                return content
+            except Exception as ex:
+                logger.warning("Could not write suite report: %s", ex)
         return ""
 
     try:
@@ -1021,7 +1073,8 @@ async def run_smoke_tests(
                 print(f"[{idx}/{len(cases)}]", end=" ", flush=True)
             res = await run_single_test(
                 case,
-                outputs_dir=outputs_dir,
+                profile_override=profile,
+                outputs_dir=outputs_dir_res,
                 event_queue=event_queue,
                 session_prefix="smoke_seq",
                 print_cli=is_cli,
@@ -1044,10 +1097,12 @@ async def run_smoke_tests(
                 "report_filename": report_filename,
                 "report_path": str(report_path),
                 "report_content": report_content,
+                "profile": target_profile_label,
                 "results_summary": [
                     {
                         "id": r["id"],
                         "name": r["name"],
+                        "assistant": r.get("assistant"),
                         "duration_sec": r["duration_sec"],
                         "status": r["status"],
                         "tool_calls_count": len(r.get("tool_calls", [])),
@@ -1065,6 +1120,7 @@ async def run_smoke_tests(
 
 async def run_smoke_tests_stream(
     test_id: Optional[str] = None,
+    profile: Optional[str] = None,
     config_path: Path = DEFAULT_CONFIG_PATH,
     outputs_dir: Path = DEFAULT_OUTPUTS_DIR,
 ) -> AsyncGenerator[Dict[str, Any], None]:
@@ -1079,6 +1135,7 @@ async def run_smoke_tests_stream(
                 config_path=config_path,
                 outputs_dir=outputs_dir,
                 test_id=test_id,
+                profile=profile,
                 event_queue=queue,
                 is_cli=False,
             )
@@ -1116,6 +1173,13 @@ def main():
         help="Run only a specific test ID (e.g. test_1_excel)",
     )
     parser.add_argument(
+        "--profile",
+        "-p",
+        type=str,
+        default=None,
+        help="Target agent profile slug to run tests against (e.g. generic_assistant, aion_std)",
+    )
+    parser.add_argument(
         "--config",
         "-c",
         type=str,
@@ -1134,9 +1198,11 @@ def main():
 
     mute_internal_loggers()
 
+    target_profile_display = args.profile or "Generic Assistant (default)"
+
     print("\n" + "=" * 60, flush=True)
     print(" 🚀 AION AGENT SMOKE TESTS (CLI)", flush=True)
-    print(" 🤖 Profilo target: Generic Assistant", flush=True)
+    print(f" 🤖 Profilo target: {target_profile_display}", flush=True)
     print(" ⚙️  Modalità: SEQUENZIALE", flush=True)
     print("=" * 60, flush=True)
 
@@ -1153,6 +1219,7 @@ def main():
                 config_path=cfg_path,
                 outputs_dir=out_dir,
                 test_id=args.test,
+                profile=args.profile,
                 is_cli=True,
             )
         )
@@ -1169,7 +1236,8 @@ def main():
     for r in results:
         status_sym = "✅" if r.get("status") == "completed" else "❌"
         status_text = "OK" if r.get("status") == "completed" else f"FALLITO ({r.get('error')})"
-        print(f" {status_sym} [{r['id']}] {r['name']:<32} {r['duration_sec']}s  (Tools: {len(r.get('tool_calls', []))}) -> {status_text}", flush=True)
+        asst_label = f"[{r.get('assistant', 'generic_assistant')}]"
+        print(f" {status_sym} [{r['id']}] {r['name']:<32} {asst_label} {r['duration_sec']}s  (Tools: {len(r.get('tool_calls', []))}) -> {status_text}", flush=True)
     print("-" * 60, flush=True)
     print(f" 🎉 Esito finale: {passed_count}/{len(results)} superati in {total_elapsed}s", flush=True)
     for r in results:
