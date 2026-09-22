@@ -394,6 +394,17 @@ const KhubPdfViewer = dynamic(
   }
 );
 
+/** Stato di caricamento di una skill nel contesto del modello.
+ *  Derivato incrociando il profilo con i segmenti skill_view già disponibili. */
+export type SkillStatus = {
+  name: string;
+  /** loaded  = skill_view chiamata con successo (skill iniettata nel contesto)
+   *  failed  = skill_view chiamata ma skill non trovata/bloccata nel registry
+   *  pending = skill nel profilo ma mai richiesta dal modello in questa chat
+   */
+  loadState: "loaded" | "failed" | "pending";
+};
+
 export function ChatWorkspace({ conversationId: initialConversationId }: { conversationId: string }) {
   const t = useT();
   const showPromptDebug = AION_PROMPT_DEBUG_UI_ENABLED;
@@ -757,6 +768,59 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const activeProfileName = useMemo(() => {
     return activeProfileRow?.name || profile;
   }, [activeProfileRow, profile]);
+
+  /** Tool MCP effettivamente invocati dall'agente in questa conversazione,
+   *  derivati dai segmenti SSE persistiti — aggiornati in tempo reale. */
+  const usedTools = useMemo(() => {
+    const toolMap = new Map<string, { callCount: number; hasError: boolean }>();
+    for (const m of messages) {
+      if (m.role !== "assistant" || !m.segments) continue;
+      for (const seg of m.segments) {
+        if (seg.kind !== "tool") continue;
+        const cur = toolMap.get(seg.name) ?? { callCount: 0, hasError: false };
+        toolMap.set(seg.name, {
+          callCount: cur.callCount + 1,
+          hasError: cur.hasError || seg.status === "error",
+        });
+      }
+    }
+    return Array.from(toolMap.entries()).map(([name, v]) => ({ name, ...v }));
+  }, [messages]);
+
+  /** Stato reale delle skill per profilo attivo:
+   *  incrocia la lista del profilo con le chiamate skill_view già tracciate nei segmenti SSE.
+   *  Nessuna chiamata backend aggiuntiva — tutto dai dati già disponibili. */
+  const skillStatuses = useMemo((): SkillStatus[] => {
+    // Raccoglie tutte le chiamate skill_view dai segmenti di tutti i messaggi
+    const skillViewCalls = new Map<string, "loaded" | "failed">();
+    for (const m of messages) {
+      if (m.role !== "assistant" || !m.segments) continue;
+      for (const seg of m.segments) {
+        if (seg.kind !== "tool" || seg.name !== "skill_view") continue;
+        const input = seg.input as Record<string, unknown> | null;
+        const skillName = String(input?.name ?? input?.skill ?? "").trim();
+        if (!skillName) continue;
+        // Il backend a volte restituisce errore testuale con status "done" (non blocca il modello)
+        // quindi verifichiamo anche l'output per pattern di errore
+        const outputText = (seg.output ?? "").toLowerCase();
+        const isError =
+          seg.status === "error" ||
+          outputText.includes("not found") ||
+          outputText.includes("not enabled") ||
+          outputText.includes("is not enabled") ||
+          outputText.includes("denied") ||
+          outputText.includes("not in the registry");
+        // Priorità a "loaded" se una chiamata precedente era andata bene
+        if (!isError || !skillViewCalls.has(skillName)) {
+          skillViewCalls.set(skillName, isError ? "failed" : "loaded");
+        }
+      }
+    }
+    return (activeProfileRow?.skills ?? []).map((name) => ({
+      name,
+      loadState: skillViewCalls.get(name) ?? "pending",
+    }));
+  }, [messages, activeProfileRow]);
 
   const showSqlQueryMemory = useMemo(
     () => hasSqlQueryMemory(activeProfileRow),
@@ -3278,6 +3342,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         selectedProvider={selectedProvider}
         providersLoading={providersLoading}
         onProviderChange={setSelectedProvider}
+        usedTools={usedTools}
+        skillStatuses={skillStatuses}
       />,
     );
   }, [
@@ -3297,6 +3363,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     llmProviders,
     selectedProvider,
     providersLoading,
+    usedTools,
+    skillStatuses,
   ]);
 
   useLayoutEffect(() => {
@@ -4454,6 +4522,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               </div>
                             ) : null}
                           </div>
+
 
                           <div className="my-1 border-t border-border/45" />
                           <button
