@@ -111,15 +111,15 @@ SAFE_ID_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def _is_safe_path(target: Path, allowed_bases: List[Path]) -> bool:
-    """Verifies that a resolved target path resides strictly within one of the allowed base directories."""
+    """Verifies that a target path stays within one of the trusted base directories."""
     try:
-        t_res = target.resolve()
+        t_res = target.resolve(strict=False)
         for base in allowed_bases:
-            b_res = base.resolve()
             try:
+                b_res = base.resolve(strict=True)
                 t_res.relative_to(b_res)
                 return True
-            except ValueError:
+            except (FileNotFoundError, ValueError):
                 continue
     except Exception:
         return False
