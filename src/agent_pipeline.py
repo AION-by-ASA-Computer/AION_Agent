@@ -3305,33 +3305,42 @@ class AgentPipeline:
                     stop_reason = "user_cancelled"
 
                 drain_sec = float(os.getenv("AION_AGENT_DRAIN_TIMEOUT_SEC", "0"))
-                if stop_event.is_set() and stop_reason != "completed" and drain_sec > 0:
-                    try:
-                        turn_result = await asyncio.wait_for(
-                            agent_task, timeout=drain_sec
-                        )
-                    except asyncio.TimeoutError:
-                        logger.error(
-                            "agent_task drain timeout after stop_reason=%s session=%s "
-                            "(thread may still run MCP tools; consider new chat or raise "
-                            "AION_TOOL_CALLS_MAX_PER_TURN for bulk memory import)",
-                            stop_reason,
-                            self.session_id[:12],
-                        )
-                        agent_task.cancel()
-                        turn_result = None
-                        yield _track_sse(
-                            {
-                                "type": "turn_outcome",
-                                "code": f"agent_drain_timeout_{stop_reason}",
-                                "message": (
-                                    f"The turn was interrupted ({stop_reason}) but the agent "
-                                    f"did not finish within {int(drain_sec)}s (probabili tool MCP "
-                                    "ancora in esecuzione). Apri una nuova chat o usa lo script "
-                                    "Use memory_note for structured lessons or the project memory panel."
-                                ),
-                            }
-                        )
+                if stop_event.is_set() and stop_reason != "completed":
+                    if drain_sec > 0:
+                        try:
+                            turn_result = await asyncio.wait_for(
+                                agent_task, timeout=drain_sec
+                            )
+                        except asyncio.TimeoutError:
+                            logger.error(
+                                "agent_task drain timeout after stop_reason=%s session=%s "
+                                "(thread may still run MCP tools; consider new chat or raise "
+                                "AION_TOOL_CALLS_MAX_PER_TURN for bulk memory import)",
+                                stop_reason,
+                                self.session_id[:12],
+                            )
+                            agent_task.cancel()
+                            turn_result = None
+                            yield _track_sse(
+                                {
+                                    "type": "turn_outcome",
+                                    "code": f"agent_drain_timeout_{stop_reason}",
+                                    "message": (
+                                        f"The turn was interrupted ({stop_reason}) but the agent "
+                                        f"did not finish within {int(drain_sec)}s (probabili tool MCP "
+                                        "ancora in esecuzione). Apri una nuova chat o usa lo script "
+                                        "Use memory_note for structured lessons or the project memory panel."
+                                    ),
+                                }
+                            )
+                    else:
+                        if not agent_task.done():
+                            logger.info("Cancelling agent_task immediately (drain_sec=0) to drop LLM connection.")
+                            agent_task.cancel()
+                        try:
+                            turn_result = await agent_task
+                        except asyncio.CancelledError:
+                            turn_result = None
                 else:
                     turn_result = await agent_task
                 _agent_debug_log(
