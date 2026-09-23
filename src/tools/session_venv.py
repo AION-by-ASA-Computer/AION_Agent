@@ -8,6 +8,7 @@ import logging
 import os
 import re
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -123,9 +124,8 @@ def _venv_bootstrap_skills_enabled() -> bool:
 def _venv_create_argv(vdir: Path) -> List[str]:
     argv: List[str] = [sys.executable, "-m", "venv"]
     if _in_sandbox_container():
-        # Inherit /opt/venv office skill deps baked into the sandbox image.
         argv.append("--system-site-packages")
-    argv.append(str(vdir))
+    argv.append(vdir.as_posix() if vdir.as_posix().startswith("/") else str(vdir))
     return argv
 
 
@@ -143,6 +143,24 @@ def _skills_requirements_path() -> Path:
     return _SKILLS_REQUIREMENTS
 
 
+def _trusted_session_python_for_checks(session_id: str) -> Optional[Path]:
+    """
+    Resolve and validate the session venv interpreter used for local import checks.
+    Returns None when the candidate is missing or fails trust validation.
+    """
+    candidate = session_venv_python(session_id)
+    if not candidate.is_file():
+        return None
+    try:
+        expected = session_venv_dir(session_id).resolve()
+        resolved = candidate.resolve()
+        resolved.relative_to(expected)
+    except Exception:
+        logger.warning("refusing untrusted session python path: %s", candidate)
+        return None
+    return candidate
+
+
 def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
     """Seed session venv with office skill Python deps (idempotent via marker file)."""
     if not _venv_bootstrap_skills_enabled():
@@ -151,16 +169,29 @@ def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
     if marker.is_file():
         return
 
+    vpy = _trusted_session_python_for_checks(session_id)
+    if vpy is None:
+        return
+
+    # If packages are already importable (e.g. inherited via system-site-packages), skip network install
+    try:
+        check_res = subprocess.run(
+            [str(vpy), "-c", "import openpyxl, pandas"],
+            capture_output=True,
+            timeout=5,
+        )
+        if check_res.returncode == 0:
+            marker.touch()
+            return
+    except Exception:
+        pass
+
     req = _skills_requirements_path()
     if not req.is_file():
         logger.warning("skills requirements not found: %s", req)
         return
     if not _pip_install_allowed():
         logger.info("skip skills venv bootstrap (AION_SANDBOX_ALLOW_PACKAGE_INSTALL=0)")
-        return
-
-    vpy = session_venv_python(session_id)
-    if not vpy.is_file():
         return
 
     timeout = _pip_timeout()

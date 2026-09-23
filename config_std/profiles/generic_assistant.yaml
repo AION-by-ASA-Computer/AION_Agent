@@ -19,6 +19,7 @@ skills:
 - artifact_protocol
 - filesystem_tools_protocol
 - memory_protocol
+- charts_generation
 - llm_wiki
 - presentation_design
 - web_research_protocol
@@ -32,6 +33,7 @@ critical_skills:
 - core_protocol
 - artifact_protocol
 - memory_protocol
+- charts_generation
 - web_research_protocol
 - incremental_execution_protocol
 native_tool_groups:
@@ -44,3 +46,4 @@ mcp_servers:
 - skills_hub
 - ocr
 - geocoding
+- charts
