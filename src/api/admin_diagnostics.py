@@ -151,7 +151,9 @@ def _resolve_file_within(base_dir: Path | str, candidate: Path | str) -> Optiona
     return None
 
 
-def _finalize_allowed_file(candidate: Path, allowed_bases: List[Path]) -> Optional[Path]:
+def _finalize_allowed_file(
+    candidate: Path, allowed_bases: List[Path]
+) -> Optional[Path]:
     """Return a strictly resolved file path only if it is within one of the allowed bases."""
     try:
         resolved = candidate.resolve(strict=True)
