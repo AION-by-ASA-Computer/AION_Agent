@@ -137,19 +137,15 @@ def _resolve_file_within(base_dir: Path | str, candidate: Path | str) -> Optiona
         base_resolved = Path(base_dir).resolve(strict=True)
         candidate_path = Path(candidate)
 
-        # Resolve untrusted paths relative to trusted base to avoid direct filesystem
-        # resolution of attacker-controlled absolute/relative expressions.
+        # Never resolve attacker-controlled absolute paths directly.
+        # Candidate must be interpreted as a path relative to the trusted base
         if candidate_path.is_absolute():
-            combined = candidate_path
-        else:
-            combined = base_resolved / candidate_path
+            return None
 
-        candidate_resolved = combined.resolve(strict=True)
-        if (
-            candidate_resolved.is_relative_to(base_resolved)
-            and candidate_resolved.is_file()
-        ):
-            return candidate_resolved
+        combined = (base_resolved / candidate_path).resolve(strict=True)
+        if combined.is_relative_to(base_resolved) and combined.is_file():
+            return combined
+
     except Exception:
         return None
     return None
@@ -281,14 +277,8 @@ async def get_diagnostic_file(
             status_code=404, detail="File deliverable non trovato o accesso negato"
         )
 
-    target_path = Path(target)
-    if target_path.is_absolute():
-        combined = target_path
-    else:
-        combined = outputs_dir / target_path
-
     try:
-        safe_target = combined.resolve(strict=True)
+        safe_target = Path(target).resolve(strict=True)
     except Exception:
         raise HTTPException(status_code=404, detail="File non trovato")
 
