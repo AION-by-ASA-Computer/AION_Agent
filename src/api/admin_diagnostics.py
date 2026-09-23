@@ -151,6 +151,25 @@ def _resolve_file_within(base_dir: Path | str, candidate: Path | str) -> Optiona
     return None
 
 
+def _finalize_allowed_file(candidate: Path, allowed_bases: List[Path]) -> Optional[Path]:
+    """Return a strictly resolved file path only if it is within one of the allowed bases."""
+    try:
+        resolved = candidate.resolve(strict=True)
+    except Exception:
+        return None
+
+    if not resolved.is_file():
+        return None
+
+    for base in allowed_bases:
+        try:
+            if resolved.is_relative_to(base):
+                return resolved
+        except Exception:
+            continue
+    return None
+
+
 def resolve_diagnostic_file(
     raw_path: str, session_id: Optional[str] = None
 ) -> Optional[Path]:
@@ -187,7 +206,7 @@ def resolve_diagnostic_file(
         for base in allowed_bases:
             res = _resolve_file_within(base, candidate)
             if res is not None:
-                return res
+                return _finalize_allowed_file(res, allowed_bases)
         return None
 
     # 1. Path strutturato con prefisso sessions/ o data/sessions/
@@ -277,10 +296,7 @@ async def get_diagnostic_file(
             status_code=404, detail="File deliverable non trovato o accesso negato"
         )
 
-    try:
-        safe_target = Path(target).resolve(strict=True)
-    except Exception:
-        raise HTTPException(status_code=404, detail="File non trovato")
+    safe_target = target
 
     if not (
         safe_target.is_relative_to(sessions_dir)
