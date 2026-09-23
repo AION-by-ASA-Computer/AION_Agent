@@ -305,6 +305,10 @@ async def get_diagnostic_file(
         raise HTTPException(status_code=404, detail="File deliverable non trovato")
 
     allowed_roots = [sessions_dir.resolve(), outputs_dir.resolve()]
+    if not any(safe_target.is_relative_to(root) for root in allowed_roots):
+        raise HTTPException(
+            status_code=404, detail="File deliverable non trovato o accesso negato"
+        )
     if not any(safe_target.is_relative_to(base) for base in allowed_roots):
         raise HTTPException(status_code=403, detail="Accesso al path non consentito")
 
