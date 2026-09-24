@@ -71,6 +71,7 @@ class UpdateNoteBody(BaseModel):
 class DeleteNoteBody(BaseModel):
     session_id: str = Field(..., min_length=1)
     note_id: int = Field(..., ge=1)
+    hard: bool = Field(default=False)
 
 
 async def _assert_project_access(
@@ -260,6 +261,7 @@ async def remove_note(
     note_id: int,
     body: DeleteNoteBody,
     auth: ChatAuthIdentity = Depends(require_chat_auth),
+    hard: Optional[bool] = Query(None),
 ) -> Dict[str, Any]:
     from src.memory.mnemos import store
 
@@ -268,7 +270,10 @@ async def remove_note(
         raise HTTPException(status_code=404, detail="note_not_found")
     slug = await _assert_project_access(note.scope_key, auth)
     tenant = default_tenant_id()
-    ok = await delete_project_note(note_id, tenant_id=tenant, project_slug=slug)
+    is_hard = body.hard if body.hard else bool(hard)
+    ok = await delete_project_note(
+        note_id, tenant_id=tenant, project_slug=slug, hard=is_hard
+    )
     if not ok:
         raise HTTPException(status_code=404, detail="note_not_found")
-    return {"ok": True, "note_id": note_id}
+    return {"ok": True, "note_id": note_id, "hard": is_hard}

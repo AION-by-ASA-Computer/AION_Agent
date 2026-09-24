@@ -68,6 +68,7 @@ class UpdateNoteBody(BaseModel):
 class DeleteNoteBody(BaseModel):
     session_id: str = Field(..., min_length=1)
     note_id: int = Field(..., ge=1)
+    hard: bool = Field(default=False)
 
 
 @router.get("/status")
@@ -243,13 +244,16 @@ async def remove_note(
     note_id: int,
     body: DeleteNoteBody,
     auth: ChatAuthIdentity = Depends(require_chat_auth),
+    hard: Optional[bool] = Query(None),
 ) -> Dict[str, Any]:
     tenant = default_tenant_id()
+    is_hard = body.hard if body.hard else bool(hard)
     ok = await delete_user_note(
         tenant_id=tenant,
         user_identifier=auth.identifier,
         note_id=note_id,
+        hard=is_hard,
     )
     if not ok:
         raise HTTPException(status_code=404, detail="note_not_found")
-    return {"ok": True, "note_id": note_id}
+    return {"ok": True, "note_id": note_id, "hard": is_hard}

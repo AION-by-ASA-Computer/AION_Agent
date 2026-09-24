@@ -258,12 +258,13 @@ export async function deleteProjectNote(
   userId: string,
   token: string | null | undefined,
   noteId: number,
-  sessionId: string
+  sessionId: string,
+  hard: boolean = false
 ): Promise<void> {
   const r = await fetch(`${apiBase()}/v1/project-memory/notes/${noteId}`, {
     method: "DELETE",
     headers: { ...jsonHeaders(userId, token), "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, note_id: noteId }),
+    body: JSON.stringify({ session_id: sessionId, note_id: noteId, hard }),
   });
   if (!r.ok) throw new Error(await parseError(r));
 }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -106,6 +107,13 @@ def _clamp_content(text: str) -> str:
     if len(t) > CONTENT_MAX_CHARS:
         return t[: CONTENT_MAX_CHARS - 3] + "..."
     return t
+
+
+def _normalize_for_dedup(text: str) -> str:
+    """Normalize text for exact/fuzzy deduplication: lowercase, no punctuation, single spaces."""
+    t = (text or "").lower()
+    t = re.sub(r"[^\w\s]", " ", t, flags=re.UNICODE)
+    return " ".join(t.split())
 
 
 async def _embedding_blob_for_content(body: str, *, allow: bool = True) -> bytes | None:
@@ -284,6 +292,107 @@ async def insert_note(
     raise RuntimeError("unreachable")
 
 
+async def find_duplicate_note(
+    scope: MemoryScope,
+    content: str,
+    *,
+    similarity_threshold: float = 0.92,
+    session: Optional[AsyncSession] = None,
+) -> Optional[LtmNote]:
+    """Check if an active note with identical or highly similar content already exists in scope."""
+    body = _clamp_content(content)
+    if len(body) < 3:
+        return None
+    norm_target = _normalize_for_dedup(body)
+    if not norm_target:
+        return None
+
+    tid, st, sk = scope.as_tuple()
+
+    async def _search(sess: AsyncSession) -> Optional[LtmNote]:
+        notes = list(
+            (
+                await sess.execute(
+                    select(LtmNote)
+                    .where(
+                        LtmNote.tenant_id == tid,
+                        LtmNote.scope_type == st,
+                        LtmNote.scope_key == sk,
+                        LtmNote.status == "active",
+                    )
+                    .order_by(LtmNote.seq.desc())
+                    .limit(100)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        if not notes:
+            return None
+
+        # Level 1: Exact normalized match
+        for note in notes:
+            if _normalize_for_dedup(note.content) == norm_target:
+                return note
+
+        # Level 2: Semantic Cosine Similarity over embeddings
+        target_vec = None
+        target_blob = await _embedding_blob_for_content(body)
+        if target_blob:
+            target_vec = bytes_to_embedding(target_blob)
+
+        if target_vec is not None:
+            import numpy as np
+
+            t_vec = np.asarray(target_vec, dtype=np.float32)
+            for note in notes:
+                if not note.embedding:
+                    continue
+                n_vec = bytes_to_embedding(note.embedding)
+                if n_vec is None:
+                    continue
+                sim = cosine_similarity(t_vec, n_vec)
+                if sim >= similarity_threshold:
+                    return note
+
+        return None
+
+    if session is not None:
+        return await _search(session)
+
+    async with get_async_session_maker()() as sess:
+        return await _search(sess)
+
+
+async def reinforce_note(
+    note_id: int,
+    *,
+    new_confidence: float = 1.0,
+    session: Optional[AsyncSession] = None,
+) -> Optional[LtmNote]:
+    """Reinforce an existing note's confidence and touched timestamp."""
+    conf = max(0.0, min(1.0, float(new_confidence)))
+    now = datetime.now(timezone.utc)
+
+    async def _do(sess: AsyncSession) -> Optional[LtmNote]:
+        note = await sess.get(LtmNote, note_id)
+        if not note:
+            return None
+        note.confidence = max(float(note.confidence or 1.0), conf)
+        note.last_recalled_at = now
+        return note
+
+    if session is not None:
+        return await _do(session)
+
+    async with get_async_session_maker()() as sess:
+        res = await _do(sess)
+        if res:
+            await sess.commit()
+            await sess.refresh(res)
+        return res
+
+
 async def get_note(note_id: int) -> Optional[LtmNote]:
     async with get_async_session_maker()() as session:
         return await session.get(LtmNote, note_id)
@@ -317,17 +426,34 @@ async def list_notes(
         return list((await session.execute(q)).scalars().all())
 
 
-async def follow_supersede_chain(note: LtmNote) -> LtmNote:
+async def follow_supersede_chain(note: LtmNote) -> Optional[LtmNote]:
+    """Follow superseded_by pointers to the active terminal note.
+
+    Returns:
+        The active note if the starting note is active,
+        or the active successor if the starting note is superseded,
+        or None if no active successor exists (e.g. forgotten note with superseded_by=None
+        or a chain terminating on a superseded note).
+    """
+    if note.status == "active":
+        return note
+
     current = note
     seen: set[int] = set()
     async with get_async_session_maker()() as session:
-        while current.superseded_by and current.id not in seen:
+        while (
+            current.status == "superseded"
+            and current.superseded_by
+            and current.id not in seen
+        ):
             seen.add(current.id)
             nxt = await session.get(LtmNote, current.superseded_by)
             if not nxt:
-                break
+                return None
             current = nxt
-        return current
+            if current.status == "active":
+                return current
+        return current if current.status == "active" else None
 
 
 async def supersede_note(
@@ -635,10 +761,16 @@ async def fts_search(
             note = await session.get(LtmNote, nid)
             if not note:
                 continue
+            if mode == "current":
+                if note.status == "superseded":
+                    resolved = await follow_supersede_chain(note)
+                    if not resolved or resolved.status != "active":
+                        continue
+                    note = resolved
+                elif note.status != "active":
+                    continue
             if not _note_visible(note, mode=mode, as_of=as_of):
                 continue
-            if mode == "current" and note.status == "superseded":
-                note = await follow_supersede_chain(note)
             tid_note = note.id
             score = float(r["score"])
             if tid_note not in best_score or score < best_score[tid_note]:
@@ -657,6 +789,8 @@ def _note_visible(
 ) -> bool:
     if mode == "historical":
         return True
+    if note.status != "active":
+        return False
     ref = as_of or datetime.now(timezone.utc)
     if ref.tzinfo is None:
         ref = ref.replace(tzinfo=timezone.utc)
@@ -696,10 +830,16 @@ async def get_notes_by_ids(
             note = by_id.get(nid)
             if not note:
                 continue
+            if mode == "current":
+                if note.status == "superseded":
+                    resolved = await follow_supersede_chain(note)
+                    if not resolved or resolved.status != "active":
+                        continue
+                    note = resolved
+                elif note.status != "active":
+                    continue
             if not _note_visible(note, mode=mode, as_of=as_of):
                 continue
-            if mode == "current" and note.status == "superseded":
-                note = await follow_supersede_chain(note)
             if note.id in seen:
                 continue
             seen.add(note.id)
@@ -751,8 +891,16 @@ async def embedding_search(
     terminal_by_id: dict[int, LtmNote] = {}
     best_sim: dict[int, float] = {}
     for sim, note in scored:
-        if mode == "current" and note.status == "superseded":
-            note = await follow_supersede_chain(note)
+        if mode == "current":
+            if note.status == "superseded":
+                resolved = await follow_supersede_chain(note)
+                if not resolved or resolved.status != "active":
+                    continue
+                note = resolved
+            elif note.status != "active":
+                continue
+        if not _note_visible(note, mode=mode, as_of=as_of):
+            continue
         tid_note = note.id
         if tid_note not in best_sim or sim > best_sim[tid_note]:
             best_sim[tid_note] = sim
