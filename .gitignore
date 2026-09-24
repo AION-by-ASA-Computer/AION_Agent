@@ -289,3 +289,6 @@ docker-compose.local.yml
 .duckdb_test_db.db
 .duckdb_test_k-hub_db.db
 *.duckdb
+
+# Output test folder for smoke tests
+evals/agent_smoke_tests/outputs/*

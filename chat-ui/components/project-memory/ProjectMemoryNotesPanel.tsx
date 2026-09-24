@@ -65,6 +65,7 @@ export function ProjectMemoryNotesPanel({
   const [draftCategory, setDraftCategory] = useState("fact");
   const [draftImportance, setDraftImportance] = useState(3);
   const [creating, setCreating] = useState(false);
+  const [deletingNote, setDeletingNote] = useState<ProjectNote | null>(null);
 
   const categoryLabel = useCallback(
     (c: string) => t(`project_memory.categories.${c}` as "project_memory.categories.fact"),
@@ -212,13 +213,14 @@ export function ProjectMemoryNotesPanel({
     }
   };
 
-  const onDelete = async (note: ProjectNote) => {
+  const executeDelete = async (note: ProjectNote, hard: boolean) => {
     setLoading(true);
+    setDeletingNote(null);
     try {
       if (memoryScope === "user") {
-        await deleteUserNote(userId, token, note.id, sessionId);
+        await deleteUserNote(userId, token, note.id, sessionId, hard);
       } else {
-        await deleteProjectNote(userId, token, note.id, sessionId);
+        await deleteProjectNote(userId, token, note.id, sessionId, hard);
       }
       await load();
     } catch (e) {
@@ -390,13 +392,23 @@ export function ProjectMemoryNotesPanel({
                         </button>
                         <button
                           type="button"
-                          className="focus-ring rounded p-1 text-destructive"
-                          onClick={() => void onDelete(note)}
+                          className="focus-ring rounded p-1 text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeletingNote(note)}
+                          title={t("project_memory.delete_title_active")}
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </>
-                    ) : null}
+                    ) : (
+                      <button
+                        type="button"
+                        className="focus-ring rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => setDeletingNote(note)}
+                        title={t("project_memory.delete_title_superseded")}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
                 <p className="whitespace-pre-wrap break-words">{note.content}</p>
@@ -413,6 +425,99 @@ export function ProjectMemoryNotesPanel({
           </ul>
         )}
       </div>
+
+      {deletingNote ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="mb-3 flex items-start justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <div className="rounded-full bg-destructive/10 p-2 text-destructive">
+                  <Trash2 className="h-5 w-5" />
+                </div>
+                <h3 className="text-base font-semibold text-foreground">
+                  {deletingNote.status === "active"
+                    ? t("project_memory.delete_title_active")
+                    : t("project_memory.delete_title_superseded")}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeletingNote(null)}
+                className="rounded p-1 text-muted-foreground hover:bg-muted"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <p className="mb-3 text-xs text-muted-foreground">
+              {deletingNote.status === "active"
+                ? t("project_memory.delete_desc_active")
+                : t("project_memory.delete_desc_superseded")}
+            </p>
+
+            <div className="mb-4 max-h-24 overflow-y-auto rounded-md border border-border bg-muted/40 p-2.5 text-xs italic text-foreground">
+              "{deletingNote.content}"
+            </div>
+
+            {deletingNote.status === "active" ? (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  className="flex w-full flex-col items-start rounded-lg border border-border bg-background p-3 text-left transition-colors hover:bg-muted"
+                  onClick={() => void executeDelete(deletingNote, false)}
+                >
+                  <span className="text-sm font-medium text-foreground">
+                    {t("project_memory.delete_soft_btn")}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {t("project_memory.delete_soft_desc")}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="flex w-full flex-col items-start rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-left transition-colors hover:border-destructive hover:bg-destructive/10"
+                  onClick={() => void executeDelete(deletingNote, true)}
+                >
+                  <span className="text-sm font-medium text-destructive">
+                    {t("project_memory.delete_hard_btn")}
+                  </span>
+                  <span className="text-[11px] text-muted-foreground">
+                    {t("project_memory.delete_hard_desc")}
+                  </span>
+                </button>
+
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    className="rounded-md border border-border px-4 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+                    onClick={() => setDeletingNote(null)}
+                  >
+                    {t("project_memory.cancel")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  className="rounded-md border border-border px-4 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+                  onClick={() => setDeletingNote(null)}
+                >
+                  {t("project_memory.cancel")}
+                </button>
+                <button
+                  type="button"
+                  className="rounded-md bg-destructive px-4 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90"
+                  onClick={() => void executeDelete(deletingNote, true)}
+                >
+                  {t("project_memory.delete_confirm")}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
