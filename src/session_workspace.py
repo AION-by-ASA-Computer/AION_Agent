@@ -17,6 +17,7 @@ from typing import Any, Dict, List, Optional
 logger = logging.getLogger("aion.session_workspace")
 
 _SAFE_REL = re.compile(r"^[a-zA-Z0-9._/\-]+$")
+_SAFE_SEGMENT = re.compile(r"^[a-zA-Z0-9._\-]+$")
 _SESSION_ID_RE = re.compile(r"^[a-zA-Z0-9\-_]{4,128}$")
 
 # Top-level dirs exposed to sandbox list/grep/glob (and typical agent workflows).
@@ -146,6 +147,28 @@ def safe_resolve(
     return full
 
 
+def _resolve_listed_subdir(root: Path, sub: str) -> Path:
+    """Resolve a validated subpath under an already-known session root."""
+    rel = sub.strip().replace("\\", "/").strip("/")
+    if not rel or not _SAFE_REL.match(rel):
+        raise ValueError(f"subdir non valido: {sub}")
+    parts = rel.split("/")
+    top = parts[0]
+    if top not in SESSION_CONTENT_ROOTS - {""}:
+        raise ValueError(
+            f"subdir deve essere uno tra: {', '.join(sorted(LISTABLE_SUBDIRS))}"
+        )
+    candidate = root
+    for part in parts:
+        if part in (".", "..") or not _SAFE_SEGMENT.match(part):
+            raise ValueError("path non consentito")
+        candidate = candidate / part
+    resolved = candidate.resolve()
+    if not _is_under(root, resolved):
+        raise ValueError("path fuori dalla sessione")
+    return resolved
+
+
 def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
     root = ensure_session_dirs(session_id)
     sub = subdir.strip().replace("\\", "/").strip("/")
@@ -154,7 +177,7 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
     if sub in LISTABLE_SUBDIRS:
         if sub == "tool_results":
             return _list_tool_results_files(session_id)
-        d = safe_resolve(session_id, sub, must_exist=False)
+        d = _resolve_listed_subdir(root, sub)
         if not d.is_dir():
             return []
         all_names = set(p.name for p in d.iterdir() if p.is_file())
@@ -189,12 +212,7 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
         return out
 
     # Nested paths under a known session root (e.g. workspace/screenshots).
-    top = sub.split("/", 1)[0]
-    if top not in SESSION_CONTENT_ROOTS - {""}:
-        raise ValueError(
-            f"subdir deve essere uno tra: {', '.join(sorted(LISTABLE_SUBDIRS))}"
-        )
-    d = safe_resolve(session_id, sub, must_exist=False)
+    d = _resolve_listed_subdir(root, sub)
     if not d.is_dir():
         return []
     out = []
