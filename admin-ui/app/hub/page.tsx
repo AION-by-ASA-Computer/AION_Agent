@@ -470,6 +470,9 @@ export default function MCPHub() {
       if (typeof v.url === "string") {
         payload.url = v.url;
       }
+      if (typeof v.remote_url === "string") {
+        payload.remote_url = v.remote_url;
+      }
       if (v.security && typeof v.security === "object" && !Array.isArray(v.security)) {
         payload.security = { ...v.security };
       }
