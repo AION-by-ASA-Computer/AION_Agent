@@ -2203,8 +2203,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             }
           }
 
-          if (chunk.type === "pii_messages_to_replace" && chunk.replacements) {
-            const repls = chunk.replacements;
+          if (chunk.type === "pii_messages_to_replace" && Array.isArray(chunk.replacements)) {
+            const repls = chunk.replacements as Array<{ message_id: string; censored_content: string }>;
             setMessages((prev) => {
               let changed = false;
               const next = prev.map((m) => {

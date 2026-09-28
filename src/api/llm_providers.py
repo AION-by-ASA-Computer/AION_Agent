@@ -144,13 +144,17 @@ async def probe_llm_provider(body: LlmProviderProbeRequest):
 
         async with get_async_session_maker()() as session:
             row = (
-                await session.execute(
-                    select(LlmProvider).where(
-                        LlmProvider.tenant_id == "default",
-                        LlmProvider.slug == body.slug,
+                (
+                    await session.execute(
+                        select(LlmProvider).where(
+                            LlmProvider.tenant_id == "default",
+                            LlmProvider.slug == body.slug,
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if row and row.api_key_encrypted:
                 api_key = decrypt_value(row.api_key_encrypted)
 
