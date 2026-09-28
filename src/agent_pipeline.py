@@ -2354,6 +2354,20 @@ class AgentPipeline:
                                 user_id=self.user_id,
                                 profile_name=self.profile_name,
                             )
+                            
+                            # Censor any tool execution steps for this turn to prevent leakage in "Previous turn tools"
+                            for step in turn_persist.pending_db_steps:
+                                needs_update = False
+                                if step.get("output"):
+                                    step["output"] = "[CENSORED BY PII REVIEW]"
+                                    needs_update = True
+                                if step.get("input") and "{" not in str(step.get("input")):
+                                    step["input"] = "[CENSORED BY PII REVIEW]"
+                                    needs_update = True
+                                
+                                if needs_update:
+                                    step["pending_update"] = True
+                                    
                         yield _track_sse({
                             "type": "pii_messages_to_replace",
                             "replacements": cleaned_replacements,

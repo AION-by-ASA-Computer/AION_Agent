@@ -214,6 +214,7 @@ export type ChatPrepareStatus = {
   conversation_id: string;
   mcp_errors?: ChatPrepareMcpError[];
   has_errors?: boolean;
+  pii_supported?: boolean;
 };
 
 async function fetchChatPrepareStatus(

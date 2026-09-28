@@ -994,6 +994,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             : result.status;
       setSessionPrepareStatus(nextStatus);
 
+      if (result.pii_supported) {
+        setPiiReviewSupported(true);
+      } else {
+        setPiiReviewSupported(false);
+        setPiiReviewEnabled(false);
+      }
+
       const runtimeRows = (result.mcp_errors ?? []).map((row: ChatPrepareMcpError) => ({
         server_slug: row.server_slug,
         display_name: row.display_name,
@@ -1122,6 +1129,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [piiReviewEnabled, setPiiReviewEnabled] = useState(false);
+  const [piiReviewSupported, setPiiReviewSupported] = useState(false);
   const [webRestrictHosts, setWebRestrictHosts] = useState<string[]>([]);
   const [webRestrictModalOpen, setWebRestrictModalOpen] = useState(false);
   const [webRestrictDraft, setWebRestrictDraft] = useState<string[]>([]);
@@ -4612,32 +4620,36 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           </div>
 
 
-                          <div className="my-1 border-t border-border/45" />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setPiiReviewEnabled((prev) => !prev);
-                              setIsPlusOpen(false);
-                              closePlusSubMenus();
-                            }}
-                            onMouseEnter={() => {
-                              closePlusSubMenus();
-                            }}
-                            className={cn(
-                              "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                              piiReviewEnabled
-                                ? "bg-primary/10 text-primary"
-                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                            )}
-                          >
-                            <div className="flex min-w-0 items-center gap-2">
-                              <Shield size={12} className="shrink-0" aria-hidden />
-                              <span className="truncate">PII Review</span>
-                            </div>
-                            {piiReviewEnabled ? (
-                              <Check size={12} className="shrink-0 text-primary" />
-                            ) : null}
-                          </button>
+                          {piiReviewSupported ? (
+                            <>
+                              <div className="my-1 border-t border-border/45" />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setPiiReviewEnabled((prev) => !prev);
+                                  setIsPlusOpen(false);
+                                  closePlusSubMenus();
+                                }}
+                                onMouseEnter={() => {
+                                  closePlusSubMenus();
+                                }}
+                                className={cn(
+                                  "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                  piiReviewEnabled
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                )}
+                              >
+                                <div className="flex min-w-0 items-center gap-2">
+                                  <Shield size={12} className="shrink-0" aria-hidden />
+                                  <span className="truncate">PII Review</span>
+                                </div>
+                                {piiReviewEnabled ? (
+                                  <Check size={12} className="shrink-0 text-primary" />
+                                ) : null}
+                              </button>
+                            </>
+                          ) : null}
 
                           <button
                             type="button"
