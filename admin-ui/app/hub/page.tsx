@@ -1595,7 +1595,7 @@ export default function MCPHub() {
                             values: {
                               ...editingConfig.values,
                               type: e.target.value,
-                              ...(e.target.value === "sse" ? { command: undefined, args: undefined, rawArgsText: "" } : {}),
+                              ...(["sse", "remote-bridge"].includes(e.target.value) ? { command: undefined, args: undefined, rawArgsText: "" } : {}),
                             },
                           })
                         }
@@ -1603,25 +1603,36 @@ export default function MCPHub() {
                       >
                         <option value="stdio">Local (Stdio)</option>
                         <option value="sse">Remote (SSE)</option>
+                        <option value="remote-bridge">Remote Bridge</option>
                         <option value="in_process">In-Process</option>
                       </select>
                     </div>
                   </div>
 
-                  {/* SSE Endpoint */}
-                  {editingConfig.values.type === "sse" ? (
+                  {/* SSE / Remote Bridge Endpoint */}
+                  {editingConfig.values.type === "sse" || editingConfig.values.type === "remote-bridge" ? (
                     <div className="space-y-1.5 pt-1">
-                      <label className="text-xs font-semibold text-gray-300 block">Endpoint URL (SSE)</label>
+                      <label className="text-xs font-semibold text-gray-300 block">
+                        {editingConfig.values.type === "remote-bridge" ? "Bridge URL" : "Endpoint URL (SSE)"}
+                      </label>
                       <input
                         type="text"
-                        value={editingConfig.values.url ?? ""}
-                        onChange={(e) =>
+                        value={
+                          editingConfig.values.type === "remote-bridge"
+                            ? (editingConfig.values.remote_url ?? "")
+                            : (editingConfig.values.url ?? "")
+                        }
+                        onChange={(e) => {
+                          const val = e.target.value;
                           setEditingConfig({
                             ...editingConfig,
-                            values: { ...editingConfig.values, url: e.target.value },
-                          })
-                        }
-                        placeholder="https://example.com/sse"
+                            values: {
+                              ...editingConfig.values,
+                              ...(editingConfig.values.type === "remote-bridge" ? { remote_url: val } : { url: val }),
+                            },
+                          });
+                        }}
+                        placeholder={editingConfig.values.type === "remote-bridge" ? "https://bridge.example.com" : "https://example.com/sse"}
                         className="w-full bg-black/50 border border-white/10 rounded-xl px-3.5 py-2.5 text-xs text-white font-mono focus:border-blue-500 outline-none transition"
                       />
                     </div>
