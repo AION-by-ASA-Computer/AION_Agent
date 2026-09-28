@@ -23,8 +23,10 @@ Benchmarks are **developer tools only** — they validate memory retrieval, agen
 |----|---------|-----------------|
 | `mnemos_bench` | Mnemos recall (smoke: 6, full: 81, adversarial: 53) | seconds–minutes |
 | `general_agent` | Agent pipeline smoke via JSON cases | seconds |
+| `agent_smoke_tests` | End-to-end multi-scenario agent diagnostics (CLI & Admin UI) | seconds |
 | `longmemeval_v2_small` | Integration stress test (Mnemos-only ingest + agent) | minutes–hours |
 
+See [agent-smoke-tests.md](./agent-smoke-tests.md) for the end-to-end Agent Smoke Tests suite and diagnostics dashboard.
 See [mnemos-bench.md](./mnemos-bench.md) for the primary Mnemos validation suite.
 
 The full dataset is a **regression guard** (expected 100%). The adversarial

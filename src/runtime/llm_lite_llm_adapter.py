@@ -58,6 +58,30 @@ except Exception as e:
     )
 
 
+def _sanitize_messages_for_litellm(messages: List[ChatMessage]) -> List[ChatMessage]:
+    """Ensure all ChatMessage instances contain at least one content item so to_openai_dict_format doesn't crash."""
+    if not messages:
+        return messages
+    from haystack.dataclasses import ChatRole, TextContent
+
+    sanitized = []
+    for m in messages:
+        content = getattr(m, "_content", None)
+        if not content:
+            text_val = getattr(m, "text", "") or " "
+            role = getattr(m, "_role", ChatRole.ASSISTANT)
+            sanitized.append(
+                ChatMessage(
+                    role=role,
+                    content=[TextContent(text=text_val)],
+                    meta=getattr(m, "meta", {}),
+                )
+            )
+        else:
+            sanitized.append(m)
+    return sanitized
+
+
 @component
 class LiteLLMChatGeneratorWrapper:
     """
@@ -153,6 +177,7 @@ class LiteLLMChatGeneratorWrapper:
         tools: Optional[List[Any]] = None,
         **kwargs,
     ) -> Dict[str, List[ChatMessage]]:
+        messages = _sanitize_messages_for_litellm(messages)
         run_params = {
             "messages": messages,
             "streaming_callback": streaming_callback,
@@ -208,6 +233,7 @@ class LiteLLMChatGeneratorWrapper:
         tools: Optional[List[Any]] = None,
         **kwargs,
     ) -> Dict[str, List[ChatMessage]]:
+        messages = _sanitize_messages_for_litellm(messages)
         run_params = {
             "messages": messages,
             "streaming_callback": streaming_callback,

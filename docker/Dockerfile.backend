@@ -97,6 +97,7 @@ RUN npm install --omit=dev
 
 # Application code (runtime dirs config/ and mcp_servers/ come from sync at boot)
 COPY src/              ./src/
+COPY evals/            ./evals/
 COPY mcp_servers_std/  ./mcp_servers_std/
 COPY config_std/       ./config_std/
 COPY migrations/       ./migrations/

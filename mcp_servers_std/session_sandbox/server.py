@@ -207,6 +207,28 @@ def sandbox_append_workspace_file(relative_path: str, content: str) -> str:
 
 
 @mcp.tool()
+def sandbox_delete_workspace_file(relative_path: str) -> str:
+    """
+    Delete a file located under workspace/ in the session sandbox.
+    Use this to clean up temporary, obsolete, or conflicting scripts and data files.
+    """
+    from src.runtime.mcp_tool_args import normalize_workspace_relative_path
+    from src.session_workspace import safe_resolve
+
+    try:
+        rel = normalize_workspace_relative_path(relative_path)
+        if not rel.startswith("workspace/"):
+            return "Error: path must be under workspace/ (e.g. workspace/temp.py)."
+        p = safe_resolve(_sid(), rel, must_exist=True)
+        if not p.is_file():
+            return f"Error: {rel} is not a file."
+        p.unlink()
+        return f"File {rel} deleted successfully."
+    except Exception as e:
+        return f"Error while deleting: {e}"
+
+
+@mcp.tool()
 def sandbox_edit_workspace_file(
     relative_path: str,
     old_string: str,
