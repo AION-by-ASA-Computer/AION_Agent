@@ -220,8 +220,28 @@ class LiteLLMChatGeneratorWrapper:
         tools: Optional[List[Any]] = None,
         **kwargs,
     ) -> Dict[str, List[ChatMessage]]:
+        # Sanitize messages to avoid Haystack empty message validation errors
+        sanitized_messages = []
+        for m in messages:
+            from haystack.dataclasses import TextContent, ChatMessage
+            has_content = (
+                getattr(m, "texts", None) or 
+                getattr(m, "tool_calls", None) or 
+                getattr(m, "tool_call_results", None) or 
+                getattr(m, "images", None) or 
+                getattr(m, "files", None)
+            )
+            if not has_content:
+                # Se un messaggio arriva vuoto (es. filtrato da PII), metti un placeholder
+                import logging
+                logger = logging.getLogger("aion.lite_llm_adapter")
+                logger.warning(f"DEBUG: Dropping empty message with role {m.role} and meta {m.meta}")
+                continue  # Drop empty messages entirely instead of polluting the history
+            else:
+                sanitized_messages.append(m)
+        
         run_params = {
-            "messages": messages,
+            "messages": sanitized_messages,
             "streaming_callback": streaming_callback,
             "generation_kwargs": generation_kwargs,
             "tools": tools,
