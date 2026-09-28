@@ -101,7 +101,9 @@ def resolve_llm_credentials() -> Tuple[str, str, str]:
                         api_key = os.getenv("AION_LLM_API_KEY", "placeholder-token")
 
                     if api_base_url:
-                        full_model = format_litellm_model_string(provider, model_name, api_base_url)
+                        full_model = format_litellm_model_string(
+                            provider, model_name, api_base_url
+                        )
                         url = api_base_url.strip().rstrip("/")
                         if not url.startswith(("http://", "https://")):
                             url = "http://" + url

@@ -53,7 +53,11 @@ try:
                 stream_chunk.meta = {}
             stream_chunk.meta["aion_event_type"] = aion_event_type
             stream_chunk.meta["data"] = getattr(chunk, "data", None)
-            if not stream_chunk.meta["data"] and hasattr(chunk, "model_extra") and chunk.model_extra:
+            if (
+                not stream_chunk.meta["data"]
+                and hasattr(chunk, "model_extra")
+                and chunk.model_extra
+            ):
                 stream_chunk.meta["data"] = chunk.model_extra.get("data")
 
         return stream_chunk
@@ -224,22 +228,26 @@ class LiteLLMChatGeneratorWrapper:
         sanitized_messages = []
         for m in messages:
             from haystack.dataclasses import TextContent, ChatMessage
+
             has_content = (
-                getattr(m, "texts", None) or 
-                getattr(m, "tool_calls", None) or 
-                getattr(m, "tool_call_results", None) or 
-                getattr(m, "images", None) or 
-                getattr(m, "files", None)
+                getattr(m, "texts", None)
+                or getattr(m, "tool_calls", None)
+                or getattr(m, "tool_call_results", None)
+                or getattr(m, "images", None)
+                or getattr(m, "files", None)
             )
             if not has_content:
                 # Se un messaggio arriva vuoto (es. filtrato da PII), metti un placeholder
                 import logging
+
                 logger = logging.getLogger("aion.lite_llm_adapter")
-                logger.warning(f"DEBUG: Dropping empty message with role {m.role} and meta {m.meta}")
+                logger.warning(
+                    f"DEBUG: Dropping empty message with role {m.role} and meta {m.meta}"
+                )
                 continue  # Drop empty messages entirely instead of polluting the history
             else:
                 sanitized_messages.append(m)
-        
+
         run_params = {
             "messages": sanitized_messages,
             "streaming_callback": streaming_callback,

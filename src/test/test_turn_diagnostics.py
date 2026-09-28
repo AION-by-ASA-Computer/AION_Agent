@@ -145,6 +145,7 @@ def test_log_turn_stop_accepts_snapshot_metrics(monkeypatch):
     )
     # WARNING log always fires; JSONL only when diagnostics enabled — no assert on captured
 
+
 def test_pii_review_created_without_final_text():
     out = classify_turn_outcome(
         session_id="sess",

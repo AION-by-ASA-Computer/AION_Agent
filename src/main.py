@@ -1381,6 +1381,7 @@ async def _finish_get_agent_build(
                     row.provider, provider_api_base
                 )
                 from src.runtime.llm_adapter import format_litellm_model_string
+
                 provider_model = format_litellm_model_string(
                     row.provider, row.model_name, provider_api_base
                 )

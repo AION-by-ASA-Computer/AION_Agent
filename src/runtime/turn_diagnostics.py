@@ -314,7 +314,12 @@ def classify_turn_outcome(
     }
 
     warning: Optional[str] = None
-    if code != "ok" and code != "plan_created" and code != "pii_review_created" and code != "pii_replacements_applied":
+    if (
+        code != "ok"
+        and code != "plan_created"
+        and code != "pii_review_created"
+        and code != "pii_replacements_applied"
+    ):
         warning = _build_user_warning(
             code=code,
             stop_reason=stop_reason,

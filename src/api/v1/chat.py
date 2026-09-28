@@ -123,7 +123,6 @@ async def _run_pipeline_in_background(
         resolved_effort = resolve_turn_reasoning(effort_in, thinking_in)
         clamped = await _clamped_runtime(raw_runtime, uid, profile_name)
 
-
         async for chunk in pipeline.run_stream(
             body.message,
             attachments=att,
@@ -147,7 +146,9 @@ async def _run_pipeline_in_background(
                     else {}
                 ),
                 **(
-                    {"aion_privacy_filter_review_content": body.aion_privacy_filter_review_content}
+                    {
+                        "aion_privacy_filter_review_content": body.aion_privacy_filter_review_content
+                    }
                     if body.aion_privacy_filter_review_content is not None
                     else {}
                 ),
@@ -439,7 +440,7 @@ async def chat_prepare(
         try:
             from src.runtime.llm_probe import check_pii_capabilities
             import asyncio
-            
+
             agent_task = asyncio.create_task(
                 get_agent(
                     body.profile,
@@ -450,11 +451,13 @@ async def chat_prepare(
                     llm_provider_name=body.llm_provider_name,
                 )
             )
-            
-            cap_task = asyncio.create_task(check_pii_capabilities(body.llm_provider_name))
-            
+
+            cap_task = asyncio.create_task(
+                check_pii_capabilities(body.llm_provider_name)
+            )
+
             _, pii_supported = await asyncio.gather(agent_task, cap_task)
-            
+
             logger.info(
                 "chat prepare ready conv=%s profile=%s user=%s pii=%s",
                 body.conversation_id[:8] + "...",
@@ -951,8 +954,11 @@ async def chat_sync(
                         else {}
                     ),
                     **(
-                        {"aion_privacy_filter_review_content": body.aion_privacy_filter_review_content}
-                        if getattr(body, "aion_privacy_filter_review_content", None) is not None
+                        {
+                            "aion_privacy_filter_review_content": body.aion_privacy_filter_review_content
+                        }
+                        if getattr(body, "aion_privacy_filter_review_content", None)
+                        is not None
                         else {}
                     ),
                     **(

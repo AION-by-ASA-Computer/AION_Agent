@@ -377,7 +377,7 @@ class StreamLoop:
                     self.pii_review_intercepts += 1
                 elif art_type == "pii_replacements":
                     self.last_progress_at = self.loop.time()
-                
+
                 if art_type != "pii_replacements":
                     yield self._track_sse(
                         {
@@ -1169,12 +1169,16 @@ class StreamLoop:
                 yield self._track_sse(pending)
         elif (pe.artifact_type or "").strip().lower() == "pii_replacements":
             import json
+
             try:
                 self.pii_replacements.extend(json.loads(pe.content or "[]"))
                 self.pii_replacements_intercepts += 1
             except Exception as e:
                 import logging
-                logging.getLogger(__name__).warning("Failed to parse pii_replacements artifact: %s", e)
+
+                logging.getLogger(__name__).warning(
+                    "Failed to parse pii_replacements artifact: %s", e
+                )
             return  # Skip saving to disk and yielding artifact_end
         else:
             path, version = self.artifact_manager.save(
