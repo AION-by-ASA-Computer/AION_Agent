@@ -1,9 +1,12 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { BookOpen, CheckCircle2, Circle, XCircle, Zap, ChevronDown } from "lucide-react";
 import type { ContextBudgetState } from "@/lib/sse/types";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
+import type { UsedTool } from "@/components/layout/CapabilitiesChip";
+import type { SkillStatus } from "@/components/chat/ChatWorkspace";
 
 const PART_COLORS: Record<string, string> = {
   system_prompt: "bg-slate-500",
@@ -19,6 +22,33 @@ const PART_COLORS: Record<string, string> = {
   system_messages: "bg-neutral-500",
   other: "bg-stone-400",
 };
+
+function formatSlug(slug: string): string {
+  return slug
+    .replace(/[-_]/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+const SKILL_STATE_CONFIG = {
+  loaded: {
+    icon: CheckCircle2,
+    iconClass: "text-emerald-500",
+    badgeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
+    badgeKey: "chat.capabilities.skill_loaded",
+  },
+  failed: {
+    icon: XCircle,
+    iconClass: "text-rose-500",
+    badgeClass: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
+    badgeKey: "chat.capabilities.skill_failed",
+  },
+  pending: {
+    icon: Circle,
+    iconClass: "text-muted-foreground/40",
+    badgeClass: "bg-muted/60 text-muted-foreground/60",
+    badgeKey: "chat.capabilities.skill_pending",
+  },
+} as const;
 
 function formatTokens(n: number): string {
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`;
@@ -121,19 +151,28 @@ export function ContextBudgetGauge({
 
 type DetailsProps = {
   budget: ContextBudgetState;
+  usedTools: UsedTool[];
+  skillStatuses: SkillStatus[];
   className?: string;
 };
 
-export function ContextBudgetBar({ budget, className }: DetailsProps) {
+export function ContextBudgetBar({ budget, usedTools, skillStatuses, className }: DetailsProps) {
   const t = useT();
   const pct = Math.min(100, Math.max(0, budget.pct));
   const triggerPct =
     budget.maxPrompt > 0 ? Math.min(100, (budget.trigger / budget.maxPrompt) * 100) : 0;
 
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [skillsOpen, setSkillsOpen] = useState(false);
+
   const parts = useMemo(
     () => [...budget.parts].sort((a, b) => b.tokens - a.tokens),
     [budget.parts],
   );
+
+  const totalTools = usedTools.length;
+  const loadedCount = skillStatuses.filter((s) => s.loadState === "loaded").length;
+  const failedCount = skillStatuses.filter((s) => s.loadState === "failed").length;
 
   return (
     <div
@@ -199,6 +238,118 @@ export function ContextBudgetBar({ budget, className }: DetailsProps) {
           </li>
         ) : null}
       </ul>
+
+      {(totalTools > 0 || skillStatuses.length > 0) && (
+        <div className="mt-3 border-t border-border/40 pt-2 flex flex-col gap-2">
+          {/* ── Section: Tools actually used ── */}
+          {totalTools > 0 && (
+            <div className="rounded-lg border border-border/40 bg-muted/10 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-2.5 py-1.5 hover:bg-muted/40 transition-colors"
+                onClick={() => setToolsOpen(!toolsOpen)}
+              >
+                <div className="flex items-center gap-1.5">
+                  <Zap size={11} className="text-violet-500 shrink-0" aria-hidden />
+                  <span className="text-[0.714em] font-bold uppercase tracking-wider text-violet-500">
+                    {t("chat.capabilities.tools_used")}
+                  </span>
+                  <span className="rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[0.65em] font-bold tabular-nums text-violet-500">
+                    {totalTools}
+                  </span>
+                </div>
+                <ChevronDown size={12} className={cn("text-muted-foreground transition-transform duration-200", toolsOpen && "rotate-180")} aria-hidden />
+              </button>
+
+              {toolsOpen && (
+                <div className="px-2 pb-2 pt-1 border-t border-border/40">
+                  <ul className="space-y-0.5">
+                    {usedTools.map((tool) => (
+                      <li
+                        key={tool.name}
+                        className="flex items-center justify-between rounded-lg px-1.5 py-1 hover:bg-muted/40 transition-colors"
+                      >
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          {tool.hasError ? (
+                            <XCircle size={13} className="shrink-0 text-rose-500" aria-hidden />
+                          ) : (
+                            <CheckCircle2 size={13} className="shrink-0 text-emerald-500" aria-hidden />
+                          )}
+                          <span className="truncate text-[0.786em] font-medium text-foreground">
+                            {formatSlug(tool.name)}
+                          </span>
+                        </div>
+                        {tool.callCount > 1 && (
+                          <span className="ml-2 shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[0.65em] font-mono tabular-nums text-muted-foreground">
+                            ×{tool.callCount}
+                          </span>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Section: Skills with load state ── */}
+          {skillStatuses.length > 0 && (
+            <div className="rounded-lg border border-border/40 bg-muted/10 overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-2.5 py-1.5 hover:bg-muted/40 transition-colors"
+                onClick={() => setSkillsOpen(!skillsOpen)}
+              >
+                <div className="flex items-center gap-1.5">
+                  <BookOpen size={11} className="text-amber-500 shrink-0" aria-hidden />
+                  <span className="text-[0.714em] font-bold uppercase tracking-wider text-amber-500">
+                    {t("chat.capabilities.skills")}
+                  </span>
+                </div>
+                <ChevronDown size={12} className={cn("text-muted-foreground transition-transform duration-200", skillsOpen && "rotate-180")} aria-hidden />
+              </button>
+
+              {skillsOpen && (
+                <div className="px-2 pb-2 pt-1 border-t border-border/40">
+                  <ul className="space-y-0.5">
+                    {skillStatuses.map((skill) => {
+                      const cfg = SKILL_STATE_CONFIG[skill.loadState];
+                      const Icon = cfg.icon;
+                      return (
+                        <li
+                          key={skill.name}
+                          className="flex items-center justify-between rounded-lg px-1.5 py-1 hover:bg-muted/40 transition-colors"
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <Icon size={13} className={cn("shrink-0", cfg.iconClass)} aria-hidden />
+                            <span
+                              className={cn(
+                                "truncate text-[0.786em] font-medium",
+                                skill.loadState === "pending"
+                                  ? "text-muted-foreground"
+                                  : "text-foreground",
+                              )}
+                            >
+                              {formatSlug(skill.name)}
+                            </span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Footer ── */}
+          {totalTools > 0 && (
+            <p className="px-1 py-1 text-[0.68em] text-muted-foreground/50 select-none">
+              {t("chat.capabilities.realtime_hint")}
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -816,10 +816,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         }
       }
     }
-    return (activeProfileRow?.skills ?? []).map((name) => ({
-      name,
-      loadState: skillViewCalls.get(name) ?? "pending",
-    }));
+    return (activeProfileRow?.skills ?? []).map((name) => {
+      const isCritical = activeProfileRow?.critical_skills?.includes(name);
+      return {
+        name,
+        loadState: skillViewCalls.get(name) ?? (isCritical ? "loaded" : "pending"),
+      };
+    });
   }, [messages, activeProfileRow]);
 
   const showSqlQueryMemory = useMemo(
@@ -4095,7 +4098,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               ) : null}
               {contextBudgetOpen ? (
                 contextBudget ? (
-                  <ContextBudgetBar budget={contextBudget} className="mb-3" />
+                  <ContextBudgetBar budget={contextBudget} usedTools={usedTools} skillStatuses={skillStatuses} className="mb-3" />
                 ) : (
                   <div className="mb-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-[0.786em] text-muted-foreground">
                     {t("chat.context_budget.unavailable")}

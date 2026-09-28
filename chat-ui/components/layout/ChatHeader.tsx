@@ -3,7 +3,7 @@
 import { Copy, PanelLeft, PanelRight } from "lucide-react";
 import { useCallback, useState, useRef, useEffect } from "react";
 import { ModelSelectChip, type LlmProviderOption } from "@/components/chat/ModelSelectChip";
-import { CapabilitiesChip, type UsedTool } from "@/components/layout/CapabilitiesChip";
+import type { UsedTool } from "@/components/layout/CapabilitiesChip";
 import type { SkillStatus } from "@/components/chat/ChatWorkspace";
 import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { cn } from "@/lib/cn";
@@ -167,10 +167,7 @@ export function ChatHeader({
             placement="below"
           />
         ) : null}
-        <CapabilitiesChip
-          usedTools={usedTools ?? []}
-          skillStatuses={skillStatuses ?? []}
-        />
+
       </div>
 
       <div className="flex flex-wrap items-center gap-2 sm:justify-end">

@@ -10,6 +10,7 @@ export type ProfileRow = {
   mcp_servers?: string[];
   native_tool_groups?: string[];
   skills?: string[];
+  critical_skills?: string[];
 };
 
 export function baseUserHeaders(userId: string, token?: string | null): Record<string, string> {

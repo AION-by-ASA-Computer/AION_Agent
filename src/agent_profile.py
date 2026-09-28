@@ -497,6 +497,7 @@ class ProfileManager:
                 "native_tool_groups": list(
                     getattr(p, "native_tool_groups", None) or []
                 ),
+                "critical_skills": list(getattr(p, "critical_skills", None) or []),
             }
             for p in self._profiles.values()
         ]
