@@ -12,6 +12,9 @@ import {
   Brain,
   Terminal,
   FileText,
+  Code2,
+  Pencil,
+  type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
@@ -73,11 +76,51 @@ function FaviconImage({ url, className }: { url?: string | null; className?: str
   );
 }
 
+type CompactActivityIconKind = "thinking" | "search" | "read_web" | "run" | "write";
+
+type ActiveRunningStep = { label: string; icon: CompactActivityIconKind };
+
+const ACTIVITY_ICON: Record<CompactActivityIconKind, LucideIcon> = {
+  thinking: Brain,
+  search: Search,
+  read_web: Globe,
+  run: Code2,
+  write: Pencil,
+};
+
+function iconKindForToolName(name: string): CompactActivityIconKind {
+  const n = name.toLowerCase();
+  if (n === "web_search" || n.includes("search")) return "search";
+  if (n === "web_fetch_page" || n.includes("fetch")) return "read_web";
+  return "run";
+}
+
+function CompactActivityIcon({ kind }: { kind: CompactActivityIconKind }) {
+  const Icon = ACTIVITY_ICON[kind];
+  return (
+    <span
+      className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground/85"
+      aria-hidden
+    >
+      <Icon className="size-3.5" strokeWidth={2} />
+    </span>
+  );
+}
+
 function StepIcon({ children }: { children: ReactNode }) {
   return (
-    <span className="mt-0.5 flex size-4 shrink-0 items-center justify-center text-muted-foreground/80">
+    <span className="inline-flex size-4 shrink-0 items-center justify-center text-muted-foreground/80 [&>svg]:size-3.5">
       {children}
     </span>
+  );
+}
+
+function CurrentStepRow({ label, icon }: { label: string; icon: CompactActivityIconKind }) {
+  return (
+    <div className="flex items-center gap-2 text-muted-foreground" role="status" aria-live="polite">
+      <CompactActivityIcon kind={icon} />
+      <AgentWorkingShimmer label={label} className="min-h-0 py-0" />
+    </div>
   );
 }
 
@@ -130,13 +173,21 @@ function CompactTurnActivityInner({
     const webSearches: Array<{ query: string }> = [];
     const otherTools: Array<{ name: string }> = [];
     const reasoningSegments: TurnSegment[] = [];
-    let activeRunningStep: { label: string } | null = null;
+    let activeRunningStep: ActiveRunningStep | null = null;
 
-    for (const seg of segments) {
+    for (let segIndex = 0; segIndex < segments.length; segIndex += 1) {
+      const seg = segments[segIndex];
+      const isLastSegment = segIndex === segments.length - 1;
       if (seg.kind === "reasoning") {
         if (seg.content.trim()) {
           visible.push(seg);
           reasoningSegments.push(seg);
+        }
+        if (streaming && isLastSegment) {
+          activeRunningStep = {
+            label: t("chat.compact_activity.thinking_streaming"),
+            icon: "thinking",
+          };
         }
         continue;
       }
@@ -144,6 +195,7 @@ function CompactTurnActivityInner({
         if (streaming && !activeRunningStep) {
           activeRunningStep = {
             label: seg.content?.trim() || t("chat.agent_status.thinking"),
+            icon: "thinking",
           };
         }
         if (streaming) visible.push(seg);
@@ -157,6 +209,7 @@ function CompactTurnActivityInner({
               label: seg.title?.trim()
                 ? t("chat.compact_activity.writing_file", { title: seg.title })
                 : t("chat.agent_status.thinking"),
+              icon: "write",
             };
           }
         }
@@ -165,7 +218,10 @@ function CompactTurnActivityInner({
       if (seg.kind === "tool") {
         if (seg.name === "thinking") {
           if (seg.status === "running") {
-            activeRunningStep = { label: t("chat.agent_status.thinking") };
+            activeRunningStep = {
+              label: t("chat.agent_status.thinking"),
+              icon: "thinking",
+            };
           }
           continue;
         }
@@ -179,6 +235,7 @@ function CompactTurnActivityInner({
               label: t("chat.compact_activity.searching_streaming", {
                 query: query ? `"${truncate(query, 40)}"` : "",
               }),
+              icon: "search",
             };
           }
         } else if (seg.name === "web_fetch_page") {
@@ -189,6 +246,7 @@ function CompactTurnActivityInner({
               label:
                 t("chat.compact_activity.reading_page") +
                 (url ? ` ${webHostLabel(url)}` : "…"),
+              icon: "read_web",
             };
           }
         } else {
@@ -196,6 +254,7 @@ function CompactTurnActivityInner({
           if (seg.status === "running") {
             activeRunningStep = {
               label: t("chat.compact_activity.running_tool_streaming", { name: seg.name }),
+              icon: iconKindForToolName(seg.name),
             };
           }
         }
@@ -213,6 +272,59 @@ function CompactTurnActivityInner({
             )
           : false;
         if (!planCheck) visible.push(seg);
+      }
+    }
+
+    if (streaming && !activeRunningStep) {
+      const last = segments[segments.length - 1];
+      if (last?.kind === "reasoning") {
+        activeRunningStep = {
+          label: t("chat.compact_activity.thinking_streaming"),
+          icon: "thinking",
+        };
+      } else if (last?.kind === "generating") {
+        activeRunningStep = {
+          label: last.title?.trim()
+            ? t("chat.compact_activity.writing_file", { title: last.title })
+            : t("chat.compact_activity.thinking_streaming"),
+          icon: "write",
+        };
+      } else if (last?.kind === "tool" && last.status === "running") {
+        if (last.name === "web_search") {
+          const query =
+            webSearchQueryFromInput(last.input) ||
+            parseWebSearchOutput(last.output || "")?.query ||
+            "";
+          activeRunningStep = {
+            label: t("chat.compact_activity.searching_streaming", {
+              query: query ? `"${truncate(query, 40)}"` : "",
+            }),
+            icon: "search",
+          };
+        } else if (last.name === "web_fetch_page") {
+          const url = webFetchUrlFromInput(last.input) || "";
+          activeRunningStep = {
+            label:
+              t("chat.compact_activity.reading_page") +
+              (url ? ` ${webHostLabel(url)}` : "…"),
+            icon: "read_web",
+          };
+        } else if (last.name !== "thinking") {
+          activeRunningStep = {
+            label: t("chat.compact_activity.running_tool_streaming", { name: last.name }),
+            icon: iconKindForToolName(last.name),
+          };
+        } else {
+          activeRunningStep = {
+            label: t("chat.compact_activity.thinking_streaming"),
+            icon: "thinking",
+          };
+        }
+      } else if (last?.kind === "status") {
+        activeRunningStep = {
+          label: last.content?.trim() || t("chat.compact_activity.thinking_streaming"),
+          icon: "thinking",
+        };
       }
     }
 
@@ -251,11 +363,33 @@ function CompactTurnActivityInner({
     });
   }, [expandableIds]);
 
-  const headerSummary = useMemo(() => {
-    if (streaming && activeRunningStep) {
-      return { prefix: "", query: activeRunningStep.label, isStreaming: true };
-    }
+  const currentStepLabel = useMemo(() => {
+    if (!streaming) return null;
+    if (activeRunningStep?.label) return activeRunningStep.label;
+    return t("chat.compact_activity.thinking_streaming");
+  }, [streaming, activeRunningStep, t]);
 
+  const currentStepIcon: CompactActivityIconKind = activeRunningStep?.icon ?? "thinking";
+
+  const activeStepShownInExpandedList = useMemo(() => {
+    if (!isOpen) return false;
+    for (let i = visibleSegments.length - 1; i >= 0; i -= 1) {
+      const seg = visibleSegments[i];
+      if (seg.kind === "generating") return true;
+      if (seg.kind === "status") return true;
+      if (seg.kind === "tool" && seg.status === "running") return true;
+    }
+    return false;
+  }, [isOpen, visibleSegments]);
+
+  const showCurrentStepFooter = Boolean(
+    streaming &&
+      currentStepLabel &&
+      totalStepsCount > 0 &&
+      (!isOpen || !activeStepShownInExpandedList),
+  );
+
+  const headerSummary = useMemo(() => {
     if (
       webSearches.length === 1 &&
       otherTools.length === 0 &&
@@ -319,8 +453,6 @@ function CompactTurnActivityInner({
       isStreaming: false,
     };
   }, [
-    streaming,
-    activeRunningStep,
     webSearches,
     otherTools,
     reasoningSegments,
@@ -329,7 +461,7 @@ function CompactTurnActivityInner({
     t,
   ]);
 
-  if (totalStepsCount === 0 && !streaming && !activeRunningStep) {
+  if (totalStepsCount === 0 && !streaming && !currentStepLabel) {
     return null;
   }
 
@@ -345,19 +477,24 @@ function CompactTurnActivityInner({
           )}
           aria-expanded={isOpen}
         >
-          {headerSummary.isStreaming ? (
-            <AgentWorkingShimmer label={headerSummary.query} />
-          ) : (
-            <span className="min-w-0 truncate">
-              <span>{headerSummary.prefix}</span>
-              {headerSummary.query ? (
-                <span className="text-foreground/80">
-                  {headerSummary.prefix ? " " : ""}
-                  {headerSummary.query}
-                </span>
-              ) : null}
-            </span>
-          )}
+          <span className="min-w-0 truncate">
+            {totalStepsCount === 0 && streaming ? (
+              <span className="inline-flex items-center gap-1.5">
+                <CompactActivityIcon kind={currentStepIcon} />
+                <AgentWorkingShimmer label={currentStepLabel!} className="min-h-0 py-0" />
+              </span>
+            ) : (
+              <>
+                <span>{headerSummary.prefix}</span>
+                {headerSummary.query ? (
+                  <span className="text-foreground/80">
+                    {headerSummary.prefix ? " " : ""}
+                    {headerSummary.query}
+                  </span>
+                ) : null}
+              </>
+            )}
+          </span>
           <ChevronRight
             size={14}
             className={cn(
@@ -391,6 +528,12 @@ function CompactTurnActivityInner({
         ) : null}
       </div>
 
+      {showCurrentStepFooter && !isOpen ? (
+        <div className="mt-1.5">
+          <CurrentStepRow label={currentStepLabel!} icon={currentStepIcon} />
+        </div>
+      ) : null}
+
       <div
         className={cn(
           "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
@@ -419,11 +562,9 @@ function CompactTurnActivityInner({
               }
               if (seg.kind === "generating") {
                 return (
-                  <div key={seg.id} className="flex items-start gap-2 text-muted-foreground">
-                    <StepIcon>
-                      <FileText size={14} aria-hidden />
-                    </StepIcon>
-                    <AgentWorkingShimmer
+                  <div key={seg.id}>
+                    <CurrentStepRow
+                      icon="write"
                       label={
                         seg.title?.trim()
                           ? t("chat.compact_activity.writing_file", { title: seg.title })
@@ -472,6 +613,11 @@ function CompactTurnActivityInner({
               }
               return null;
             })}
+            {showCurrentStepFooter && isOpen ? (
+              <div className="pt-0.5">
+                <CurrentStepRow label={currentStepLabel!} icon={currentStepIcon} />
+              </div>
+            ) : null}
           </div>
         </div>
       </div>
@@ -515,7 +661,7 @@ function CompactReasoningItem({
       <button
         type="button"
         onClick={onToggle}
-        className="focus-ring group mb-1 inline-flex items-center gap-2 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+        className="focus-ring group mb-1 inline-flex items-center gap-2 text-left text-[13px] leading-5 text-muted-foreground transition-colors hover:text-foreground"
         aria-expanded={open}
       >
         <StepIcon>
@@ -547,16 +693,32 @@ function CompactWebSearchItem({ seg }: { seg: Extract<TurnSegment, { kind: "tool
   const ws = parseWebSearchOutput(seg.output || "");
   const query = ws?.query || webSearchQueryFromInput(seg.input) || "";
   const results = ws?.results?.filter((r) => r && r.url) || [];
+  const running = seg.status === "running";
 
   return (
     <div className="min-w-0 space-y-1.5">
-      <div className="flex items-start gap-2 text-[13px] text-muted-foreground">
-        <StepIcon>
-          <Search size={14} aria-hidden />
-        </StepIcon>
+      <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+        {running ? (
+          <CompactActivityIcon kind="search" />
+        ) : (
+          <StepIcon>
+            <Search size={14} aria-hidden />
+          </StepIcon>
+        )}
         <div className="min-w-0">
-          <span>{t("chat.compact_activity.searched_web")}</span>
-          {query ? <span className="text-foreground/80"> {query}</span> : null}
+          {running ? (
+            <AgentWorkingShimmer
+              className="min-h-0 py-0"
+              label={t("chat.compact_activity.searching_streaming", {
+                query: query ? `"${truncate(query, 40)}"` : "",
+              })}
+            />
+          ) : (
+            <>
+              <span>{t("chat.compact_activity.searched_web")}</span>
+              {query ? <span className="text-foreground/80"> {query}</span> : null}
+            </>
+          )}
         </div>
       </div>
       {ws?.error ? (
@@ -593,24 +755,41 @@ function CompactWebFetchItem({ seg }: { seg: Extract<TurnSegment, { kind: "tool"
   const t = useT();
   const wf = parseWebFetchOutput(seg.output || "");
   const url = wf?.url || webFetchUrlFromInput(seg.input) || "";
+  const running = seg.status === "running";
 
   return (
-    <div className="flex items-start gap-2 text-[13px] text-muted-foreground">
-      <StepIcon>
-        <Globe size={14} aria-hidden />
-      </StepIcon>
+    <div className="flex items-center gap-2 text-[13px] text-muted-foreground">
+      {running ? (
+        <CompactActivityIcon kind="read_web" />
+      ) : (
+        <StepIcon>
+          <Globe size={14} aria-hidden />
+        </StepIcon>
+      )}
       <div className="min-w-0">
-        <span>{t("chat.compact_activity.reading_page")}</span>
-        {url ? (
-          <a
-            href={url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-1 text-foreground/80 hover:underline"
-          >
-            {webHostLabel(url) || url}
-          </a>
-        ) : null}
+        {running ? (
+          <AgentWorkingShimmer
+            className="min-h-0 py-0"
+            label={
+              t("chat.compact_activity.reading_page") +
+              (url ? ` ${webHostLabel(url)}` : "…")
+            }
+          />
+        ) : (
+          <>
+            <span>{t("chat.compact_activity.reading_page")}</span>
+            {url ? (
+              <a
+                href={url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="ml-1 text-foreground/80 hover:underline"
+              >
+                {webHostLabel(url) || url}
+              </a>
+            ) : null}
+          </>
+        )}
         {wf?.error ? <p className="text-[12px] text-destructive">{wf.error}</p> : null}
       </div>
     </div>
@@ -698,6 +877,7 @@ function CompactToolItem({
   const t = useT();
   const preview = toolInputPreview(tool.input);
   const formattedInput = formatToolInput(tool.input);
+  const running = tool.status === "running";
 
   return (
     <div className="min-w-0">
@@ -710,12 +890,27 @@ function CompactToolItem({
         )}
         aria-expanded={open}
       >
-        <StepIcon>
-          <Terminal size={14} aria-hidden />
-        </StepIcon>
+        {running ? (
+          <CompactActivityIcon kind={iconKindForToolName(tool.name)} />
+        ) : (
+          <StepIcon>
+            <Terminal size={14} aria-hidden />
+          </StepIcon>
+        )}
         <span className="min-w-0 truncate">
-          {t("chat.compact_activity.tool_executed", { name: tool.name })}
-          {preview ? <span className="font-normal text-muted-foreground/80"> {preview}</span> : null}
+          {running ? (
+            <AgentWorkingShimmer
+              className="min-h-0 py-0"
+              label={t("chat.compact_activity.running_tool_streaming", { name: tool.name })}
+            />
+          ) : (
+            <>
+              {t("chat.compact_activity.tool_executed", { name: tool.name })}
+              {preview ? (
+                <span className="font-normal text-muted-foreground/80"> {preview}</span>
+              ) : null}
+            </>
+          )}
         </span>
         <ChevronRight
           size={13}
