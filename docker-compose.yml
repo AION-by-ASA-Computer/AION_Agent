@@ -105,6 +105,7 @@ services:
       - ./config_std:/app/config_std:ro
       - ./mcp_servers_std:/app/mcp_servers_std:ro
       - ./src:/app/src:ro
+      - ./evals:/app/evals
       - ./requirements-sandbox-skills.txt:/app/requirements-sandbox-skills.txt:ro
       # Writable runtime overlay (synced from *_std at boot; local customizations persist)
       - ./config:/app/config

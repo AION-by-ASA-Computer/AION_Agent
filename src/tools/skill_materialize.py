@@ -26,7 +26,7 @@ OFFICE_SKILL_SLUGS = frozenset({"docx", "pdf", "xlsx", "pptx"})
 _OFFICE_SENTINELS: Dict[str, str] = {
     "docx": "scripts/office/unpack.py",
     "pptx": "scripts/office/unpack.py",
-    "xlsx": "scripts/office/soffice.py",
+    "xlsx": "scripts/inspect_xlsx.py",
     "pdf": "scripts/check_bounding_boxes.py",
 }
 
