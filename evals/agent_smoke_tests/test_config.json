@@ -1,0 +1,23 @@
+[
+  {
+    "id": "test_1_excel",
+    "name": "Analisi Dati Excel",
+    "assistant": "generic_assistant",
+    "prompt": "Analizza il file Excel allegato e fornisci calcoli esatti e grafici per i seguenti punti:\n\nKPI Principali: Calcola Fatturato Netto Totale, Margine Totale (€) e Scontrino Medio (AOV).\n\nPerformance Agenti (2025): Filtra le vendite del solo 2025. Calcola il fatturato netto generato da ciascun agente e genera un grafico a barre per confrontarli.\n\nTrend Mensile: Raggruppa il fatturato netto per mese (sempre per il 2025) e mostra l'andamento temporale con un grafico a linee.\n\nTop 5 SKU: Identifica i 5 articoli più venduti in base al fatturato netto e mostrali in una tabella o lista.\n\nKey Takeaways: Scrivi 3 bullet point operativi di sintesi sui dati emersi (es. chi è l'agente migliore, qual è il mese di picco o il prodotto trainante).",
+    "attachment": "assets/dataset_vendite.xlsx"
+  },
+  {
+    "id": "test_2_pdf",
+    "name": "Estrazione RAG da PDF lungo",
+    "assistant": "generic_assistant",
+    "prompt": "Analizza il manuale d'uso Tesla allegato ed estrai la procedura di emergenza per l'apertura manuale della portiera e la frequenza di manutenzione del liquido freni, indicando la pagina esatta o la sezione.",
+    "attachment": "assets/manuale_tesla.pdf"
+  },
+  {
+    "id": "test_3_word",
+    "name": "Generazione Word Strutturato",
+    "assistant": "generic_assistant",
+    "prompt": "Genera un documento Word impaginato e formattato professionalmente per una riunione aziendale di Kickoff. Il documento deve contenere un'intestazione ufficiale, la data della riunione (15 Ottobre), una tabella con l'ordine del giorno suddiviso per colonne (Orario, Argomento, Relatore) e un elenco puntato con i materiali preparatori richiesti ai partecipanti. Salva il file come agenda_kickoff.docx.",
+    "attachment": null
+  }
+]
