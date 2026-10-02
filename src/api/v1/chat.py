@@ -145,9 +145,22 @@ async def _run_pipeline_in_background(
                     if body.llm_provider_name
                     else {}
                 ),
+                **(
+                    {
+                        "aion_privacy_filter_review_content": body.aion_privacy_filter_review_content
+                    }
+                    if body.aion_privacy_filter_review_content is not None
+                    else {}
+                ),
+                **(
+                    {"aion_pii_review_token": body.aion_pii_review_token}
+                    if getattr(body, "aion_pii_review_token", None) is not None
+                    else {}
+                ),
             },
             runtime=clamped,
         ):
+            # logger.info(f"[SSE CHUNK] {chunk}")
             event_data = {"event": "message", "data": json.dumps(chunk)}
             run.history.append(event_data)
             for q in list(run.queues):
@@ -296,6 +309,14 @@ class ChatStreamBody(BaseModel):
         default=None,
         description="Allowlisted turn overrides (steps, sampling, thinking).",
     )
+    aion_privacy_filter_review_content: Optional[bool] = Field(
+        default=None,
+        description="Abilita il filtro PII strict review al gateway.",
+    )
+    aion_pii_review_token: Optional[str] = Field(
+        default=None,
+        description="Token opzionale per by-passare o confermare la review PII.",
+    )
 
     class Config:
         populate_by_name = True
@@ -415,20 +436,34 @@ async def chat_prepare(
 
     async def _run_prepare() -> None:
         status = "ready"
+        pii_supported = False
         try:
-            await get_agent(
-                body.profile,
-                session_id=body.conversation_id,
-                user_id=uid,
-                agent_mode=resolved_agent_mode,
-                message_source="internal_trigger",
-                llm_provider_name=body.llm_provider_name,
+            from src.runtime.llm_probe import check_pii_capabilities
+            import asyncio
+
+            agent_task = asyncio.create_task(
+                get_agent(
+                    body.profile,
+                    session_id=body.conversation_id,
+                    user_id=uid,
+                    agent_mode=resolved_agent_mode,
+                    message_source="internal_trigger",
+                    llm_provider_name=body.llm_provider_name,
+                )
             )
+
+            cap_task = asyncio.create_task(
+                check_pii_capabilities(body.llm_provider_name)
+            )
+
+            _, pii_supported = await asyncio.gather(agent_task, cap_task)
+
             logger.info(
-                "chat prepare ready conv=%s profile=%s user=%s",
+                "chat prepare ready conv=%s profile=%s user=%s pii=%s",
                 body.conversation_id[:8] + "...",
                 body.profile,
                 uid,
+                pii_supported,
             )
         except Exception as exc:
             status = "failed"
@@ -448,6 +483,7 @@ async def chat_prepare(
                 "profile": body.profile,
                 "mcp_errors": mcp_errors,
                 "has_errors": bool(mcp_errors),
+                "pii_supported": pii_supported,
             }
             _prepare_tasks.pop(dedupe_key, None)
 
@@ -915,6 +951,19 @@ async def chat_sync(
                     **(
                         {"llm_provider_name": body.llm_provider_name}
                         if body.llm_provider_name
+                        else {}
+                    ),
+                    **(
+                        {
+                            "aion_privacy_filter_review_content": body.aion_privacy_filter_review_content
+                        }
+                        if getattr(body, "aion_privacy_filter_review_content", None)
+                        is not None
+                        else {}
+                    ),
+                    **(
+                        {"aion_pii_review_token": body.aion_pii_review_token}
+                        if getattr(body, "aion_pii_review_token", None) is not None
                         else {}
                     ),
                 },

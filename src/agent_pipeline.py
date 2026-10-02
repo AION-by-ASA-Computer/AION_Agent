@@ -1771,6 +1771,20 @@ class AgentPipeline:
             except Exception as _rt_gen_exc:
                 logger.debug("runtime generation kwargs merge skipped: %s", _rt_gen_exc)
 
+            if (
+                metadata
+                and metadata.get("aion_privacy_filter_review_content") is not None
+            ):
+                eb = dict(gen_kw.get("extra_body") or {})
+                eb["aion_privacy_filter_review_content"] = metadata[
+                    "aion_privacy_filter_review_content"
+                ]
+                gen_kw["extra_body"] = eb
+            if metadata and metadata.get("aion_pii_review_token") is not None:
+                eb = dict(gen_kw.get("extra_body") or {})
+                eb["aion_pii_review_token"] = metadata["aion_pii_review_token"]
+                gen_kw["extra_body"] = eb
+
             # Always refresh system prompt so cached agents get the current date
             # and any profile changes.  The harness_v2_injections flag used to
             # gate this, but that left agents built before the flag was enabled
@@ -2176,6 +2190,8 @@ class AgentPipeline:
             artifact_parse_hits = 0
             artifact_salvage = 0
             plan_intercepts = 0
+            pii_review_intercepts = 0
+            pii_replacements_intercepts = 0
             plan_finalize_source: Optional[str] = None
             plan_text_fallback_count = 0
             raw_token_fallback_chunks = 0
@@ -2315,6 +2331,80 @@ class AgentPipeline:
                     artifact_parse_hits = _stream_loop.artifact_parse_hits
                     artifact_salvage = _stream_loop.artifact_salvage
                     plan_intercepts = _stream_loop.plan_intercepts
+                    pii_review_intercepts = getattr(
+                        _stream_loop, "pii_review_intercepts", 0
+                    )
+                    pii_replacements_intercepts = getattr(
+                        _stream_loop, "pii_replacements_intercepts", 0
+                    )
+                    _pii_replacements_from_loop = getattr(
+                        _stream_loop, "pii_replacements", None
+                    )
+                    if _pii_replacements_from_loop:
+                        import re
+
+                        def _clean_prompt(text: str) -> str:
+                            if not text:
+                                return ""
+                            text = re.sub(
+                                r"(?i)\[session_memory\][\s\S]*?(?=--- runtime context|\[System instruction|$)",
+                                "",
+                                text,
+                            )
+                            text = re.sub(
+                                r"--- runtime context[\s\S]*?--- end runtime context ---\n?",
+                                "",
+                                text,
+                            )
+                            text = re.sub(
+                                r"\[System instruction[\s\S]*?(?=\n\n|$)", "", text
+                            )
+                            text = re.sub(
+                                r"Only after loading any required missing skills, proceed to execute the task\.\n*",
+                                "",
+                                text,
+                            )
+                            return text.strip()
+
+                        cleaned_replacements = []
+                        for r in _pii_replacements_from_loop:
+                            cleaned = _clean_prompt(r.get("censored_content", ""))
+                            cleaned_replacements.append(
+                                {
+                                    "message_id": user_message_id,
+                                    "censored_content": cleaned,
+                                }
+                            )
+                            await turn_persist.history_manager.upsert_message_content(
+                                session_id=self.session_id,
+                                message_id=user_message_id,
+                                role="user",
+                                content=cleaned,
+                                user_id=self.user_id,
+                                profile_name=self.profile_name,
+                            )
+
+                            # Censor any tool execution steps for this turn to prevent leakage in "Previous turn tools"
+                            for step in turn_persist.pending_db_steps:
+                                needs_update = False
+                                if step.get("output"):
+                                    step["output"] = "[CENSORED BY PII REVIEW]"
+                                    needs_update = True
+                                if step.get("input") and "{" not in str(
+                                    step.get("input")
+                                ):
+                                    step["input"] = "[CENSORED BY PII REVIEW]"
+                                    needs_update = True
+
+                                if needs_update:
+                                    step["pending_update"] = True
+
+                        yield _track_sse(
+                            {
+                                "type": "pii_messages_to_replace",
+                                "replacements": cleaned_replacements,
+                            }
+                        )
                     raw_token_fallback_chunks = _stream_loop.raw_token_fallback_chunks
                     pending_write_artifacts = _stream_loop.pending_write_artifacts
                     assistant_message_persisted = (
@@ -2508,6 +2598,10 @@ class AgentPipeline:
                                             pe.artifact_type or ""
                                         ).strip().lower() == "plan":
                                             plan_intercepts += 1
+                                        elif (
+                                            pe.artifact_type or ""
+                                        ).strip().lower() == "pii_review":
+                                            pii_review_intercepts += 1
                                         yield _track_sse(
                                             {
                                                 "type": "artifact_start",
@@ -3258,33 +3352,44 @@ class AgentPipeline:
                     stop_reason = "user_cancelled"
 
                 drain_sec = float(os.getenv("AION_AGENT_DRAIN_TIMEOUT_SEC", "0"))
-                if stop_event.is_set() and stop_reason != "completed" and drain_sec > 0:
-                    try:
-                        turn_result = await asyncio.wait_for(
-                            agent_task, timeout=drain_sec
-                        )
-                    except asyncio.TimeoutError:
-                        logger.error(
-                            "agent_task drain timeout after stop_reason=%s session=%s "
-                            "(thread may still run MCP tools; consider new chat or raise "
-                            "AION_TOOL_CALLS_MAX_PER_TURN for bulk memory import)",
-                            stop_reason,
-                            self.session_id[:12],
-                        )
-                        agent_task.cancel()
-                        turn_result = None
-                        yield _track_sse(
-                            {
-                                "type": "turn_outcome",
-                                "code": f"agent_drain_timeout_{stop_reason}",
-                                "message": (
-                                    f"The turn was interrupted ({stop_reason}) but the agent "
-                                    f"did not finish within {int(drain_sec)}s (probabili tool MCP "
-                                    "ancora in esecuzione). Apri una nuova chat o usa lo script "
-                                    "Use memory_note for structured lessons or the project memory panel."
-                                ),
-                            }
-                        )
+                if stop_event.is_set() and stop_reason != "completed":
+                    if drain_sec > 0:
+                        try:
+                            turn_result = await asyncio.wait_for(
+                                agent_task, timeout=drain_sec
+                            )
+                        except asyncio.TimeoutError:
+                            logger.error(
+                                "agent_task drain timeout after stop_reason=%s session=%s "
+                                "(thread may still run MCP tools; consider new chat or raise "
+                                "AION_TOOL_CALLS_MAX_PER_TURN for bulk memory import)",
+                                stop_reason,
+                                self.session_id[:12],
+                            )
+                            agent_task.cancel()
+                            turn_result = None
+                            yield _track_sse(
+                                {
+                                    "type": "turn_outcome",
+                                    "code": f"agent_drain_timeout_{stop_reason}",
+                                    "message": (
+                                        f"The turn was interrupted ({stop_reason}) but the agent "
+                                        f"did not finish within {int(drain_sec)}s (probabili tool MCP "
+                                        "ancora in esecuzione). Apri una nuova chat o usa lo script "
+                                        "Use memory_note for structured lessons or the project memory panel."
+                                    ),
+                                }
+                            )
+                    else:
+                        if not agent_task.done():
+                            logger.info(
+                                "Cancelling agent_task immediately (drain_sec=0) to drop LLM connection."
+                            )
+                            agent_task.cancel()
+                        try:
+                            turn_result = await agent_task
+                        except asyncio.CancelledError:
+                            turn_result = None
                 else:
                     turn_result = await agent_task
                 _agent_debug_log(
@@ -3867,6 +3972,8 @@ class AgentPipeline:
                         pending_db_steps=pending_db_steps,
                         timeline_builder=timeline_builder,
                         plan_intercepts=plan_intercepts,
+                        pii_review_intercepts=pii_review_intercepts,
+                        pii_replacements_intercepts=pii_replacements_intercepts,
                         reasoning_effort=reasoning_effort,
                         max_reasoning_chars=max_reasoning_chars,
                         max_reasoning_events=max_reasoning_events,

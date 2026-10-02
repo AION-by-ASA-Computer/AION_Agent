@@ -263,6 +263,7 @@ async def _fetch_live_model_ids(
     key = (api_key or "").strip()
     if key and key.lower() not in ("none", "placeholder-token"):
         headers["Authorization"] = f"Bearer {key}"
+        headers["X-API-Key"] = key
     endpoint = base_url.rstrip("/") + "/models"
     async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.get(endpoint, headers=headers)
@@ -308,6 +309,37 @@ async def probe_llm_connection(
 
     try:
         live_ids = await _fetch_live_model_ids(base_url, api_key)
+    except httpx.HTTPStatusError as e:
+        logger.warning(
+            "Live /models probe returned HTTP %s for %s",
+            e.response.status_code,
+            base_url,
+        )
+        if not catalog:
+            status = e.response.status_code
+            detail = ""
+            try:
+                body_json = e.response.json()
+                if isinstance(body_json, dict) and "error" in body_json:
+                    detail = str(body_json["error"])
+                elif isinstance(body_json, dict) and "detail" in body_json:
+                    detail = str(body_json["detail"])
+                else:
+                    detail = e.response.text[:100]
+            except Exception:
+                detail = e.response.text[:100]
+
+            if status in (401, 403):
+                msg = f"Authentication failed (HTTP {status})."
+            else:
+                msg = f"Endpoint returned HTTP {status}."
+
+            if detail:
+                msg += f" Detail: {detail.strip()}"
+
+            raise ValueError(msg) from e
+        warning = f"Live probe failed (HTTP {e.response.status_code}), showing LiteLLM catalog only."
+        models_source = "catalog"
     except Exception as e:
         logger.exception("Live /models probe failed for %s", base_url)
         if not catalog:
@@ -346,3 +378,81 @@ async def probe_llm_connection(
         "models": enriched,
         "warning": warning,
     }
+
+
+async def check_pii_capabilities(llm_provider_name: Optional[str] = None) -> bool:
+    """
+    Check if the LLM provider explicitly supports PII review by POSTing to /v1/capabilities.
+    Returns True if the endpoint returns {"support_pii": True} within 3 seconds.
+    """
+    from src.runtime.llm_adapter import (
+        resolve_llm_endpoint,
+        format_litellm_model_string,
+    )
+    import os
+
+    llm_url, llm_model = resolve_llm_endpoint()
+    provider = "openai"
+    api_key = os.getenv("AION_LLM_API_KEY", "")
+
+    logger.info(
+        "PII STARTS HERE %s %s %s %s", llm_provider_name, llm_url, llm_model, provider
+    )
+    if llm_provider_name:
+        from src.data.engine import get_async_session_maker
+        from src.data.models import LlmProvider
+        from sqlalchemy import select
+
+        async with get_async_session_maker()() as session:
+            row = (
+                (
+                    await session.execute(
+                        select(LlmProvider).where(
+                            LlmProvider.tenant_id == "default",
+                            LlmProvider.slug == llm_provider_name,
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+        if row and row.enabled:
+            llm_url = row.api_base_url or llm_url
+            provider = row.provider
+            llm_model = format_litellm_model_string(
+                row.provider, row.model_name, llm_url
+            )
+            if row.api_key_encrypted:
+                from src.runtime.credential_store import decrypt_value
+
+                try:
+                    api_key = decrypt_value(row.api_key_encrypted)
+                except Exception:
+                    pass
+
+    if not llm_url:
+        return False
+
+    endpoint = llm_url.rstrip("/") + "/capabilities"
+    try:
+        # logger.info("MODEL %s", llm_model)
+        llm_model = llm_model.split("/")
+
+        if len(llm_model) > 0:
+            llm_model = llm_model[-2] + "/" + llm_model[-1]
+
+        headers = {}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            resp = await client.post(
+                endpoint, json={"model": f"{llm_model}"}, headers=headers
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                return bool(data.get("support_pii"))
+    except Exception as e:
+        logger.debug("PII capabilities check failed for %s: %s", endpoint, e)
+
+    return False

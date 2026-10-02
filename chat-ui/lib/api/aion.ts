@@ -10,6 +10,7 @@ export type ProfileRow = {
   mcp_servers?: string[];
   native_tool_groups?: string[];
   skills?: string[];
+  critical_skills?: string[];
 };
 
 export function baseUserHeaders(userId: string, token?: string | null): Record<string, string> {
@@ -194,6 +195,8 @@ export type ChatRequestBody = {
   llm_provider_name?: string;
   metadata?: Record<string, any>;
   runtime?: Record<string, unknown>;
+  aion_privacy_filter_review_content?: boolean;
+  aion_pii_review_token?: string;
 };
 
 
@@ -212,6 +215,7 @@ export type ChatPrepareStatus = {
   conversation_id: string;
   mcp_errors?: ChatPrepareMcpError[];
   has_errors?: boolean;
+  pii_supported?: boolean;
 };
 
 async function fetchChatPrepareStatus(

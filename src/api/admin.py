@@ -240,6 +240,7 @@ class MCPUpdate(BaseModel):
     aion_connector_id: Optional[str] = None
     type: Optional[str] = None
     url: Optional[str] = None
+    remote_url: Optional[str] = None
 
 
 class MCPInstallRequest(BaseModel):

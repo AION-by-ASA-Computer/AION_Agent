@@ -60,6 +60,7 @@ class LlmProviderProbeRequest(BaseModel):
     provider: str = Field(..., description="openai, anthropic, gemini, ollama, vllm, …")
     api_base_url: Optional[str] = None
     api_key: Optional[str] = None
+    slug: Optional[str] = None
 
 
 class LlmProviderPublic(BaseModel):
@@ -87,6 +88,8 @@ _SAFE_PROBE_VALUE_ERROR_PREFIXES = (
     "API base URL is required",
     "API base URL is not allowed",
     "Endpoint unreachable",
+    "Authentication failed",
+    "Endpoint returned HTTP",
 )
 
 
@@ -132,11 +135,34 @@ async def probe_llm_provider(body: LlmProviderProbeRequest):
     """Test connectivity and list models (GET /v1/models + LiteLLM catalog fallback)."""
     from src.runtime.llm_probe import probe_llm_connection
 
+    api_key = body.api_key
+    if not api_key and body.slug:
+        from src.data.engine import get_async_session_maker
+        from src.data.models import LlmProvider
+        from src.runtime.credential_store import decrypt_value
+        from sqlalchemy import select
+
+        async with get_async_session_maker()() as session:
+            row = (
+                (
+                    await session.execute(
+                        select(LlmProvider).where(
+                            LlmProvider.tenant_id == "default",
+                            LlmProvider.slug == body.slug,
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+            if row and row.api_key_encrypted:
+                api_key = decrypt_value(row.api_key_encrypted)
+
     try:
         return await probe_llm_connection(
             provider=body.provider,
             api_base_url=body.api_base_url,
-            api_key=body.api_key,
+            api_key=api_key,
         )
     except ValueError as e:
         logger.warning(
