@@ -899,7 +899,17 @@
       "decision": "Decisione",
       "pitfall": "Pitfall",
       "task": "Task"
-    }
+    },
+    "delete_title_active": "Elimina o archivia nota",
+    "delete_desc_active": "Come desideri procedere per questa nota?",
+    "delete_soft_btn": "Archivia (Soft Delete)",
+    "delete_soft_desc": "La nota passa in stato 'sostituita'. Non verrà più usata dall'agente ma rimarrà consultabile nello storico.",
+    "delete_hard_btn": "Elimina Definitivamente (Hard Delete)",
+    "delete_hard_desc": "La nota verrà cancellata fisicamente dal database e dall'indice FTS in modo irreversibile.",
+    "delete_title_superseded": "Elimina definitivamente nota",
+    "delete_desc_superseded": "Vuoi eliminare definitivamente questa nota archiviata dal database? L'operazione è irreversibile.",
+    "delete_confirm": "Elimina definitivamente",
+    "cancel": "Annulla"
   },
   "user_memory": {
     "empty": "Nessuna nota personale. Aggiungine una qui o chiedi all'agente di ricordare qualcosa su di te.",

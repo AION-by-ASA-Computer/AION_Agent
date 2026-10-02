@@ -899,7 +899,17 @@
       "decision": "Decision",
       "pitfall": "Pitfall",
       "task": "Task"
-    }
+    },
+    "delete_title_active": "Delete or archive note",
+    "delete_desc_active": "How would you like to proceed with this note?",
+    "delete_soft_btn": "Archive (Soft Delete)",
+    "delete_soft_desc": "The note becomes 'superseded'. It won't be used by the agent but stays in history.",
+    "delete_hard_btn": "Delete Permanently (Hard Delete)",
+    "delete_hard_desc": "The note will be permanently removed from the database and FTS index.",
+    "delete_title_superseded": "Permanently delete note",
+    "delete_desc_superseded": "Permanently delete this archived note from the database? This cannot be undone.",
+    "delete_confirm": "Delete permanently",
+    "cancel": "Cancel"
   },
   "user_memory": {
     "empty": "No personal notes yet. Add one here or ask the agent to remember something about you.",
