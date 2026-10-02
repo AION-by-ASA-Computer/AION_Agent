@@ -98,13 +98,15 @@ def _has_value(v: Any) -> bool:
 
 
 def normalize_workspace_relative_path(path: str) -> str:
-    """Ensure session paths are under workspace/ (models often omit the prefix)."""
+    """Ensure session paths are under workspace/ or valid session roots (models often omit the prefix)."""
     p = (path or "").strip().replace("\\", "/").lstrip("/")
     if not p:
         return p
     while p.startswith("workspace/workspace/"):
         p = p[len("workspace/") :]
-    if p.startswith(("workspace/", "uploads/", "derived/", "unpacked/")):
+    if p.startswith("workspace/scripts/"):
+        p = p[len("workspace/") :]
+    if p.startswith(("workspace/", "uploads/", "derived/", "unpacked/", "scripts/")):
         return p
     return f"workspace/{p}"
 

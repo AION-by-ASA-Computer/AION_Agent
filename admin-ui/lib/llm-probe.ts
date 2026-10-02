@@ -183,7 +183,7 @@ export function embeddingServiceUrlFromProbeBase(baseUrl: string): string {
 export async function runModelProbe(
   apiFetchFn: (input: string, init?: RequestInit) => Promise<Response>,
   apiBaseUrl: string,
-  body: { provider: string; api_base_url?: string | null; api_key?: string | null },
+  body: { provider: string; api_base_url?: string | null; api_key?: string | null; slug?: string | null },
 ): Promise<LlmProbeResponse> {
   const probeProvider = resolveProbeProvider(body.provider, body.api_base_url);
   const res = await apiFetchFn(`${apiBaseUrl}/admin/llm-providers/probe`, {

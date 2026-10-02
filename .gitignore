@@ -57,6 +57,9 @@ data/deep_research/
 data/_backups/
 .env.bak*
 
+# Evaluation output for tests
+evals/agent_smoke_tests/outputs
+
 # Distribution / packaging
 .Python
 build/

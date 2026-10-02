@@ -61,6 +61,7 @@ services:
     volumes:
       - ./.env:/app/.env:ro
       - ./src:/app/src
+      - ./evals:/app/evals
       - ./scripts:/app/scripts
       - ./config_std:/app/config_std:ro
       - ./mcp_servers_std:/app/mcp_servers_std:ro

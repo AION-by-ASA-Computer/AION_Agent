@@ -389,11 +389,13 @@ class SessionSandboxExecutor:
         Consente qualsiasi import installato nell'ambiente del processo MCP (docx, reportlab, …).
         """
         extra_args = list(extra_args or [])
-        rel = relative_path.strip().replace("\\", "/").lstrip("/")
-        if not rel.startswith("workspace/"):
+        rel = (relative_path or "").strip().replace("\\", "/").lstrip("/")
+        if rel.startswith("workspace/scripts/"):
+            rel = rel[len("workspace/") :]
+        if not (rel.startswith("workspace/") or rel.startswith("scripts/")):
             return (
-                "Error: only run scripts under workspace/, es. workspace/convert.py "
-                "(first create the file with sandbox_write_workspace_file)."
+                "Error: only run scripts under workspace/ or scripts/, es. workspace/analyze.py or scripts/inspect_xlsx.py "
+                "(first create the file with sandbox_write_workspace_file or materialize via skill)."
             )
         if not rel.lower().endswith(".py"):
             if rel.lower().endswith((".js", ".mjs", ".cjs")):
