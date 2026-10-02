@@ -326,7 +326,12 @@ export default function SettingsPage() {
       setMessage({ type: "error", text: "API Base URL is required for this provider." });
       return false;
     }
-    if (providerForm.provider !== "ollama" && !providerForm.api_key.trim()) {
+
+    const needsApiKey = providerForm.provider !== "ollama";
+    const hasNewKey = !!providerForm.api_key.trim();
+    const hasExistingKey = !!editingProvider && editingProvider.api_key_present;
+
+    if (needsApiKey && !hasNewKey && !hasExistingKey) {
       setMessage({ type: "error", text: "API Key is required to test the connection." });
       return false;
     }
@@ -339,6 +344,7 @@ export default function SettingsPage() {
         provider: providerForm.provider,
         api_base_url: providerForm.api_base_url.trim() || null,
         api_key: providerForm.api_key.trim() || null,
+        slug: editingProvider ? editingProvider.slug : null,
       });
       const allIds = modelIdsFromProbe(result);
       const chatIds = filterModelsForKind(allIds, "chat");

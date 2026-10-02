@@ -223,6 +223,8 @@ def classify_turn_outcome(
     max_agent_steps: Optional[int] = None,
     llm_steps: int = 0,
     plan_intercepts: int = 0,
+    pii_review_intercepts: int = 0,
+    pii_replacements_intercepts: int = 0,
     reasoning_effort: Optional[str] = None,
     max_reasoning_chars: Optional[int] = None,
     max_reasoning_events: Optional[int] = None,
@@ -278,6 +280,10 @@ def classify_turn_outcome(
             "I created the execution plan in the **Plan** sidebar. "
             "Review the tasks, edit if needed, and approve to start execution."
         )
+    elif final_len == 0 and pii_review_intercepts > 0:
+        code = "pii_review_created"
+    elif final_len == 0 and pii_replacements_intercepts > 0:
+        code = "pii_replacements_applied"
     elif final_len == 0 and tool_calls_count > 0:
         code = "tools_without_final_answer"
         if stop_reason == "reasoning_budget":
@@ -308,7 +314,12 @@ def classify_turn_outcome(
     }
 
     warning: Optional[str] = None
-    if code != "ok" and code != "plan_created":
+    if (
+        code != "ok"
+        and code != "plan_created"
+        and code != "pii_review_created"
+        and code != "pii_replacements_applied"
+    ):
         warning = _build_user_warning(
             code=code,
             stop_reason=stop_reason,

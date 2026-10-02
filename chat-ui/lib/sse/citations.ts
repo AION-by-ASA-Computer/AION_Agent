@@ -4,7 +4,7 @@
  */
 
 const CODE_FENCE_RE = /(```[\s\S]*?```|`[^`]+`)/g;
-const PLAIN_CITATION_RE = /(^|[^\[])\[(\d{1,3})\](?!\(|\])/g;
+const PLAIN_CITATION_RE = /(?<!\[)\[(\d{1,3})\](?!\(|\])/g;
 const MARKDOWN_CITATION_RE = /\[(\d{1,3})\]\(https?:\/\/[^)]+\)/gi;
 /** Model sometimes omits the opening bracket: "confidenza 18[29]" */
 const GLUED_CITATION_RE = /(\s)(\d{1,3})(\[\d{1,3}\])/g;
@@ -32,7 +32,7 @@ export function formatTextWithCitations(text: string, messageId?: string): strin
     });
     chunk = chunk.replace(
       PLAIN_CITATION_RE,
-      (_, lead: string, n: string) => `${lead}${citationAnchor(prefix, n)}`,
+      (_, n: string) => citationAnchor(prefix, n),
     );
     chunk = chunk.replace(LINK_CLEANUP_RE, (match, label: string, url: string) => {
       const cleanUrl = url.trim().startsWith("#") ? url.trim() : url.trim().replace(/ /g, "%20");

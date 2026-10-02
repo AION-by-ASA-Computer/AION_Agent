@@ -44,6 +44,22 @@ try:
                 stream_chunk.meta["reasoning"] = reasoning
                 stream_chunk.meta["reasoning_content"] = reasoning
 
+        # AION Custom Events Support
+        aion_event_type = getattr(chunk, "aion_event_type", None)
+        if not aion_event_type and hasattr(chunk, "model_extra") and chunk.model_extra:
+            aion_event_type = chunk.model_extra.get("aion_event_type")
+        if aion_event_type:
+            if stream_chunk.meta is None:
+                stream_chunk.meta = {}
+            stream_chunk.meta["aion_event_type"] = aion_event_type
+            stream_chunk.meta["data"] = getattr(chunk, "data", None)
+            if (
+                not stream_chunk.meta["data"]
+                and hasattr(chunk, "model_extra")
+                and chunk.model_extra
+            ):
+                stream_chunk.meta["data"] = chunk.model_extra.get("data")
+
         return stream_chunk
 
     litellm_chat_mod._convert_litellm_chunk_to_streaming_chunk = (
@@ -233,9 +249,32 @@ class LiteLLMChatGeneratorWrapper:
         tools: Optional[List[Any]] = None,
         **kwargs,
     ) -> Dict[str, List[ChatMessage]]:
-        messages = _sanitize_messages_for_litellm(messages)
+        # Sanitize messages to avoid Haystack empty message validation errors
+        sanitized_messages = []
+        for m in messages:
+            from haystack.dataclasses import TextContent, ChatMessage
+
+            has_content = (
+                getattr(m, "texts", None)
+                or getattr(m, "tool_calls", None)
+                or getattr(m, "tool_call_results", None)
+                or getattr(m, "images", None)
+                or getattr(m, "files", None)
+            )
+            if not has_content:
+                # Se un messaggio arriva vuoto (es. filtrato da PII), metti un placeholder
+                import logging
+
+                logger = logging.getLogger("aion.lite_llm_adapter")
+                logger.warning(
+                    f"DEBUG: Dropping empty message with role {m.role} and meta {m.meta}"
+                )
+                continue  # Drop empty messages entirely instead of polluting the history
+            else:
+                sanitized_messages.append(m)
+
         run_params = {
-            "messages": messages,
+            "messages": sanitized_messages,
             "streaming_callback": streaming_callback,
             "generation_kwargs": generation_kwargs,
             "tools": tools,
