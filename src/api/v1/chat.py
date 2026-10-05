@@ -19,6 +19,7 @@ from src.api.v1.runtime_settings import RuntimeSettingsPayload
 from src.identity import sanitize_user_id
 from src.main import get_agent, set_event_loop
 from src.runtime.reasoning_effort import resolve_turn_reasoning
+from src.session_workspace import normalize_session_id
 from src.runtime.runtime_settings import (
     profile_step_cap,
     resolve_turn_runtime_settings,
@@ -742,11 +743,16 @@ async def chat_stream(
 
     run: Optional[BackgroundChatRun] = None
     if not _project_access_err:
-        run = BackgroundChatRun(body.conversation_id)
-        _background_runs[body.conversation_id] = run
+        try:
+            normalized_conversation_id = normalize_session_id(body.conversation_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
+        run = BackgroundChatRun(normalized_conversation_id)
+        _background_runs[normalized_conversation_id] = run
         run.task = asyncio.create_task(
             _run_pipeline_in_background(
-                conversation_id=body.conversation_id,
+                conversation_id=normalized_conversation_id,
                 body=body,
                 uid=uid,
                 resolved_agent_mode=resolved_agent_mode,
@@ -846,7 +852,13 @@ async def chat_sync(
         body_user_id=body.user_id,
         x_aion_user_id=x_aion_user_id,
     )
-    conversation_id = (body.conversation_id or "").strip() or str(uuid.uuid4())
+    if (body.conversation_id or "").strip():
+        try:
+            conversation_id = normalize_session_id(body.conversation_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    else:
+        conversation_id = str(uuid.uuid4())
 
     from src.runtime.agent_mode_resolve import resolve_agent_mode
 

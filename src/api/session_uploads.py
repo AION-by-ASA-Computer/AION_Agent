@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 
-from src.session_workspace import list_dir, save_upload
+from src.session_workspace import list_dir, normalize_session_id, save_upload
 from src.tools.doc_auto_ingest import schedule_auto_ingest
 from src.tools.office_auto_convert import apply_legacy_word_conversion
 from .auth_login import ChatAuthIdentity, require_chat_auth
@@ -29,6 +29,10 @@ async def upload_session_files(
     _auth: ChatAuthIdentity = Depends(require_chat_auth),
 ):
     """Carica uno o più file in uploads/ per la sessione."""
+    try:
+        session_id = normalize_session_id(session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     if not files:
         raise HTTPException(status_code=400, detail="Nessun file")
 
@@ -120,6 +124,7 @@ async def list_session_files(
 ):
     """Elenco file (uploads, derived, workspace)."""
     try:
+        session_id = normalize_session_id(session_id)
         rows = list_dir(session_id, subdir=subdir)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -148,6 +153,7 @@ async def get_session_tool_ledger(
     from src.runtime.tool_ledger import list_ledger_entries, tool_ledger_enabled
 
     try:
+        session_id = normalize_session_id(session_id)
         entries = list_ledger_entries(session_id)
     except Exception as exc:
         logger.debug("tool-ledger read failed session=%s: %s", session_id[:8], exc)
@@ -176,6 +182,11 @@ async def download_session_file(
     Percorso fisico sul server: DATA_DIR/sessions/<session_id>/...
     """
     from src.session_workspace import safe_resolve
+
+    try:
+        session_id = normalize_session_id(session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     rel = (relative_path or "").strip().replace("\\", "/").lstrip("/")
     if rel.startswith("."):
@@ -216,13 +227,18 @@ async def session_events_sse(
     header custom (gestito da ``require_chat_auth``).
     """
 
+    try:
+        session_id = normalize_session_id(session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     async def gen():
         from src.runtime.redis_client import redis_drain_session_events
 
         try:
             while True:
                 events = await redis_drain_session_events(
-                    session_id.strip(), max_items=25
+                    session_id, max_items=25
                 )
                 for ev in events:
                     yield {"event": "session_event", "data": json.dumps(ev)}
