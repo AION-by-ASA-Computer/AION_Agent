@@ -114,11 +114,11 @@ async def update_user_note(
 
 
 async def delete_user_note(
-    *, tenant_id: str, user_identifier: str, note_id: int
+    *, tenant_id: str, user_identifier: str, note_id: int, hard: bool = False
 ) -> bool:
     note = await store.get_note(note_id)
     _assert_user_note(note, tenant_id=tenant_id, user_identifier=user_identifier)
-    return await store.forget_note(note_id, hard=False)
+    return await store.forget_note(note_id, hard=hard)
 
 
 async def user_memory_status(*, tenant_id: str, user_identifier: str) -> Dict[str, Any]:

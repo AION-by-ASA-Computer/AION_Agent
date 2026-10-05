@@ -83,6 +83,7 @@ class MnemosOrchestrator:
         confidence: float = 1.0,
         confidence_source: Optional[str] = None,
         valid_from: Optional[datetime] = None,
+        dedup: bool = True,
     ) -> Dict[str, Any]:
         scope = resolve_scope_for_write(
             tenant_id=tenant_id,
@@ -90,6 +91,26 @@ class MnemosOrchestrator:
             scope_name=scope_name,
             active_project_slug=active_project_slug,
         )
+        if dedup:
+            duplicate = await store.find_duplicate_note(scope, text)
+            if duplicate is not None:
+                await store.reinforce_note(duplicate.id, new_confidence=confidence)
+                if supersede_hint:
+                    candidates = await store.find_supersede_candidates(
+                        scope, supersede_hint, limit=3
+                    )
+                    for c in candidates:
+                        if c.id != duplicate.id:
+                            await store.supersede_note(c.id, duplicate)
+                return {
+                    "id": duplicate.id,
+                    "seq": duplicate.seq,
+                    "scope_type": scope.scope_type,
+                    "scope_key": scope.scope_key,
+                    "content": duplicate.content,
+                    "deduplicated": True,
+                }
+
         note = await store.insert_note(
             scope,
             content=text,

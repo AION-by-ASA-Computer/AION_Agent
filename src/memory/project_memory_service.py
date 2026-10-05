@@ -146,6 +146,7 @@ async def delete_project_note(
     *,
     tenant_id: str,
     project_slug: str,
+    hard: bool = False,
 ) -> bool:
     note = await store.get_note(note_id)
     if not note:
@@ -157,7 +158,7 @@ async def delete_project_note(
         or note.scope_key != slug
     ):
         return False
-    return await store.forget_note(note_id, hard=False)
+    return await store.forget_note(note_id, hard=hard)
 
 
 async def project_memory_status(*, tenant_id: str, project_slug: str) -> Dict[str, Any]:

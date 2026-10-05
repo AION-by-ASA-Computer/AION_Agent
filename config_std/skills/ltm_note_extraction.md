@@ -52,7 +52,9 @@ conoscenza duratura come note. Rispondi SOLO con JSON valido.
 
 `should_persist=true`, `importance >= 4`, scope coerente col contenuto.
 
-## Non persistere
+## Non persistere (Anti-Echo e Deduplicazione)
 
-Query SQL complete (le gestisce Query Memory), dump di schema/catalogo,
-errori MCP/tool transitori, rumore di navigazione senza una lezione riutilizzabile.
+- **MAI persistere fatti che l'assistente ha semplicemente ripetuto recuperandoli dalla memoria** (session_memory / wake / prompt pre-esistente) per rispondere a domande o test dell'utente (es. "Come mi chiamo?", "Chi sono?", "Dove lavoro?").
+- Non duplicare fatti già noti e stabili se non contengono novità o aggiornamenti reali.
+- Query SQL complete (le gestisce Query Memory), dump di schema/catalogo,
+- Errori MCP/tool transitori, rumore di navigazione senza una lezione riutilizzabile.
