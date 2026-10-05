@@ -101,6 +101,14 @@ def _flat_session_mount() -> bool:
     return (os.getenv("AION_DATA_DIR") or "").strip() == "/session"
 
 
+def _is_under(parent: Path, candidate: Path) -> bool:
+    try:
+        candidate.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
 def session_root(session_id: str) -> Path:
     sid = (session_id or "").strip()
     if not _SESSION_ID_RE.match(sid):
@@ -108,7 +116,11 @@ def session_root(session_id: str) -> Path:
     root = data_root()
     if _flat_session_mount():
         return root.resolve()
-    return (root / "sessions" / sid).resolve()
+    base = (root / "sessions").resolve()
+    target = (base / sid).resolve()
+    if not _is_under(base, target):
+        raise ValueError("session_id traversal non consentito")
+    return target
 
 
 def ensure_session_dirs(session_id: str) -> Path:
@@ -116,14 +128,6 @@ def ensure_session_dirs(session_id: str) -> Path:
     for sub in ("uploads", "derived", "workspace"):
         (root / sub).mkdir(parents=True, exist_ok=True)
     return root
-
-
-def _is_under(parent: Path, candidate: Path) -> bool:
-    try:
-        candidate.resolve().relative_to(parent.resolve())
-        return True
-    except ValueError:
-        return False
 
 
 def safe_resolve(

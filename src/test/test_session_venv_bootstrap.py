@@ -48,39 +48,26 @@ def test_bootstrap_skills_skipped_when_marker_present(
     assert called is False
 
 
-def test_bootstrap_skills_runs_in_container_when_unmarked(
+def test_bootstrap_skills_in_container_marks_without_pip(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("AION_SANDBOX_IN_CONTAINER", "1")
     session = tmp_path / "sess"
     vdir = session / ".venv"
-    vbin = vdir / "bin"
-    vbin.mkdir(parents=True)
-    vpy = vbin / "python"
-    vpy.write_text("#!/bin/sh\n", encoding="utf-8")
+    vdir.mkdir(parents=True)
 
-    req = tmp_path / "requirements-sandbox-skills.txt"
-    req.write_text("defusedxml\n", encoding="utf-8")
-    monkeypatch.setattr(session_venv, "_skills_requirements_path", lambda: req)
-    monkeypatch.setattr(session_venv, "session_root", lambda sid: session)
-    monkeypatch.setattr(session_venv, "session_venv_python", lambda sid: vpy)
+    called = False
 
-    captured: dict = {}
+    def _fail(*_a, **_k):
+        nonlocal called
+        called = True
+        raise AssertionError("should not run subprocess in container")
 
-    def _fake_run(session_id, argv, **kwargs):
-        captured["argv"] = list(argv)
-        proc = MagicMock()
-        proc.returncode = 0
-        proc.stdout = "ok"
-        proc.stderr = ""
-        return proc
-
-    monkeypatch.setattr(session_venv, "run_session_subprocess", _fake_run)
-    monkeypatch.setenv("AION_SANDBOX_PIP_USE_UV", "0")
+    monkeypatch.setattr(session_venv, "run_session_subprocess", _fail)
 
     session_venv._bootstrap_session_venv_skills("sess", vdir)
 
-    assert captured["argv"][:4] == [str(vpy), "-m", "pip", "install"]
+    assert called is False
     assert (vdir / ".aion_skills_bootstrapped").is_file()
 
 
