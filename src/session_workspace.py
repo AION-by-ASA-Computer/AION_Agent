@@ -103,10 +103,13 @@ def _flat_session_mount() -> bool:
 
 def _is_under(parent: Path, candidate: Path) -> bool:
     try:
-        candidate.resolve().relative_to(parent.resolve())
-        return True
-    except ValueError:
-        return False
+        return candidate.resolve().is_relative_to(parent.resolve())
+    except (ValueError, AttributeError):
+        try:
+            candidate.resolve().relative_to(parent.resolve())
+            return True
+        except ValueError:
+            return False
 
 
 def normalize_session_id(session_id: str) -> str:
@@ -123,10 +126,10 @@ def session_root(session_id: str) -> Path:
         return root.resolve()
     base = (root / "sessions").resolve()
     safe_leaf = Path(sid).name
-    if safe_leaf != sid:
+    if safe_leaf != sid or "/" in sid or "\\" in sid or ".." in sid:
         raise ValueError("session_id traversal non consentito")
     target = (base / safe_leaf).resolve()
-    if not _is_under(base, target):
+    if not target.is_relative_to(base):
         raise ValueError("session_id traversal non consentito")
     return target
 
@@ -150,9 +153,9 @@ def safe_resolve(
         raise ValueError("path non consentito")
     if rel and not _SAFE_REL.match(rel):
         raise ValueError("caratteri path non consentiti")
-    root = ensure_session_dirs(session_id)
+    root = ensure_session_dirs(session_id).resolve()
     full = (root / rel).resolve()
-    if not _is_under(root, full):
+    if not full.is_relative_to(root):
         raise ValueError("path fuori dalla sessione")
     if must_exist and not full.exists():
         raise FileNotFoundError(relative_path)
@@ -170,13 +173,14 @@ def _resolve_listed_subdir(root: Path, sub: str) -> Path:
         raise ValueError(
             f"subdir deve essere uno tra: {', '.join(sorted(LISTABLE_SUBDIRS))}"
         )
-    candidate = root
+    resolved_root = root.resolve()
+    candidate = resolved_root
     for part in parts:
         if part in (".", "..") or not _SAFE_SEGMENT.match(part):
             raise ValueError("path non consentito")
         candidate = candidate / part
     resolved = candidate.resolve()
-    if not _is_under(root, resolved):
+    if not resolved.is_relative_to(resolved_root):
         raise ValueError("path fuori dalla sessione")
     return resolved
 
