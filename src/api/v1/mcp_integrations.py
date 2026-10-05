@@ -60,7 +60,7 @@ def _chat_base_url(request: Optional[Request] = None) -> str:
         return public_chat
 
     api_base = _oauth_redirect_api_base(request)
-    if _is_absolute_http_url(api_base):
+    if _is_absolute_http_url(api_base) and not _is_loopback_host_url(api_base):
         low = api_base.rstrip("/").lower()
         if low.endswith("/api"):
             return api_base.rstrip("/")[:-4]
