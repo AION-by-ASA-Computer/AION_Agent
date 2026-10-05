@@ -122,7 +122,10 @@ def session_root(session_id: str) -> Path:
     if _flat_session_mount():
         return root.resolve()
     base = (root / "sessions").resolve()
-    target = (base / sid).resolve()
+    safe_leaf = Path(sid).name
+    if safe_leaf != sid:
+        raise ValueError("session_id traversal non consentito")
+    target = (base / safe_leaf).resolve()
     if not _is_under(base, target):
         raise ValueError("session_id traversal non consentito")
     return target
