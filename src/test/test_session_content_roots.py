@@ -53,3 +53,16 @@ def test_safe_resolve_rejects_traversal(isolated_data):
 
     with pytest.raises(ValueError):
         safe_resolve(sid, "uploads/../../secret.txt")
+
+
+def test_session_fs_confines_relative_paths(isolated_data):
+    from src.session_workspace import session_fs
+
+    sid = "test-fs-confine"
+    root = session_root(sid)
+    uploads = session_fs(sid, "uploads")
+    assert uploads == str((root / "uploads").resolve())
+    assert session_fs(sid).startswith(str(root))
+
+    with pytest.raises(ValueError):
+        session_fs(sid, "../secret")

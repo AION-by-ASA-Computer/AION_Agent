@@ -82,7 +82,7 @@ cached per session. Sandbox files live in `data/sessions/<session_id>/` (gitigno
 
 ## Next.js: version-specific quirks
 
-Both `chat-ui` and `admin-ui` use **Next.js 16.2.3** with **React 19.2.4**.
+Both `chat-ui` and `admin-ui` use **Next.js 16.3.8** with **React 19.2.4**.
 The `admin-ui` dev command requires `--webpack` (not Turbopack):
 `next dev --webpack -p 3870`.
 
