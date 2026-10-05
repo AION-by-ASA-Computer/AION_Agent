@@ -129,13 +129,14 @@ def session_root(session_id: str) -> Path:
     if safe_leaf != sid or "/" in sid or "\\" in sid or ".." in sid:
         raise ValueError("session_id traversal non consentito")
     target = (base / safe_leaf).resolve()
-    if not target.is_relative_to(base):
+    if not _is_under(base, target):
         raise ValueError("session_id traversal non consentito")
     return target
 
 
 def ensure_session_dirs(session_id: str) -> Path:
-    root = session_root(session_id)
+    sid = normalize_session_id(session_id)
+    root = session_root(sid)
     for sub in ("uploads", "derived", "workspace"):
         (root / sub).mkdir(parents=True, exist_ok=True)
     return root
@@ -148,12 +149,13 @@ def safe_resolve(
     Risolve un path relativo sotto la root sessione (qualsiasi sottopath valido, es. uploads/, workspace/, unpacked/).
     `relative_path` non deve iniziare con / o contenere ..
     """
+    sid = normalize_session_id(session_id)
     rel = (relative_path or "").strip().replace("\\", "/").lstrip("/")
     if ".." in rel:
         raise ValueError("path non consentito")
     if rel and not _SAFE_REL.match(rel):
         raise ValueError("caratteri path non consentiti")
-    root = ensure_session_dirs(session_id).resolve()
+    root = ensure_session_dirs(sid).resolve()
     full = (root / rel).resolve()
     if not full.is_relative_to(root):
         raise ValueError("path fuori dalla sessione")
