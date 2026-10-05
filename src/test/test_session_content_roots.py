@@ -33,3 +33,23 @@ def test_safe_resolve_unpacked_and_workspace_paths(isolated_data):
 def test_session_content_roots_includes_unpacked():
     assert "unpacked" in SESSION_CONTENT_ROOTS
     assert "workspace" in SESSION_CONTENT_ROOTS
+
+
+def test_session_root_rejects_traversal(isolated_data):
+    with pytest.raises(ValueError):
+        session_root("../../etc/passwd")
+
+    with pytest.raises(ValueError):
+        session_root("..\\..\\windows")
+
+    with pytest.raises(ValueError):
+        session_root("/absolute/path")
+
+
+def test_safe_resolve_rejects_traversal(isolated_data):
+    sid = "test-traversal-sid"
+    with pytest.raises(ValueError):
+        safe_resolve(sid, "../outside.txt")
+
+    with pytest.raises(ValueError):
+        safe_resolve(sid, "uploads/../../secret.txt")

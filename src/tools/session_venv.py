@@ -8,7 +8,6 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 from typing import List, Optional
@@ -143,24 +142,6 @@ def _skills_requirements_path() -> Path:
     return _SKILLS_REQUIREMENTS
 
 
-def _trusted_session_python_for_checks(session_id: str) -> Optional[Path]:
-    """
-    Resolve and validate the session venv interpreter used for local import checks.
-    Returns None when the candidate is missing or fails trust validation.
-    """
-    candidate = session_venv_python(session_id)
-    if not candidate.is_file():
-        return None
-    try:
-        expected = session_venv_dir(session_id).resolve()
-        resolved = candidate.resolve()
-        resolved.relative_to(expected)
-    except Exception:
-        logger.warning("refusing untrusted session python path: %s", candidate)
-        return None
-    return candidate
-
-
 def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
     """Seed session venv with office skill Python deps (idempotent via marker file)."""
     if not _venv_bootstrap_skills_enabled():
@@ -169,22 +150,19 @@ def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
     if marker.is_file():
         return
 
-    vpy = _trusted_session_python_for_checks(session_id)
-    if vpy is None:
+    # In sandbox container, the venv was created with --system-site-packages
+    # and all skill requirements are already preinstalled in the container image.
+    if _in_sandbox_container():
+        try:
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            marker.write_text("ok\n", encoding="utf-8")
+        except OSError as exc:
+            logger.warning("skills bootstrap marker write failed: %s", exc)
         return
 
-    # If packages are already importable (e.g. inherited via system-site-packages), skip network install
-    try:
-        check_res = subprocess.run(
-            [str(vpy), "-c", "import openpyxl, pandas"],
-            capture_output=True,
-            timeout=5,
-        )
-        if check_res.returncode == 0:
-            marker.touch()
-            return
-    except Exception:
-        pass
+    vpy = session_venv_python(session_id)
+    if not vpy.is_file():
+        return
 
     req = _skills_requirements_path()
     if not req.is_file():
