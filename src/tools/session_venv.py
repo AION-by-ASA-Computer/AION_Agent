@@ -14,7 +14,12 @@ from typing import List, Optional
 
 from ..security.session_env import build_session_env
 from ..security.session_runner import run_session_subprocess
-from ..session_workspace import ensure_session_dirs, session_root
+from ..session_workspace import (
+    contained_path_str,
+    ensure_session_dirs,
+    session_fs,
+    session_root,
+)
 
 logger = logging.getLogger("aion.session_venv")
 
@@ -28,19 +33,17 @@ _PACKAGE_TOKEN_RE = re.compile(
 
 
 def session_venv_dir(session_id: str) -> Path:
-    return session_root(session_id) / ".venv"
+    return Path(session_fs(session_id, ".venv"))
 
 
 def session_venv_python(session_id: str) -> Path:
-    root = session_venv_dir(session_id)
     if os.name == "nt":
-        return root / "Scripts" / "python.exe"
-    return root / "bin" / "python"
+        return Path(session_fs(session_id, ".venv/Scripts/python.exe"))
+    return Path(session_fs(session_id, ".venv/bin/python"))
 
 
 def session_venv_exists(session_id: str) -> bool:
-    py = session_venv_python(session_id)
-    return py.is_file()
+    return os.path.isfile(os.fspath(session_venv_python(session_id)))
 
 
 def _pip_install_allowed() -> bool:
@@ -128,8 +131,12 @@ def _venv_create_argv(vdir: Path) -> List[str]:
     return argv
 
 
-def _skills_bootstrap_marker(vdir: Path) -> Path:
-    return vdir / ".aion_skills_bootstrapped"
+def _write_skills_bootstrap_marker(vdir: Path) -> None:
+    parent_s = contained_path_str(vdir)
+    marker_s = contained_path_str(vdir, ".aion_skills_bootstrapped")
+    os.makedirs(parent_s, exist_ok=True)
+    with open(marker_s, "w", encoding="utf-8") as fh:
+        fh.write("ok\n")
 
 
 def _skills_requirements_path() -> Path:
@@ -146,22 +153,21 @@ def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
     """Seed session venv with office skill Python deps (idempotent via marker file)."""
     if not _venv_bootstrap_skills_enabled():
         return
-    marker = _skills_bootstrap_marker(vdir)
-    if marker.is_file():
+    marker_s = contained_path_str(vdir, ".aion_skills_bootstrapped")
+    if os.path.isfile(marker_s):
         return
 
     # In sandbox container, the venv was created with --system-site-packages
     # and all skill requirements are already preinstalled in the container image.
     if _in_sandbox_container():
         try:
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            marker.write_text("ok\n", encoding="utf-8")
+            _write_skills_bootstrap_marker(vdir)
         except OSError as exc:
             logger.warning("skills bootstrap marker write failed: %s", exc)
         return
 
     vpy = session_venv_python(session_id)
-    if not vpy.is_file():
+    if not os.path.isfile(os.fspath(vpy)):
         return
 
     req = _skills_requirements_path()
@@ -236,8 +242,7 @@ def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
         )
         return
     try:
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        marker.write_text("ok\n", encoding="utf-8")
+        _write_skills_bootstrap_marker(vdir)
     except OSError as exc:
         logger.warning("skills bootstrap marker write failed: %s", exc)
     logger.info("Session venv bootstrapped with office skill deps: %s", vdir)
@@ -248,7 +253,7 @@ def ensure_session_venv(session_id: str) -> Path:
     ensure_session_dirs(session_id)
     vdir = session_venv_dir(session_id)
     py = session_venv_python(session_id)
-    if py.is_file():
+    if os.path.isfile(os.fspath(py)):
         _bootstrap_session_venv_skills(session_id, vdir)
         return vdir
     timeout = _pip_timeout()
@@ -270,7 +275,7 @@ def ensure_session_venv(session_id: str) -> Path:
         raise RuntimeError(
             f"python -m venv failed (exit {proc.returncode}): {err[:4000]}"
         )
-    if not py.is_file():
+    if not os.path.isfile(os.fspath(py)):
         raise RuntimeError("venv creato ma interprete not found")
     _bootstrap_session_venv_skills(session_id, vdir)
     logger.info("Session venv creato: %s", vdir)
@@ -314,7 +319,7 @@ def install_packages(
 
     ensure_session_venv(session_id)
     vpy = session_venv_python(session_id)
-    if not vpy.is_file():
+    if not os.path.isfile(os.fspath(vpy)):
         return "Error: interprete venv not found dopo ensure_session_venv."
 
     use_uv_flag = _default_use_uv() if use_uv is None else bool(use_uv)

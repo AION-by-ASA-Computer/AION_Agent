@@ -101,15 +101,45 @@ def _flat_session_mount() -> bool:
     return (os.getenv("AION_DATA_DIR") or "").strip() == "/session"
 
 
-def _is_under(parent: Path, candidate: Path) -> bool:
+def contained_path_str(base: Path, relative: str = "") -> str:
+    """Join ``relative`` under ``base`` and return a real path still inside ``base``.
+
+    ``os.path.commonpath`` is the CodeQL-recognized sanitizer for
+    ``py/path-injection``. ``Path.resolve()`` / ``is_relative_to()`` are not,
+    and calling them on a user-influenced Path is itself a sink.
+    """
+    base_real = os.path.realpath(os.fspath(base))
+    rel = (relative or "").replace("\\", "/").strip("/")
+    if rel:
+        parts: List[str] = []
+        for part in rel.split("/"):
+            if part in ("", ".", "..") or not _SAFE_SEGMENT.match(part):
+                raise ValueError("path non consentito")
+            parts.append(part)
+        joined = os.path.join(base_real, *parts)
+    else:
+        joined = base_real
+    cand_real = os.path.realpath(joined)
     try:
-        return candidate.resolve().is_relative_to(parent.resolve())
-    except (ValueError, AttributeError):
-        try:
-            candidate.resolve().relative_to(parent.resolve())
-            return True
-        except ValueError:
-            return False
+        common = os.path.commonpath([base_real, cand_real])
+    except ValueError as exc:
+        raise ValueError("path fuori dalla sessione") from exc
+    if common != base_real:
+        raise ValueError("path fuori dalla sessione")
+    return cand_real
+
+
+def session_fs(session_id: str, relative: str = "") -> str:
+    """Absolute path under this session, confined to ``data_root()``."""
+    sid = normalize_session_id(session_id)
+    root = data_root()
+    if _flat_session_mount():
+        return contained_path_str(root, relative)
+    parts = ["sessions", sid]
+    rel = (relative or "").replace("\\", "/").strip("/")
+    if rel:
+        parts.append(rel)
+    return contained_path_str(root, "/".join(parts))
 
 
 def normalize_session_id(session_id: str) -> str:
@@ -120,26 +150,15 @@ def normalize_session_id(session_id: str) -> str:
 
 
 def session_root(session_id: str) -> Path:
-    sid = normalize_session_id(session_id)
-    root = data_root()
-    if _flat_session_mount():
-        return root.resolve()
-    base = (root / "sessions").resolve()
-    safe_leaf = Path(sid).name
-    if safe_leaf != sid or "/" in sid or "\\" in sid or ".." in sid:
-        raise ValueError("session_id traversal non consentito")
-    target = (base / safe_leaf).resolve()
-    if not _is_under(base, target):
-        raise ValueError("session_id traversal non consentito")
-    return target
+    return Path(session_fs(session_id))
 
 
 def ensure_session_dirs(session_id: str) -> Path:
     sid = normalize_session_id(session_id)
-    root = session_root(sid)
+    root_s = session_fs(sid)
     for sub in ("uploads", "derived", "workspace"):
-        (root / sub).mkdir(parents=True, exist_ok=True)
-    return root
+        os.makedirs(session_fs(sid, sub), exist_ok=True)
+    return Path(root_s)
 
 
 def safe_resolve(
@@ -155,17 +174,15 @@ def safe_resolve(
         raise ValueError("path non consentito")
     if rel and not _SAFE_REL.match(rel):
         raise ValueError("caratteri path non consentiti")
-    root = ensure_session_dirs(sid).resolve()
-    full = (root / rel).resolve()
-    if not full.is_relative_to(root):
-        raise ValueError("path fuori dalla sessione")
-    if must_exist and not full.exists():
+    ensure_session_dirs(sid)
+    full_s = session_fs(sid, rel)
+    if must_exist and not os.path.exists(full_s):
         raise FileNotFoundError(relative_path)
-    return full
+    return Path(full_s)
 
 
-def _resolve_listed_subdir(root: Path, sub: str) -> Path:
-    """Resolve a validated subpath under an already-known session root."""
+def _resolve_listed_subdir(session_id: str, sub: str) -> Path:
+    """Resolve a validated subpath under the session root."""
     rel = sub.strip().replace("\\", "/").strip("/")
     if not rel or not _SAFE_REL.match(rel):
         raise ValueError(f"subdir non valido: {sub}")
@@ -175,16 +192,10 @@ def _resolve_listed_subdir(root: Path, sub: str) -> Path:
         raise ValueError(
             f"subdir deve essere uno tra: {', '.join(sorted(LISTABLE_SUBDIRS))}"
         )
-    resolved_root = root.resolve()
-    candidate = resolved_root
     for part in parts:
         if part in (".", "..") or not _SAFE_SEGMENT.match(part):
             raise ValueError("path non consentito")
-        candidate = candidate / part
-    resolved = candidate.resolve()
-    if not resolved.is_relative_to(resolved_root):
-        raise ValueError("path fuori dalla sessione")
-    return resolved
+    return Path(session_fs(session_id, rel))
 
 
 def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
@@ -195,7 +206,7 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
     if sub in LISTABLE_SUBDIRS:
         if sub == "tool_results":
             return _list_tool_results_files(session_id)
-        d = _resolve_listed_subdir(root, sub)
+        d = _resolve_listed_subdir(session_id, sub)
         if not d.is_dir():
             return []
         all_names = set(p.name for p in d.iterdir() if p.is_file())
@@ -230,7 +241,7 @@ def list_dir(session_id: str, subdir: str = "uploads") -> List[Dict[str, Any]]:
         return out
 
     # Nested paths under a known session root (e.g. workspace/screenshots).
-    d = _resolve_listed_subdir(root, sub)
+    d = _resolve_listed_subdir(session_id, sub)
     if not d.is_dir():
         return []
     out = []
