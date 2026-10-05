@@ -8,7 +8,7 @@ from typing import List
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from src.api.auth import AuthContext, Scope, require_scope
-from src.session_workspace import save_upload
+from src.session_workspace import normalize_session_id, save_upload
 from src.storage import get_storage_backend
 from src.tools.doc_auto_ingest import schedule_auto_ingest
 from src.tools.office_auto_convert import apply_legacy_word_conversion
@@ -22,6 +22,10 @@ async def upload_files(
     ctx: AuthContext = Depends(require_scope(Scope.FILES_WRITE)),
     files: List[UploadFile] = File(...),
 ):
+    try:
+        conversation_id = normalize_session_id(conversation_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
     if not files:
         raise HTTPException(400, "No files")
     out = []
@@ -50,6 +54,7 @@ async def list_files(
     from src.session_workspace import list_dir
 
     try:
+        conversation_id = normalize_session_id(conversation_id)
         rows = list_dir(conversation_id, subdir="uploads")
     except ValueError as e:
         raise HTTPException(400, str(e)) from e

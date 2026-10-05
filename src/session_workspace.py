@@ -109,10 +109,15 @@ def _is_under(parent: Path, candidate: Path) -> bool:
         return False
 
 
-def session_root(session_id: str) -> Path:
+def normalize_session_id(session_id: str) -> str:
     sid = (session_id or "").strip()
     if not _SESSION_ID_RE.match(sid):
         raise ValueError("session_id non valido")
+    return sid
+
+
+def session_root(session_id: str) -> Path:
+    sid = normalize_session_id(session_id)
     root = data_root()
     if _flat_session_mount():
         return root.resolve()

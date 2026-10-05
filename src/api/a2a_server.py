@@ -4,6 +4,7 @@ from typing import Dict, Any, Optional
 from ..a2a.agent_card import get_agent_card
 from ..main import get_agent
 from ..agent_pipeline import AgentPipeline
+from ..session_workspace import normalize_session_id
 import uuid
 
 router = APIRouter(prefix="/a2a", tags=["agent-to-agent"])
@@ -39,6 +40,10 @@ async def invoke_agent(msg: A2AMessage, x_aion_origin: str = Header(None)):
 
     if not prompt:
         raise HTTPException(status_code=400, detail="Missing 'prompt' in params")
+    try:
+        session_id = normalize_session_id(session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     try:
         # 1. Get the agent instance
