@@ -237,9 +237,7 @@ async def session_events_sse(
 
         try:
             while True:
-                events = await redis_drain_session_events(
-                    session_id, max_items=25
-                )
+                events = await redis_drain_session_events(session_id, max_items=25)
                 for ev in events:
                     yield {"event": "session_event", "data": json.dumps(ev)}
                 await asyncio.sleep(0.45)
