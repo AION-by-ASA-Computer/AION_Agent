@@ -2,7 +2,6 @@
 
 import { PanelLeft, PanelRight } from "lucide-react";
 import { useCallback, useState, useRef, useEffect } from "react";
-import { ModelSelectChip, type LlmProviderOption } from "@/components/chat/ModelSelectChip";
 import { CapabilitiesChip, type UsedTool } from "@/components/layout/CapabilitiesChip";
 import type { SkillStatus } from "@/components/chat/ChatWorkspace";
 import { cn } from "@/lib/cn";
@@ -12,17 +11,12 @@ import type { DockTab } from "@/lib/layout/dock-tab";
 export type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research";
 
 export function ChatHeader({
-  conversationId,
   dockTab,
   onToggleDock,
   isSidebarOpen,
   onToggleSidebar,
   title,
   onTitleChange,
-  llmProviders,
-  selectedProvider,
-  providersLoading,
-  onProviderChange,
   usedTools,
   skillStatuses,
 }: {
@@ -38,7 +32,7 @@ export function ChatHeader({
   onToggleSidebar?: () => void;
   title: string | null;
   onTitleChange?: (newTitle: string) => void;
-  llmProviders?: LlmProviderOption[];
+  llmProviders?: unknown[];
   selectedProvider?: string | null;
   providersLoading?: boolean;
   onProviderChange?: (slug: string | null) => void;
@@ -49,7 +43,6 @@ export function ChatHeader({
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(title || "");
-  const [isModelOpen, setIsModelOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const t = useT();
 
@@ -143,17 +136,10 @@ export function ChatHeader({
 
       {/* Center: Capabilities & Tool Status Badges */}
       <div className="flex min-w-0 flex-wrap items-center justify-center gap-2.5">
-        {llmProviders && onProviderChange ? (
-          <ModelSelectChip
-            providers={llmProviders}
-            selectedSlug={selectedProvider ?? null}
-            loading={providersLoading}
-            open={isModelOpen}
-            onOpenChange={setIsModelOpen}
-            onSelect={onProviderChange}
-            placement="below"
-          />
-        ) : null}
+        <CapabilitiesChip
+          usedTools={usedTools ?? []}
+          skillStatuses={skillStatuses ?? []}
+        />
       </div>
 
       {/* Right: Dock Toggle Button */}
