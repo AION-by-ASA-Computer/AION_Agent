@@ -65,8 +65,9 @@ def verify_id_token(
         allowed_domains = provider_config.get("allowed_domains", [])
         if allowed_domains:
             email = payload.get("preferred_username") or payload.get("email") or ""
-            domain = email.split("@")[-1] if "@" in email else ""
-            if domain not in allowed_domains:
+            domain = email.split("@")[-1].lower() if "@" in email else ""
+            allowed_domains_lower = [d.lower() for d in allowed_domains]
+            if domain not in allowed_domains_lower:
                 raise ValueError("domain_not_allowed")
 
     elif provider == "google":
@@ -77,8 +78,9 @@ def verify_id_token(
             
         allowed_domains = provider_config.get("allowed_domains", [])
         if allowed_domains:
-            hd = payload.get("hd")
-            if hd not in allowed_domains:
+            hd = (payload.get("hd") or "").lower()
+            allowed_domains_lower = [d.lower() for d in allowed_domains]
+            if hd not in allowed_domains_lower:
                 raise ValueError("domain_not_allowed")
 
     return payload

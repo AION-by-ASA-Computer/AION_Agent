@@ -855,7 +855,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       const list = await fetchSqlProjects(userId, token, activeProfileSlug);
       setSqlProjects(list);
     } catch (err) {
-      console.error("Error fetching SQL projects:", err);
+      if (token || !String(err).includes("Authentication required")) {
+        console.error("Error fetching SQL projects:", err);
+      }
     } finally {
       setLoadingSqlProjects(false);
     }
@@ -999,9 +1001,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
       if (result.pii_supported) {
         setPiiReviewSupported(true);
+        setPiiAvailableTags(result.pii_tags ?? []);
       } else {
         setPiiReviewSupported(false);
         setPiiReviewEnabled(false);
+        setPiiAvailableTags([]);
       }
 
       const runtimeRows = (result.mcp_errors ?? []).map((row: ChatPrepareMcpError) => ({
@@ -1133,6 +1137,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [webSearchEnabled, setWebSearchEnabled] = useState(true);
   const [piiReviewEnabled, setPiiReviewEnabled] = useState(false);
   const [piiReviewSupported, setPiiReviewSupported] = useState(false);
+  /** Tag PII censurabili esposti dal gateway (SmartRoute /v1/capabilities). */
+  const [piiAvailableTags, setPiiAvailableTags] = useState<string[]>([]);
+  /** Tag deselezionati dall'utente (non censurati). Si salvano gli esclusi così i tag nuovi restano censurati di default. */
+  const [piiExcludedTags, setPiiExcludedTags] = useState<string[]>([]);
   const [webRestrictHosts, setWebRestrictHosts] = useState<string[]>([]);
   const [webRestrictModalOpen, setWebRestrictModalOpen] = useState(false);
   const [webRestrictDraft, setWebRestrictDraft] = useState<string[]>([]);
@@ -1141,6 +1149,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   useEffect(() => {
     try {
+      const piiRaw = localStorage.getItem("aion_chat_pii_excluded_tags");
+      if (piiRaw) {
+        const arr = JSON.parse(piiRaw) as unknown;
+        if (Array.isArray(arr)) {
+          setPiiExcludedTags(arr.filter((x): x is string => typeof x === "string"));
+        }
+      }
       const en = localStorage.getItem("aion_chat_web_search_enabled");
       if (en === "0" || en === "false") setWebSearchEnabled(false);
       else if (en === "1" || en === "true") setWebSearchEnabled(true);
@@ -1165,6 +1180,25 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       /* ignore */
     }
   }, []);
+
+  const togglePiiTag = useCallback((tag: string) => {
+    setPiiExcludedTags((prev) => {
+      const next = prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag];
+      try {
+        if (next.length) localStorage.setItem("aion_chat_pii_excluded_tags", JSON.stringify(next));
+        else localStorage.removeItem("aion_chat_pii_excluded_tags");
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  const piiExcludeTagsForTurn = useMemo(() => {
+    if (!piiReviewSupported) return undefined;
+    const excluded = piiAvailableTags.filter((tag) => piiExcludedTags.includes(tag));
+    return excluded.length ? excluded : undefined;
+  }, [piiReviewSupported, piiAvailableTags, piiExcludedTags]);
 
   const persistWebRestrictHosts = useCallback((hosts: string[]) => {
     setWebRestrictHosts(hosts);
@@ -2040,6 +2074,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             runtime: getRuntimeValuesForTurn(thinkingEnabled, reasoningEffort),
             aion_privacy_filter_review_content: piiReviewEnabled,
             aion_pii_review_token: opts?.aion_pii_review_token,
+            aion_privacy_filter_exclude_tags: piiExcludeTagsForTurn,
           },
           token,
           abortRef.current.signal
@@ -2409,6 +2444,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       refreshThreads,
       webSearchEnabled,
       webRestrictHosts,
+      piiReviewEnabled,
+      piiExcludeTagsForTurn,
       agentMode,
       sqlQueryProject,
       showProjectMemory,
@@ -4651,6 +4688,43 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   <Check size={12} className="shrink-0 text-primary" />
                                 ) : null}
                               </button>
+                              {piiAvailableTags.length ? (
+                                <div className="mt-1 px-2.5 pb-1">
+                                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+                                    {t("chat.pii.tags_label")}
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {piiAvailableTags.map((tag) => {
+                                      const selected = !piiExcludedTags.includes(tag);
+                                      return (
+                                        <button
+                                          key={tag}
+                                          type="button"
+                                          aria-pressed={selected}
+                                          onClick={() => togglePiiTag(tag)}
+                                          onMouseEnter={() => {
+                                            closePlusSubMenus();
+                                          }}
+                                          className={cn(
+                                            "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors",
+                                            selected
+                                              ? "border-primary/30 bg-primary/10 text-primary"
+                                              : "border-border/60 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                                          )}
+                                        >
+                                          {selected ? <Check size={10} className="shrink-0" aria-hidden /> : null}
+                                          <span>{tag}</span>
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                  {piiAvailableTags.every((tag) => piiExcludedTags.includes(tag)) ? (
+                                    <div className="mt-1 text-[10px] text-muted-foreground">
+                                      {t("chat.pii.tags_none")}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </>
                           ) : null}
 

@@ -12,6 +12,7 @@ import {
   isChangePwSkipped,
 } from "@/lib/auth/storage";
 import { fetchAuthStatus, resetAuthStatusCache } from "@/lib/auth/status";
+import { SsoLinkModal } from "./SsoLinkModal";
 
 /**
  * Client guard: se il backend ha `AION_CHAT_PASSWORD_AUTH=1`, redirige a
@@ -25,9 +26,10 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const t = useT();
-  const [state, setState] = useState<"checking" | "ok" | "redirecting">(
+  const [state, setState] = useState<"checking" | "ok" | "redirecting" | "sso_link">(
     "checking"
   );
+  const [ssoProvider, setSsoProvider] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +72,16 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         }
         const me = (await r.json().catch(() => ({}))) as {
           must_change_password?: boolean;
+          sso_link_required?: boolean;
+          sso_provider?: string;
         };
+
+        if (me.sso_link_required && me.sso_provider) {
+          setSsoProvider(me.sso_provider);
+          setState("sso_link");
+          return;
+        }
+
         if (me.must_change_password && !isChangePwSkipped()) {
           // Redirect non-bloccante: l'utente puo' skipparlo dalla pagina.
           setState("redirecting");
@@ -91,6 +102,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
   }, [pathname, router]);
 
   if (state === "ok") return <>{children}</>;
+  
+  if (state === "sso_link" && ssoProvider) {
+    // Rendiamo SsoLinkModal senza i children per forzare l'azione
+    return <SsoLinkModal provider={ssoProvider} />;
+  }
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-background text-muted-foreground">

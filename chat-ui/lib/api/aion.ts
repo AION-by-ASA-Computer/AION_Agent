@@ -197,6 +197,8 @@ export type ChatRequestBody = {
   runtime?: Record<string, unknown>;
   aion_privacy_filter_review_content?: boolean;
   aion_pii_review_token?: string;
+  /** PII tags SmartRoute must NOT redact for this request. */
+  aion_privacy_filter_exclude_tags?: string[];
 };
 
 
@@ -216,6 +218,8 @@ export type ChatPrepareStatus = {
   mcp_errors?: ChatPrepareMcpError[];
   has_errors?: boolean;
   pii_supported?: boolean;
+  /** Redactable PII tags exposed by the gateway (/v1/capabilities). */
+  pii_tags?: string[];
 };
 
 async function fetchChatPrepareStatus(
@@ -382,7 +386,7 @@ export async function listSessionFilesSubdir(
     { headers: baseUserHeaders(userId, token) }
   );
   if (r.status === 401) {
-    console.warn("[aion-chat-ui] session files list unauthorized (token missing or expired)");
+    if (token) console.warn("[aion-chat-ui] session files list unauthorized (token missing or expired)");
     return [];
   }
   if (!r.ok) {

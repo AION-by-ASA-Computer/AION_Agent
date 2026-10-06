@@ -1784,6 +1784,15 @@ class AgentPipeline:
                 eb = dict(gen_kw.get("extra_body") or {})
                 eb["aion_pii_review_token"] = metadata["aion_pii_review_token"]
                 gen_kw["extra_body"] = eb
+            if (
+                metadata
+                and metadata.get("aion_privacy_filter_exclude_tags") is not None
+            ):
+                eb = dict(gen_kw.get("extra_body") or {})
+                eb["aion_privacy_filter_exclude_tags"] = list(
+                    metadata["aion_privacy_filter_exclude_tags"]
+                )
+                gen_kw["extra_body"] = eb
 
             # Always refresh system prompt so cached agents get the current date
             # and any profile changes.  The harness_v2_injections flag used to

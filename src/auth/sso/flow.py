@@ -11,7 +11,7 @@ from urllib.parse import urlencode
 
 from sqlalchemy import select
 
-from src.auth.sso.config_service import get_active_provider
+from src.auth.sso.config_service import get_active_provider, get_provider
 from src.auth.sso.providers import get_descriptor
 from src.data.engine import get_async_session_maker
 from src.data.models import SsoAuthState
@@ -36,11 +36,11 @@ async def build_authorize_url(
     tenant_id: str = "default",
     user_id: Optional[str] = None,
 ) -> str:
-    config = await get_active_provider(tenant_id)
-    if not config or not config.get("enabled"):
+    # admin_validate può partire anche prima che il provider sia abilitato (fix 0.1).
+    require_enabled = purpose not in ("admin_validate",)
+    config = await get_provider(tenant_id, provider, require_enabled=require_enabled)
+    if not config:
         raise ValueError("SSO non configurato o disabilitato.")
-    if config["provider"] != provider:
-        raise ValueError(f"Il provider attivo è {config['provider']}, non {provider}.")
 
     descriptor = get_descriptor(provider)
     if not descriptor:
@@ -82,7 +82,7 @@ async def build_authorize_url(
         "code_challenge_method": "S256",
         "prompt": "select_account",
     }
-    
+
     # Provider-specific tweaks
     if provider == "google" and config.get("allowed_domains"):
         params["hd"] = config["allowed_domains"][0]
@@ -114,7 +114,12 @@ async def handle_callback(
             raise ValueError("state_invalid")
         if auth_state.consumed_at:
             raise ValueError("state_invalid")
-        if auth_state.expires_at < now:
+            
+        expires_at = auth_state.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+            
+        if expires_at < now:
             raise ValueError("state_invalid")
 
         auth_state.consumed_at = now
@@ -127,8 +132,9 @@ async def handle_callback(
         code_verifier = decrypt_value(auth_state.code_verifier_encrypted) if auth_state.code_verifier_encrypted else None
         target_user_id = auth_state.user_id
 
-    config = await get_active_provider(tenant_id)
-    if not config or config["provider"] != provider:
+    # Per admin_validate il provider potrebbe non essere ancora abilitato (fix 0.1).
+    config = await get_provider(tenant_id, provider, require_enabled=False)
+    if not config:
         raise ValueError("provider_error")
 
     descriptor = get_descriptor(provider)

@@ -8,7 +8,6 @@ import { getStoredToken } from "@/lib/auth/storage";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PageToast, ToastState } from "@/components/PageToast";
-import { SsoConfigPanel } from "@/components/sso/SsoConfigPanel";
 
 export default function SecurityAudit() {
   const [targetPath, setTargetPath] = useState("");
@@ -276,9 +275,9 @@ export default function SecurityAudit() {
       {/* Header */}
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-6">
         <div className="space-y-1">
-          <h2 className="text-3xl font-extrabold tracking-tight text-white">Security Audit</h2>
+          <h2 className="text-3xl font-extrabold tracking-tight text-white">Security & Auth</h2>
           <p className="text-md text-gray-400 max-w-2xl mt-2">
-            Monitor and scan MCP servers for vulnerabilities using AION Antivirus and specialized AI Security Agents.
+            Gestisci l'autenticazione degli utenti e scansiona il sistema per vulnerabilità.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -288,15 +287,6 @@ export default function SecurityAudit() {
           </div>
         </div>
       </header>
-
-      {/* SSO Settings */}
-      <div className="glass-card p-6 sm:p-8 bg-[#121212]/50 border border-white/10 rounded-3xl relative overflow-hidden">
-        <div className="mb-6">
-          <h3 className="text-xl font-bold text-white tracking-tight">Single Sign-On (SSO)</h3>
-          <p className="text-sm text-gray-400">Configura l'autenticazione tramite provider esterni.</p>
-        </div>
-        <SsoConfigPanel isSetup={false} />
-      </div>
 
       {/* Scanner Card */}
       <div className="glass-card p-6 sm:p-8 bg-gradient-to-b from-blue-600/10 to-transparent border border-blue-500/20 rounded-3xl relative overflow-hidden">

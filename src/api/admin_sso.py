@@ -67,11 +67,10 @@ async def start_provider_validation(
     provider: str,
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
-    from src.api.auth_sso import sso_start
-    # Riutilizziamo sso_start che ha la logica di pkce, passandogli purpose=admin_validate
-    # Questo endpoint risponde JSON { "authorize_url": ... } in modo che l'admin panel possa aprire un popup.
     from src.auth.sso.flow import build_authorize_url
     from src.api.auth_sso import _get_redirect_uri
+    # Fix 0.1: usa get_provider(require_enabled=False) — la validazione precede l'abilitazione.
+    # Fix 0.2: user_id è sempre auth.user_row_id (mai dalla query string).
     try:
         url = await build_authorize_url(
             provider=provider,

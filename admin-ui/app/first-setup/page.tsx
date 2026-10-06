@@ -490,18 +490,16 @@ export default function FirstSetupPage() {
       };
 
       if (ssoStatus.enabled && ssoStatus.validated) {
-        // We don't know the exact provider in this page state but the api will just enable the active one if we want?
-        // Actually we need the provider name to call /enable. Let's let SsoConfigPanel handle its own enabling?
-        // But the plan says: `POST /admin/sso/providers/{provider}/enable`. We can fetch the active provider.
         const provRes = await apiFetch(`${apiBase()}/admin/sso/providers`);
         if (provRes.ok) {
           const provData = await provRes.json();
-          const active = provData[0];
+          // Find the enabled provider, or fallback to the first active
+          const active = provData.find((p: any) => p.enabled) || provData[0];
           if (active && active.provider) {
-             await apiFetch(`${apiBase()}/admin/sso/providers/${active.provider}/enable`, {
-                method: "POST",
+             await apiFetch(`${apiBase()}/admin/auth/login-mode`, {
+                method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ enabled: true })
+                body: JSON.stringify({ mode: active.provider })
              });
           }
         }

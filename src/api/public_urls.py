@@ -39,9 +39,7 @@ def oauth_redirect_api_base(request: Optional[Request] = None) -> str:
 
     public = (os.getenv("AION_PUBLIC_API_URL") or "").strip().rstrip("/")
     if _is_absolute_http_url(public):
-        if public.lower().endswith("/api"):
-            return public
-        return f"{public}/api"
+        return public
 
     chat = (os.getenv("AION_CHAT_URL") or "").strip().rstrip("/")
     if _is_absolute_http_url(chat):

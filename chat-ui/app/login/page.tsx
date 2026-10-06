@@ -18,6 +18,7 @@ export default function LoginPage() {
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [ssoEnabled, setSsoEnabled] = useState<boolean>(false);
   const [ssoProvider, setSsoProvider] = useState<"microsoft" | "google" | null>(null);
+  const [passwordVisible, setPasswordVisible] = useState<boolean>(true);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,6 +27,7 @@ export default function LoginPage() {
         setAuthRequired(s.password_auth_enabled);
         setSsoEnabled(s.sso_enabled || false);
         setSsoProvider(s.sso_provider || null);
+        setPasswordVisible(s.password_login_visible ?? true);
       }
     });
 
@@ -80,7 +82,7 @@ export default function LoginPage() {
     const r = await fetch(`${apiBase()}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ username, password, client: "chat" }),
     });
     const raw = await r.text();
     let j: { detail?: string | unknown[]; access_token?: string; user_id?: string };
@@ -121,18 +123,18 @@ export default function LoginPage() {
         <div className="flex w-full max-w-sm flex-col gap-4 mb-2">
           <button
             onClick={handleSSOLogin}
-            className="focus-ring flex w-full items-center justify-center gap-3 rounded-aion border border-input bg-background px-4 py-2.5 text-sm font-medium text-foreground hover:bg-muted"
+            className="focus-ring flex w-full items-center justify-center gap-3 rounded-aion border border-input bg-background px-4 py-4 text-base font-semibold text-foreground hover:bg-muted transition-colors"
             type="button"
           >
             {ssoProvider === "microsoft" ? (
-              <svg className="h-5 w-5" viewBox="0 0 21 21" fill="none">
+              <svg className="h-6 w-6 shrink-0" viewBox="0 0 21 21" fill="none">
                 <path d="M0 0H10V10H0V0Z" fill="#f25022"/>
                 <path d="M11 0H21V10H11V0Z" fill="#7fba00"/>
                 <path d="M0 11H10V21H0V11Z" fill="#00a4ef"/>
                 <path d="M11 11H21V21H11V11Z" fill="#ffb900"/>
               </svg>
             ) : (
-              <svg className="h-5 w-5" viewBox="0 0 48 48">
+              <svg className="h-6 w-6 shrink-0" viewBox="0 0 48 48">
                 <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
                 <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
                 <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
@@ -141,44 +143,48 @@ export default function LoginPage() {
             )}
             {ssoProvider === "microsoft" ? t("login.sso_microsoft") : t("login.sso_google")}
           </button>
-          <div className="relative">
-            <div className="absolute inset-0 flex items-center">
-              <span className="w-full border-t border-input" />
+          {passwordVisible && (
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t border-input" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">{t("login.or")}</span>
+              </div>
             </div>
-            <div className="relative flex justify-center text-xs uppercase">
-              <span className="bg-background px-2 text-muted-foreground">{t("login.or")}</span>
-            </div>
-          </div>
+          )}
         </div>
       )}
-      <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-3">
-        <input
-          className="focus-ring rounded-aion border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
-          placeholder="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          autoComplete="username"
-        />
-        <input
-          type="password"
-          className="focus-ring rounded-aion border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="current-password"
-        />
-        {err && (
-          <p className="text-sm text-destructive" role="alert">
-            {err}
-          </p>
-        )}
-        <button
-          type="submit"
-          className="focus-ring rounded-aion bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
-        >
-          {t("login.btn")}
-        </button>
-      </form>
+      {passwordVisible && (
+        <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-3">
+          <input
+            className="focus-ring rounded-aion border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+            placeholder="Username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+          />
+          <input
+            type="password"
+            className="focus-ring rounded-aion border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+            placeholder="Password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+          {err && (
+            <p className="text-sm text-destructive" role="alert">
+              {err}
+            </p>
+          )}
+          <button
+            type="submit"
+            className="focus-ring rounded-aion bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            {t("login.btn")}
+          </button>
+        </form>
+      )}
       {/* Il bypass "chat senza login" e' permesso solo se AION_CHAT_PASSWORD_AUTH e' disattivato lato server. */}
       {authRequired === false && (
         <Link href="/" className="focus-ring text-xs text-primary underline-offset-2 hover:underline">

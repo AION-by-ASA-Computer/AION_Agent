@@ -6,6 +6,10 @@ export type AuthStatus = {
   token_ttl_seconds: number;
   sso_enabled?: boolean;
   sso_provider?: "microsoft" | "google" | null;
+  login_mode?: "password" | "microsoft" | "google";
+  sso_origin?: "first_setup" | "migration" | null;
+  sso_migration_active?: boolean;
+  password_login_visible?: boolean;
 };
 
 const DEFAULT_STATUS: AuthStatus = {
@@ -14,6 +18,10 @@ const DEFAULT_STATUS: AuthStatus = {
   token_ttl_seconds: 0,
   sso_enabled: false,
   sso_provider: null,
+  login_mode: "password",
+  sso_origin: null,
+  sso_migration_active: false,
+  password_login_visible: true,
 };
 
 /** Una sola richiesta per pagina: cache module-level. */
@@ -32,6 +40,10 @@ export function fetchAuthStatus(force = false): Promise<AuthStatus> {
         token_ttl_seconds: Number(j.token_ttl_seconds || 0),
         sso_enabled: Boolean(j.sso_enabled),
         sso_provider: j.sso_provider as "microsoft" | "google" | null,
+        login_mode: j.login_mode as "password" | "microsoft" | "google" | undefined,
+        sso_origin: j.sso_origin as "first_setup" | "migration" | null | undefined,
+        sso_migration_active: Boolean(j.sso_migration_active),
+        password_login_visible: j.password_login_visible !== undefined ? Boolean(j.password_login_visible) : true,
       };
     } catch {
       return DEFAULT_STATUS;

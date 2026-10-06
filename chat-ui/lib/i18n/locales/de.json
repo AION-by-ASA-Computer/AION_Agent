@@ -270,6 +270,10 @@
     "new_conversation": "Neues Gespräch"
   },
   "chat": {
+    "pii": {
+      "tags_label": "Zu zensierende Tags",
+      "tags_none": "Keine Tags ausgewählt: es wird nichts zensiert."
+    },
     "thinking": {
       "label": "Nachdenken",
       "off": "Thinking: Aus",
@@ -424,7 +428,14 @@
   },
   "login": {
     "btn": "Einloggen",
-    "no_auth": "← Chat ohne Login (Standard-Benutzer)"
+    "no_auth": "← Chat ohne Login (Standard-Benutzer)",
+    "sso_microsoft": "Mit Microsoft anmelden",
+    "sso_google": "Mit Google anmelden",
+    "or": "oder",
+    "sso_error": {
+      "sso_already_linked": "Das Konto ist bereits mit einem anderen Benutzer verknüpft.",
+      "sso_user_already_linked": "Sie haben bereits ein verknüpftes Konto."
+    }
   },
   "authgate": {
     "checking": "Zugang wird überprüft…",

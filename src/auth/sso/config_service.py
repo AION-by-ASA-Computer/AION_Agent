@@ -16,12 +16,37 @@ from src.runtime.credential_store import (
 
 logger = logging.getLogger("aion.sso.config")
 
+
+def _row_to_provider_dict(row: SsoProvider) -> Optional[Dict[str, Any]]:
+    """Converte una riga SsoProvider in dizionario, decryptando il secret."""
+    try:
+        secret = None
+        if row.client_secret_encrypted:
+            secret = decrypt_value(row.client_secret_encrypted)
+        return {
+            "id": row.id,
+            "provider": row.provider,
+            "client_id": row.client_id,
+            "client_secret": secret,
+            "directory_tenant_id": row.directory_tenant_id,
+            "allowed_domains": json.loads(row.allowed_domains) if row.allowed_domains else [],
+            "auto_provision": row.auto_provision,
+            "default_roles": json.loads(row.default_roles) if row.default_roles else ["user"],
+            "enabled": row.enabled,
+            "validated_at": row.validated_at,
+            "validated_by_user_id": row.validated_by_user_id,
+        }
+    except CredentialDecryptionError:
+        logger.error("Failed to decrypt SSO client secret for provider %s.", row.provider)
+        return None
+
 # Simple in-memory cache (tenant_id -> (expiry, provider_dict))
 _CACHE: Dict[str, Tuple[float, Optional[Dict[str, Any]]]] = {}
 CACHE_TTL = 30.0
 
 
 async def get_active_provider(tenant_id: str = "default") -> Optional[Dict[str, Any]]:
+    """Restituisce il provider SSO attivo (enabled=True), con cache di 30s."""
     import time
 
     now = time.time()
@@ -46,28 +71,36 @@ async def get_active_provider(tenant_id: str = "default") -> Optional[Dict[str, 
         _CACHE[tenant_id] = (now + CACHE_TTL, None)
         return None
 
-    try:
-        secret = None
-        if row.client_secret_encrypted:
-            secret = decrypt_value(row.client_secret_encrypted)
-        
-        result = {
-            "id": row.id,
-            "provider": row.provider,
-            "client_id": row.client_id,
-            "client_secret": secret,
-            "directory_tenant_id": row.directory_tenant_id,
-            "allowed_domains": json.loads(row.allowed_domains) if row.allowed_domains else [],
-            "auto_provision": row.auto_provision,
-            "default_roles": json.loads(row.default_roles) if row.default_roles else ["user"],
-            "validated_at": row.validated_at,
-        }
-        _CACHE[tenant_id] = (now + CACHE_TTL, result)
-        return result
-    except CredentialDecryptionError:
-        logger.error("Failed to decrypt SSO client secret. Considering SSO disabled.")
-        _CACHE[tenant_id] = (now + CACHE_TTL, None)
+    result = _row_to_provider_dict(row)
+    _CACHE[tenant_id] = (now + CACHE_TTL, result)
+    return result
+
+
+async def get_provider(
+    tenant_id: str,
+    provider: str,
+    *,
+    require_enabled: bool = True,
+) -> Optional[Dict[str, Any]]:
+    """Restituisce la configurazione di un provider specifico.
+
+    Se ``require_enabled=True`` (default) restituisce None se il provider non
+    è abilitato. Con ``require_enabled=False`` restituisce il provider anche
+    se non ancora abilitato (usato dal flusso admin_validate, dove la
+    validazione precede l'abilitazione).
+    """
+    async with get_async_session_maker()() as session:
+        stmt = select(SsoProvider).where(
+            SsoProvider.tenant_id == tenant_id,
+            SsoProvider.provider == provider,
+        )
+        row = (await session.execute(stmt)).scalars().first()
+
+    if not row:
         return None
+    if require_enabled and not row.enabled:
+        return None
+    return _row_to_provider_dict(row)
 
 
 async def upsert_provider(
@@ -311,7 +344,7 @@ async def admin_list_providers(tenant_id: str) -> List[Dict[str, Any]]:
                 secret_hint = f"••••{val[-4:]}" if len(val) >= 4 else "••••"
             except CredentialDecryptionError:
                 secret_hint = "(error: key mismatch)"
-        
+
         res.append({
             "provider": row.provider,
             "client_id": row.client_id,
@@ -322,5 +355,6 @@ async def admin_list_providers(tenant_id: str) -> List[Dict[str, Any]]:
             "default_roles": json.loads(row.default_roles) if row.default_roles else ["user"],
             "enabled": row.enabled,
             "validated_at": row.validated_at,
+            "validated_by_user_id": row.validated_by_user_id,
         })
     return res

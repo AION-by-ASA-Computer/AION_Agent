@@ -11,6 +11,8 @@ import {
   ShieldAlert, Cloud, ScanLine, Loader2,
 } from "lucide-react";
 import { PolicyEditor } from "@/components/policy-editor";
+import { SsoConfigPanel } from "@/components/sso/SsoConfigPanel";
+import { SsoMigrationPanel } from "@/components/sso/SsoMigrationPanel";
 import { load as yamlLoad } from "js-yaml";
 import {
   embeddingProviderToProbeProvider,
@@ -895,7 +897,21 @@ export default function SettingsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-
+        {/* SSO Settings */}
+        <section className="glass-card p-6 border-[#262626] hover:border-blue-500/30 transition-colors group md:col-span-2 animate-in fade-in duration-500">
+          <div className="flex items-start gap-4 mb-6">
+            <div className="p-3 bg-blue-500/10 rounded-xl group-hover:scale-110 transition-transform">
+              <Lock className="w-6 h-6 text-blue-500" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">Accesso Utenti (SSO)</h3>
+              <p className="text-gray-400 text-sm mt-1">Configura l'autenticazione tramite provider esterni e le policy di migrazione degli utenti.</p>
+            </div>
+          </div>
+          <div className="space-y-8">
+            <SsoMigrationPanel />
+          </div>
+        </section>
         {/* LLM Providers */}
         <section className="glass-card p-6 border-[#262626] hover:border-purple-500/30 transition-colors group md:col-span-2 animate-in fade-in duration-500">
           <div className="flex items-center justify-between mb-6">

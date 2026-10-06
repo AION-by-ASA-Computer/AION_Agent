@@ -56,6 +56,15 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # SSO migration: esonero dal conteggio utenti in attesa (§1.2).
+    sso_migration_exempt: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # Password temporanea generata dall'admin per la migrazione SSO (§1.2).
+    # Valorizzata solo quando password_hash contiene una temp password.
+    temp_password_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -882,6 +891,10 @@ class UserSsoIdentity(Base):
         UniqueConstraint(
             "tenant_id", "provider", "subject", name="uq_user_sso_identities_provider_subject"
         ),
+        # Fix 0.10: impedisce a un utente di avere due identità dello stesso provider.
+        UniqueConstraint(
+            "tenant_id", "user_id", "provider", name="uq_user_sso_identities_user_provider"
+        ),
     )
 
 
@@ -901,3 +914,39 @@ class SsoAuthState(Base):
     payload_json: Mapped[Optional[str]] = mapped_column(Text)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+
+class AuthSettings(Base):
+    """Impostazioni di autenticazione per tenant (§1.1).
+
+    Una riga per tenant. Fonte di verità per login_mode.
+    """
+
+    __tablename__ = "auth_settings"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tenants.id"), primary_key=True
+    )
+    # Valori: 'password', 'microsoft', 'google'
+    login_mode: Mapped[str] = mapped_column(
+        String(16), default="password", server_default="password", nullable=False
+    )
+    # Valori: 'first_setup', 'migration', oppure NULL
+    sso_origin: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    migration_started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Solo informativo; la visibilità è calcolata in tempo reale
+    migration_completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Se True, cancella password_hash al link (solo per non-admin)
+    clear_password_on_link: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
