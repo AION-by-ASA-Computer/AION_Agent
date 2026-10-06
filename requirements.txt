@@ -17,6 +17,7 @@ PyYAML>=6.0
 aiosqlite
 sqlalchemy>=2.0
 cryptography>=50.0.0
+PyJWT[crypto]>=2.10
 uuid6>=2025.0.1
 alembic>=1.13
 greenlet>=3.0.0

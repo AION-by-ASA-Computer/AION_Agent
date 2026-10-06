@@ -23,6 +23,7 @@ import {
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { fetchAuthStatus } from "@/lib/auth/status";
+import { SsoConfigPanel } from "@/components/sso/SsoConfigPanel";
 import {
   embeddingProviderToProbeProvider,
   embeddingServiceUrlFromProbeBase,
@@ -43,7 +44,7 @@ import {
 
 type OcrMode = "remote" | "local";
 
-type Step = "llm" | "embeddings" | "ocr" | "search" | "policy" | "review";
+type Step = "llm" | "embeddings" | "ocr" | "search" | "policy" | "sso" | "review";
 
 export default function FirstSetupPage() {
   const router = useRouter();
@@ -52,6 +53,9 @@ export default function FirstSetupPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
+
+  // --- Step SSO State ---
+  const [ssoStatus, setSsoStatus] = useState({ enabled: false, validated: false });
 
   // --- Step 1: LLM Provider State ---
   const [llmForm, setLlmForm] = useState({
@@ -481,8 +485,27 @@ export default function FirstSetupPage() {
           AION_THINKING_TOKEN_BUDGET: String(llmForm.thinking_token_budget),
           // Setup Completion Flag
           AION_FIRST_SETUP_COMPLETE: "1",
+          ...(ssoStatus.enabled && ssoStatus.validated ? { AION_CHAT_PASSWORD_AUTH: "1" } : {})
         },
       };
+
+      if (ssoStatus.enabled && ssoStatus.validated) {
+        // We don't know the exact provider in this page state but the api will just enable the active one if we want?
+        // Actually we need the provider name to call /enable. Let's let SsoConfigPanel handle its own enabling?
+        // But the plan says: `POST /admin/sso/providers/{provider}/enable`. We can fetch the active provider.
+        const provRes = await apiFetch(`${apiBase()}/admin/sso/providers`);
+        if (provRes.ok) {
+          const provData = await provRes.json();
+          const active = provData[0];
+          if (active && active.provider) {
+             await apiFetch(`${apiBase()}/admin/sso/providers/${active.provider}/enable`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ enabled: true })
+             });
+          }
+        }
+      }
 
       const settingsRes = await apiFetch(`${apiBase()}/admin/settings`, {
         method: "POST",
@@ -544,7 +567,7 @@ export default function FirstSetupPage() {
     }, 1500);
   };
 
-  const stepsOrder: Step[] = ["llm", "embeddings", "ocr", "search", "policy", "review"];
+  const stepsOrder: Step[] = ["llm", "embeddings", "ocr", "search", "policy", "sso", "review"];
 
   const handleNext = async () => {
     setError(null);
@@ -648,6 +671,16 @@ export default function FirstSetupPage() {
           setError("OCR Max Image Bytes must be a positive integer.");
           return;
         }
+      }
+      const idx = stepsOrder.indexOf(currentStep);
+      setCurrentStep(stepsOrder[idx + 1]);
+      return;
+    }
+
+    if (currentStep === "sso") {
+      if (ssoStatus.enabled && !ssoStatus.validated) {
+        setError("Devi verificare l'account (Salva e verifica) per poter procedere con SSO abilitato. Oppure disabilitalo.");
+        return;
       }
       const idx = stepsOrder.indexOf(currentStep);
       setCurrentStep(stepsOrder[idx + 1]);
@@ -1561,7 +1594,27 @@ export default function FirstSetupPage() {
               </div>
             )}
 
-            {/* Step 6: Review */}
+            {/* Step 6: SSO Configuration */}
+            {currentStep === "sso" && (
+              <div className="space-y-6 animate-in fade-in duration-300">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                    <ShieldAlert className="w-5 h-5 text-blue-500" />
+                  </div>
+                  <div>
+                    <h2 className="text-xl font-bold">6. Single Sign-On (SSO)</h2>
+                    <p className="text-xs text-gray-400">Opzionale: configura l'accesso tramite Google Workspace o Microsoft Entra ID.</p>
+                  </div>
+                </div>
+                
+                <SsoConfigPanel 
+                  isSetup={true} 
+                  onStatusChange={(enabled, validated) => setSsoStatus({ enabled, validated })}
+                />
+              </div>
+            )}
+
+            {/* Step 7: Review */}
             {currentStep === "review" && (
               <div className="space-y-6 animate-in fade-in duration-300">
                 <div className="flex items-center gap-3">
@@ -1646,6 +1699,16 @@ export default function FirstSetupPage() {
                         {policyEnabled ? `Enabled (${policyTemplate} template)` : "Disabled"}
                       </span>
                       <span className="text-xs text-gray-400 font-mono">config/fs_policy.yaml</span>
+                    </div>
+                  </div>
+
+                  {/* SSO Card */}
+                  <div className="p-4 rounded-xl border border-[#222] bg-[#070707] space-y-2">
+                    <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Single Sign-On</span>
+                    <div className="flex flex-col">
+                      <span className="font-bold text-white">
+                        {ssoStatus.enabled ? (ssoStatus.validated ? "Enabled & Validated" : "Enabled (Error: Not Validated)") : "Disabled"}
+                      </span>
                     </div>
                   </div>
                 </div>

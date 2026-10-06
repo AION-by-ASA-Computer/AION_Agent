@@ -48,7 +48,6 @@ from ..agent_pipeline import AgentPipeline
 from ..main import get_agent, set_event_loop
 from .auth_login import require_admin_role
 from .settings_api import router as settings_router
-
 from .ltm_admin import router as ltm_admin_router
 from .admin_profile_memory import router as admin_profile_memory_router
 from .cron_admin import router as cron_admin_router
@@ -57,6 +56,7 @@ from .llm_providers import router as llm_providers_router
 from .metrics_api import router as metrics_router
 from .version_check import router as version_check_router
 from .admin_diagnostics import router as diagnostics_router
+from .admin_sso import router as admin_sso_router
 from ..runtime.redis_client import redis_status
 from ..data.engine import get_async_session_maker
 from ..mcp_connector_catalog import (
@@ -300,6 +300,7 @@ router.include_router(llm_providers_router)
 router.include_router(metrics_router)
 router.include_router(version_check_router)
 router.include_router(diagnostics_router)
+router.include_router(admin_sso_router)
 
 
 def _project_root() -> Path:

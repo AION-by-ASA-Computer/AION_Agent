@@ -308,9 +308,23 @@ def admin_password_auth_enabled() -> bool:
 async def auth_status():
     """Stato dell'autenticazione chat + admin. Usato dal frontend per
     decidere se forzare il redirect verso /login. Sempre pubblico."""
+    
+    from src.auth.sso.config_service import public_view
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+    sso_config = await public_view(tenant)
+    
+    sso_enabled = False
+    sso_provider = None
+    if sso_config and sso_config.get("enabled") and sso_config.get("validated_at"):
+        if password_auth_enabled():
+            sso_enabled = True
+            sso_provider = sso_config.get("provider")
+
     return {
         "password_auth_enabled": password_auth_enabled(),
         "admin_password_auth_enabled": admin_password_auth_enabled(),
+        "sso_enabled": sso_enabled,
+        "sso_provider": sso_provider,
         "login_endpoint": "/auth/login",
         "token_ttl_seconds": _TOKEN_TTL_SEC,
         "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",

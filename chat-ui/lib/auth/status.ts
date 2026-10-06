@@ -4,12 +4,16 @@ export type AuthStatus = {
   password_auth_enabled: boolean;
   login_endpoint: string;
   token_ttl_seconds: number;
+  sso_enabled?: boolean;
+  sso_provider?: "microsoft" | "google" | null;
 };
 
 const DEFAULT_STATUS: AuthStatus = {
   password_auth_enabled: false,
   login_endpoint: "/auth/login",
   token_ttl_seconds: 0,
+  sso_enabled: false,
+  sso_provider: null,
 };
 
 /** Una sola richiesta per pagina: cache module-level. */
@@ -26,6 +30,8 @@ export function fetchAuthStatus(force = false): Promise<AuthStatus> {
         password_auth_enabled: Boolean(j.password_auth_enabled),
         login_endpoint: j.login_endpoint || "/auth/login",
         token_ttl_seconds: Number(j.token_ttl_seconds || 0),
+        sso_enabled: Boolean(j.sso_enabled),
+        sso_provider: j.sso_provider as "microsoft" | "google" | null,
       };
     } catch {
       return DEFAULT_STATUS;
