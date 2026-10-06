@@ -1,4 +1,4 @@
-﻿"""MCP: ricerca e lettura on-demand delle skill (Hermes FASE A)."""
+"""MCP: ricerca e lettura on-demand delle skill (Hermes FASE A)."""
 
 from __future__ import annotations
 
@@ -298,8 +298,8 @@ def skill_save(
     from pathlib import Path
     import re
 
-    # Normalizza slug name a kebab-case
-    slug = re.sub(r"[^a-z0-9-]+", "", name.lower().replace("_", "-").strip())
+    # Normalizza slug name preservando caratteri alfanumerici, trattini e underscore
+    slug = re.sub(r"[^a-z0-9_-]+", "", name.lower().strip())
     if not slug:
         return "Error: invalid skill name."
 
@@ -359,6 +359,77 @@ def skill_save(
 
 
 @mcp.tool()
+def skill_append(
+    name: str,
+    content_to_append: str,
+    heading: str = "",
+) -> str:
+    """Appends new notes, insights, rules, or data sections to an existing skill WITHOUT overwriting existing content.
+
+    name: slug della skill (es. 'monge_mssql_gateway')
+    content_to_append: testo Markdown con le nuove informazioni da integrare
+    heading: intestazione opzionale (es. '## Aggiornamenti Anagrafica Clienti')
+    """
+    import os
+    import frontmatter
+    import re
+    from pathlib import Path
+
+    enabled = os.getenv("AION_SKILL_WRITE_ENABLED", "1").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if not enabled:
+        return "Error: skill write/delete (AION_SKILL_WRITE_ENABLED) is disabled for this MCP server."
+
+    slug = re.sub(r"[^a-z0-9_-]+", "", name.lower().strip())
+    if not slug:
+        return "Error: invalid skill name."
+
+    # Leggi il corpo esistente della skill
+    existing_body = skill_registry.get_skill_full(slug) or ""
+    existing_meta = skill_registry.get_meta(slug) or {}
+
+    desc = existing_meta.get("description", f"Skill {slug}")
+    tags = existing_meta.get("tags", [])
+
+    append_part = content_to_append.strip()
+    if heading:
+        append_part = f"\n\n{heading.strip()}\n\n{append_part}"
+    else:
+        append_part = f"\n\n{append_part}"
+
+    if existing_body.strip():
+        new_content = existing_body.rstrip() + "\n" + append_part
+    else:
+        new_content = append_part.lstrip()
+
+    # Salva solo in config/skills/ (curated_dir)
+    target_dir = skill_registry.curated_dir
+    target_dir.mkdir(parents=True, exist_ok=True)
+    file_path = target_dir / f"{slug}.md"
+
+    post = frontmatter.Post(
+        content=new_content,
+        **{
+            "name": slug,
+            "description": desc,
+            "tags": FlowList(tags) if isinstance(tags, list) else tags,
+            "status": "verified",
+            "source": "curated",
+            "version": int(existing_meta.get("version", 1)),
+        },
+    )
+
+    file_path.write_text(frontmatter.dumps(post), encoding="utf-8")
+    skill_registry.reload()
+
+    return f"Skill '{slug}' successfully enriched and appended at: {file_path}. Registry reloaded."
+
+
+@mcp.tool()
 def skill_delete(name: str) -> str:
     """Delete an existing skill from the filesystem and registry."""
     import os
@@ -375,7 +446,7 @@ def skill_delete(name: str) -> str:
     import re
     from pathlib import Path
 
-    slug = re.sub(r"[^a-z0-9-]+", "", name.lower().replace("_", "-").strip())
+    slug = re.sub(r"[^a-z0-9_-]+", "", name.lower().strip())
 
     # Determine the relative path of the existing skill to delete it correctly from all directories
     existing_path = skill_registry.get_skill_path(slug)

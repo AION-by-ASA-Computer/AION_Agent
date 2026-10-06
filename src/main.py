@@ -696,7 +696,11 @@ def _register_mcp_tool_function(server_name: str, tool_name: str, session_id: st
 
 
 async def build_mcp_tools(
-    name: str, server_config: Dict[str, Any], session_id: str, user_id: str = "default"
+    name: str,
+    server_config: Dict[str, Any],
+    session_id: str,
+    user_id: str = "default",
+    profile_slug: Optional[str] = None,
 ):
     """Discovers tools from an MCP server using the manager and optional sandboxing."""
     discovered_tools = []
@@ -720,8 +724,22 @@ async def build_mcp_tools(
         return build_orchestration_haystack_tools(session_id, user_id)
 
     if session_id:
+        existing_ctx = mcp_manager.get_session_context(session_id)
+        target_slug = (
+            profile_slug
+            or (existing_ctx.profile_slug if existing_ctx else None)
+            or "generic_assistant"
+        )
+        from .runtime.session_context import SessionContext
+
         mcp_manager.set_session_context(
-            session_id, ("generic_assistant", user_id or "default", "default")
+            session_id,
+            SessionContext(
+                profile_slug=target_slug,
+                user_id=user_id or (existing_ctx.user_id if existing_ctx else "default"),
+                tenant_id=(existing_ctx.tenant_id if existing_ctx else "default"),
+                conversation_id=session_id,
+            ),
         )
 
     try:
@@ -942,7 +960,11 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
             )
             return []
         return await build_mcp_tools(
-            server_name, server_config, session_id, user_id=user_id
+            server_name,
+            server_config,
+            session_id,
+            user_id=user_id,
+            profile_slug=getattr(profile, "slug", None) or profile_name,
         )
 
     if mcp_discover_names:

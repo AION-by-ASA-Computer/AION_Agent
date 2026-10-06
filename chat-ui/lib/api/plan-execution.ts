@@ -169,6 +169,26 @@ export async function pausePlanExecution(
   });
 }
 
+export async function startPlanExecution(
+  planId: string,
+  sessionId?: string,
+  profileName?: string,
+  userId = "default",
+  token?: string | null,
+): Promise<{ run_id: string; plan_id: string; status: string; ui_event?: string } | null> {
+  const r = await fetch(`${apiBase()}/plan-execution/start`, {
+    method: "POST",
+    headers: baseUserHeaders(userId, token),
+    body: JSON.stringify({
+      plan_id: planId,
+      chat_session_id: sessionId,
+      profile_name: profileName,
+    }),
+  });
+  if (!r.ok) return null;
+  return r.json();
+}
+
 export async function resumePlanExecution(
   runId: string,
   userId: string,

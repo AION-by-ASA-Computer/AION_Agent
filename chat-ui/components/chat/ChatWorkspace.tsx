@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star, Search, Cpu, Bot } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -417,6 +417,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const shellActions = useShellActions();
   const sidebarOpen = useSidebarOpen();
   const [conversationId, setConversationId] = useState(initialConversationId);
+  const [currentUserDisplayName, setCurrentUserDisplayName] = useState<string>("");
 
   const {
     items: pendingUploadItems,
@@ -1092,17 +1093,33 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   // Stati e logica per i nuovi menù popover "+", "Profilo", "Thinking" e "Agent Mode"
   const [isPlusOpen, setIsPlusOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [profileSearchQuery, setProfileSearchQuery] = useState("");
   const [isAgentModeOpen, setIsAgentModeOpen] = useState(false);
+
+  const filteredProfiles = useMemo(() => {
+    if (!profileSearchQuery.trim()) return profiles;
+    const q = profileSearchQuery.toLowerCase();
+    return profiles.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        (p.description && p.description.toLowerCase().includes(q)) ||
+        (p.slug && p.slug.toLowerCase().includes(q))
+    );
+  }, [profiles, profileSearchQuery]);
   const [contextBudgetOpen, setContextBudgetOpen] = useState(false);
   const [lastContextBudget, setLastContextBudget] = useState<ContextBudgetState | null>(null);
   const [isToolsViewSubOpen, setIsToolsViewSubOpen] = useState(false);
   const [isWebSearchSubOpen, setIsWebSearchSubOpen] = useState(false);
   const [isThinkingSubOpen, setIsThinkingSubOpen] = useState(false);
+  const [isModelSubOpen, setIsModelSubOpen] = useState(false);
+  const [isAgentModeSubOpen, setIsAgentModeSubOpen] = useState(false);
 
   const closePlusSubMenus = useCallback(() => {
     setIsToolsViewSubOpen(false);
     setIsWebSearchSubOpen(false);
     setIsThinkingSubOpen(false);
+    setIsModelSubOpen(false);
+    setIsAgentModeSubOpen(false);
   }, []);
 
   const [toolsView, setToolsView] = useState<"compact" | "hidden" | "partial" | "full">(() => {
@@ -1355,14 +1372,16 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [input, setInput] = useState("");
+  const [isMultiLine, setIsMultiLine] = useState(false);
   const [composerTextMax, setComposerTextMax] = useState(COMPOSER_TEXTAREA_DEFAULT_MAX);
   const [composerResizing, setComposerResizing] = useState(false);
   const composerContainerRef = useRef<HTMLDivElement | null>(null);
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composerResizeStartRef = useRef({ y: 0, textMax: COMPOSER_TEXTAREA_DEFAULT_MAX });
   useAutoResizeTextarea(composerTextareaRef, input, {
-    minHeight: COMPOSER_TEXTAREA_MIN,
+    minHeight: 28,
     maxHeight: composerTextMax,
+    onMultiLineChange: setIsMultiLine,
   });
   const handleFilesDropped = useCallback((files: File[]) => {
     queuePendingUploads(files);
@@ -1624,6 +1643,16 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     setPlanExecAdoptPlanId(null);
     setChatView({ kind: "main" });
   }, []);
+
+  const handlePlanRejected = useCallback(() => {
+    setPlanChunk(null);
+    if (planChunkRef) {
+      planChunkRef.current = null;
+    }
+    setPlanExecAdoptRunId(null);
+    setPlanExecAdoptPlanId(null);
+    setChatView({ kind: "main" });
+  }, [setPlanChunk, planChunkRef]);
 
   const refreshPlanExecutionHistory = useCallback(
     async (opts?: { syncAssistantId?: string | null }) => {
@@ -2515,6 +2544,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     if (!token) return;
     void fetchCurrentUser(token)
       .then((user) => {
+        if (user?.display_name || user?.identifier) {
+          setCurrentUserDisplayName(user.display_name || user.identifier || "");
+        }
         const slug = readDefaultProfileSlug(user?.metadata);
         if (!slug) return;
         setFavoriteProfileSlug(slug);
@@ -3092,13 +3124,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       "plan",
       "research",
       "artifacts",
-      // "agentdb"
     ];
     if (showProjectMemory) list.push("memory");
-    if (showPromptDebug) list.push("prompt_debug");
     if (pdfUrl || khubLoading || khubError) list.push("khub_file");
     return list;
-  }, [pdfUrl, khubLoading, khubError, showProjectMemory, showPromptDebug]);
+  }, [pdfUrl, khubLoading, khubError, showProjectMemory]);
 
   const planLiveMarkdown = useMemo(() => {
     if (!turnVisual) return "";
@@ -3126,27 +3156,60 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     turnVisual?.segments.some((s) => s.kind === "generating" && s.target === "plan"),
   );
 
-  const dockTabs = (
-    <div className="flex h-14 shrink-0 overflow-x-auto border-b border-border bg-card/80 text-xs backdrop-blur-sm no-scrollbar">
-      {tabsToRender.map((tab) => (
-        <button
-          key={tab}
-          type="button"
-          className={cn(
-            "focus-ring flex h-full min-w-[4.5rem] shrink-0 flex-1 items-center justify-center border-b-2 border-transparent px-2 font-medium transition-colors",
-            dockTab === tab
-              ? "border-primary bg-muted/50 text-foreground"
-              : "text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-          )}
-          onClick={() => setDockTab(tab)}
-        >
-          {t(`${tab}.title`)}
-        </button>
-      ))}
-    </div>
-  );
-
   const closeDock = useCallback(() => setDockTab("none"), []);
+
+  const dockTabs = useMemo(() => {
+    const tabIcons: Record<string, React.ReactNode> = {
+      plan: <Sparkles size={13} className="shrink-0" />,
+      research: <Search size={13} className="shrink-0" />,
+      artifacts: <Paperclip size={13} className="shrink-0" />,
+      memory: <Database size={13} className="shrink-0" />,
+      khub_file: <FileText size={13} className="shrink-0" />,
+    };
+
+    return (
+      <div className="flex h-12 shrink-0 items-center gap-1.5 border-b border-black/[0.06] dark:border-white/[0.08] bg-card/60 dark:bg-card/40 px-2.5 backdrop-blur-xl no-scrollbar overflow-x-auto">
+        <div className="flex flex-1 items-center gap-1 min-w-0">
+          {tabsToRender.map((tab) => {
+            const isActive = dockTab === tab;
+            let activeColorClass = "bg-primary/10 text-primary shadow-2xs ring-1 ring-primary/20";
+            if (tab === "plan") {
+              activeColorClass = "bg-orange-500/15 text-orange-600 dark:text-orange-400 shadow-2xs ring-1 ring-orange-500/30";
+            } else if (tab === "research") {
+              activeColorClass = "bg-violet-500/15 text-violet-600 dark:text-violet-400 shadow-2xs ring-1 ring-violet-500/30";
+            }
+
+            return (
+              <button
+                key={tab}
+                type="button"
+                className={cn(
+                  "focus-ring relative flex flex-1 min-w-0 items-center justify-center gap-1.5 rounded-xl px-2 py-1.5 text-xs font-semibold transition-all duration-200 truncate",
+                  isActive
+                    ? activeColorClass
+                    : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+                )}
+                onClick={() => setDockTab(tab)}
+              >
+                {tabIcons[tab]}
+                <span className="truncate">{t(`${tab}.title`)}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex items-center gap-1 shrink-0 pl-1 border-l border-black/[0.06] dark:border-white/[0.08]">
+          <button
+            type="button"
+            onClick={closeDock}
+            className="focus-ring rounded-lg p-1.5 text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors"
+            title={t("header.toggle_dock.hide")}
+          >
+            <X size={15} />
+          </button>
+        </div>
+      </div>
+    );
+  }, [tabsToRender, dockTab, closeDock, t]);
 
   const dockBody = (
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
@@ -3162,10 +3225,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               setResearchAdoptId(null);
               setResearchAdoptQuery(null);
             }}
+            onPromptSuggestion={handleEmptySuggestion}
           />
         </div>
       )}
-      {dockTab === "plan" && (planChunk || planExecAdoptRunId) && (
+      {dockTab === "plan" && (
         <PlanPanel
           chunk={planChunk}
           apiBaseUrl={apiBase()}
@@ -3182,11 +3246,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           selectedTaskId={openPlanTaskId}
           onAdoptHandled={handlePlanExecutionAdoptHandled}
           onPlanApproved={adoptPlanExecution}
+          onPlanRejected={handlePlanRejected}
           onFinalSummary={handlePlanFinalSummary}
           onTaskSelect={(taskId) => {
             if (!taskId) setChatView({ kind: "main" });
             else openPlanTaskView(taskId);
           }}
+          onPromptSuggestion={handleEmptySuggestion}
         />
       )}
       {dockTab === "artifacts" && (
@@ -3369,269 +3435,1202 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   useLayoutEffect(() => {
     setDockOpen(dockTab !== "none");
-    if (dockTab === "none") {
-      setDock(null);
-      return;
-    }
     setDock(
       <>
         {dockTabs}
         {dockBody}
       </>,
     );
-  });
+  }, [setDockOpen, setDock, dockTab, dockTabs, dockBody]);
 
-  useLayoutEffect(() => {
-    return () => clearChrome();
-  }, [clearChrome]);
+  const renderComposer = () => {
+    const profileSelectorNode = (
+      <div ref={profileMenuRef} className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => {
+            setIsProfileOpen((prev) => !prev);
+            setIsPlusOpen(false);
+            closePlusSubMenus();
+            setIsAgentModeOpen(false);
+          }}
+          className={cn(
+            "focus-ring inline-flex h-8 max-w-[8.5rem] sm:max-w-[12rem] items-center gap-1.5 rounded-full border px-2.5 text-[0.786em] font-medium shadow-2xs backdrop-blur-md transition-all duration-200",
+            isProfileOpen
+              ? "border-primary/40 bg-primary/10 text-primary shadow-xs"
+              : "border-black/[0.08] bg-card/60 text-muted-foreground hover:bg-card/90 hover:text-foreground dark:border-white/[0.08] dark:bg-card/40 dark:hover:bg-card/70"
+          )}
+          title={activeProfileName || t("chat.profile.label")}
+        >
+          <User size={12} className="shrink-0" aria-hidden />
+          <span className="truncate">
+            {activeProfileName || t("chat.profile.label")}
+          </span>
+          <ChevronDown size={10} className="shrink-0 opacity-60" aria-hidden />
+        </button>
+
+        {isProfileOpen && (
+          <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,32rem)] rounded-2xl border border-black/10 bg-card/90 p-2.5 text-card-foreground shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 dark:border-white/10 dark:bg-card/85">
+            <div className="flex items-center justify-between border-b border-border/40 pb-2 px-1">
+              <div className="text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
+                {t("chat.profile.select")}
+              </div>
+              <span className="text-[0.68em] text-muted-foreground/70 font-medium">
+                {filteredProfiles.length} {filteredProfiles.length === 1 ? "profilo" : "profili"}
+              </span>
+            </div>
+
+            <div className="relative my-2">
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+              <input
+                type="text"
+                value={profileSearchQuery}
+                onChange={(e) => setProfileSearchQuery(e.target.value)}
+                placeholder="Cerca profilo o abilità..."
+                className="w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-muted/40 pl-8 pr-7 py-1.5 text-xs text-foreground placeholder:text-muted-foreground/60 focus:border-primary/40 focus:bg-background/80 focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              />
+              {profileSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setProfileSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-0.5 rounded-full"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            <div className="max-h-64 overflow-y-auto overflow-x-hidden p-0.5 grid grid-cols-1 sm:grid-cols-2 gap-1.5 custom-scrollbar">
+              {filteredProfiles.map((p) => {
+                const slug = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
+                const isSelected = p.slug === profile || p.name === profile;
+                const isFavorite = favoriteProfileSlug === slug;
+                return (
+                  <div
+                    key={p.name}
+                    onClick={() => {
+                      handleProfileChange(slug);
+                      setIsProfileOpen(false);
+                    }}
+                    className={cn(
+                      "group relative flex flex-col justify-between rounded-xl border p-2 text-left cursor-pointer transition-all duration-200",
+                      isSelected
+                        ? "border-primary/50 bg-primary/10 shadow-xs ring-1 ring-primary/20"
+                        : "border-black/[0.06] dark:border-white/[0.06] bg-card/40 hover:bg-card/90 hover:border-black/15 dark:hover:border-white/20 hover:shadow-xs hover:translate-y-[-1px]"
+                    )}
+                  >
+                    <div className="flex items-start justify-between gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <div
+                          className={cn(
+                            "flex h-5 w-5 shrink-0 items-center justify-center rounded-lg text-[10px] font-bold transition-colors",
+                            isSelected
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-muted text-muted-foreground group-hover:bg-primary/20 group-hover:text-primary"
+                          )}
+                        >
+                          {p.name.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="truncate text-xs font-semibold text-foreground group-hover:text-primary transition-colors">
+                          {p.name}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void handleSetFavoriteProfile(slug);
+                        }}
+                        className={cn(
+                          "focus-ring shrink-0 rounded p-1 transition-colors",
+                          isFavorite
+                            ? "text-amber-500 hover:text-amber-600"
+                            : "text-muted-foreground/30 hover:text-amber-500 opacity-0 group-hover:opacity-100"
+                        )}
+                        aria-label={
+                          isFavorite
+                            ? t("chat.profile.favorite_active")
+                            : t("chat.profile.favorite_set")
+                        }
+                        title={
+                          isFavorite
+                            ? t("chat.profile.favorite_active")
+                            : t("chat.profile.favorite_set")
+                        }
+                      >
+                        <Star
+                          size={12}
+                          className={cn(isFavorite && "fill-current opacity-100")}
+                          aria-hidden
+                        />
+                      </button>
+                    </div>
+                    {p.description ? (
+                      <p className="line-clamp-2 text-[0.68em] leading-snug text-muted-foreground">
+                        {p.description}
+                      </p>
+                    ) : (
+                      <p className="text-[0.68em] italic text-muted-foreground/50">
+                        {t("chat.profile.no_description") || "Nessuna descrizione"}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+              {filteredProfiles.length === 0 ? (
+                <div className="col-span-full py-6 text-center text-xs text-muted-foreground">
+                  {t("chat.profile.none") || "Nessun profilo trovato"}
+                </div>
+              ) : null}
+            </div>
+
+            <div className="mt-1.5 border-t border-border/40 pt-1.5">
+              <Link
+                href="/settings?tab=user-md"
+                className="focus-ring flex w-full items-center justify-center gap-1.5 rounded-xl px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-all duration-200 hover:bg-muted/50 hover:text-foreground"
+                onClick={() => setIsProfileOpen(false)}
+              >
+                <Settings size={12} className="shrink-0" aria-hidden />
+                <span>{t("chat.profile.customize")}</span>
+              </Link>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+
+    const plusMenuNode = (
+      <div ref={plusMenuRef} className="relative shrink-0">
+        <button
+          type="button"
+          onClick={() => {
+            setIsPlusOpen((prev) => !prev);
+            closePlusSubMenus();
+            setIsProfileOpen(false);
+            setIsAgentModeOpen(false);
+          }}
+          className={cn(
+            "focus-ring inline-flex size-8 items-center justify-center rounded-full border shadow-2xs backdrop-blur-md transition-all duration-200 active:scale-95",
+            isPlusOpen || !webSearchEnabled || thinkingEnabled || agentMode !== "normal" || selectedProvider
+              ? "border-primary/40 bg-primary/10 text-primary shadow-xs"
+              : "border-black/[0.08] bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground dark:border-white/[0.08] dark:bg-card/40 dark:hover:bg-card/70"
+          )}
+          title="Opzioni chat, modalità e parametri"
+        >
+          <Plus size={14} className={cn("transition-transform duration-200", isPlusOpen && "rotate-45")} aria-hidden />
+        </button>
+
+        {isPlusOpen && (
+          <div className="absolute bottom-full left-0 z-50 mb-2 w-56 rounded-2xl border border-black/10 bg-card/95 p-1.5 text-card-foreground shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 dark:border-white/10 dark:bg-card/90">
+            <button
+              type="button"
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left"
+              onClick={() => {
+                fileInputRef.current?.click();
+                setIsPlusOpen(false);
+                closePlusSubMenus();
+              }}
+            >
+              <Paperclip size={14} className="shrink-0 opacity-80" aria-hidden />
+              <span>{t("chat.upload.button")}</span>
+            </button>
+
+            <div className="my-1 border-t border-border/45" />
+
+            <div className="relative" onMouseLeave={() => setIsModelSubOpen(false)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsModelSubOpen((prev) => !prev);
+                  setIsAgentModeSubOpen(false);
+                  setIsToolsViewSubOpen(false);
+                  setIsWebSearchSubOpen(false);
+                  setIsThinkingSubOpen(false);
+                }}
+                onMouseEnter={() => {
+                  setIsModelSubOpen(true);
+                  setIsAgentModeSubOpen(false);
+                  setIsToolsViewSubOpen(false);
+                  setIsWebSearchSubOpen(false);
+                  setIsThinkingSubOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-colors text-left",
+                  isModelSubOpen
+                    ? "bg-primary/10 text-foreground dark:bg-white/10"
+                    : "text-muted-foreground hover:bg-primary/10 hover:text-foreground dark:hover:bg-white/10"
+                )}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Cpu size={14} className="shrink-0 opacity-80" aria-hidden />
+                  <span className="truncate">
+                    {t("chat.model.label") || "Modello"}
+                    {selectedProvider ? `: ${llmProviders.find(p => p.slug === selectedProvider)?.display_name || llmProviders.find(p => p.slug === selectedProvider)?.model_name || selectedProvider}` : ""}
+                  </span>
+                </div>
+                <ChevronRight size={13} className="shrink-0 opacity-60" aria-hidden />
+              </button>
+
+              {isModelSubOpen && (
+                <div className="absolute bottom-full left-0 z-50 pb-1.5 w-60 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                  <div
+                    onMouseEnter={() => setIsModelSubOpen(true)}
+                    className="w-full rounded-2xl border border-black/10 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2 dark:border-white/10 dark:bg-card/90"
+                  >
+                    <div className="px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
+                      {t("chat.model.select")}
+                    </div>
+                    <div className="space-y-0.5 max-h-60 overflow-y-auto custom-scrollbar">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedProvider(null);
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          !selectedProvider
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                        )}
+                      >
+                        <div className="flex flex-col">
+                          <span>{t("chat.model.default")}</span>
+                          <span className="text-[0.68rem] text-muted-foreground/75 font-normal">{t("chat.model.default_desc")}</span>
+                        </div>
+                        {!selectedProvider && <Check size={12} className="shrink-0 text-primary ml-2" />}
+                      </button>
+
+                      {llmProviders.map((p) => {
+                        const isSelected = selectedProvider === p.slug;
+                        const displayName = p.display_name || p.model_name || p.slug;
+                        return (
+                          <button
+                            key={p.slug}
+                            type="button"
+                            onClick={() => {
+                              setSelectedProvider(p.slug);
+                              setIsPlusOpen(false);
+                              closePlusSubMenus();
+                            }}
+                            className={cn(
+                              "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                              isSelected
+                                ? "bg-primary/10 text-primary"
+                                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                            )}
+                          >
+                            <div className="flex flex-col min-w-0 flex-1">
+                              <span className="truncate font-medium">{displayName}</span>
+                              {p.description ? (
+                                <span className="text-[0.68rem] text-muted-foreground/75 font-normal truncate max-w-[13rem]">
+                                  {p.description}
+                                </span>
+                              ) : p.model_name && p.model_name !== displayName ? (
+                                <span className="text-[0.68rem] text-muted-foreground/60 font-mono truncate max-w-[13rem]">
+                                  {p.model_name}
+                                </span>
+                              ) : null}
+                            </div>
+                            {isSelected && <Check size={12} className="shrink-0 text-primary ml-2" />}
+                          </button>
+                        );
+                      })}
+                      {llmProviders.length === 0 && (
+                        <div className="px-2.5 py-2 text-[0.714em] text-muted-foreground text-center">
+                          {providersLoading ? "Caricamento modelli..." : "Nessun modello configurato"}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="relative" onMouseLeave={() => setIsAgentModeSubOpen(false)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAgentModeSubOpen((prev) => !prev);
+                  setIsModelSubOpen(false);
+                  setIsToolsViewSubOpen(false);
+                  setIsWebSearchSubOpen(false);
+                  setIsThinkingSubOpen(false);
+                }}
+                onMouseEnter={() => {
+                  setIsAgentModeSubOpen(true);
+                  setIsModelSubOpen(false);
+                  setIsToolsViewSubOpen(false);
+                  setIsWebSearchSubOpen(false);
+                  setIsThinkingSubOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-colors text-left",
+                  isAgentModeSubOpen
+                    ? "bg-primary/10 text-foreground dark:bg-white/10"
+                    : "text-muted-foreground hover:bg-primary/10 hover:text-foreground dark:hover:bg-white/10"
+                )}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Bot size={14} className="shrink-0 opacity-80" aria-hidden />
+                  <span className="truncate">
+                    {agentMode === "normal"
+                      ? "Modalità: Normale"
+                      : agentMode === "plan"
+                        ? "Modalità: Piano"
+                        : "Modalità: Ricerca"}
+                  </span>
+                </div>
+                <ChevronRight size={13} className="shrink-0 opacity-60" aria-hidden />
+              </button>
+
+              {isAgentModeSubOpen && (
+                <div className="absolute bottom-full left-0 z-50 pb-1.5 w-56 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                  <div
+                    onMouseEnter={() => setIsAgentModeSubOpen(true)}
+                    className="w-full rounded-2xl border border-black/10 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2 dark:border-white/10 dark:bg-card/90"
+                  >
+                    <div className="px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
+                      {t("chat.agent_mode.select")}
+                    </div>
+                    <div className="space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleAgentModeChange("normal");
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          agentMode === "normal"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                        )}
+                      >
+                        <div className="flex flex-col">
+                          <span>{t("chat.agent_mode.normal")}</span>
+                          <span className="text-[0.68rem] text-muted-foreground/75 font-normal">Risposte standard ed esecuzione diretta</span>
+                        </div>
+                        {agentMode === "normal" && <Check size={12} className="shrink-0 text-primary ml-2" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleAgentModeChange("plan");
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          agentMode === "plan"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                        )}
+                      >
+                        <div className="flex flex-col">
+                          <span>Piano / Task Plan</span>
+                          <span className="text-[0.68rem] text-muted-foreground/75 font-normal">Pianificazione ed esecuzione task</span>
+                        </div>
+                        {agentMode === "plan" && <Check size={12} className="shrink-0 text-primary ml-2" />}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleAgentModeChange("deep_research");
+                          setDockTab("research");
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          agentMode === "deep_research"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                        )}
+                      >
+                        <div className="flex flex-col">
+                          <span>Deep Research</span>
+                          <span className="text-[0.68rem] text-muted-foreground/75 font-normal">Ricerca web autonoma avanzata</span>
+                        </div>
+                        {agentMode === "deep_research" && <Check size={12} className="shrink-0 text-primary ml-2" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="relative" onMouseLeave={() => setIsToolsViewSubOpen(false)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsToolsViewSubOpen((prev) => !prev);
+                  setIsModelSubOpen(false);
+                  setIsAgentModeSubOpen(false);
+                  setIsWebSearchSubOpen(false);
+                  setIsThinkingSubOpen(false);
+                }}
+                onMouseEnter={() => {
+                  setIsToolsViewSubOpen(true);
+                  setIsModelSubOpen(false);
+                  setIsAgentModeSubOpen(false);
+                  setIsWebSearchSubOpen(false);
+                  setIsThinkingSubOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-colors text-left",
+                  isToolsViewSubOpen
+                    ? "bg-primary/10 text-foreground dark:bg-white/10"
+                    : "text-muted-foreground hover:bg-primary/10 hover:text-foreground dark:hover:bg-white/10"
+                )}
+              >
+                <div className="flex items-center gap-2.5">
+                  <Wrench size={14} className="shrink-0 opacity-80" aria-hidden />
+                  <span>{t("chat.tools.view_label")}</span>
+                </div>
+                <ChevronRight size={13} className="shrink-0 opacity-60" aria-hidden />
+              </button>
+
+              {isToolsViewSubOpen && (
+                <div className="absolute bottom-full left-0 z-50 pb-1.5 w-52 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                  <div
+                    onMouseEnter={() => setIsToolsViewSubOpen(true)}
+                    className="w-full rounded-2xl border border-black/10 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2 dark:border-white/10 dark:bg-card/90"
+                  >
+                    <div className="px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
+                      {t("chat.tools.select_view")}
+                    </div>
+                    <div className="space-y-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleToolsViewChange("compact");
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          toolsView === "compact"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                        )}
+                      >
+                        <div className="flex flex-col">
+                          <span>{t("chat.tools.compact")}</span>
+                          <span className="text-[0.68rem] text-muted-foreground/75 font-normal">
+                            {t("chat.tools.compact_desc")}
+                          </span>
+                        </div>
+                        {toolsView === "compact" && <Check size={12} className="shrink-0 text-primary ml-2" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleToolsViewChange("partial");
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          toolsView === "partial"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                        )}
+                      >
+                        <span>{t("chat.tools.partial")}</span>
+                        {toolsView === "partial" && <Check size={12} className="shrink-0 text-primary" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleToolsViewChange("full");
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          toolsView === "full"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                        )}
+                      >
+                        <span>{t("chat.tools.full")}</span>
+                        {toolsView === "full" && <Check size={12} className="shrink-0 text-primary" />}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleToolsViewChange("hidden");
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          toolsView === "hidden"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                        )}
+                      >
+                        <span>{t("chat.tools.hide")}</span>
+                        {toolsView === "hidden" && <Check size={12} className="shrink-0 text-primary" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="relative" onMouseLeave={() => setIsWebSearchSubOpen(false)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsWebSearchSubOpen((prev) => !prev);
+                  setIsModelSubOpen(false);
+                  setIsAgentModeSubOpen(false);
+                  setIsToolsViewSubOpen(false);
+                  setIsThinkingSubOpen(false);
+                }}
+                onMouseEnter={() => {
+                  setIsWebSearchSubOpen(true);
+                  setIsModelSubOpen(false);
+                  setIsAgentModeSubOpen(false);
+                  setIsToolsViewSubOpen(false);
+                  setIsThinkingSubOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-colors text-left",
+                  isWebSearchSubOpen
+                    ? "bg-primary/10 text-foreground dark:bg-white/10"
+                    : "text-muted-foreground hover:bg-primary/10 hover:text-foreground dark:hover:bg-white/10",
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  {webSearchEnabled ? (
+                    <Globe size={14} className="shrink-0 opacity-80" aria-hidden />
+                  ) : (
+                    <GlobeLock size={14} className="shrink-0 opacity-80" aria-hidden />
+                  )}
+                  <span className="truncate">{t("chat.web_search.global")}</span>
+                </div>
+                <ChevronRight size={13} className="shrink-0 opacity-60" aria-hidden />
+              </button>
+
+              {isWebSearchSubOpen ? (
+                <div className="absolute bottom-full left-0 z-50 pb-1.5 w-48 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                  <div
+                    onMouseEnter={() => setIsWebSearchSubOpen(true)}
+                    className="w-full rounded-2xl border border-black/10 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2 dark:border-white/10 dark:bg-card/90"
+                  >
+                    <div className="border-b border-border/45 px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground">
+                      {t("chat.web_search.global")}
+                    </div>
+                    <div className="space-y-0.5 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          persistWebSearchEnabled(false);
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          !webSearchEnabled
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                        )}
+                      >
+                        <span>{t("chat.web_search.off_short")}</span>
+                        {!webSearchEnabled ? (
+                          <Check size={12} className="shrink-0 text-primary" />
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          persistWebSearchEnabled(true);
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          webSearchEnabled
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                        )}
+                      >
+                        <span>{t("chat.web_search.on_short")}</span>
+                        {webSearchEnabled ? (
+                          <Check size={12} className="shrink-0 text-primary" />
+                        ) : null}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="relative" onMouseLeave={() => setIsThinkingSubOpen(false)}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsThinkingSubOpen((prev) => !prev);
+                  setIsModelSubOpen(false);
+                  setIsAgentModeSubOpen(false);
+                  setIsToolsViewSubOpen(false);
+                  setIsWebSearchSubOpen(false);
+                }}
+                onMouseEnter={() => {
+                  setIsThinkingSubOpen(true);
+                  setIsModelSubOpen(false);
+                  setIsAgentModeSubOpen(false);
+                  setIsToolsViewSubOpen(false);
+                  setIsWebSearchSubOpen(false);
+                }}
+                className={cn(
+                  "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-colors text-left",
+                  isThinkingSubOpen || thinkingEnabled
+                    ? "bg-primary/10 text-foreground dark:bg-white/10"
+                    : "text-muted-foreground hover:bg-primary/10 hover:text-foreground dark:hover:bg-white/10",
+                )}
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <Sparkles size={14} className="shrink-0 opacity-80" aria-hidden />
+                  <span className="truncate">{t("chat.thinking.label")}</span>
+                </div>
+                <ChevronRight size={13} className="shrink-0 opacity-60" aria-hidden />
+              </button>
+
+              {isThinkingSubOpen ? (
+                <div className="absolute bottom-full left-0 z-50 pb-1.5 w-48 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                  <div
+                    onMouseEnter={() => setIsThinkingSubOpen(true)}
+                    className="w-full rounded-2xl border border-black/10 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2 dark:border-white/10 dark:bg-card/90"
+                  >
+                    <div className="border-b border-border/45 px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground">
+                      {t("chat.thinking.label")}
+                    </div>
+                    <div className="space-y-0.5 p-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleToggleThinking(false);
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          !thinkingEnabled
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                        )}
+                      >
+                        <span>{t("chat.thinking.disable")}</span>
+                        {!thinkingEnabled ? (
+                          <Check size={12} className="shrink-0 text-primary" />
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleToggleThinking(true);
+                          handleReasoningEffortChange("min");
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          thinkingEnabled && reasoningEffort === "min"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                        )}
+                      >
+                        <span>{t("chat.thinking.min")}</span>
+                        {thinkingEnabled && reasoningEffort === "min" ? (
+                          <Check size={12} className="shrink-0 text-primary" />
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleToggleThinking(true);
+                          handleReasoningEffortChange("medium");
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          thinkingEnabled && reasoningEffort === "medium"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                        )}
+                      >
+                        <span>{t("chat.thinking.med")}</span>
+                        {thinkingEnabled && reasoningEffort === "medium" ? (
+                          <Check size={12} className="shrink-0 text-primary" />
+                        ) : null}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleToggleThinking(true);
+                          handleReasoningEffortChange("max");
+                          setIsPlusOpen(false);
+                          closePlusSubMenus();
+                        }}
+                        className={cn(
+                          "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                          thinkingEnabled && reasoningEffort === "max"
+                            ? "bg-primary/10 text-primary"
+                            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                        )}
+                      >
+                        <span>{t("chat.thinking.max")}</span>
+                        {thinkingEnabled && reasoningEffort === "max" ? (
+                          <Check size={12} className="shrink-0 text-primary" />
+                        ) : null}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="my-1 border-t border-border/45" />
+            <button
+              type="button"
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left"
+              onClick={() => {
+                setWebRestrictDraft([...webRestrictHosts]);
+                setWebRestrictInput("");
+                setWebRestrictInputError(null);
+                setWebRestrictModalOpen(true);
+                setIsPlusOpen(false);
+                closePlusSubMenus();
+              }}
+            >
+              <Settings size={14} className="shrink-0 opacity-80" aria-hidden />
+              <span className="truncate">{t("chat.web_search.advanced")}</span>
+            </button>
+          </div>
+        )}
+      </div>
+    );
+
+    const projectMemoryNode = showProjectMemory ? (
+      <div className="shrink-0">
+        <ProjectMemoryChip
+          userId={userId}
+          token={token}
+          profileSlug={activeProfileSlug}
+          projectSlug={sqlQueryProject}
+          onOpenPanel={() => setDockTab("memory")}
+        />
+      </div>
+    ) : null;
+
+    const sendButtonNode = (
+      <div className="flex shrink-0 items-center gap-1.5">
+        {mcpAlertCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setMcpPendingOpen(true)}
+            className={cn(
+              "focus-ring flex items-center gap-1 rounded-full border px-2 py-1 text-[0.75em] font-medium shadow-2xs backdrop-blur-md transition-all duration-200",
+              mcpRuntimeErrors.length > 0
+                ? "border-red-500/50 bg-red-500/15 text-red-800 dark:text-red-200"
+                : "border-amber-500/50 bg-amber-500/15 text-amber-800 dark:text-amber-200"
+            )}
+            title={t("integrationsPage.composer_pending")}
+          >
+            <AlertTriangle size={12} aria-hidden className={mcpRuntimeErrors.length > 0 ? "text-red-600 dark:text-red-400" : "text-amber-600 dark:text-amber-400"} />
+            <span>{mcpAlertCount}</span>
+          </button>
+        )}
+
+        {contextBudget && (
+          <ContextBudgetGauge
+            pct={contextBudget?.pct ?? 0}
+            triggerPct={
+              contextBudget && contextBudget.maxPrompt > 0
+                ? Math.min(100, (contextBudget.trigger / contextBudget.maxPrompt) * 100)
+                : 92
+            }
+            unavailable={!contextBudget}
+            active={contextBudgetOpen}
+            onClick={() => setContextBudgetOpen((open) => !open)}
+          />
+        )}
+
+        {streaming ? (
+          <button
+            type="button"
+            onClick={stop}
+            className="focus-ring inline-flex size-8 items-center justify-center rounded-full bg-destructive/20 text-destructive transition-all duration-200 hover:scale-105 hover:bg-destructive/30 active:scale-95"
+          >
+            <Square size={12} aria-hidden fill="currentColor" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void send()}
+            disabled={
+              !input.trim() ||
+              isProjectRequiredButMissing ||
+              sendBlockedByUploads
+            }
+            title={
+              sendBlockedByUploads ? t("chat.upload.send_blocked") : undefined
+            }
+            className={cn(
+              "focus-ring inline-flex size-8 items-center justify-center rounded-full transition-all duration-300 ease-out",
+              input.trim() && !isProjectRequiredButMissing && !sendBlockedByUploads
+                ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:scale-105 hover:bg-primary/95 active:scale-95 cursor-pointer"
+                : "bg-muted text-muted-foreground/40 opacity-40 cursor-not-allowed pointer-events-none scale-95"
+            )}
+          >
+            <Send size={13} aria-hidden className={input.trim() ? "translate-x-px" : ""} />
+          </button>
+        )}
+      </div>
+    );
+
+    return (
+      <div className="w-full">
+        {showContextCompactingShimmer ? (
+          <StatusProgressCard
+            className="mb-3 border-amber-500/30 bg-amber-500/5"
+            icon={Database}
+            title={t("chat.agent_status.compacting")}
+            subtitle={t("chat.agent_status.compacting_desc")}
+          />
+        ) : null}
+        {contextBudgetOpen ? (
+          contextBudget ? (
+            <ContextBudgetBar budget={contextBudget} className="mb-3" />
+          ) : (
+            <div className="mb-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-[0.786em] text-muted-foreground">
+              {t("chat.context_budget.unavailable")}
+            </div>
+          )
+        ) : null}
+        {pendingUploadItems.length > 0 && (
+          <div className="mb-3 flex flex-wrap gap-2" aria-live="polite">
+            {pendingUploadItems.map((item) => {
+              const ringStatus =
+                item.status === "done"
+                  ? "done"
+                  : item.status === "error"
+                    ? "error"
+                    : "uploading";
+              const statusLabel =
+                item.status === "done"
+                  ? t("chat.upload.done")
+                  : item.status === "error"
+                    ? t("chat.upload.failed")
+                    : t("chat.upload.uploading", { progress: item.progress });
+              return (
+                <span
+                  key={item.id}
+                  className={cn(
+                    "inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-[0.857em] font-medium backdrop-blur-sm",
+                    item.status === "error"
+                      ? "border-destructive/40 bg-destructive/10 text-destructive"
+                      : "border-border bg-muted/60 text-foreground",
+                  )}
+                  title={statusLabel}
+                >
+                  <CircularUploadProgress
+                    value={item.progress}
+                    status={ringStatus}
+                    size={18}
+                  />
+                  <span className="truncate max-w-[14rem]">{item.file.name}</span>
+                  {item.status === "error" ? (
+                    <button
+                      type="button"
+                      className="focus-ring rounded-full px-1 text-[0.786em] font-semibold hover:underline"
+                      onClick={() => retryPendingUpload(item.id)}
+                    >
+                      {t("chat.upload.retry")}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="focus-ring rounded-full px-0.5 text-muted-foreground hover:text-destructive transition-colors"
+                    aria-label={t("chat.remove_file", { name: item.file.name })}
+                    onClick={() => removePendingUpload(item.id)}
+                  >
+                    ×
+                  </button>
+                </span>
+              );
+            })}
+          </div>
+        )}
+        {isProjectRequiredButMissing && (
+          <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:text-amber-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <div className="flex-1 leading-relaxed">
+              <span className="font-semibold block mb-0.5 text-amber-900 dark:text-amber-300 text-sm">{t("chat.project_required.title")}</span>
+              {t("chat.project_required.desc")}
+            </div>
+            <button
+              type="button"
+              onClick={() => setProjectCreateOpen(true)}
+              className="shrink-0 self-start sm:self-center inline-flex items-center justify-center rounded-lg bg-amber-600 hover:bg-amber-500 active:bg-amber-700 px-3.5 py-1.5 font-semibold text-white dark:text-black dark:bg-amber-400 dark:hover:bg-amber-300 transition-colors"
+            >
+              {t("chat.project_required.button")}
+            </button>
+          </div>
+        )}
+
+        {/* Composer Container: Single-line compact bar OR multi-line expanding box */}
+        <div
+          ref={composerContainerRef}
+          className={cn(
+            "relative flex min-w-0 flex-col overflow-visible border shadow-md backdrop-blur-xl transition-[border-radius,padding,border-color,background-color,box-shadow,gap] duration-200 ease-out",
+            isMultiLine
+              ? "rounded-[22px] px-3.5 pt-2.5 pb-2 gap-1.5"
+              : "rounded-[28px] p-1.5 px-3 min-h-[48px] sm:min-h-[50px] justify-center",
+            agentMode === "plan"
+              ? "border-orange-500/35 bg-card/60 focus-within:border-orange-500/60 focus-within:shadow-[0_0_24px_-4px_rgba(249,115,22,0.25)] dark:bg-card/35"
+              : agentMode === "deep_research"
+                ? "border-violet-500/35 bg-card/60 focus-within:border-violet-500/60 focus-within:shadow-[0_0_24px_-4px_rgba(139,92,246,0.25)] dark:bg-card/35"
+                : "border-black/[0.08] bg-card/60 hover:border-black/15 focus-within:border-primary/50 focus-within:shadow-[0_0_25px_-5px_hsl(var(--primary)/0.18)] dark:border-white/[0.09] dark:bg-card/35 dark:hover:border-white/15",
+          )}
+        >
+          {/* Hidden file input */}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              const selected = Array.from(e.target.files || []);
+              queuePendingUploads(selected);
+              e.target.value = "";
+            }}
+          />
+
+          {(webRestrictHosts.length > 0 || !webSearchEnabled) && (
+            <div className="flex flex-wrap gap-2 px-1 pt-0.5 text-[0.786em] text-muted-foreground" aria-live="polite">
+              {!webSearchEnabled ? (
+                <span className="rounded-full border border-amber-500/40 bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-200">
+                  {t("chat.web_search.disabled")}
+                </span>
+              ) : null}
+              {webRestrictHosts.length > 0 ? (
+                <span className="rounded-full border border-cyan-500/35 bg-cyan-500/15 dark:bg-cyan-500/10 px-2 py-0.5 font-medium text-cyan-700 dark:text-cyan-200">
+                  {t("chat.web_search.restricted", { count: webRestrictHosts.length })}
+                </span>
+              ) : null}
+            </div>
+          )}
+
+          <div className={cn("flex min-w-0 w-full transition-all duration-200 ease-out", isMultiLine ? "flex-col gap-1.5" : "flex-row items-center gap-2")}>
+            {!isMultiLine && (
+              <div className="flex items-center gap-1.5 shrink-0 animate-in fade-in duration-150">
+                {plusMenuNode}
+                {profileSelectorNode}
+              </div>
+            )}
+            <div className={cn("min-w-0 flex items-center", isMultiLine ? "w-full" : "flex-1")}>
+              <textarea
+                ref={composerTextareaRef}
+                value={input}
+                disabled={streaming || isProjectRequiredButMissing}
+                onChange={(e) => {
+                  setInput(e.target.value);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Tab" && e.shiftKey) {
+                    e.preventDefault();
+                    handleAgentModeChange(agentMode === "plan" ? "normal" : "plan");
+                  } else if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!sendBlockedByUploads) void send();
+                  }
+                }}
+                placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
+                className={cn(
+                  "chat-font box-border w-full resize-none break-words border-0 bg-transparent text-sm text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/60 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
+                  isMultiLine
+                    ? "min-h-[28px] max-h-[220px] px-1 py-1 leading-[22px] overflow-y-auto custom-scrollbar"
+                    : "h-[28px] min-h-[28px] max-h-[28px] px-2 py-1 leading-[20px] overflow-hidden whitespace-nowrap"
+                )}
+                rows={1}
+              />
+            </div>
+            {!isMultiLine && (
+              <div className="flex items-center gap-1.5 shrink-0 animate-in fade-in duration-150">
+                {projectMemoryNode}
+                {sendButtonNode}
+              </div>
+            )}
+            {isMultiLine && (
+              <div className="flex min-w-0 items-center justify-between gap-x-2 pt-1.5 border-t border-black/[0.04] dark:border-white/[0.04] animate-in fade-in duration-200">
+                <div className="flex items-center gap-1.5">
+                  {plusMenuNode}
+                  {profileSelectorNode}
+                </div>
+                <div className="flex items-center gap-1.5">
+                  {projectMemoryNode}
+                  {sendButtonNode}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="mt-3 text-center text-[0.857em] font-medium text-muted-foreground">
+          {t("chat.footer_hint")}
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
       <ChatDragDrop onFilesDropped={handleFilesDropped}>
-        <div id="chat-pane" className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden">
-          <div
-            ref={messagesContainerRef}
-            className={cn(
-              "flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-8",
-              showEmptyState && "flex flex-col justify-center",
-            )}
-            aria-busy={streaming}
-            aria-live="polite"
-          >
-            <div className="mx-auto w-full max-w-3xl flex flex-col">
-              {historyError ? (
-                <div
-                  className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                  role="alert"
-                >
-                  <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
-                  <span>{t("chat.history_load_error", { msg: historyError })}</span>
-                </div>
-              ) : null}
-              {sessionPrepareStatus === "warming" && !streaming ? (
-                <div
-                  className="mb-4 flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-4 py-3 text-sm text-muted-foreground"
-                  role="status"
-                >
-                  <Loader2 className="size-4 shrink-0 animate-spin text-primary" aria-hidden />
-                  <ShimmerText>{t("chat.session_preparing")}</ShimmerText>
-                </div>
-              ) : null}
-              {mcpRuntimeErrors.length > 0 && sessionPrepareStatus !== "warming" ? (
-                <div
-                  className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm"
-                  role="alert"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-start gap-2">
-                      <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400" aria-hidden />
-                      <div>
-                        <p className="font-medium text-red-800 dark:text-red-200">
-                          {t("integrationsPage.composer_runtime_errors")}
-                        </p>
-                        <p className="mt-1 text-xs text-red-700/90 dark:text-red-300/90">
-                          {t("chat.mcp_errors_hint")}
-                        </p>
-                        <ul className="mt-2 space-y-1 text-xs text-red-800/90 dark:text-red-200/90">
-                          {mcpRuntimeErrors.slice(0, 3).map((p) => (
-                            <li key={p.server_slug}>
-                              <span className="font-medium">{p.display_name}</span>
-                              {p.message ? ` — ${p.message}` : null}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setMcpPendingOpen(true)}
-                      className="shrink-0 rounded-lg border border-red-500/30 bg-background/80 px-2.5 py-1 text-xs font-medium text-red-800 hover:bg-red-500/10 dark:text-red-200"
-                    >
-                      {t("chat.mcp_errors_details")}
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              {showEmptyState ? (
+        <div
+          id="chat-pane"
+          className={cn(
+            "relative flex min-h-0 min-w-0 flex-1 flex-col overflow-x-hidden transition-colors duration-500",
+            showEmptyState &&
+            "bg-[radial-gradient(ellipse_80%_60%_at_50%_38%,rgba(225,29,72,0.12),rgba(159,18,57,0.04)_45%,transparent_75%)] dark:bg-[radial-gradient(ellipse_80%_60%_at_50%_38%,rgba(225,29,72,0.18),rgba(159,18,57,0.06)_48%,transparent_80%)]",
+          )}
+        >
+          {/* Subtle floating non-intrusive status when session tools are warming up */}
+          {sessionPrepareStatus === "warming" && !streaming ? (
+            <div
+              className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-30 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/85 px-3.5 py-1 text-xs font-medium text-muted-foreground shadow-xs backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-300"
+              role="status"
+            >
+              <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" aria-hidden />
+              <ShimmerText>{t("chat.session_preparing")}</ShimmerText>
+            </div>
+          ) : null}
+
+          {showEmptyState ? (
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-8 sm:py-12 w-full max-w-3xl mx-auto min-h-0 animate-in fade-in-0 duration-300">
+              <div className="w-full flex flex-col items-center gap-6 sm:gap-8 -translate-y-4 sm:-translate-y-8">
                 <ChatEmptyState
                   profileName={activeProfileName}
-                  onSuggestion={handleEmptySuggestion}
+                  userDisplayName={currentUserDisplayName || userId}
                 />
-              ) : null}
-              {chatView.kind === "task" && openPlanTask && planExecutionProgress ? (
-                <TaskChatView
-                  task={openPlanTask}
-                  tasks={planExecutionProgress.tasks}
-                  messages={taskViewMessages}
-                  progress={planExecutionProgress}
-                  onBack={() => setChatView({ kind: "main" })}
-                  onOpenTask={openPlanTaskView}
-                  onCancel={handleCancelPlanExecution}
-                  renderMessage={(m, msgIdx) => {
-                    if (m.role === "internal") {
-                      return (
-                        <div className="my-3 rounded-lg border border-border/50 bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
-                          ▶ {t("chat.plan.task.starting")} <code className="font-mono">{openPlanTask.task_id}</code>
-                        </div>
-                      );
-                    }
-                    if (m.role !== "assistant") return null;
-                    const prevMsg = msgIdx > 0 ? taskViewMessages[msgIdx - 1] : null;
-                    const afterUser = prevMsg?.role === "user" || prevMsg?.role === "internal";
-                    return (
-                      <div
-                        key={m.id}
-                        data-message-id={m.id}
-                        className={cn(
-                          "group relative mr-auto w-full max-w-[min(92%,48rem)] flex flex-col px-5 chat-font text-foreground",
-                          afterUser ? "pt-0.5 pb-2" : "py-3",
-                        )}
-                      >
-                        <TurnTimeline
-                          segments={segmentsForMessage({
-                            segments: (m as ChatMessage).segments,
-                            reasoning: (m as ChatMessage).reasoning,
-                            content: (m as ChatMessage).content,
-                            steps: (m as ChatMessage).steps,
-                            artifacts: (m as ChatMessage).artifacts?.map((a) => {
-                              if (isLiveArtifact(a as ChatMessageArtifact)) {
-                                const live = a as LiveArtifactMessage;
-                                return {
-                                  id: live.id,
-                                  title: live.title,
-                                  artType: live.artType,
-                                  buffer: live.buffer,
-                                  storage_key: live.savedPath,
-                                };
-                              }
-                              const hist = a as ChatHistoryArtifact;
-                              return {
-                                id: hist.id,
-                                title: hist.original_name || hist.id,
-                                artType: hist.mime || "text",
-                                buffer: `[File: ${hist.original_name || hist.id}]`,
-                                storage_key: hist.storage_key,
-                              };
-                            }),
-                          })}
-                          toolsView={toolsView}
-                          conversationId={conversationId}
-                          token={token}
-                          isPlanArtifact={isPlanArtifact}
-                          renderMarkdownLink={renderMarkdownLink}
-                          formatTextWithCitations={formatTextWithCitations}
-                        />
-                      </div>
-                    );
-                  }}
-                />
-              ) : null}
-              {chatView.kind === "main" && planExecutionProgress ? (
-                <PlanExecutionChatBanner
-                  progress={planExecutionProgress}
-                  onOpenTask={openPlanTaskView}
-                  onOpenAllTasks={() => setDockTab("plan")}
-                  onResume={handleResumePlanExecution}
-                />
-              ) : null}
-              {chatView.kind === "main" && !showEmptyState
-                ? mainFeedMessages.map((m, msgIdx) => {
-                  const isLastUser = m.role === "user" && m.id === lastUserMessageId;
-                  const prevMsg = msgIdx > 0 ? mainFeedMessages[msgIdx - 1] : null;
-                  const afterUser = m.role === "assistant" && prevMsg?.role === "user";
-                  const turnGapClass =
-                    msgIdx === 0
-                      ? ""
-                      : afterUser
-                        ? "mt-0.5"
-                        : prevMsg?.role === "assistant" && m.role === "user"
-                          ? "mt-6"
-                          : "mt-4";
-                  return (
+                <div className="w-full">
+                  {renderComposer()}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-1 flex-col overflow-hidden min-h-0">
+              <div
+                ref={messagesContainerRef}
+                className="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-8 flex flex-col justify-start transition-all duration-300 ease-out"
+                aria-busy={streaming}
+                aria-live="polite"
+              >
+                <div className="mx-auto w-full max-w-3xl flex flex-col">
+                  {historyError ? (
                     <div
-                      key={m.id}
-                      data-message-id={m.id}
-                      className={cn(
-                        "group relative w-full flex flex-col transition-opacity",
-                        turnGapClass,
-                        m.archived && "opacity-[0.88]",
-                      )}
+                      className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                      role="alert"
                     >
-                      {m.archived ? (
-                        <p className="mb-1 px-5 text-[0.643em] font-medium uppercase tracking-wide text-muted-foreground/70">
-                          {t("chat.message.archived_context")}
-                        </p>
-                      ) : null}
-                      <div
-                        className={cn(
-                          "w-full px-5 chat-font",
-                          m.role === "user"
-                            ? cn(
-                              "ml-auto max-w-[min(92%,42rem)] sm:max-w-[min(70%,42rem)] rounded-3xl text-foreground [&_a]:text-foreground [&_code]:bg-background [&_code]:text-foreground",
-                              editingMessageId === m.id
-                                ? "bg-transparent p-0"
-                                : "border border-border/40 bg-muted/45 py-3 px-4",
-                            )
-                            : cn(
-                              "mr-auto max-w-[min(92%,48rem)] bg-transparent text-foreground",
-                              afterUser ? "pt-0.5 pb-2" : "py-3",
-                            ),
-                        )}
-                      >
-                        {m.role === "internal" ? (
-                          <>
-                            <div className="mb-2 text-[0.786em] font-semibold uppercase tracking-wide text-muted-foreground">
-                              {t("chat.plan.execution")}
-                            </div>
-                            {m.content?.trim() ? (
-                              <div className="prose-chat text-muted-foreground">
-                                <InternalMessageMarkdown
-                                  content={m.content.trim()}
-                                  streaming={streaming}
-                                  renderMarkdownLink={renderMarkdownLink}
-                                  formatTextWithCitations={formatTextWithCitations}
-                                />
-                              </div>
-                            ) : null}
-                          </>
-                        ) : null}
-                        {m.role === "assistant" && m.content && isMemorizationMessage(m.content) ? (
-                          <div className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto">
-                            <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
-                            <div className="flex-1">
-                              <InternalMessageMarkdown
-                                content={m.content.trim()}
-                                streaming={streaming}
-                                renderMarkdownLink={renderMarkdownLink}
-                                formatTextWithCitations={formatTextWithCitations}
-                              />
-                            </div>
+                      <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                      <span>{t("chat.history_load_error", { msg: historyError })}</span>
+                    </div>
+                  ) : null}
+                  {mcpRuntimeErrors.length > 0 && sessionPrepareStatus !== "warming" ? (
+                    <div
+                      className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm"
+                      role="alert"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400" aria-hidden />
+                          <div>
+                            <p className="font-medium text-red-800 dark:text-red-200">
+                              {t("integrationsPage.composer_runtime_errors")}
+                            </p>
+                            <p className="mt-1 text-xs text-red-700/90 dark:text-red-300/90">
+                              {t("chat.mcp_errors_hint")}
+                            </p>
+                            <ul className="mt-2 space-y-1 text-xs text-red-800/90 dark:text-red-200/90">
+                              {mcpRuntimeErrors.slice(0, 3).map((p) => (
+                                <li key={p.server_slug}>
+                                  <span className="font-medium">{p.display_name}</span>
+                                  {p.message ? ` — ${p.message}` : null}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
-                        ) : m.role === "assistant" &&
-                          (m.reasoning || (m.steps && m.steps.length > 0) || (m.artifacts && m.artifacts.length > 0) || m.content) ? (
-                          <div className={cn(afterUser ? "mb-2" : "mb-3")}>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setMcpPendingOpen(true)}
+                          className="shrink-0 rounded-lg border border-red-500/30 bg-background/80 px-2.5 py-1 text-xs font-medium text-red-800 hover:bg-red-500/10 dark:text-red-200"
+                        >
+                          {t("chat.mcp_errors_details")}
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  {chatView.kind === "task" && openPlanTask && planExecutionProgress ? (
+                    <TaskChatView
+                      task={openPlanTask}
+                      tasks={planExecutionProgress.tasks}
+                      messages={taskViewMessages}
+                      progress={planExecutionProgress}
+                      onBack={() => setChatView({ kind: "main" })}
+                      onOpenTask={openPlanTaskView}
+                      onCancel={handleCancelPlanExecution}
+                      renderMessage={(m, msgIdx) => {
+                        if (m.role === "internal") {
+                          return (
+                            <div className="my-3 rounded-lg border border-border/50 bg-muted/25 px-3 py-2 text-xs text-muted-foreground">
+                              ▶ {t("chat.plan.task.starting")} <code className="font-mono">{openPlanTask.task_id}</code>
+                            </div>
+                          );
+                        }
+                        if (m.role !== "assistant") return null;
+                        const prevMsg = msgIdx > 0 ? taskViewMessages[msgIdx - 1] : null;
+                        const afterUser = prevMsg?.role === "user" || prevMsg?.role === "internal";
+                        return (
+                          <div
+                            key={m.id}
+                            data-message-id={m.id}
+                            className={cn(
+                              "group relative mr-auto w-full max-w-[min(92%,48rem)] flex flex-col px-5 chat-font text-foreground",
+                              afterUser ? "pt-0.5 pb-2" : "py-3",
+                            )}
+                          >
                             <TurnTimeline
                               segments={segmentsForMessage({
-                                segments: m.segments,
-                                reasoning: m.reasoning,
-                                content: m.content,
-                                steps: m.steps,
-                                artifacts: m.artifacts?.map((a) => {
-                                  if (isLiveArtifact(a)) {
+                                segments: (m as ChatMessage).segments,
+                                reasoning: (m as ChatMessage).reasoning,
+                                content: (m as ChatMessage).content,
+                                steps: (m as ChatMessage).steps,
+                                artifacts: (m as ChatMessage).artifacts?.map((a) => {
+                                  if (isLiveArtifact(a as ChatMessageArtifact)) {
+                                    const live = a as LiveArtifactMessage;
                                     return {
-                                      id: a.id,
-                                      title: a.title,
-                                      artType: a.artType,
-                                      buffer: a.buffer,
-                                      storage_key: a.savedPath,
+                                      id: live.id,
+                                      title: live.title,
+                                      artType: live.artType,
+                                      buffer: live.buffer,
+                                      storage_key: live.savedPath,
                                     };
                                   }
+                                  const hist = a as ChatHistoryArtifact;
                                   return {
-                                    id: a.id,
-                                    title: a.original_name || a.id,
-                                    artType: a.mime || "text",
-                                    buffer: `[File: ${a.original_name || a.id}]`,
-                                    storage_key: a.storage_key,
+                                    id: hist.id,
+                                    title: hist.original_name || hist.id,
+                                    artType: hist.mime || "text",
+                                    buffer: `[File: ${hist.original_name || hist.id}]`,
+                                    storage_key: hist.storage_key,
                                   };
                                 }),
                               })}
@@ -3641,1104 +4640,480 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                               isPlanArtifact={isPlanArtifact}
                               renderMarkdownLink={renderMarkdownLink}
                               formatTextWithCitations={formatTextWithCitations}
-                              messageId={m.id}
                             />
                           </div>
-                        ) : null}
-
-                        {m.role === "user" && m.artifacts && m.artifacts.length > 0 && (
-                          <div className="mb-3 flex flex-wrap gap-2">
-                            {m.artifacts.map((a) => {
-                              const storageKey = "storage_key" in a ? a.storage_key : a.savedPath || "";
-                              const title = "original_name" in a ? a.original_name : a.title || storageKey;
-                              const mime = "mime" in a ? a.mime : a.artType;
-                              const downloadUrl = storageKey ? sessionDownloadUrl(conversationId, storageKey, token) : undefined;
-                              return (
-                                <a
-                                  key={a.id}
-                                  href={downloadUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="inline-flex items-center gap-2 rounded-xl bg-background/40 hover:bg-background/60 px-3 py-1.5 text-xs text-foreground/90 transition-colors border border-border/40 shadow-sm"
-                                >
-                                  <Paperclip size={13} className="text-muted-foreground" />
-                                  <span className="font-medium truncate max-w-[200px]">{title}</span>
-                                  {mime && (
-                                    <span className="text-[0.714em] text-muted-foreground uppercase px-1.5 py-0.5 bg-muted/50 rounded">
-                                      {mime.split("/")[1] || mime}
-                                    </span>
-                                  )}
-                                </a>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {m.role === "user" && editingMessageId === m.id ? (
-                          <div className="flex flex-col gap-3">
-                            <div className="relative flex flex-col rounded-[24px] border border-border/50 bg-card/60 p-2 shadow-sm backdrop-blur-xl focus-within:ring-1 focus-within:ring-border/80 hover:border-border/80 transition-colors">
-                              <textarea
-                                value={editInput}
-                                onChange={(e) => setEditInput(e.target.value)}
-                                onKeyDown={(e) => {
-                                  if (e.key === "Enter" && !e.shiftKey) {
-                                    e.preventDefault();
-                                    void handleSaveEdit(m.id);
-                                  }
-                                }}
-                                placeholder={t("chat.edit.placeholder")}
-                                className="focus-ring chat-font min-h-[80px] flex-1 w-full resize-none rounded-[20px] border-0 bg-transparent px-4 py-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
-                              />
-                            </div>
-                            <div className="flex justify-end gap-2 text-xs">
-                              <button
-                                type="button"
-                                onClick={() => setEditingMessageId(null)}
-                                className="rounded-lg border border-border/60 bg-muted/10 px-3 py-1.5 text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all duration-200"
-                              >
-                                {t("btn.cancel")}
-                              </button>
-                              <button
-                                type="button"
-                                disabled={!editInput.trim() || streaming}
-                                onClick={() => handleSaveEdit(m.id)}
-                                className="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground hover:bg-primary/90 transition-all duration-200 disabled:opacity-50"
-                              >
-                                {t("chat.edit.save_send")}
-                              </button>
-                            </div>
-                          </div>
-                        ) : m.role === "user" ? (
-                          <div className="prose-chat">
-                            <UserMessageMarkdown
-                              content={m.content.trim()}
-                              renderMarkdownLink={renderMarkdownLink}
-                              formatTextWithCitations={formatTextWithCitations}
-                            />
-                          </div>
-                        ) : null}
-                        {m.role === "assistant" && m.webSources && m.webSources.length > 0 ? (
-                          <WebSourcesBar cards={m.webSources} messageId={m.id} />
-                        ) : null}
-                        {m.role === "assistant" && m.reasoningUnavailable ? (
-                          <p className="mt-2 border-t border-border pt-2 text-[0.786em] leading-snug text-muted-foreground">
-                            {t("chat.edit.no_reasoning", { level: "min" })}
-                          </p>
-                        ) : null}
-                      </div>
-
-                      {m.role === "user" && editingMessageId !== m.id ? (
+                        );
+                      }}
+                    />
+                  ) : null}
+                  {chatView.kind === "main" && planExecutionProgress ? (
+                    <PlanExecutionChatBanner
+                      progress={planExecutionProgress}
+                      onOpenTask={openPlanTaskView}
+                      onOpenAllTasks={() => setDockTab("plan")}
+                      onResume={handleResumePlanExecution}
+                    />
+                  ) : null}
+                  {chatView.kind === "main" && !showEmptyState
+                    ? mainFeedMessages.map((m, msgIdx) => {
+                      const isLastUser = m.role === "user" && m.id === lastUserMessageId;
+                      const prevMsg = msgIdx > 0 ? mainFeedMessages[msgIdx - 1] : null;
+                      const afterUser = m.role === "assistant" && prevMsg?.role === "user";
+                      const turnGapClass =
+                        msgIdx === 0
+                          ? ""
+                          : afterUser
+                            ? "mt-0.5"
+                            : prevMsg?.role === "assistant" && m.role === "user"
+                              ? "mt-6"
+                              : "mt-4";
+                      return (
                         <div
+                          key={m.id}
+                          data-message-id={m.id}
                           className={cn(
-                            "mt-1 flex items-center justify-end gap-2 pr-2 select-none transition-opacity duration-150",
-                            isLastUser
-                              ? "opacity-100"
-                              : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 focus-within:opacity-100"
+                            "group relative w-full flex flex-col transition-opacity",
+                            turnGapClass,
+                            m.archived && "opacity-[0.88]",
                           )}
                         >
-                          {!streaming ? (
-                            <div className="flex items-center gap-1">
-                              {isLastUser && !m.archived ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleStartEdit(m)}
-                                  className="inline-flex items-center gap-1 rounded-lg p-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
-                                  title={t("chat.edit.tooltip")}
-                                >
-                                  <Pencil size={14} aria-hidden />
-                                </button>
-                              ) : null}
-                              <MessageActions
-                                messageId={m.id}
-                                copyText={m.content}
-                                className="pr-1"
-                                pinned
-                              />
-                            </div>
+                          {m.archived ? (
+                            <p className="mb-1 px-5 text-[0.643em] font-medium uppercase tracking-wide text-muted-foreground/70">
+                              {t("chat.message.archived_context")}
+                            </p>
                           ) : null}
-                          {m.createdAt ? (
-                            <span className="text-[11px] font-medium tabular-nums text-muted-foreground/60">
-                              {formatMessageTime(m.createdAt)}
-                            </span>
-                          ) : null}
-                        </div>
-                      ) : null}
-
-                      {m.role === "assistant" && !streaming && !isMemorizationMessage(m.content) ? (
-                        <div className="mt-0.5 flex flex-col items-start justify-start pl-1 w-full">
                           <div
                             className={cn(
-                              "flex items-center gap-2.5 w-full max-w-[min(92%,48rem)] pr-2 transition-opacity duration-150",
-                              (m.id === lastAssistantMessageId && messages[messages.length - 1]?.id === m.id)
-                                ? "opacity-100"
-                                : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 focus-within:opacity-100"
+                              "w-full px-5 chat-font",
+                              m.role === "user"
+                                ? cn(
+                                  "ml-auto max-w-[min(92%,42rem)] sm:max-w-[min(70%,42rem)] rounded-3xl text-foreground [&_a]:text-foreground [&_code]:bg-background [&_code]:text-foreground",
+                                  editingMessageId === m.id
+                                    ? "bg-transparent p-0"
+                                    : "border border-border/40 bg-muted/45 py-3 px-4",
+                                )
+                                : cn(
+                                  "mr-auto max-w-[min(92%,48rem)] bg-transparent text-foreground",
+                                  afterUser ? "pt-0.5 pb-2" : "py-3",
+                                ),
                             )}
                           >
-                            {(() => {
-                              const assistantTime = m.completedAt || m.createdAt;
-                              const formattedTime = formatMessageTime(assistantTime);
-                              let durationMs = m.durationMs;
-                              if (durationMs == null && assistantTime) {
-                                for (let i = msgIdx - 1; i >= 0; i--) {
-                                  if (visibleMessages[i]?.role === "user" && visibleMessages[i]?.createdAt) {
-                                    const start = new Date(visibleMessages[i].createdAt!).getTime();
-                                    const end = new Date(assistantTime).getTime();
-                                    if (!isNaN(start) && !isNaN(end) && end >= start) {
-                                      const diff = end - start;
-                                      if (diff >= 100 && diff < 7200_000) {
-                                        durationMs = diff;
-                                      }
-                                    }
-                                    break;
-                                  }
-                                }
-                              }
-                              const formattedDuration = formatTurnDuration(durationMs);
-                              if (!formattedTime) return null;
-                              return (
-                                <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60 select-none">
-                                  <span className="tabular-nums">{formattedTime}</span>
-                                  {formattedDuration && (
-                                    <>
-                                      <span className="opacity-40">·</span>
-                                      <span className="font-mono text-[10.5px] opacity-75">{formattedDuration}</span>
-                                    </>
-                                  )}
+                            {m.role === "internal" ? (
+                              <>
+                                <div className="mb-2 text-[0.786em] font-semibold uppercase tracking-wide text-muted-foreground">
+                                  {t("chat.plan.execution")}
                                 </div>
-                              );
-                            })()}
-                            <MessageActions
-                              messageId={m.id}
-                              copyText={extractAssistantCopyText(m)}
-                              rating={messageRatings[m.id] ?? null}
-                              onRate={handleMessageRate}
-                              onRegenerate={handleRegenerate}
-                              showRegenerate={
-                                m.id === lastAssistantMessageId &&
-                                messages[messages.length - 1]?.id === m.id
-                              }
-                              pinned
-                              onMemorize={() => handleMemorize(m.id)}
-                            />
-                          </div>
-                          {activeCommentBoxId === m.id && (
-                            <div className="mt-3 w-full max-w-xl p-4 sm:p-5 rounded-2xl bg-card border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.08)] flex flex-col gap-4 relative">
-                              {/* Header */}
-                              <div className="flex items-center justify-between shrink-0">
-                                <div className="flex items-center gap-2 font-bold text-xs text-rose-400">
-                                  <ThumbsDown className="w-4 h-4 text-rose-500 fill-current" />
-                                  {t("chat.actions.feedback_title")}
+                                {m.content?.trim() ? (
+                                  <div className="prose-chat text-muted-foreground">
+                                    <InternalMessageMarkdown
+                                      content={m.content.trim()}
+                                      streaming={streaming}
+                                      renderMarkdownLink={renderMarkdownLink}
+                                      formatTextWithCitations={formatTextWithCitations}
+                                    />
+                                  </div>
+                                ) : null}
+                              </>
+                            ) : null}
+                            {m.role === "assistant" && m.content && isMemorizationMessage(m.content) ? (
+                              <div className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto">
+                                <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                                <div className="flex-1">
+                                  <InternalMessageMarkdown
+                                    content={m.content.trim()}
+                                    streaming={streaming}
+                                    renderMarkdownLink={renderMarkdownLink}
+                                    formatTextWithCitations={formatTextWithCitations}
+                                  />
                                 </div>
-                                <button
-                                  onClick={() => setActiveCommentBoxId(null)}
-                                  className="p-1 text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-lg transition-colors cursor-pointer"
-                                >
-                                  <X className="w-4 h-4" />
-                                </button>
                               </div>
-
-                              {/* Textarea Wrapper */}
-                              <div className="relative w-full">
-                                <textarea
-                                  id={`feedback-textarea-${m.id}`}
-                                  placeholder={t("chat.actions.feedback_placeholder")}
-                                  className="w-full min-h-[85px] text-xs bg-black/40 border border-white/10 hover:border-white/20 focus:border-rose-500 rounded-xl p-3 pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-rose-500/30 resize-none transition-all placeholder:text-muted-foreground/75"
-                                  defaultValue={m.feedbackComment ?? ""}
-                                  onKeyDown={(e) => {
-                                    if (e.key === "Enter" && !e.shiftKey) {
-                                      e.preventDefault();
-                                      const text = (e.target as HTMLTextAreaElement).value;
-                                      handleMessageComment(m.id, text);
-                                      setActiveCommentBoxId(null);
-                                    }
-                                  }}
+                            ) : m.role === "assistant" &&
+                              (m.reasoning || (m.steps && m.steps.length > 0) || (m.artifacts && m.artifacts.length > 0) || m.content) ? (
+                              <div className={cn(afterUser ? "mb-2" : "mb-3")}>
+                                <TurnTimeline
+                                  segments={segmentsForMessage({
+                                    segments: m.segments,
+                                    reasoning: m.reasoning,
+                                    content: m.content,
+                                    steps: m.steps,
+                                    artifacts: m.artifacts?.map((a) => {
+                                      if (isLiveArtifact(a)) {
+                                        return {
+                                          id: a.id,
+                                          title: a.title,
+                                          artType: a.artType,
+                                          buffer: a.buffer,
+                                          storage_key: a.savedPath,
+                                        };
+                                      }
+                                      return {
+                                        id: a.id,
+                                        title: a.original_name || a.id,
+                                        artType: a.mime || "text",
+                                        buffer: `[File: ${a.original_name || a.id}]`,
+                                        storage_key: a.storage_key,
+                                      };
+                                    }),
+                                  })}
+                                  toolsView={toolsView}
+                                  conversationId={conversationId}
+                                  token={token}
+                                  isPlanArtifact={isPlanArtifact}
+                                  renderMarkdownLink={renderMarkdownLink}
+                                  formatTextWithCitations={formatTextWithCitations}
+                                  messageId={m.id}
                                 />
                               </div>
+                            ) : null}
 
-                              {/* Footer Actions */}
-                              <div className="flex items-center justify-end gap-2 shrink-0">
-                                <button
-                                  onClick={() => {
-                                    handleMessageRate(m.id, null);
-                                    setActiveCommentBoxId(null);
-                                  }}
-                                  className="px-4 py-1.5 text-xs font-semibold rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-gray-300 transition-all cursor-pointer"
-                                >
-                                  {t("chat.actions.feedback_cancel")}
-                                </button>
-                                <button
-                                  onClick={() => {
-                                    const el = document.getElementById(`feedback-textarea-${m.id}`) as HTMLTextAreaElement;
-                                    if (el) {
-                                      handleMessageComment(m.id, el.value);
-                                    }
-                                    setActiveCommentBoxId(null);
-                                  }}
-                                  className="px-5 py-1.5 text-xs font-bold rounded-full bg-rose-500 hover:bg-rose-600 text-white transition-all shadow-md shadow-rose-500/20 cursor-pointer"
-                                >
-                                  {t("chat.actions.feedback_submit")}
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
-
-                      {memorizingMessageId === m.id && streaming ? (
-                        <div className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
-                          <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary mt-0.5" />
-                          <div className="flex-1">
-                            <div className="font-semibold">{t("chat.agent_status.saving_info")}</div>
-                            <div className="text-xs text-muted-foreground">{t("chat.agent_status.saving_info_desc")}</div>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {(() => {
-                        const memorizationMsgs = messages.filter(
-                          (msg) => msg.metadata?.memorized_message_id === m.id
-                        );
-                        if (memorizationMsgs.length === 0) return null;
-                        return memorizationMsgs.map((mm) => (
-                          <div key={mm.id} className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
-                            <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
-                            <div className="flex-1">
-                              <InternalMessageMarkdown
-                                content={mm.content.trim()}
-                                streaming={streaming}
-                                renderMarkdownLink={renderMarkdownLink}
-                                formatTextWithCitations={formatTextWithCitations}
-                              />
-                            </div>
-                          </div>
-                        ));
-                      })()}
-                    </div>
-                  );
-                })
-                : null}
-              {chatView.kind === "main" && streamRecovery ? (
-                <div
-                  className="mx-auto mb-3 flex max-w-3xl items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-4 py-2.5 text-sm"
-                  role="status"
-                  aria-live="polite"
-                >
-                  <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
-                  <AgentWorkingShimmer label={t("chat.stream_recovery")} />
-                </div>
-              ) : null}
-              {showMainTurnVisual && turnVisual ? (
-                <div className="mr-auto mt-0.5 w-full max-w-4xl min-h-[3.5rem] bg-transparent px-5 pt-0 pb-3 chat-font text-foreground">
-                  {isSavingInfo ? (
-                    <StatusProgressCard
-                      className="mb-3"
-                      icon={Database}
-                      title={t("chat.agent_status.saving_info")}
-                      subtitle={t("chat.agent_status.saving_info_desc")}
-                    />
-                  ) : showAgentWorkingShimmer ? (
-                    <AgentWorkingShimmer label={agentWorkingLabel} />
-                  ) : null}
-
-                  {!isSavingInfo && (
-                    <TurnTimeline
-                      key={streamEpoch}
-                      segments={turnVisual.segments}
-                      toolsView={toolsView}
-                      streaming={streaming}
-                      conversationId={conversationId}
-                      token={token}
-                      isPlanArtifact={isPlanArtifact}
-                      renderMarkdownLink={renderMarkdownLink}
-                      formatTextWithCitations={formatTextWithCitations}
-                      messageId={activeMessageId || undefined}
-                    />
-                  )}
-                  {turnVisual.webSourceCards.length > 0 && activeMessageId ? (
-                    <WebSourcesBar
-                      cards={turnVisual.webSourceCards}
-                      messageId={activeMessageId}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
-              {(postTurnCharts.length > 0 || postTurnFiles.length > 0) && (
-                <div className="mr-auto mt-2 w-full max-w-4xl rounded-2xl border border-border bg-card/40 px-5 py-4 shadow-sm">
-                  <SessionCharts charts={postTurnCharts} />
-                  {postTurnFiles.length > 0 && (
-                    <div className="mt-3 text-xs">
-                      <div className="mb-1 font-medium text-muted-foreground">{t("chat.session_files_new")}</div>
-                      <ul className="list-inside list-disc space-y-1">
-                        {postTurnFiles.map((f) => (
-                          <li key={f.rp}>
-                            <a
-                              className="focus-ring rounded text-primary underline-offset-2 hover:underline"
-                              href={sessionDownloadUrl(conversationId, f.rp, token)}
-                            >
-                              {f.label}
-                            </a>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <div className="relative z-20 min-w-0 shrink-0 bg-transparent p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none">
-            <div className="mx-auto w-full min-w-0 max-w-3xl">
-              {showContextCompactingShimmer ? (
-                <StatusProgressCard
-                  className="mb-3 border-amber-500/30 bg-amber-500/5"
-                  icon={Database}
-                  title={t("chat.agent_status.compacting")}
-                  subtitle={t("chat.agent_status.compacting_desc")}
-                />
-              ) : null}
-              {contextBudgetOpen ? (
-                contextBudget ? (
-                  <ContextBudgetBar budget={contextBudget} className="mb-3" />
-                ) : (
-                  <div className="mb-3 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-[0.786em] text-muted-foreground">
-                    {t("chat.context_budget.unavailable")}
-                  </div>
-                )
-              ) : null}
-              {pendingUploadItems.length > 0 && (
-                <div className="mb-3 flex flex-wrap gap-2" aria-live="polite">
-                  {pendingUploadItems.map((item) => {
-                    const ringStatus =
-                      item.status === "done"
-                        ? "done"
-                        : item.status === "error"
-                          ? "error"
-                          : "uploading";
-                    const statusLabel =
-                      item.status === "done"
-                        ? t("chat.upload.done")
-                        : item.status === "error"
-                          ? t("chat.upload.failed")
-                          : t("chat.upload.uploading", { progress: item.progress });
-                    return (
-                      <span
-                        key={item.id}
-                        className={cn(
-                          "inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-[0.857em] font-medium backdrop-blur-sm",
-                          item.status === "error"
-                            ? "border-destructive/40 bg-destructive/10 text-destructive"
-                            : "border-border bg-muted/60 text-foreground",
-                        )}
-                        title={statusLabel}
-                      >
-                        <CircularUploadProgress
-                          value={item.progress}
-                          status={ringStatus}
-                          size={18}
-                        />
-                        <span className="truncate max-w-[14rem]">{item.file.name}</span>
-                        {item.status === "error" ? (
-                          <button
-                            type="button"
-                            className="focus-ring rounded-full px-1 text-[0.786em] font-semibold hover:underline"
-                            onClick={() => retryPendingUpload(item.id)}
-                          >
-                            {t("chat.upload.retry")}
-                          </button>
-                        ) : null}
-                        <button
-                          type="button"
-                          className="focus-ring rounded-full px-0.5 text-muted-foreground hover:text-destructive transition-colors"
-                          aria-label={t("chat.remove_file", { name: item.file.name })}
-                          onClick={() => removePendingUpload(item.id)}
-                        >
-                          ×
-                        </button>
-                      </span>
-                    );
-                  })}
-                </div>
-              )}
-              {isProjectRequiredButMissing && (
-                <div className="mb-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-800 dark:text-amber-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-bottom-2 duration-200">
-                  <div className="flex-1 leading-relaxed">
-                    <span className="font-semibold block mb-0.5 text-amber-900 dark:text-amber-300 text-sm">{t("chat.project_required.title")}</span>
-                    {t("chat.project_required.desc")}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setProjectCreateOpen(true)}
-                    className="shrink-0 self-start sm:self-center inline-flex items-center justify-center rounded-lg bg-amber-600 hover:bg-amber-500 active:bg-amber-700 px-3.5 py-1.5 font-semibold text-white dark:text-black dark:bg-amber-400 dark:hover:bg-amber-300 transition-colors"
-                  >
-                    {t("chat.project_required.button")}
-                  </button>
-                </div>
-              )}
-              <div
-                ref={composerContainerRef}
-                className={cn(
-                  "relative flex min-w-0 flex-col overflow-visible rounded-[26px] border bg-card/45 p-2.5 shadow-md backdrop-blur-xl focus-within:ring-1",
-                  agentMode === "plan"
-                    ? "border-orange-500/35 shadow-[0_0_12px_rgba(249,115,22,0.08)] focus-within:ring-orange-500/30"
-                    : agentMode === "deep_research"
-                      ? "border-violet-500/35 shadow-[0_0_12px_rgba(139,92,246,0.08)] focus-within:ring-violet-500/30"
-                      : "border-border hover:border-border/80 focus-within:ring-primary/30",
-                  composerResizing ? "" : "transition-colors"
-                )}
-                style={{ minHeight: COMPOSER_MIN_HEIGHT }}
-              >
-                <button
-                  type="button"
-                  aria-label={t("chat.resize_composer")}
-                  onMouseDown={startComposerResize}
-                  className="focus-ring absolute left-0 top-0 z-10 h-4 w-full -translate-y-1/2 cursor-ns-resize bg-transparent"
-                />
-                {(webRestrictHosts.length > 0 || !webSearchEnabled) && (
-                  <div className="flex flex-wrap gap-2 px-3 pt-1 text-[0.786em] text-muted-foreground" aria-live="polite">
-                    {!webSearchEnabled ? (
-                      <span className="rounded-full border border-amber-500/40 bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-200">
-                        {t("chat.web_search.disabled")}
-                      </span>
-                    ) : null}
-                    {webRestrictHosts.length > 0 ? (
-                      <span className="rounded-full border border-cyan-500/35 bg-cyan-500/15 dark:bg-cyan-500/10 px-2 py-0.5 font-medium text-cyan-700 dark:text-cyan-200">
-                        {t("chat.web_search.restricted", { count: webRestrictHosts.length })}
-                      </span>
-                    ) : null}
-                  </div>
-                )}
-                <div className="min-h-0 shrink-0">
-                  <textarea
-                    ref={composerTextareaRef}
-                    value={input}
-                    disabled={streaming || isProjectRequiredButMissing}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Tab" && e.shiftKey) {
-                        e.preventDefault();
-                        handleAgentModeChange(agentMode === "plan" ? "normal" : "plan");
-                      } else if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        if (!sendBlockedByUploads) void send();
-                      }
-                    }}
-                    placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
-                    className="focus-ring chat-font box-border min-h-[48px] min-w-0 max-w-full w-full resize-none overflow-x-hidden break-words rounded-[20px] border-0 bg-transparent px-4 py-2.5 text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/75 focus-visible:ring-0"
-                    rows={1}
-                  />
-                </div>
-                <div className="mt-1 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5 px-2 pb-1">
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={(e) => {
-                      const selected = Array.from(e.target.files || []);
-                      queuePendingUploads(selected);
-                      e.target.value = "";
-                    }}
-                  />
-                  {/* Pulsante "+" con Menu di Allega File */}
-                  <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-                    <div ref={plusMenuRef} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsPlusOpen((prev) => !prev);
-                          closePlusSubMenus();
-                          setIsProfileOpen(false);
-                          setIsAgentModeOpen(false);
-                        }}
-                        className={cn(
-                          "focus-ring inline-flex size-7 items-center justify-center rounded-full border transition-all duration-200 active:scale-95",
-                          isPlusOpen || !webSearchEnabled || thinkingEnabled
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border bg-muted/40 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                        )}
-                        title={t("chat.tools.plus_tooltip")}
-                      >
-                        <span
-                          className={cn(
-                            "flex items-center justify-center transition-transform duration-200",
-                          )}
-                        >
-                          {
-                            isPlusOpen ? <X size={14} aria-hidden /> : <Plus size={14} aria-hidden />
-                          }
-                        </span>
-                      </button>
-
-                      {isPlusOpen && (
-                        <div className="absolute bottom-full left-0 z-50 mb-2 min-w-[15rem] max-w-[min(100vw-2rem,18rem)] rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          {/* Opzione: Allega File */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              fileInputRef.current?.click();
-                              setIsPlusOpen(false);
-                              closePlusSubMenus();
-                            }}
-                            onMouseEnter={() => {
-                              closePlusSubMenus();
-                            }}
-                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-colors text-left"
-                          >
-                            <Paperclip size={12} className="shrink-0" aria-hidden />
-                            <span>{t("chat.tools.attach_file")}</span>
-                          </button>
-
-                          {/* Opzione: Vista Tools > */}
-                          <div className="relative" onMouseLeave={() => setIsToolsViewSubOpen(false)}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsToolsViewSubOpen((prev) => !prev);
-                                setIsWebSearchSubOpen(false);
-                                setIsThinkingSubOpen(false);
-                              }}
-                              onMouseEnter={() => {
-                                setIsToolsViewSubOpen(true);
-                                setIsWebSearchSubOpen(false);
-                                setIsThinkingSubOpen(false);
-                              }}
-                              className={cn(
-                                "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                isToolsViewSubOpen
-                                  ? "bg-muted/60 text-foreground"
-                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                              )}
-                            >
-                              <div className="flex items-center gap-2">
-                                <Wrench size={12} className="shrink-0" aria-hidden />
-                                <span>{t("chat.tools.view_label")}</span>
-                              </div>
-                              <ChevronRight size={12} className="shrink-0" aria-hidden />
-                            </button>
-
-                            {/* Sottomenu Vista Tools */}
-                            {isToolsViewSubOpen && (
-                              <div className="absolute bottom-full left-0 z-50 pb-1.5 w-48 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
-                                <div
-                                  onMouseEnter={() => setIsToolsViewSubOpen(true)}
-                                  className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
-                                >
-                                  <div className="px-2 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
-                                    {t("chat.tools.select_view")}
-                                  </div>
-                                  <div className="space-y-0.5">
-                                    {/* Opzione: Compatta */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleToolsViewChange("compact");
-                                        setIsPlusOpen(false);
-                                        closePlusSubMenus();
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                        toolsView === "compact"
-                                          ? "bg-primary/10 text-primary"
-                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                      )}
+                            {m.role === "user" && m.artifacts && m.artifacts.length > 0 && (
+                              <div className="mb-3 flex flex-wrap gap-2">
+                                {m.artifacts.map((a) => {
+                                  const storageKey = "storage_key" in a ? a.storage_key : a.savedPath || "";
+                                  const title = "original_name" in a ? a.original_name : a.title || storageKey;
+                                  const mime = "mime" in a ? a.mime : a.artType;
+                                  const downloadUrl = storageKey ? sessionDownloadUrl(conversationId, storageKey, token) : undefined;
+                                  return (
+                                    <a
+                                      key={a.id}
+                                      href={downloadUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-2 rounded-xl bg-background/40 hover:bg-background/60 px-3 py-1.5 text-xs text-foreground/90 transition-colors border border-border/40 shadow-sm"
                                     >
-                                      <div className="flex flex-col">
-                                        <span>{t("chat.tools.compact")}</span>
-                                        <span className="text-[0.68rem] text-muted-foreground/75 font-normal">
-                                          {t("chat.tools.compact_desc")}
+                                      <Paperclip size={13} className="text-muted-foreground" />
+                                      <span className="font-medium truncate max-w-[200px]">{title}</span>
+                                      {mime && (
+                                        <span className="text-[0.714em] text-muted-foreground uppercase px-1.5 py-0.5 bg-muted/50 rounded">
+                                          {mime.split("/")[1] || mime}
                                         </span>
-                                      </div>
-                                      {toolsView === "compact" && <Check size={12} className="shrink-0 text-primary ml-2" />}
-                                    </button>
-
-                                    {/* Opzione: Parziale */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleToolsViewChange("partial");
-                                        setIsPlusOpen(false);
-                                        closePlusSubMenus();
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                        toolsView === "partial"
-                                          ? "bg-primary/10 text-primary"
-                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                                       )}
-                                    >
-                                      <span>{t("chat.tools.partial")}</span>
-                                      {toolsView === "partial" && <Check size={12} className="shrink-0 text-primary" />}
-                                    </button>
-
-                                    {/* Opzione: Completa */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleToolsViewChange("full");
-                                        setIsPlusOpen(false);
-                                        closePlusSubMenus();
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                        toolsView === "full"
-                                          ? "bg-primary/10 text-primary"
-                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                      )}
-                                    >
-                                      <span>{t("chat.tools.full")}</span>
-                                      {toolsView === "full" && <Check size={12} className="shrink-0 text-primary" />}
-                                    </button>
-
-                                    {/* Opzione: Nascondi */}
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleToolsViewChange("hidden");
-                                        setIsPlusOpen(false);
-                                        closePlusSubMenus();
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                        toolsView === "hidden"
-                                          ? "bg-primary/10 text-primary"
-                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                                      )}
-                                    >
-                                      <span>{t("chat.tools.hide")}</span>
-                                      {toolsView === "hidden" && <Check size={12} className="shrink-0 text-primary" />}
-                                    </button>
-                                  </div>
-                                </div>
+                                    </a>
+                                  );
+                                })}
                               </div>
                             )}
-                          </div>
 
-                          {/* Opzione: Web search > */}
-                          <div className="relative" onMouseLeave={() => setIsWebSearchSubOpen(false)}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsWebSearchSubOpen((prev) => !prev);
-                                setIsToolsViewSubOpen(false);
-                                setIsThinkingSubOpen(false);
-                              }}
-                              onMouseEnter={() => {
-                                setIsWebSearchSubOpen(true);
-                                setIsToolsViewSubOpen(false);
-                                setIsThinkingSubOpen(false);
-                              }}
-                              className={cn(
-                                "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                isWebSearchSubOpen
-                                  ? "bg-muted/60 text-foreground"
-                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                              )}
-                            >
-                              <div className="flex min-w-0 items-center gap-2">
-                                {webSearchEnabled ? (
-                                  <Globe size={12} className="shrink-0" aria-hidden />
-                                ) : (
-                                  <GlobeLock size={12} className="shrink-0" aria-hidden />
-                                )}
-                                <span className="truncate">{t("chat.web_search.global")}</span>
-                              </div>
-                              <ChevronRight size={12} className="shrink-0" aria-hidden />
-                            </button>
-
-                            {isWebSearchSubOpen ? (
-                              <div className="absolute bottom-full left-0 z-50 pb-1.5 w-44 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
-                                <div
-                                  onMouseEnter={() => setIsWebSearchSubOpen(true)}
-                                  className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
-                                >
-                                  <div className="border-b border-border/45 px-2 py-1 text-[0.714em] font-semibold text-muted-foreground">
-                                    {t("chat.web_search.global")}
-                                  </div>
-                                  <div className="space-y-0.5 p-0.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        persistWebSearchEnabled(false);
-                                        setIsPlusOpen(false);
-                                        closePlusSubMenus();
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                        !webSearchEnabled
-                                          ? "bg-primary/10 text-primary"
-                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                                      )}
-                                    >
-                                      <span>{t("chat.web_search.off_short")}</span>
-                                      {!webSearchEnabled ? (
-                                        <Check size={12} className="shrink-0 text-primary" />
-                                      ) : null}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        persistWebSearchEnabled(true);
-                                        setIsPlusOpen(false);
-                                        closePlusSubMenus();
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                        webSearchEnabled
-                                          ? "bg-primary/10 text-primary"
-                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                                      )}
-                                    >
-                                      <span>{t("chat.web_search.on_short")}</span>
-                                      {webSearchEnabled ? (
-                                        <Check size={12} className="shrink-0 text-primary" />
-                                      ) : null}
-                                    </button>
-                                  </div>
+                            {m.role === "user" && editingMessageId === m.id ? (
+                              <div className="flex flex-col gap-3">
+                                <div className="relative flex flex-col rounded-[24px] border border-border/50 bg-card/60 p-2 shadow-sm backdrop-blur-xl focus-within:ring-1 focus-within:ring-border/80 hover:border-border/80 transition-colors">
+                                  <textarea
+                                    value={editInput}
+                                    onChange={(e) => setEditInput(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" && !e.shiftKey) {
+                                        e.preventDefault();
+                                        void handleSaveEdit(m.id);
+                                      }
+                                    }}
+                                    placeholder={t("chat.edit.placeholder")}
+                                    className="focus-ring chat-font min-h-[80px] flex-1 w-full resize-none rounded-[20px] border-0 bg-transparent px-4 py-3 text-foreground placeholder:text-muted-foreground focus-visible:ring-0"
+                                  />
+                                </div>
+                                <div className="flex justify-end gap-2 text-xs">
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingMessageId(null)}
+                                    className="rounded-lg border border-border/60 bg-muted/10 px-3 py-1.5 text-muted-foreground hover:bg-muted/40 hover:text-foreground transition-all duration-200"
+                                  >
+                                    {t("btn.cancel")}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={!editInput.trim() || streaming}
+                                    onClick={() => handleSaveEdit(m.id)}
+                                    className="rounded-lg bg-primary px-3 py-1.5 text-primary-foreground hover:bg-primary/90 transition-all duration-200 disabled:opacity-50"
+                                  >
+                                    {t("chat.edit.save_send")}
+                                  </button>
                                 </div>
                               </div>
-                            ) : null}
-                          </div>
-
-                          {/* Opzione: Thinking > */}
-                          <div className="relative" onMouseLeave={() => setIsThinkingSubOpen(false)}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setIsThinkingSubOpen((prev) => !prev);
-                                setIsToolsViewSubOpen(false);
-                                setIsWebSearchSubOpen(false);
-                              }}
-                              onMouseEnter={() => {
-                                setIsThinkingSubOpen(true);
-                                setIsToolsViewSubOpen(false);
-                                setIsWebSearchSubOpen(false);
-                              }}
-                              className={cn(
-                                "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                isThinkingSubOpen || thinkingEnabled
-                                  ? "bg-muted/60 text-foreground"
-                                  : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                              )}
-                            >
-                              <div className="flex min-w-0 items-center gap-2">
-                                <Sparkles size={12} className="shrink-0" aria-hidden />
-                                <span className="truncate">{t("chat.thinking.label")}</span>
-                              </div>
-                              <ChevronRight size={12} className="shrink-0" aria-hidden />
-                            </button>
-
-                            {isThinkingSubOpen ? (
-                              <div className="absolute bottom-full left-0 z-50 pb-1.5 w-44 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
-                                <div
-                                  onMouseEnter={() => setIsThinkingSubOpen(true)}
-                                  className="w-full rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
-                                >
-                                  <div className="border-b border-border/45 px-2 py-1 text-[0.714em] font-semibold text-muted-foreground">
-                                    {t("chat.thinking.label")}
-                                  </div>
-                                  <div className="space-y-0.5 p-0.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleToggleThinking(false);
-                                        setIsPlusOpen(false);
-                                        closePlusSubMenus();
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                        !thinkingEnabled
-                                          ? "bg-primary/10 text-primary"
-                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                                      )}
-                                    >
-                                      <span>{t("chat.thinking.disable")}</span>
-                                      {!thinkingEnabled ? (
-                                        <Check size={12} className="shrink-0 text-primary" />
-                                      ) : null}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleToggleThinking(true);
-                                        handleReasoningEffortChange("min");
-                                        setIsPlusOpen(false);
-                                        closePlusSubMenus();
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                        thinkingEnabled && reasoningEffort === "min"
-                                          ? "bg-primary/10 text-primary"
-                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                                      )}
-                                    >
-                                      <span>{t("chat.thinking.min")}</span>
-                                      {thinkingEnabled && reasoningEffort === "min" ? (
-                                        <Check size={12} className="shrink-0 text-primary" />
-                                      ) : null}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleToggleThinking(true);
-                                        handleReasoningEffortChange("medium");
-                                        setIsPlusOpen(false);
-                                        closePlusSubMenus();
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                        thinkingEnabled && reasoningEffort === "medium"
-                                          ? "bg-primary/10 text-primary"
-                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                                      )}
-                                    >
-                                      <span>{t("chat.thinking.med")}</span>
-                                      {thinkingEnabled && reasoningEffort === "medium" ? (
-                                        <Check size={12} className="shrink-0 text-primary" />
-                                      ) : null}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        handleToggleThinking(true);
-                                        handleReasoningEffortChange("max");
-                                        setIsPlusOpen(false);
-                                        closePlusSubMenus();
-                                      }}
-                                      className={cn(
-                                        "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                        thinkingEnabled && reasoningEffort === "max"
-                                          ? "bg-primary/10 text-primary"
-                                          : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                                      )}
-                                    >
-                                      <span>{t("chat.thinking.max")}</span>
-                                      {thinkingEnabled && reasoningEffort === "max" ? (
-                                        <Check size={12} className="shrink-0 text-primary" />
-                                      ) : null}
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
-                            ) : null}
-                          </div>
-
-
-                          <div className="my-1 border-t border-border/45" />
-                          <button
-                            type="button"
-                            className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors text-left border border-transparent hover:border-primary/20"
-                            onClick={() => {
-                              setWebRestrictDraft([...webRestrictHosts]);
-                              setWebRestrictInput("");
-                              setWebRestrictInputError(null);
-                              setWebRestrictModalOpen(true);
-                              setIsPlusOpen(false);
-                              closePlusSubMenus();
-                            }}
-                          >
-                            <Settings size={12} className="shrink-0" aria-hidden />
-                            <span className="truncate">{t("chat.web_search.advanced")}</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Pulsante Profilo con Dropdown Opzioni */}
-                    <div ref={profileMenuRef} className="relative">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setIsProfileOpen((prev) => !prev);
-                          setIsPlusOpen(false);
-                          closePlusSubMenus();
-                          setIsAgentModeOpen(false);
-                        }}
-                        className={cn(
-                          "focus-ring inline-flex h-7 max-w-[9rem] items-center gap-1 rounded-full border px-2.5 text-[0.786em] font-medium transition-colors sm:max-w-[10rem]",
-                          isProfileOpen
-                            ? "border-primary/45 bg-primary/10 text-primary"
-                            : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
-                        )}
-                      >
-                        <User size={12} className="shrink-0" aria-hidden />
-                        <span className="max-w-[5.5rem] truncate sm:max-w-[7.5rem]">
-                          {activeProfileName || t("chat.profile.label")}
-                        </span>
-                        <ChevronDown size={10} className="opacity-70" aria-hidden />
-                      </button>
-
-                      {isProfileOpen && (
-                        <div className="absolute bottom-full left-0 mb-2 z-50 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-                          <div className="border-b border-border/45 px-2.5 py-1.5 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
-                            {t("chat.profile.select")}
-                          </div>
-                          <p className="px-2.5 py-1 text-[0.714em] leading-snug text-muted-foreground">
-                            {t("chat.profile.active_hint")}
-                          </p>
-                          <div className="max-h-52 overflow-y-auto p-0.5">
-                            {profiles.map((p) => {
-                              const slug = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
-                              const isSelected = p.slug === profile || p.name === profile;
-                              const isFavorite = favoriteProfileSlug === slug;
-                              return (
-                                <ComposerOptionRow
-                                  key={p.name}
-                                  label={p.name}
-                                  description={p.description}
-                                  selected={isSelected}
-                                  onClick={() => {
-                                    handleProfileChange(slug);
-                                    setIsProfileOpen(false);
-                                  }}
-                                  trailing={
-                                    <button
-                                      type="button"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        void handleSetFavoriteProfile(slug);
-                                      }}
-                                      className={cn(
-                                        "focus-ring rounded p-0.5 transition-colors",
-                                        isFavorite
-                                          ? "text-amber-500 hover:text-amber-600"
-                                          : "text-muted-foreground/50 hover:text-amber-500",
-                                      )}
-                                      aria-label={
-                                        isFavorite
-                                          ? t("chat.profile.favorite_active")
-                                          : t("chat.profile.favorite_set")
-                                      }
-                                      title={
-                                        isFavorite
-                                          ? t("chat.profile.favorite_active")
-                                          : t("chat.profile.favorite_set")
-                                      }
-                                    >
-                                      <Star
-                                        size={12}
-                                        className={cn(isFavorite && "fill-current")}
-                                        aria-hidden
-                                      />
-                                    </button>
-                                  }
+                            ) : m.role === "user" ? (
+                              <div className="prose-chat">
+                                <UserMessageMarkdown
+                                  content={m.content.trim()}
+                                  renderMarkdownLink={renderMarkdownLink}
+                                  formatTextWithCitations={formatTextWithCitations}
                                 />
-                              );
-                            })}
-                            {profiles.length === 0 ? (
-                              <div className="px-2.5 py-2 text-xs italic text-muted-foreground">
-                                {t("chat.profile.none")}
                               </div>
                             ) : null}
+                            {m.role === "assistant" && m.webSources && m.webSources.length > 0 ? (
+                              <WebSourcesBar cards={m.webSources} messageId={m.id} />
+                            ) : null}
+                            {m.role === "assistant" && m.reasoningUnavailable ? (
+                              <p className="mt-2 border-t border-border pt-2 text-[0.786em] leading-snug text-muted-foreground">
+                                {t("chat.edit.no_reasoning", { level: "min" })}
+                              </p>
+                            ) : null}
                           </div>
-                          <div className="border-t border-border/45 p-1">
-                            <Link
-                              href="/settings?tab=user-md"
-                              className="focus-ring flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-xs font-medium text-muted-foreground transition hover:bg-muted/55 hover:text-foreground"
-                              onClick={() => setIsProfileOpen(false)}
+
+                          {m.role === "user" && editingMessageId !== m.id ? (
+                            <div
+                              className={cn(
+                                "mt-1 flex items-center justify-end gap-2 pr-2 select-none transition-opacity duration-150",
+                                isLastUser
+                                  ? "opacity-100"
+                                  : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 focus-within:opacity-100"
+                              )}
                             >
-                              <Settings size={12} className="shrink-0" aria-hidden />
-                              <span>{t("chat.profile.customize")}</span>
-                            </Link>
-                          </div>
+                              {!streaming ? (
+                                <div className="flex items-center gap-1">
+                                  {isLastUser && !m.archived ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleStartEdit(m)}
+                                      className="inline-flex items-center gap-1 rounded-lg p-1.5 text-xs text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+                                      title={t("chat.edit.tooltip")}
+                                    >
+                                      <Pencil size={14} aria-hidden />
+                                    </button>
+                                  ) : null}
+                                  <MessageActions
+                                    messageId={m.id}
+                                    copyText={m.content}
+                                    className="pr-1"
+                                    pinned
+                                  />
+                                </div>
+                              ) : null}
+                              {m.createdAt ? (
+                                <span className="text-[11px] font-medium tabular-nums text-muted-foreground/60">
+                                  {formatMessageTime(m.createdAt)}
+                                </span>
+                              ) : null}
+                            </div>
+                          ) : null}
+
+                          {m.role === "assistant" && !streaming && !isMemorizationMessage(m.content) ? (
+                            <div className="mt-0.5 flex flex-col items-start justify-start pl-1 w-full">
+                              <div
+                                className={cn(
+                                  "flex items-center gap-2.5 w-full max-w-[min(92%,48rem)] pr-2 transition-opacity duration-150",
+                                  (m.id === lastAssistantMessageId && messages[messages.length - 1]?.id === m.id)
+                                    ? "opacity-100"
+                                    : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 focus-within:opacity-100"
+                                )}
+                              >
+                                {(() => {
+                                  const assistantTime = m.completedAt || m.createdAt;
+                                  const formattedTime = formatMessageTime(assistantTime);
+                                  let durationMs = m.durationMs;
+                                  if (durationMs == null && assistantTime) {
+                                    for (let i = msgIdx - 1; i >= 0; i--) {
+                                      if (visibleMessages[i]?.role === "user" && visibleMessages[i]?.createdAt) {
+                                        const start = new Date(visibleMessages[i].createdAt!).getTime();
+                                        const end = new Date(assistantTime).getTime();
+                                        if (!isNaN(start) && !isNaN(end) && end >= start) {
+                                          const diff = end - start;
+                                          if (diff >= 100 && diff < 7200_000) {
+                                            durationMs = diff;
+                                          }
+                                        }
+                                        break;
+                                      }
+                                    }
+                                  }
+                                  const formattedDuration = formatTurnDuration(durationMs);
+                                  if (!formattedTime) return null;
+                                  return (
+                                    <div className="flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground/60 select-none">
+                                      <span className="tabular-nums">{formattedTime}</span>
+                                      {formattedDuration && (
+                                        <>
+                                          <span className="opacity-40">·</span>
+                                          <span className="font-mono text-[10.5px] opacity-75">{formattedDuration}</span>
+                                        </>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                                <MessageActions
+                                  messageId={m.id}
+                                  copyText={extractAssistantCopyText(m)}
+                                  rating={messageRatings[m.id] ?? null}
+                                  onRate={handleMessageRate}
+                                  onRegenerate={handleRegenerate}
+                                  showRegenerate={
+                                    m.id === lastAssistantMessageId &&
+                                    messages[messages.length - 1]?.id === m.id
+                                  }
+                                  pinned
+                                  onMemorize={() => handleMemorize(m.id)}
+                                />
+                              </div>
+                              {activeCommentBoxId === m.id && (
+                                <div className="mt-3 w-full max-w-xl p-4 sm:p-5 rounded-2xl bg-card border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.08)] flex flex-col gap-4 relative">
+                                  {/* Header */}
+                                  <div className="flex items-center justify-between shrink-0">
+                                    <div className="flex items-center gap-2 font-bold text-xs text-rose-400">
+                                      <ThumbsDown className="w-4 h-4 text-rose-500 fill-current" />
+                                      {t("chat.actions.feedback_title")}
+                                    </div>
+                                    <button
+                                      onClick={() => setActiveCommentBoxId(null)}
+                                      className="p-1 text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-lg transition-colors cursor-pointer"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+
+                                  {/* Textarea Wrapper */}
+                                  <div className="relative w-full">
+                                    <textarea
+                                      id={`feedback-textarea-${m.id}`}
+                                      placeholder={t("chat.actions.feedback_placeholder")}
+                                      className="w-full min-h-[85px] text-xs bg-black/40 border border-white/10 hover:border-white/20 focus:border-rose-500 rounded-xl p-3 pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-rose-500/30 resize-none transition-all placeholder:text-muted-foreground/75"
+                                      defaultValue={m.feedbackComment ?? ""}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter" && !e.shiftKey) {
+                                          e.preventDefault();
+                                          const text = (e.target as HTMLTextAreaElement).value;
+                                          handleMessageComment(m.id, text);
+                                          setActiveCommentBoxId(null);
+                                        }
+                                      }}
+                                    />
+                                  </div>
+
+                                  {/* Footer Actions */}
+                                  <div className="flex items-center justify-end gap-2 shrink-0">
+                                    <button
+                                      onClick={() => {
+                                        handleMessageRate(m.id, null);
+                                        setActiveCommentBoxId(null);
+                                      }}
+                                      className="px-4 py-1.5 text-xs font-semibold rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-gray-300 transition-all cursor-pointer"
+                                    >
+                                      {t("chat.actions.feedback_cancel")}
+                                    </button>
+                                    <button
+                                      onClick={() => {
+                                        const el = document.getElementById(`feedback-textarea-${m.id}`) as HTMLTextAreaElement;
+                                        if (el) {
+                                          handleMessageComment(m.id, el.value);
+                                        }
+                                        setActiveCommentBoxId(null);
+                                      }}
+                                      className="px-5 py-1.5 text-xs font-bold rounded-full bg-rose-500 hover:bg-rose-600 text-white transition-all shadow-md shadow-rose-500/20 cursor-pointer"
+                                    >
+                                      {t("chat.actions.feedback_submit")}
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ) : null}
+
+                          {memorizingMessageId === m.id && streaming ? (
+                            <div className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
+                              <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary mt-0.5" />
+                              <div className="flex-1">
+                                <div className="font-semibold">{t("chat.agent_status.saving_info")}</div>
+                                <div className="text-xs text-muted-foreground">{t("chat.agent_status.saving_info_desc")}</div>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          {(() => {
+                            const memorizationMsgs = messages.filter(
+                              (msg) => msg.metadata?.memorized_message_id === m.id
+                            );
+                            if (memorizationMsgs.length === 0) return null;
+                            return memorizationMsgs.map((mm) => (
+                              <div key={mm.id} className="chat-font flex items-start gap-2.5 rounded-2xl border border-border/40 bg-muted/25 px-4 py-3 text-muted-foreground max-w-[min(92%,42rem)] my-1 shadow-sm mr-auto mt-2">
+                                <Brain size={16} className="mt-0.5 shrink-0 text-primary" aria-hidden />
+                                <div className="flex-1">
+                                  <InternalMessageMarkdown
+                                    content={mm.content.trim()}
+                                    streaming={streaming}
+                                    renderMarkdownLink={renderMarkdownLink}
+                                    formatTextWithCitations={formatTextWithCitations}
+                                  />
+                                </div>
+                              </div>
+                            ));
+                          })()}
+                        </div>
+                      );
+                    })
+                    : null}
+                  {chatView.kind === "main" && streamRecovery ? (
+                    <div
+                      className="mx-auto mb-3 flex max-w-3xl items-center gap-2 rounded-xl border border-border/60 bg-muted/30 px-4 py-2.5 text-sm"
+                      role="status"
+                      aria-live="polite"
+                    >
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                      <AgentWorkingShimmer label={t("chat.stream_recovery")} />
+                    </div>
+                  ) : null}
+                  {showMainTurnVisual && turnVisual ? (
+                    <div className="mr-auto mt-0.5 w-full max-w-4xl min-h-[3.5rem] bg-transparent px-5 pt-0 pb-3 chat-font text-foreground">
+                      {isSavingInfo ? (
+                        <StatusProgressCard
+                          className="mb-3"
+                          icon={Database}
+                          title={t("chat.agent_status.saving_info")}
+                          subtitle={t("chat.agent_status.saving_info_desc")}
+                        />
+                      ) : showAgentWorkingShimmer ? (
+                        <AgentWorkingShimmer label={agentWorkingLabel} />
+                      ) : null}
+
+                      {!isSavingInfo && (
+                        <TurnTimeline
+                          key={streamEpoch}
+                          segments={turnVisual.segments}
+                          toolsView={toolsView}
+                          streaming={streaming}
+                          conversationId={conversationId}
+                          token={token}
+                          isPlanArtifact={isPlanArtifact}
+                          renderMarkdownLink={renderMarkdownLink}
+                          formatTextWithCitations={formatTextWithCitations}
+                          messageId={activeMessageId || undefined}
+                        />
+                      )}
+                      {turnVisual.webSourceCards.length > 0 && activeMessageId ? (
+                        <WebSourcesBar
+                          cards={turnVisual.webSourceCards}
+                          messageId={activeMessageId}
+                        />
+                      ) : null}
+                    </div>
+                  ) : null}
+                  {(postTurnCharts.length > 0 || postTurnFiles.length > 0) && (
+                    <div className="mr-auto mt-2 w-full max-w-4xl rounded-2xl border border-border bg-card/40 px-5 py-4 shadow-sm">
+                      <SessionCharts charts={postTurnCharts} />
+                      {postTurnFiles.length > 0 && (
+                        <div className="mt-3 text-xs">
+                          <div className="mb-1 font-medium text-muted-foreground">{t("chat.session_files_new")}</div>
+                          <ul className="list-inside list-disc space-y-1">
+                            {postTurnFiles.map((f) => (
+                              <li key={f.rp}>
+                                <a
+                                  className="focus-ring rounded text-primary underline-offset-2 hover:underline"
+                                  href={sessionDownloadUrl(conversationId, f.rp, token)}
+                                >
+                                  {f.label}
+                                </a>
+                              </li>
+                            ))}
+                          </ul>
                         </div>
                       )}
                     </div>
-
-
-                    {showProjectMemory && (
-                      <ProjectMemoryChip
-                        userId={userId}
-                        token={token}
-                        profileSlug={activeProfileSlug}
-                        projectSlug={sqlQueryProject}
-                        onOpenPanel={() => setDockTab("memory")}
-                      />
-                    )}
-
-                    <AgentModeSelectChip
-                      mode={agentMode}
-                      onChange={handleAgentModeChange}
-                      open={isAgentModeOpen}
-                      onOpenChange={(open) => {
-                        setIsAgentModeOpen(open);
-                        if (open) {
-                          setIsPlusOpen(false);
-                          closePlusSubMenus();
-                          setIsProfileOpen(false);
-                        }
-                      }}
-                      onAfterSelect={(mode) => {
-                        if (mode === "deep_research") setDockTab("research");
-                      }}
-                    />
-
-                    <ContextBudgetGauge
-                      pct={contextBudget?.pct ?? 0}
-                      triggerPct={
-                        contextBudget && contextBudget.maxPrompt > 0
-                          ? Math.min(100, (contextBudget.trigger / contextBudget.maxPrompt) * 100)
-                          : 92
-                      }
-                      unavailable={!contextBudget}
-                      active={contextBudgetOpen}
-                      onClick={() => setContextBudgetOpen((open) => !open)}
-                    />
-                  </div>
-
-                  {/* Altri controlli a destra */}
-                  <div className="ml-auto flex shrink-0 items-center gap-2">
-                    {mcpAlertCount > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setMcpPendingOpen(true)}
-                        className={cn(
-                          "focus-ring flex items-center gap-1 rounded-full border px-2.5 py-1 text-[0.786em] font-medium",
-                          mcpRuntimeErrors.length > 0
-                            ? "border-red-500/50 bg-red-500/15 text-red-800 dark:text-red-200"
-                            : "border-amber-500/50 bg-amber-500/15 text-amber-800 dark:text-amber-200"
-                        )}
-                        title={t("integrationsPage.composer_pending")}
-                      >
-                        <AlertTriangle size={14} aria-hidden className="text-red-800" />
-                        <span className={mcpRuntimeErrors.length > 0 ? "text-red-800" : "text-amber-800"}>
-                          {mcpAlertCount}
-                        </span>
-                      </button>
-                    )}
-                    {streaming ? (
-                      <button
-                        type="button"
-                        onClick={stop}
-                        className="focus-ring inline-flex size-8 items-center justify-center rounded-full bg-destructive/20 text-destructive transition-colors hover:bg-destructive/30"
-                      >
-                        <Square size={12} aria-hidden fill="currentColor" />
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => void send()}
-                        disabled={
-                          !input.trim() ||
-                          isProjectRequiredButMissing ||
-                          sendBlockedByUploads
-                        }
-                        title={
-                          sendBlockedByUploads ? t("chat.upload.send_blocked") : undefined
-                        }
-                        className="focus-ring inline-flex size-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all duration-200 hover:scale-105 hover:bg-primary/95 disabled:pointer-events-none disabled:opacity-30"
-                      >
-                        <Send size={13} aria-hidden />
-                      </button>
-                    )}
-                  </div>
+                  )}
                 </div>
               </div>
-              <div className="mt-3 text-center text-[0.857em] font-medium text-muted-foreground">
-                {t("chat.footer_hint")}
+
+              <div className="relative z-20 min-w-0 shrink-0 bg-transparent px-3 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none transition-all duration-300 ease-out">
+                <div className="mx-auto w-full min-w-0 max-w-3xl">
+                  {renderComposer()}
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </ChatDragDrop>
       <ProjectCreateModal

@@ -107,13 +107,13 @@
       }
     },
     "runtime": {
-        "loading": "Loading runtime settings…",
-        "hint": "Env values are the starting defaults. Changes apply to the next turn.",
-        "reset_all": "Reset all",
-        "reset_field": "Reset field",
-        "server_default": "Server default: {{value}}",
-        "profile_cap": "This profile limits agent steps to {{value}}.",
-        "composer_thinking_hint": "Turn Thinking on/off and choose min/med/max from the + menu in the chat box.",
+      "loading": "Loading runtime settings…",
+      "hint": "Env values are the starting defaults. Changes apply to the next turn.",
+      "reset_all": "Reset all",
+      "reset_field": "Reset field",
+      "server_default": "Server default: {{value}}",
+      "profile_cap": "This profile limits agent steps to {{value}}.",
+      "composer_thinking_hint": "Turn Thinking on/off and choose min/med/max from the + menu in the chat box.",
       "group": {
         "loop": "Agent loop",
         "generation": "Generation",
@@ -476,15 +476,16 @@
       "favorite_active": "Default profile"
     },
     "agent_mode": {
-      "select": "Agent mode",
+      "label": "Agent mode",
+      "select": "Select agent mode",
       "soon": "Soon",
       "beta": "Beta",
       "normal": "Normal",
-      "normal_desc": "Balanced chat — tools and memory as configured.",
-      "plan": "Plan",
+      "normal_desc": "Standard chat — tools and memory as configured.",
+      "plan": "Plan / Task Plan",
       "plan_desc": "Break work into steps before executing.",
-      "deep_research": "Deep research",
-      "deep_research_desc": "Longer research runs with the research panel.",
+      "deep_research": "Deep Research",
+      "deep_research_desc": "Autonomous web research with dedicated panel.",
       "ask": "Ask",
       "ask_desc": "Read-only answers without tool side effects.",
       "debug": "Debug",
@@ -492,8 +493,10 @@
     },
     "model": {
       "label": "Model",
-      "select": "Select Model",
+      "select": "Select LLM Model",
       "switch": "Switch Model",
+      "default": "System default",
+      "default_desc": "Use primary configured LLM model",
       "default_hint": "Default model for this server."
     },
     "capabilities": {
@@ -508,9 +511,10 @@
       "skill_pending": "Pending"
     },
     "empty": {
+      "greeting_user": "What's on your mind, {{name}}?",
       "title": "What can I help you with?",
-      "subtitle": "Ask anything, attach a file, or turn on web search. Answers stream in as they're written.",
-      "subtitle_profile": "You're on the {{profile}} profile. Ask anything, attach files, or enable web search — replies stream live.",
+      "subtitle": "Ask anything, attach a file, or turn on web search — answers stream in real time.",
+      "subtitle_profile": "Active profile: {{profile}}. Ask anything, attach files, or kick off a task.",
       "hint_attach": "Drag files here or use + to attach",
       "suggestions": {
         "explain": "Explain a hard concept simply",
@@ -618,6 +622,7 @@
     "session_files_new": "New session files",
     "remove_file": "Remove {{name}}",
     "upload": {
+      "button": "Upload attachment",
       "uploading": "Uploading… {{progress}}%",
       "done": "Upload complete",
       "failed": "Upload failed",

@@ -53,37 +53,37 @@ export function ModelSelectChip({
         type="button"
         onClick={() => onOpenChange(!open)}
         className={cn(
-          "focus-ring inline-flex h-8 max-w-[11rem] items-center gap-1.5 rounded-full border px-3 text-[0.786em] font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] sm:max-w-[13rem]",
+          "focus-ring inline-flex h-7 max-w-[10rem] items-center gap-1.5 rounded-full px-2.5 text-xs font-semibold transition-all duration-200 hover:scale-[1.01] active:scale-[0.99] sm:max-w-[12rem]",
           open || selectedSlug
-            ? "border-primary/40 bg-primary/10 text-primary"
-            : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground",
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
         )}
         title={t("chat.model.select")}
       >
         {loading ? (
           <Loader2 size={12} className="shrink-0 animate-spin" aria-hidden />
         ) : (
-          <Sparkles size={12} className="shrink-0" aria-hidden />
+          <Sparkles size={12} className="shrink-0 text-primary/80" aria-hidden />
         )}
         <span className="truncate">
           {selected?.display_name || t("chat.model.label")}
         </span>
-        <ChevronDown size={10} className="shrink-0 opacity-70" aria-hidden />
+        <ChevronDown size={10} className="shrink-0 opacity-60" aria-hidden />
       </button>
 
       {open ? (
         <div
           className={cn(
-            "absolute left-0 z-50 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 duration-150",
+            "absolute left-0 z-50 w-[min(100vw-2rem,17rem)] rounded-2xl border border-black/10 dark:border-white/10 bg-card/90 dark:bg-card/85 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-200",
             placement === "below"
               ? "top-full mt-2 slide-in-from-top-2"
               : "bottom-full mb-2 slide-in-from-bottom-2",
           )}
         >
-          <div className="border-b border-border/45 px-2.5 py-1.5 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
+          <div className="border-b border-border/40 px-2.5 py-1.5 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
             {t("chat.model.select")}
           </div>
-          <div className="max-h-56 overflow-y-auto p-0.5">
+          <div className="max-h-56 overflow-y-auto p-0.5 custom-scrollbar">
             {loading ? (
               <div className="flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground">
                 <Loader2 size={12} className="animate-spin" />

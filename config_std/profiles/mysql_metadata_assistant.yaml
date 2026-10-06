@@ -14,7 +14,6 @@ instructions: |
 skills:
   - core_protocol
   - artifact_protocol
-  - openmetadata_guide
   - datasource_memory_protocol
   - charts_generation
 critical_skills:
@@ -22,8 +21,7 @@ critical_skills:
   - artifact_protocol
   - datasource_memory_protocol
 mcp_servers:
-  - toolbox-mysql
-  - openmetadata
+  - mssql
   - skills_hub
   - session_sandbox
   - query_memory

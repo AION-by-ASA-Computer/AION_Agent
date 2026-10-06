@@ -1,74 +1,64 @@
 "use client";
 
-import { Paperclip, Sparkles } from "lucide-react";
-
+import { useMemo } from "react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 
-const SUGGESTION_KEYS = [
-  "chat.empty.suggestions.explain",
-  "chat.empty.suggestions.plan",
-  "chat.empty.suggestions.attach",
-  "chat.empty.suggestions.research",
-] as const;
-
 export function ChatEmptyState({
-  onSuggestion,
   profileName,
+  userDisplayName,
   className,
 }: {
-  onSuggestion?: (text: string) => void;
   profileName?: string;
+  userDisplayName?: string;
   className?: string;
 }) {
   const t = useT();
 
+  const firstName = useMemo(() => {
+    if (!userDisplayName) return "";
+    const cleaned = userDisplayName.trim();
+    if (!cleaned) return "";
+    const first = cleaned.split(/\s+/)[0];
+    if (!first) return "";
+    return first.charAt(0).toUpperCase() + first.slice(1);
+  }, [userDisplayName]);
+
+  const greeting = useMemo(() => {
+    if (firstName) {
+      const template = t("chat.empty.greeting_user", { name: firstName });
+      if (template && template !== "chat.empty.greeting_user") {
+        return template;
+      }
+      return `E ora, ${firstName}?`;
+    }
+    return t("chat.empty.title");
+  }, [firstName, t]);
+
   return (
     <div
       className={cn(
-        "flex min-h-[min(52vh,28rem)] flex-col items-center justify-center px-4 py-10 text-center sm:px-6",
+        "relative flex flex-col items-center justify-center text-center px-4 select-none animate-in fade-in-0 zoom-in-95 duration-500",
         className,
       )}
     >
+      {/* Ambient glowing radial aura in the center */}
       <div
-        className="mb-5 flex size-14 items-center justify-center rounded-full border border-primary/15 bg-primary/8 shadow-[0_0_40px_-12px_hsl(var(--primary)/0.45)]"
+        className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-64 w-[min(92vw,38rem)] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20 blur-[90px] transition-all duration-700 dark:bg-primary/[0.24] dark:blur-[110px]"
         aria-hidden
-      >
-        <Sparkles className="size-6 text-primary" />
-      </div>
+      />
 
-      <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[1.65rem]">
-        {t("chat.empty.title")}
-      </h2>
+      {/* Main Hero Title - Gemini Style */}
+      <h1 className="text-3xl font-medium tracking-tight text-foreground/95 sm:text-4xl md:text-[2.6rem] transition-all duration-300 drop-shadow-xs">
+        {greeting}
+      </h1>
 
-      <p className="mt-2.5 max-w-md text-sm leading-relaxed text-muted-foreground">
+      {/* Subtle Subtitle */}
+      <p className="mt-2.5 max-w-lg text-sm leading-relaxed text-muted-foreground/80 font-normal">
         {profileName
           ? t("chat.empty.subtitle_profile", { profile: profileName })
           : t("chat.empty.subtitle")}
       </p>
-
-      <div className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/25 px-3 py-1 text-[0.786em] text-muted-foreground">
-        <Paperclip size={12} aria-hidden />
-        <span>{t("chat.empty.hint_attach")}</span>
-      </div>
-
-      <div className="mt-8 grid w-full max-w-2xl grid-cols-1 gap-2.5 sm:grid-cols-2">
-        {SUGGESTION_KEYS.map((key) => {
-          const text = t(key);
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => onSuggestion?.(text)}
-              className="group rounded-2xl border border-border/70 bg-card/35 px-4 py-3.5 text-left text-sm text-foreground shadow-sm backdrop-blur-sm transition hover:border-primary/35 hover:bg-card/60 hover:shadow-md"
-            >
-              <span className="block leading-snug text-foreground/90 group-hover:text-foreground">
-                {text}
-              </span>
-            </button>
-          );
-        })}
-      </div>
     </div>
   );
 }

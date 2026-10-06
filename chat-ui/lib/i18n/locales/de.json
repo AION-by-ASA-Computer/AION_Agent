@@ -338,7 +338,10 @@
     "model": {
       "label": "Modell",
       "select": "Modell auswählen",
-      "switch": "Modell wechseln"
+      "switch": "Modell wechseln",
+      "default": "Systemstandard",
+      "default_desc": "Haupt-LLM-Modell verwenden",
+      "default_hint": "Standardmodell für diesen Server."
     },
     "capabilities": {
       "label": "Werkzeuge & Fähigkeiten",

@@ -172,11 +172,39 @@ class AgentProfile:
         self.critical_skills = critical_skills
         self.max_agent_steps = max_agent_steps
 
+    def resolved_skills(self) -> List[str]:
+        """Expands glob/wildcard patterns (e.g. 'monge_*') against available skills in the registry."""
+        import fnmatch
+
+        all_names = skill_registry.get_all_names()
+        out: List[str] = []
+        seen = set()
+        for item in (self.skills or []):
+            if "*" in item or "?" in item:
+                for match in sorted(fnmatch.filter(all_names, item)):
+                    if match not in seen:
+                        seen.add(match)
+                        out.append(match)
+            else:
+                if item not in seen:
+                    seen.add(item)
+                    out.append(item)
+        return out
+
     def _resolved_critical_skill_names(self) -> frozenset:
+        import fnmatch
+
+        all_names = skill_registry.get_all_names()
         if self.critical_skills is None:
             base = DEFAULT_CRITICAL_SKILL_NAMES
         else:
-            base = frozenset(self.critical_skills)
+            base_set = set()
+            for item in (self.critical_skills or []):
+                if "*" in item or "?" in item:
+                    base_set.update(fnmatch.filter(all_names, item))
+                else:
+                    base_set.add(item)
+            base = frozenset(base_set)
         return ALWAYS_CRITICAL_SKILL_NAMES | base
 
     def generate_system_prompt(
@@ -225,9 +253,11 @@ class AgentProfile:
         except Exception:
             pass
 
+        active_skills = self.resolved_skills()
+
         if mode == "full":
             parts.append("\n## Skills and rules")
-            for skill_name in self.skills:
+            for skill_name in active_skills:
                 actual_name = resolve_skill_alias(skill_name)
 
                 body = skill_registry.get_skill_full(actual_name)
@@ -238,7 +268,7 @@ class AgentProfile:
 
             # 1. Critical full content (core_protocol always; see ALWAYS_CRITICAL_SKILL_NAMES)
             inlined_critical: set[str] = set()
-            for skill_name in self.skills:
+            for skill_name in active_skills:
                 if skill_name in critical_skills:
                     actual_name = resolve_skill_alias(skill_name)
 
@@ -254,14 +284,14 @@ class AgentProfile:
                         inlined_critical.add(skill_name)
 
             for skill_name in sorted(critical_skills - inlined_critical):
-                if skill_name not in self.skills:
+                if skill_name not in active_skills:
                     body = skill_registry.get_skill_full(skill_name)
                     if body:
                         parts.append(f"\n### Protocol rules ({skill_name})\n{body}")
                         inlined_critical.add(skill_name)
 
             # 2. Others as summaries
-            other_skills = [s for s in self.skills if s not in critical_skills]
+            other_skills = [s for s in active_skills if s not in critical_skills]
             summaries = skill_registry.list_summaries(allowed_names=other_skills)
             if summaries:
                 parts.append("\n## Other available skills")
