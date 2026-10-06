@@ -246,7 +246,7 @@ export function ThreadSidebar({
         <button
           type="button"
           onClick={onToggleCollapse}
-          className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted/60"
+          className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
           aria-label={t("sidebar.expand")}
           title={t("sidebar.expand")}
         >
@@ -256,14 +256,14 @@ export function ThreadSidebar({
         <button
           type="button"
           onClick={startNewChat}
-          className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:bg-primary/90"
+          className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/25 transition-all duration-300 ease-out hover:scale-105 hover:shadow-lg hover:shadow-primary/35 active:scale-95"
           aria-label={t("sidebar.new_conversation")}
           title={t("sidebar.new_conversation")}
         >
           <MessageSquarePlus className="h-4 w-4" aria-hidden />
         </button>
 
-        <nav className="flex flex-col items-center gap-1">
+        <nav className="flex flex-col items-center gap-1.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active =
@@ -277,9 +277,9 @@ export function ThreadSidebar({
                   aria-label={item.label}
                   onClick={openTuningsPanel}
                   className={cn(
-                    "inline-flex h-9 w-9 items-center justify-center rounded-md transition",
+                    "inline-flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200",
                     active
-                      ? "bg-primary/10 text-foreground"
+                      ? "bg-primary/10 text-primary dark:bg-white/10 dark:text-foreground border border-primary/15 dark:border-white/10"
                       : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )}
                 >
@@ -295,9 +295,9 @@ export function ThreadSidebar({
                 aria-label={item.label}
                 onClick={() => closeTunings()}
                 className={cn(
-                  "inline-flex h-9 w-9 items-center justify-center rounded-md transition",
+                  "inline-flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200",
                   active
-                    ? "bg-primary/10 text-foreground"
+                    ? "bg-primary/10 text-primary dark:bg-white/10 dark:text-foreground border border-primary/15 dark:border-white/10"
                     : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                 )}
               >
@@ -307,7 +307,7 @@ export function ThreadSidebar({
           })}
         </nav>
 
-        <div className="mt-auto flex flex-col items-center gap-2 border-t border-sidebar-border/60 pt-3">
+        <div className="mt-auto flex flex-col items-center gap-2 border-t border-sidebar-border/45 pt-3">
           <SidebarProfileMenu
             profileLabel={profileLabel}
             profileSubtitle={profileSubtitle}
@@ -324,14 +324,14 @@ export function ThreadSidebar({
   return (
     <aside className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="shrink-0">
-        <div className="flex items-center justify-between px-4 pb-3 pt-4">
+        <div className="flex items-center justify-between px-4 pb-3 pt-3.5">
           <div className="min-w-0 flex-1">
             <ChatBrand className="max-w-[120px]" />
           </div>
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+            className="rounded-xl p-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
             aria-label={t("sidebar.collapse")}
             title={t("sidebar.collapse")}
           >
@@ -339,32 +339,36 @@ export function ThreadSidebar({
           </button>
         </div>
 
-        <div className="px-3">
+        <div className="px-3 pt-1">
           <button
             type="button"
             onClick={startNewChat}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+            className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary/95 to-primary px-3.5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all duration-300 ease-out hover:scale-[1.02] hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98]"
           >
-            <MessageSquarePlus className="h-4 w-4" aria-hidden />
-            {t("sidebar.new_conversation")}
+            <div
+              className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
+              aria-hidden
+            />
+            <MessageSquarePlus className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" aria-hidden />
+            <span>{t("sidebar.new_conversation")}</span>
           </button>
         </div>
 
-        <nav className="mt-4 flex flex-col gap-0.5 px-2">
+        <nav className="mt-3.5 flex flex-col gap-1 px-2.5">
           {navItems.map((item) => {
             const Icon = item.icon;
             const active =
               item.section === "tunings" ? tuningsOpen : !tuningsOpen && activeSection === item.section;
             const className = cn(
-              "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition",
+              "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-300 ease-out",
               active
-                ? "bg-primary/10 font-medium text-foreground"
-                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                ? "bg-primary/10 text-primary dark:bg-white/10 dark:text-foreground border border-primary/15 dark:border-white/10 shadow-2xs font-semibold"
+                : "text-muted-foreground hover:translate-x-1 hover:bg-muted/50 hover:text-foreground dark:hover:bg-white/[0.06]",
             );
             if (item.section === "tunings") {
               return (
                 <button key={item.section} type="button" onClick={openTuningsPanel} className={className}>
-                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                  <Icon className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110" aria-hidden />
                   <span className="truncate">{item.label}</span>
                 </button>
               );
@@ -376,7 +380,7 @@ export function ThreadSidebar({
                 onClick={() => closeTunings()}
                 className={className}
               >
-                <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                <Icon className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110" aria-hidden />
                 <span className="truncate">{item.label}</span>
               </Link>
             );
@@ -385,36 +389,36 @@ export function ThreadSidebar({
       </div>
 
       {tuningsOpen ? (
-        <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-sidebar-border/70 pt-4">
+        <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-sidebar-border/45 pt-3">
           <SidebarTuningsPanel tab={tuningsTab} onTabChange={setTuningsTab} />
         </div>
       ) : (
         <>
-      <div className="mt-3 shrink-0 px-3 pb-2">
-        <div className="flex items-center gap-2 rounded-lg border border-sidebar-border bg-background/40 px-2 py-1.5 focus-within:border-primary/50">
-          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder={t("sidebar.search_placeholder")}
-            className="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
-            aria-label={t("sidebar.search_placeholder")}
-          />
-          {searchQuery ? (
-            <button
-              type="button"
-              onClick={() => setSearchQuery("")}
-              className="rounded p-0.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
-              aria-label={t("btn.cancel")}
-            >
-              <X className="h-3 w-3" aria-hidden />
-            </button>
-          ) : null}
-        </div>
-      </div>
+          <div className="mt-3 shrink-0 px-3 pb-2">
+            <div className="flex items-center gap-2 rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-background/50 dark:bg-card/40 px-2.5 py-1.5 backdrop-blur-md transition-all duration-200 focus-within:border-primary/50 focus-within:shadow-[0_0_12px_rgba(var(--primary-rgb),0.12)]">
+              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder={t("sidebar.search_placeholder")}
+                className="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+                aria-label={t("sidebar.search_placeholder")}
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="rounded p-0.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+                  aria-label={t("btn.cancel")}
+                >
+                  <X className="h-3 w-3" aria-hidden />
+                </button>
+              ) : null}
+            </div>
+          </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">{conversationList}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-width:thin]">{conversationList}</div>
         </>
       )}
 
@@ -425,7 +429,7 @@ export function ThreadSidebar({
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-1 mt-3 flex items-center gap-1.5 px-2 text-[0.786em] font-semibold uppercase tracking-wider text-primary">
+    <div className="mb-1 mt-3.5 flex items-center gap-1.5 px-3 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground/80">
       {children}
     </div>
   );
@@ -463,7 +467,7 @@ function ConversationRow({
 
   if (isEditing) {
     return (
-      <div className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-muted/40 px-2 py-1.5 shadow-[0_0_12px_rgba(var(--primary-rgb),0.08)]">
+      <div className="flex items-center gap-1.5 rounded-xl border border-primary/30 bg-muted/40 px-2.5 py-1.5 shadow-[0_0_12px_rgba(var(--primary-rgb),0.08)]">
         <input
           type="text"
           value={editTitle}
@@ -512,7 +516,7 @@ function ConversationRow({
 
   if (isConfirmingDelete) {
     return (
-      <div className="flex items-center justify-between rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-rose-200 animate-in fade-in zoom-in-95 duration-150">
+      <div className="flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-rose-200 animate-in fade-in zoom-in-95 duration-150">
         <span className="truncate pr-1 text-xs font-medium text-rose-400/90">
           {t("sidebar.delete_confirm")}
         </span>
@@ -524,14 +528,14 @@ function ConversationRow({
               setConfirmDeleteId(null);
               void onRefresh();
             }}
-            className="rounded bg-rose-500 px-2 py-0.5 text-[0.714em] font-semibold uppercase tracking-wider text-white shadow-sm transition-all duration-150 hover:bg-rose-600"
+            className="rounded-lg bg-rose-500 px-2 py-0.5 text-[0.714em] font-semibold uppercase tracking-wider text-white shadow-sm transition-all duration-150 hover:bg-rose-600"
           >
             {t("btn.yes")}
           </button>
           <button
             type="button"
             onClick={() => setConfirmDeleteId(null)}
-            className="rounded bg-muted px-1.5 py-0.5 text-[0.714em] font-semibold uppercase tracking-wider text-foreground transition-all duration-150 hover:bg-muted/80"
+            className="rounded-lg bg-muted px-1.5 py-0.5 text-[0.714em] font-semibold uppercase tracking-wider text-foreground transition-all duration-150 hover:bg-muted/80"
           >
             {t("btn.no")}
           </button>
@@ -543,10 +547,10 @@ function ConversationRow({
   return (
     <div
       className={cn(
-        "group relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition",
-        isActive
-          ? "bg-sidebar-accent text-sidebar-foreground"
-          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+        "group relative flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-sm transition-all duration-200 ease-out",
+        isActive || menuOpen
+          ? "bg-primary/10 text-primary dark:bg-white/10 dark:text-foreground border border-primary/15 dark:border-white/10 shadow-2xs font-medium"
+          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground dark:hover:bg-white/[0.05]",
       )}
     >
       <Link
@@ -561,19 +565,20 @@ function ConversationRow({
         title={displayTitle}
       >
         {favorite ? (
-          <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" aria-hidden />
+          <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-hidden />
         ) : null}
-        <span className="truncate">{displayTitle}</span>
+        <span className="truncate transition-transform duration-200 group-hover:translate-x-0.5">{displayTitle}</span>
       </Link>
 
-      <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className={cn("flex items-center gap-0.5 transition-opacity duration-200", menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
         <button
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             onToggleFavorite?.(conv.id, favorite);
             void onRefresh();
           }}
-          className="rounded p-1 hover:bg-muted/80"
+          className="rounded-lg p-1 hover:bg-muted/80 transition-colors"
           title={favorite ? t("sidebar.remove_favorite") : t("sidebar.add_favorite")}
           aria-label={favorite ? t("sidebar.remove_favorite") : t("sidebar.add_favorite")}
         >
@@ -586,8 +591,14 @@ function ConversationRow({
         </button>
         <button
           type="button"
-          onClick={() => setMenuOpen((v) => !v)}
-          className="rounded p-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMenuOpen((v) => !v);
+          }}
+          className={cn(
+            "rounded-lg p-1 transition-colors",
+            menuOpen ? "bg-muted/80 text-foreground" : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          )}
           title={t("sidebar.chat_options")}
           aria-label={t("sidebar.chat_options")}
         >
@@ -597,35 +608,39 @@ function ConversationRow({
 
       {menuOpen ? (
         <>
-          <button
-            type="button"
+          <div
             className="fixed inset-0 z-40"
-            aria-label={t("btn.cancel")}
-            onClick={() => setMenuOpen(false)}
+            aria-hidden
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen(false);
+            }}
           />
-          <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-xl border border-border bg-popover/95 p-1.5 text-popover-foreground shadow-xl backdrop-blur-md">
+          <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-2xl border border-black/10 dark:border-white/10 bg-popover/95 dark:bg-card/95 p-1.5 text-popover-foreground shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-150">
             <button
               type="button"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 setEditingId(conv.id);
                 setEditTitle(conv.title || "");
                 setMenuOpen(false);
               }}
-              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-foreground dark:hover:bg-white/10 transition-colors"
             >
-              <Edit3 size={12} />
-              {t("sidebar.rename")}
+              <Edit3 size={13} className="shrink-0 opacity-80" />
+              <span>{t("sidebar.rename")}</span>
             </button>
             <button
               type="button"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 setConfirmDeleteId(conv.id);
                 setMenuOpen(false);
               }}
-              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-rose-500 hover:bg-rose-500/10 hover:text-rose-400"
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-medium text-rose-500 hover:bg-rose-500/10 hover:text-rose-400 transition-colors"
             >
-              <Trash2 size={12} />
-              {t("sidebar.delete")}
+              <Trash2 size={13} className="shrink-0" />
+              <span>{t("sidebar.delete")}</span>
             </button>
           </div>
         </>

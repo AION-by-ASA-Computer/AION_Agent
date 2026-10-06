@@ -528,9 +528,9 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={handleLogout}
-                    className="focus-ring inline-flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 px-4 py-2.5 text-xs font-semibold text-destructive transition hover:bg-destructive/10"
+                    className="focus-ring inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 dark:bg-red-500/15 px-4 py-2.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 dark:hover:bg-red-500/25 transition-colors cursor-pointer"
                   >
-                    <LogOut className="h-4 w-4" aria-hidden />
+                    <LogOut className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden />
                     {t("settings.btn.logout")}
                   </button>
                 </SettingsCard>

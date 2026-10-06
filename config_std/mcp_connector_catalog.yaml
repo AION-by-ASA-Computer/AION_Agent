@@ -368,3 +368,52 @@ connectors:
       #     IMAP_PORT: "${AION_USER_EMAIL_MCP_SERVER__IMAP_PORT}"
       #     SMTP_HOST: "${AION_USER_EMAIL_MCP_SERVER__SMTP_HOST}"
       #     SMTP_PORT: "${AION_USER_EMAIL_MCP_SERVER__SMTP_PORT}"
+
+  - id: mssql
+    title: Microsoft SQL Server (MSSQL)
+    category: database
+    install_type: stdio
+    default_credential_mode: per_user
+    description: >
+      Server MCP per Microsoft SQL Server (supporta SQL Server 2017/2019/2022 e Azure SQL).
+      Consente l'esecuzione di query SQL in lettura sicura (SELECT), l'esplorazione di schemi, tabelle, viste, stored procedure e relazioni.
+    tags: [mssql, sqlserver, database, sql]
+    mcp_name_hints: [mssql, sqlserver, mssql-server, mssql_mcp_server]
+    credential_fields:
+      - { key: MSSQL_SERVER, label: "Server / Host (es. 127.0.0.1 o host.docker.internal)", secret: false, required: true }
+      - { key: MSSQL_PORT, label: "Porta (es. 1433)", secret: false, required: true }
+      - { key: MSSQL_DATABASE, label: "Database (es. ASACONTRB)", secret: false, required: true }
+      - { key: MSSQL_USER, label: "Utente (es. sa)", secret: false, required: true }
+      - { key: MSSQL_PASSWORD, label: "Password", secret: true, required: true }
+    official_doc_url: https://github.com/PiyapatRag/mssql-mcp-server
+    mcp_upstream_docs_url: https://github.com/PiyapatRag/mssql-mcp-server/blob/main/README.md
+    registry_search_hint: mssql sqlserver mcp
+    required_env:
+      - MSSQL_SERVER
+      - MSSQL_PORT
+      - MSSQL_DATABASE
+      - MSSQL_USER
+      - MSSQL_PASSWORD
+    optional_env:
+      - MSSQL_ENCRYPT
+      - MSSQL_TRUST_SERVER_CERTIFICATE
+      - NODE_TLS_REJECT_UNAUTHORIZED
+    approval_status: aion_recommended
+    example_registry_block: |
+      mssql:
+        command: npx
+        args:
+        - --quiet
+        - -y
+        - '@piyapat/mssql-mcp-server'
+        aion_connector_id: mssql
+        description: Server MCP MSSQL (Model Context Protocol) per interrogazione e introspezione SQL Server
+        env:
+          MSSQL_SERVER: "${AION_USER_MSSQL__MSSQL_SERVER}"
+          MSSQL_PORT: "${AION_USER_MSSQL__MSSQL_PORT}"
+          MSSQL_DATABASE: "${AION_USER_MSSQL__MSSQL_DATABASE}"
+          MSSQL_USER: "${AION_USER_MSSQL__MSSQL_USER}"
+          MSSQL_PASSWORD: "${AION_USER_MSSQL__MSSQL_PASSWORD}"
+          MSSQL_ENCRYPT: "false"
+          MSSQL_TRUST_SERVER_CERTIFICATE: "true"
+          NODE_TLS_REJECT_UNAUTHORIZED: "0"

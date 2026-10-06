@@ -1,12 +1,30 @@
 "use client";
-import React from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useT } from "@/lib/i18n/use-t";
 import { resolvePlanEditorMarkdown, orchestrationPlanToMarkdown } from "@/lib/sse/planDisplay";
 import {
   fetchPlanExecutionResult,
   subscribePlanExecutionStream,
+  resumePlanExecution,
+  startPlanExecution,
 } from "@/lib/api/plan-execution";
 import {
+  Target,
+  BookOpen,
+  FileCode,
+  CheckCircle2,
+  Circle,
+  Loader2,
+  PauseCircle,
+  Check,
+  X,
+  Plus,
+  ArrowRight,
+  ExternalLink,
+  Workflow,
+  Sparkles,
+  FileText,
+  ListTodo,
   Type,
   Heading1,
   Heading2,
@@ -14,13 +32,19 @@ import {
   CheckSquare,
   Code as CodeIcon,
   List as ListIcon,
-  Loader2,
+  Clock,
+  Play,
+  RotateCw,
 } from "lucide-react";
-/**
- * Task plan sidebar V4: editor markdown a blocchi come superficie primaria (goal/contesto/avanzamento);
- * anteprima Goal/Task collassabile solo lettura; post-decisione e polling come V3.
- */
-/* eslint-disable react-hooks/set-state-in-effect -- sync props/revision/markdown: refactor tracked separately */
+import { cn } from "@/lib/cn";
+
+function formatDuration(sec) {
+  if (sec == null || sec <= 0) return "0s";
+  const m = Math.floor(sec / 60);
+  const s = sec % 60;
+  if (m === 0) return `${s}s`;
+  return `${m}m ${s}s`;
+}
 
 function escapeHtml(s) {
   return String(s || "")
@@ -32,8 +56,7 @@ function escapeHtml(s) {
 
 function renderInlineMd(raw) {
   let t = escapeHtml(raw || "");
-  t = t.replace(/`([^`]+)`/g, '<code style="font-family:ui-monospace,monospace;font-size:0.9em;padding:0 4px;border-radius:4px;background:hsl(var(--muted)/0.6)">$1</code>');
-  // Global passes so multiple **segments** on one line render correctly.
+  t = t.replace(/`([^`]+)`/g, '<code class="font-mono text-[0.88em] px-1.5 py-0.5 rounded bg-muted/60 text-foreground">$1</code>');
   let prev = "";
   while (prev !== t) {
     prev = t;
@@ -42,21 +65,23 @@ function renderInlineMd(raw) {
   t = t.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<em>$1</em>");
   t = t.replace(
     /\[([^\]]+)\]\((https?:[^)\s]+)\)/g,
-    '<a href="$2" target="_blank" rel="noopener noreferrer" style="color:hsl(var(--primary));text-decoration:underline">$1</a>'
+    '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-primary underline underline-offset-2">$1</a>'
   );
   return t;
 }
 
-function MdSpan({ text, ...rest }) {
-  return <span dangerouslySetInnerHTML={{ __html: renderInlineMd(text || "") }} {...rest} />;
+function MdSpan({ text, className = "", ...rest }) {
+  return (
+    <span
+      className={className}
+      dangerouslySetInnerHTML={{ __html: renderInlineMd(text || "") }}
+      {...rest}
+    />
+  );
 }
-
-
-
 
 const generateId = () => Math.random().toString(36).substr(2, 9);
 
-/** Stable React keys across markdown re-parses (avoids editor flicker on poll/SSE refresh). */
 function blockStableId(block, index) {
   const head = String(block.content || "").slice(0, 80);
   return `b-${index}-${block.type}-${head.length}-${head.replace(/\s+/g, " ").trim()}`;
@@ -72,7 +97,7 @@ const parseTaskLine = (content, checked) => {
   const idm = /`([^`]+)`/.exec(normalized || "");
   const id = idm ? idm[1].trim() : "";
   const tm = /\*\*([^*]+)\*\*/.exec(normalized || "");
-  const title = tm ? tm[1].trim() : (normalized || "").trim();
+  const title = tm ? tm[1].trim() : (normalized || "").replace(/^`[^`]+`\s*/, "").trim();
   const dm = /\(deps:\s*([^)]+)\)/.exec(normalized || "");
   const depsRaw = dm ? dm[1].trim() : "";
   const deps =
@@ -82,7 +107,6 @@ const parseTaskLine = (content, checked) => {
   return { id, title, deps, checked, normalized };
 };
 
-/** Canonical checkbox body for backend SSOT (`task_01` + bold title + deps). */
 const formatCanonicalTaskContent = (content, taskIndex, depsOverride) => {
   const meta = parseTaskLine(content, false);
   const id =
@@ -115,10 +139,15 @@ const serializeBlocksToCanonicalMarkdown = (blks) => {
         case "h3":
           inTasksSection = false;
           return `### ${b.content}`;
-        case "task":
+        case "task": {
           taskIndex += 1;
           inTasksSection = true;
-          return `- [${b.checked ? "x" : " "}] ${formatCanonicalTaskContent(b.content, taskIndex)}`;
+          const main = `- [${b.checked ? "x" : " "}] ${formatCanonicalTaskContent(b.content, taskIndex)}`;
+          if (b.description && b.description.trim()) {
+            return `${main}\n  - Description: ${b.description.trim()}`;
+          }
+          return main;
+        }
         case "list":
           if (inTasksSection) {
             taskIndex += 1;
@@ -173,7 +202,7 @@ const todosFromBlocks = (blks) => {
     todos.push({
       id,
       title: meta.title || stripLegacyTaskMeta(b.content) || `Task ${taskIndex}`,
-      description: "",
+      description: (b.description || "").trim(),
       status: checked ? "done" : "pending",
       depends_on: meta.deps,
       target_profile: "",
@@ -200,6 +229,7 @@ export default function TaskPlanManagerV4(props) {
     executionProgress,
     selectedTaskId,
     onPlanApproved,
+    onPlanRejected,
     onFinalSummary,
     onExecutionAdoptHandled,
     onTaskSelect,
@@ -207,6 +237,8 @@ export default function TaskPlanManagerV4(props) {
 
   const planId = (rawPlanId || "").trim();
   const sessionId = (rawSessionId || "").trim();
+
+  const [planViewTab, setPlanViewTab] = useState("overview"); // "overview" | "document"
 
   const extractSection = (md, header) => {
     const lines = (md || "").split("\n");
@@ -236,6 +268,13 @@ export default function TaskPlanManagerV4(props) {
     let currentCodeBlock = null;
     let blockIndex = 0;
 
+    const snapshotDescMap = {};
+    (planSnapshot?.tasks || []).forEach((t) => {
+      if (t?.id && t?.description) {
+        snapshotDescMap[String(t.id)] = String(t.description).trim();
+      }
+    });
+
     const pushBlock = (block) => {
       const prev = prevBlocks[blockIndex];
       const stable =
@@ -245,7 +284,11 @@ export default function TaskPlanManagerV4(props) {
         Boolean(prev.checked) === Boolean(block.checked)
           ? prev.id
           : blockStableId(block, blockIndex);
-      newBlocks.push({ ...block, id: stable });
+      const description =
+        prev && prev.id === stable && prev.description !== undefined
+          ? prev.description
+          : (block.description !== undefined ? block.description : "");
+      newBlocks.push({ ...block, id: stable, description });
       blockIndex += 1;
     };
 
@@ -267,6 +310,20 @@ export default function TaskPlanManagerV4(props) {
         return;
       }
 
+      // Check if line is a description of the previous task block
+      if (/^\s*-\s*Description:/i.test(line) || /^\s*Description:/i.test(line) || (/^\s{2,}-\s*/.test(line) && newBlocks.length > 0 && newBlocks[newBlocks.length - 1]?.type === "task")) {
+        const cleanDesc = line
+          .replace(/^\s*-\s*Description:\s*/i, "")
+          .replace(/^\s*Description:\s*/i, "")
+          .replace(/^\s{2,}-\s*(?:Description:\s*)?/i, "")
+          .trim();
+        if (newBlocks.length > 0 && newBlocks[newBlocks.length - 1]?.type === "task") {
+          const last = newBlocks[newBlocks.length - 1];
+          last.description = last.description ? `${last.description}\n${cleanDesc}` : cleanDesc;
+        }
+        return;
+      }
+
       if (line.startsWith("# ")) {
         pushBlock({ type: "h1", content: line.slice(2) });
       } else if (line.startsWith("## ")) {
@@ -275,8 +332,11 @@ export default function TaskPlanManagerV4(props) {
         pushBlock({ type: "h3", content: line.slice(4) });
       } else if (/^\s*-\s*\[[ xX]\]\s/.test(line)) {
         const checked = /^\s*-\s*\[[xX]\]/.test(line);
-        const content = stripLegacyTaskMeta(line.replace(/^\s*-\s*\[[ xX]\]\s*/, ""));
-        pushBlock({ type: "task", content, checked });
+        let content = stripLegacyTaskMeta(line.replace(/^\s*-\s*\[[ xX]\]\s*/, ""));
+        content = content.replace(/\s*-\s*Description:.*$/i, "").trim();
+        const meta = parseTaskLine(content, checked);
+        const initialDesc = meta?.id && snapshotDescMap[meta.id] ? snapshotDescMap[meta.id] : "";
+        pushBlock({ type: "task", content, checked, description: initialDesc });
       } else if (line.startsWith("- ")) {
         pushBlock({ type: "list", content: line.slice(2) });
       } else if (trimmed !== "") {
@@ -298,8 +358,13 @@ export default function TaskPlanManagerV4(props) {
             return `## ${b.content}`;
           case "h3":
             return `### ${b.content}`;
-          case "task":
-            return `- [${b.checked ? "x" : " "}] ${b.content}`;
+          case "task": {
+            const main = `- [${b.checked ? "x" : " "}] ${b.content}`;
+            if (b.description && b.description.trim()) {
+              return `${main}\n  - Description: ${b.description.trim()}`;
+            }
+            return main;
+          }
           case "list":
             return `- ${b.content}`;
           case "code":
@@ -316,55 +381,71 @@ export default function TaskPlanManagerV4(props) {
     let lastId = null;
     const lines = (md || "").split("\n");
     const taskLine = /^\s*-\s*\[[ xX]\]\s*`([^`]+)`/;
-    const descLine = /^\s*-\s*Description:\s*(.+)$/;
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
       const tm = taskLine.exec(line);
       if (tm) {
         lastId = tm[1].trim();
         continue;
       }
-      const dm = descLine.exec(line);
-      if (dm && lastId) map[lastId] = dm[1].trim();
+      if (lastId && (/^\s*-\s*Description:\s*/i.test(line) || /^\s*Description:\s*/i.test(line))) {
+        const clean = line.replace(/^\s*-\s*Description:\s*/i, "").replace(/^\s*Description:\s*/i, "").trim();
+        if (clean) {
+          map[lastId] = clean;
+          lastId = null;
+        }
+      } else if (lastId && /^\s{2,}-\s*(.+)/.test(line)) {
+        const clean = line.replace(/^\s{2,}-\s*(?:Description:\s*)?/i, "").trim();
+        if (clean) {
+          map[lastId] = clean;
+          lastId = null;
+        }
+      }
     }
     return map;
   };
 
-  const [blocks, setBlocks] = React.useState([]);
-  const [focusedId, setFocusedId] = React.useState(null);
-  const [statusMsg, setStatusMsg] = React.useState("");
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [showSlashMenu, setShowSlashMenu] = React.useState(null);
-  const [baseMarkdown, setBaseMarkdown] = React.useState("");
-  const [lastAppliedRevision, setLastAppliedRevision] = React.useState(0);
-  const [revisionNotice, setRevisionNotice] = React.useState("");
-  const [isLocked, setIsLocked] = React.useState(false);
-  const [userDecision, setUserDecision] = React.useState(null);
-  const [previewExpanded, setPreviewExpanded] = React.useState(false);
-  const [showCompleted, setShowCompleted] = React.useState(false);
-  const [planSnapshot, setPlanSnapshot] = React.useState(initialPlan || {});
-  const [hlTask, setHlTask] = React.useState((hlProp || "").trim());
-  const [executionLabel, setExecutionLabel] = React.useState("");
-  const [executionActivities, setExecutionActivities] = React.useState([]);
-  const [executionStatus, setExecutionStatus] = React.useState("");
-  const [executionDeliverablePath, setExecutionDeliverablePath] = React.useState("");
+  const [blocks, setBlocks] = useState([]);
+  const [focusedId, setFocusedId] = useState(null);
+  const [statusMsg, setStatusMsg] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSlashMenu, setShowSlashMenu] = useState(null);
+  const [baseMarkdown, setBaseMarkdown] = useState("");
+  const [lastAppliedRevision, setLastAppliedRevision] = useState(0);
+  const [revisionNotice, setRevisionNotice] = useState("");
+  const [isLocked, setIsLocked] = useState(false);
+  const [userDecision, setUserDecision] = useState(null);
+  const [planSnapshot, setPlanSnapshot] = useState(initialPlan || {});
+  const [hlTask, setHlTask] = useState((hlProp || "").trim());
+  const [executionLabel, setExecutionLabel] = useState("");
+  const [executionActivities, setExecutionActivities] = useState([]);
+  const [executionStatus, setExecutionStatus] = useState("");
+  const [executionDeliverablePath, setExecutionDeliverablePath] = useState("");
+  const [expandedTasks, setExpandedTasks] = useState({});
 
-  // Undo/Redo history stack refs
-  const historyRef = React.useRef([]);
-  const historyPointerRef = React.useRef(-1);
-  const isUndoRedoActionRef = React.useRef(false);
-  const executionFinalHandledRef = React.useRef(false);
-  const onFinalSummaryRef = React.useRef(onFinalSummary);
-  const onExecutionAdoptHandledRef = React.useRef(onExecutionAdoptHandled);
+  const toggleTaskExpand = useCallback((taskId) => {
+    setExpandedTasks((prev) => ({
+      ...prev,
+      [taskId]: !prev[taskId],
+    }));
+  }, []);
 
-  React.useEffect(() => {
+  const historyRef = useRef([]);
+  const historyPointerRef = useRef(-1);
+  const isUndoRedoActionRef = useRef(false);
+  const executionFinalHandledRef = useRef(false);
+  const onFinalSummaryRef = useRef(onFinalSummary);
+  const onExecutionAdoptHandledRef = useRef(onExecutionAdoptHandled);
+
+  useEffect(() => {
     onFinalSummaryRef.current = onFinalSummary;
   }, [onFinalSummary]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     onExecutionAdoptHandledRef.current = onExecutionAdoptHandled;
   }, [onExecutionAdoptHandled]);
 
-  const emitExecutionFinalOnce = React.useCallback(
+  const emitExecutionFinalOnce = useCallback(
     (runId) => {
       const rid = (runId || "").trim();
       if (!rid || !userIdProp || executionFinalHandledRef.current) return;
@@ -383,21 +464,21 @@ export default function TaskPlanManagerV4(props) {
     [userIdProp, authToken, planId],
   );
 
-  React.useEffect(() => {
+  useEffect(() => {
     const h = (hlProp || "").trim();
     if (h) setHlTask(h);
   }, [hlProp]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (initialPlan && typeof initialPlan === "object") setPlanSnapshot(initialPlan);
   }, [initialPlan, revision]);
 
-  const fallbackFromPlan = React.useMemo(
+  const fallbackFromPlan = useMemo(
     () => planJsonToMarkdown(initialPlan, t),
     [initialPlan, t]
   );
 
-  const resolvedInitialMarkdown = React.useMemo(
+  const resolvedInitialMarkdown = useMemo(
     () =>
       resolvePlanEditorMarkdown(initialMarkdown, initialPlan, planLabels(t)) ||
       fallbackFromPlan ||
@@ -405,7 +486,7 @@ export default function TaskPlanManagerV4(props) {
     [initialMarkdown, initialPlan, fallbackFromPlan, t]
   );
 
-  React.useEffect(() => {
+  useEffect(() => {
     const source = resolvedInitialMarkdown;
     const incomingRev = Number(revision || 1);
     if (incomingRev <= lastAppliedRevision) return;
@@ -417,18 +498,16 @@ export default function TaskPlanManagerV4(props) {
       return;
     }
     setBlocks((prev) => {
-      const parsed = parseMarkdownToBlocks(nextMarkdown, prev);
-      return parsed;
+      return parseMarkdownToBlocks(nextMarkdown, prev);
     });
     setBaseMarkdown(nextMarkdown);
     setLastAppliedRevision(incomingRev);
     setRevisionNotice(incomingRev > 1 ? t("plan.notice.updated", { rev: incomingRev }) : "");
   }, [resolvedInitialMarkdown, revision, t]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (executionProgress) {
       setIsLocked(true);
-      setPreviewExpanded(true);
       const label = executionProgress.label || "";
       if (label) setExecutionLabel(label);
       if (executionProgress.status) setExecutionStatus(executionProgress.status);
@@ -447,86 +526,67 @@ export default function TaskPlanManagerV4(props) {
     const runId = (executionRunId || "").trim();
     if (!runId || !userIdProp) return undefined;
     setIsLocked(true);
-    setPreviewExpanded(true);
-    let cancelled = false;
+
     const unsub = subscribePlanExecutionStream(
       runId,
       userIdProp,
       authToken,
       (ev) => {
-        if (cancelled) return;
-        const label = ev.label || ev.message || "";
-        if (label) setExecutionLabel(label);
-        if (ev.status) setExecutionStatus(ev.status);
-        if (ev.task_id) setHlTask(String(ev.task_id));
-        if (ev.activities?.length) {
-          setExecutionActivities(ev.activities);
-        } else if (label) {
-          setExecutionActivities((prev) => [
-            ...prev,
-            {
-              label,
-              message: ev.message,
-              task_id: ev.task_id,
-              ts: Date.now() / 1000,
-            },
-          ].slice(-40));
-        }
-        if (ev.error) {
-          setExecutionLabel(ev.error);
-          setExecutionStatus("error");
+        if (ev.type === "plan_execution_progress") {
+          const l = ev.label || "";
+          if (l) setExecutionLabel(l);
+          if (ev.status) setExecutionStatus(ev.status);
+          const tid = ev.progress?.task_id;
+          if (tid) setHlTask(String(tid));
+          if (Array.isArray(ev.activities)) setExecutionActivities(ev.activities);
+          if (ev.done) {
+            emitExecutionFinalOnce(runId);
+          }
+        } else if (ev.type === "plan_execution_final") {
+          if (ev.deliverable_path) setExecutionDeliverablePath(ev.deliverable_path);
+          if (ev.summary && typeof onFinalSummaryRef.current === "function") {
+            onFinalSummaryRef.current(ev.summary, ev.plan_id || planId, runId);
+          }
+          if (typeof onExecutionAdoptHandledRef.current === "function") {
+            onExecutionAdoptHandledRef.current();
+          }
         }
       },
-      () => {
-        if (cancelled) return;
-        emitExecutionFinalOnce(runId);
-      },
+      () => {},
+      {
+        onRunNotFound: () => {
+          setIsLocked(false);
+        },
+      }
     );
-    return () => {
-      cancelled = true;
-      unsub();
-    };
-  }, [executionRunId, executionProgress, userIdProp, authToken, planId, emitExecutionFinalOnce]);
 
-  React.useEffect(() => {
-    executionFinalHandledRef.current = false;
-  }, [executionRunId]);
+    return () => unsub();
+  }, [executionProgress, executionRunId, userIdProp, authToken, planId, emitExecutionFinalOnce]);
 
-  React.useEffect(() => {
-    if (!executionProgress?.done) return undefined;
-    const runId = (executionRunId || "").trim();
-    if (!runId || !userIdProp) return undefined;
-    emitExecutionFinalOnce(runId);
+  useEffect(() => {
+    if (!executionProgress?.done || !executionRunId || !userIdProp) return undefined;
+    emitExecutionFinalOnce(executionRunId);
     return undefined;
   }, [executionProgress?.done, executionRunId, userIdProp, emitExecutionFinalOnce]);
 
   // Track blocks state changes for Undo/Redo history
-  React.useEffect(() => {
+  useEffect(() => {
     if (isUndoRedoActionRef.current) {
       isUndoRedoActionRef.current = false;
       return;
     }
-
     if (!blocks || blocks.length === 0) return;
-
-    // Prune the future history stack if we had undone some actions and then made a new edit
     const currentHistory = historyRef.current.slice(0, historyPointerRef.current + 1);
-
-    // Check if the current state is identical to the last state in the history stack to avoid duplicate entries
     const lastState = currentHistory[currentHistory.length - 1];
-    if (lastState && JSON.stringify(lastState) === JSON.stringify(blocks)) {
-      return;
-    }
+    if (lastState && JSON.stringify(lastState) === JSON.stringify(blocks)) return;
 
     const nextHistory = [...currentHistory, blocks];
-    if (nextHistory.length > 50) {
-      nextHistory.shift();
-    }
+    if (nextHistory.length > 50) nextHistory.shift();
     historyRef.current = nextHistory;
     historyPointerRef.current = nextHistory.length - 1;
   }, [blocks]);
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!planId || !sessionId || !apiBase) return undefined;
     let cancelled = false;
     const base = (apiBase || "").replace(/\/$/, "");
@@ -585,35 +645,47 @@ export default function TaskPlanManagerV4(props) {
     };
   }, [planId, sessionId, apiBase, authToken, userIdProp, lastAppliedRevision, baseMarkdown, isLocked, t]);
 
-  const currentMarkdown = React.useMemo(() => serializeBlocksToMarkdown(blocks), [blocks]);
+  const currentMarkdown = useMemo(() => serializeBlocksToMarkdown(blocks), [blocks]);
   const isDirty = currentMarkdown !== baseMarkdown;
 
-  const descById = React.useMemo(() => {
-    const fromLegacy = extractLegacyDescriptions(currentMarkdown);
-    const m = { ...fromLegacy };
+  const descById = useMemo(() => {
+    const m = {};
     (planSnapshot.tasks || []).forEach((t) => {
       if (t && t.id) {
         const d = String(t.description || "").trim();
         if (d) m[String(t.id)] = d;
       }
     });
+    const fromLegacy = extractLegacyDescriptions(currentMarkdown);
+    Object.assign(m, fromLegacy);
+    (blocks || []).forEach((b) => {
+      if (b.type === "task") {
+        const meta = parseTaskLine(b.content, b.checked);
+        if (meta?.id && b.description !== undefined) {
+          m[meta.id] = b.description;
+        }
+      }
+    });
     return m;
-  }, [planSnapshot, currentMarkdown]);
+  }, [planSnapshot, currentMarkdown, blocks]);
 
-  const goalText = React.useMemo(() => extractSection(currentMarkdown, t("plan.fallback.goal")), [currentMarkdown, t]);
-  const contextText = React.useMemo(() => extractSection(currentMarkdown, t("plan.fallback.context")), [currentMarkdown, t]);
-  const notesText = React.useMemo(() => extractSection(currentMarkdown, t("plan.fallback.notes")), [currentMarkdown, t]);
+  const goalText = useMemo(() => extractSection(currentMarkdown, t("plan.fallback.goal")) || extractSection(currentMarkdown, "Goal") || extractSection(currentMarkdown, "Obiettivo"), [currentMarkdown, t]);
+  const contextText = useMemo(() => extractSection(currentMarkdown, t("plan.fallback.context")) || extractSection(currentMarkdown, "Context") || extractSection(currentMarkdown, "Contesto"), [currentMarkdown, t]);
+  const deliverableText = useMemo(() => {
+    const raw = extractSection(currentMarkdown, "Deliverable") || extractSection(currentMarkdown, "Deliverables") || "";
+    return raw.replace(/^`+|`+$/g, "").trim();
+  }, [currentMarkdown]);
 
-  const taskBlocks = React.useMemo(() => (blocks || []).filter((b) => b.type === "task"), [blocks]);
-  const parsedTasks = React.useMemo(
+  const taskBlocks = useMemo(() => (blocks || []).filter((b) => b.type === "task"), [blocks]);
+  const parsedTasks = useMemo(
     () => taskBlocks.map((b) => ({ block: b, meta: parseTaskLine(b.content, b.checked) })),
     [taskBlocks]
   );
-  const completedTasks = React.useMemo(() => parsedTasks.filter((p) => p.meta.checked), [parsedTasks]);
-  const pendingTasks = React.useMemo(() => parsedTasks.filter((p) => !p.meta.checked), [parsedTasks]);
+  const completedTasks = useMemo(() => parsedTasks.filter((p) => p.meta.checked), [parsedTasks]);
+  const pendingTasks = useMemo(() => parsedTasks.filter((p) => !p.meta.checked), [parsedTasks]);
   const currentTask = pendingTasks[0] || null;
 
-  const taskProgress = React.useMemo(() => {
+  const taskProgress = useMemo(() => {
     const total = taskBlocks.length;
     const done = completedTasks.length;
     const percent = total > 0 ? Math.round((done / total) * 100) : 0;
@@ -643,11 +715,10 @@ export default function TaskPlanManagerV4(props) {
         return;
       }
       setBaseMarkdown(currentMarkdown);
-      if (path.endsWith("/approve")) setIsLocked(true);
+      if (decisionKind === "approved") setIsLocked(true);
       setUserDecision(decisionKind);
       setStatusMsg(okText);
       if (
-        path.endsWith("/approve") &&
         decisionKind === "approved" &&
         typeof onPlanApproved === "function" &&
         j &&
@@ -657,6 +728,12 @@ export default function TaskPlanManagerV4(props) {
         const pid = String(j.plan_id || planId || "").trim();
         if (rid && pid) onPlanApproved(rid, pid);
       }
+      if (
+        decisionKind === "rejected" &&
+        typeof onPlanRejected === "function"
+      ) {
+        onPlanRejected(planId);
+      }
     } catch (e) {
       setStatusMsg(t("plan.error.network", { msg: e.message }));
     } finally {
@@ -664,7 +741,7 @@ export default function TaskPlanManagerV4(props) {
     }
   };
 
-  const performUndo = React.useCallback(() => {
+  const performUndo = useCallback(() => {
     if (historyPointerRef.current > 0) {
       historyPointerRef.current -= 1;
       const prevState = historyRef.current[historyPointerRef.current];
@@ -673,7 +750,7 @@ export default function TaskPlanManagerV4(props) {
     }
   }, []);
 
-  const performRedo = React.useCallback(() => {
+  const performRedo = useCallback(() => {
     if (historyPointerRef.current < historyRef.current.length - 1) {
       historyPointerRef.current += 1;
       const nextState = historyRef.current[historyPointerRef.current];
@@ -708,38 +785,6 @@ export default function TaskPlanManagerV4(props) {
     } catch (e) {
       setStatusMsg(t("plan.error.network", { msg: e.message }));
       return false;
-    }
-  };
-
-  const onCompleteAllTasks = async () => {
-    setIsSubmitting(true);
-    setStatusMsg(t("plan.task.completing_all"));
-    const base = (apiBase || "").replace(/\/$/, "");
-    const headers = {
-      "Content-Type": "application/json",
-      "X-AION-User-Id": userIdProp || "default",
-    };
-    if (authToken) headers.Authorization = `Bearer ${authToken}`;
-    try {
-      const r = await fetch(
-        `${base}/internal/orchestration/plans/${encodeURIComponent(planId)}/tasks/complete-all`,
-        {
-          method: "POST",
-          headers,
-          body: JSON.stringify({ session_id: sessionId }),
-        }
-      );
-      const j = await r.json().catch(() => null);
-      if (!r.ok) {
-        setStatusMsg(t("plan.error.server", { code: r.status, msg: (j && j.detail) || "Unknown error" }));
-        return;
-      }
-      const n = Array.isArray(j?.completed) ? j.completed.length : 0;
-      setStatusMsg(t("plan.task.complete_all_ok", { count: n }));
-    } catch (e) {
-      setStatusMsg(t("plan.error.network", { msg: e.message }));
-    } finally {
-      setIsSubmitting(false);
     }
   };
 
@@ -868,18 +913,6 @@ export default function TaskPlanManagerV4(props) {
     );
   };
 
-  const onApproveDraft = () => {
-    postDecision(
-      `/internal/orchestration/plans/${encodeURIComponent(planId)}/approve`,
-      {
-        session_id: sessionId,
-        approve_only: true,
-      },
-      t("plan.decision.ok_approved_draft"),
-      "approved_draft"
-    );
-  };
-
   const onReject = () => {
     postDecision(
       `/internal/orchestration/plans/${encodeURIComponent(planId)}/reject`,
@@ -892,557 +925,589 @@ export default function TaskPlanManagerV4(props) {
     );
   };
 
-  const sectionBox = {
-    padding: "10px 14px",
-    borderBottom: "1px solid hsl(var(--border))",
-    fontSize: 13,
-    lineHeight: 1.55,
-    color: "hsl(var(--foreground))",
-  };
-
-  /** Anteprima sola lettura (nessun checkbox: modificare solo nell'editor a blocchi). */
-  const renderPreviewTaskCard = (p, { emphasize }) => {
-    const { meta, block } = p;
-    const desc = descById[meta.id] || "";
-    const isHl = hlTask && meta.id === hlTask;
-    const isSelected = selectedTaskId && meta.id === selectedTaskId;
-    const isCurrent = emphasize && currentTask && block.id === currentTask.block.id;
-    const clickable = !!(executionRunId && typeof onTaskSelect === "function" && meta.id);
-    const handleTaskClick = () => {
-      if (!clickable) return;
-      onTaskSelect(isSelected ? null : meta.id);
-    };
-    return (
-      <div
-        key={block.id}
-        role={clickable ? "button" : undefined}
-        tabIndex={clickable ? 0 : undefined}
-        title={clickable ? "Apri chat della task" : undefined}
-        onClick={clickable ? handleTaskClick : undefined}
-        onKeyDown={
-          clickable
-            ? (e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  handleTaskClick();
-                }
-              }
-            : undefined
-        }
-        style={{
-          marginBottom: 10,
-          padding: "10px 12px",
-          borderRadius: "calc(var(--radius, 0.875rem) - 2px)",
-          border:
-            isCurrent || isHl || isSelected
-              ? "1px solid hsl(var(--primary))"
-              : "1px solid hsl(var(--border))",
-          background: isCurrent ? "hsl(var(--muted) / 0.45)" : "hsl(var(--card))",
-          boxShadow: isHl || isSelected ? "0 0 0 2px hsl(var(--primary) / 0.25)" : "none",
-          transition: "border 0.15s ease, box-shadow 0.15s ease",
-          cursor: clickable ? "pointer" : undefined,
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
-          <div
-            aria-hidden
-            style={{
-              marginTop: 4,
-              fontSize: 11,
-              fontWeight: 700,
-              fontFamily: "ui-monospace, monospace",
-              color: "hsl(var(--muted-foreground))",
-              minWidth: 36,
-            }}
-          >
-            {meta.checked ? "[x]" : "[ ]"}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 13, letterSpacing: "-0.02em" }}>
-              <MdSpan text={meta.title} />
-              {meta.id ? (
-                <code style={{ fontWeight: 500, color: "hsl(var(--muted-foreground))", marginLeft: 8 }}>
-                  {meta.id}
-                </code>
-              ) : null}
-            </div>
-            {meta.profile ? (
-              <div style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", marginTop: 4 }}>
-                {t("plan.meta.profile")}: <MdSpan text={meta.profile} />
-              </div>
-            ) : null}
-            {meta.deps && meta.deps.length ? (
-              <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
-                {meta.deps.map((d) => (
-                  <span
-                    key={d}
-                    style={{
-                      fontSize: 10,
-                      padding: "2px 8px",
-                      borderRadius: 999,
-                      background: "hsl(var(--muted))",
-                      color: "hsl(var(--muted-foreground))",
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t("plan.meta.dep")}: {d}
-                  </span>
-                ))}
-              </div>
-            ) : null}
-            {desc ? (
-              <div style={{ marginTop: 8, fontSize: 12, color: "hsl(var(--muted-foreground))" }}>
-                <MdSpan text={desc} />
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
   if (!planId || !sessionId) {
     return (
-      <div
-        style={{
-          padding: 12,
-          fontSize: 13,
-          color: "hsl(var(--destructive))",
-          background: "hsl(var(--muted))",
-          borderRadius: "var(--radius, 0.875rem)",
-          border: "1px solid hsl(var(--border))",
-        }}
-      >
+      <div className="p-4 text-xs text-destructive bg-destructive/10 rounded-2xl border border-destructive/30 m-4">
         {t("plan.missing_props")}
       </div>
     );
   }
 
-  const decisionBanner =
-    userDecision === "approved"
-      ? t("plan.decision.approved")
-      : userDecision === "approved_draft"
-        ? t("plan.decision.approved_draft")
-        : userDecision === "rejected"
-          ? t("plan.decision.rejected")
-          : null;
+  const isExecutingPhase = Boolean(executionRunId || executionProgress);
+  const showFooterActions = userDecision === null && !isLocked && !isExecutingPhase;
 
-  const showFooterActions = userDecision === null && !isLocked;
-  const showProgressActions = isLocked;
+  const isInterruptedOrPaused =
+    isExecutingPhase &&
+    executionStatus !== "done" &&
+    executionStatus !== "running" &&
+    pendingTasks.length > 0;
+
+  const isPartialReview =
+    !isExecutingPhase &&
+    completedTasks.length > 0 &&
+    pendingTasks.length > 0;
+
+  const handleResume = async () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
+    setStatusMsg("Ripresa dell'esecuzione del piano in corso...");
+    try {
+      if (executionRunId) {
+        const res = await resumePlanExecution(executionRunId, userIdProp || "default", authToken);
+        if (res && res.status !== "error") {
+          setIsLocked(true);
+          setExecutionStatus("running");
+          setStatusMsg("Esecuzione ripresa con successo.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
+      // Try direct startPlanExecution for approved plan
+      const started = await startPlanExecution(
+        planId,
+        sessionId,
+        profileNameProp,
+        userIdProp || "default",
+        authToken
+      );
+      if (started && started.run_id) {
+        setIsLocked(true);
+        setExecutionStatus("running");
+        setStatusMsg("Esecuzione avviata con successo.");
+        setIsSubmitting(false);
+        if (typeof onPlanApproved === "function") {
+          onPlanApproved(started.run_id, planId);
+        }
+        return;
+      }
+      onApprove();
+    } catch (err) {
+      console.error("Error resuming plan execution:", err);
+      onApprove();
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const [totalElapsed, setTotalElapsed] = useState(0);
+  const executionStartTimeRef = useRef(null);
+  const taskTimingsRef = useRef({});
+  const [taskTimings, setTaskTimings] = useState({});
+
+  useEffect(() => {
+    if (!isExecutingPhase) return;
+    if (!executionStartTimeRef.current) {
+      executionStartTimeRef.current = Date.now();
+    }
+    if (executionStatus === "done" || executionStatus === "error") {
+      return;
+    }
+    const timer = setInterval(() => {
+      if (executionStartTimeRef.current) {
+        setTotalElapsed(Math.max(1, Math.round((Date.now() - executionStartTimeRef.current) / 1000)));
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [isExecutingPhase, executionStatus]);
+
+  useEffect(() => {
+    if (!isExecutingPhase) return;
+
+    parsedTasks.forEach((p) => {
+      const { meta, block } = p;
+      const tid = meta.id;
+      if (!tid) return;
+      const isDone = Boolean(block.checked || meta.checked);
+      const isCurRunning = !isDone && (hlTask === tid || (!hlTask && currentTask?.block.id === block.id));
+
+      const entry = taskTimingsRef.current[tid];
+
+      if (isCurRunning) {
+        if (!entry) {
+          taskTimingsRef.current[tid] = { start: Date.now(), done: false };
+        }
+      } else if (isDone) {
+        if (entry && !entry.done) {
+          const duration = Math.max(1, Math.round((Date.now() - entry.start) / 1000));
+          taskTimingsRef.current[tid] = { ...entry, duration, done: true };
+          setTaskTimings((prev) => ({ ...prev, [tid]: duration }));
+        }
+      }
+    });
+
+    const taskInterval = setInterval(() => {
+      const nextTimings = { ...taskTimingsRef.current };
+      const out = {};
+
+      Object.entries(nextTimings).forEach(([tid, timing]) => {
+        if (!timing) return;
+        if (timing.done) {
+          out[tid] = timing.duration;
+        } else if (timing.start) {
+          out[tid] = Math.max(1, Math.round((Date.now() - timing.start) / 1000));
+        }
+      });
+
+      setTaskTimings(out);
+    }, 1000);
+
+    return () => clearInterval(taskInterval);
+  }, [isExecutingPhase, parsedTasks, hlTask, currentTask]);
 
   return (
-    <div style={containerStyle}>
-      <div style={headerStyle}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <div style={dotStyle} />
-          <div style={{ fontWeight: 600, fontSize: 14, letterSpacing: "-0.02em", color: "hsl(var(--foreground))" }}>
-            {t("plan.title")}
+    <div className="flex flex-col h-full max-h-full bg-card/60 text-card-foreground overflow-hidden select-text">
+      {/* Top Header Section */}
+      <div className="flex flex-col gap-2 p-3.5 border-b border-black/[0.06] dark:border-white/[0.08] bg-card/70 backdrop-blur-xl shrink-0">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span
+              className={cn(
+                "size-2.5 rounded-full shrink-0",
+                isExecutingPhase
+                  ? executionStatus === "done"
+                    ? "bg-emerald-500"
+                    : "bg-orange-500 animate-pulse"
+                  : "bg-orange-500"
+              )}
+            />
+            <h3 className="font-bold text-sm text-foreground truncate">
+              {isExecutingPhase ? "Esecuzione Piano" : "Piano di Esecuzione"}
+            </h3>
           </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", fontWeight: 500 }}>
-            {taskProgress.done}/{taskProgress.total} {t("plan.tasks")} · {taskProgress.percent}%
-          </div>
-          <div
-            style={{
-              fontSize: 11,
-              color: isDirty ? "hsl(var(--chart-5))" : "hsl(var(--muted-foreground))",
-              fontWeight: 600,
-            }}
-          >
-            {(isLocked ? t("plan.status.locked") : isDirty ? t("plan.status.dirty") : t("plan.status.ok"))} · {t("plan.status.revision")} {lastAppliedRevision || revision || 1}
-          </div>
-        </div>
-      </div>
 
-      <div style={progressBarWrapStyle}>
-        <div style={{ ...progressBarFillStyle, width: `${taskProgress.percent}%` }} />
-      </div>
-
-      {executionRunId ? (
-        <div
-          style={{
-            padding: "10px 14px",
-            borderBottom: "1px solid hsl(var(--border))",
-            background: "hsl(var(--muted) / 0.35)",
-            fontSize: 12,
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: executionActivities.length ? 8 : 0 }}>
-            {executionStatus !== "done" && executionStatus !== "error" ? (
-              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
-            ) : null}
-            <span style={{ fontWeight: 600, color: "hsl(var(--foreground))" }}>
-              {executionLabel || t("plan.execution.running")}
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[11px] font-semibold text-muted-foreground">
+              {taskProgress.done}/{taskProgress.total} task · {taskProgress.percent}%
             </span>
           </div>
-          {executionDeliverablePath ? (
-            <div style={{ marginTop: 6, fontSize: 11, color: "hsl(var(--muted-foreground))" }}>
-              <span style={{ fontWeight: 600, color: "hsl(var(--foreground))" }}>
-                {t("plan.execution.deliverable")}:
-              </span>{" "}
-              <code style={{ fontFamily: "ui-monospace, monospace", fontSize: 10 }}>
-                {executionDeliverablePath}
-              </code>
-            </div>
-          ) : null}
-          {executionActivities.length ? (
-            <ul style={{ margin: 0, padding: "0 0 0 16px", color: "hsl(var(--muted-foreground))", lineHeight: 1.45 }}>
-              {executionActivities.slice(-6).map((act, i) => (
-                <li key={`${act.ts || i}-${act.label || act.message || i}`}>
-                  {act.label || act.message || ""}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null}
-
-      <div
-        style={{
-          flex: 1,
-          minHeight: 0,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            ...editorContainerStyle,
-            flex: 1,
-            minHeight: 0,
-            overflowY: "auto",
-            borderBottom: "1px solid hsl(var(--border))",
-          }}
-          onBlur={(e) => {
-            // Only clear focusedId when focus moves OUTSIDE the editor container.
-            // When moving between blocks inside the editor, relatedTarget is still
-            // inside this div, so we skip clearing to avoid the race condition.
-            if (!e.currentTarget.contains(e.relatedTarget)) {
-              setFocusedId(null);
-            }
-          }}
-        >
-          {blocks.map((block) => {
-            const taskMeta = block.type === "task" ? parseTaskLine(block.content, block.checked) : null;
-            const taskDesc = taskMeta?.id ? descById[taskMeta.id] || "" : "";
-            return (
-            <BlockNode
-              key={block.id}
-              block={block}
-              isFocused={focusedId === block.id}
-              isLocked={isLocked}
-              hlTask={hlTask}
-              taskDescription={taskDesc}
-              showSlashMenu={showSlashMenu === block.id}
-              onFocus={() => setFocusedId(block.id)}
-              updateBlock={updateBlock}
-              addBlock={addBlock}
-              removeBlock={removeBlock}
-              moveFocus={moveFocus}
-              setShowSlashMenu={setShowSlashMenu}
-              changeBlockType={changeBlockType}
-              performUndo={performUndo}
-              performRedo={performRedo}
-              t={t}
-            />
-            );
-          })}
         </div>
 
-        <div style={{ padding: "8px 12px", flexShrink: 0, borderBottom: previewExpanded ? "1px solid hsl(var(--border))" : "none" }}>
+        {/* View Switcher Tabs (Panoramica / Avanzamento vs Documento MD) */}
+        <div className="flex items-center gap-1 p-0.5 rounded-xl bg-muted/50 border border-black/[0.04] dark:border-white/[0.04]">
           <button
             type="button"
-            onClick={() => setPreviewExpanded(!previewExpanded)}
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "hsl(var(--primary))",
-              cursor: "pointer",
-              fontSize: 12,
-              fontWeight: 600,
-            }}
+            onClick={() => setPlanViewTab("overview")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-semibold transition-all",
+              planViewTab === "overview"
+                ? "bg-background text-foreground shadow-2xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
           >
-            {t("plan.preview.title")} {previewExpanded ? "▼" : "▶"}
+            <Workflow size={12} className={planViewTab === "overview" ? "text-orange-500" : ""} />
+            <span>{isExecutingPhase ? "Stato Avanzamento" : "Panoramica Piano"}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setPlanViewTab("document")}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-semibold transition-all",
+              planViewTab === "document"
+                ? "bg-background text-foreground shadow-2xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <FileText size={12} className={planViewTab === "document" ? "text-orange-500" : ""} />
+            <span>Documento MD</span>
           </button>
         </div>
-
-        {previewExpanded ? (
-          <div
-            style={{
-              maxHeight: "38vh",
-              overflowY: "auto",
-              flexShrink: 0,
-              display: "flex",
-              flexDirection: "column",
-            }}
-          >
-            <div style={{ fontSize: 10, color: "hsl(var(--muted-foreground))", padding: "6px 14px 0", fontStyle: "italic" }}>
-              {t("plan.preview.edit_hint")}
-            </div>
-            {goalText ? (
-              <div style={sectionBox}>
-                <div style={{ fontWeight: 700, fontSize: 11, textTransform: "uppercase", marginBottom: 6, opacity: 0.85 }}>
-                  {t("plan.fallback.goal")}
-                </div>
-                <div style={{ whiteSpace: "pre-wrap" }}>
-                  <MdSpan text={goalText} />
-                </div>
-              </div>
-            ) : null}
-
-            {contextText ? (
-              <div style={sectionBox}>
-                <div style={{ fontWeight: 700, fontSize: 11, textTransform: "uppercase", marginBottom: 6, opacity: 0.85 }}>
-                  {t("plan.fallback.context")}
-                </div>
-                <div style={{ whiteSpace: "pre-wrap" }}>
-                  <MdSpan text={contextText} />
-                </div>
-              </div>
-            ) : null}
-
-            <div style={{ ...sectionBox, borderBottom: notesText ? undefined : "none" }}>
-              <div style={{ fontWeight: 700, fontSize: 11, textTransform: "uppercase", marginBottom: 10, opacity: 0.85 }}>
-                {t("plan.fallback.tasks")}
-              </div>
-
-              {completedTasks.length ? (
-                <div style={{ marginBottom: 12 }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowCompleted(!showCompleted)}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: "hsl(var(--primary))",
-                      cursor: "pointer",
-                      fontSize: 12,
-                      fontWeight: 600,
-                      padding: 0,
-                      marginBottom: 8,
-                    }}
-                  >
-                    {t("plan.preview.completed")} ({completedTasks.length}) {showCompleted ? "▼" : "▶"}
-                  </button>
-                  {showCompleted ? completedTasks.map((p) => renderPreviewTaskCard(p, { emphasize: false })) : null}
-                </div>
-              ) : null}
-
-              {currentTask ? (
-                <div style={{ marginBottom: 8 }}>
-                  <div style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", marginBottom: 8, fontWeight: 600 }}>
-                    {t("plan.preview.active")}
-                  </div>
-                  {renderPreviewTaskCard(currentTask, { emphasize: true })}
-                </div>
-              ) : null}
-
-              {pendingTasks.length > 1 ? (
-                <div>
-                  <div style={{ fontSize: 11, color: "hsl(var(--muted-foreground))", marginBottom: 8, fontWeight: 600 }}>
-                    {t("plan.preview.next")}
-                  </div>
-                  {pendingTasks.slice(1).map((p) => renderPreviewTaskCard(p, { emphasize: false }))}
-                </div>
-              ) : null}
-
-              {!pendingTasks.length && !completedTasks.length ? (
-                <div style={{ fontSize: 12, color: "hsl(var(--muted-foreground))" }}>{t("plan.preview.no_tasks")}</div>
-              ) : null}
-            </div>
-
-            {notesText ? (
-              <div style={{ ...sectionBox, borderTop: "1px solid hsl(var(--border))" }}>
-                <div style={{ fontWeight: 700, fontSize: 11, textTransform: "uppercase", marginBottom: 6, opacity: 0.85 }}>
-                  {t("plan.fallback.notes")}
-                </div>
-                <div style={{ whiteSpace: "pre-wrap" }}>
-                  <MdSpan text={notesText} />
-                </div>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
       </div>
 
-      {decisionBanner ? (
-        <div style={{ ...statusBannerStyle, background: "hsl(var(--muted) / 0.5)", fontWeight: 600 }}>
-          {decisionBanner}
-        </div>
-      ) : null}
+      {/* Progress Line */}
+      <div className="h-1 w-full bg-muted/60 shrink-0">
+        <div
+          className={cn(
+            "h-full transition-all duration-300",
+            taskProgress.percent === 100
+              ? "bg-emerald-500"
+              : "bg-gradient-to-r from-orange-500 to-amber-500"
+          )}
+          style={{ width: `${taskProgress.percent}%` }}
+        />
+      </div>
 
-      {showFooterActions ? (
-        <div style={footerStyle}>
-          <button onClick={onApprove} disabled={isSubmitting} style={btnPrimaryStyle}>
-            {isSubmitting ? t("plan.actions.sending") : t("plan.actions.approve")}
-          </button>
-          <button onClick={onApproveDraft} disabled={isSubmitting} style={btnSecondaryStyle}>
-            {t("plan.actions.original")}
-          </button>
-          <button onClick={onReject} disabled={isSubmitting} style={btnDangerStyle}>
-            {t("plan.actions.reject")}
-          </button>
-          <div style={{ marginLeft: "auto", fontSize: 10, color: "hsl(var(--muted-foreground))", fontWeight: 500 }}>
-            {blocks.length} {t("plan.blocks")} · {currentMarkdown.length} {t("plan.chars")}
+      {/* Main Body Content */}
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3.5 space-y-3.5">
+        {planViewTab === "overview" ? (
+          /* ============================================================ */
+          /* UNIFIED OVERVIEW / PROGRESS VIEW (ALWAYS IMAGE 2 STYLING)   */
+          /* ============================================================ */
+          <div className="space-y-3 animate-in fade-in-0 duration-200">
+            {/* Execution / Plan Status Banner */}
+            <div className="rounded-2xl border border-orange-500/25 bg-orange-500/5 dark:bg-orange-500/10 p-3.5 backdrop-blur-md">
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  {executionStatus === "running" ? (
+                    <Loader2 className="size-4 animate-spin text-orange-500 shrink-0" />
+                  ) : executionStatus === "done" ? (
+                    <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
+                  ) : executionStatus === "error" || userDecision === "rejected" ? (
+                    <X className="size-4 text-destructive shrink-0" />
+                  ) : (isInterruptedOrPaused || isPartialReview || completedTasks.length > 0) ? (
+                    <PauseCircle className="size-4 text-amber-500 shrink-0" />
+                  ) : (
+                    <Workflow className="size-4 text-orange-500 shrink-0" />
+                  )}
+                  <span className="font-bold text-xs sm:text-sm text-foreground">
+                    {userDecision === "rejected"
+                      ? "Piano rifiutato dall'utente"
+                      : executionLabel ||
+                        (executionStatus === "done"
+                          ? "Piano completato con successo"
+                          : executionStatus === "running"
+                          ? "Esecuzione piano in corso..."
+                          : completedTasks.length > 0
+                          ? `Piano in pausa (${completedTasks.length}/${parsedTasks.length} completate)`
+                          : goalText || "Piano di esecuzione pronto")}
+                  </span>
+                </div>
+                <span
+                  className={cn(
+                    "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0",
+                    userDecision === "rejected"
+                      ? "bg-destructive/15 text-destructive border border-destructive/30"
+                      : executionStatus === "done"
+                      ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                      : executionStatus === "running"
+                      ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 animate-pulse"
+                      : (isInterruptedOrPaused || isPartialReview || completedTasks.length > 0)
+                      ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                      : "bg-muted text-muted-foreground"
+                  )}
+                >
+                  {userDecision === "rejected"
+                    ? "Rifiutato"
+                    : executionStatus === "running"
+                    ? "In corso"
+                    : executionStatus === "done"
+                    ? "Completato"
+                    : executionStatus === "error"
+                    ? "Errore"
+                    : (isInterruptedOrPaused || isPartialReview || completedTasks.length > 0)
+                    ? "In pausa"
+                    : "In attesa"}
+                </span>
+              </div>
+
+              {/* Goal or Context preview if before start */}
+              {goalText && !executionDeliverablePath && completedTasks.length === 0 ? (
+                <div className="mt-2.5 pt-2 border-t border-orange-500/15 text-xs text-muted-foreground leading-relaxed">
+                  <MdSpan text={goalText} />
+                </div>
+              ) : null}
+
+              {(executionDeliverablePath || deliverableText) ? (
+                <div className="mt-2.5 pt-2 border-t border-orange-500/15 flex items-center justify-between gap-2 text-xs">
+                  <span className="font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <FileCode size={13} className="text-orange-500" />
+                    Deliverable:
+                  </span>
+                  <code className="font-mono text-[11px] bg-background/80 px-2 py-0.5 rounded border border-border/50 text-foreground truncate max-w-[200px]">
+                    {executionDeliverablePath || deliverableText}
+                  </code>
+                </div>
+              ) : null}
+
+              {/* Compact Live Tool Activity Log */}
+              {executionActivities.length > 0 && executionStatus !== "done" ? (
+                <div className="mt-3 pt-2.5 border-t border-orange-500/15 space-y-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Attività in tempo reale
+                  </span>
+                  <ul className="space-y-1 text-xs text-muted-foreground">
+                    {executionActivities.slice(-3).map((act, i) => (
+                      <li key={`${act.ts || i}-${i}`} className="flex items-center gap-1.5 truncate">
+                        <span className="size-1.5 rounded-full bg-orange-500 animate-pulse shrink-0" />
+                        <span className="truncate">{act.label || act.message || "Operazione in corso..."}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+
+              {/* Quick Resume button inside banner when paused/interrupted */}
+              {((isInterruptedOrPaused || isPartialReview) && executionStatus !== "running" && pendingTasks.length > 0) && (
+                <div className="mt-3 pt-2.5 border-t border-orange-500/20 flex items-center justify-between gap-2">
+                  <span className="text-xs text-muted-foreground font-medium">
+                    Piano interrotto ({pendingTasks.length} task da completare)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleResume}
+                    disabled={isSubmitting}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 active:scale-[0.98] text-white font-semibold text-xs shadow-sm shadow-orange-500/20 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    {isSubmitting ? (
+                      <Loader2 className="animate-spin size-3.5" />
+                    ) : (
+                      <Play size={12} className="fill-current" />
+                    )}
+                    <span>Riprendi</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Structured Task List in Execution Style */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Avanzamento Task ({parsedTasks.length})
+                  </span>
+                  {totalElapsed > 0 ? (
+                    <span className="inline-flex items-center gap-1 font-mono text-[10.5px] font-semibold px-2 py-0.5 rounded-full bg-muted/80 text-foreground border border-black/[0.06] dark:border-white/[0.08]">
+                      <Clock size={10} className="text-orange-500" />
+                      {formatDuration(totalElapsed)}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="text-[11px] text-muted-foreground font-medium">
+                  {completedTasks.length} completate
+                </span>
+              </div>
+
+              {parsedTasks.map((p, idx) => {
+                const { meta, block } = p;
+                const isDone = Boolean(block.checked || meta.checked);
+                const isCurTarget = !isDone && (hlTask === meta.id || (!hlTask && currentTask?.block.id === block.id));
+                const isActivelyRunning = isCurTarget && executionStatus === "running";
+                const isPausedTarget = isCurTarget && !isActivelyRunning && (isInterruptedOrPaused || isPartialReview || executionStatus === "paused" || executionStatus === "interrupted" || (completedTasks.length > 0 && executionStatus !== "done"));
+                const isPending = !isDone && !isActivelyRunning && !isPausedTarget;
+                const desc = descById[meta.id] || "";
+                const isSelected = selectedTaskId && meta.id === selectedTaskId;
+                const isClickable = typeof onTaskSelect === "function";
+                const taskDuration = taskTimings[meta.id];
+                const isExpanded = Boolean(expandedTasks[meta.id]);
+                const isLongDesc = desc.length > 140;
+                const displayDesc = !isExpanded && isLongDesc ? desc.slice(0, 140).trim() + "…" : desc;
+
+                return (
+                  <div
+                    key={block.id}
+                    role={isClickable ? "button" : undefined}
+                    tabIndex={isClickable ? 0 : undefined}
+                    onClick={isClickable ? () => onTaskSelect(isSelected ? null : meta.id) : undefined}
+                    className={cn(
+                      "rounded-2xl p-3.5 transition-all duration-200 text-left relative",
+                      isActivelyRunning
+                        ? "border-2 border-orange-500 bg-orange-500/10 dark:bg-orange-500/15 shadow-md shadow-orange-500/15 ring-2 ring-orange-500/20"
+                        : isPausedTarget
+                        ? "border-2 border-amber-500/60 bg-amber-500/10 dark:bg-amber-500/15 shadow-sm"
+                        : isDone
+                        ? "border border-emerald-500/40 bg-emerald-500/5 dark:bg-emerald-500/10"
+                        : "border border-black/[0.08] dark:border-white/[0.08] bg-card/40 opacity-75 hover:opacity-100",
+                      isClickable && "cursor-pointer hover:-translate-y-0.5 hover:shadow-sm"
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      {isDone ? (
+                        <CheckCircle2 className="size-5 text-emerald-500 shrink-0 mt-0.5" />
+                      ) : isActivelyRunning ? (
+                        <Loader2 className="size-5 animate-spin text-orange-500 shrink-0 mt-0.5" />
+                      ) : isPausedTarget ? (
+                        <PauseCircle className="size-5 text-amber-500 shrink-0 mt-0.5" />
+                      ) : (
+                        <Circle className="size-5 text-muted-foreground/50 shrink-0 mt-0.5" />
+                      )}
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={cn(
+                                "font-mono text-[10px] font-bold px-1.5 py-0.5 rounded",
+                                isDone
+                                  ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                                  : isActivelyRunning
+                                  ? "bg-orange-500 text-white"
+                                  : isPausedTarget
+                                  ? "bg-amber-500 text-white"
+                                  : "bg-muted text-muted-foreground"
+                              )}
+                            >
+                              {meta.id || `task_${String(idx + 1).padStart(2, "0")}`}
+                            </span>
+                            <span
+                              className={cn(
+                                "text-xs sm:text-sm font-semibold leading-snug",
+                                isDone
+                                  ? "line-through text-foreground/85"
+                                  : isActivelyRunning || isPausedTarget
+                                  ? "text-foreground font-bold"
+                                  : "text-muted-foreground"
+                              )}
+                            >
+                              <MdSpan text={meta.title} />
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {taskDuration != null ? (
+                              <span
+                                className={cn(
+                                  "inline-flex items-center gap-1 font-mono text-[10px] font-semibold px-1.5 py-0.5 rounded-md",
+                                  isDone
+                                    ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                                    : isActivelyRunning
+                                    ? "bg-orange-500/15 text-orange-600 dark:text-orange-400"
+                                    : isPausedTarget
+                                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                                    : "bg-muted text-muted-foreground"
+                                )}
+                              >
+                                <Clock size={9} />
+                                {formatDuration(taskDuration)}
+                              </span>
+                            ) : null}
+
+                            <span
+                              className={cn(
+                                "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full",
+                                isDone
+                                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                  : isActivelyRunning
+                                  ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 border border-orange-500/30 animate-pulse"
+                                  : isPausedTarget
+                                  ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                                  : "text-muted-foreground/70 bg-muted/40"
+                              )}
+                            >
+                              {isDone
+                                ? "Completata"
+                                : isActivelyRunning
+                                ? "In corso"
+                                : isPausedTarget
+                                ? "In pausa"
+                                : "In attesa"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {desc ? (
+                          <div className="mt-1.5 text-xs text-muted-foreground leading-relaxed">
+                            <MdSpan text={displayDesc} />
+                            {isLongDesc && (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleTaskExpand(meta.id);
+                                }}
+                                className="ml-1.5 inline-flex items-center text-[11px] font-semibold text-orange-500 hover:text-orange-600 dark:hover:text-orange-400 underline underline-offset-2 transition-colors cursor-pointer"
+                              >
+                                {isExpanded ? "Comprimi" : "Espandi"}
+                              </button>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           </div>
+        ) : (
+          /* ============================================================ */
+          /* DOCUMENT TAB (FULL MARKDOWN VIEW / EDITOR)                   */
+          /* ============================================================ */
+          <div className="space-y-2 animate-in fade-in-0 duration-200">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Editor Documento Piano
+              </span>
+              <span className="text-[10px] text-muted-foreground font-mono">
+                {isLocked ? "Sola lettura" : "Modificabile"}
+              </span>
+            </div>
+
+            <div className="rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-card/60 dark:bg-card/40 p-3 space-y-2 shadow-2xs">
+              {blocks.map((block) => {
+                return (
+                  <BlockNode
+                    key={block.id}
+                    block={block}
+                    isFocused={focusedId === block.id}
+                    isLocked={isLocked}
+                    hlTask={hlTask}
+                    showSlashMenu={showSlashMenu === block.id}
+                    onFocus={() => setFocusedId(block.id)}
+                    updateBlock={updateBlock}
+                    addBlock={addBlock}
+                    removeBlock={removeBlock}
+                    moveFocus={moveFocus}
+                    setShowSlashMenu={setShowSlashMenu}
+                    changeBlockType={changeBlockType}
+                    performUndo={performUndo}
+                    performRedo={performRedo}
+                    t={t}
+                  />
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Footer Decisions Banner */}
+      {statusMsg ? (
+        <div className="p-2.5 text-xs font-medium text-muted-foreground bg-muted/40 border-t border-border/50 text-center">
+          {statusMsg}
         </div>
       ) : null}
 
-      {showProgressActions && pendingTasks.length > 0 ? (
-        <div style={footerStyle}>
+      {/* Footer Action Buttons */}
+      {(showFooterActions || isInterruptedOrPaused || isPartialReview) && pendingTasks.length > 0 && (
+        <div className="flex items-center gap-2.5 p-3.5 border-t border-black/[0.06] dark:border-white/[0.08] bg-card/80 backdrop-blur-xl shrink-0 animate-in fade-in-0">
           <button
             type="button"
-            onClick={() => void onCompleteAllTasks()}
-            disabled={isSubmitting}
-            style={btnPrimaryStyle}
+            onClick={isPartialReview || isInterruptedOrPaused ? handleResume : onApprove}
+            disabled={isSubmitting || executionStatus === "running"}
+            className={cn(
+              "flex-1 flex items-center justify-center gap-2 rounded-xl font-semibold py-2.5 px-4 text-xs sm:text-sm transition-all disabled:opacity-50 shadow-sm cursor-pointer",
+              isPartialReview || isInterruptedOrPaused
+                ? "bg-orange-500 hover:bg-orange-600 text-white shadow-orange-500/20 active:scale-[0.98]"
+                : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20 active:scale-[0.98]"
+            )}
           >
-            {isSubmitting ? t("plan.actions.sending") : t("plan.actions.complete_all")}
+            {isSubmitting ? (
+              <>
+                <Loader2 className="animate-spin size-4" />
+                <span>{isPartialReview || isInterruptedOrPaused ? "Ripresa in corso..." : "Invio..."}</span>
+              </>
+            ) : isPartialReview || isInterruptedOrPaused ? (
+              <>
+                <Play size={15} className="fill-current" />
+                <span>Riprendi Esecuzione ({pendingTasks.length} rimanenti)</span>
+              </>
+            ) : (
+              <>
+                <Check size={16} />
+                <span>Approva Piano</span>
+              </>
+            )}
           </button>
-          <div style={{ marginLeft: "auto", fontSize: 10, color: "hsl(var(--muted-foreground))", fontWeight: 500 }}>
-            {taskProgress.done}/{taskProgress.total} {t("plan.task.progress")}
-          </div>
+          <button
+            type="button"
+            onClick={onReject}
+            disabled={isSubmitting}
+            className="flex-1 flex items-center justify-center gap-2 rounded-xl border border-destructive/40 hover:bg-destructive/10 active:scale-[0.98] text-destructive font-semibold py-2.5 px-4 text-xs sm:text-sm transition-all disabled:opacity-50 cursor-pointer"
+          >
+            <X size={16} />
+            <span>Rifiuta</span>
+          </button>
         </div>
-      ) : null}
-
-      {statusMsg ? <div style={statusBannerStyle}>{statusMsg}</div> : null}
-      {!statusMsg && revisionNotice ? <div style={statusBannerStyle}>{revisionNotice}</div> : null}
+      )}
     </div>
   );
 }
-
-const containerStyle = {
-  display: "flex",
-  flexDirection: "column",
-  height: "100%",
-  maxHeight: "100%",
-  background: "hsl(var(--card))",
-  color: "hsl(var(--card-foreground))",
-  fontFamily: "var(--font-sans, 'Inter', ui-sans-serif, system-ui, sans-serif)",
-  borderRadius: "0",
-  border: "0px solid hsl(var(--border))",
-  overflow: "hidden",
-};
-
-const headerStyle = {
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  padding: "12px 16px",
-  borderBottom: "1px solid hsl(var(--border))",
-  background: "hsl(var(--card))",
-};
-
-const progressBarWrapStyle = {
-  height: 4,
-  width: "100%",
-  background: "hsl(var(--muted))",
-  borderBottom: "1px solid hsl(var(--border))",
-};
-
-const progressBarFillStyle = {
-  height: "100%",
-  background: "hsl(var(--primary))",
-  transition: "width 0.25s ease",
-};
-
-const dotStyle = {
-  width: 8,
-  height: 8,
-  borderRadius: "50%",
-  background: "hsl(var(--primary))",
-};
-
-const editorContainerStyle = {
-  flex: 1,
-  padding: "16px 8px",
-  overflowY: "auto",
-  overflowX: "hidden",
-  display: "flex",
-  flexDirection: "column",
-  gap: 2,
-  background: "transparent",
-};
-
-const footerStyle = {
-  display: "flex",
-  alignItems: "center",
-  gap: 10,
-  padding: "12px 16px",
-  background: "hsl(var(--muted) / 0.25)",
-  borderTop: "1px solid hsl(var(--border))",
-};
-
-const btnPrimaryStyle = {
-  background: "hsl(var(--primary))",
-  color: "hsl(var(--primary-foreground))",
-  border: "none",
-  padding: "8px 14px",
-  borderRadius: "calc(var(--radius, 0.875rem) - 2px)",
-  fontWeight: 600,
-  fontSize: 12,
-  cursor: "pointer",
-};
-
-const btnSecondaryStyle = {
-  background: "hsl(var(--secondary))",
-  color: "hsl(var(--secondary-foreground))",
-  border: "1px solid hsl(var(--border))",
-  padding: "8px 14px",
-  borderRadius: "calc(var(--radius, 0.875rem) - 2px)",
-  fontWeight: 600,
-  fontSize: 12,
-  cursor: "pointer",
-};
-
-const btnDangerStyle = {
-  background: "transparent",
-  color: "hsl(var(--destructive))",
-  border: "1px solid hsl(var(--destructive) / 0.35)",
-  padding: "8px 14px",
-  borderRadius: "calc(var(--radius, 0.875rem) - 2px)",
-  fontWeight: 600,
-  fontSize: 12,
-  cursor: "pointer",
-};
-
-const statusBannerStyle = {
-  padding: "10px 16px",
-  background: "hsl(var(--muted) / 0.35)",
-  borderTop: "1px solid hsl(var(--border))",
-  fontSize: 12,
-  color: "hsl(var(--muted-foreground))",
-  fontWeight: 500,
-};
-
-const slashMenuStyles = {
-  position: "absolute",
-  top: "100%",
-  left: 0,
-  zIndex: 100,
-  background: "hsl(var(--popover))",
-  border: "1px solid hsl(var(--border))",
-  borderRadius: "calc(var(--radius, 0.875rem) - 4px)",
-  padding: 4,
-  minWidth: 160,
-  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.12)",
-};
-
-const slashItemStyle = {
-  padding: "8px 12px",
-  fontSize: 13,
-  borderRadius: 4,
-  cursor: "pointer",
-  color: "hsl(var(--popover-foreground))",
-};
 
 const BlockNode = React.memo(({
   block,
   isFocused,
   isLocked,
   hlTask,
-  taskDescription,
   showSlashMenu,
   onFocus,
   updateBlock,
@@ -1474,7 +1539,6 @@ const BlockNode = React.memo(({
 
   React.useEffect(() => {
     if (!isFocused) return;
-    // rAF ensures DOM is ready before focusing
     const raf = requestAnimationFrame(() => {
       if (textareaRef.current && document.activeElement !== textareaRef.current) {
         textareaRef.current.focus();
@@ -1587,9 +1651,9 @@ const BlockNode = React.memo(({
     overflow: "hidden",
     padding: 0,
     margin: 0,
-    lineHeight: 1.6,
+    lineHeight: 1.5,
     fontFamily: block.type === "code" ? "ui-monospace, monospace" : "inherit",
-    fontSize: block.type === "h1" ? "1.875rem" : block.type === "h2" ? "1.5rem" : block.type === "h3" ? "1.25rem" : "1rem",
+    fontSize: block.type === "h1" ? "1.5rem" : block.type === "h2" ? "1.25rem" : block.type === "h3" ? "1.1rem" : "0.875rem",
     fontWeight: block.type.startsWith("h") ? 700 : 400,
     letterSpacing: block.type.startsWith("h") ? "-0.02em" : "normal",
     whiteSpace: "pre-wrap",
@@ -1602,14 +1666,15 @@ const BlockNode = React.memo(({
 
   return (
     <div
-      className={`group flex items-start gap-3 px-3 py-1.5 rounded-lg transition-colors relative cursor-text ${isFocused ? "bg-black/5 dark:bg-white/5" : "hover:bg-black/5 dark:hover:bg-white/5"} ${isHlBlock ? "ring-2 ring-blue-500/35" : ""}`}
+      className={cn(
+        "group flex items-start gap-2.5 px-2.5 py-1.5 rounded-xl transition-colors relative cursor-text",
+        isFocused ? "bg-muted/40 ring-1 ring-primary/20" : "hover:bg-muted/20",
+        isHlBlock && "ring-2 ring-orange-500/40 bg-orange-500/5"
+      )}
       onClick={(e) => {
         const target = e.target;
-        // Don't intercept checkbox clicks
         if (target.tagName === "INPUT" && target.type === "checkbox") return;
-        // Don't intercept slash-menu clicks
         if (target.closest && target.closest(".slash-menu-container")) return;
-        // Trigger focus: onFocus() updates state, then rAF focuses the textarea
         onFocus();
         if (textareaRef.current && document.activeElement !== textareaRef.current) {
           textareaRef.current.focus();
@@ -1622,18 +1687,18 @@ const BlockNode = React.memo(({
           checked={!!block.checked}
           onChange={(e) => updateBlock(block.id, { checked: e.target.checked })}
           disabled={isLocked && block.checked}
-          className="mt-1.5 w-4 h-4 rounded border-gray-300 dark:border-white/20 bg-white dark:bg-black/40 text-blue-500 focus:ring-blue-500/20 cursor-pointer disabled:opacity-50"
+          className="mt-1 size-4 rounded border-gray-300 dark:border-white/20 text-orange-500 focus:ring-orange-500/20 cursor-pointer"
         />
       )}
       {block.type === "list" && (
-        <div className="mt-1.5 text-gray-500">•</div>
+        <div className="mt-0.5 text-muted-foreground font-bold">•</div>
       )}
 
       <div className="flex-1 relative min-w-0">
         {useMdMirror && (
           <div
             aria-hidden="true"
-            className="absolute inset-0 pointer-events-none select-none text-gray-900 dark:text-gray-100"
+            className="absolute inset-0 pointer-events-none select-none text-foreground"
             style={inputStyles}
             dangerouslySetInnerHTML={{ __html: renderInlineMd(block.content) + "\n" }}
           />
@@ -1646,46 +1711,36 @@ const BlockNode = React.memo(({
           onFocus={onFocus}
           readOnly={isLocked}
           rows={1}
-          placeholder={isLocked ? "" : (isFocused ? (t("plan.menu.placeholder") || "Type '/' for commands...") : "")}
+          placeholder={isLocked ? "" : (isFocused ? (t("plan.menu.placeholder") || "Scrivi '/' per comandi...") : "")}
           style={{
             ...inputStyles,
             ...(useMdMirror ? { color: "transparent", caretColor: "hsl(var(--foreground))", WebkitTextFillColor: "transparent" } : {})
           }}
-          className={`relative z-10 placeholder:text-gray-400 dark:placeholder:text-gray-600`}
+          className="relative z-10 placeholder:text-muted-foreground/50"
           spellCheck={false}
         />
 
-        {block.type === "task" && taskDescription && !isFocused ? (
-          <div
-            style={{
-              marginTop: 6,
-              fontSize: 12,
-              lineHeight: 1.45,
-              color: "hsl(var(--muted-foreground))",
-            }}
-          >
-            <MdSpan text={taskDescription} />
-          </div>
-        ) : null}
-
         {showSlashMenu && (
-          <div className="absolute top-full left-0 z-50 mt-1 w-56 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-white/10 rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100">
+          <div className="absolute top-full left-0 z-50 mt-1 w-52 bg-popover border border-border rounded-xl shadow-2xl p-1 animate-in fade-in zoom-in-95 duration-100">
             {menuOptions.map((item, idx) => (
               <button
                 key={item.id}
                 onMouseDown={(e) => {
-                  e.preventDefault(); // Prevents textarea from losing focus and closing the menu
+                  e.preventDefault();
                   changeBlockType(block.id, item.id);
                 }}
                 onMouseEnter={() => setMenuIndex(idx)}
-                className={`w-full flex items-center gap-3 px-3 py-2 text-sm rounded-lg transition-colors ${idx === menuIndex ? "text-gray-900 dark:text-white bg-gray-100 dark:bg-white/10" : "text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-white/5"
-                  }`}
+                className={cn(
+                  "w-full flex items-center gap-2.5 px-2.5 py-1.5 text-xs rounded-lg transition-colors",
+                  idx === menuIndex
+                    ? "text-popover-foreground bg-muted font-semibold"
+                    : "text-muted-foreground hover:text-popover-foreground hover:bg-muted/50"
+                )}
               >
-                <div className={`p-1.5 rounded-md transition-colors ${idx === menuIndex ? "bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400" : "bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400"
-                  }`}>
+                <div className={cn("p-1 rounded-md", idx === menuIndex ? "bg-primary/15 text-primary" : "text-muted-foreground")}>
                   {item.icon}
                 </div>
-                {item.label}
+                <span>{item.label}</span>
               </button>
             ))}
           </div>
@@ -1695,4 +1750,3 @@ const BlockNode = React.memo(({
   );
 });
 BlockNode.displayName = "BlockNode";
-

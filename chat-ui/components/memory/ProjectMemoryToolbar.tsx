@@ -64,118 +64,81 @@ export function ProjectMemoryToolbar({
 
   const current = projects.find((p) => p.slug === value);
 
-  const projectSelect = (
-    <select
-      className={cn(
-        "w-full bg-transparent text-foreground outline-none",
-        variant === "panel" ? "text-sm font-medium" : "text-xs"
-      )}
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label={t("memory_project.label")}
-    >
-      {projects.length === 0 && (
-        <option value={value || "default"}>{value || "default"}</option>
-      )}
-      {value && !projects.some((p) => p.slug === value) && (
-        <option value={value}>
-          {value} ({t("memory_project.not_in_list")})
-        </option>
-      )}
-      {projects.map((p) => (
-        <option key={p.id} value={p.slug}>
-          {p.display_name}
-        </option>
-      ))}
-    </select>
-  );
-
-  const actionButtons = (
-    <>
-      <button
-        type="button"
-        title={t("memory_project.new_project")}
-        className={cn(
-          "inline-flex items-center gap-1 rounded-lg border border-border bg-background/80 transition-colors hover:bg-muted/60",
-          variant === "panel" ? "px-2.5 py-2 text-xs font-medium" : "p-1.5"
-        )}
-        onClick={() => setCreateOpen(true)}
-      >
-        <Plus size={14} />
-        {variant === "panel" ? <span className="hidden sm:inline">{t("memory_project.new_short")}</span> : null}
-      </button>
-      <button
-        type="button"
-        title={t("memory_project.settings")}
-        disabled={!value}
-        className={cn(
-          "inline-flex items-center gap-1 rounded-lg border border-border bg-background/80 transition-colors hover:bg-muted/60 disabled:opacity-40",
-          variant === "panel" ? "px-2.5 py-2 text-xs font-medium" : "p-1.5"
-        )}
-        onClick={() => setSettingsOpen(true)}
-      >
-        <Settings2 size={14} />
-        {variant === "panel" ? <span className="hidden sm:inline">{t("memory_project.settings_short")}</span> : null}
-      </button>
-      {variant === "panel" ? (
-        <Link
-          href={value ? `/projects?project=${encodeURIComponent(value)}` : "/projects"}
-          className="inline-flex items-center gap-1 rounded-lg border border-border bg-background/80 px-2.5 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground"
-          title={t("memory_project.open_full_page")}
-        >
-          <ExternalLink size={14} />
-        </Link>
-      ) : null}
-    </>
-  );
-
   return (
     <>
-      <div className={cn("flex flex-col gap-2", className)}>
-        {variant === "panel" ? (
-          <div className="rounded-xl border border-border/70 bg-card/60 p-3 shadow-sm">
-            <label className="flex flex-col gap-1.5">
-              <span className="text-[0.786em] font-medium uppercase tracking-wide text-muted-foreground">
-                {t("memory_project.label")}
-              </span>
-              <span className="focus-within:ring-ring/50 flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 focus-within:ring-2">
-                <Database size={16} className="shrink-0 text-primary" aria-hidden />
-                {projectSelect}
-              </span>
-            </label>
-            {current?.description ? (
-              <p className="mt-2 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
-                {current.description}
-              </p>
-            ) : null}
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              {current?.role ? (
-                <span className="rounded-md bg-muted px-2 py-0.5 text-[0.714em] text-muted-foreground">
-                  {t("memory_project.your_role")}:{" "}
-                  <span className="font-mono text-foreground">{current.role}</span>
-                </span>
-              ) : null}
-              <div className="ml-auto flex flex-wrap gap-1.5">{actionButtons}</div>
-            </div>
-          </div>
-        ) : (
-          <div className="flex flex-wrap items-end gap-2">
-            <label className="flex min-w-0 flex-1 flex-col gap-0.5">
-              <span className="text-[0.714em] text-muted-foreground">{t("memory_project.label")}</span>
-              <span className="focus-within:ring-ring/50 flex h-7 min-w-0 items-center gap-1.5 rounded-full border border-border bg-muted/40 px-2 focus-within:ring-1">
-                <Database size={12} className="shrink-0 text-primary" aria-hidden />
-                <span className="min-w-0 flex-1">{projectSelect}</span>
-              </span>
-            </label>
-            {actionButtons}
-          </div>
+      <div
+        className={cn(
+          "flex items-center justify-between gap-2 rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-card/60 dark:bg-card/40 p-1.5 px-2.5 backdrop-blur-xl shadow-2xs transition-all",
+          className
         )}
-        {loadError ? (
-          <p className="text-[0.714em] text-destructive truncate" title={loadError}>
-            {loadError}
-          </p>
-        ) : null}
+      >
+        {/* Project Selector Label & Dropdown */}
+        <div className="flex min-w-0 flex-1 items-center gap-2">
+          <Database size={13} className="shrink-0 text-sky-500 dark:text-sky-400" aria-hidden />
+          <span className="shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            {t("memory_project.label")}:
+          </span>
+          <div className="relative min-w-0 flex-1">
+            <select
+              className="focus-ring w-full cursor-pointer appearance-none rounded-lg bg-transparent py-0.5 pr-4 text-xs font-semibold text-foreground outline-none transition-colors hover:text-primary"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              aria-label={t("memory_project.label")}
+            >
+              {projects.length === 0 && (
+                <option value={value || "default"}>{value || "default"}</option>
+              )}
+              {value && !projects.some((p) => p.slug === value) && (
+                <option value={value}>
+                  {value} ({t("memory_project.not_in_list")})
+                </option>
+              )}
+              {projects.map((p) => (
+                <option key={p.id} value={p.slug}>
+                  {p.display_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            type="button"
+            title={t("memory_project.new_project")}
+            className="focus-ring inline-flex items-center gap-1 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-card/80 hover:bg-card p-1.5 text-xs font-medium text-foreground transition-all hover:scale-105 active:scale-95"
+            onClick={() => setCreateOpen(true)}
+          >
+            <Plus size={13} className="text-primary" />
+            <span className="hidden sm:inline text-[11px] font-semibold">{t("memory_project.new_short")}</span>
+          </button>
+
+          <button
+            type="button"
+            title={t("memory_project.settings")}
+            disabled={!value}
+            className="focus-ring rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-card/80 hover:bg-card p-1.5 text-muted-foreground hover:text-foreground transition-all disabled:opacity-40"
+            onClick={() => setSettingsOpen(true)}
+          >
+            <Settings2 size={13} />
+          </button>
+
+          <Link
+            href={value ? `/projects?project=${encodeURIComponent(value)}` : "/projects"}
+            className="focus-ring rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-card/80 hover:bg-card p-1.5 text-muted-foreground hover:text-foreground transition-all"
+            title={t("memory_project.open_full_page")}
+          >
+            <ExternalLink size={13} />
+          </Link>
+        </div>
       </div>
+
+      {loadError && (
+        <p className="mt-1 text-[11px] text-destructive truncate px-1" title={loadError}>
+          {loadError}
+        </p>
+      )}
 
       <ProjectCreateModal
         open={createOpen}

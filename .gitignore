@@ -295,3 +295,8 @@ docker-compose.local.yml
 
 # Output test folder for smoke tests
 evals/agent_smoke_tests/outputs/*
+
+# Local agent skills, agents and hooks (e.g. Impeccable)
+.github/skills/
+.github/agents/
+.github/hooks/
