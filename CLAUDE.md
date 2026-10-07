@@ -356,8 +356,18 @@ Switching from password to an SSO mode places the system in a migration state.
 - Existing users must log in via password first, and are then blocked by a required "link account" modal.
 - If users don't have a password set, the backend generates temporary 12-char passwords and returns them to the admin to distribute securely.
 - No auto-provisioning links identities by email automatically.
+- Temp passwords expire after `AION_SSO_TEMP_PASSWORD_TTL_DAYS` (default 7); non-admin local passwords are cleared on link; admins keep theirs.
+- Break-glass: `AION_SSO_FORCE_PASSWORD=1` restores password login for everyone.
+- TOTP 2FA applies only while `login_mode=password`.
 
 See `docs/security/sso-migration.md` for the full migration flow.
+
+### Two-factor authentication (TOTP)
+
+Admin-toggled (`PUT /admin/auth/2fa`), applies only to the password login while `login_mode=password`.
+`POST /auth/login` returns `mfa_required` + `mfa_token`; the session token is issued by `/auth/2fa/*`
+(`src/api/auth_mfa.py`, logic in `src/auth/mfa/totp.py`). Recovery: admin reset, `python -m src.auth.mfa reset <user>`
+or `AION_2FA_FORCE_DISABLE=1`. See `docs/security/two-factor-auth.md`.
 
 ### Documentation
 - Single source of truth: `docs/` directory

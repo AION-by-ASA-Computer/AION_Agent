@@ -36,7 +36,11 @@
         "thinking": "Thinking",
         "advanced": "Erweitert"
       },
-      "enum": { "min": "Min", "medium": "Mittel", "max": "Max" },
+      "enum": {
+        "min": "Min",
+        "medium": "Mittel",
+        "max": "Max"
+      },
       "fields": {
         "max_agent_steps": "Max. Agent-Steps",
         "max_tool_calls": "Max. Tool-Aufrufe",
@@ -435,9 +439,47 @@
     "sso_microsoft": "Mit Microsoft anmelden",
     "sso_google": "Mit Google anmelden",
     "or": "oder",
+    "mfa": {
+      "title_enroll": "Zwei-Faktor-Authentifizierung einrichten",
+      "title_verify": "Bestätigung in zwei Schritten",
+      "enroll_help": "Scannen Sie den QR-Code mit Google Authenticator, Microsoft Authenticator oder einer ähnlichen App und geben Sie dann den 6-stelligen Code ein.",
+      "verify_help": "Geben Sie den 6-stelligen Code ein, der in Ihrer Authentifizierungs-App angezeigt wird.",
+      "manual": "Scannen nicht möglich? Geben Sie diesen Schlüssel manuell ein:",
+      "code": "6-stelliger Code",
+      "confirm": "Bestätigen und anmelden",
+      "verify": "Verifizieren",
+      "back": "Zurück zur Anmeldung",
+      "loading": "Wird geladen…",
+      "error": {
+        "invalid_code": "Ungültiger Code. Bitte versuchen Sie es erneut.",
+        "mfa_locked": "Zu viele Versuche. Versuchen Sie es in {{seconds}} Sekunden erneut.",
+        "invalid_mfa_token": "Sitzung abgelaufen. Bitte melden Sie sich erneut an.",
+        "generic": "Verifizierung fehlgeschlagen."
+      }
+    },
     "sso_error": {
       "sso_already_linked": "Das Konto ist bereits mit einem anderen Benutzer verknüpft.",
-      "sso_user_already_linked": "Sie haben bereits ein verknüpftes Konto."
+      "sso_user_already_linked": "Sie haben bereits ein verknüpftes Konto.",
+      "generic": "Anmeldung fehlgeschlagen. Bitte erneut versuchen.",
+      "sso_not_linked": "Ihr Konto ist noch nicht verknüpft. Melden Sie sich mit Passwort an und verknüpfen Sie Ihr Firmenkonto.",
+      "sso_domain_not_allowed": "Ihre E-Mail-Domain ist nicht zugelassen.",
+      "sso_required": "Für dieses Konto ist SSO-Anmeldung erforderlich.",
+      "password_login_disabled": "Die Passwort-Anmeldung ist deaktiviert.",
+      "temp_password_expired": "Das temporäre Passwort ist abgelaufen. Kontaktieren Sie den Administrator.",
+      "sso_failed": "SSO-Authentifizierung fehlgeschlagen.",
+      "sso_start_failed": "SSO-Anmeldung konnte nicht gestartet werden.",
+      "sso_token_invalid": "Ungültiges SSO-Token.",
+      "sso_provisioning_failed": "Konto konnte nicht erstellt werden.",
+      "sso_provisioning_conflict": "Konto wird erstellt, bitte erneut versuchen.",
+      "email_required_for_provisioning": "Der Anbieter hat keine E-Mail geliefert.",
+      "invalid_code": "Ungültiger Anmeldecode.",
+      "code_expired": "Anmeldecode abgelaufen. Bitte erneut versuchen.",
+      "code_already_used": "Anmeldecode bereits verwendet.",
+      "exchange_error": "Fehler beim Abschluss der Anmeldung.",
+      "exchange_failed": "Fehler beim Abschluss der Anmeldung.",
+      "link_failed": "Verknüpfung fehlgeschlagen.",
+      "session_invalid": "Sitzung abgelaufen, bitte erneut anmelden.",
+      "user_not_found": "Benutzer nicht gefunden."
     }
   },
   "authgate": {
@@ -695,5 +737,14 @@
       "howto": "Anleitung",
       "factcheck": "Fact-Check"
     }
+  },
+  "sso_link": {
+    "title": "Sicherheitsupdate",
+    "desc": "Der Administrator verlangt, dass Sie Ihr Konto mit {{provider}} verknüpfen, um sich weiter anzumelden.",
+    "button": "{{provider}}-Konto verknüpfen",
+    "logout": "Abmelden",
+    "start_failed": "SSO-Verknüpfung konnte nicht gestartet werden.",
+    "bad_response": "Ungültige Serverantwort.",
+    "network": "Netzwerkfehler."
   }
 }

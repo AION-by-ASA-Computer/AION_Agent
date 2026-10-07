@@ -23,9 +23,34 @@ _PENDING_CACHE: Dict[str, tuple] = {}
 CACHE_TTL = 15.0  # secondi
 
 
+def _force_password() -> bool:
+    """Break-glass ``AION_SSO_FORCE_PASSWORD=1`` (vedi auth_login.sso_force_password)."""
+    return (os.getenv("AION_SSO_FORCE_PASSWORD") or "").strip() == "1"
+
+
 def _invalidate_cache(tenant_id: str) -> None:
     _SETTINGS_CACHE.pop(tenant_id, None)
-    _PENDING_CACHE.pop(tenant_id, None)
+    # La cache dei pendenti e' indicizzata "tenant:provider": rimuovi tutte le chiavi del tenant.
+    prefix = f"{tenant_id}:"
+    for key in [k for k in _PENDING_CACHE if k.startswith(prefix)]:
+        _PENDING_CACHE.pop(key, None)
+
+
+async def is_migration_active(tenant_id: str) -> bool:
+    """True se SSO attivo con origin ``migration`` e migrazione non completata.
+
+    Stessa definizione usata da ``/auth/status`` (``sso_migration_active``).
+    Mentre e' attiva, un'identita' IdP non collegata NON puo' creare un nuovo
+    utente (``sso_not_linked``): deve prima collegarsi dall'account esistente.
+    """
+    if _force_password():
+        return False
+    settings = await get_login_settings(tenant_id)
+    return (
+        settings["login_mode"] != "password"
+        and settings["sso_origin"] == "migration"
+        and not settings["migration_completed_at"]
+    )
 
 
 async def get_login_settings(tenant_id: str) -> Dict[str, Any]:
@@ -47,6 +72,7 @@ async def get_login_settings(tenant_id: str) -> Dict[str, Any]:
             "migration_completed_at": None,
             "clear_password_on_link": True,
             "sso_provider": None,
+            "totp_required": False,
         }
     else:
         mode = row.login_mode or "password"
@@ -57,6 +83,7 @@ async def get_login_settings(tenant_id: str) -> Dict[str, Any]:
             "migration_completed_at": row.migration_completed_at,
             "clear_password_on_link": bool(row.clear_password_on_link),
             "sso_provider": mode if mode != "password" else None,
+            "totp_required": bool(getattr(row, "totp_required", False)),
         }
 
     _SETTINGS_CACHE[tenant_id] = (now + CACHE_TTL, result)
@@ -107,7 +134,7 @@ async def password_login_visible(tenant_id: str) -> bool:
     mode = settings["login_mode"]
     origin = settings["sso_origin"]
 
-    if mode == "password":
+    if mode == "password" or _force_password():
         return True
     if origin == "first_setup":
         return False
@@ -123,7 +150,7 @@ async def user_needs_link(tenant_id: str, user_row_id: str) -> bool:
     """Restituisce True se l'utente deve ancora collegarsi al provider SSO attivo."""
     settings = await get_login_settings(tenant_id)
     mode = settings["login_mode"]
-    if mode == "password":
+    if mode == "password" or _force_password():
         return False
 
     provider = settings["sso_provider"]
@@ -152,6 +179,9 @@ async def user_needs_link(tenant_id: str, user_row_id: str) -> bool:
 
 async def _check_migration_completion(tenant_id: str, provider: str) -> None:
     """Se pending_users_count arriva a 0, scrive migration_completed_at."""
+    # Il conteggio e' in cache 15s: senza invalidazione il collegamento appena
+    # avvenuto non verrebbe visto e la migrazione non risulterebbe mai completata.
+    _invalidate_cache(tenant_id)
     count = await pending_users_count(tenant_id, provider)
     if count == 0:
         async with get_async_session_maker()() as session:
@@ -249,7 +279,13 @@ async def set_login_mode(
 
             # Step 4: aggiorna auth_settings
             migration_started = now if sso_origin == "migration" else None
-            if current_row:
+            if current_row and current_mode == mode:
+                # Ri-conferma dello stesso provider (es. dopo cambio secret):
+                # NON riaprire la migrazione ne' cambiare origin; si riabilita
+                # solo il provider (enable_provider, dopo il commit).
+                current_row.updated_by_user_id = actor_user_id
+                current_row.updated_at = now
+            elif current_row:
                 current_row.login_mode = mode
                 current_row.sso_origin = sso_origin
                 current_row.migration_started_at = migration_started

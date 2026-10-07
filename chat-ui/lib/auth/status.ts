@@ -10,6 +10,7 @@ export type AuthStatus = {
   sso_origin?: "first_setup" | "migration" | null;
   sso_migration_active?: boolean;
   password_login_visible?: boolean;
+  two_factor_required?: boolean;
 };
 
 const DEFAULT_STATUS: AuthStatus = {

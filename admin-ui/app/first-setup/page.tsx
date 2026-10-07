@@ -55,7 +55,10 @@ export default function FirstSetupPage() {
   const [restarting, setRestarting] = useState(false);
 
   // --- Step SSO State ---
-  const [ssoStatus, setSsoStatus] = useState({ enabled: false, validated: false });
+  // "none" = SSO disattivato; altrimenti provider scelto (va verificato prima di procedere)
+  const [ssoProvider, setSsoProvider] = useState<"none" | "microsoft" | "google">("none");
+  const [ssoValidated, setSsoValidated] = useState(false);
+  const ssoStatus = { enabled: ssoProvider !== "none", validated: ssoProvider !== "none" && ssoValidated };
 
   // --- Step 1: LLM Provider State ---
   const [llmForm, setLlmForm] = useState({
@@ -493,14 +496,19 @@ export default function FirstSetupPage() {
         const provRes = await apiFetch(`${apiBase()}/admin/sso/providers`);
         if (provRes.ok) {
           const provData = await provRes.json();
-          // Find the enabled provider, or fallback to the first active
-          const active = provData.find((p: any) => p.enabled) || provData[0];
+          // Provider scelto nello step SSO (deve essere validato, altrimenti il backend rifiuta con 409)
+          const active = provData.find((p: any) => p.provider === ssoProvider);
           if (active && active.provider) {
-             await apiFetch(`${apiBase()}/admin/auth/login-mode`, {
+             const modeRes = await apiFetch(`${apiBase()}/admin/auth/login-mode`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ mode: active.provider })
              });
+             if (!modeRes.ok) {
+               let code = "";
+               try { code = (await modeRes.json())?.detail?.code || ""; } catch {}
+               throw new Error(`Attivazione SSO fallita${code ? ` (${code})` : ""}. Torna allo step SSO e ripeti la verifica.`);
+             }
           }
         }
       }
@@ -1605,10 +1613,35 @@ export default function FirstSetupPage() {
                   </div>
                 </div>
                 
-                <SsoConfigPanel 
-                  isSetup={true} 
-                  onStatusChange={(enabled, validated) => setSsoStatus({ enabled, validated })}
-                />
+                <div className="grid grid-cols-3 gap-3">
+                  {([
+                    ["none", "Nessuno (password)"],
+                    ["microsoft", "Microsoft Entra ID"],
+                    ["google", "Google Workspace"],
+                  ] as const).map(([value, label]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => { setSsoProvider(value); setSsoValidated(false); }}
+                      className={`p-3 rounded-xl border text-sm font-semibold transition-all ${
+                        ssoProvider === value
+                          ? "bg-blue-500/10 border-blue-500 text-white"
+                          : "bg-[#070707] border-[#222] text-gray-400 hover:border-gray-500"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {ssoProvider !== "none" && (
+                  <SsoConfigPanel
+                    key={ssoProvider}
+                    forcedProvider={ssoProvider}
+                    isActive
+                    onValidatedChange={setSsoValidated}
+                  />
+                )}
               </div>
             )}
 

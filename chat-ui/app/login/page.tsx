@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { apiBase } from "@/lib/config";
 import { setStoredAuth } from "@/lib/auth/storage";
 import { fetchAuthStatus } from "@/lib/auth/status";
 import { ChatBrand } from "@/components/brand/ChatBrand";
+import { TwoFactorStep, type MfaChallenge } from "@/components/auth/TwoFactorStep";
 import { initLocaleFromStorage } from "@/lib/i18n/i18n-store";
 import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
 import { useT } from "@/lib/i18n/use-t";
@@ -19,6 +20,16 @@ export default function LoginPage() {
   const [ssoEnabled, setSsoEnabled] = useState<boolean>(false);
   const [ssoProvider, setSsoProvider] = useState<"microsoft" | "google" | null>(null);
   const [passwordVisible, setPasswordVisible] = useState<boolean>(true);
+  const [mfa, setMfa] = useState<MfaChallenge | null>(null);
+
+  const ssoErrorMessage = useCallback(
+    (code: string) => {
+      const key = `login.sso_error.${code}`;
+      const msg = t(key);
+      return msg && msg !== key ? msg : t("login.sso_error.generic");
+    },
+    [t]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -34,43 +45,13 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     const ssoError = params.get("error");
     if (ssoError) {
-      setErr(t(`login.sso_error.${ssoError}`) || `Errore SSO: ${ssoError}`);
-    }
-
-    // Check hash for sso_token
-    if (window.location.hash.includes("sso_token=")) {
-      const hashParams = new URLSearchParams(window.location.hash.substring(1));
-      const ssoToken = hashParams.get("sso_token");
-      const returnTo = hashParams.get("return_to") || "/";
-      if (ssoToken) {
-        // Clean hash from URL without reloading
-        window.history.replaceState(null, "", window.location.pathname + window.location.search);
-        
-        // Use token as if returned by login
-        // we can't extract user_id trivially without decoding, but setStoredAuth just needs to work
-        // actually setStoredAuth takes (token, userId). We might need to fetch /auth/me or decode the token.
-        // The token is user_row_id:identifier:roles:exp:sig in base64.
-        try {
-           const raw = atob(ssoToken.replace(/-/g, "+").replace(/_/g, "/"));
-           const parts = raw.split(":");
-           const userId = parts[1]; // identifier
-           if (userId) {
-              setStoredAuth(ssoToken, userId);
-              initLocaleFromStorage();
-              syncLanguagePreferenceToServer(ssoToken).then(() => {
-                window.location.href = returnTo;
-              });
-           }
-        } catch (e) {
-           console.error(e);
-        }
-      }
+      setErr(ssoErrorMessage(ssoError));
     }
 
     return () => {
       cancelled = true;
     };
-  }, [t]);
+  }, [ssoErrorMessage]);
 
   function handleSSOLogin() {
     window.location.href = `${apiBase()}/auth/sso/start?provider=${ssoProvider}&return_to=/`;
@@ -85,7 +66,14 @@ export default function LoginPage() {
       body: JSON.stringify({ username, password, client: "chat" }),
     });
     const raw = await r.text();
-    let j: { detail?: string | unknown[]; access_token?: string; user_id?: string };
+    let j: {
+      detail?: string | { code?: string } | unknown[];
+      access_token?: string;
+      user_id?: string;
+      mfa_required?: boolean;
+      mfa_stage?: "enroll" | "verify";
+      mfa_token?: string;
+    };
     try {
       j = raw ? (JSON.parse(raw) as typeof j) : {};
     } catch {
@@ -98,8 +86,11 @@ export default function LoginPage() {
     }
     if (!r.ok) {
       const d = j.detail;
+      const code = d && !Array.isArray(d) && typeof d === "object" ? (d as { code?: string }).code : undefined;
       const msg =
-        typeof d === "string"
+        code
+          ? ssoErrorMessage(code)
+          : typeof d === "string"
           ? d
           : Array.isArray(d) && d[0] && typeof (d[0] as { msg?: string }).msg === "string"
             ? (d[0] as { msg: string }).msg
@@ -107,6 +98,15 @@ export default function LoginPage() {
       setErr(msg);
       return;
     }
+    if (j.mfa_required && j.mfa_token && j.mfa_stage) {
+      setPassword("");
+      setMfa({ stage: j.mfa_stage, token: j.mfa_token });
+      return;
+    }
+    await completeLogin(j);
+  }
+
+  async function completeLogin(j: { access_token?: string; user_id?: string }) {
     if (j.access_token && j.user_id) {
       setStoredAuth(j.access_token, j.user_id);
       initLocaleFromStorage();
@@ -119,7 +119,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-4 text-foreground">
       <ChatBrand className="mb-2 h-20" />
       <h1 className="text-xl font-semibold tracking-tight text-foreground sr-only">AION Chat — login</h1>
-      {ssoEnabled && ssoProvider && (
+      {ssoEnabled && ssoProvider && !mfa && (
         <div className="flex w-full max-w-sm flex-col gap-4 mb-2">
           <button
             onClick={handleSSOLogin}
@@ -155,7 +155,14 @@ export default function LoginPage() {
           )}
         </div>
       )}
-      {passwordVisible && (
+      {mfa && (
+        <TwoFactorStep
+          challenge={mfa}
+          onSuccess={completeLogin}
+          onCancel={() => setMfa(null)}
+        />
+      )}
+      {passwordVisible && !mfa && (
         <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-3">
           <input
             className="focus-ring rounded-aion border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"

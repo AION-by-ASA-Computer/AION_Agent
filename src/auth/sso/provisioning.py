@@ -176,6 +176,7 @@ async def link_identity_to_user(
     claims: Dict[str, Any],
     token_data: Dict[str, Any],
     provider_config: Dict[str, Any],
+    finalize_migration: bool = False,
 ) -> None:
     """Collega un'identità SSO a un utente locale già autenticato.
 
@@ -184,6 +185,13 @@ async def link_identity_to_user(
     - purpose=admin_validate (admin che conferma il provider)
 
     Fix 0.8: SOLO questo flusso può collegare identità. Nessun auto-link.
+
+    ``finalize_migration=True`` (solo purpose=link): a collegamento avvenuto
+    azzera la scadenza della password temporanea e, se
+    ``auth_settings.clear_password_on_link`` e' attivo, rimuove la password
+    locale (l'utente entra solo via SSO). Gli admin NON perdono mai la password:
+    e' il loro accesso di emergenza (break-glass). Con ``admin_validate`` resta
+    False per lo stesso motivo.
     """
     provider = provider_config["provider"]
     subject, email = _extract_subject_and_email(claims, provider)
@@ -262,6 +270,16 @@ async def link_identity_to_user(
         # Se l'utente non ha email, popolala con quella SSO
         if not user.email and email:
             user.email = email
+
+        if finalize_migration:
+            from src.auth.sso.login_mode import get_login_settings
+            from src.data.user_password import get_roles
+
+            user.temp_password_expires_at = None
+            settings = await get_login_settings(tenant_id)
+            if settings.get("clear_password_on_link") and "admin" not in get_roles(user):
+                user.password_hash = None
+                user.must_change_password = False
 
         try:
             await session.commit()

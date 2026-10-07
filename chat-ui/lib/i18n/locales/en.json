@@ -677,9 +677,47 @@
     "sso_microsoft": "Sign in with Microsoft",
     "sso_google": "Sign in with Google",
     "or": "or",
+    "mfa": {
+      "title_enroll": "Set up two-factor authentication",
+      "title_verify": "Two-step verification",
+      "enroll_help": "Scan the QR code with Google Authenticator, Microsoft Authenticator or a similar app, then enter the 6-digit code.",
+      "verify_help": "Enter the 6-digit code shown by your authenticator app.",
+      "manual": "Can't scan? Enter this key manually:",
+      "code": "6-digit code",
+      "confirm": "Confirm and sign in",
+      "verify": "Verify",
+      "back": "Back to login",
+      "loading": "Loading…",
+      "error": {
+        "invalid_code": "Invalid code. Please try again.",
+        "mfa_locked": "Too many attempts. Try again in {{seconds}} seconds.",
+        "invalid_mfa_token": "Session expired. Please sign in again.",
+        "generic": "Verification failed."
+      }
+    },
     "sso_error": {
       "sso_already_linked": "Account is already linked to another user.",
-      "sso_user_already_linked": "You already have an account linked."
+      "sso_user_already_linked": "You already have an account linked.",
+      "generic": "Sign-in failed. Please try again.",
+      "sso_not_linked": "Your account is not linked yet. Sign in with your password and link your company account.",
+      "sso_domain_not_allowed": "Your email domain is not allowed.",
+      "sso_required": "SSO sign-in is required for this account.",
+      "password_login_disabled": "Password sign-in is disabled.",
+      "temp_password_expired": "Your temporary password has expired. Contact your administrator.",
+      "sso_failed": "SSO authentication failed.",
+      "sso_start_failed": "Unable to start SSO sign-in.",
+      "sso_token_invalid": "Invalid SSO token.",
+      "sso_provisioning_failed": "Unable to create the account.",
+      "sso_provisioning_conflict": "Account is being created, please retry.",
+      "email_required_for_provisioning": "The provider did not return an email.",
+      "invalid_code": "Invalid sign-in code.",
+      "code_expired": "Sign-in code expired. Please retry.",
+      "code_already_used": "Sign-in code already used.",
+      "exchange_error": "Error completing sign-in.",
+      "exchange_failed": "Error completing sign-in.",
+      "link_failed": "Linking failed.",
+      "session_invalid": "Session expired, please sign in again.",
+      "user_not_found": "User not found."
     }
   },
   "authgate": {
@@ -1097,5 +1135,14 @@
       "tool_events": "Turn stopped automatically: too many tool events.",
       "plan_invalid_response": "Plan mode: invalid assistant response."
     }
+  },
+  "sso_link": {
+    "title": "Security update",
+    "desc": "Your administrator requires you to link your account to {{provider}} to keep signing in.",
+    "button": "Link {{provider}} account",
+    "logout": "Sign out",
+    "start_failed": "Unable to start SSO linking.",
+    "bad_response": "Invalid response from the server.",
+    "network": "Network error."
   }
 }

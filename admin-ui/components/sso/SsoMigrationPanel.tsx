@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { Shield, Users, Key, AlertTriangle, CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
@@ -8,6 +9,16 @@ import { TempPasswordsDialog } from "./TempPasswordsDialog";
 import { SsoConfigPanel } from "./SsoConfigPanel";
 
 type LoginMode = "password" | "microsoft" | "google";
+
+const MODE_ERRORS: Record<string, string> = {
+  sso_revalidation_required:
+    "La verifica del provider è scaduta (oltre 30 minuti). Premi «Reimposta» e verifica di nuovo con il tuo account.",
+  sso_admin_not_linked:
+    "Il tuo account amministratore non è collegato a questo provider. Esegui «Salva e verifica con il mio account».",
+  migration_in_progress:
+    "C'è una migrazione in corso sul provider attuale: attendi che gli utenti si colleghino (o esonerali) prima di cambiare provider.",
+  provider_not_configured: "Configura e verifica il provider prima di attivarlo.",
+};
 
 interface AuthStatus {
   login_mode: LoginMode;
@@ -22,6 +33,7 @@ interface AuthStatus {
 }
 
 export function SsoMigrationPanel() {
+  const router = useRouter();
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -32,6 +44,11 @@ export function SsoMigrationPanel() {
   const [tempPasswords, setTempPasswords] = useState<any[]>([]);
   const [dialogTitle, setDialogTitle] = useState("");
   const [dialogMessage, setDialogMessage] = useState("");
+
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [affectedUsers, setAffectedUsers] = useState<any[]>([]);
+  const [pendingModeChange, setPendingModeChange] = useState<LoginMode | null>(null);
+  const [loadingSimulation, setLoadingSimulation] = useState(false);
 
   const fetchStatus = async () => {
     try {
@@ -52,6 +69,38 @@ export function SsoMigrationPanel() {
     fetchStatus();
   }, []);
 
+  const handleModeChangeRequest = async (newMode: LoginMode) => {
+    if (status?.login_mode === "password" && newMode !== "password") {
+      const ok = window.confirm(
+        "Attivare il Single Sign-On?\n\nGli utenti esistenti potranno accedere con la password solo per collegare il proprio account " +
+          "aziendale al primo accesso; poi entreranno solo via SSO. Il tuo account admin conserva la password come accesso di emergenza."
+      );
+      if (!ok) return;
+    }
+    if (status?.login_mode && status.login_mode !== "password" && status.login_mode !== newMode) {
+      setLoadingSimulation(true);
+      setError(null);
+      try {
+        const res = await apiFetch(`${apiBase()}/admin/auth/login-mode/simulate?mode=${newMode}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.affected_users && data.affected_users.length > 0) {
+            setAffectedUsers(data.affected_users);
+            setPendingModeChange(newMode);
+            setShowConfirmDialog(true);
+            setLoadingSimulation(false);
+            return; // Wait for user confirmation
+          }
+        }
+      } catch (e) {
+        console.error("Simulation error", e);
+      }
+      setLoadingSimulation(false);
+    }
+    
+    await handleModeChange(newMode);
+  };
+
   const handleModeChange = async (newMode: LoginMode) => {
     setError(null);
     setSaving(true);
@@ -66,7 +115,7 @@ export function SsoMigrationPanel() {
         let msg = "Errore durante il cambio modalità.";
         try {
           const j = await res.json();
-          if (j.detail?.code) msg = `Errore: ${j.detail.code}`;
+          if (j.detail?.code) msg = MODE_ERRORS[j.detail.code] ?? `Errore: ${j.detail.code}`;
           else if (typeof j.detail === "string") msg = j.detail;
         } catch {}
         setError(msg);
@@ -185,7 +234,7 @@ export function SsoMigrationPanel() {
 
           <div className="flex justify-end pt-2">
             <button
-              onClick={() => window.location.href = "/security/migration"}
+              onClick={() => router.push("/security/migration")}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-all"
             >
               Gestisci Utenti <ChevronRight className="w-4 h-4" />
@@ -199,7 +248,7 @@ export function SsoMigrationPanel() {
         <div className="animate-in fade-in slide-in-from-top-4">
           <SsoConfigPanel
             forcedProvider={selectedTab as any}
-            onValidationSuccess={() => handleModeChange(selectedTab)}
+            onActivate={() => handleModeChangeRequest(selectedTab)}
             isActive={status.login_mode === selectedTab}
           />
         </div>
@@ -214,10 +263,11 @@ export function SsoMigrationPanel() {
             Disattiva il Single Sign-On e torna all'accesso standard tramite password per tutti gli utenti.
           </p>
           <button
-            onClick={() => handleModeChange("password")}
-            className="mt-4 px-6 py-2 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors"
+            onClick={() => handleModeChangeRequest("password")}
+            disabled={loadingSimulation}
+            className="mt-4 px-6 py-2 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
           >
-            Imposta come predefinita
+            {loadingSimulation ? "Verifica in corso..." : "Imposta come predefinita"}
           </button>
         </div>
       )}
@@ -229,6 +279,63 @@ export function SsoMigrationPanel() {
         title={dialogTitle}
         message={dialogMessage}
       />
+
+      {/* Modal Conferma Cambio Modalità */}
+      {showConfirmDialog && pendingModeChange && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-[#111] border border-[#333] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
+            <div className="p-6 border-b border-[#222]">
+              <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4 border border-yellow-500/20">
+                <AlertTriangle className="w-6 h-6 text-yellow-500" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Conferma Cambio Metodo di Accesso</h3>
+              <p className="text-sm text-gray-400">
+                Stai per cambiare il metodo di accesso attualmente in uso. I seguenti {affectedUsers.length} utenti non possiedono una password per accedere.
+                <br /><br />
+                <strong>Verrà generata una password temporanea per ciascuno (mostrata una sola volta): comunicala agli utenti in modo sicuro.</strong>
+              </p>
+            </div>
+            
+            <div className="p-6 overflow-y-auto flex-1 bg-black/40">
+              <div className="space-y-2">
+                {affectedUsers.map((u, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 rounded-lg border border-[#222] bg-[#070707]">
+                    <div>
+                      <div className="text-sm font-medium text-white">{u.identifier}</div>
+                      <div className="text-xs text-gray-500">{u.email}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-[#222] bg-[#0a0a0a] flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowConfirmDialog(false);
+                  setPendingModeChange(null);
+                }}
+                disabled={saving}
+                className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={async () => {
+                  setShowConfirmDialog(false);
+                  await handleModeChange(pendingModeChange);
+                  setPendingModeChange(null);
+                }}
+                disabled={saving}
+                className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Conferma e Genera Password
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

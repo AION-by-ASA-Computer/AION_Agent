@@ -36,7 +36,11 @@
         "thinking": "Thinking",
         "advanced": "Avanzado"
       },
-      "enum": { "min": "Mín", "medium": "Medio", "max": "Máx" },
+      "enum": {
+        "min": "Mín",
+        "medium": "Medio",
+        "max": "Máx"
+      },
       "fields": {
         "max_agent_steps": "Pasos máximos del agente",
         "max_tool_calls": "Llamadas máximas a tools",
@@ -435,9 +439,47 @@
     "sso_microsoft": "Iniciar sesión con Microsoft",
     "sso_google": "Iniciar sesión con Google",
     "or": "o",
+    "mfa": {
+      "title_enroll": "Configurar la autenticación de dos factores",
+      "title_verify": "Verificación en dos pasos",
+      "enroll_help": "Escanea el código QR con Google Authenticator, Microsoft Authenticator o una aplicación similar, y luego ingresa el código de 6 dígitos.",
+      "verify_help": "Ingresa el código de 6 dígitos mostrado por tu aplicación de autenticación.",
+      "manual": "¿No puedes escanear? Ingresa esta clave manualmente:",
+      "code": "Código de 6 dígitos",
+      "confirm": "Confirmar e iniciar sesión",
+      "verify": "Verificar",
+      "back": "Volver al inicio de sesión",
+      "loading": "Cargando…",
+      "error": {
+        "invalid_code": "Código inválido. Por favor, inténtalo de nuevo.",
+        "mfa_locked": "Demasiados intentos. Inténtalo de nuevo en {{seconds}} segundos.",
+        "invalid_mfa_token": "Sesión expirada. Por favor, inicia sesión de nuevo.",
+        "generic": "Fallo en la verificación."
+      }
+    },
     "sso_error": {
       "sso_already_linked": "La cuenta ya está vinculada a otro usuario.",
-      "sso_user_already_linked": "Ya tienes una cuenta vinculada."
+      "sso_user_already_linked": "Ya tienes una cuenta vinculada.",
+      "generic": "Error al iniciar sesión. Inténtalo de nuevo.",
+      "sso_not_linked": "Tu cuenta aún no está vinculada. Inicia sesión con tu contraseña y vincula tu cuenta corporativa.",
+      "sso_domain_not_allowed": "El dominio de tu correo no está permitido.",
+      "sso_required": "Esta cuenta requiere inicio de sesión SSO.",
+      "password_login_disabled": "El inicio de sesión con contraseña está deshabilitado.",
+      "temp_password_expired": "La contraseña temporal ha caducado. Contacta con el administrador.",
+      "sso_failed": "Error de autenticación SSO.",
+      "sso_start_failed": "No se pudo iniciar el acceso SSO.",
+      "sso_token_invalid": "Token SSO no válido.",
+      "sso_provisioning_failed": "No se pudo crear la cuenta.",
+      "sso_provisioning_conflict": "La cuenta se está creando, reintenta.",
+      "email_required_for_provisioning": "El proveedor no devolvió un correo.",
+      "invalid_code": "Código de acceso no válido.",
+      "code_expired": "Código de acceso caducado. Reintenta.",
+      "code_already_used": "Código de acceso ya utilizado.",
+      "exchange_error": "Error al completar el acceso.",
+      "exchange_failed": "Error al completar el acceso.",
+      "link_failed": "Error al vincular.",
+      "session_invalid": "Sesión caducada, inicia sesión de nuevo.",
+      "user_not_found": "Usuario no encontrado."
     }
   },
   "authgate": {
@@ -692,5 +734,14 @@
       "howto": "Cómo hacer",
       "factcheck": "Fact-check"
     }
+  },
+  "sso_link": {
+    "title": "Actualización de seguridad",
+    "desc": "El administrador requiere vincular tu cuenta a {{provider}} para seguir accediendo.",
+    "button": "Vincular cuenta {{provider}}",
+    "logout": "Cerrar sesión",
+    "start_failed": "No se pudo iniciar la vinculación SSO.",
+    "bad_response": "Respuesta no válida del servidor.",
+    "network": "Error de red."
   }
 }

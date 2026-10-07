@@ -57,13 +57,6 @@ async def get_login_mode(
 
     if provider:
         async with get_async_session_maker()() as session:
-            total_q = select(func.count()).select_from(User).where(
-                User.tenant_id == tenant,
-                User.password_hash.is_not(None),
-                User.sso_migration_exempt == False,  # noqa: E712
-            )
-            total = (await session.execute(total_q)).scalar_one()
-
             migrated_q = (
                 select(func.count())
                 .select_from(User)
@@ -75,7 +68,6 @@ async def get_login_mode(
                 )
                 .where(
                     User.tenant_id == tenant,
-                    User.password_hash.is_not(None),
                     User.sso_migration_exempt == False,  # noqa: E712
                 )
             )
@@ -88,7 +80,10 @@ async def get_login_mode(
             exempt = (await session.execute(exempt_q)).scalar_one()
 
         pending = await pending_users_count(tenant, provider)
-        
+        # Con clear_password_on_link i migrati non hanno piu' password: il totale
+        # e' migrati + in attesa (non "utenti con password").
+        total = migrated + pending
+
         # Auto-completamento se la migrazione è terminata ma non è stata registrata
         if result["sso_migration_active"] and pending == 0:
             await _check_migration_completion(tenant, provider)
@@ -102,6 +97,71 @@ async def get_login_mode(
         result["exempt"] = exempt
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# GET /admin/auth/login-mode/simulate
+# ---------------------------------------------------------------------------
+
+@router.get("/login-mode/simulate")
+async def simulate_login_mode_change(
+    mode: str = Query(..., regex="^(password|microsoft|google)$"),
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+) -> Dict[str, Any]:
+    """Simula il cambio di modalità per identificare gli utenti che riceveranno una password temporanea."""
+    tenant = _tenant_id()
+    settings = await get_login_settings(tenant)
+    current_mode = settings.get("login_mode", "password")
+
+    users_affected = []
+
+    async with get_async_session_maker()() as session:
+        if mode != "password" and current_mode in ("microsoft", "google") and current_mode != mode:
+            # Cambio da SSO a SSO
+            users_without_pw = (
+                await session.execute(
+                    select(User).where(
+                        User.tenant_id == tenant,
+                        User.password_hash.is_(None),
+                        User.sso_migration_exempt == False,
+                        User.id != auth.user_row_id,
+                    ).where(
+                        ~(
+                            select(UserSsoIdentity.id)
+                            .where(
+                                UserSsoIdentity.user_id == User.id,
+                                UserSsoIdentity.tenant_id == tenant,
+                                UserSsoIdentity.provider == mode,
+                            )
+                            .correlate(User)
+                            .exists()
+                        )
+                    )
+                )
+            ).scalars().all()
+        elif mode == "password" and current_mode != "password":
+            # Cambio da SSO a password
+            users_without_pw = (
+                await session.execute(
+                    select(User).where(
+                        User.tenant_id == tenant,
+                        User.password_hash.is_(None),
+                        User.sso_migration_exempt == False,
+                    )
+                )
+            ).scalars().all()
+        else:
+            users_without_pw = []
+
+        for u in users_without_pw:
+            users_affected.append({
+                "id": u.id,
+                "identifier": u.identifier,
+                "email": u.email,
+                "display_name": u.display_name,
+            })
+
+    return {"affected_users": users_affected}
 
 
 # ---------------------------------------------------------------------------
@@ -148,7 +208,7 @@ async def put_login_mode(
 
 @router.get("/sso-migration/users")
 async def list_migration_users(
-    status: str = Query("pending", regex="^(pending|migrated|exempt)$"),
+    status: str = Query("pending", regex="^(pending|migrated|exempt|no_access)$"),
     q: str = Query(""),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -177,6 +237,30 @@ async def list_migration_users(
                 .where(
                     User.tenant_id == tenant,
                     User.sso_migration_exempt == False,  # noqa: E712
+                )
+            )
+        elif status == "no_access" and provider:
+            # Senza password e senza identita' sul provider attivo: non possono
+            # entrare in nessun modo finche' non ricevono una password temporanea
+            # (es. dopo uno scollegamento).
+            stmt = (
+                select(User)
+                .where(
+                    User.tenant_id == tenant,
+                    User.password_hash.is_(None),
+                    User.sso_migration_exempt == False,  # noqa: E712
+                )
+                .where(
+                    ~(
+                        select(UserSsoIdentity.id)
+                        .where(
+                            UserSsoIdentity.user_id == User.id,
+                            UserSsoIdentity.tenant_id == tenant,
+                            UserSsoIdentity.provider == provider,
+                        )
+                        .correlate(User)
+                        .exists()
+                    )
                 )
             )
         else:  # pending
@@ -250,6 +334,7 @@ async def list_migration_users(
                     )
                 ).scalars().first()
                 if identity:
+                    entry["identity_id"] = identity.id
                     entry["sso_email"] = identity.email
                     entry["linked_at"] = identity.created_at
 
@@ -360,3 +445,90 @@ async def unlink_sso_identity(
         "identity_id": identity_id,
         "user_has_no_password": needs_temp,
     }
+
+
+# ---------------------------------------------------------------------------
+# 2FA TOTP (solo login con password)
+# ---------------------------------------------------------------------------
+
+class SetTwoFactorBody(BaseModel):
+    required: bool
+
+
+@router.get("/2fa")
+async def get_two_factor(
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+) -> Dict[str, Any]:
+    from src.auth.mfa.totp import force_disabled, two_factor_effective
+
+    tid = _tenant_id()
+    settings = await get_login_settings(tid)
+    async with get_async_session_maker()() as session:
+        password_users = (
+            await session.execute(
+                select(func.count())
+                .select_from(User)
+                .where(User.tenant_id == tid, User.password_hash.is_not(None))
+            )
+        ).scalar_one()
+        enrolled_users = (
+            await session.execute(
+                select(func.count())
+                .select_from(User)
+                .where(
+                    User.tenant_id == tid,
+                    User.password_hash.is_not(None),
+                    User.totp_enabled_at.is_not(None),
+                )
+            )
+        ).scalar_one()
+    return {
+        "required": bool(settings.get("totp_required")),
+        "effective": await two_factor_effective(tid),
+        "available": settings.get("login_mode") == "password",
+        "force_disabled": force_disabled(),
+        "enrolled_users": enrolled_users,
+        "password_users": password_users,
+    }
+
+
+@router.put("/2fa")
+async def put_two_factor(
+    body: SetTwoFactorBody,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+) -> Dict[str, Any]:
+    from datetime import datetime, timezone
+
+    tid = _tenant_id()
+    settings = await get_login_settings(tid)
+    if body.required and settings.get("login_mode") != "password":
+        raise HTTPException(409, detail={"code": "sso_active"})
+    async with get_async_session_maker()() as session:
+        row = await session.get(AuthSettings, tid)
+        if row is None:
+            row = AuthSettings(tenant_id=tid, login_mode="password")
+            session.add(row)
+        if bool(row.totp_required) != body.required:
+            row.totp_required = body.required
+            row.totp_required_changed_at = datetime.now(timezone.utc)
+        row.updated_by_user_id = auth.user_row_id
+        await session.commit()
+    _invalidate_cache(tid)
+    logger.info("2FA required=%s set by %s", body.required, auth.identifier)
+    return await get_two_factor(auth)
+
+
+@router.delete("/users/{user_id}/2fa")
+async def reset_user_two_factor(
+    user_id: str,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+) -> Dict[str, Any]:
+    from src.auth.mfa.totp import reset_user_totp
+
+    async with get_async_session_maker()() as session:
+        user = await session.get(User, user_id)
+        if not user or user.tenant_id != _tenant_id():
+            raise HTTPException(404, detail="User not found")
+    await reset_user_totp(user_id)
+    logger.info("2FA reset for user %s by %s", user_id, auth.identifier)
+    return {"status": "ok", "user_id": user_id, "totp_enabled": False}

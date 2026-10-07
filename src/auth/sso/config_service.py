@@ -164,7 +164,21 @@ async def upsert_provider(
             if needs_revalidation:
                 existing.validated_at = None
                 existing.validated_by_user_id = None
-                existing.enabled = False
+                # Se questo e' il provider ATTIVO non lo spegniamo: con
+                # login_mode su SSO e provider disabilitato nessuno (admin
+                # incluso, senza break-glass) potrebbe piu' accedere. Resta
+                # acceso e l'admin deve solo rivalidarlo dal pannello.
+                login_active = False
+                try:
+                    from src.auth.sso.login_mode import get_login_settings
+
+                    login_active = (
+                        await get_login_settings(tenant_id)
+                    ).get("login_mode") == provider
+                except Exception:  # noqa: BLE001
+                    login_active = False
+                if not login_active:
+                    existing.enabled = False
         else:
             session.add(
                 SsoProvider(

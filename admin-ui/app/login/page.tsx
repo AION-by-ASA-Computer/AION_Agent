@@ -7,6 +7,13 @@ import { ShieldCheck, Loader2, AlertCircle } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { setStoredAuth } from "@/lib/auth/storage";
 import { resetAuthStatusCache } from "@/lib/auth/status";
+import { TwoFactorStep, type MfaChallenge, type MfaLoginResult } from "@/components/auth/TwoFactorStep";
+
+const LOGIN_ERRORS: Record<string, string> = {
+  temp_password_expired: "La password temporanea è scaduta. Chiedi a un amministratore di rigenerarla.",
+  sso_required: "Questo account accede tramite SSO: usa il login SSO dalla chat.",
+  password_login_disabled: "L'accesso con password non è disponibile per questo account.",
+};
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -18,10 +25,31 @@ export default function AdminLoginPage() {
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showDefaultHint, setShowDefaultHint] = useState(false);
+  const [mfa, setMfa] = useState<MfaChallenge | null>(null);
 
   useEffect(() => {
     setShowDefaultHint(true);
   }, []);
+
+  function completeLogin(j: MfaLoginResult) {
+    if (!j.access_token) {
+      setErr("Token mancante nella risposta.");
+      return;
+    }
+    const roles = Array.isArray(j.roles) ? j.roles : [];
+    if (!roles.includes("admin")) {
+      setErr("Questo utente non ha il ruolo 'admin'. Chiedi all'amministratore di assegnartelo.");
+      setMfa(null);
+      return;
+    }
+    setStoredAuth(j.access_token, j.user_id ?? null);
+    resetAuthStatusCache();
+    if (j.must_change_password) {
+      router.replace("/change-password");
+    } else {
+      router.replace(next);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -31,15 +59,20 @@ export default function AdminLoginPage() {
       const r = await fetch(`${apiBase()}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        // client:"admin" -> il backend NON applica il blocco "solo SSO" ai ruoli admin
+        // (accesso di emergenza). Per i non-admin viene comunque trattato come "chat".
+        body: JSON.stringify({ username, password, client: "admin" }),
       });
       const raw = await r.text();
       let j: {
-        detail?: string | unknown[];
+        detail?: string | { code?: string } | unknown[];
         access_token?: string;
         user_id?: string;
         roles?: string[];
         must_change_password?: boolean;
+        mfa_required?: boolean;
+        mfa_stage?: "enroll" | "verify";
+        mfa_token?: string;
       };
       try {
         j = raw ? JSON.parse(raw) : {};
@@ -53,31 +86,25 @@ export default function AdminLoginPage() {
       }
       if (!r.ok) {
         const d = j.detail;
+        const code =
+          d && !Array.isArray(d) && typeof d === "object" ? (d as { code?: string }).code : undefined;
         const msg =
           typeof d === "string"
             ? d
+            : code
+            ? LOGIN_ERRORS[code] ?? `Accesso negato (${code})`
             : Array.isArray(d) && d[0] && typeof (d[0] as { msg?: string }).msg === "string"
             ? (d[0] as { msg: string }).msg
             : "Login failed";
         setErr(msg);
         return;
       }
-      if (!j.access_token) {
-        setErr("Token mancante nella risposta.");
+      if (j.mfa_required && j.mfa_token && j.mfa_stage) {
+        setPassword("");
+        setMfa({ stage: j.mfa_stage, token: j.mfa_token });
         return;
       }
-      const roles = Array.isArray(j.roles) ? j.roles : [];
-      if (!roles.includes("admin")) {
-        setErr("Questo utente non ha il ruolo 'admin'. Chiedi all'amministratore di assegnartelo.");
-        return;
-      }
-      setStoredAuth(j.access_token, j.user_id ?? null);
-      resetAuthStatusCache();
-      if (j.must_change_password) {
-        router.replace("/change-password");
-      } else {
-        router.replace(next);
-      }
+      completeLogin(j);
     } catch (e: unknown) {
       setErr((e as Error)?.message || "Errore di rete");
     } finally {
@@ -96,6 +123,13 @@ export default function AdminLoginPage() {
           <p className="text-sm text-gray-400 text-center">Accesso riservato agli amministratori</p>
         </div>
 
+        {mfa ? (
+          <TwoFactorStep
+            challenge={mfa}
+            onSuccess={completeLogin}
+            onCancel={() => setMfa(null)}
+          />
+        ) : (
         <form onSubmit={submit} className="flex w-full flex-col gap-3">
           <input
             className="w-full rounded-xl border border-[#262626] bg-[#141414] px-4 py-2.5 text-sm text-white placeholder:text-gray-500 outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition"
@@ -131,8 +165,9 @@ export default function AdminLoginPage() {
             Entra
           </button>
         </form>
+        )}
 
-        {showDefaultHint && (
+        {showDefaultHint && !mfa && (
           <p className="text-xs text-gray-500 max-w-sm text-center">
             Setup iniziale? Le credenziali di default sono
             {" "}

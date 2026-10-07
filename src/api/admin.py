@@ -3575,6 +3575,7 @@ async def list_users():
                     "must_change_password": bool(
                         getattr(r, "must_change_password", False)
                     ),
+                    "totp_enabled": r.totp_enabled_at is not None,
                     "created_at": r.created_at,
                     "last_active_at": r.last_active_at,
                 }

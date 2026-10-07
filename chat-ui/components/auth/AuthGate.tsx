@@ -74,7 +74,17 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
           must_change_password?: boolean;
           sso_link_required?: boolean;
           sso_provider?: string;
+          mfa_enrollment_required?: boolean;
         };
+
+        if (me.mfa_enrollment_required) {
+          // 2FA diventato obbligatorio dopo l'emissione del token: nuovo login con enrollment.
+          setStoredAuth(null, null);
+          resetAuthStatusCache();
+          setState("redirecting");
+          router.replace("/login");
+          return;
+        }
 
         if (me.sso_link_required && me.sso_provider) {
           setSsoProvider(me.sso_provider);

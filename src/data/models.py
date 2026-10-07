@@ -69,6 +69,19 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now()
     )
     last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # 2FA TOTP (migration v4w5x6y024). Secret cifrato AES-GCM (credential_store).
+    # ``totp_enabled_at`` NULL = enrollment non confermato (secret pending).
+    totp_secret_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    totp_enabled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    totp_last_used_step: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    totp_failed_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    totp_locked_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "identifier", name="uq_users_tenant_identifier"),
@@ -943,6 +956,13 @@ class AuthSettings(Base):
     # Se True, cancella password_hash al link (solo per non-admin)
     clear_password_on_link: Mapped[bool] = mapped_column(
         Boolean, default=True, server_default="1", nullable=False
+    )
+    # 2FA TOTP obbligatorio per il login con password (migration v4w5x6y024)
+    totp_required: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    totp_required_changed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     updated_by_user_id: Mapped[Optional[str]] = mapped_column(
         String(64), ForeignKey("users.id"), nullable=True

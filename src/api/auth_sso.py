@@ -8,6 +8,7 @@ Fix 0.6: user_id calcolato lato server, non decodificato dal client.
 """
 
 import hashlib
+import html
 import logging
 import os
 import secrets
@@ -18,8 +19,13 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import select, update
 
-from src.api.auth_login import ChatAuthIdentity, issue_chat_token, require_chat_auth
+from src.api.auth_login import (
+    ChatAuthIdentity,
+    issue_chat_token,
+    require_chat_token_only,
+)
 from src.api.public_urls import chat_base_url, oauth_redirect_api_base
 from src.auth.sso.config_service import get_provider, mark_validated
 from src.auth.sso.flow import build_authorize_url, handle_callback
@@ -134,14 +140,15 @@ class LinkStartBody(BaseModel):
 async def sso_link_start(
     request: Request,
     body: LinkStartBody,
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_token_only),
 ):
     """Avvia il flusso SSO di collegamento. Richiede token chat utente.
 
-    Usa require_chat_auth senza il blocco sso_link_required (l'utente deve
-    poter avviare il link anche quando è in stato link_required).
+    Usa require_chat_token_only: senza il blocco sso_link_required (l'utente
+    deve poter avviare il link proprio quando e' in stato link_required).
+    Solo token HMAC utente: API key / BFF non hanno un utente da collegare.
     """
-    if not auth.user_row_id:
+    if auth.via != "chat_token" or not auth.user_row_id:
         raise HTTPException(401, detail="Token utente richiesto")
 
     # Recupera il provider attivo
@@ -230,9 +237,8 @@ async def sso_callback(
             )
         except Exception as e:
             logger.warning("Admin validate error: %s", e)
-            admin_base = (os.getenv("AION_ADMIN_URL") or "").rstrip("/")
             return HTMLResponse(
-                f"<h3>Errore durante la validazione</h3><p>{e}</p>",
+                f"<h3>Errore durante la validazione</h3><p>{html.escape(str(e))}</p>",
                 status_code=400,
             )
 
@@ -272,6 +278,7 @@ async def sso_callback(
                 claims=claims,
                 token_data=data,
                 provider_config=provider_config,
+                finalize_migration=True,
             )
         except ValueError as e:
             error_code = str(e)
@@ -322,11 +329,14 @@ async def sso_callback(
     # login normale (fix 0.4, 0.5, 0.6)
     # -----------------------------------------------------------------------
     try:
+        from src.auth.sso.login_mode import is_migration_active
+
         user_dict = await resolve_user(
             claims=claims,
             token_data=data,
             provider_config=provider_config,
             tenant_id=_tenant_id(),
+            migration_active=await is_migration_active(_tenant_id()),
         )
     except ValueError as e:
         error_code = str(e)
@@ -382,9 +392,7 @@ async def sso_exchange(body: ExchangeBody):
     async with get_async_session_maker()() as session:
         state = (
             await session.execute(
-                __import__("sqlalchemy", fromlist=["select"]).select(SsoAuthState).where(
-                    SsoAuthState.state_hash == code_hash
-                )
+                select(SsoAuthState).where(SsoAuthState.state_hash == code_hash)
             )
         ).scalars().first()
 
@@ -392,19 +400,32 @@ async def sso_exchange(body: ExchangeBody):
             raise HTTPException(400, detail={"code": "invalid_code"})
         if state.consumed_at:
             raise HTTPException(400, detail={"code": "code_already_used"})
-            
+
         expires_at = state.expires_at
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
-            
+
         if expires_at < now:
             raise HTTPException(400, detail={"code": "code_expired"})
 
-        state.consumed_at = now
+        encrypted_payload = state.payload_json
+
+        # Consumo atomico: due richieste concorrenti con lo stesso codice non
+        # possono riuscire entrambe (UPDATE condizionato su consumed_at IS NULL).
+        res = await session.execute(
+            update(SsoAuthState)
+            .where(
+                SsoAuthState.state_hash == code_hash,
+                SsoAuthState.consumed_at.is_(None),
+            )
+            .values(consumed_at=now)
+        )
         await session.commit()
+        if res.rowcount != 1:
+            raise HTTPException(400, detail={"code": "code_already_used"})
 
     try:
-        payload_json = decrypt_value(state.payload_json)
+        payload_json = decrypt_value(encrypted_payload)
         payload = json.loads(payload_json)
     except Exception:
         raise HTTPException(500, detail={"code": "exchange_error"})
