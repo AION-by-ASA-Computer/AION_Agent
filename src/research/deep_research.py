@@ -624,33 +624,114 @@ class DeepResearcher:
         prompt = EXTRACTOR_PROMPT.format(webpage_content=content, goal=question)
 
         try:
-            response = await self._llm(
+            raw_response = await self._llm(
                 [{"role": "user", "content": prompt}],
                 temperature=0.2,
-                max_tokens=2048,
+                max_tokens=4096,
                 timeout=self.extraction_timeout,
             )
+            response = strip_thinking(raw_response) or ""
             parsed = self._parse_json_object(response)
-            if parsed:
-                parsed["url"] = url
-                parsed["title"] = title or page.get("title", "")
-                parsed["og_image"] = page.get("og_image", "")
-                # Skip findings where the LLM says the page is useless
-                if is_low_quality(parsed.get("summary", "")):
-                    logger.info(f"Skipping low-quality extraction from {url}")
-                    return None
-                return parsed
-            # If JSON parsing fails, treat entire response as evidence
-            return {
+
+            summary = ""
+            evidence = ""
+            rational = ""
+
+            if isinstance(parsed, dict):
+                # Search for summary across multiple standard and common field names
+                for k in (
+                    "summary",
+                    "riassunto",
+                    "sintesi",
+                    "overview",
+                    "description",
+                    "answer",
+                    "key_points",
+                    "findings",
+                ):
+                    val = parsed.get(k)
+                    if isinstance(val, str) and val.strip():
+                        summary = val.strip()
+                        break
+                    elif isinstance(val, list) and val:
+                        summary = " ".join(str(x) for x in val if x)
+                        break
+
+                # Search for evidence across multiple common field names
+                for k in (
+                    "evidence",
+                    "evidenza",
+                    "content",
+                    "text",
+                    "details",
+                    "facts",
+                    "quotes",
+                    "information",
+                    "data",
+                ):
+                    val = parsed.get(k)
+                    if isinstance(val, str) and val.strip():
+                        evidence = val.strip()
+                        break
+                    elif isinstance(val, list) and val:
+                        evidence = "\n".join(str(x) for x in val if x)
+                        break
+
+                rational = str(
+                    parsed.get("rational")
+                    or parsed.get("reasoning")
+                    or parsed.get("motivo")
+                    or ""
+                )
+            elif isinstance(parsed, list):
+                summary = " ".join(str(x) for x in parsed[:3] if x)
+                evidence = "\n".join(str(x) for x in parsed if x)
+
+            # If summary or evidence contains reasoning leakage / meta-prompt text, discard them
+            if summary and is_low_quality(summary):
+                summary = ""
+            if evidence and is_low_quality(evidence):
+                evidence = ""
+
+            # If JSON parsing gave no usable summary or evidence, use the raw response text (if clean)
+            if not summary and not evidence:
+                if response.strip() and not is_low_quality(response.strip()):
+                    evidence = response.strip()[:3000]
+                    summary = response.strip()[:500]
+
+            # Critical Webpage Fallback: If extraction still gave empty fields, use the actual webpage content!
+            if not summary and not evidence and content:
+                evidence = content[:2500]
+                summary = content[:400]
+
+            # If finding still has no real content or is useless, skip it
+            if not evidence and not summary:
+                return None
+
+            result_dict = {
                 "url": url,
                 "title": title or page.get("title", ""),
                 "og_image": page.get("og_image", ""),
-                "rational": "LLM extraction (raw)",
-                "evidence": response[:3000],
-                "summary": response[:500],
+                "rational": rational or "LLM extraction",
+                "evidence": evidence,
+                "summary": summary or (evidence[:500] if evidence else ""),
             }
+            if isinstance(parsed, dict):
+                for k, v in parsed.items():
+                    if k not in result_dict:
+                        result_dict[k] = v
+            return result_dict
         except Exception as e:
             logger.warning(f"LLM extraction failed for {url}: {e}")
+            if content:
+                return {
+                    "url": url,
+                    "title": title or page.get("title", ""),
+                    "og_image": page.get("og_image", ""),
+                    "rational": "Web content fallback (extraction failed)",
+                    "evidence": content[:2500],
+                    "summary": content[:400],
+                }
             return None
 
     # ------------------------------------------------------------------
@@ -682,22 +763,22 @@ class DeepResearcher:
             )
 
         try:
-            return await self._llm(
+            res = await self._llm(
                 [{"role": "user", "content": prompt}],
                 temperature=0.3,
                 max_tokens=self.max_report_tokens,
-                # Synthesis is a heavy generation call like the final report
-                # (which gets 180s); a slow local model (e.g. a 20B served from
-                # LM Studio) routinely needs >60s for it. The old 60s cap timed
-                # out mid-stream and discarded the round's findings (#1551).
-                timeout=180,
+                timeout=300,
             )
+            clean_res = strip_thinking(res)
+            if clean_res and clean_res.strip():
+                return clean_res.strip()
+            return current_report or findings_text
         except Exception as e:
             logger.error(f"Synthesis failed: {e}")
             self._emit(
                 phase="warning", message="Synthesis failed, keeping previous report"
             )
-            return current_report  # keep the old report on failure
+            return current_report or findings_text  # keep the old report or seed with findings
 
     # ------------------------------------------------------------------
     # DECIDE
@@ -733,61 +814,57 @@ class DeepResearcher:
     # FINAL REPORT
     # ------------------------------------------------------------------
     async def _final_report(self, question: str, report: str) -> str:
-        """LLM writes a polished final report, retrying if too short."""
-        prompt = FINAL_REPORT_PROMPT.format(
-            question=question,
-            report=report,
-        )
+        """LLM writes a polished final report."""
         cat_extra = CATEGORY_PROMPTS.get(self.category or "", "")
-        if cat_extra:
-            prompt += "\n\n" + cat_extra
 
+        lang_instruction = ""
         if self.language and self.language != "en":
             from src.runtime.user_language import LANG_DISPLAY_NAMES
 
             lang_name = LANG_DISPLAY_NAMES.get(self.language, self.language.title())
-            prompt += (
+            lang_instruction = (
                 f"\n\nIMPORTANT: Write the entire final research report, including COMPARE TABLES, "
                 f"verdicts, pros/cons, headings, and executive summary strictly in {lang_name}."
             )
 
+        # Build the system message with the format override (if any) — this way
+        # the model receives the format rule as a top-level system constraint
+        # rather than as an appended note that can conflict with the user prompt.
+        system_parts = [
+            "You are an expert research writer. Your task is to write a polished, comprehensive research report.",
+            "Output ONLY the final report content — no meta-commentary, no explanations, no planning text.",
+            "Do NOT output your reasoning or thought process. Write the report directly.",
+        ]
+        if cat_extra:
+            system_parts.append(cat_extra)
+        if lang_instruction:
+            system_parts.append(lang_instruction)
+        system_msg = "\n\n".join(system_parts)
+
+        user_prompt = FINAL_REPORT_PROMPT.format(
+            question=question,
+            report=report,
+        )
+
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_prompt},
+        ]
+
         try:
             result = await self._llm(
-                [{"role": "user", "content": prompt}],
+                messages,
                 temperature=0.3,
                 max_tokens=self.max_report_tokens,
-                timeout=180,
+                timeout=300,
             )
-
-            # If report is too short, ask the LLM to expand it
-            if len(result.split()) < 400:
-                logger.info(
-                    f"Final report too short ({len(result.split())} words), requesting expansion"
-                )
-                self._emit(phase="writing", message="Expanding report...")
-                expanded = await self._llm(
-                    [
-                        {"role": "user", "content": prompt},
-                        {"role": "assistant", "content": result},
-                        {
-                            "role": "user",
-                            "content": "This report is too brief. Please expand it significantly:\n"
-                            "- Add detailed paragraphs for each section (not just bullet points)\n"
-                            "- Include specific data, numbers, and comparisons from the evidence\n"
-                            "- Explain context and significance — don't just list facts\n"
-                            "- Use ## headings and ### subheadings\n"
-                            "- Target at least 1000 words\n"
-                            "Write the full expanded report now.",
-                        },
-                    ],
-                    temperature=0.4,
-                    max_tokens=self.max_report_tokens,
-                    timeout=180,
-                )
-                if len(expanded.split()) > len(result.split()):
-                    return expanded
-
-            return result
+            clean_result = strip_thinking(result) or result
+            if clean_result and len(clean_result.split()) >= 30:
+                return clean_result
+            if report and len(report.split()) > len((clean_result or "").split()):
+                logger.warning("Final report output too brief; falling back to synthesis report")
+                return report
+            return clean_result or report
         except Exception as e:
             logger.error(f"Final report generation failed: {e}")
             return report  # return the evolving report as-is
@@ -805,8 +882,6 @@ class DeepResearcher:
 
     def _time_exceeded(self) -> bool:
         return (time.time() - self._start_time) > self.max_time
-
-    # _strip_think_tags removed — use research_utils.strip_thinking()
 
     @staticmethod
     def _strip_code_block(text: str) -> str:
@@ -904,13 +979,36 @@ class DeepResearcher:
         for i, f in enumerate(findings, 1):
             url = f.get("url", "unknown")
             title = f.get("title", "")
-            summary = f.get("summary", "")
-            evidence = f.get("evidence", "")
-            # Use summary if available, fall back to truncated evidence
+            summary = (
+                f.get("summary")
+                or f.get("riassunto")
+                or f.get("sintesi")
+                or f.get("description")
+                or ""
+            )
+            evidence = (
+                f.get("evidence")
+                or f.get("evidenza")
+                or f.get("content")
+                or f.get("text")
+                or f.get("details")
+                or ""
+            )
+            if not summary and not evidence:
+                for k in ("snippet", "raw_content", "rational"):
+                    val = f.get(k)
+                    if isinstance(val, str) and val.strip():
+                        evidence = val.strip()
+                        break
+
             content = (
-                summary
-                if summary
-                else (evidence[:1000] if evidence else "(no content)")
+                summary.strip()
+                if isinstance(summary, str) and summary.strip()
+                else (
+                    evidence[:1200].strip()
+                    if isinstance(evidence, str) and evidence.strip()
+                    else "(no content)"
+                )
             )
             parts.append(f"**Finding {i}** — [{title}]({url})\n{content}")
         return "\n\n".join(parts)

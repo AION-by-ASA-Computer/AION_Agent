@@ -134,14 +134,6 @@ export function ChatHeader({
         </div>
       </div>
 
-      {/* Center: Capabilities & Tool Status Badges */}
-      <div className="flex min-w-0 flex-wrap items-center justify-center gap-2.5">
-        <CapabilitiesChip
-          usedTools={usedTools ?? []}
-          skillStatuses={skillStatuses ?? []}
-        />
-      </div>
-
       {/* Right: Dock Toggle Button */}
       <div className="flex items-center gap-2 sm:justify-end">
         {onToggleDock && (

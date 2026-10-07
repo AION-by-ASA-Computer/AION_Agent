@@ -86,27 +86,27 @@ export function ProjectMemoryNotesPanel({
       const [st, list] =
         memoryScope === "user"
           ? await Promise.all([
-              fetchUserMemoryStatus(userId, token),
-              searchQ.trim()
-                ? searchUserNotes(userId, searchQ.trim(), token, { mode: searchMode })
-                : fetchUserNotes(userId, token, {
-                    category: category || undefined,
-                    status: statusFilter,
-                    limit: 200,
-                  }),
-            ])
+            fetchUserMemoryStatus(userId, token),
+            searchQ.trim()
+              ? searchUserNotes(userId, searchQ.trim(), token, { mode: searchMode })
+              : fetchUserNotes(userId, token, {
+                category: category || undefined,
+                status: statusFilter,
+                limit: 200,
+              }),
+          ])
           : await Promise.all([
-              fetchProjectMemoryStatus(userId, projectSlug, token),
-              searchQ.trim()
-                ? searchProjectNotes(userId, projectSlug, searchQ.trim(), token, {
-                    mode: searchMode,
-                  })
-                : fetchProjectNotes(userId, projectSlug, token, {
-                    category: category || undefined,
-                    status: statusFilter,
-                    limit: 200,
-                  }),
-            ]);
+            fetchProjectMemoryStatus(userId, projectSlug, token),
+            searchQ.trim()
+              ? searchProjectNotes(userId, projectSlug, searchQ.trim(), token, {
+                mode: searchMode,
+              })
+              : fetchProjectNotes(userId, projectSlug, token, {
+                category: category || undefined,
+                status: statusFilter,
+                limit: 200,
+              }),
+          ]);
       setActiveCount(st.notes_active);
       setTotalCount(st.notes_total);
       setNotes(list);
@@ -265,22 +265,21 @@ export function ProjectMemoryNotesPanel({
         <button
           type="button"
           onClick={startCreate}
-          className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary to-primary/85 px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+          className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 py-2 px-3 text-xs font-bold text-white shadow-md shadow-rose-500/25 border border-rose-400/30 backdrop-blur-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
         >
-          <Plus size={14} />
+          <Plus size={14} className="shrink-0" />
           <span className="hidden sm:inline">Nuova Nota</span>
         </button>
       </div>
-
       {/* 2. Scrollable Category Micro-Pills & Discreet Stats */}
       <div className="flex items-center justify-between gap-2 border-b border-black/[0.04] dark:border-white/[0.04] pb-2">
         <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
           <button
             type="button"
             className={cn(
-              "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all shrink-0 border",
+              "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all shrink-0 border cursor-pointer",
               !category
-                ? "border-primary/40 bg-primary/15 text-primary font-semibold shadow-2xs"
+                ? "border-transparent bg-foreground text-background font-semibold shadow-xs"
                 : "border-black/[0.06] dark:border-white/[0.08] bg-card/40 text-muted-foreground hover:bg-card/80 hover:text-foreground"
             )}
             onClick={() => setCategory("")}
@@ -294,15 +293,9 @@ export function ProjectMemoryNotesPanel({
                 key={c}
                 type="button"
                 className={cn(
-                  "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all shrink-0 border",
+                  "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all shrink-0 border cursor-pointer",
                   isSelected
-                    ? c === "decision"
-                      ? "border-indigo-500/40 bg-indigo-500/15 text-indigo-400 font-semibold shadow-2xs"
-                      : c === "pitfall"
-                      ? "border-amber-500/40 bg-amber-500/15 text-amber-400 font-semibold shadow-2xs"
-                      : c === "preference"
-                      ? "border-purple-500/40 bg-purple-500/15 text-purple-400 font-semibold shadow-2xs"
-                      : "border-blue-500/40 bg-blue-500/15 text-blue-400 font-semibold shadow-2xs"
+                    ? "border-transparent bg-foreground text-background font-semibold shadow-xs"
                     : "border-black/[0.06] dark:border-white/[0.08] bg-card/40 text-muted-foreground hover:bg-card/80 hover:text-foreground"
                 )}
                 onClick={() => setCategory(c)}
@@ -318,7 +311,12 @@ export function ProjectMemoryNotesPanel({
           <button
             type="button"
             onClick={() => setStatusFilter((prev) => (prev === "active" ? "all" : "active"))}
-            className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-card/30 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+            className={cn(
+              "rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors cursor-pointer",
+              statusFilter === "active"
+                ? "border-transparent bg-foreground text-background shadow-2xs"
+                : "border-black/[0.06] dark:border-white/[0.08] bg-card/30 text-muted-foreground hover:text-foreground"
+            )}
           >
             {statusFilter === "active" ? "Attive" : "Tutte"}
           </button>
@@ -410,7 +408,7 @@ export function ProjectMemoryNotesPanel({
             </button>
             <button
               type="button"
-              className="focus-ring rounded-xl bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90"
+              className="focus-ring rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 px-4 py-1.5 text-xs font-bold text-white shadow-md shadow-rose-500/25 border border-rose-400/30 backdrop-blur-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 cursor-pointer"
               onClick={() => void saveForm()}
               disabled={loading || !draft.trim()}
             >
@@ -439,32 +437,6 @@ export function ProjectMemoryNotesPanel({
               </p>
             </div>
 
-            {/* Template idea chips */}
-            <div className="space-y-1.5">
-              <span className="px-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                Esempi di note utili
-              </span>
-              {[
-                { cat: "preference", text: "Preferisco risposte dirette e codice ben documentato in TypeScript." },
-                { cat: "decision", text: "Tutte le query SQL devono utilizzare clausole LIMIT e indici espliciti." },
-                { cat: "constraint", text: "Non modificare file di migrazione già applicati in produzione." },
-              ].map((tpl, i) => (
-                <button
-                  key={i}
-                  type="button"
-                  onClick={() => {
-                    setCreating(true);
-                    setDraft(tpl.text);
-                    setDraftCategory(tpl.cat);
-                  }}
-                  className="group flex w-full flex-col rounded-xl border border-black/[0.05] dark:border-white/[0.06] bg-card/40 p-2.5 text-left transition-all hover:border-primary/40 hover:bg-card/80"
-                >
-                  <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors">
-                    + {tpl.text}
-                  </span>
-                </button>
-              ))}
-            </div>
           </div>
         ) : (
           <ul className="space-y-2.5">
@@ -473,10 +445,10 @@ export function ProjectMemoryNotesPanel({
                 note.category === "decision"
                   ? "bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border-indigo-500/20"
                   : note.category === "constraint"
-                  ? "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20"
-                  : note.category === "preference"
-                  ? "bg-purple-500/10 text-purple-500 dark:text-purple-400 border-purple-500/20"
-                  : "bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20";
+                    ? "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20"
+                    : note.category === "preference"
+                      ? "bg-purple-500/10 text-purple-500 dark:text-purple-400 border-purple-500/20"
+                      : "bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20";
 
               return (
                 <li

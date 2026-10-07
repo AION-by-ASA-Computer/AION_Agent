@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { useT } from "@/lib/i18n/use-t";
 import { StreamingContentPreview } from "@/components/dock/StreamingContentPreview";
-import { ToolResultsPanel } from "@/components/dock/ToolResultsPanel";
 import { filterUserVisibleSessionFiles } from "@/lib/session-file-paths";
 import {
   sessionDownloadUrl,
@@ -406,14 +405,6 @@ export function ArtifactsPanel({
 
   return (
     <div className="space-y-4 p-3">
-      {toolLedgerEntries.length > 0 ? (
-        <ToolResultsPanel
-          entries={toolLedgerEntries}
-          conversationId={conversationId}
-          token={token}
-        />
-      ) : null}
-
       {/* Session Files Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1 py-1 border-b border-border/15 pb-2 mb-3">

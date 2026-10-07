@@ -203,49 +203,6 @@ export function SidebarProfileMenu({
           </div>
         </div>
 
-        <div className="rounded-lg px-1 py-0.5">
-          <button
-            type="button"
-            onClick={() => setLangOpen((prev) => !prev)}
-            className="focus-ring flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-left text-sm transition hover:bg-muted/55"
-          >
-            <span className="font-medium text-foreground">{t("sidebar.profile_menu.language")}</span>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <span aria-hidden>{currentLocale.flag}</span>
-              <span>{currentLocale.name}</span>
-              {langOpen ? (
-                <ChevronUp className="h-3.5 w-3.5" aria-hidden />
-              ) : (
-                <ChevronDown className="h-3.5 w-3.5" aria-hidden />
-              )}
-            </span>
-          </button>
-          {langOpen ? (
-            <div className="mt-0.5 space-y-0.5 rounded-lg border border-border/40 bg-muted/20 p-1">
-              {LOCALE_OPTIONS.map((lang) => (
-                <button
-                  key={lang.code}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={locale === lang.code}
-                  onClick={() => void handleLanguageChange(lang.code)}
-                  className={cn(
-                    "focus-ring flex w-full items-center justify-between rounded-md px-2.5 py-1.5 text-xs font-medium transition",
-                    locale === lang.code
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                  )}
-                >
-                  <span className="flex items-center gap-2">
-                    <span aria-hidden>{lang.flag}</span>
-                    <span>{lang.name}</span>
-                  </span>
-                  {locale === lang.code ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
       </div>
 
       <div className="space-y-0.5 border-t border-border/45 p-1">
@@ -257,15 +214,6 @@ export function SidebarProfileMenu({
         >
           <Settings className="h-4 w-4 shrink-0" aria-hidden />
           <span className="font-medium">{t("sidebar.settings")}</span>
-        </Link>
-        <Link
-          href="/settings?tab=user-md"
-          role="menuitem"
-          className="focus-ring flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition hover:bg-muted/55 hover:text-foreground"
-          onClick={() => setOpen(false)}
-        >
-          <FileText className="h-4 w-4 shrink-0" aria-hidden />
-          <span className="font-medium">{t("sidebar.profile_menu.customize")}</span>
         </Link>
         <button
           type="button"

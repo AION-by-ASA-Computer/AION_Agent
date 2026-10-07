@@ -3267,11 +3267,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         <div className="flex flex-1 items-center gap-1 min-w-0">
           {tabsToRender.map((tab) => {
             const isActive = dockTab === tab;
-            let activeColorClass = "bg-primary/10 text-primary shadow-2xs ring-1 ring-primary/20";
+            let activeColorClass = "bg-black/[0.08] dark:bg-white/[0.12] text-foreground ring-1 ring-black/10 dark:ring-white/15 shadow-2xs font-semibold";
             if (tab === "plan") {
               activeColorClass = "bg-orange-500/15 text-orange-600 dark:text-orange-400 shadow-2xs ring-1 ring-orange-500/30";
             } else if (tab === "research") {
               activeColorClass = "bg-violet-500/15 text-violet-600 dark:text-violet-400 shadow-2xs ring-1 ring-violet-500/30";
+            } else if (tab === "memory") {
+              activeColorClass = "bg-rose-500/15 text-rose-600 dark:text-rose-400 shadow-2xs ring-1 ring-rose-500/30";
             }
 
             return (
@@ -3565,7 +3567,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         </button>
 
         {isProfileOpen && (
-          <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,32rem)] rounded-2xl border border-black/10 bg-card/90 p-2.5 text-card-foreground shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 dark:border-white/10 dark:bg-card/85">
+          <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,32rem)] rounded-2xl border border-border bg-card p-2.5 text-card-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
             <div className="flex items-center justify-between border-b border-border/40 pb-2 px-1">
               <div className="text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
                 {t("chat.profile.select")}
@@ -3611,7 +3613,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       "group relative flex flex-col justify-between rounded-xl border p-2 text-left cursor-pointer transition-all duration-200",
                       isSelected
                         ? "border-primary/50 bg-primary/10 shadow-xs ring-1 ring-primary/20"
-                        : "border-black/[0.06] dark:border-white/[0.06] bg-card/40 hover:bg-card/90 hover:border-black/15 dark:hover:border-white/20 hover:shadow-xs hover:translate-y-[-1px]"
+                        : "border-border/60 bg-muted/30 hover:bg-muted/70 dark:bg-card dark:hover:bg-muted/30 hover:border-border hover:shadow-xs hover:translate-y-[-1px]"
                     )}
                   >
                     <div className="flex items-start justify-between gap-1.5 mb-1">
@@ -3716,7 +3718,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         </button>
 
         {isPlusOpen && (
-          <div className="absolute bottom-full left-0 z-50 mb-2 w-56 rounded-2xl border border-black/10 bg-card/95 p-1.5 text-card-foreground shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 dark:border-white/10 dark:bg-card/90">
+          <div className="absolute bottom-full left-0 z-50 mb-2 w-56 rounded-2xl border border-border bg-card p-1.5 text-card-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
             <button
               type="button"
               className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left"
@@ -3770,7 +3772,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 <div className="absolute bottom-full left-0 z-50 pb-1.5 w-60 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
                   <div
                     onMouseEnter={() => setIsModelSubOpen(true)}
-                    className="w-full rounded-2xl border border-black/10 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2 dark:border-white/10 dark:bg-card/90"
+                    className="w-full rounded-2xl border border-border bg-card p-1.5 shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2"
                   >
                     <div className="px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
                       {t("chat.model.select")}
@@ -3884,7 +3886,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 <div className="absolute bottom-full left-0 z-50 pb-1.5 w-56 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
                   <div
                     onMouseEnter={() => setIsAgentModeSubOpen(true)}
-                    className="w-full rounded-2xl border border-black/10 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2 dark:border-white/10 dark:bg-card/90"
+                    className="w-full rounded-2xl border border-border bg-card p-1.5 shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2"
                   >
                     <div className="px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
                       {t("chat.agent_mode.select")}
@@ -3994,7 +3996,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 <div className="absolute bottom-full left-0 z-50 pb-1.5 w-52 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
                   <div
                     onMouseEnter={() => setIsToolsViewSubOpen(true)}
-                    className="w-full rounded-2xl border border-black/10 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2 dark:border-white/10 dark:bg-card/90"
+                    className="w-full rounded-2xl border border-border bg-card p-1.5 shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2"
                   >
                     <div className="px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
                       {t("chat.tools.select_view")}
@@ -4118,7 +4120,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 <div className="absolute bottom-full left-0 z-50 pb-1.5 w-48 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
                   <div
                     onMouseEnter={() => setIsWebSearchSubOpen(true)}
-                    className="w-full rounded-2xl border border-black/10 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2 dark:border-white/10 dark:bg-card/90"
+                    className="w-full rounded-2xl border border-border bg-card p-1.5 shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2"
                   >
                     <div className="border-b border-border/45 px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground">
                       {t("chat.web_search.global")}
@@ -4203,7 +4205,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 <div className="absolute bottom-full left-0 z-50 pb-1.5 w-48 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
                   <div
                     onMouseEnter={() => setIsThinkingSubOpen(true)}
-                    className="w-full rounded-2xl border border-black/10 bg-card/95 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2 dark:border-white/10 dark:bg-card/90"
+                    className="w-full rounded-2xl border border-border bg-card p-1.5 shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-150 sm:slide-in-from-left-2"
                   >
                     <div className="border-b border-border/45 px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground">
                       {t("chat.thinking.label")}

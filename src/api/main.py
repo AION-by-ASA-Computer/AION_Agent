@@ -209,6 +209,14 @@ async def _lifespan(app: FastAPI):
         logger.error(f"Logging recovery failed at lifespan: {e}", exc_info=True)
 
     logger.info("Starting application lifespan...")
+    global _GLOBAL_LOOP
+    _GLOBAL_LOOP = asyncio.get_running_loop()
+    try:
+        import src.main
+
+        src.main._GLOBAL_LOOP = _GLOBAL_LOOP
+    except Exception:
+        pass
     _cleanup_orphaned_mcp_remotes()
     try:
         validate_settings_at_startup()

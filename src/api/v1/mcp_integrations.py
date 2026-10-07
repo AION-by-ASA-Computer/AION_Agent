@@ -418,6 +418,24 @@ async def save_credentials(
     }
 
 
+@router.get("/credentials/{server_slug}/{credential_key}")
+async def get_user_credential_value(
+    server_slug: str,
+    credential_key: str,
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
+) -> Dict[str, Any]:
+    _require_credentials_enabled()
+    _require_identity_for_mutation(auth)
+    user_id = _credential_user_id(auth)
+    tenant = _tenant_id()
+    from src.runtime.credential_store import get_credential
+
+    val = await get_credential(user_id, server_slug, credential_key, tenant_id=tenant)
+    if val is None:
+        raise HTTPException(status_code=404, detail="Credential not found")
+    return {"key": credential_key, "value": val}
+
+
 @router.delete("/credentials/{server_slug}/{credential_key}")
 async def delete_user_credential(
     server_slug: str,

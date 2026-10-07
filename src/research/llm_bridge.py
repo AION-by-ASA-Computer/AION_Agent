@@ -82,8 +82,15 @@ async def complete_messages(
             "temperature": temperature,
             "max_tokens": max_tokens or _max_report_tokens(),
         }
+        client_timeout = httpx.Timeout(
+            timeout=float(timeout),
+            connect=30.0,
+            read=float(timeout),
+            write=30.0,
+            pool=30.0,
+        )
         try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
+            async with httpx.AsyncClient(timeout=client_timeout) as client:
                 r = await client.post(url, json=payload, headers=headers)
                 r.raise_for_status()
                 data = r.json()
@@ -94,12 +101,14 @@ async def complete_messages(
                     part.get("text", "") if isinstance(part, dict) else str(part)
                     for part in content
                 )
+            if not content:
+                content = msg.get("reasoning_content") or msg.get("reasoning") or ""
             return strip_thinking(content or "") or ""
         except Exception as e:
             import logging
 
             logging.getLogger("aion.research").warning(
-                "LLM bridge direct HTTP failed: %s", e
+                "LLM bridge direct HTTP failed: %s", e, exc_info=True
             )
             return ""
     else:
@@ -127,14 +136,33 @@ async def complete_messages(
         try:
             res = await generator.run_async(messages=chat_messages)
             if res and "replies" in res and res["replies"]:
-                content = res["replies"][0].text or ""
+                reply = res["replies"][0]
+                content = reply.text or ""
+                # For reasoning models (Claude extended thinking etc.) the
+                # visible content may be empty while the reasoning is in a
+                # separate field — fall back to it so we get *something*.
+                if not content:
+                    try:
+                        content = (
+                            getattr(reply, "reasoning_content", None)
+                            or getattr(reply, "reasoning", None)
+                            or ""
+                        )
+                    except Exception:
+                        content = ""
                 return strip_thinking(content) or ""
         except Exception as e:
             import logging
 
+            err_str = str(e)
             logging.getLogger("aion.research").warning(
-                "LLM bridge wrapper failed: %s", e
+                "LLM bridge wrapper failed: %s", err_str
             )
+            # Swallow the "model output must contain either output text or tool
+            # calls" error that LiteLLM/Haystack raises when a reasoning model
+            # returns an empty visible-content response (all tokens in think
+            # block). Returning "" lets the caller apply its own fallback.
+            return ""
         return ""
 
 

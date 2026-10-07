@@ -100,7 +100,7 @@ export function AgentModeSelectChip({
       </button>
 
       {open ? (
-        <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,18rem)] rounded-2xl border border-black/10 bg-card/90 p-2 text-card-foreground shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 dark:border-white/10 dark:bg-card/85">
+        <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,18rem)] rounded-2xl border border-border bg-card p-2 text-card-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
           <div className="border-b border-border/40 pb-1.5 px-2 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
             {t("chat.agent_mode.select")}
           </div>

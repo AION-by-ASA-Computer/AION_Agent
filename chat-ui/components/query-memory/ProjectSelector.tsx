@@ -66,7 +66,7 @@ export function ProjectSelector({
         <Database size={12} className="shrink-0 text-primary" aria-hidden />
         <select
           className={cn(
-            "min-w-0 flex-1 bg-transparent text-foreground outline-none",
+            "min-w-0 flex-1 bg-transparent text-foreground outline-none [&>option]:bg-card [&>option]:text-foreground dark:[&>option]:bg-neutral-900 dark:[&>option]:text-neutral-100",
             compact ? "text-[0.786em]" : "text-xs"
           )}
           value={value}

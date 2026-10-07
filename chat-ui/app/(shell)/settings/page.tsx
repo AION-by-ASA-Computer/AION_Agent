@@ -477,15 +477,6 @@ export default function SettingsPage() {
                     </SettingsFieldRow>
                   </div>
                 </SettingsCard>
-
-                <SettingsCard title={t("settings.profile.shortcuts_title")} description={t("settings.profile.shortcuts_desc")}>
-                  <Link
-                    href="/schedules"
-                    className="inline-flex items-center gap-2 rounded-xl border border-border/50 bg-muted/30 px-4 py-3 text-sm font-medium transition hover:bg-muted/50"
-                  >
-                    {t("sidebar.schedules")}
-                  </Link>
-                </SettingsCard>
               </>
             ) : null}
 
@@ -522,17 +513,6 @@ export default function SettingsPage() {
                       showToast(msg);
                     }}
                   />
-                </SettingsCard>
-
-                <SettingsCard title={t("settings.section.session.title")}>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="focus-ring inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 dark:bg-red-500/15 px-4 py-2.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 dark:hover:bg-red-500/25 transition-colors cursor-pointer"
-                  >
-                    <LogOut className="h-4 w-4 text-red-600 dark:text-red-400" aria-hidden />
-                    {t("settings.btn.logout")}
-                  </button>
                 </SettingsCard>
               </>
             ) : null}

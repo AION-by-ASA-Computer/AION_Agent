@@ -74,7 +74,7 @@ export function ModelSelectChip({
       {open ? (
         <div
           className={cn(
-            "absolute left-0 z-50 w-[min(100vw-2rem,17rem)] rounded-2xl border border-black/10 dark:border-white/10 bg-card/90 dark:bg-card/85 p-1.5 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-200",
+            "absolute left-0 z-50 w-[min(100vw-2rem,17rem)] rounded-2xl border border-border bg-card p-1.5 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-200",
             placement === "below"
               ? "top-full mt-2 slide-in-from-top-2"
               : "bottom-full mb-2 slide-in-from-bottom-2",

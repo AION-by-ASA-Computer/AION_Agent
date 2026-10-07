@@ -82,10 +82,10 @@ function activityIcon(act: ResearchActivity, isLatest: boolean, isJobRunning?: b
   if (act.phase === "error")
     return <XCircle className="h-3.5 w-3.5 shrink-0 text-red-500" />;
   if (act.phase === "warning")
-    return <Circle className="h-3.5 w-3.5 shrink-0 text-amber-400" />;
+    return <Circle className="h-3.5 w-3.5 shrink-0 text-amber-500" />;
   if (isLatest && isJobRunning)
-    return <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-400" />;
-  return <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-500/90" />;
+    return <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-600 dark:text-violet-400" />;
+  return <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />;
 }
 
 function progressSummary(j: JobState, t: ReturnType<typeof useT>): string {
@@ -143,9 +143,22 @@ export function DeepResearchPanel({
   const [jobs, setJobs] = useState<JobState[]>([]);
   const [past, setPast] = useState<ResearchLibraryItem[]>([]);
   const [tick, setTick] = useState(0);
+  const [dismissedJobs, setDismissedJobs] = useState<Set<string>>(new Set());
 
   const jobsRef = useRef<JobState[]>([]);
   jobsRef.current = jobs;
+
+  const dismissedJobsRef = useRef<Set<string>>(new Set());
+  dismissedJobsRef.current = dismissedJobs;
+
+  const dismissJob = useCallback((sessionId: string) => {
+    setDismissedJobs((prev) => {
+      const next = new Set(prev);
+      next.add(sessionId);
+      return next;
+    });
+    setJobs((prev) => prev.filter((j) => j.session_id !== sessionId));
+  }, []);
 
   const refreshRef = useRef<() => void>(() => { });
   const unsubRef = useRef<Map<string, () => void>>(new Map());
@@ -215,17 +228,45 @@ export function DeepResearchPanel({
 
     setJobs((prev) => {
       const merged: JobState[] = [];
+      const seen = new Set<string>();
+
+      // 1. Process active running jobs
       for (const [sid, job] of activeMap.entries()) {
+        if (dismissedJobsRef.current.has(sid)) continue;
+        seen.add(sid);
         const existing = prev.find((x) => x.session_id === sid);
-        const isAlreadyDone = existing?.done || existing?.status === "done" || existing?.status === "error";
+        const isAlreadyDone =
+          existing?.done ||
+          existing?.status === "done" ||
+          existing?.status === "error";
         merged.push({
           ...job,
-          status: isAlreadyDone ? (existing?.status || job.status) : job.status,
+          status: isAlreadyDone ? existing?.status || job.status : job.status,
           progress: existing?.progress ?? job.progress,
           activities: existing?.activities ?? job.activities,
           done: isAlreadyDone ? true : existing?.done,
         });
       }
+
+      // 2. Preserve completed or existing jobs that haven't been dismissed
+      for (const p of prev) {
+        if (seen.has(p.session_id)) continue;
+        if (dismissedJobsRef.current.has(p.session_id)) continue;
+        const libItem = lib.find((x) => x.id === p.session_id);
+        if (libItem) {
+          merged.push({
+            ...p,
+            status: libItem.status || p.status,
+            query: libItem.query || p.query,
+            started_at: libItem.started_at || p.started_at,
+            completed_at: libItem.completed_at || p.completed_at,
+            done: libItem.status !== "running",
+          });
+        } else {
+          merged.push(p);
+        }
+      }
+
       return merged;
     });
 
@@ -372,6 +413,11 @@ export function DeepResearchPanel({
     if (!adoptSessionId) return;
     const q = (adoptQuery || "").trim() || t("research.adopt_default_query");
     rememberWatchedResearch(adoptSessionId, q, conversationId);
+    setDismissedJobs((prev) => {
+      const next = new Set(prev);
+      next.delete(adoptSessionId);
+      return next;
+    });
     setJobs((prev) => {
       if (prev.some((j) => j.session_id === adoptSessionId)) return prev;
       return [{ session_id: adoptSessionId, query: q, status: "running" }, ...prev];
@@ -409,7 +455,7 @@ export function DeepResearchPanel({
             <ArrowLeft className="size-3.5 text-muted-foreground" />
             <span>Torna a Deep Research</span>
           </button>
-          <span className="rounded-full bg-violet-500/15 text-violet-400 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
+          <span className="rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/25 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider">
             {past.length} completate
           </span>
         </div>
@@ -417,7 +463,7 @@ export function DeepResearchPanel({
         <div className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-              <BookOpen size={14} className="text-violet-400" />
+              <BookOpen size={14} className="text-violet-600 dark:text-violet-400" />
               <span>Ricerche Recenti</span>
             </h3>
           </div>
@@ -486,34 +532,34 @@ export function DeepResearchPanel({
   /* MAIN DEEP RESEARCH VIEW                                      */
   /* ============================================================ */
   return (
-    <div className="relative flex h-full flex-col gap-4 p-4 text-sm overflow-y-auto custom-scrollbar animate-in fade-in-0 duration-200">
+    <div className="relative flex min-h-full flex-col gap-3.5 p-3 sm:p-4 text-sm overflow-y-auto custom-scrollbar animate-in fade-in-0 duration-200">
       {/* Active Research Activity & Step Timeline */}
       {jobs.length > 0 ? (
         <>
           {/* Header Hero Card */}
-          <div className="relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-500/10 via-card/70 to-card/40 p-4 shadow-sm backdrop-blur-xl">
-            <div className="flex items-start gap-3">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-500/25">
-                <Globe size={20} />
+          <div className="shrink-0 relative overflow-hidden rounded-2xl border border-violet-500/20 bg-gradient-to-b from-violet-500/10 via-card/70 to-card/40 p-3 sm:p-4 shadow-sm backdrop-blur-xl">
+            <div className="flex items-start gap-2.5 sm:gap-3">
+              <div className="flex size-8 sm:size-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-500/25">
+                <Globe className="size-4 sm:size-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-foreground text-sm">Deep Research</h3>
-                    <span className="rounded-full bg-violet-500/15 text-violet-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide">
+                <div className="flex flex-wrap items-center justify-between gap-1.5 sm:gap-2">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <h3 className="font-semibold text-foreground text-xs sm:text-sm">Deep Research</h3>
+                    <span className="rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/25 px-2 py-0.5 text-[9.5px] sm:text-[10px] font-bold uppercase tracking-wide">
                       Multi-Round Web
                     </span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setShowInfo((v) => !v)}
-                    className="focus-ring rounded-full p-1 text-muted-foreground hover:bg-violet-500/15 hover:text-violet-400 transition-colors"
+                    className="focus-ring rounded-full p-1 text-muted-foreground hover:bg-violet-500/15 hover:text-violet-600 dark:hover:text-violet-400 transition-colors"
                     title="Informazioni su Deep Research"
                   >
-                    <Lightbulb size={16} className={showInfo ? "text-violet-400" : "text-muted-foreground"} />
+                    <Lightbulb size={15} className={showInfo ? "text-violet-600 dark:text-violet-400" : "text-muted-foreground"} />
                   </button>
                 </div>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                <p className="mt-1 text-[11px] sm:text-xs leading-relaxed text-muted-foreground">
                   {t("research.description") ||
                     "Ricerca autonoma multi-round: analisi fonti, sintesi incrociata e generazione report strutturato."}
                 </p>
@@ -525,39 +571,42 @@ export function DeepResearchPanel({
           <button
             type="button"
             onClick={() => setView("library")}
-            className="flex w-full items-center justify-between rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-card/60 dark:bg-card/30 p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-500/40 hover:bg-card/90 hover:shadow-md cursor-pointer group"
+            className="shrink-0 flex w-full items-center justify-between rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-card/60 dark:bg-card/30 p-2.5 sm:p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-500/40 hover:bg-card/90 hover:shadow-md cursor-pointer group"
           >
             <div className="flex items-center gap-2.5">
-              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-400 group-hover:bg-violet-500 group-hover:text-white transition-colors">
+              <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/15 text-violet-600 dark:text-violet-400 group-hover:bg-violet-600 group-hover:text-white transition-colors">
                 <BookOpen size={14} />
               </div>
-              <span className="text-xs font-semibold text-foreground group-hover:text-violet-400 transition-colors">
+              <span className="text-xs font-semibold text-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors">
                 Ricerche Recenti
               </span>
             </div>
             <div className="flex items-center gap-1.5">
               {past.length > 0 && (
-                <span className="rounded-full bg-violet-500/15 text-violet-400 px-2 py-0.5 text-[10px] font-bold">
+                <span className="rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/25 px-2 py-0.5 text-[10px] font-bold">
                   {past.length}
                 </span>
               )}
-              <ChevronRight size={13} className="text-muted-foreground group-hover:text-violet-400 group-hover:translate-x-0.5 transition-all" />
+              <ChevronRight size={13} className="text-muted-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 group-hover:translate-x-0.5 transition-all" />
             </div>
           </button>
 
-          <section className="space-y-2.5">
+          <section className="space-y-2.5 min-w-0">
             <div className="flex items-center justify-between px-1">
               <h3 className="text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
                 {t("research.activity")}
               </h3>
-              <span className="flex items-center gap-1.5 text-[0.68em] text-violet-400 font-semibold">
+              <span className="flex items-center gap-1.5 text-[0.68em] text-violet-700 dark:text-violet-300 font-semibold">
                 {jobs.filter((j) => (j.status === "running" || !j.status) && !j.done).length > 0 ? (
                   <>
-                    <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
+                    <span className="relative flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-500 opacity-75" />
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-600 dark:bg-violet-400" />
+                    </span>
                     <span>{jobs.filter((j) => (j.status === "running" || !j.status) && !j.done).length} in esecuzione</span>
                   </>
                 ) : (
-                  <span className="text-emerald-500 flex items-center gap-1">
+                  <span className="text-emerald-600 dark:text-emerald-500 flex items-center gap-1">
                     <CheckCircle2 size={12} />
                     <span>Completata</span>
                   </span>
@@ -590,21 +639,39 @@ export function DeepResearchPanel({
                       </div>
                       <span
                         className={cn(
-                          "shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
+                          "shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide flex items-center gap-1.5",
                           isDone
-                            ? "bg-emerald-500/15 text-emerald-500 border border-emerald-500/20"
+                            ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
                             : j.status === "error"
-                              ? "bg-destructive/15 text-destructive border border-destructive/20"
-                              : "bg-violet-500/15 text-violet-300 border border-violet-500/20"
+                              ? "bg-destructive/15 text-destructive border border-destructive/30"
+                              : "bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/30"
                         )}
                       >
+                        {isRunning && (
+                          <span className="relative flex h-1.5 w-1.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-500 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-violet-600 dark:bg-violet-400" />
+                          </span>
+                        )}
                         {statusLabel(isDone ? "done" : j.status, t)}
                       </span>
                     </div>
 
                     {/* Summary Callout */}
-                    <div className="mt-2.5 rounded-xl bg-violet-500/10 border border-violet-500/15 p-2 text-xs text-violet-300 font-medium">
-                      {progressSummary(j, t)}
+                    <div
+                      className={cn(
+                        "mt-2.5 flex items-center gap-2.5 rounded-xl border p-2.5 text-xs transition-all",
+                        isRunning
+                          ? "bg-violet-500/15 dark:bg-violet-500/20 border-violet-500/30 text-violet-950 dark:text-violet-100 font-semibold shadow-2xs"
+                          : "bg-muted/40 border-border/40 text-muted-foreground font-medium"
+                      )}
+                    >
+                      {isRunning && (
+                        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-violet-600 dark:text-violet-400" />
+                      )}
+                      <span className="min-w-0 flex-1 leading-snug break-words">
+                        {progressSummary(j, t)}
+                      </span>
                     </div>
 
                     {/* Metrics Badges */}
@@ -615,7 +682,7 @@ export function DeepResearchPanel({
                         </span>
                       ) : null}
                       {j.progress?.round != null ? (
-                        <span className="rounded-lg bg-violet-500/15 px-2 py-0.5 text-violet-300 font-medium">
+                        <span className="rounded-lg bg-violet-500/15 border border-violet-500/25 px-2 py-0.5 text-violet-700 dark:text-violet-300 font-semibold">
                           {t("research.round", { round: j.progress.round })}
                         </span>
                       ) : null}
@@ -658,9 +725,9 @@ export function DeepResearchPanel({
                               <li
                                 key={`${act.ts ?? idx}-${label.slice(0, 40)}`}
                                 className={cn(
-                                   "flex items-start gap-2.5 rounded-xl p-2 text-xs leading-snug transition-colors",
+                                  "flex items-start gap-2.5 rounded-xl p-2.5 text-xs leading-snug transition-colors",
                                   isLatest
-                                    ? "bg-violet-500/10 border border-violet-500/20 text-foreground font-medium"
+                                    ? "bg-violet-500/15 dark:bg-violet-500/20 border border-violet-500/30 text-violet-950 dark:text-violet-100 font-semibold shadow-2xs"
                                     : "text-muted-foreground hover:bg-muted/30"
                                 )}
                               >
@@ -668,7 +735,7 @@ export function DeepResearchPanel({
                                 <div className="min-w-0 flex-1">
                                   <span className="block break-words">{label}</span>
                                   {act.ts ? (
-                                    <span className="text-[10px] opacity-60 font-mono mt-0.5 block">
+                                    <span className="text-[10px] opacity-70 font-mono mt-0.5 block">
                                       {formatTime(act.ts)}
                                     </span>
                                   ) : null}
@@ -681,21 +748,43 @@ export function DeepResearchPanel({
                     )}
 
                     {/* Bottom Action Buttons */}
-                    <div className="mt-3.5 flex items-center justify-between border-t border-border/40 pt-2.5">
+                    <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-2.5">
                       {isDone && (
-                        <button
-                          type="button"
-                          className="focus-ring inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm shadow-violet-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-                          onClick={() => openReport(j.session_id, token)}
-                        >
-                          <ExternalLink className="h-3.5 w-3.5" />
-                          {t("research.open_report")}
-                        </button>
+                        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                          <button
+                            type="button"
+                            className="focus-ring inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white px-4 py-2 text-xs font-semibold shadow-md shadow-rose-500/25 border border-rose-400/30 backdrop-blur-xl transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                            onClick={() => openReport(j.session_id, token)}
+                          >
+                            <ExternalLink className="h-3.5 w-3.5" />
+                            <span>Visualizza Report</span>
+                          </button>
+                          <button
+                            type="button"
+                            className="focus-ring inline-flex items-center justify-center gap-1.5 rounded-xl border border-black/10 dark:border-white/15 bg-card/80 hover:bg-card px-3.5 py-2 text-xs font-medium text-foreground hover:text-foreground transition-all active:scale-[0.98] cursor-pointer"
+                            onClick={() => dismissJob(j.session_id)}
+                          >
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                            <span>Torna indietro</span>
+                          </button>
+                        </div>
+                      )}
+                      {j.status === "error" && (
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            className="focus-ring inline-flex items-center justify-center gap-1.5 rounded-xl border border-black/10 dark:border-white/15 bg-card/80 hover:bg-card px-3.5 py-2 text-xs font-medium text-foreground hover:text-foreground transition-all cursor-pointer"
+                            onClick={() => dismissJob(j.session_id)}
+                          >
+                            <ArrowLeft className="h-3.5 w-3.5" />
+                            <span>Torna indietro</span>
+                          </button>
+                        </div>
                       )}
                       {isRunning && (
                         <button
                           type="button"
-                          className="focus-ring ml-auto rounded-xl border border-red-500/30 bg-red-500/15 px-3 py-1 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/25 hover:text-red-700 dark:hover:text-red-300 transition-colors cursor-pointer"
+                          className="focus-ring ml-auto rounded-xl border border-red-500/30 bg-red-500/15 px-3 py-1.5 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/25 hover:text-red-700 dark:hover:text-red-300 transition-colors cursor-pointer"
                           onClick={() =>
                             void cancelResearch(j.session_id, userId, token).then(
                               refreshLibrary
@@ -714,7 +803,7 @@ export function DeepResearchPanel({
         </>
       ) : (
         /* Empty / Idle State: Centered Hero Section */
-        <div className="flex flex-col items-center text-center my-auto py-4">
+        <div className="shrink-0 flex flex-col items-center text-center my-auto py-4">
           <div className="relative mb-3 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-violet-600 to-indigo-600 text-white shadow-lg shadow-violet-500/25 ring-4 ring-violet-500/10">
             <Globe size={28} />
           </div>
@@ -748,11 +837,11 @@ export function DeepResearchPanel({
               className="flex w-full items-center justify-between rounded-2xl border border-black/[0.06] dark:border-white/[0.08] bg-card/60 dark:bg-card/30 p-3 text-left transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-500/40 hover:bg-card/90 hover:shadow-md cursor-pointer group"
             >
               <div className="flex items-center gap-2.5">
-                <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 text-violet-400 group-hover:bg-violet-500 group-hover:text-white transition-colors">
+                <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-violet-500/15 text-violet-600 dark:text-violet-400 group-hover:bg-violet-600 group-hover:text-white transition-colors">
                   <BookOpen size={16} />
                 </div>
                 <div>
-                  <span className="text-xs font-semibold text-foreground group-hover:text-violet-400 transition-colors block">
+                  <span className="text-xs font-semibold text-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 transition-colors block">
                     Ricerche Recenti
                   </span>
                   <span className="text-[11px] text-muted-foreground">
@@ -762,11 +851,11 @@ export function DeepResearchPanel({
               </div>
               <div className="flex items-center gap-1.5">
                 {past.length > 0 && (
-                  <span className="rounded-full bg-violet-500/15 text-violet-400 px-2 py-0.5 text-[10.5px] font-bold">
+                  <span className="rounded-full bg-violet-500/15 text-violet-700 dark:text-violet-300 border border-violet-500/25 px-2 py-0.5 text-[10.5px] font-bold">
                     {past.length}
                   </span>
                 )}
-                <ChevronRight size={14} className="text-muted-foreground group-hover:text-violet-400 group-hover:translate-x-0.5 transition-all" />
+                <ChevronRight size={14} className="text-muted-foreground group-hover:text-violet-600 dark:group-hover:text-violet-400 group-hover:translate-x-0.5 transition-all" />
               </div>
             </button>
           </div>

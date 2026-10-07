@@ -256,7 +256,7 @@ export function ThreadSidebar({
         <button
           type="button"
           onClick={startNewChat}
-          className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-md shadow-primary/25 transition-all duration-300 ease-out hover:scale-105 hover:shadow-lg hover:shadow-primary/35 active:scale-95"
+          className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white shadow-lg shadow-rose-500/25 border border-rose-400/30 backdrop-blur-xl transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
           aria-label={t("sidebar.new_conversation")}
           title={t("sidebar.new_conversation")}
         >
@@ -343,13 +343,13 @@ export function ThreadSidebar({
           <button
             type="button"
             onClick={startNewChat}
-            className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-primary via-primary/95 to-primary px-3.5 py-2.5 text-sm font-semibold text-primary-foreground shadow-md shadow-primary/20 transition-all duration-300 ease-out hover:scale-[1.02] hover:shadow-lg hover:shadow-primary/30 active:scale-[0.98]"
+            className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 py-2.5 px-3.5 text-sm font-bold text-white shadow-lg shadow-rose-500/25 border border-rose-400/30 backdrop-blur-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.98] cursor-pointer"
           >
             <div
               className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
               aria-hidden
             />
-            <MessageSquarePlus className="h-4 w-4 transition-transform duration-300 group-hover:scale-110" aria-hidden />
+            <MessageSquarePlus className="h-4 w-4 transition-transform duration-300 group-hover:scale-110 shrink-0" aria-hidden />
             <span>{t("sidebar.new_conversation")}</span>
           </button>
         </div>
@@ -616,7 +616,7 @@ function ConversationRow({
               setMenuOpen(false);
             }}
           />
-          <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-2xl border border-black/10 dark:border-white/10 bg-popover/95 dark:bg-card/95 p-1.5 text-popover-foreground shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-150">
+          <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 duration-150">
             <button
               type="button"
               onClick={(e) => {

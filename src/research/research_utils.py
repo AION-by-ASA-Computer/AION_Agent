@@ -21,6 +21,12 @@ LOW_QUALITY_MARKERS = [
     "copyright notice",
     "copyright footer",
     "all rights reserved",
+    "we need answer",
+    "need process webpage",
+    "need output json",
+    "user goal in",
+    "output json with",
+    "task guidelines",
 ]
 
 _THINK_PATTERNS = [
@@ -36,14 +42,22 @@ def strip_thinking(text):
     out = str(text)
     for pat in _THINK_PATTERNS:
         out = pat.sub("", out)
-    return out.strip()
+    res = out.strip()
+    if res:
+        return res
+    # If stripping removed all content because the entire generation was inside <think>...</think>,
+    # preserve the inner content instead of returning an empty string.
+    raw = str(text).strip()
+    raw = re.sub(r"^<(?:think|thinking)>", "", raw, flags=re.I).strip()
+    raw = re.sub(r"</(?:think|thinking)>$", "", raw, flags=re.I).strip()
+    return raw
 
 
 def is_low_quality(summary: str) -> bool:
-    """Check if a finding summary indicates useless or irrelevant content."""
+    """Check if a finding summary explicitly indicates useless or irrelevant content."""
     try:
-        if not isinstance(summary, str) or not summary:
-            return True
+        if not isinstance(summary, str) or not summary.strip():
+            return False
         low = summary.lower()
         return any(marker in low for marker in LOW_QUALITY_MARKERS)
     except Exception:
