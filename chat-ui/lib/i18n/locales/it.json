@@ -413,6 +413,10 @@
     "new_conversation": "Nuova conversazione"
   },
   "chat": {
+    "pii": {
+      "tags_label": "Tag da censurare",
+      "tags_none": "Nessun tag selezionato: nessun dato verrà censurato."
+    },
     "thinking": {
       "label": "Ragionamento (Thinking)",
       "select": "Livello di ragionamento",
@@ -670,7 +674,14 @@
   },
   "login": {
     "btn": "Entra",
-    "no_auth": "← Chat senza login (user default)"
+    "no_auth": "← Chat senza login (user default)",
+    "sso_microsoft": "Accedi con Microsoft",
+    "sso_google": "Accedi con Google",
+    "or": "oppure",
+    "sso_error": {
+      "sso_already_linked": "L'account è già collegato a un altro utente.",
+      "sso_user_already_linked": "Hai già un account collegato."
+    }
   },
   "authgate": {
     "checking": "Verifica accesso…",

@@ -132,6 +132,7 @@ def verify_chat_token(token: str) -> Optional[Dict[str, Any]]:
 class LoginBody(BaseModel):
     username: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)
+    client: str = Field(default="chat")  # "chat" | "admin" (§3.5)
 
 
 @router.post("/login")
@@ -149,14 +150,70 @@ async def login(body: LoginBody):
     row = await authenticate_user_password(body.username, body.password)
     if not row:
         raise HTTPException(401, detail="Invalid credentials")
+
+    # Controllo password temporanea scaduta (§3.5)
+    from src.data.engine import get_async_session_maker as _gsm
+    from src.data.models import User as _User
+    from datetime import timezone as _tz
+    import datetime as _dt
+
+    user_id_raw = str(row["id"])
+    async with _gsm()() as _sess:
+        _u = await _sess.get(_User, user_id_raw)
+        if _u and _u.temp_password_expires_at:
+            _now = _dt.datetime.now(_tz.utc)
+            _exp = _u.temp_password_expires_at
+            if _exp.tzinfo is None:
+                _exp = _exp.replace(tzinfo=_tz.utc)
+            if _exp < _now:
+                raise HTTPException(
+                    401,
+                    detail={"code": "temp_password_expired"},
+                )
+
     uid = sanitize_user_id(str(row["identifier"]))
     roles = list(row.get("roles") or [])
     must_change = bool(row.get("must_change_password", False))
     tok = issue_chat_token(
-        user_row_id=str(row["id"]),
+        user_row_id=user_id_raw,
         user_identifier=str(row["identifier"]),
         roles=roles,
     )
+
+    # Controlli SSO per client="chat" (§3.5)
+    sso_link_required = False
+    if body.client == "chat" and password_auth_enabled():
+        tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+        try:
+            from src.auth.sso.login_mode import (
+                get_login_settings,
+                password_login_visible,
+                user_needs_link,
+            )
+            settings = await get_login_settings(tenant)
+            login_mode = settings.get("login_mode", "password")
+
+            if login_mode != "password":
+                vis = await password_login_visible(tenant)
+                if not vis:
+                    raise HTTPException(
+                        403,
+                        detail={"code": "password_login_disabled"},
+                    )
+                needs_link = await user_needs_link(tenant, user_id_raw)
+                if needs_link:
+                    sso_link_required = True
+                else:
+                    # L'utente è già migrato: deve usare solo SSO
+                    raise HTTPException(
+                        403,
+                        detail={"code": "sso_required"},
+                    )
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logger.warning("SSO login check failed: %s", _e)
+
     return {
         "access_token": tok,
         "token_type": "bearer",
@@ -165,6 +222,7 @@ async def login(body: LoginBody):
         "display_name": row.get("display_name") or row["identifier"],
         "roles": roles,
         "must_change_password": must_change,
+        "sso_link_required": sso_link_required,
     }
 
 
@@ -182,8 +240,24 @@ async def me(authorization: Optional[str] = Header(None)):
 
     import json as _json
     from src.data.engine import get_async_session_maker
-    from src.data.models import User
+    from src.data.models import User, UserSsoIdentity
     from src.data.user_password import get_roles
+
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+
+    # Controlla se l'utente deve ancora collegarsi all'SSO (§3.5)
+    sso_link_required = False
+    sso_linked = False
+    sso_provider_name = None
+    try:
+        from src.auth.sso.login_mode import get_login_settings, user_needs_link
+        settings = await get_login_settings(tenant)
+        sso_provider_name = settings.get("sso_provider")
+        if sso_provider_name:
+            sso_link_required = await user_needs_link(tenant, user_row_id)
+            sso_linked = not sso_link_required
+    except Exception as _e:
+        logger.warning("SSO me check failed: %s", _e)
 
     async with get_async_session_maker()() as session:
         u = await session.get(User, user_row_id)
@@ -194,6 +268,9 @@ async def me(authorization: Optional[str] = Header(None)):
                 "metadata": {},
                 "roles": parsed.get("roles", []),
                 "must_change_password": False,
+                "sso_link_required": sso_link_required,
+                "sso_linked": sso_linked,
+                "sso_provider": sso_provider_name,
             }
 
         meta: Dict[str, Any] = {}
@@ -210,8 +287,11 @@ async def me(authorization: Optional[str] = Header(None)):
             "email": u.email,
             "metadata": meta,
             "roles": get_roles(u),
-            "must_change_password": bool(getattr(u, "must_change_password", False)),
+            "must_change_password": bool(getattr(u, "must_change_password", False)) and not sso_linked,
             "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
+            "sso_link_required": sso_link_required,
+            "sso_linked": sso_linked,
+            "sso_provider": sso_provider_name,
         }
 
 
@@ -308,9 +388,60 @@ def admin_password_auth_enabled() -> bool:
 async def auth_status():
     """Stato dell'autenticazione chat + admin. Usato dal frontend per
     decidere se forzare il redirect verso /login. Sempre pubblico."""
+
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+
+    # Leggi impostazioni login_mode (§3.1)
+    login_mode = "password"
+    sso_origin = None
+    sso_migration_active = False
+    password_login_vis = True
+    sso_enabled = False
+    sso_provider = None
+
+    try:
+        from src.auth.sso.login_mode import (
+            get_login_settings,
+            password_login_visible,
+        )
+        settings = await get_login_settings(tenant)
+        login_mode = settings["login_mode"]
+        sso_origin = settings["sso_origin"]
+        sso_migration_active = (
+            sso_origin == "migration"
+            and not settings.get("migration_completed_at")
+        )
+        password_login_vis = await password_login_visible(tenant)
+        if login_mode != "password":
+            sso_enabled = True
+            sso_provider = login_mode
+    except Exception as _e:
+        logger.warning("auth_status SSO check failed: %s", _e)
+        # Fallback al comportamento precedente
+        from src.auth.sso.config_service import public_view
+        sso_config = await public_view(tenant)
+        if sso_config and sso_config.get("enabled") and sso_config.get("validated_at"):
+            if password_auth_enabled():
+                sso_enabled = True
+                sso_provider = sso_config.get("provider")
+
+    # AION_SSO_FORCE_PASSWORD: bypass di emergenza (vedi §5)
+    if (os.getenv("AION_SSO_FORCE_PASSWORD") or "").strip() == "1":
+        login_mode = "password"
+        sso_enabled = False
+        sso_provider = None
+        sso_migration_active = False
+        password_login_vis = True
+
     return {
         "password_auth_enabled": password_auth_enabled(),
         "admin_password_auth_enabled": admin_password_auth_enabled(),
+        "login_mode": login_mode,
+        "sso_origin": sso_origin,
+        "sso_migration_active": sso_migration_active,
+        "password_login_visible": password_login_vis,
+        "sso_enabled": sso_enabled,
+        "sso_provider": sso_provider,
         "login_endpoint": "/auth/login",
         "token_ttl_seconds": _TOKEN_TTL_SEC,
         "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
@@ -417,12 +548,33 @@ async def require_chat_auth(
         raise HTTPException(
             401, detail="Invalid or expired token. Re-login at /auth/login."
         )
-    return ChatAuthIdentity(
+
+    auth_identity = ChatAuthIdentity(
         via="chat_token",
         user_row_id=parsed.get("user_row_id"),
         identifier=parsed.get("identifier"),
         roles=parsed.get("roles") or [],
     )
+
+    # Fix 0.4 / §3.6: blocco sso_link_required per token chat.
+    # Le API key e il BFF passano senza questo controllo.
+    user_row_id = parsed.get("user_row_id")
+    if user_row_id:
+        try:
+            from src.auth.sso.login_mode import user_needs_link
+            tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+            needs_link = await user_needs_link(tenant, user_row_id)
+            if needs_link:
+                raise HTTPException(
+                    403,
+                    detail={"code": "sso_link_required"},
+                )
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logger.warning("SSO link check failed in require_chat_auth: %s", _e)
+
+    return auth_identity
 
 
 # --- Admin role guard -------------------------------------------------------

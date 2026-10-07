@@ -349,6 +349,16 @@ The `/admin/*` router is **always protected** independent of chat auth:
 See [`docs/clients/admin-ui.md`](docs/clients/admin-ui.md#admin-auth-always-on)
 for the full design.
 
+### SSO Migration & Auth Modes
+
+The system supports `password`, `microsoft`, and `google` auth modes (via `PUT /admin/auth/login-mode`). 
+Switching from password to an SSO mode places the system in a migration state.
+- Existing users must log in via password first, and are then blocked by a required "link account" modal.
+- If users don't have a password set, the backend generates temporary 12-char passwords and returns them to the admin to distribute securely.
+- No auto-provisioning links identities by email automatically.
+
+See `docs/security/sso-migration.md` for the full migration flow.
+
 ### Documentation
 - Single source of truth: `docs/` directory
 - Rendered site: `website/` (Docusaurus)

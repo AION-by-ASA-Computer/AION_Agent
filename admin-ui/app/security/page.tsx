@@ -275,9 +275,9 @@ export default function SecurityAudit() {
       {/* Header */}
       <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-6">
         <div className="space-y-1">
-          <h2 className="text-3xl font-extrabold tracking-tight text-white">Security Audit</h2>
+          <h2 className="text-3xl font-extrabold tracking-tight text-white">Security & Auth</h2>
           <p className="text-md text-gray-400 max-w-2xl mt-2">
-            Monitor and scan MCP servers for vulnerabilities using AION Antivirus and specialized AI Security Agents.
+            Gestisci l'autenticazione degli utenti e scansiona il sistema per vulnerabilità.
           </p>
         </div>
         <div className="flex items-center gap-3">

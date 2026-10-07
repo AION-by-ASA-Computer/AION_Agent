@@ -270,6 +270,10 @@
     "new_conversation": "Nueva conversación"
   },
   "chat": {
+    "pii": {
+      "tags_label": "Etiquetas a censurar",
+      "tags_none": "Ninguna etiqueta seleccionada: no se censurará nada."
+    },
     "thinking": {
       "label": "Pensamiento",
       "off": "Thinking: Desactivado",
@@ -427,7 +431,14 @@
   },
   "login": {
     "btn": "Entrar",
-    "no_auth": "← Chat sin iniciar sesión (usuario por defecto)"
+    "no_auth": "← Chat sin iniciar sesión (usuario por defecto)",
+    "sso_microsoft": "Iniciar sesión con Microsoft",
+    "sso_google": "Iniciar sesión con Google",
+    "or": "o",
+    "sso_error": {
+      "sso_already_linked": "La cuenta ya está vinculada a otro usuario.",
+      "sso_user_already_linked": "Ya tienes una cuenta vinculada."
+    }
   },
   "authgate": {
     "checking": "Verificando acceso…",

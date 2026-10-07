@@ -380,11 +380,18 @@ async def probe_llm_connection(
     }
 
 
-async def check_pii_capabilities(llm_provider_name: Optional[str] = None) -> bool:
+async def check_pii_capabilities(
+    llm_provider_name: Optional[str] = None,
+) -> Dict[str, Any]:
     """
     Check if the LLM provider explicitly supports PII review by POSTing to /v1/capabilities.
-    Returns True if the endpoint returns {"support_pii": True} within 3 seconds.
+
+    Returns ``{"support_pii": bool, "pii_tags": list[str]}``. ``support_pii`` is True
+    if the endpoint returns {"support_pii": True} within 3 seconds; ``pii_tags`` lists
+    the PII tags the gateway can censor (selectable per request via
+    ``aion_privacy_filter_exclude_tags``).
     """
+    unsupported: Dict[str, Any] = {"support_pii": False, "pii_tags": []}
     from src.runtime.llm_adapter import (
         resolve_llm_endpoint,
         format_litellm_model_string,
@@ -431,7 +438,7 @@ async def check_pii_capabilities(llm_provider_name: Optional[str] = None) -> boo
                     pass
 
     if not llm_url:
-        return False
+        return unsupported
 
     endpoint = llm_url.rstrip("/") + "/capabilities"
     try:
@@ -451,8 +458,15 @@ async def check_pii_capabilities(llm_provider_name: Optional[str] = None) -> boo
             )
             if resp.status_code == 200:
                 data = resp.json()
-                return bool(data.get("support_pii"))
+                support_pii = bool(data.get("support_pii"))
+                raw_tags = data.get("pii_tags")
+                pii_tags = (
+                    [str(t) for t in raw_tags if str(t).strip()]
+                    if support_pii and isinstance(raw_tags, list)
+                    else []
+                )
+                return {"support_pii": support_pii, "pii_tags": pii_tags}
     except Exception as e:
         logger.debug("PII capabilities check failed for %s: %s", endpoint, e)
 
-    return False
+    return unsupported

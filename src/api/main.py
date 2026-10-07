@@ -519,9 +519,15 @@ app.include_router(research_router)
 app.include_router(plan_execution_router)
 
 from .auth_login import router as auth_login_router
+from .auth_sso import router as auth_sso_router
+from .admin_sso import router as admin_sso_router
+from .admin_auth_mode import router as admin_auth_mode_router
 from .chat_ui import router as chat_ui_router
 
 app.include_router(auth_login_router)
+app.include_router(auth_sso_router)
+app.include_router(admin_sso_router)
+app.include_router(admin_auth_mode_router)
 app.include_router(chat_ui_router)
 
 

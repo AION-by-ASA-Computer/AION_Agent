@@ -158,6 +158,13 @@ async def _run_pipeline_in_background(
                     if getattr(body, "aion_pii_review_token", None) is not None
                     else {}
                 ),
+                **(
+                    {
+                        "aion_privacy_filter_exclude_tags": body.aion_privacy_filter_exclude_tags
+                    }
+                    if body.aion_privacy_filter_exclude_tags is not None
+                    else {}
+                ),
             },
             runtime=clamped,
         ):
@@ -318,6 +325,13 @@ class ChatStreamBody(BaseModel):
         default=None,
         description="Token opzionale per by-passare o confermare la review PII.",
     )
+    aion_privacy_filter_exclude_tags: Optional[List[str]] = Field(
+        default=None,
+        description=(
+            "Tag PII da NON censurare per questa richiesta (complemento dei tag "
+            "selezionati in chat-ui rispetto a quelli esposti da /v1/capabilities)."
+        ),
+    )
 
     class Config:
         populate_by_name = True
@@ -438,6 +452,7 @@ async def chat_prepare(
     async def _run_prepare() -> None:
         status = "ready"
         pii_supported = False
+        pii_tags: list[str] = []
         try:
             from src.runtime.llm_probe import check_pii_capabilities
             import asyncio
@@ -457,7 +472,9 @@ async def chat_prepare(
                 check_pii_capabilities(body.llm_provider_name)
             )
 
-            _, pii_supported = await asyncio.gather(agent_task, cap_task)
+            _, pii_caps = await asyncio.gather(agent_task, cap_task)
+            pii_supported = bool(pii_caps.get("support_pii"))
+            pii_tags = list(pii_caps.get("pii_tags") or [])
 
             logger.info(
                 "chat prepare ready conv=%s profile=%s user=%s pii=%s",
@@ -485,6 +502,7 @@ async def chat_prepare(
                 "mcp_errors": mcp_errors,
                 "has_errors": bool(mcp_errors),
                 "pii_supported": pii_supported,
+                "pii_tags": pii_tags,
             }
             _prepare_tasks.pop(dedupe_key, None)
 
@@ -976,6 +994,14 @@ async def chat_sync(
                     **(
                         {"aion_pii_review_token": body.aion_pii_review_token}
                         if getattr(body, "aion_pii_review_token", None) is not None
+                        else {}
+                    ),
+                    **(
+                        {
+                            "aion_privacy_filter_exclude_tags": body.aion_privacy_filter_exclude_tags
+                        }
+                        if getattr(body, "aion_privacy_filter_exclude_tags", None)
+                        is not None
                         else {}
                     ),
                 },

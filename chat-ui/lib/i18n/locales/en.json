@@ -413,6 +413,10 @@
     "new_conversation": "New conversation"
   },
   "chat": {
+    "pii": {
+      "tags_label": "Tags to redact",
+      "tags_none": "No tags selected: nothing will be redacted."
+    },
     "thinking": {
       "label": "Thinking",
       "off": "Thinking: Off",
@@ -669,7 +673,14 @@
   },
   "login": {
     "btn": "Sign in",
-    "no_auth": "← Chat without login (default user)"
+    "no_auth": "← Chat without login (default user)",
+    "sso_microsoft": "Sign in with Microsoft",
+    "sso_google": "Sign in with Google",
+    "or": "or",
+    "sso_error": {
+      "sso_already_linked": "Account is already linked to another user.",
+      "sso_user_already_linked": "You already have an account linked."
+    }
   },
   "authgate": {
     "checking": "Checking access…",
