@@ -342,7 +342,10 @@
     "model": {
       "label": "Modelo",
       "select": "Seleccionar modelo",
-      "switch": "Cambiar modelo"
+      "switch": "Cambiar modelo",
+      "default": "Predeterminado del sistema",
+      "default_desc": "Usar el modelo LLM principal configurado",
+      "default_hint": "Modelo predeterminado del servidor."
     },
     "capabilities": {
       "label": "Herramientas y Habilidades",

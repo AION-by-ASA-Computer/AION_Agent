@@ -77,12 +77,12 @@ export function AgentModeSelectChip({
 
   const chipClass =
     mode === "plan"
-      ? "border-orange-500/40 bg-orange-500/10 text-orange-500"
+      ? "border-amber-500/40 bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 shadow-[0_0_12px_rgba(245,158,11,0.15)] font-semibold"
       : mode === "deep_research"
-        ? "border-violet-500/40 bg-violet-500/10 text-violet-500"
-        : open || mode !== "normal"
-          ? "border-primary/40 bg-primary/10 text-primary"
-          : "border-border/80 bg-muted/20 text-muted-foreground hover:bg-muted/40 hover:text-foreground";
+        ? "border-violet-500/40 bg-violet-500/10 text-violet-600 dark:text-violet-400 hover:bg-violet-500/20 shadow-[0_0_12px_rgba(139,92,246,0.15)] font-semibold"
+        : open
+          ? "border-primary/40 bg-primary/10 text-primary shadow-xs font-semibold"
+          : "border-black/[0.08] dark:border-white/[0.08] bg-card/70 dark:bg-card/40 text-foreground hover:bg-card/95 dark:hover:bg-card/70 hover:border-black/15 dark:hover:border-white/15 font-semibold";
 
   return (
     <div ref={ref} className="relative">
@@ -90,21 +90,21 @@ export function AgentModeSelectChip({
         type="button"
         onClick={() => onOpenChange(!open)}
         className={cn(
-          "focus-ring inline-flex h-7 max-w-[9rem] items-center gap-1 rounded-full border px-2.5 text-[0.786em] font-medium transition-colors sm:max-w-[10rem]",
+          "focus-ring inline-flex h-7 max-w-[10rem] items-center gap-1.5 rounded-full border px-3 text-xs shadow-2xs backdrop-blur-xl transition-all duration-200 hover:scale-[1.02] active:scale-[0.98] sm:max-w-[12rem]",
           chipClass,
         )}
       >
-        <Icon size={12} className="shrink-0" aria-hidden />
+        <Icon size={12} className={cn("shrink-0", mode === "normal" && "text-primary")} aria-hidden />
         <span className="truncate">{t(meta.labelKey)}</span>
-        <ChevronDown size={10} className="shrink-0 opacity-70" aria-hidden />
+        <ChevronDown size={10} className="shrink-0 opacity-60" aria-hidden />
       </button>
 
       {open ? (
-        <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,17rem)] rounded-xl border border-border bg-card/95 p-1 shadow-lg backdrop-blur-md animate-in fade-in-0 slide-in-from-bottom-2 duration-150">
-          <div className="border-b border-border/45 px-2.5 py-1.5 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
+        <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,18rem)] rounded-2xl border border-black/10 bg-card/90 p-2 text-card-foreground shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 dark:border-white/10 dark:bg-card/85">
+          <div className="border-b border-border/40 pb-1.5 px-2 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
             {t("chat.agent_mode.select")}
           </div>
-          <div className="max-h-64 overflow-y-auto p-0.5">
+          <div className="max-h-64 overflow-y-auto p-0.5 custom-scrollbar">
             {(Object.keys(MODE_META) as AgentMode[]).map((key) => {
               const m = MODE_META[key];
               const ModeIcon = m.icon;
@@ -123,7 +123,7 @@ export function AgentModeSelectChip({
                         : undefined
                   }
                   badgeTone={m.beta ? "beta" : "muted"}
-                  icon={<ModeIcon size={12} className="shrink-0 opacity-80" />}
+                  icon={<ModeIcon size={13} className="shrink-0 opacity-80" />}
                   onClick={() => {
                     if (m.soon) return;
                     onChange(key);

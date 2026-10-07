@@ -68,3 +68,6 @@ mako>=1.3.12
 orjson>=3.11.6
 pdfminer.six>=20251230
 anyio>=4.14.2
+# haystack-ai / opik depend on tqdm with no lower bound; OSV resolves that to 4.9.0
+# (PYSEC-2017-74, GHSA-g7vv-2v7x-gj9p / PYSEC-2026-1976).
+tqdm>=4.66.3

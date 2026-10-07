@@ -37,7 +37,12 @@ type StatusFilter = "active" | "superseded" | "all";
 function formatWhen(iso?: string | null) {
   if (!iso) return "";
   try {
-    return new Date(iso).toLocaleString();
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return iso;
   }
@@ -59,7 +64,8 @@ export function ProjectMemoryNotesPanel({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("active");
   const [searchQ, setSearchQ] = useState("");
   const [searchMode, setSearchMode] = useState<"current" | "historical">("current");
-  const [statusText, setStatusText] = useState("");
+  const [activeCount, setActiveCount] = useState<number | null>(null);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [editing, setEditing] = useState<ProjectNote | null>(null);
   const [draft, setDraft] = useState("");
   const [draftCategory, setDraftCategory] = useState("fact");
@@ -68,7 +74,7 @@ export function ProjectMemoryNotesPanel({
   const [deletingNote, setDeletingNote] = useState<ProjectNote | null>(null);
 
   const categoryLabel = useCallback(
-    (c: string) => t(`project_memory.categories.${c}` as "project_memory.categories.fact"),
+    (c: string) => t(`project_memory.categories.${c}` as "project_memory.categories.fact") || c,
     [t]
   );
 
@@ -101,22 +107,8 @@ export function ProjectMemoryNotesPanel({
                     limit: 200,
                   }),
             ]);
-      setStatusText(
-        memoryScope === "user"
-          ? t("user_memory.status_line", {
-              active: st.notes_active,
-              total: st.notes_total,
-              digests: st.digests_ready,
-              stale: st.digests_stale ?? 0,
-              scope: st.scope_key ?? userId,
-            })
-          : t("project_memory.status_line", {
-              active: st.notes_active,
-              total: st.notes_total,
-              digests: st.digests_ready,
-              stale: st.digests_stale ?? 0,
-            })
-      );
+      setActiveCount(st.notes_active);
+      setTotalCount(st.notes_total);
       setNotes(list);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -132,7 +124,6 @@ export function ProjectMemoryNotesPanel({
     searchQ,
     searchMode,
     memoryScope,
-    t,
   ]);
 
   useEffect(() => {
@@ -152,30 +143,31 @@ export function ProjectMemoryNotesPanel({
     setDraftImportance(3);
   };
 
-  const startEdit = (note: ProjectNote) => {
-    setEditing(note);
+  const startEdit = (n: ProjectNote) => {
+    setEditing(n);
     setCreating(false);
-    setDraft(note.content);
-    setDraftCategory(note.category);
-    setDraftImportance(note.importance);
+    setDraft(n.content);
+    setDraftCategory(n.category);
+    setDraftImportance(n.importance ?? 3);
   };
 
   const cancelForm = () => {
-    setEditing(null);
     setCreating(false);
+    setEditing(null);
     setDraft("");
   };
 
   const saveForm = async () => {
-    const content = draft.trim();
-    if (!content) return;
+    const text = draft.trim();
+    if (!text) return;
     setLoading(true);
+    setError(null);
     try {
       if (editing) {
         if (memoryScope === "user") {
           await updateUserNote(userId, token, editing.id, {
             session_id: sessionId,
-            content,
+            content: text,
             category: draftCategory,
             importance: draftImportance,
           });
@@ -183,29 +175,31 @@ export function ProjectMemoryNotesPanel({
           await updateProjectNote(userId, token, editing.id, {
             session_id: sessionId,
             project: projectSlug,
-            content,
+            content: text,
             category: draftCategory,
             importance: draftImportance,
           });
         }
-      } else if (memoryScope === "user") {
-        await createUserNote(userId, token, {
-          session_id: sessionId,
-          content,
-          category: draftCategory,
-          importance: draftImportance,
-        });
       } else {
-        await createProjectNote(userId, token, {
-          session_id: sessionId,
-          project: projectSlug,
-          content,
-          category: draftCategory,
-          importance: draftImportance,
-        });
+        if (memoryScope === "user") {
+          await createUserNote(userId, token, {
+            session_id: sessionId,
+            content: text,
+            category: draftCategory,
+            importance: draftImportance,
+          });
+        } else {
+          await createProjectNote(userId, token, {
+            session_id: sessionId,
+            project: projectSlug,
+            content: text,
+            category: draftCategory,
+            importance: draftImportance,
+          });
+        }
       }
       cancelForm();
-      await load();
+      void load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -215,14 +209,15 @@ export function ProjectMemoryNotesPanel({
 
   const executeDelete = async (note: ProjectNote, hard: boolean) => {
     setLoading(true);
-    setDeletingNote(null);
+    setError(null);
     try {
       if (memoryScope === "user") {
         await deleteUserNote(userId, token, note.id, sessionId, hard);
       } else {
         await deleteProjectNote(userId, token, note.id, sessionId, hard);
       }
-      await load();
+      setDeletingNote(null);
+      void load();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -231,204 +226,343 @@ export function ProjectMemoryNotesPanel({
   };
 
   return (
-    <div className={cn("flex h-full min-h-0 flex-col", embedded ? "" : "p-3")}>
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="relative min-w-[140px] flex-1">
-          <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+    <div className={cn("flex flex-col text-sm h-full min-h-0 p-3.5 gap-2.5", embedded ? "" : "p-4")}>
+      {/* 1. Unified Search, Refresh & Primary "+ Nuova Nota" Row */}
+      <div className="flex items-center gap-1.5">
+        <div className="relative min-w-0 flex-1">
+          <Search size={13} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/60" />
           <input
-            className="focus-ring w-full rounded-md border border-border bg-background py-2 pl-8 pr-2 text-sm"
-            placeholder={t("project_memory.search_placeholder")}
+            className="focus-ring w-full rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-card/60 dark:bg-card/40 py-2 pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground/60 transition-all focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
+            placeholder={
+              memoryScope === "user"
+                ? "Cerca nella memoria personale..."
+                : (t("project_memory.search_placeholder") || "Cerca nelle note...")
+            }
             value={searchQ}
             onChange={(e) => setSearchQ(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && void load()}
           />
+          {searchQ && (
+            <button
+              type="button"
+              onClick={() => setSearchQ("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-0.5 rounded-full"
+            >
+              ✕
+            </button>
+          )}
         </div>
-        <select
-          className="focus-ring rounded-md border border-border bg-background px-2 py-2 text-sm"
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
+
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="focus-ring shrink-0 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-card/60 dark:bg-card/40 p-2 text-muted-foreground hover:bg-card/90 hover:text-foreground transition-all"
+          title={t("query_memory.refresh")}
         >
-          <option value="">{t("project_memory.all_categories")}</option>
-          {NOTE_CATEGORIES.map((c) => (
-            <option key={c} value={c}>
-              {categoryLabel(c)}
-            </option>
-          ))}
-        </select>
-        <select
-          className="focus-ring rounded-md border border-border bg-background px-2 py-2 text-sm"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-        >
-          <option value="active">{t("project_memory.status_active")}</option>
-          <option value="superseded">{t("project_memory.status_superseded")}</option>
-          <option value="all">{t("project_memory.status_all")}</option>
-        </select>
-        {searchQ.trim() ? (
-          <select
-            className="focus-ring rounded-md border border-border bg-background px-2 py-2 text-xs"
-            value={searchMode}
-            onChange={(e) => setSearchMode(e.target.value as "current" | "historical")}
-          >
-            <option value="current">{t("project_memory.search_current")}</option>
-            <option value="historical">{t("project_memory.search_historical")}</option>
-          </select>
-        ) : null}
-        <button type="button" className="focus-ring rounded-md border p-2" onClick={() => void load()}>
-          <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+          <RefreshCw size={14} className={cn(loading && "animate-spin text-primary")} />
         </button>
-        <button type="button" className="focus-ring rounded-md border p-2" onClick={startCreate}>
-          <Plus className="h-4 w-4" />
+
+        <button
+          type="button"
+          onClick={startCreate}
+          className="focus-ring inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-gradient-to-r from-primary to-primary/85 px-3 py-2 text-xs font-semibold text-primary-foreground shadow-sm shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+        >
+          <Plus size={14} />
+          <span className="hidden sm:inline">Nuova Nota</span>
         </button>
       </div>
 
-      {statusText ? (
-        <p className="mb-2 text-xs text-muted-foreground">{statusText}</p>
-      ) : null}
-      {error ? <p className="mb-2 text-xs text-destructive">{error}</p> : null}
+      {/* 2. Scrollable Category Micro-Pills & Discreet Stats */}
+      <div className="flex items-center justify-between gap-2 border-b border-black/[0.04] dark:border-white/[0.04] pb-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+          <button
+            type="button"
+            className={cn(
+              "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all shrink-0 border",
+              !category
+                ? "border-primary/40 bg-primary/15 text-primary font-semibold shadow-2xs"
+                : "border-black/[0.06] dark:border-white/[0.08] bg-card/40 text-muted-foreground hover:bg-card/80 hover:text-foreground"
+            )}
+            onClick={() => setCategory("")}
+          >
+            Tutte
+          </button>
+          {NOTE_CATEGORIES.map((c) => {
+            const isSelected = category === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all shrink-0 border",
+                  isSelected
+                    ? c === "decision"
+                      ? "border-indigo-500/40 bg-indigo-500/15 text-indigo-400 font-semibold shadow-2xs"
+                      : c === "pitfall"
+                      ? "border-amber-500/40 bg-amber-500/15 text-amber-400 font-semibold shadow-2xs"
+                      : c === "preference"
+                      ? "border-purple-500/40 bg-purple-500/15 text-purple-400 font-semibold shadow-2xs"
+                      : "border-blue-500/40 bg-blue-500/15 text-blue-400 font-semibold shadow-2xs"
+                    : "border-black/[0.06] dark:border-white/[0.08] bg-card/40 text-muted-foreground hover:bg-card/80 hover:text-foreground"
+                )}
+                onClick={() => setCategory(c)}
+              >
+                {categoryLabel(c)}
+              </button>
+            );
+          })}
+        </div>
 
-      {(creating || editing) && (
-        <div className="mb-3 rounded-lg border border-border bg-muted/30 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium">
-              {editing ? t("project_memory.edit_note") : t("project_memory.new_note")}
+        {/* Discreet Stats + Active filter */}
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => setStatusFilter((prev) => (prev === "active" ? "all" : "active"))}
+            className="rounded-full border border-black/[0.06] dark:border-white/[0.08] bg-card/30 px-2 py-0.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {statusFilter === "active" ? "Attive" : "Tutte"}
+          </button>
+
+          {activeCount != null && (
+            <span className="text-[10px] font-mono text-muted-foreground/60 hidden sm:inline">
+              {activeCount}/{totalCount}
             </span>
-            <button type="button" onClick={cancelForm} className="focus-ring rounded p-1">
-              <X className="h-4 w-4" />
+          )}
+        </div>
+      </div>
+
+      {error && (
+        <p className="rounded-xl border border-destructive/30 bg-destructive/10 p-2.5 text-xs text-destructive">
+          {error}
+        </p>
+      )}
+
+      {/* 3. Note Creation / Editing Card */}
+      {(creating || editing) && (
+        <div className="rounded-2xl border border-primary/30 bg-card/95 dark:bg-card/85 p-3.5 shadow-xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-200">
+          <div className="mb-2.5 flex items-center justify-between">
+            <span className="text-xs font-bold uppercase tracking-wider text-foreground">
+              {editing ? (t("project_memory.edit_note") || "Modifica Nota") : (t("project_memory.new_note") || "Nuova Nota")}
+            </span>
+            <button
+              type="button"
+              onClick={cancelForm}
+              className="focus-ring rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            >
+              <X size={14} />
             </button>
           </div>
-          <select
-            className="focus-ring mb-2 w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-            value={draftCategory}
-            onChange={(e) => setDraftCategory(e.target.value)}
-          >
+
+          <div className="mb-2 flex flex-wrap gap-1">
             {NOTE_CATEGORIES.map((c) => (
-              <option key={c} value={c}>
+              <button
+                key={c}
+                type="button"
+                className={cn(
+                  "rounded-full px-2.5 py-0.5 text-[11px] font-medium transition-all border",
+                  draftCategory === c
+                    ? "border-primary bg-primary/15 text-primary font-semibold"
+                    : "border-border/60 bg-muted/30 text-muted-foreground hover:text-foreground"
+                )}
+                onClick={() => setDraftCategory(c)}
+              >
                 {categoryLabel(c)}
-              </option>
+              </button>
             ))}
-          </select>
-          <div className="mb-2">
-            <label className="mb-1 block text-xs text-muted-foreground">
-              {t("project_memory.importance")} ({draftImportance})
-            </label>
-            <input
-              type="range"
-              min={1}
-              max={5}
-              value={draftImportance}
-              onChange={(e) => setDraftImportance(Number(e.target.value))}
-              className="w-full"
-            />
           </div>
+
+          <div className="mb-2.5 flex items-center justify-between rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-muted/20 px-3 py-1.5 text-xs text-muted-foreground">
+            <span>Importanza:</span>
+            <div className="flex items-center gap-1">
+              {[1, 2, 3, 4, 5].map((lvl) => (
+                <button
+                  key={lvl}
+                  type="button"
+                  onClick={() => setDraftImportance(lvl)}
+                  className={cn(
+                    "h-5 w-5 rounded-md text-xs font-bold transition-all",
+                    draftImportance >= lvl
+                      ? "bg-amber-500/20 text-amber-500 font-bold"
+                      : "bg-muted/40 text-muted-foreground/40"
+                  )}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+          </div>
+
           <textarea
-            className="focus-ring mb-2 min-h-[80px] w-full rounded-md border border-border bg-background p-2 text-sm"
+            className="focus-ring mb-3 min-h-[90px] w-full resize-none rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-background/80 p-2.5 text-xs text-foreground placeholder:text-muted-foreground/60 transition-all focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
             maxLength={500}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder={t("project_memory.note_placeholder")}
+            placeholder={t("project_memory.note_placeholder") || "Scrivi una nota o una regola..."}
           />
-          <button
-            type="button"
-            className="focus-ring rounded-md bg-primary px-3 py-1.5 text-sm text-primary-foreground"
-            onClick={() => void saveForm()}
-            disabled={loading || !draft.trim()}
-          >
-            {t("project_memory.save")}
-          </button>
+
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={cancelForm}
+              className="focus-ring rounded-xl px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground transition-all"
+            >
+              {t("btn.cancel")}
+            </button>
+            <button
+              type="button"
+              className="focus-ring rounded-xl bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm transition-all hover:bg-primary/90"
+              onClick={() => void saveForm()}
+              disabled={loading || !draft.trim()}
+            >
+              {t("project_memory.save") || "Salva"}
+            </button>
+          </div>
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      {/* 4. Notes List with Floating Glassmorphic Cards */}
+      <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar">
         {loading && notes.length === 0 ? (
-          <div className="flex justify-center py-8 text-muted-foreground">
-            <Loader2 className="h-6 w-6 animate-spin" />
+          <div className="flex justify-center py-12 text-muted-foreground">
+            <Loader2 className="h-6 w-6 animate-spin text-primary" />
           </div>
         ) : sorted.length === 0 ? (
-          <p className="py-8 text-center text-sm text-muted-foreground">
-            {memoryScope === "user"
-              ? t("user_memory.empty")
-              : t("project_memory.empty")}
-          </p>
+          <div className="space-y-3 py-4">
+            <div className="rounded-2xl border border-dashed border-border/80 bg-muted/20 p-6 text-center">
+              <p className="text-xs font-medium text-muted-foreground">
+                {memoryScope === "user"
+                  ? (t("user_memory.empty") || "Nessuna nota personale.")
+                  : (t("project_memory.empty") || "Nessuna nota nel progetto.")}
+              </p>
+              <p className="mt-1 text-[11px] text-muted-foreground/70">
+                Aggiungi fatti, regole o preferenze che l&apos;agente deve ricordare.
+              </p>
+            </div>
+
+            {/* Template idea chips */}
+            <div className="space-y-1.5">
+              <span className="px-1 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+                Esempi di note utili
+              </span>
+              {[
+                { cat: "preference", text: "Preferisco risposte dirette e codice ben documentato in TypeScript." },
+                { cat: "decision", text: "Tutte le query SQL devono utilizzare clausole LIMIT e indici espliciti." },
+                { cat: "constraint", text: "Non modificare file di migrazione già applicati in produzione." },
+              ].map((tpl, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    setCreating(true);
+                    setDraft(tpl.text);
+                    setDraftCategory(tpl.cat);
+                  }}
+                  className="group flex w-full flex-col rounded-xl border border-black/[0.05] dark:border-white/[0.06] bg-card/40 p-2.5 text-left transition-all hover:border-primary/40 hover:bg-card/80"
+                >
+                  <span className="text-xs font-medium text-foreground group-hover:text-primary transition-colors">
+                    + {tpl.text}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </div>
         ) : (
-          <ul className="space-y-2">
-            {sorted.map((note) => (
-              <li
-                key={note.id}
-                className={cn(
-                  "rounded-lg border p-3 text-sm shadow-sm",
-                  note.status === "superseded"
-                    ? "border-border/50 bg-muted/20 opacity-80"
-                    : "border-border/80 bg-card"
-                )}
-              >
-                <div className="mb-1 flex flex-wrap items-center gap-2">
-                  <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium uppercase text-primary">
-                    {categoryLabel(note.category)}
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">#{note.seq}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {t("project_memory.importance_short")} {note.importance}
-                  </span>
-                  {note.status !== "active" ? (
-                    <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] uppercase text-muted-foreground">
-                      {note.status}
-                    </span>
-                  ) : null}
-                  {note.superseded_by ? (
-                    <span className="text-[10px] text-muted-foreground">
-                      → #{note.superseded_by}
-                    </span>
-                  ) : null}
-                  <div className="ml-auto flex gap-1">
-                    {note.status === "active" ? (
-                      <>
+          <ul className="space-y-2.5">
+            {sorted.map((note) => {
+              const catClass =
+                note.category === "decision"
+                  ? "bg-indigo-500/10 text-indigo-500 dark:text-indigo-400 border-indigo-500/20"
+                  : note.category === "constraint"
+                  ? "bg-amber-500/10 text-amber-500 dark:text-amber-400 border-amber-500/20"
+                  : note.category === "preference"
+                  ? "bg-purple-500/10 text-purple-500 dark:text-purple-400 border-purple-500/20"
+                  : "bg-blue-500/10 text-blue-500 dark:text-blue-400 border-blue-500/20";
+
+              return (
+                <li
+                  key={note.id}
+                  className={cn(
+                    "group relative flex flex-col rounded-2xl border p-3.5 shadow-2xs backdrop-blur-xl transition-all duration-200 animate-in fade-in-0 slide-in-from-bottom-1",
+                    note.status === "superseded"
+                      ? "border-black/[0.04] dark:border-white/[0.04] bg-muted/20 opacity-70"
+                      : "border-black/[0.06] dark:border-white/[0.08] bg-card/60 dark:bg-card/35 hover:bg-card/90 hover:shadow-md hover:-translate-y-0.5"
+                  )}
+                >
+                  {/* Card Header: Soft Badge, Importance & Actions */}
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn("rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide", catClass)}>
+                        {categoryLabel(note.category)}
+                      </span>
+                      <span className="text-[10px] font-mono text-muted-foreground/60">
+                        #{note.seq}
+                      </span>
+                      {note.importance ? (
+                        <span className="text-[10px] text-amber-500 font-semibold tracking-tight">
+                          {"★".repeat(note.importance)}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {note.status === "active" ? (
+                        <>
+                          <button
+                            type="button"
+                            className="focus-ring rounded-lg p-1 text-muted-foreground/60 hover:bg-muted/80 hover:text-foreground transition-colors"
+                            onClick={() => startEdit(note)}
+                            title={t("project_memory.edit_note")}
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="focus-ring rounded-lg p-1 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive transition-colors"
+                            onClick={() => setDeletingNote(note)}
+                            title={t("project_memory.delete_title_active")}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </>
+                      ) : (
                         <button
                           type="button"
-                          className="focus-ring rounded p-1"
-                          onClick={() => startEdit(note)}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          className="focus-ring rounded p-1 text-destructive hover:bg-destructive/10"
+                          className="focus-ring rounded-lg p-1 text-muted-foreground/60 hover:bg-destructive/10 hover:text-destructive transition-colors"
                           onClick={() => setDeletingNote(note)}
-                          title={t("project_memory.delete_title_active")}
+                          title={t("project_memory.delete_title_superseded")}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
+                          <Trash2 size={13} />
                         </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="focus-ring rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                        onClick={() => setDeletingNote(note)}
-                        title={t("project_memory.delete_title_superseded")}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-                <p className="whitespace-pre-wrap break-words">{note.content}</p>
-                <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
-                  {note.created_at ? <span>{formatWhen(note.created_at)}</span> : null}
-                  {note.source_session_id ? (
-                    <span className="font-mono">
-                      {t("project_memory.session")}: {note.source_session_id.slice(0, 8)}…
-                    </span>
-                  ) : null}
-                </div>
-              </li>
-            ))}
+
+                  {/* Note Content */}
+                  <p className="text-xs leading-relaxed text-foreground whitespace-pre-wrap break-words font-normal">
+                    {note.content}
+                  </p>
+
+                  {/* Card Footer: Timestamp and Session */}
+                  <div className="mt-2.5 flex items-center justify-between gap-2 border-t border-black/[0.04] dark:border-white/[0.04] pt-2 text-[10px] text-muted-foreground/60">
+                    <span>{note.created_at ? formatWhen(note.created_at) : ""}</span>
+                    {note.source_session_id ? (
+                      <span className="font-mono truncate max-w-[8rem]">
+                        Session · {note.source_session_id.slice(0, 8)}
+                      </span>
+                    ) : null}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
 
+      {/* Delete Confirmation Modal */}
       {deletingNote ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-xl border border-border bg-card p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+          <div className="w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
             <div className="mb-3 flex items-start justify-between gap-2">
               <div className="flex items-center gap-2">
                 <div className="rounded-full bg-destructive/10 p-2 text-destructive">
@@ -455,7 +589,7 @@ export function ProjectMemoryNotesPanel({
                 : t("project_memory.delete_desc_superseded")}
             </p>
 
-            <div className="mb-4 max-h-24 overflow-y-auto rounded-md border border-border bg-muted/40 p-2.5 text-xs italic text-foreground">
+            <div className="mb-4 max-h-24 overflow-y-auto rounded-xl border border-border bg-muted/40 p-2.5 text-xs italic text-foreground">
               "{deletingNote.content}"
             </div>
 
@@ -463,7 +597,7 @@ export function ProjectMemoryNotesPanel({
               <div className="space-y-2">
                 <button
                   type="button"
-                  className="flex w-full flex-col items-start rounded-lg border border-border bg-background p-3 text-left transition-colors hover:bg-muted"
+                  className="flex w-full flex-col items-start rounded-xl border border-border bg-background p-3 text-left transition-colors hover:bg-muted"
                   onClick={() => void executeDelete(deletingNote, false)}
                 >
                   <span className="text-sm font-medium text-foreground">
@@ -476,7 +610,7 @@ export function ProjectMemoryNotesPanel({
 
                 <button
                   type="button"
-                  className="flex w-full flex-col items-start rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-left transition-colors hover:border-destructive hover:bg-destructive/10"
+                  className="flex w-full flex-col items-start rounded-xl border border-destructive/30 bg-destructive/5 p-3 text-left transition-colors hover:border-destructive hover:bg-destructive/10"
                   onClick={() => void executeDelete(deletingNote, true)}
                 >
                   <span className="text-sm font-medium text-destructive">
@@ -490,7 +624,7 @@ export function ProjectMemoryNotesPanel({
                 <div className="mt-2 flex justify-end">
                   <button
                     type="button"
-                    className="rounded-md border border-border px-4 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+                    className="rounded-xl border border-border px-4 py-1.5 text-xs text-muted-foreground hover:bg-muted"
                     onClick={() => setDeletingNote(null)}
                   >
                     {t("project_memory.cancel")}
@@ -501,14 +635,14 @@ export function ProjectMemoryNotesPanel({
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
-                  className="rounded-md border border-border px-4 py-1.5 text-xs text-muted-foreground hover:bg-muted"
+                  className="rounded-xl border border-border px-4 py-1.5 text-xs text-muted-foreground hover:bg-muted"
                   onClick={() => setDeletingNote(null)}
                 >
                   {t("project_memory.cancel")}
                 </button>
                 <button
                   type="button"
-                  className="rounded-md bg-destructive px-4 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90"
+                  className="rounded-xl bg-destructive px-4 py-1.5 text-xs font-medium text-destructive-foreground hover:bg-destructive/90"
                   onClick={() => void executeDelete(deletingNote, true)}
                 >
                   {t("project_memory.delete_confirm")}

@@ -105,7 +105,7 @@ def validate_profile_references(
     """Check skill and MCP server references (warnings only)."""
     report = ProfileValidationReport()
     for skill in schema.skills or []:
-        if skill and not skill_exists(skill):
+        if skill and not ("*" in skill or "?" in skill) and not skill_exists(skill):
             report.issues.append(
                 ProfileValidationIssue(
                     slug,

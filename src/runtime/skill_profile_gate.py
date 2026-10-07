@@ -25,7 +25,8 @@ def skill_allowed_for_profile_slug(skill_name: str, profile_slug: str) -> bool:
         prof = profile_manager.get_profile(profile_slug.strip())
         if not prof:
             return True
-        return name_strip in (prof.skills or []) or name_strip == "core_protocol"
+        allowed = prof.resolved_skills() if hasattr(prof, "resolved_skills") else list(prof.skills or [])
+        return name_strip in allowed or name_strip == "core_protocol"
     except Exception:
         return True
 
@@ -36,7 +37,7 @@ def skill_view_denied_message(skill_name: str, profile_slug: str) -> str:
 
         profile_manager.load_all_if_stale()
         prof = profile_manager.get_profile(profile_slug.strip())
-        allowed = list(prof.skills) if prof and prof.skills else []
+        allowed = prof.resolved_skills() if prof and hasattr(prof, "resolved_skills") else (list(prof.skills) if prof and prof.skills else [])
     except Exception:
         allowed = []
     return (

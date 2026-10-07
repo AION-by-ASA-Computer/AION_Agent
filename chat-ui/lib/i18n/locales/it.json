@@ -407,16 +407,17 @@
       "tags_none": "Nessun tag selezionato: nessun dato verrà censurato."
     },
     "thinking": {
-      "label": "Thinking",
-      "off": "Thinking: Off",
+      "label": "Ragionamento (Thinking)",
+      "select": "Livello di ragionamento",
+      "off": "Thinking: Spento",
       "min": "Thinking: Minimo",
       "med": "Thinking: Medio",
       "max": "Thinking: Massimo",
       "disable": "Disabilita",
-      "disable_desc": "Nessun ragionamento esteso — risposte più rapide.",
-      "min_desc": "Ragionamento leggero per domande quotidiane.",
+      "disable_desc": "Nessun ragionamento esteso — risposte più veloci.",
+      "min_desc": "Ragionamento rapido per domande ordinarie.",
       "med_desc": "Profondità bilanciata prima di rispondere.",
-      "max_desc": "Massima profondità per problemi complessi; risposte più lente."
+      "max_desc": "Massima profondità di analisi per problemi complessi."
     },
     "stream_recovery": "L'agente sta ancora elaborando questa chat sul server. Aggiornamento automatico…",
     "agent_status": {
@@ -458,15 +459,15 @@
       "script_named": "Generando {{title}}…"
     },
     "tools": {
-      "attach_file": "Allega File",
-      "view_label": "Vista Tools",
-      "select_view": "Seleziona Vista Tools",
+      "attach_file": "Allega file",
+      "view_label": "Vista strumenti",
+      "select_view": "Visualizzazione strumenti",
       "compact": "Compatta",
-      "compact_desc": "Tendina in cima alla risposta",
+      "compact_desc": "Riepilogo espandibile in cima alla risposta",
       "hide": "Nascondi",
       "partial": "Parziale",
       "full": "Completa",
-      "plus_tooltip": "Aggiungi file o cambia vista tools",
+      "plus_tooltip": "Aggiungi file o configura opzioni",
       "drag_drop_title": "Rilascia i file qui",
       "drag_drop_desc": "Trascina e rilascia i documenti per allegarli a questa conversazione"
     },
@@ -480,15 +481,16 @@
       "favorite_active": "Profilo predefinito"
     },
     "agent_mode": {
-      "select": "Modalità agente",
+      "label": "Modalità agente",
+      "select": "Seleziona modalità",
       "soon": "Presto",
       "beta": "Beta",
       "normal": "Normale",
-      "normal_desc": "Chat bilanciata — tool e memoria come configurati.",
-      "plan": "Pianifica",
+      "normal_desc": "Chat standard — tool e memoria come configurati.",
+      "plan": "Piano / Task Plan",
       "plan_desc": "Scompone il lavoro in passi prima di eseguire.",
-      "deep_research": "Ricerca approfondita",
-      "deep_research_desc": "Ricerche più lunghe con il pannello dedicato.",
+      "deep_research": "Deep Research",
+      "deep_research_desc": "Ricerca web autonoma avanzata.",
       "ask": "Chiedi",
       "ask_desc": "Risposte in sola lettura senza effetti collaterali dei tool.",
       "debug": "Debug",
@@ -496,8 +498,10 @@
     },
     "model": {
       "label": "Modello",
-      "select": "Seleziona modello",
+      "select": "Seleziona modello LLM",
       "switch": "Cambia modello",
+      "default": "Predefinito del sistema",
+      "default_desc": "Usa il modello LLM principale configurato",
       "default_hint": "Modello predefinito del server."
     },
     "capabilities": {
@@ -512,9 +516,10 @@
       "skill_pending": "In attesa"
     },
     "empty": {
+      "greeting_user": "Bentornato, {{name}}",
       "title": "Come posso aiutarti?",
-      "subtitle": "Chiedi qualsiasi cosa, allega un file o attiva la ricerca web. Le risposte arrivano in streaming mentre vengono scritte.",
-      "subtitle_profile": "Profilo {{profile}} attivo. Chiedi qualsiasi cosa, allega file o attiva la ricerca web — le risposte arrivano in streaming.",
+      "subtitle": "Chiedi qualsiasi cosa, allega un file o attiva la ricerca web — le risposte arrivano in tempo reale.",
+      "subtitle_profile": "Profilo {{profile}} attivo. Chiedi qualsiasi cosa, allega file o avvia un'attività.",
       "hint_attach": "Trascina file qui o usa + per allegare",
       "suggestions": {
         "explain": "Spiega un concetto difficile in modo semplice",
@@ -622,6 +627,7 @@
     "session_files_new": "Nuovi file sessione",
     "remove_file": "Rimuovi {{name}}",
     "upload": {
+      "button": "Carica allegato",
       "uploading": "Caricamento… {{progress}}%",
       "done": "Caricamento completato",
       "failed": "Caricamento fallito",
@@ -633,12 +639,12 @@
       "restricted": "Controllata · {{count}} host",
       "global": "Ricerca web globale",
       "global_desc": "Connessione Internet attiva per ottenere risposte aggiornate dalle fonti web.",
-      "on_short": "Web on",
-      "off_short": "Web off",
+      "on_short": "Web attivo",
+      "off_short": "Web disattivato",
       "on_desc": "Cerca sul web quando serve informazione aggiornata.",
       "off_desc": "Risposte solo da contesto locale e file allegati.",
       "toggle_aria": "Attiva o disattiva la ricerca web",
-      "advanced": "Ricerca Avanzata (Fonti Specifiche)",
+      "advanced": "Ricerca avanzata (fonti specifiche)",
       "modal_title": "Ricerca Web Avanzata",
       "modal_desc": "Limita i risultati della ricerca a domini specifici.",
       "add_domain": "Aggiungi un dominio",

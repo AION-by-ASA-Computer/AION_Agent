@@ -271,9 +271,9 @@ export function SidebarProfileMenu({
           type="button"
           role="menuitem"
           onClick={handleLogout}
-          className="focus-ring flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-medium text-destructive transition hover:bg-destructive/10"
+          className="focus-ring flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-500/10 dark:hover:bg-red-500/20 transition-colors cursor-pointer"
         >
-          <LogOut className="h-4 w-4 shrink-0" aria-hidden />
+          <LogOut className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400" aria-hidden />
           <span>{t("sidebar.profile_menu.logout")}</span>
         </button>
       </div>

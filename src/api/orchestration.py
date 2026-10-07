@@ -421,7 +421,12 @@ async def approve_plan(
         approved_plan=approved_payload,
     )
     if not res.get("ok"):
-        raise _http_from_resolve_result(res)
+        err = str(res.get("error") or "")
+        if err == "not_pending":
+            logger.info("approve_plan: plan %s already approved/resolved in DB/registry, proceeding to execution", plan_id)
+            res = {"ok": True, "state": "approved", "plan": approved_payload}
+        else:
+            raise _http_from_resolve_result(res)
 
     final_markdown = (approved_md or "").strip()
     if not final_markdown and prev:
@@ -583,7 +588,12 @@ async def reject_plan(
         reason=body.reason or "rejected_by_user",
     )
     if not res.get("ok"):
-        raise _http_from_resolve_result(res)
+        err = str(res.get("error") or "")
+        if err == "not_pending":
+            logger.info("reject_plan: plan %s already resolved or not pending, updating DB to rejected directly", plan_id)
+            res = {"ok": True, "state": "rejected"}
+        else:
+            raise _http_from_resolve_result(res)
 
     try:
         await odb.update_plan_after_wait(
