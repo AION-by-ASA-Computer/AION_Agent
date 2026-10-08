@@ -207,3 +207,36 @@ async def test_concurrent_enroll_start_returns_same_secret(env, monkeypatch):
         am.MfaCodeBody(mfa_token=res["mfa_token"], code=pyotp.TOTP(a["secret"]).now())
     )
     assert ok["access_token"]
+
+
+@with_env
+async def test_totp_kept_and_required_during_sso_migration(env, monkeypatch):
+    from src.data.models import AuthSettings
+
+    al, am = env["al"], env["am"]
+    await env["set_required"](True)
+    res = await _login(al)
+    secret = (await am.enroll_start(am.MfaTokenBody(mfa_token=res["mfa_token"])))["secret"]
+    await am.enroll_confirm(
+        am.MfaCodeBody(mfa_token=res["mfa_token"], code=pyotp.TOTP(secret).now())
+    )
+
+    # Passaggio a SSO: alice non ha ancora collegato l'account.
+    async with env["sm"]() as s:
+        row = await s.get(AuthSettings, "default")
+        row.login_mode = "microsoft"
+        row.sso_origin = "migration"
+        await s.commit()
+    import src.auth.sso.login_mode as lm
+
+    lm._invalidate_cache("default")
+    await lm.finalize_linked_users("default", "microsoft")
+
+    res2 = await _login(al)
+    assert res2["mfa_required"] and res2["mfa_stage"] == "verify"
+    nxt = pyotp.TOTP(secret).at(time.time() + 30)
+    ok = await am.verify(am.MfaCodeBody(mfa_token=res2["mfa_token"], code=nxt))
+    assert ok["access_token"] and ok["sso_link_required"]
+    # Nessun enrollment nuovo in modalita' SSO.
+    with pytest.raises(HTTPException):
+        await am.enroll_start(am.MfaTokenBody(mfa_token=res2["mfa_token"]))

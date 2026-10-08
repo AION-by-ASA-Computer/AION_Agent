@@ -77,7 +77,7 @@ def with_env(fn):
 
 
 @with_env
-async def test_link_clears_password_for_normal_user_but_not_admin(env, monkeypatch):
+async def test_link_clears_password_for_everyone(env, monkeypatch):
     await env["set"](login_mode="google", sso_origin="migration", clear_password_on_link=True)
     bob = await env["mkuser"]("bob")
     adm = await env["mkuser"]("root", roles=["admin"])
@@ -86,12 +86,14 @@ async def test_link_clears_password_for_normal_user_but_not_admin(env, monkeypat
             "default", uid, _claims(sub, f"{sub}@x.io"), {}, PROVIDER, finalize_migration=True
         )
     assert (await env["get_user"](bob)).password_hash is None
-    assert (await env["get_user"](adm)).password_hash is not None
+    # Anche l'admin: l'accesso di emergenza passa da src.auth.recover.
+    assert (await env["get_user"](adm)).password_hash is None
 
 
 @with_env
 async def test_link_without_finalize_keeps_password(env, monkeypatch):
-    await env["set"](login_mode="google", sso_origin="migration", clear_password_on_link=True)
+    # admin_validate: ancora in modalita' password, anche se l'admin e' l'unico utente.
+    await env["set"](login_mode="password", clear_password_on_link=True)
     adm = await env["mkuser"]("root", roles=["admin"])
     await env["prov"].link_identity_to_user("default", adm, _claims("s1", "a@x.io"), {}, PROVIDER)
     assert (await env["get_user"](adm)).password_hash is not None
@@ -170,3 +172,155 @@ async def test_2fa_not_enforced_in_sso_mode_even_if_required(env, monkeypatch):
     # In modalita' SSO la politica TOTP non si applica (solo login_mode=password).
     assert hasattr(totp, "user_requires_enrollment")
     assert not await totp.user_requires_enrollment("default", uid)
+
+
+async def _enroll_totp(env, uid):
+    from datetime import datetime, timezone
+
+    from src.data.models import User
+
+    async with env["sm"]() as s:
+        u = await s.get(User, uid)
+        u.totp_secret_encrypted = "enc"
+        u.totp_enabled_at = datetime.now(timezone.utc)
+        await s.commit()
+
+
+@with_env
+async def test_link_wipes_totp_for_everyone(env, monkeypatch):
+    await env["set"](login_mode="google", sso_origin="migration")
+    adm = await env["mkuser"]("root", roles=["admin"])
+    await _enroll_totp(env, adm)
+    await env["prov"].link_identity_to_user(
+        "default", adm, _claims("s1", "a@x.io"), {}, PROVIDER, finalize_migration=True
+    )
+    u = await env["get_user"](adm)
+    assert u.totp_secret_encrypted is None and u.totp_enabled_at is None
+    assert u.password_hash is None
+
+
+async def _new_migration(env):
+    """Simula SSO -> password -> SSO: apre una nuova migrazione ora."""
+    from datetime import datetime, timezone
+
+    await env["set"](login_mode="password", sso_origin=None, migration_started_at=None)
+    await env["set"](
+        login_mode="google",
+        sso_origin="migration",
+        migration_started_at=datetime.now(timezone.utc),
+        migration_completed_at=None,
+    )
+
+
+async def _set_password(env, uid, pw="tmp"):
+    from src.data.models import User
+    from src.data.user_password import hash_password
+
+    async with env["sm"]() as s:
+        u = await s.get(User, uid)
+        u.password_hash = hash_password(pw)
+        await s.commit()
+
+
+@with_env
+async def test_second_migration_starts_fresh(env, monkeypatch):
+    lm, prov = env["lm"], env["prov"]
+    await env["set"](login_mode="google", sso_origin="migration")
+    adm = await env["mkuser"]("root", roles=["admin"])
+    bob = await env["mkuser"]("bob")
+    for uid, sub in ((adm, "sa"), (bob, "sb")):
+        await prov.link_identity_to_user(
+            "default", uid, _claims(sub, f"{sub}@x.io"), {}, PROVIDER, finalize_migration=True
+        )
+    assert not await lm.is_migration_active("default")
+
+    # Ritorno a password (password temporanee per tutti) e di nuovo SSO.
+    await _new_migration(env)
+    await _set_password(env, bob)
+    await _set_password(env, adm)
+    await _enroll_totp(env, bob)
+
+    # Le identita' della migrazione precedente non contano.
+    assert await lm.is_migration_active("default")
+    assert await lm.pending_users_count("default", "google") == 2
+    assert await lm.user_needs_link("default", bob)
+    # Il passaggio a SSO non deve cancellare le password temporanee.
+    assert await lm.finalize_linked_users("default", "google") == 0
+    await lm._check_migration_completion("default", "google")
+    assert (await env["get_user"](bob)).password_hash is not None
+    assert await lm.is_migration_active("default")
+
+    # Bob ricollega lo stesso account: migrato, password e TOTP rimossi.
+    await prov.link_identity_to_user(
+        "default", bob, _claims("sb", "sb@x.io"), {}, PROVIDER, finalize_migration=True
+    )
+    assert not await lm.user_needs_link("default", bob)
+    b = await env["get_user"](bob)
+    assert b.password_hash is None and b.totp_secret_encrypted is None
+    assert await lm.is_migration_active("default")
+
+    # Anche l'admin riconferma: migrazione completata.
+    await prov.link_identity_to_user(
+        "default", adm, _claims("sa", "sa@x.io"), {}, PROVIDER, finalize_migration=True
+    )
+    assert not await lm.is_migration_active("default")
+
+
+@with_env
+async def test_relink_stale_identity_with_new_subject(env, monkeypatch):
+    lm, prov = env["lm"], env["prov"]
+    await env["set"](login_mode="google", sso_origin="migration")
+    bob = await env["mkuser"]("bob")
+    await prov.link_identity_to_user("default", bob, _claims("old", "old@x.io"), {}, PROVIDER)
+    # Nella stessa migrazione un subject diverso resta vietato.
+    with pytest.raises(ValueError, match="sso_user_already_linked"):
+        await prov.link_identity_to_user("default", bob, _claims("new", "new@x.io"), {}, PROVIDER)
+
+    await _new_migration(env)
+    await _set_password(env, bob)
+    await prov.link_identity_to_user(
+        "default", bob, _claims("new", "new@x.io"), {}, PROVIDER, finalize_migration=True
+    )
+    from src.data.models import UserSsoIdentity
+
+    async with env["sm"]() as s:
+        rows = (
+            await s.execute(select(UserSsoIdentity).where(UserSsoIdentity.user_id == bob))
+        ).scalars().all()
+    assert [r.subject for r in rows] == ["new"]
+    assert not await lm.user_needs_link("default", bob)
+
+
+@with_env
+async def test_sso_login_with_stale_identity_confirms(env, monkeypatch):
+    lm, prov = env["lm"], env["prov"]
+    await env["set"](login_mode="google", sso_origin="migration")
+    bob = await env["mkuser"]("bob")
+    await prov.link_identity_to_user("default", bob, _claims("sb", "sb@x.io"), {}, PROVIDER)
+
+    await _new_migration(env)
+    await _set_password(env, bob)
+    assert await lm.user_needs_link("default", bob)
+    user = await prov.resolve_user(_claims("sb", "sb@x.io"), {}, PROVIDER, migration_active=True)
+    assert user
+    assert not await lm.user_needs_link("default", bob)
+    assert (await env["get_user"](bob)).password_hash is None
+    assert not await lm.is_migration_active("default")
+
+
+@with_env
+async def test_recover_sets_temporary_password(env, monkeypatch):
+    from src.auth import recover
+    from src.data.user_password import verify_password
+
+    await env["set"](login_mode="google", sso_origin="migration")
+    adm = await env["mkuser"]("root", roles=["admin"])
+    await env["prov"].link_identity_to_user(
+        "default", adm, _claims("s1", "a@x.io"), {}, PROVIDER, finalize_migration=True
+    )
+    assert (await env["get_user"](adm)).password_hash is None
+    assert await recover._set_password("root", "emergency-pw") == 0
+    u = await env["get_user"](adm)
+    assert verify_password("emergency-pw", u.password_hash)
+    assert u.must_change_password
+    assert await recover._set_password("ghost", None) == 1

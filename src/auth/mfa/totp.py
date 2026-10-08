@@ -56,6 +56,23 @@ async def two_factor_effective(tenant_id: str) -> bool:
     return bool(settings.get("totp_required")) and settings.get("login_mode") == "password"
 
 
+async def login_stage(tenant_id: str, user: Optional[User]) -> Optional[str]:
+    """Passo 2FA richiesto dal login con password, ``None`` se nessuno.
+
+    Con la politica attiva (solo login_mode=password) verifica o enrollment.
+    In modalita' SSO chi aveva gia' configurato il TOTP e non ha ancora
+    collegato l'account lo conserva: il codice resta obbligatorio.
+    """
+    if force_disabled() or user is None:
+        return None
+    if await two_factor_effective(tenant_id):
+        return STAGE_VERIFY if is_enrolled(user) else STAGE_ENROLL
+    settings = await get_login_settings(tenant_id)
+    if settings.get("login_mode") != "password" and is_enrolled(user):
+        return STAGE_VERIFY
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Secret / QR
 # ---------------------------------------------------------------------------

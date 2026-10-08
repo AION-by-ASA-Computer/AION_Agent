@@ -6,13 +6,23 @@ import { ShieldCheck, Loader2, AlertCircle } from "lucide-react";
 
 import { apiBase } from "@/lib/api";
 import { setStoredAuth } from "@/lib/auth/storage";
-import { resetAuthStatusCache } from "@/lib/auth/status";
+import { fetchAuthStatus, resetAuthStatusCache } from "@/lib/auth/status";
 import { TwoFactorStep, type MfaChallenge, type MfaLoginResult } from "@/components/auth/TwoFactorStep";
 
 const LOGIN_ERRORS: Record<string, string> = {
   temp_password_expired: "La password temporanea è scaduta. Chiedi a un amministratore di rigenerarla.",
-  sso_required: "Questo account accede tramite SSO: usa il login SSO dalla chat.",
+  sso_required: "Questo account accede tramite SSO: usa il pulsante SSO.",
   password_login_disabled: "L'accesso con password non è disponibile per questo account.",
+  not_admin: "Questo account non ha il ruolo 'admin'.",
+  sso_not_linked: "Questo account SSO non è collegato a nessun utente AION.",
+  sso_failed: "Accesso SSO non riuscito. Riprova.",
+  sso_token_invalid: "Accesso SSO non riuscito (token non valido). Riprova.",
+  sso_start_failed: "Impossibile avviare l'accesso SSO.",
+};
+
+const SSO_LABELS: Record<string, string> = {
+  microsoft: "Microsoft",
+  google: "Google",
 };
 
 export default function AdminLoginPage() {
@@ -26,10 +36,33 @@ export default function AdminLoginPage() {
   const [loading, setLoading] = useState(false);
   const [showDefaultHint, setShowDefaultHint] = useState(false);
   const [mfa, setMfa] = useState<MfaChallenge | null>(null);
+  const [ssoProvider, setSsoProvider] = useState<string | null>(null);
+  // Finche' lo stato non arriva mostriamo il form (comportamento precedente).
+  const [passwordVisible, setPasswordVisible] = useState(true);
+  const [emergency, setEmergency] = useState(false);
 
   useEffect(() => {
-    setShowDefaultHint(true);
-  }, []);
+    let cancelled = false;
+    void fetchAuthStatus(true).then((s) => {
+      if (cancelled) return;
+      setSsoProvider(s.sso_enabled ? s.sso_provider : null);
+      setPasswordVisible(!s.sso_enabled || s.password_login_visible);
+      setShowDefaultHint(!s.sso_enabled);
+    });
+    const code = params.get("error");
+    if (code) setErr(LOGIN_ERRORS[code] ?? `Accesso negato (${code})`);
+    return () => {
+      cancelled = true;
+    };
+  }, [params]);
+
+  function startSso() {
+    if (!ssoProvider) return;
+    const q = new URLSearchParams({ provider: ssoProvider, client: "admin", return_to: next });
+    window.location.href = `${apiBase()}/auth/sso/start?${q.toString()}`;
+  }
+
+  const showPasswordForm = passwordVisible || emergency;
 
   function completeLogin(j: MfaLoginResult) {
     if (!j.access_token) {
@@ -130,6 +163,33 @@ export default function AdminLoginPage() {
             onCancel={() => setMfa(null)}
           />
         ) : (
+        <div className="flex w-full flex-col gap-4">
+        {ssoProvider && (
+          <button
+            type="button"
+            onClick={startSso}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500/20 px-4 py-2.5 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition"
+          >
+            Accedi con {SSO_LABELS[ssoProvider] ?? ssoProvider}
+          </button>
+        )}
+        {ssoProvider && showPasswordForm && (
+          <div className="flex items-center gap-3 text-xs text-gray-500">
+            <span className="h-px flex-1 bg-[#262626]" />
+            oppure con password
+            <span className="h-px flex-1 bg-[#262626]" />
+          </div>
+        )}
+        {!showPasswordForm && err && (
+          <div
+            className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+            role="alert"
+          >
+            <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
+            <span>{err}</span>
+          </div>
+        )}
+        {showPasswordForm && (
         <form onSubmit={submit} className="flex w-full flex-col gap-3">
           <input
             className="w-full rounded-xl border border-[#262626] bg-[#141414] px-4 py-2.5 text-sm text-white placeholder:text-gray-500 outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition"
@@ -165,6 +225,17 @@ export default function AdminLoginPage() {
             Entra
           </button>
         </form>
+        )}
+        {!showPasswordForm && (
+          <button
+            type="button"
+            onClick={() => setEmergency(true)}
+            className="text-xs text-gray-500 underline-offset-2 hover:text-gray-300 hover:underline"
+          >
+            Accesso di emergenza con password
+          </button>
+        )}
+        </div>
         )}
 
         {showDefaultHint && !mfa && (

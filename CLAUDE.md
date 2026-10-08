@@ -356,9 +356,10 @@ Switching from password to an SSO mode places the system in a migration state.
 - Existing users must log in via password first, and are then blocked by a required "link account" modal.
 - If users don't have a password set, the backend generates temporary 12-char passwords and returns them to the admin to distribute securely.
 - No auto-provisioning links identities by email automatically.
-- Temp passwords expire after `AION_SSO_TEMP_PASSWORD_TTL_DAYS` (default 7); non-admin local passwords are cleared on link; admins keep theirs.
-- Break-glass: `AION_SSO_FORCE_PASSWORD=1` restores password login for everyone.
-- TOTP 2FA applies only while `login_mode=password`.
+- Temp passwords expire after `AION_SSO_TEMP_PASSWORD_TTL_DAYS` (default 7); local passwords are cleared on link, admins included.
+- Every switch to SSO starts a new migration: only identities confirmed after `migration_started_at` count as migrated.
+- Break-glass: `AION_SSO_FORCE_PASSWORD=1` restores password login for everyone; `python -m src.auth.recover set-password <user>` (or `docker compose -f docker-compose.ghcr.yml exec backend ...`) gives a migrated admin a temporary password for the admin-ui "Accesso di emergenza" link.
+- TOTP 2FA policy applies only while `login_mode=password`; after a switch to SSO, users who already enrolled keep TOTP (required at password login) until they link SSO.
 
 See `docs/security/sso-migration.md` for the full migration flow.
 

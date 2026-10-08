@@ -108,3 +108,22 @@ def chat_base_url(request: Optional[Request] = None) -> str:
     if _is_absolute_http_url(explicit):
         return explicit
     return "http://localhost:8003"
+
+
+def admin_base_url(request: Optional[Request] = None) -> str:
+    """
+    Browser-facing admin-ui base URL (redirect finale del login SSO admin).
+
+    1. ``AION_PUBLIC_ADMIN_URL`` se assoluto;
+    2. ``AION_ADMIN_UI_URL`` solo se loopback (dev: admin-ui su porta propria).
+       In Docker install.sh lo imposta all'host interno ``admin-ui:3870``, non
+       raggiungibile dal browser;
+    3. layout Docker/Caddy: stesso dominio della chat sotto ``/admin``.
+    """
+    explicit = (os.getenv("AION_PUBLIC_ADMIN_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(explicit):
+        return explicit
+    dev = (os.getenv("AION_ADMIN_UI_URL") or "").strip().rstrip("/")
+    if _is_absolute_http_url(dev) and _is_loopback_host_url(dev):
+        return dev
+    return f"{chat_base_url(request).rstrip('/')}/admin"

@@ -15,6 +15,7 @@ from src.api.auth_login import ChatAuthIdentity, require_admin_role
 from src.auth.sso.login_mode import (
     _check_migration_completion,
     _invalidate_cache,
+    confirmed_identity_exists,
     generate_temp_passwords,
     get_login_settings,
     pending_users_count,
@@ -57,19 +58,14 @@ async def get_login_mode(
 
     if provider:
         async with get_async_session_maker()() as session:
-            migrated_q = (
-                select(func.count())
-                .select_from(User)
-                .join(
-                    UserSsoIdentity,
-                    (UserSsoIdentity.user_id == User.id)
-                    & (UserSsoIdentity.tenant_id == tenant)
-                    & (UserSsoIdentity.provider == provider),
-                )
-                .where(
-                    User.tenant_id == tenant,
-                    User.sso_migration_exempt == False,  # noqa: E712
-                )
+            # Migrati = identita' confermata nella migrazione corrente: quelle
+            # rimaste da una migrazione precedente non contano.
+            migrated_q = select(func.count()).select_from(User).where(
+                User.tenant_id == tenant,
+                User.sso_migration_exempt == False,  # noqa: E712
+                confirmed_identity_exists(
+                    tenant, provider, settings.get("migration_started_at")
+                ),
             )
             migrated = (await session.execute(migrated_q)).scalar_one()
 
@@ -218,6 +214,7 @@ async def list_migration_users(
     tenant = _tenant_id()
     settings = await get_login_settings(tenant)
     provider = settings.get("sso_provider")
+    since = settings.get("migration_started_at")
 
     async with get_async_session_maker()() as session:
         if status == "exempt":
@@ -226,18 +223,10 @@ async def list_migration_users(
                 User.sso_migration_exempt == True,  # noqa: E712
             )
         elif status == "migrated" and provider:
-            stmt = (
-                select(User)
-                .join(
-                    UserSsoIdentity,
-                    (UserSsoIdentity.user_id == User.id)
-                    & (UserSsoIdentity.tenant_id == tenant)
-                    & (UserSsoIdentity.provider == provider),
-                )
-                .where(
-                    User.tenant_id == tenant,
-                    User.sso_migration_exempt == False,  # noqa: E712
-                )
+            stmt = select(User).where(
+                User.tenant_id == tenant,
+                User.sso_migration_exempt == False,  # noqa: E712
+                confirmed_identity_exists(tenant, provider, since),
             )
         elif status == "no_access" and provider:
             # Senza password e senza identita' sul provider attivo: non possono
@@ -272,18 +261,7 @@ async def list_migration_users(
                         User.password_hash.is_not(None),
                         User.sso_migration_exempt == False,  # noqa: E712
                     )
-                    .where(
-                        ~(
-                            select(UserSsoIdentity.id)
-                            .where(
-                                UserSsoIdentity.user_id == User.id,
-                                UserSsoIdentity.tenant_id == tenant,
-                                UserSsoIdentity.provider == provider,
-                            )
-                            .correlate(User)
-                            .exists()
-                        )
-                    )
+                    .where(~confirmed_identity_exists(tenant, provider, since))
                 )
             else:
                 stmt = select(User).where(

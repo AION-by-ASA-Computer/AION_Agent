@@ -55,14 +55,22 @@ async def _check_code(user_row_id: str, code: str) -> None:
         raise HTTPException(401, detail={"code": "invalid_code"})
 
 
-async def _login_payload(user_row_id: str) -> Dict[str, Any]:
+async def _login_payload(user_row_id: str, client: str = "chat") -> Dict[str, Any]:
+    from src.auth.sso.login_mode import get_login_settings, user_needs_link
     from src.chat_auth import _user_to_auth_dict
 
     async with get_async_session_maker()() as session:
         user = await session.get(User, user_row_id)
     if not user:
         raise HTTPException(401, detail={"code": "invalid_mfa_token"})
-    return build_login_response(_user_to_auth_dict(user))
+    auth = _user_to_auth_dict(user)
+    # Come /auth/login: durante la migrazione SSO la chat mostra il modale di
+    # collegamento (client="admin" vale solo per chi ha il ruolo admin).
+    link_required = False
+    is_admin = client == "admin" and "admin" in list(auth.get("roles") or [])
+    if not is_admin and (await get_login_settings(_tenant())).get("login_mode") != "password":
+        link_required = await user_needs_link(_tenant(), user_row_id)
+    return build_login_response(auth, sso_link_required=link_required)
 
 
 async def _require_active() -> None:
@@ -87,13 +95,17 @@ async def enroll_confirm(body: MfaCodeBody) -> Dict[str, Any]:
     uid = parsed["user_row_id"]
     await _check_code(uid, body.code)
     await totp.confirm_enrollment(uid)
-    return await _login_payload(uid)
+    return await _login_payload(uid, parsed["client"])
 
 
 @router.post("/verify")
 async def verify(body: MfaCodeBody) -> Dict[str, Any]:
-    await _require_active()
     parsed = _challenge(body.mfa_token, totp.STAGE_VERIFY)
     uid = parsed["user_row_id"]
+    # Attivo con la politica 2FA oppure, in SSO, per chi conserva il TOTP.
+    async with get_async_session_maker()() as session:
+        stage = await totp.login_stage(_tenant(), await session.get(User, uid))
+    if stage != totp.STAGE_VERIFY:
+        raise HTTPException(409, detail={"code": "two_factor_not_active"})
     await _check_code(uid, body.code)
-    return await _login_payload(uid)
+    return await _login_payload(uid, parsed["client"])

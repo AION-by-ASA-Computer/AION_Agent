@@ -46,6 +46,7 @@ export function SsoMigrationPanel() {
   const [dialogMessage, setDialogMessage] = useState("");
 
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [showEnableSsoDialog, setShowEnableSsoDialog] = useState(false);
   const [affectedUsers, setAffectedUsers] = useState<any[]>([]);
   const [pendingModeChange, setPendingModeChange] = useState<LoginMode | null>(null);
   const [loadingSimulation, setLoadingSimulation] = useState(false);
@@ -71,12 +72,14 @@ export function SsoMigrationPanel() {
 
   const handleModeChangeRequest = async (newMode: LoginMode) => {
     if (status?.login_mode === "password" && newMode !== "password") {
-      const ok = window.confirm(
-        "Attivare il Single Sign-On?\n\nGli utenti esistenti potranno accedere con la password solo per collegare il proprio account " +
-          "aziendale al primo accesso; poi entreranno solo via SSO. Il tuo account admin conserva la password come accesso di emergenza."
-      );
-      if (!ok) return;
+      setPendingModeChange(newMode);
+      setShowEnableSsoDialog(true);
+      return;
     }
+    await proceedWithModeChange(newMode);
+  };
+
+  const proceedWithModeChange = async (newMode: LoginMode) => {
     if (status?.login_mode && status.login_mode !== "password" && status.login_mode !== newMode) {
       setLoadingSimulation(true);
       setError(null);
@@ -195,14 +198,18 @@ export function SsoMigrationPanel() {
       )}
 
       {/* Migration Tracker (shown only if the selected tab is the active SSO mode and migration is active) */}
-      {selectedTab !== "password" && status.login_mode === selectedTab && status.sso_origin === "migration" && status.sso_migration_active && (
+      {selectedTab !== "password" && status.login_mode === selectedTab && (
         <div className="p-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-4 animate-in fade-in slide-in-from-top-4">
           <div className="flex items-center justify-between">
             <h4 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
               <Users className="w-5 h-5 text-emerald-400" />
               Stato Migrazione Utenti
             </h4>
-            {status.sso_migration_active ? (
+            {status.sso_origin !== "migration" ? (
+              <span className="px-2 py-1 bg-gray-500/20 text-gray-400 text-[10px] font-bold uppercase rounded border border-gray-500/30">
+                Setup Iniziale
+              </span>
+            ) : status.sso_migration_active ? (
               <span className="px-2 py-1 bg-yellow-500/20 text-yellow-500 text-[10px] font-bold uppercase rounded border border-yellow-500/30">
                 In Corso
               </span>
@@ -216,7 +223,7 @@ export function SsoMigrationPanel() {
           <div className="grid grid-cols-4 gap-4">
             <div className="p-4 bg-black/40 rounded-lg text-center">
               <div className="text-2xl font-black text-white">{status.total || 0}</div>
-              <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Totali (con pass)</div>
+              <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Totali</div>
             </div>
             <div className="p-4 bg-black/40 rounded-lg text-center">
               <div className="text-2xl font-black text-green-400">{status.migrated || 0}</div>
@@ -331,6 +338,50 @@ export function SsoMigrationPanel() {
               >
                 {saving && <Loader2 className="w-4 h-4 animate-spin" />}
                 Conferma e Genera Password
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal Attivazione SSO */}
+      {showEnableSsoDialog && pendingModeChange && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-[#111] border border-[#333] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
+            <div className="p-6 border-b border-[#222]">
+              <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mb-4 border border-blue-500/20">
+                <Shield className="w-6 h-6 text-blue-500" />
+              </div>
+              <h3 className="text-xl font-bold text-white mb-2">Attivare il Single Sign-On?</h3>
+              <p className="text-sm text-gray-400">
+                Gli utenti esistenti potranno accedere con la password solo per collegare il proprio account aziendale al primo accesso; poi entreranno solo via SSO. 
+                <br /><br />
+                Il tuo account admin conserva la password come accesso di emergenza.
+              </p>
+            </div>
+            
+            <div className="p-4 bg-[#0a0a0a] flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowEnableSsoDialog(false);
+                  setPendingModeChange(null);
+                }}
+                disabled={saving || loadingSimulation}
+                className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors disabled:opacity-50"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={async () => {
+                  setShowEnableSsoDialog(false);
+                  const mode = pendingModeChange;
+                  setPendingModeChange(null);
+                  await proceedWithModeChange(mode);
+                }}
+                disabled={saving || loadingSimulation}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                {(saving || loadingSimulation) && <Loader2 className="w-4 h-4 animate-spin" />}
+                Attiva SSO
               </button>
             </div>
           </div>

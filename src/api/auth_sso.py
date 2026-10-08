@@ -26,7 +26,7 @@ from src.api.auth_login import (
     issue_chat_token,
     require_chat_token_only,
 )
-from src.api.public_urls import chat_base_url, oauth_redirect_api_base
+from src.api.public_urls import admin_base_url, chat_base_url, oauth_redirect_api_base
 from src.auth.sso.config_service import get_provider, mark_validated
 from src.auth.sso.flow import build_authorize_url, handle_callback
 from src.auth.sso.id_token import verify_id_token
@@ -104,18 +104,21 @@ async def sso_start(
     request: Request,
     provider: str,
     return_to: str = "/",
+    client: str = "chat",
 ):
-    """Avvia il flusso SSO per il login. Accetta SOLO purpose=login.
+    """Avvia il flusso SSO per il login. Accetta SOLO purpose=login
+    (``client=admin`` → ``admin_login``: stesso login, ritorno su admin-ui).
 
     I purpose privilegiati (link, admin_validate) partono da endpoint
     autenticati separati.
     """
     return_to = _validate_return_to(return_to)
+    is_admin = client == "admin"
 
     try:
         url = await build_authorize_url(
             provider=provider,
-            purpose="login",
+            purpose="admin_login" if is_admin else "login",
             return_to=return_to,
             redirect_uri=_get_redirect_uri(request),
             tenant_id=_tenant_id(),
@@ -124,8 +127,8 @@ async def sso_start(
         return RedirectResponse(url)
     except Exception as e:
         logger.warning("Error starting SSO login: %s", e)
-        chat_base = chat_base_url(request).rstrip("/")
-        return RedirectResponse(f"{chat_base}/login?error=sso_start_failed")
+        base = (admin_base_url(request) if is_admin else chat_base_url(request)).rstrip("/")
+        return RedirectResponse(f"{base}/login?error=sso_start_failed")
 
 
 # ---------------------------------------------------------------------------
@@ -323,6 +326,54 @@ async def sso_callback(
         code_raw = await _create_handoff_code(handoff_payload, _tenant_id())
         return RedirectResponse(
             f"{chat_base}/login/sso#code={quote(code_raw, safe='')}&return_to={quote(return_to, safe='/')}"
+        )
+
+    # -----------------------------------------------------------------------
+    # admin_login: login SSO dal pannello admin. Solo utenti esistenti con
+    # ruolo admin (niente auto-provisioning), ritorno su admin-ui.
+    # -----------------------------------------------------------------------
+    if purpose == "admin_login":
+        admin_base = admin_base_url(request).rstrip("/")
+        try:
+            from src.auth.sso.login_mode import is_migration_active
+
+            user_dict = await resolve_user(
+                claims=claims,
+                token_data=data,
+                provider_config={**provider_config, "auto_provision": False},
+                tenant_id=_tenant_id(),
+                migration_active=await is_migration_active(_tenant_id()),
+            )
+        except ValueError as e:
+            error_code = str(e)
+            logger.warning("SSO admin login error: %s", error_code)
+            return RedirectResponse(f"{admin_base}/login?error={quote(error_code, safe='')}")
+        except Exception as e:
+            logger.exception("Unexpected SSO admin login error: %s", e)
+            return RedirectResponse(f"{admin_base}/login?error=sso_failed")
+
+        roles = list(user_dict.get("roles") or [])
+        if "admin" not in roles:
+            return RedirectResponse(f"{admin_base}/login?error=not_admin")
+        tok = issue_chat_token(
+            user_row_id=str(user_dict["id"]),
+            user_identifier=str(user_dict["identifier"]),
+            roles=roles,
+        )
+        return_to = _validate_return_to(data.get("return_to"))
+        handoff_payload = {
+            "access_token": tok,
+            "user_id": sanitize_user_id(str(user_dict["identifier"])),
+            "identifier": str(user_dict["identifier"]),
+            "display_name": str(user_dict.get("display_name") or user_dict["identifier"]),
+            "roles": roles,
+            "sso_link_required": False,
+            "provider": provider_config["provider"],
+            "return_to": return_to,
+        }
+        code_raw = await _create_handoff_code(handoff_payload, _tenant_id())
+        return RedirectResponse(
+            f"{admin_base}/login/sso#code={quote(code_raw, safe='')}&return_to={quote(return_to, safe='/')}"
         )
 
     # -----------------------------------------------------------------------

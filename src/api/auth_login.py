@@ -227,14 +227,9 @@ async def login(body: LoginBody):
     # 2FA TOTP: password OK ma il token di sessione si emette solo dopo il codice.
     from src.auth.mfa import totp as _totp
 
-    if await _totp.two_factor_effective(tenant):
-        async with _gsm()() as _sess:
-            _mu = await _sess.get(_User, user_id_raw)
-            _stage = (
-                _totp.STAGE_VERIFY
-                if _mu is not None and _totp.is_enrolled(_mu)
-                else _totp.STAGE_ENROLL
-            )
+    async with _gsm()() as _sess:
+        _stage = await _totp.login_stage(tenant, await _sess.get(_User, user_id_raw))
+    if _stage:
         return {
             "mfa_required": True,
             "mfa_stage": _stage,

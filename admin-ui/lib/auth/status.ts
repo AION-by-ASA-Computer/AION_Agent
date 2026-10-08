@@ -6,6 +6,9 @@ export type AuthStatus = {
   login_endpoint: string;
   token_ttl_seconds: number;
   first_setup_complete: boolean;
+  sso_enabled: boolean;
+  sso_provider: string | null;
+  password_login_visible: boolean;
 };
 
 const DEFAULT_STATUS: AuthStatus = {
@@ -15,6 +18,9 @@ const DEFAULT_STATUS: AuthStatus = {
   login_endpoint: "/auth/login",
   token_ttl_seconds: 0,
   first_setup_complete: false,
+  sso_enabled: false,
+  sso_provider: null,
+  password_login_visible: true,
 };
 
 let cachedStatus: Promise<AuthStatus> | null = null;
@@ -35,6 +41,10 @@ export function fetchAuthStatus(force = false): Promise<AuthStatus> {
         login_endpoint: j.login_endpoint || "/auth/login",
         token_ttl_seconds: Number(j.token_ttl_seconds || 0),
         first_setup_complete: Boolean(j.first_setup_complete),
+        sso_enabled: Boolean(j.sso_enabled),
+        sso_provider: j.sso_provider || null,
+        password_login_visible:
+          j.password_login_visible === undefined ? true : Boolean(j.password_login_visible),
       };
     } catch {
       return DEFAULT_STATUS;

@@ -6,7 +6,7 @@ description: Optional TOTP two-factor authentication for the classic password lo
 
 # Two-Factor Authentication (TOTP)
 
-The administrator can require a TOTP code (Google Authenticator, Microsoft Authenticator, any RFC 6238 app) on top of the password. It applies to **every login through `POST /auth/login`** (chat-ui and admin-ui) and **only while `login_mode` is `password`**. SSO logins are never affected; when an SSO mode is active the setting is ignored (and cannot be enabled: `PUT /admin/auth/2fa` returns `409 sso_active`).
+The administrator can require a TOTP code (Google Authenticator, Microsoft Authenticator, any RFC 6238 app) on top of the password. It applies to **every login through `POST /auth/login`** (chat-ui and admin-ui) and **only while `login_mode` is `password`**. SSO logins are never affected; when an SSO mode is active the setting is ignored (and cannot be enabled: `PUT /admin/auth/2fa` returns `409 sso_active`). Exception: during an SSO migration, users who already enrolled keep their TOTP and must enter the code at password login until they link SSO (see [SSO migration](./sso-migration.md)).
 
 ## Flow
 
