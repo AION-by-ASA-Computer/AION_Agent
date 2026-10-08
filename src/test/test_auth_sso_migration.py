@@ -324,3 +324,22 @@ async def test_recover_sets_temporary_password(env, monkeypatch):
     assert verify_password("emergency-pw", u.password_hash)
     assert u.must_change_password
     assert await recover._set_password("ghost", None) == 1
+
+
+@with_env
+async def test_email_follows_new_provider(env, monkeypatch):
+    prov = env["prov"]
+    ms = {"provider": "microsoft", "auto_provision": False}
+    await env["set"](login_mode="microsoft", sso_origin="migration")
+    bob = await env["mkuser"]("bob")
+    ms_claims = {"tid": "t", "oid": "o", "preferred_username": "bob@corp.onmicrosoft.com", "name": "Bob"}
+    await prov.link_identity_to_user("default", bob, ms_claims, {}, ms, finalize_migration=True)
+    assert (await env["get_user"](bob)).email == "bob@corp.onmicrosoft.com"
+
+    # admin_validate su Google: email invariata finche' non si passa davvero.
+    await _new_migration(env)
+    await prov.link_identity_to_user("default", bob, _claims("g1", "Bob@Gmail.com"), {}, PROVIDER)
+    assert (await env["get_user"](bob)).email == "bob@corp.onmicrosoft.com"
+    # Login SSO col nuovo provider: l'email segue Google.
+    await prov.resolve_user(_claims("g1", "Bob@Gmail.com"), {}, PROVIDER, migration_active=True)
+    assert (await env["get_user"](bob)).email == "bob@gmail.com"

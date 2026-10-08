@@ -101,6 +101,9 @@ async def resolve_user(
                 if email:
                     identity.email = email
                     identity.display_name = display_name
+                from src.auth.sso.login_mode import sync_user_email
+
+                sync_user_email(user, email)
                 if migration_active:
                     # Login SSO con identita' di una migrazione precedente:
                     # vale come collegamento, l'utente e' migrato.
@@ -233,6 +236,7 @@ async def link_identity_to_user(
             finalize_user,
             get_login_settings,
             is_identity_confirmed,
+            sync_user_email,
         )
 
         settings = await get_login_settings(tenant_id)
@@ -292,11 +296,14 @@ async def link_identity_to_user(
                 identity.email = email
                 identity.display_name = display_name
 
-        # Se l'utente non ha email, popolala con quella SSO
+        # Se l'utente non ha email, popolala con quella SSO; a migrazione
+        # confermata vale quella del nuovo provider. Con admin_validate (non
+        # ancora passato) l'email resta invariata.
         if not user.email and email:
             user.email = email
 
         if finalize_migration:
+            sync_user_email(user, email)
             # Il 2FA TOTP vale solo per il login con password.
             finalize_user(user, bool(settings.get("clear_password_on_link")))
 

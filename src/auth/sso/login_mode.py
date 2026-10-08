@@ -212,6 +212,14 @@ def _wipe_totp(user: User) -> None:
     user.totp_locked_until = None
 
 
+def sync_user_email(user: User, sso_email: Optional[str]) -> None:
+    """L'email dell'utente segue quella del provider SSO attivo (es. dopo un
+    passaggio Microsoft -> Google)."""
+    email = (sso_email or "").strip().lower()
+    if email and user.email != email:
+        user.email = email
+
+
 def finalize_user(user: User, clear_password: bool) -> bool:
     """Applica a un utente appena migrato: via TOTP e scadenza della password
     temporanea; con ``clear_password`` rimuove la password locale, admin
@@ -389,6 +397,9 @@ async def set_login_mode(
                 # riconfermate (vedi confirmed_identity_exists). L'admin che
                 # attiva l'SSO ha appena validato il provider: conta come migrato.
                 actor_identity.last_login_at = now
+                actor = await session.get(User, actor_user_id)
+                if actor:
+                    sync_user_email(actor, actor_identity.email)
                 current_row.login_mode = mode
                 current_row.sso_origin = sso_origin
                 current_row.migration_started_at = migration_started
@@ -397,6 +408,9 @@ async def set_login_mode(
                 current_row.updated_at = now
             else:
                 actor_identity.last_login_at = now
+                actor = await session.get(User, actor_user_id)
+                if actor:
+                    sync_user_email(actor, actor_identity.email)
                 session.add(AuthSettings(
                     tenant_id=tenant_id,
                     login_mode=mode,
