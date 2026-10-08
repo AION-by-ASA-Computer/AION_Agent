@@ -277,6 +277,8 @@
   },
   "chat": {
     "pii": {
+      "review_label": "Examen PII",
+      "tags_menu": "Tags PII",
       "tags_label": "Tags à censurer",
       "select_all": "Tout sélectionner",
       "deselect_all": "Tout désélectionner",

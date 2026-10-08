@@ -277,6 +277,8 @@
   },
   "chat": {
     "pii": {
+      "review_label": "Revisión PII",
+      "tags_menu": "Etiquetas PII",
       "tags_label": "Etiquetas a censurar",
       "select_all": "Seleccionar todo",
       "deselect_all": "Deseleccionar todo",

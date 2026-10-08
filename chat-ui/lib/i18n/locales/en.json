@@ -427,6 +427,8 @@
   },
   "chat": {
     "pii": {
+      "review_label": "PII Review",
+      "tags_menu": "PII Tags",
       "tags_label": "Tags to redact",
       "select_all": "Select all",
       "deselect_all": "Deselect all",

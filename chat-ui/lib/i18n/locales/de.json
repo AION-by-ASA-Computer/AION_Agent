@@ -277,6 +277,8 @@
   },
   "chat": {
     "pii": {
+      "review_label": "PII-Überprüfung",
+      "tags_menu": "PII-Tags",
       "tags_label": "Zu zensierende Tags",
       "select_all": "Alle auswählen",
       "deselect_all": "Alle abwählen",

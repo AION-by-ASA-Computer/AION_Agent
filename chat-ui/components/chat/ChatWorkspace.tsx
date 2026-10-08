@@ -1129,6 +1129,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [isThinkingSubOpen, setIsThinkingSubOpen] = useState(false);
   const [isModelSubOpen, setIsModelSubOpen] = useState(false);
   const [isAgentModeSubOpen, setIsAgentModeSubOpen] = useState(false);
+  const [isPiiTagsSubOpen, setIsPiiTagsSubOpen] = useState(false);
 
   const closePlusSubMenus = useCallback(() => {
     setIsToolsViewSubOpen(false);
@@ -1136,6 +1137,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     setIsThinkingSubOpen(false);
     setIsModelSubOpen(false);
     setIsAgentModeSubOpen(false);
+    setIsPiiTagsSubOpen(false);
   }, []);
 
   const [toolsView, setToolsView] = useState<"compact" | "hidden" | "partial" | "full">(() => {
@@ -4445,6 +4447,128 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               ) : null}
             </div>
 
+            {piiReviewSupported ? (
+              <>
+                <div className="my-1 border-t border-border/45" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPiiReviewEnabled((prev) => !prev);
+                  }}
+                  onMouseEnter={() => {
+                    closePlusSubMenus();
+                  }}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-colors text-left",
+                    piiReviewEnabled
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-primary/10 hover:text-foreground",
+                  )}
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <Shield size={14} className="shrink-0 opacity-80" aria-hidden />
+                    <span className="truncate">{t("chat.pii.review_label")}</span>
+                  </div>
+                  {piiReviewEnabled ? (
+                    <Check size={13} className="shrink-0 text-primary" />
+                  ) : null}
+                </button>
+                
+                <div className="relative" onMouseLeave={() => setIsPiiTagsSubOpen(false)}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsPiiTagsSubOpen((prev) => !prev);
+                      setIsModelSubOpen(false);
+                      setIsAgentModeSubOpen(false);
+                      setIsToolsViewSubOpen(false);
+                      setIsWebSearchSubOpen(false);
+                      setIsThinkingSubOpen(false);
+                    }}
+                    onMouseEnter={() => {
+                      setIsPiiTagsSubOpen(true);
+                      setIsModelSubOpen(false);
+                      setIsAgentModeSubOpen(false);
+                      setIsToolsViewSubOpen(false);
+                      setIsWebSearchSubOpen(false);
+                      setIsThinkingSubOpen(false);
+                    }}
+                    className={cn(
+                      "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-colors text-left",
+                      isPiiTagsSubOpen
+                        ? "bg-primary/10 text-foreground dark:bg-white/10"
+                        : "text-muted-foreground hover:bg-primary/10 hover:text-foreground dark:hover:bg-white/10",
+                    )}
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <FileText size={14} className="shrink-0 opacity-80" aria-hidden />
+                      <span className="truncate">{t("chat.pii.tags_menu")}</span>
+                    </div>
+                    <ChevronRight size={13} className="shrink-0 opacity-60" aria-hidden />
+                  </button>
+
+                  {isPiiTagsSubOpen ? (
+                    <div className="absolute bottom-full left-0 z-50 pb-1.5 w-56 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                      <div
+                        onMouseEnter={() => setIsPiiTagsSubOpen(true)}
+                        className="w-full rounded-2xl border border-border bg-card p-1.5 shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2"
+                      >
+                        <div className="px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
+                          {t("chat.pii.tags_label")}
+                        </div>
+                        <div className="space-y-0.5 p-0.5 max-h-64 overflow-y-auto custom-scrollbar">
+                          {(() => {
+                            const allSelected = piiAvailableTags.length > 0 && piiAvailableTags.every((tag) => !piiExcludedTags.includes(tag));
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => setAllPiiTags(!allSelected)}
+                                className={cn(
+                                  "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                  allSelected ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                )}
+                              >
+                                <span>{allSelected ? t("chat.pii.deselect_all") : t("chat.pii.select_all")}</span>
+                              </button>
+                            );
+                          })()}
+                          
+                          {piiAvailableTags.length > 0 ? (
+                            <div className="my-1 border-t border-border/45 mx-2" />
+                          ) : null}
+                          
+                          {piiAvailableTags.map((tag) => {
+                            const selected = !piiExcludedTags.includes(tag);
+                            return (
+                              <button
+                                key={tag}
+                                type="button"
+                                aria-pressed={selected}
+                                onClick={() => togglePiiTag(tag)}
+                                className={cn(
+                                  "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                  selected ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                )}
+                              >
+                                <span className="truncate">{tag}</span>
+                                {selected ? <Check size={12} className="shrink-0 text-primary ml-2" /> : null}
+                              </button>
+                            );
+                          })}
+                          
+                          {piiAvailableTags.length === 0 ? (
+                            <div className="px-2.5 py-2 text-[0.714em] text-muted-foreground text-center">
+                              {t("chat.pii.tags_none")}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+
             <div className="my-1 border-t border-border/45" />
             <button
               type="button"
@@ -5278,90 +5402,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                             </div>
                           ) : null}
 
-                          {piiReviewSupported ? (
-                            <>
-                              <div className="my-1 border-t border-border/45" />
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setPiiReviewEnabled((prev) => !prev);
-                                  setIsPlusOpen(false);
-                                  closePlusSubMenus();
-                                }}
-                                onMouseEnter={() => {
-                                  closePlusSubMenus();
-                                }}
-                                className={cn(
-                                  "flex w-full items-center justify-between rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
-                                  piiReviewEnabled
-                                    ? "bg-primary/10 text-primary"
-                                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                                )}
-                              >
-                                <div className="flex min-w-0 items-center gap-2">
-                                  <Shield size={12} className="shrink-0" aria-hidden />
-                                  <span className="truncate">PII Review</span>
-                                </div>
-                                {piiReviewEnabled ? (
-                                  <Check size={12} className="shrink-0 text-primary" />
-                                ) : null}
-                              </button>
-                              {piiReviewEnabled && piiAvailableTags.length ? (
-                                <div className="mt-1 px-2.5 pb-1">
-                                  {(() => {
-                                    const allSelected = piiAvailableTags.every((tag) => !piiExcludedTags.includes(tag));
-                                    return (
-                                      <div className="mb-1 flex items-center justify-between gap-2">
-                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">
-                                          {t("chat.pii.tags_label")}
-                                        </span>
-                                        <button
-                                          type="button"
-                                          onClick={() => setAllPiiTags(!allSelected)}
-                                          onMouseEnter={() => {
-                                            closePlusSubMenus();
-                                          }}
-                                          className="shrink-0 text-[10px] font-medium text-primary hover:underline"
-                                        >
-                                          {allSelected ? t("chat.pii.deselect_all") : t("chat.pii.select_all")}
-                                        </button>
-                                      </div>
-                                    );
-                                  })()}
-                                  <div className="flex flex-wrap gap-1">
-                                    {piiAvailableTags.map((tag) => {
-                                      const selected = !piiExcludedTags.includes(tag);
-                                      return (
-                                        <button
-                                          key={tag}
-                                          type="button"
-                                          aria-pressed={selected}
-                                          onClick={() => togglePiiTag(tag)}
-                                          onMouseEnter={() => {
-                                            closePlusSubMenus();
-                                          }}
-                                          className={cn(
-                                            "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium transition-colors",
-                                            selected
-                                              ? "border-primary/30 bg-primary/10 text-primary"
-                                              : "border-border/60 text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                                          )}
-                                        >
-                                          {selected ? <Check size={10} className="shrink-0" aria-hidden /> : null}
-                                          <span>{tag}</span>
-                                        </button>
-                                      );
-                                    })}
-                                  </div>
-                                  {piiAvailableTags.every((tag) => piiExcludedTags.includes(tag)) ? (
-                                    <div className="mt-1 text-[10px] text-muted-foreground">
-                                      {t("chat.pii.tags_none")}
-                                    </div>
-                                  ) : null}
-                                </div>
-                              ) : null}
-                            </>
-                          ) : null}
+
 
                           {(() => {
                             const memorizationMsgs = messages.filter(

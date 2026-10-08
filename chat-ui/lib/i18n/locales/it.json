@@ -427,6 +427,8 @@
   },
   "chat": {
     "pii": {
+      "review_label": "Revisione PII",
+      "tags_menu": "Tag PII",
       "tags_label": "Tag da censurare",
       "select_all": "Seleziona tutti",
       "deselect_all": "Deseleziona tutti",
