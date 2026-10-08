@@ -691,9 +691,47 @@
     "sso_microsoft": "Accedi con Microsoft",
     "sso_google": "Accedi con Google",
     "or": "oppure",
+    "mfa": {
+      "title_enroll": "Configura l'autenticazione a due fattori",
+      "title_verify": "Verifica in due passaggi",
+      "enroll_help": "Scansiona il QR code con Google Authenticator, Microsoft Authenticator o un'app equivalente, poi inserisci il codice a 6 cifre.",
+      "verify_help": "Inserisci il codice a 6 cifre mostrato dalla tua app authenticator.",
+      "manual": "Non riesci a scansionare? Inserisci questa chiave manualmente:",
+      "code": "Codice a 6 cifre",
+      "confirm": "Conferma e accedi",
+      "verify": "Verifica",
+      "back": "Torna al login",
+      "loading": "Caricamento…",
+      "error": {
+        "invalid_code": "Codice non valido. Riprova.",
+        "mfa_locked": "Troppi tentativi. Riprova tra {{seconds}} secondi.",
+        "invalid_mfa_token": "Sessione scaduta. Effettua di nuovo il login.",
+        "generic": "Errore durante la verifica."
+      }
+    },
     "sso_error": {
       "sso_already_linked": "L'account è già collegato a un altro utente.",
-      "sso_user_already_linked": "Hai già un account collegato."
+      "sso_user_already_linked": "Hai già un account collegato.",
+      "generic": "Accesso non riuscito. Riprova.",
+      "sso_not_linked": "Il tuo account non è ancora collegato. Accedi con la password e collega l'account aziendale.",
+      "sso_domain_not_allowed": "Il dominio della tua email non è autorizzato.",
+      "sso_required": "Per questo account è obbligatorio l'accesso SSO.",
+      "password_login_disabled": "L'accesso con password è disabilitato.",
+      "temp_password_expired": "La password temporanea è scaduta. Contatta l'amministratore.",
+      "sso_failed": "Autenticazione SSO non riuscita.",
+      "sso_start_failed": "Impossibile avviare l'accesso SSO.",
+      "sso_token_invalid": "Token SSO non valido.",
+      "sso_provisioning_failed": "Impossibile creare l'account.",
+      "sso_provisioning_conflict": "Account in creazione, riprova.",
+      "email_required_for_provisioning": "Il provider non ha fornito un'email.",
+      "invalid_code": "Codice di accesso non valido.",
+      "code_expired": "Codice di accesso scaduto. Riprova.",
+      "code_already_used": "Codice di accesso già utilizzato.",
+      "exchange_error": "Errore durante il completamento dell'accesso.",
+      "exchange_failed": "Errore durante il completamento dell'accesso.",
+      "link_failed": "Collegamento non riuscito.",
+      "session_invalid": "Sessione scaduta, accedi di nuovo.",
+      "user_not_found": "Utente non trovato."
     }
   },
   "authgate": {
@@ -1111,5 +1149,14 @@
       "tool_events": "Turno interrotto automaticamente: troppi eventi tool.",
       "plan_invalid_response": "Plan mode: risposta assistente non valida."
     }
+  },
+  "sso_link": {
+    "title": "Aggiornamento Sicurezza",
+    "desc": "L'amministratore richiede di collegare il tuo account a {{provider}} per continuare ad accedere.",
+    "button": "Collega account {{provider}}",
+    "logout": "Esci",
+    "start_failed": "Impossibile avviare il collegamento SSO.",
+    "bad_response": "Risposta non valida dal server.",
+    "network": "Errore di rete."
   }
 }

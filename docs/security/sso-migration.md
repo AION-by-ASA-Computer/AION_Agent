@@ -30,15 +30,32 @@ When the administrator switches the system to "Microsoft" or "Google":
 
 ## 2. Admin Perspective & Temporary Passwords
 
-If an administrator enables SSO *before* some users have set up a local password, those users would be permanently locked out (since they cannot perform step 3 above). 
+Switching to an SSO mode does **not** generate passwords automatically. Users who already have a password keep it and link their SSO identity at the next login (step 6 above). For users who cannot log in (no password, or a forgotten one), the administrator generates a temporary password on demand from **Security → SSO migration** (`POST /admin/auth/temp-passwords`).
 
-To prevent this, AION's **Auth Settings** engine automatically generates **Temporary Passwords** when the login mode is changed.
+- Temporary passwords are random 12-character strings, stored hashed, shown **once** to the admin (dialog + CSV).
+- They expire after `AION_SSO_TEMP_PASSWORD_TTL_DAYS` days (default **7**). Expiry is cleared when the user links SSO or changes the password.
+- An expired temporary password is rejected with `temp_password_expired`.
+- When `clear_password_on_link` is on (default), the local password is removed as soon as the user links SSO, **admins included**. The admin who activates SSO (after `admin_validate`) counts as migrated immediately and loses the password when the switch is applied. Emergency access goes through the recovery CLI (see Break-glass).
+- While the migration is active (`origin = migration`, not completed) an IdP identity that is not yet linked can **not** create a new user: login fails with `sso_not_linked`. Only an explicit, authenticated link can attach an identity; there is never auto-linking by email.
+- The migration completes automatically when no user is pending; the password form then disappears from chat-ui.
+- Admin sign-in from admin-ui sends `client: "admin"`: the SSO/password restrictions of the chat client do not apply to users with the `admin` role.
+- In SSO mode the admin-ui login page shows an **"Accedi con Microsoft/Google"** button (`/auth/sso/start?client=admin`, callback purpose `admin_login`, handoff to `/admin/login/sso`). Only users with the `admin` role are accepted; new identities are never provisioned from this flow. The password form is shown only while at least one admin still has a local password (`admin_password_login` in `GET /auth/status`: migration still pending for an admin, or a password restored with the recovery CLI) or with `AION_SSO_FORCE_PASSWORD=1`. Once every admin has migrated, only the SSO button is shown.
+- Each switch to SSO with `origin = migration` starts a **new** migration: only identities confirmed (linked or used to sign in) after `migration_started_at` count, so identities left over from a previous migration must be confirmed again.
 
-- The backend scans all active users.
-- If a user has no password set (or hasn't logged in recently) and hasn't linked an SSO identity, the system generates a random 12-character password.
-- These passwords are returned to the administrator in a **one-time pop-up dialog** containing a downloadable CSV file.
-- The administrator must securely distribute these temporary passwords to the affected users.
-- The temporary passwords expire after 48 hours.
+### Break-glass
+
+Set `AION_SSO_FORCE_PASSWORD=1` and restart the backend to restore password login for everyone (SSO gates, link requirement and migration lock are ignored). Remove it once the IdP is fixed.
+
+Since migrated admins no longer have a local password, set a temporary one with the recovery CLI (prints a generated password, to be changed at first login):
+
+```bash
+# local checkout
+python -m src.auth.recover set-password admin
+# Docker install (install.sh), from the install directory
+docker compose -f docker-compose.ghcr.yml exec backend python -m src.auth.recover set-password admin
+```
+
+The admin login page then shows the password form again (an admin has a password). `--password <value>` sets a specific password instead of a generated one.
 
 ## 3. The `handoff` State
 
@@ -53,10 +70,20 @@ This endpoints exchanges the code for a full `access_token` and `user_id`, preve
 The administrator UI interacts with the following endpoints:
 
 - `GET /v1/admin/auth/login-mode`: Returns the current mode (`password`, `microsoft`, `google`), the migration status (`sso_migration_active`), and counts of pending/migrated users.
-- `PUT /v1/admin/auth/login-mode`: Changes the mode. This endpoint performs the temporary password generation and triggers the migration state lock.
+- `PUT /v1/admin/auth/login-mode`: Changes the mode. Requires a provider validated in the last 30 minutes and an admin already linked to it. Re-selecting the current mode does not restart the migration.
+- `GET /v1/admin/auth/sso-migration/users?status=pending|migrated|exempt|no_access`: User lists per migration state.
+- `POST /v1/admin/auth/sso-migration/users/{id}/exempt`: Exempt/reinstate a user.
+- `POST /v1/admin/auth/temp-passwords`: Generate temporary passwords for selected users.
+- `DELETE /v1/admin/auth/users/{id}/sso-identities/{identity_id}`: Unlink an identity.
+- `GET /v1/admin/sso/providers/redirect-uri`: Redirect URI to register at the IdP (derived from the backend public URL).
+- The active provider cannot be disabled or deleted directly (`use_login_mode`, `provider_in_use`); changing its client id/secret requires re-validation but keeps it active.
 
 ## 5. Security Measures
 
 - **Unique Constraints**: The database enforces a unique constraint `(tenant_id, user_id, provider)` on the `user_sso_identities` table to prevent linking issues.
 - **CSRF Protection**: The `/auth/sso/link/start` endpoint strictly checks the authorized user context before generating the OAuth `state` token, preventing attackers from linking their SSO to a victim's account.
-- **Short-Lived Codes**: Handoff codes are deleted immediately after use or after 60 seconds.
+- **Short-Lived Codes**: Handoff codes are single-use (consumed atomically, a replay returns `code_already_used`) and expire after 60 seconds.
+
+## 6. Interaction with Two-Factor Authentication
+
+The optional [TOTP 2FA](./two-factor-auth.md) policy applies only while `login_mode = password` and cannot be enabled while an SSO mode is active. Switching to SSO does **not** remove existing TOTP enrollments: a user who already configured 2FA keeps it, and the code is still required at every password login until they link their SSO account. The TOTP secret is removed only when the user links (or signs in via SSO); nobody is asked to enroll during a migration.

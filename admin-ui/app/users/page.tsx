@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Plus, Trash2, Edit2, Key, CheckCircle, Save, X, AlertTriangle, Shield } from "lucide-react";
+import { Users, Plus, Trash2, Edit2, Key, CheckCircle, Save, X, AlertTriangle, Shield, Lock } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { PageToast, ToastState } from "@/components/PageToast";
+import { SsoMigrationPanel } from "@/components/sso/SsoMigrationPanel";
+import { TwoFactorPanel } from "@/components/sso/TwoFactorPanel";
 
 export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([]);
@@ -150,6 +152,18 @@ export default function UsersPage() {
       setToast({ message: "Errore durante l'eliminazione dell'utente: " + err.message, variant: "error" });
     } finally {
       setDeleting(false);
+    }
+  };
+
+  const resetTwoFactor = async (user: any) => {
+    if (!window.confirm(`Resettare il 2FA di ${user.identifier}? Al prossimo login dovrà configurarlo di nuovo.`)) return;
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/auth/users/${user.id}/2fa`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Reset non riuscito");
+      setToast({ message: "2FA resettato.", variant: "success" });
+      fetchUsers();
+    } catch (err: any) {
+      setToast({ message: "Errore durante il reset del 2FA: " + err.message, variant: "error" });
     }
   };
 
@@ -328,6 +342,38 @@ export default function UsersPage() {
         </div>
       )}
 
+      <div className="space-y-6">
+        {/* SSO Settings */}
+        <section className="glass-card p-6 border-[#262626] hover:border-blue-500/30 transition-colors group animate-in fade-in duration-500">
+          <div className="flex items-start gap-4 mb-6">
+            <div className="p-3 bg-blue-500/10 rounded-xl group-hover:scale-110 transition-transform">
+              <Lock className="w-6 h-6 text-blue-500" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-white flex items-center gap-2">Accesso Utenti (SSO)</h3>
+              <p className="text-gray-400 text-sm mt-1">Configura l'autenticazione tramite provider esterni e le policy di migrazione degli utenti.</p>
+            </div>
+          </div>
+          <div className="space-y-8">
+            <SsoMigrationPanel />
+          </div>
+        </section>
+
+        {/* Two-factor authentication */}
+        <section className="glass-card p-6 border-[#262626] hover:border-emerald-500/30 transition-colors group animate-in fade-in duration-500">
+          <div className="flex items-start gap-4 mb-6">
+            <div className="p-3 bg-emerald-500/10 rounded-xl group-hover:scale-110 transition-transform">
+              <Lock className="w-6 h-6 text-emerald-500" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-white">Autenticazione a due fattori (2FA)</h3>
+              <p className="text-gray-400 text-sm mt-1">Richiede un codice da app authenticator a ogni login con password (chat e admin). Non si applica all'SSO.</p>
+            </div>
+          </div>
+          <TwoFactorPanel />
+        </section>
+      </div>
+
       <div className="glass-card overflow-hidden border border-white/10 rounded-3xl bg-gradient-to-b from-[#181818]/90 to-[#121212]/90 shadow-2xl relative">
         <table className="w-full text-left">
           <thead>
@@ -349,6 +395,11 @@ export default function UsersPage() {
                     <div>
                       <div className="text-sm font-bold text-white">{u.display_name || u.identifier}</div>
                       <div className="text-xs text-gray-500 font-mono mt-0.5">{u.identifier}</div>
+                      {u.totp_enabled && (
+                        <span className="mt-1 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                          <Shield className="w-3 h-3" /> 2FA
+                        </span>
+                      )}
                     </div>
                   </div>
                 </td>
@@ -368,6 +419,15 @@ export default function UsersPage() {
                   >
                     <Users className="w-4 h-4" />
                   </button>
+                  {u.totp_enabled && (
+                    <button
+                      onClick={() => resetTwoFactor(u)}
+                      title="Reset 2FA"
+                      className="p-2.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-xl transition-all hover:border-amber-500/40 cursor-pointer inline-flex items-center justify-center mr-2"
+                    >
+                      <Key className="w-4 h-4" />
+                    </button>
+                  )}
                   <button
                     onClick={() => openEditForm(u)}
                     title="Edit User"
@@ -539,6 +599,8 @@ export default function UsersPage() {
           </div>
         </div>
       )}
+
+
 
       <PageToast toast={toast} onDismiss={() => setToast(null)} />
     </div>

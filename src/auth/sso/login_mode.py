@@ -23,9 +23,69 @@ _PENDING_CACHE: Dict[str, tuple] = {}
 CACHE_TTL = 15.0  # secondi
 
 
+def _force_password() -> bool:
+    """Break-glass ``AION_SSO_FORCE_PASSWORD=1`` (vedi auth_login.sso_force_password)."""
+    return (os.getenv("AION_SSO_FORCE_PASSWORD") or "").strip() == "1"
+
+
 def _invalidate_cache(tenant_id: str) -> None:
     _SETTINGS_CACHE.pop(tenant_id, None)
-    _PENDING_CACHE.pop(tenant_id, None)
+    # La cache dei pendenti e' indicizzata "tenant:provider": rimuovi tutte le chiavi del tenant.
+    prefix = f"{tenant_id}:"
+    for key in [k for k in _PENDING_CACHE if k.startswith(prefix)]:
+        _PENDING_CACHE.pop(key, None)
+
+
+def _as_aware(dt: Optional[datetime]) -> Optional[datetime]:
+    """SQLite restituisce datetime naive: li normalizza a UTC per i confronti."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
+
+def confirmed_identity_exists(tenant_id: str, provider: str, since: Optional[datetime]):
+    """Clausola EXISTS (correlata a ``User``): l'utente ha un'identita' per
+    ``provider`` confermata nella migrazione corrente.
+
+    Ogni passaggio a SSO apre una nuova migrazione (``migration_started_at``):
+    le identita' rimaste da una migrazione precedente (es. SSO -> password ->
+    SSO) contano solo se l'utente le ha riconfermate (link o login SSO, che
+    aggiornano ``last_login_at``) dopo l'inizio. Con ``since`` NULL
+    (first_setup / nessuna migrazione) basta l'esistenza dell'identita'.
+    """
+    q = select(UserSsoIdentity.id).where(
+        UserSsoIdentity.user_id == User.id,
+        UserSsoIdentity.tenant_id == tenant_id,
+        UserSsoIdentity.provider == provider,
+    )
+    if since is not None:
+        q = q.where(UserSsoIdentity.last_login_at >= since)
+    return q.correlate(User).exists()
+
+
+def is_identity_confirmed(identity: UserSsoIdentity, since: Optional[datetime]) -> bool:
+    """Versione Python di :func:`confirmed_identity_exists` per una riga gia' caricata."""
+    if since is None:
+        return True
+    last = _as_aware(identity.last_login_at)
+    return last is not None and last >= _as_aware(since)
+
+
+async def is_migration_active(tenant_id: str) -> bool:
+    """True se SSO attivo con origin ``migration`` e migrazione non completata.
+
+    Stessa definizione usata da ``/auth/status`` (``sso_migration_active``).
+    Mentre e' attiva, un'identita' IdP non collegata NON puo' creare un nuovo
+    utente (``sso_not_linked``): deve prima collegarsi dall'account esistente.
+    """
+    if _force_password():
+        return False
+    settings = await get_login_settings(tenant_id)
+    return (
+        settings["login_mode"] != "password"
+        and settings["sso_origin"] == "migration"
+        and not settings["migration_completed_at"]
+    )
 
 
 async def get_login_settings(tenant_id: str) -> Dict[str, Any]:
@@ -47,6 +107,7 @@ async def get_login_settings(tenant_id: str) -> Dict[str, Any]:
             "migration_completed_at": None,
             "clear_password_on_link": True,
             "sso_provider": None,
+            "totp_required": False,
         }
     else:
         mode = row.login_mode or "password"
@@ -57,6 +118,7 @@ async def get_login_settings(tenant_id: str) -> Dict[str, Any]:
             "migration_completed_at": row.migration_completed_at,
             "clear_password_on_link": bool(row.clear_password_on_link),
             "sso_provider": mode if mode != "password" else None,
+            "totp_required": bool(getattr(row, "totp_required", False)),
         }
 
     _SETTINGS_CACHE[tenant_id] = (now + CACHE_TTL, result)
@@ -72,8 +134,10 @@ async def pending_users_count(tenant_id: str, provider: str) -> int:
     if cached and now < cached[0]:
         return cached[1]
 
+    since = (await get_login_settings(tenant_id))["migration_started_at"]
     async with get_async_session_maker()() as session:
-        # Utenti con password, non esonerati, senza identità per questo provider
+        # Utenti con password, non esonerati, senza identità confermata per
+        # questo provider nella migrazione corrente
         stmt = (
             select(func.count())
             .select_from(User)
@@ -82,18 +146,7 @@ async def pending_users_count(tenant_id: str, provider: str) -> int:
                 User.password_hash.is_not(None),
                 User.sso_migration_exempt == False,  # noqa: E712
             )
-            .where(
-                ~(
-                    select(UserSsoIdentity.id)
-                    .where(
-                        UserSsoIdentity.user_id == User.id,
-                        UserSsoIdentity.tenant_id == tenant_id,
-                        UserSsoIdentity.provider == provider,
-                    )
-                    .correlate(User)
-                    .exists()
-                )
-            )
+            .where(~confirmed_identity_exists(tenant_id, provider, since))
         )
         count = (await session.execute(stmt)).scalar_one()
 
@@ -107,7 +160,7 @@ async def password_login_visible(tenant_id: str) -> bool:
     mode = settings["login_mode"]
     origin = settings["sso_origin"]
 
-    if mode == "password":
+    if mode == "password" or _force_password():
         return True
     if origin == "first_setup":
         return False
@@ -123,7 +176,7 @@ async def user_needs_link(tenant_id: str, user_row_id: str) -> bool:
     """Restituisce True se l'utente deve ancora collegarsi al provider SSO attivo."""
     settings = await get_login_settings(tenant_id)
     mode = settings["login_mode"]
-    if mode == "password":
+    if mode == "password" or _force_password():
         return False
 
     provider = settings["sso_provider"]
@@ -137,23 +190,100 @@ async def user_needs_link(tenant_id: str, user_row_id: str) -> bool:
         if bool(getattr(user, "sso_migration_exempt", False)):
             return False
 
-        identity = (
+        confirmed = (
             await session.execute(
-                select(UserSsoIdentity).where(
-                    UserSsoIdentity.tenant_id == tenant_id,
-                    UserSsoIdentity.user_id == user_row_id,
-                    UserSsoIdentity.provider == provider,
+                select(User.id).where(
+                    User.id == user_row_id,
+                    confirmed_identity_exists(
+                        tenant_id, provider, settings["migration_started_at"]
+                    ),
                 )
             )
-        ).scalars().first()
+        ).first()
 
-    return identity is None
+    return confirmed is None
+
+
+def _wipe_totp(user: User) -> None:
+    user.totp_secret_encrypted = None
+    user.totp_enabled_at = None
+    user.totp_last_used_step = None
+    user.totp_failed_count = 0
+    user.totp_locked_until = None
+
+
+def sync_user_email(user: User, sso_email: Optional[str]) -> None:
+    """L'email dell'utente segue quella del provider SSO attivo (es. dopo un
+    passaggio Microsoft -> Google)."""
+    email = (sso_email or "").strip().lower()
+    if email and user.email != email:
+        user.email = email
+
+
+def finalize_user(user: User, clear_password: bool) -> bool:
+    """Applica a un utente appena migrato: via TOTP e scadenza della password
+    temporanea; con ``clear_password`` rimuove la password locale, admin
+    compresi (accesso di emergenza: ``python -m src.auth.recover``).
+    Ritorna True se ha modificato qualcosa."""
+    touched = False
+    if user.totp_secret_encrypted or user.totp_enabled_at:
+        _wipe_totp(user)
+        touched = True
+    if user.temp_password_expires_at is not None:
+        user.temp_password_expires_at = None
+        touched = True
+    if clear_password and user.password_hash:
+        user.password_hash = None
+        user.must_change_password = False
+        touched = True
+    return touched
+
+
+async def finalize_linked_users(tenant_id: str, provider: str) -> int:
+    """Rimuove password e 2FA (TOTP) di chi ha un'identita' SSO confermata
+    nella migrazione corrente (vedi :func:`confirmed_identity_exists`).
+
+    La password e' rimossa solo con ``clear_password_on_link`` (admin compresi);
+    il TOTP sempre, perche' in modalita' SSO non ha senso. Le identita' rimaste da
+    una migrazione precedente non contano: altrimenti un nuovo passaggio a SSO
+    cancellerebbe le password temporanee appena emesse.
+    Ritorna il numero di utenti modificati.
+    """
+    changed = 0
+    async with get_async_session_maker()() as session:
+        settings_row = await session.get(AuthSettings, tenant_id)
+        clear_pw = True if settings_row is None else bool(settings_row.clear_password_on_link)
+        since = settings_row.migration_started_at if settings_row else None
+        users = (
+            await session.execute(
+                select(User).where(
+                    User.tenant_id == tenant_id,
+                    confirmed_identity_exists(tenant_id, provider, since),
+                )
+            )
+        ).scalars().all()
+        for u in users:
+            changed += 1 if finalize_user(u, clear_pw) else 0
+        if changed:
+            await session.commit()
+    if changed:
+        _invalidate_cache(tenant_id)
+    return changed
 
 
 async def _check_migration_completion(tenant_id: str, provider: str) -> None:
-    """Se pending_users_count arriva a 0, scrive migration_completed_at."""
+    """Se pending_users_count arriva a 0, scrive migration_completed_at e
+    ripulisce password/TOTP degli utenti gia' migrati."""
+    # Il conteggio e' in cache 15s: senza invalidazione il collegamento appena
+    # avvenuto non verrebbe visto e la migrazione non risulterebbe mai completata.
+    _invalidate_cache(tenant_id)
+    # Con admin_validate siamo ancora in modalita' password: niente pulizia,
+    # altrimenti un admin unico utente perderebbe la password prima del passaggio.
+    if (await get_login_settings(tenant_id))["login_mode"] != provider:
+        return
     count = await pending_users_count(tenant_id, provider)
     if count == 0:
+        await finalize_linked_users(tenant_id, provider)
         async with get_async_session_maker()() as session:
             row = await session.get(AuthSettings, tenant_id)
             if row and row.sso_origin == "migration" and not row.migration_completed_at:
@@ -225,12 +355,19 @@ async def set_login_mode(
                 raise ValueError("sso_admin_not_linked")
 
             # Calcola origin
+            # first_setup solo se il setup non e' concluso E non esistono altri
+            # utenti oltre all'admin che sta attivando SSO; altrimenti e' una
+            # migrazione (es. passaggio password -> SSO dalle impostazioni).
             first_setup_complete = os.getenv("AION_FIRST_SETUP_COMPLETE") == "1"
-            if not first_setup_complete:
+            other_users = (
+                await session.execute(
+                    select(func.count())
+                    .select_from(User)
+                    .where(User.tenant_id == tenant_id, User.id != actor_user_id)
+                )
+            ).scalar_one()
+            if not first_setup_complete and other_users == 0:
                 sso_origin = "first_setup"
-            elif current_mode in ("microsoft", "google") and current_mode != mode:
-                # Cambio da SSO a SSO → sempre migration
-                sso_origin = "migration"
             else:
                 sso_origin = "migration"
 
@@ -249,7 +386,20 @@ async def set_login_mode(
 
             # Step 4: aggiorna auth_settings
             migration_started = now if sso_origin == "migration" else None
-            if current_row:
+            if current_row and current_mode == mode:
+                # Ri-conferma dello stesso provider (es. dopo cambio secret):
+                # NON riaprire la migrazione ne' cambiare origin; si riabilita
+                # solo il provider (enable_provider, dopo il commit).
+                current_row.updated_by_user_id = actor_user_id
+                current_row.updated_at = now
+            elif current_row:
+                # Nuova migrazione: le identita' gia' esistenti vanno
+                # riconfermate (vedi confirmed_identity_exists). L'admin che
+                # attiva l'SSO ha appena validato il provider: conta come migrato.
+                actor_identity.last_login_at = now
+                actor = await session.get(User, actor_user_id)
+                if actor:
+                    sync_user_email(actor, actor_identity.email)
                 current_row.login_mode = mode
                 current_row.sso_origin = sso_origin
                 current_row.migration_started_at = migration_started
@@ -257,6 +407,10 @@ async def set_login_mode(
                 current_row.updated_by_user_id = actor_user_id
                 current_row.updated_at = now
             else:
+                actor_identity.last_login_at = now
+                actor = await session.get(User, actor_user_id)
+                if actor:
+                    sync_user_email(actor, actor_identity.email)
                 session.add(AuthSettings(
                     tenant_id=tenant_id,
                     login_mode=mode,
@@ -361,6 +515,11 @@ async def set_login_mode(
             await enable_provider(tenant_id, mode, True)
         except Exception as e:
             logger.warning("enable_provider failed after set_login_mode: %s", e)
+        # Chi e' gia' migrato (l'admin che attiva) perde TOTP e password locale.
+        # Gli altri conservano il 2FA, richiesto al login con password finche'
+        # non collegano l'account SSO (finalize_user).
+        await finalize_linked_users(tenant_id, mode)
+        await _check_migration_completion(tenant_id, mode)
     else:
         # Disabilita tutti i provider
         from src.auth.sso.config_service import admin_list_providers, enable_provider as _ep

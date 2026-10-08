@@ -18,6 +18,8 @@ aiosqlite
 sqlalchemy>=2.0
 cryptography>=50.0.0
 PyJWT[crypto]>=2.10
+pyotp>=2.9
+segno>=1.6
 uuid6>=2025.0.1
 alembic>=1.13
 greenlet>=3.0.0

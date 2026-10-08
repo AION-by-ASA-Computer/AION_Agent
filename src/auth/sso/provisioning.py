@@ -94,13 +94,29 @@ async def resolve_user(
                 user.last_active_at = now
                 identity.access_token_encrypted = access_token_encrypted
                 identity.token_expires_at = token_expires_at
+                # last_login_at >= migration_started_at conferma l'identita'
+                # nella migrazione corrente (vedi confirmed_identity_exists).
                 identity.last_login_at = now
                 identity.updated_at = now
                 if email:
                     identity.email = email
                     identity.display_name = display_name
+                from src.auth.sso.login_mode import sync_user_email
+
+                sync_user_email(user, email)
+                if migration_active:
+                    # Login SSO con identita' di una migrazione precedente:
+                    # vale come collegamento, l'utente e' migrato.
+                    from src.auth.sso.login_mode import finalize_user, get_login_settings
+
+                    settings = await get_login_settings(tenant_id)
+                    finalize_user(user, settings.get("clear_password_on_link", True))
                 await session.commit()
                 await session.refresh(user)
+                if migration_active:
+                    from src.auth.sso.login_mode import _check_migration_completion
+
+                    await _check_migration_completion(tenant_id, provider)
                 return _user_to_auth_dict(user)
 
         # Fix 0.8: nessun auto-link per email/identifier.
@@ -176,6 +192,7 @@ async def link_identity_to_user(
     claims: Dict[str, Any],
     token_data: Dict[str, Any],
     provider_config: Dict[str, Any],
+    finalize_migration: bool = False,
 ) -> None:
     """Collega un'identità SSO a un utente locale già autenticato.
 
@@ -184,6 +201,13 @@ async def link_identity_to_user(
     - purpose=admin_validate (admin che conferma il provider)
 
     Fix 0.8: SOLO questo flusso può collegare identità. Nessun auto-link.
+
+    ``finalize_migration=True`` (solo purpose=link): a collegamento avvenuto
+    azzera la scadenza della password temporanea e, se
+    ``auth_settings.clear_password_on_link`` e' attivo, rimuove la password
+    locale (l'utente entra solo via SSO), admin compresi: l'accesso di emergenza
+    passa da ``python -m src.auth.recover``. Con ``admin_validate`` resta False:
+    l'admin non e' ancora passato a SSO.
     """
     provider = provider_config["provider"]
     subject, email = _extract_subject_and_email(claims, provider)
@@ -208,60 +232,80 @@ async def link_identity_to_user(
             )
         ).scalars().first()
 
-        if existing_identity:
-            if existing_identity.user_id != user_id:
-                raise ValueError("sso_already_linked")
-            # Idempotente: aggiorna dati e ritorna
-            existing_identity.access_token_encrypted = access_token_encrypted
-            existing_identity.token_expires_at = token_expires_at
-            existing_identity.last_login_at = now
-            existing_identity.updated_at = now
-            if email:
-                existing_identity.email = email
-                existing_identity.display_name = display_name
-            await session.commit()
-            return
+        from src.auth.sso.login_mode import (
+            finalize_user,
+            get_login_settings,
+            is_identity_confirmed,
+            sync_user_email,
+        )
 
-        # Verifica che l'utente non abbia già un'identità per questo provider
-        # con un subject diverso
-        user_identity = (
-            await session.execute(
-                select(UserSsoIdentity).where(
-                    UserSsoIdentity.tenant_id == tenant_id,
-                    UserSsoIdentity.user_id == user_id,
-                    UserSsoIdentity.provider == provider,
-                )
-            )
-        ).scalars().first()
+        settings = await get_login_settings(tenant_id)
 
-        if user_identity:
-            # Subject diverso → solo l'admin può scollegare
-            raise ValueError("sso_user_already_linked")
+        if existing_identity and existing_identity.user_id != user_id:
+            raise ValueError("sso_already_linked")
 
         # Verifica che l'utente esista
         user = await session.get(User, user_id)
         if not user:
             raise ValueError("user_not_found")
 
-        new_identity = UserSsoIdentity(
-            id=new_uuid7_str(),
-            tenant_id=tenant_id,
-            user_id=user_id,
-            provider=provider,
-            subject=subject,
-            email=email,
-            display_name=display_name,
-            access_token_encrypted=access_token_encrypted,
-            token_expires_at=token_expires_at,
-            last_login_at=now,
-            created_at=now,
-            updated_at=now,
-        )
-        session.add(new_identity)
+        # last_login_at = now conferma l'identita' nella migrazione corrente
+        # (vedi confirmed_identity_exists), anche quando la riga esiste gia'.
+        identity = existing_identity
+        if identity is None:
+            # Verifica che l'utente non abbia già un'identità per questo provider
+            # con un subject diverso
+            identity = (
+                await session.execute(
+                    select(UserSsoIdentity).where(
+                        UserSsoIdentity.tenant_id == tenant_id,
+                        UserSsoIdentity.user_id == user_id,
+                        UserSsoIdentity.provider == provider,
+                    )
+                )
+            ).scalars().first()
+            if identity is not None:
+                if is_identity_confirmed(identity, settings.get("migration_started_at")):
+                    # Subject diverso → solo l'admin può scollegare
+                    raise ValueError("sso_user_already_linked")
+                # Identita' di una migrazione precedente: in una nuova
+                # migrazione l'utente puo' collegare un account diverso.
+                identity.subject = subject
 
-        # Se l'utente non ha email, popolala con quella SSO
+        if identity is None:
+            session.add(UserSsoIdentity(
+                id=new_uuid7_str(),
+                tenant_id=tenant_id,
+                user_id=user_id,
+                provider=provider,
+                subject=subject,
+                email=email,
+                display_name=display_name,
+                access_token_encrypted=access_token_encrypted,
+                token_expires_at=token_expires_at,
+                last_login_at=now,
+                created_at=now,
+                updated_at=now,
+            ))
+        else:
+            identity.access_token_encrypted = access_token_encrypted
+            identity.token_expires_at = token_expires_at
+            identity.last_login_at = now
+            identity.updated_at = now
+            if email:
+                identity.email = email
+                identity.display_name = display_name
+
+        # Se l'utente non ha email, popolala con quella SSO; a migrazione
+        # confermata vale quella del nuovo provider. Con admin_validate (non
+        # ancora passato) l'email resta invariata.
         if not user.email and email:
             user.email = email
+
+        if finalize_migration:
+            sync_user_email(user, email)
+            # Il 2FA TOTP vale solo per il login con password.
+            finalize_user(user, bool(settings.get("clear_password_on_link")))
 
         try:
             await session.commit()

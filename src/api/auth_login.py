@@ -129,6 +129,11 @@ def verify_chat_token(token: str) -> Optional[Dict[str, Any]]:
         return None
 
 
+def sso_force_password() -> bool:
+    """Break-glass: ``AION_SSO_FORCE_PASSWORD=1`` ignora ogni blocco SSO."""
+    return (os.getenv("AION_SSO_FORCE_PASSWORD") or "").strip() == "1"
+
+
 class LoginBody(BaseModel):
     username: str = Field(..., min_length=1)
     password: str = Field(..., min_length=1)
@@ -171,19 +176,24 @@ async def login(body: LoginBody):
                     detail={"code": "temp_password_expired"},
                 )
 
-    uid = sanitize_user_id(str(row["identifier"]))
-    roles = list(row.get("roles") or [])
-    must_change = bool(row.get("must_change_password", False))
-    tok = issue_chat_token(
-        user_row_id=user_id_raw,
-        user_identifier=str(row["identifier"]),
-        roles=roles,
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+
+    # Controlli SSO (§3.5). ``client="admin"`` e' onorato SOLO se l'utente ha
+    # davvero il ruolo admin: altrimenti un utente migrato potrebbe inviare
+    # client="admin" per aggirare il blocco password e ottenere un token valido
+    # anche per la chat. Gli admin (break-glass) possono sempre usare la password.
+    effective_client = (
+        "admin"
+        if body.client == "admin" and "admin" in list(row.get("roles") or [])
+        else "chat"
     )
 
-    # Controlli SSO per client="chat" (§3.5)
     sso_link_required = False
-    if body.client == "chat" and password_auth_enabled():
-        tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+    if (
+        effective_client == "chat"
+        and password_auth_enabled()
+        and not sso_force_password()
+    ):
         try:
             from src.auth.sso.login_mode import (
                 get_login_settings,
@@ -214,6 +224,37 @@ async def login(body: LoginBody):
         except Exception as _e:
             logger.warning("SSO login check failed: %s", _e)
 
+    # 2FA TOTP: password OK ma il token di sessione si emette solo dopo il codice.
+    from src.auth.mfa import totp as _totp
+
+    async with _gsm()() as _sess:
+        _stage = await _totp.login_stage(tenant, await _sess.get(_User, user_id_raw))
+    if _stage:
+        return {
+            "mfa_required": True,
+            "mfa_stage": _stage,
+            "mfa_token": _totp.issue_mfa_token(
+                user_row_id=user_id_raw, stage=_stage, client=body.client
+            ),
+            "expires_in": _totp.CHALLENGE_TTL_SEC,
+        }
+
+    return build_login_response(row, sso_link_required=sso_link_required)
+
+
+def build_login_response(
+    row: Dict[str, Any], *, sso_link_required: bool = False
+) -> Dict[str, Any]:
+    """Risposta di login con token di sessione (riusata da /auth/2fa/*)."""
+    user_id_raw = str(row["id"])
+    uid = sanitize_user_id(str(row["identifier"]))
+    roles = list(row.get("roles") or [])
+    must_change = bool(row.get("must_change_password", False))
+    tok = issue_chat_token(
+        user_row_id=user_id_raw,
+        user_identifier=str(row["identifier"]),
+        roles=roles,
+    )
     return {
         "access_token": tok,
         "token_type": "bearer",
@@ -271,6 +312,8 @@ async def me(authorization: Optional[str] = Header(None)):
                 "sso_link_required": sso_link_required,
                 "sso_linked": sso_linked,
                 "sso_provider": sso_provider_name,
+                "mfa_enrollment_required": False,
+                "totp_enabled": False,
             }
 
         meta: Dict[str, Any] = {}
@@ -279,6 +322,10 @@ async def me(authorization: Optional[str] = Header(None)):
                 meta = _json.loads(u.metadata_json)
             except Exception:
                 pass
+
+        from src.auth.mfa.totp import user_requires_enrollment
+
+        mfa_enrollment_required = await user_requires_enrollment(tenant, user_row_id)
 
         return {
             "user_id": uid,
@@ -292,6 +339,8 @@ async def me(authorization: Optional[str] = Header(None)):
             "sso_link_required": sso_link_required,
             "sso_linked": sso_linked,
             "sso_provider": sso_provider_name,
+            "mfa_enrollment_required": mfa_enrollment_required,
+            "totp_enabled": u.totp_enabled_at is not None,
         }
 
 
@@ -425,13 +474,33 @@ async def auth_status():
                 sso_enabled = True
                 sso_provider = sso_config.get("provider")
 
+    try:
+        from src.auth.mfa.totp import two_factor_effective
+
+        two_factor_required = await two_factor_effective(tenant)
+    except Exception as _e:
+        logger.warning("auth_status 2FA check failed: %s", _e)
+        two_factor_required = False
+
+    # Login admin-ui in SSO: il form password serve solo se almeno un admin ha
+    # ancora una password (migrazione in corso o recupero via src.auth.recover).
+    admin_password_login = not sso_enabled
+    if sso_enabled:
+        try:
+            admin_password_login = await _admin_with_password_exists(tenant)
+        except Exception as _e:
+            logger.warning("auth_status admin password check failed: %s", _e)
+            admin_password_login = True
+
     # AION_SSO_FORCE_PASSWORD: bypass di emergenza (vedi §5)
-    if (os.getenv("AION_SSO_FORCE_PASSWORD") or "").strip() == "1":
+    if sso_force_password():
+        admin_password_login = True
         login_mode = "password"
         sso_enabled = False
         sso_provider = None
         sso_migration_active = False
         password_login_vis = True
+        two_factor_required = False
 
     return {
         "password_auth_enabled": password_auth_enabled(),
@@ -440,12 +509,30 @@ async def auth_status():
         "sso_origin": sso_origin,
         "sso_migration_active": sso_migration_active,
         "password_login_visible": password_login_vis,
+        "admin_password_login": admin_password_login,
         "sso_enabled": sso_enabled,
         "sso_provider": sso_provider,
+        "two_factor_required": two_factor_required,
         "login_endpoint": "/auth/login",
         "token_ttl_seconds": _TOKEN_TTL_SEC,
         "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
     }
+
+
+async def _admin_with_password_exists(tenant: str) -> bool:
+    from sqlalchemy import select
+
+    from src.data.engine import get_async_session_maker
+    from src.data.models import User
+    from src.data.user_password import has_role
+
+    async with get_async_session_maker()() as session:
+        users = (
+            await session.execute(
+                select(User).where(User.tenant_id == tenant, User.password_hash.is_not(None))
+            )
+        ).scalars().all()
+    return any(has_role(u, "admin") for u in users)
 
 
 # --- FastAPI dependency: require_chat_auth -----------------------------------
@@ -477,6 +564,46 @@ async def require_chat_auth(
         None,
         description="Token chat via query (per SSE via EventSource che non supporta header custom).",
     ),
+) -> ChatAuthIdentity:
+    """Protegge gli endpoint user-facing della chat (con gate SSO/2FA)."""
+    return await _resolve_chat_identity(
+        authorization,
+        x_api_key,
+        x_chat_ui_secret,
+        access_token,
+        enforce_user_gates=True,
+    )
+
+
+async def require_chat_token_only(
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    access_token: Optional[str] = Query(None),
+) -> ChatAuthIdentity:
+    """Come ``require_chat_auth`` ma SENZA i gate ``sso_link_required`` e
+    ``mfa_enrollment_required``.
+
+    Serve agli endpoint che l'utente deve poter chiamare proprio quando e'
+    bloccato dai gate (es. ``POST /auth/sso/link/start``): il token resta
+    comunque validato (firma + scadenza).
+    """
+    return await _resolve_chat_identity(
+        authorization,
+        x_api_key,
+        x_chat_ui_secret,
+        access_token,
+        enforce_user_gates=False,
+    )
+
+
+async def _resolve_chat_identity(
+    authorization: Optional[str],
+    x_api_key: Optional[str],
+    x_chat_ui_secret: Optional[str],
+    access_token: Optional[str],
+    *,
+    enforce_user_gates: bool,
 ) -> ChatAuthIdentity:
     """Protegge gli endpoint user-facing della chat.
 
@@ -559,7 +686,7 @@ async def require_chat_auth(
     # Fix 0.4 / §3.6: blocco sso_link_required per token chat.
     # Le API key e il BFF passano senza questo controllo.
     user_row_id = parsed.get("user_row_id")
-    if user_row_id:
+    if user_row_id and enforce_user_gates:
         try:
             from src.auth.sso.login_mode import user_needs_link
             tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
@@ -573,6 +700,22 @@ async def require_chat_auth(
             raise
         except Exception as _e:
             logger.warning("SSO link check failed in require_chat_auth: %s", _e)
+
+        # 2FA obbligatorio ma non ancora configurato (token pre-attivazione
+        # o utente resettato dall'admin): serve un nuovo login con enrollment.
+        try:
+            from src.auth.mfa.totp import user_requires_enrollment
+
+            tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+            if await user_requires_enrollment(tenant, user_row_id):
+                raise HTTPException(
+                    403,
+                    detail={"code": "mfa_enrollment_required"},
+                )
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logger.warning("2FA check failed in require_chat_auth: %s", _e)
 
     return auth_identity
 
@@ -653,6 +796,8 @@ async def change_password(
             raise HTTPException(400, detail="New password must differ from the old one")
         u.password_hash = hash_password(body.new_password)
         u.must_change_password = False
+        # La password scelta dall'utente non e' piu' "temporanea": niente scadenza.
+        u.temp_password_expires_at = None
         session.add(u)
         await session.commit()
 

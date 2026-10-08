@@ -441,9 +441,47 @@
     "sso_microsoft": "Se connecter avec Microsoft",
     "sso_google": "Se connecter avec Google",
     "or": "ou",
+    "mfa": {
+      "title_enroll": "Configurer l'authentification à deux facteurs",
+      "title_verify": "Vérification en deux étapes",
+      "enroll_help": "Scannez le code QR avec Google Authenticator, Microsoft Authenticator ou une application similaire, puis entrez le code à 6 chiffres.",
+      "verify_help": "Entrez le code à 6 chiffres affiché par votre application d'authentification.",
+      "manual": "Impossible de scanner ? Entrez cette clé manuellement :",
+      "code": "Code à 6 chiffres",
+      "confirm": "Confirmer et se connecter",
+      "verify": "Vérifier",
+      "back": "Retour à la connexion",
+      "loading": "Chargement…",
+      "error": {
+        "invalid_code": "Code invalide. Veuillez réessayer.",
+        "mfa_locked": "Trop de tentatives. Réessayez dans {{seconds}} secondes.",
+        "invalid_mfa_token": "Session expirée. Veuillez vous reconnecter.",
+        "generic": "Échec de la vérification."
+      }
+    },
     "sso_error": {
       "sso_already_linked": "Le compte est déjà lié à un autre utilisateur.",
-      "sso_user_already_linked": "Vous avez déjà un compte lié."
+      "sso_user_already_linked": "Vous avez déjà un compte lié.",
+      "generic": "Échec de la connexion. Réessayez.",
+      "sso_not_linked": "Votre compte n'est pas encore lié. Connectez-vous avec votre mot de passe et liez votre compte professionnel.",
+      "sso_domain_not_allowed": "Le domaine de votre e-mail n'est pas autorisé.",
+      "sso_required": "La connexion SSO est obligatoire pour ce compte.",
+      "password_login_disabled": "La connexion par mot de passe est désactivée.",
+      "temp_password_expired": "Le mot de passe temporaire a expiré. Contactez l'administrateur.",
+      "sso_failed": "Échec de l'authentification SSO.",
+      "sso_start_failed": "Impossible de démarrer la connexion SSO.",
+      "sso_token_invalid": "Jeton SSO invalide.",
+      "sso_provisioning_failed": "Impossible de créer le compte.",
+      "sso_provisioning_conflict": "Compte en cours de création, réessayez.",
+      "email_required_for_provisioning": "Le fournisseur n'a pas fourni d'e-mail.",
+      "invalid_code": "Code de connexion invalide.",
+      "code_expired": "Code de connexion expiré. Réessayez.",
+      "code_already_used": "Code de connexion déjà utilisé.",
+      "exchange_error": "Erreur lors de la finalisation de la connexion.",
+      "exchange_failed": "Erreur lors de la finalisation de la connexion.",
+      "link_failed": "Échec de la liaison.",
+      "session_invalid": "Session expirée, reconnectez-vous.",
+      "user_not_found": "Utilisateur introuvable."
     }
   },
   "authgate": {
@@ -697,5 +735,14 @@
       "howto": "Guide",
       "factcheck": "Fact-check"
     }
+  },
+  "sso_link": {
+    "title": "Mise à jour de sécurité",
+    "desc": "L'administrateur exige de lier votre compte à {{provider}} pour continuer à vous connecter.",
+    "button": "Lier le compte {{provider}}",
+    "logout": "Se déconnecter",
+    "start_failed": "Impossible de démarrer la liaison SSO.",
+    "bad_response": "Réponse invalide du serveur.",
+    "network": "Erreur réseau."
   }
 }

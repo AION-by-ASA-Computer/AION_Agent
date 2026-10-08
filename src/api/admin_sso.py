@@ -27,6 +27,21 @@ async def list_configured_providers(
     return await admin_list_providers(_tenant_id())
 
 
+@router.get("/redirect-uri")
+async def get_redirect_uri(
+    request: Request,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+) -> Dict[str, str]:
+    """Redirect URI effettivo usato dal backend: e' quello da registrare sull'IdP.
+
+    Il pannello admin non puo' dedurlo da ``window.location`` (dietro Caddy
+    l'API e' sotto ``/api``; in dev gira su un'altra porta).
+    """
+    from src.api.auth_sso import _get_redirect_uri
+
+    return {"redirect_uri": _get_redirect_uri(request)}
+
+
 class UpsertProviderBody(BaseModel):
     client_id: str
     client_secret: Optional[str] = None
@@ -95,6 +110,14 @@ async def toggle_provider(
     body: EnableProviderBody,
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
+    # ``auth_settings.login_mode`` e' la fonte di verita': abilitare/disabilitare
+    # a mano un provider lo desincronizzerebbe (login SSO rotto o link verso il
+    # provider sbagliato). Si cambia solo da PUT /admin/auth/login-mode.
+    from src.auth.sso.login_mode import get_login_settings
+
+    login_mode = (await get_login_settings(_tenant_id())).get("login_mode")
+    if body.enabled != (login_mode == provider):
+        raise HTTPException(409, detail={"code": "use_login_mode"})
     try:
         success = await enable_provider(_tenant_id(), provider, body.enabled)
         if not success:
@@ -109,5 +132,10 @@ async def remove_provider(
     provider: str,
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
+    from src.auth.sso.login_mode import get_login_settings
+
+    if (await get_login_settings(_tenant_id())).get("login_mode") == provider:
+        # Cancellare il provider attivo chiuderebbe fuori tutti gli utenti SSO.
+        raise HTTPException(409, detail={"code": "provider_in_use"})
     await delete_provider(_tenant_id(), provider)
     return {"ok": True}

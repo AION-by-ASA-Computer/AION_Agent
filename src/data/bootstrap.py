@@ -76,6 +76,30 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
             )
             logger.info("SQLite schema patch: added users.must_change_password")
 
+    # 2FA TOTP (v4w5x6y024): stesso motivo del blocco users.roles qui sopra.
+    if await _sqlite_table_exists(conn, "users"):
+        for col, ddl in (
+            ("totp_secret_encrypted", "totp_secret_encrypted TEXT"),
+            ("totp_enabled_at", "totp_enabled_at DATETIME"),
+            ("totp_last_used_step", "totp_last_used_step INTEGER"),
+            ("totp_failed_count", "totp_failed_count INTEGER NOT NULL DEFAULT 0"),
+            ("totp_locked_until", "totp_locked_until DATETIME"),
+        ):
+            await _sqlite_add_column_if_missing(conn, "users", col, ddl)
+    if await _sqlite_table_exists(conn, "auth_settings"):
+        await _sqlite_add_column_if_missing(
+            conn,
+            "auth_settings",
+            "totp_required",
+            "totp_required BOOLEAN NOT NULL DEFAULT 0",
+        )
+        await _sqlite_add_column_if_missing(
+            conn,
+            "auth_settings",
+            "totp_required_changed_at",
+            "totp_required_changed_at DATETIME",
+        )
+
     # Observability + timeline columns (migrate_v3 / g3h4i5j6k007). Skipped when
     # alembic stamp head marks a legacy DB as up-to-date without running migrations.
     if await _sqlite_table_exists(conn, "messages"):
