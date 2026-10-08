@@ -428,6 +428,8 @@
   "chat": {
     "pii": {
       "tags_label": "Tags to redact",
+      "select_all": "Select all",
+      "deselect_all": "Deselect all",
       "tags_none": "No tags selected: nothing will be redacted."
     },
     "thinking": {

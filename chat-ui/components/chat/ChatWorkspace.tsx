@@ -1200,18 +1200,33 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, []);
 
+  const persistPiiExcludedTags = useCallback((next: string[]) => {
+    try {
+      if (next.length) localStorage.setItem("aion_chat_pii_excluded_tags", JSON.stringify(next));
+      else localStorage.removeItem("aion_chat_pii_excluded_tags");
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
   const togglePiiTag = useCallback((tag: string) => {
     setPiiExcludedTags((prev) => {
       const next = prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag];
-      try {
-        if (next.length) localStorage.setItem("aion_chat_pii_excluded_tags", JSON.stringify(next));
-        else localStorage.removeItem("aion_chat_pii_excluded_tags");
-      } catch {
-        /* ignore */
-      }
+      persistPiiExcludedTags(next);
       return next;
     });
-  }, []);
+  }, [persistPiiExcludedTags]);
+
+  /** Seleziona (tutti censurati) o deseleziona (nessuno censurato) tutti i tag disponibili. */
+  const setAllPiiTags = useCallback((selectAll: boolean) => {
+    setPiiExcludedTags((prev) => {
+      const next = selectAll
+        ? prev.filter((x) => !piiAvailableTags.includes(x))
+        : Array.from(new Set([...prev, ...piiAvailableTags]));
+      persistPiiExcludedTags(next);
+      return next;
+    });
+  }, [piiAvailableTags, persistPiiExcludedTags]);
 
   const piiExcludeTagsForTurn = useMemo(() => {
     if (!piiReviewSupported) return undefined;
@@ -5291,11 +5306,28 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   <Check size={12} className="shrink-0 text-primary" />
                                 ) : null}
                               </button>
-                              {piiAvailableTags.length ? (
+                              {piiReviewEnabled && piiAvailableTags.length ? (
                                 <div className="mt-1 px-2.5 pb-1">
-                                  <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">
-                                    {t("chat.pii.tags_label")}
-                                  </div>
+                                  {(() => {
+                                    const allSelected = piiAvailableTags.every((tag) => !piiExcludedTags.includes(tag));
+                                    return (
+                                      <div className="mb-1 flex items-center justify-between gap-2">
+                                        <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground/80">
+                                          {t("chat.pii.tags_label")}
+                                        </span>
+                                        <button
+                                          type="button"
+                                          onClick={() => setAllPiiTags(!allSelected)}
+                                          onMouseEnter={() => {
+                                            closePlusSubMenus();
+                                          }}
+                                          className="shrink-0 text-[10px] font-medium text-primary hover:underline"
+                                        >
+                                          {allSelected ? t("chat.pii.deselect_all") : t("chat.pii.select_all")}
+                                        </button>
+                                      </div>
+                                    );
+                                  })()}
                                   <div className="flex flex-wrap gap-1">
                                     {piiAvailableTags.map((tag) => {
                                       const selected = !piiExcludedTags.includes(tag);

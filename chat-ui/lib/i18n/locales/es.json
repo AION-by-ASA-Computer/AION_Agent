@@ -278,6 +278,8 @@
   "chat": {
     "pii": {
       "tags_label": "Etiquetas a censurar",
+      "select_all": "Seleccionar todo",
+      "deselect_all": "Deseleccionar todo",
       "tags_none": "Ninguna etiqueta seleccionada: no se censurará nada."
     },
     "thinking": {

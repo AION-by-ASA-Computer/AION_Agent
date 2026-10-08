@@ -278,6 +278,8 @@
   "chat": {
     "pii": {
       "tags_label": "Zu zensierende Tags",
+      "select_all": "Alle auswählen",
+      "deselect_all": "Alle abwählen",
       "tags_none": "Keine Tags ausgewählt: es wird nichts zensiert."
     },
     "thinking": {
