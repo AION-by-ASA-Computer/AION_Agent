@@ -11,7 +11,6 @@ import { coalesceTurnSegments } from "@/lib/sse/coalesceTurnSegments";
 import { splitCompactTurn } from "@/lib/sse/splitCompactTurn";
 import type { TurnSegment } from "@/lib/sse/types";
 import { useT } from "@/lib/i18n/use-t";
-import { cn } from "@/lib/cn";
 import type { ToolsViewMode } from "@/components/chat/WebResearchViews";
 import { AssistantToolStepBlock } from "@/components/chat/WebResearchViews";
 import { CompactTurnActivity } from "@/components/chat/CompactTurnActivity";
@@ -131,15 +130,8 @@ export function TurnTimeline({
             );
           }
           if (seg.kind === "text" && Boolean(seg.content)) {
-            const hasPrecedingProcess = prepSegments.length > 0;
             return (
-              <div
-                key={seg.id}
-                className={cn(
-                  "prose-chat",
-                  hasPrecedingProcess && "mt-3.5 pt-2.5 border-t border-border/40",
-                )}
-              >
+              <div key={seg.id} className="prose-chat">
                 <TextSegment
                   content={seg.content.trimStart()}
                   streaming={streaming}
@@ -334,17 +326,8 @@ export function TurnTimeline({
           );
         }
         if (seg.kind === "text" && Boolean(seg.content)) {
-          const hasPrecedingProcess = displaySegments
-            .slice(0, idx)
-            .some((s) => s.kind === "tool" || s.kind === "reasoning");
           return (
-            <div
-              key={seg.id}
-              className={cn(
-                "prose-chat",
-                hasPrecedingProcess && "mt-3.5 pt-2.5 border-t border-border/40",
-              )}
-            >
+            <div key={seg.id} className="prose-chat">
               <TextSegment
                 content={seg.content.trimStart()}
                 streaming={streaming}

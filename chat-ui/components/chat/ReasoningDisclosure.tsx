@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ChevronRight, Brain } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
+import { AgentWorkingShimmer } from "@/components/chat/ShimmerText";
 
 type Props = {
   content: string;
@@ -12,23 +13,23 @@ type Props = {
 
 export function ReasoningDisclosure({ content, streaming = false }: Props) {
   const t = useT();
-  const [open, setOpen] = useState(streaming);
+  const [open, setOpen] = useState(true);
   const text = content.trim();
   if (!text && !streaming) return null;
 
   return (
-    <div className="my-2 select-text">
+    <div className="mb-2">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="focus-ring group inline-flex items-center gap-2 rounded-xl border border-purple-500/25 bg-purple-500/[0.05] dark:bg-purple-500/[0.08] px-3 py-1.5 text-left text-xs font-medium text-purple-700 dark:text-purple-300 transition-all hover:bg-purple-500/10 hover:border-purple-500/40 cursor-pointer"
+        className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
         aria-expanded={open}
       >
-        <Brain size={14} className="shrink-0 text-purple-600 dark:text-purple-400" aria-hidden />
-        <span>{t("chat.reasoning.label")}</span>
+        <Brain size={14} className="shrink-0 opacity-80" aria-hidden />
+        <span className="text-xs font-medium">{t("chat.reasoning.label")}</span>
         <ChevronRight
           size={13}
-          className={cn("shrink-0 opacity-70 transition-transform duration-200", open && "rotate-90")}
+          className={cn("ml-auto shrink-0 opacity-70 transition-transform duration-200", open && "rotate-90")}
           aria-hidden
         />
       </button>
@@ -40,8 +41,8 @@ export function ReasoningDisclosure({ content, streaming = false }: Props) {
       >
         <div className="min-h-0 overflow-hidden">
           {text ? (
-            <div className="mt-2 rounded-xl border-l-2 border-purple-500/40 bg-purple-500/[0.03] dark:bg-purple-500/[0.05] pl-3.5 pr-3 py-2.5">
-              <div className="whitespace-pre-wrap font-sans text-[13px] italic leading-relaxed text-muted-foreground/85">
+            <div className="mt-1.5 rounded-lg bg-muted/35 px-3 py-2.5">
+              <div className="whitespace-pre-wrap font-sans text-[0.929em] leading-relaxed text-muted-foreground">
                 {text}
               </div>
             </div>

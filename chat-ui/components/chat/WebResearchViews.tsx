@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Globe, Search, FileText, Terminal, Code2, Wrench } from "lucide-react";
+import { ChevronDown, Globe, Search } from "lucide-react";
 import { formatToolInput, toolInputPreview } from "@/lib/sse/formatToolInput";
 import {
   parseWebFetchOutput,
@@ -116,23 +116,17 @@ function StatusDot({ running, isError }: { running: boolean; isError?: boolean }
 function ToolCardShell({
   children,
   isError,
-  isRunning,
   className,
 }: {
   children: React.ReactNode;
   isError?: boolean;
-  isRunning?: boolean;
   className?: string;
 }) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-border/70 bg-card/70 dark:bg-card/80 px-3.5 py-3 text-[0.857em] shadow-2xs backdrop-blur-xs transition-all",
-        isError
-          ? "border-destructive/40 border-l-4 border-l-destructive bg-destructive/[0.04]"
-          : isRunning
-            ? "border-amber-500/40 border-l-4 border-l-amber-500 bg-amber-500/[0.03]"
-            : "border-l-4 border-l-emerald-500/70 dark:border-l-emerald-500/80",
+        "rounded-xl border border-border/60 bg-muted/20 px-3 py-2.5 text-[0.857em] shadow-sm",
+        isError && "border-destructive/35 bg-destructive/5",
         className,
       )}
     >
@@ -353,24 +347,16 @@ export function AssistantToolStepBlock({
   const running = status === "running";
   const preview = toolInputPreview(input);
 
-  const isRead = name.includes("read") || name.includes("fetch") || name.includes("get") || name.includes("search");
-  const isWrite = name.includes("write") || name.includes("edit") || name.includes("patch") || name.includes("save");
-  const isRun = name.includes("run") || name.includes("bash") || name.includes("node") || name.includes("python") || name.includes("exec") || name.includes("cmd");
-  const ToolIcon = isRun ? Terminal : isWrite ? Code2 : isRead ? FileText : Wrench;
-
   const header = (
     <div className="flex items-center gap-2 font-mono text-[0.714em] font-semibold text-muted-foreground">
       <StatusDot running={running} isError={isError} />
-      <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-muted/70 dark:bg-muted/40 px-2.5 py-1 text-xs text-foreground/90 font-mono font-medium shadow-2xs">
-        <ToolIcon size={13} className={cn("shrink-0", isRun ? "text-amber-500" : isWrite ? "text-blue-500" : "text-emerald-500")} aria-hidden />
-        <span>{name}</span>
-      </span>
+      <span>{name}</span>
       {running ? (
-        <ShimmerText className="text-[0.714em] font-medium text-amber-600 dark:text-amber-400">
+        <ShimmerText className="text-[0.714em] font-medium">
           {t("chat.tool.running", { name })}
         </ShimmerText>
       ) : tokens_in !== undefined && tokens_out !== undefined ? (
-        <span className="ml-auto rounded-md border border-border/50 bg-background/50 px-1.5 py-0.5 text-[0.643em] font-medium tabular-nums text-muted-foreground">
+        <span className="ml-auto rounded border border-border/50 bg-background/50 px-1.5 py-0.5 text-[0.643em] font-medium">
           {tokens_in} in / {tokens_out} out
         </span>
       ) : null}
@@ -379,7 +365,7 @@ export function AssistantToolStepBlock({
 
   if (masked === "minimum") {
     return (
-      <ToolCardShell isError={isError} isRunning={running}>
+      <ToolCardShell isError={isError}>
         {header}
       </ToolCardShell>
     );
@@ -426,20 +412,20 @@ export function AssistantToolStepBlock({
       );
     }
     return (
-      <ToolCardShell isError={isError} isRunning={running}>
+      <ToolCardShell>
         {header}
         <ToolParamsBlock input={input} />
         {output != null && output.trim() !== "" ? (
-          <div className="mt-2.5 border-t border-border/40 pt-2">
+          <div className="mt-2 border-t border-border/40 pt-2">
             <div className="mb-1 text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground">
               {isError ? t("chat.tool.result_error") : t("chat.tool.result")}
             </div>
             <pre
               className={cn(
-                "max-h-48 overflow-auto whitespace-pre-wrap rounded-xl border p-2.5 font-mono text-[11px] leading-relaxed",
+                "max-h-40 overflow-auto whitespace-pre-wrap rounded-lg border p-2 font-mono text-[0.714em] leading-relaxed",
                 isError
                   ? "border-destructive/25 bg-destructive/5 text-destructive"
-                  : "border-border/50 bg-muted/40 dark:bg-black/35 text-foreground/90",
+                  : "border-border/50 bg-background/50 text-foreground/90",
               )}
             >
               {output}
