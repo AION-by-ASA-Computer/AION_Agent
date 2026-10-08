@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.1](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.6.0...v1.6.1) (2026-10-08)
+
+
+### Bug Fixes
+
+* prevent loopback AION_PUBLIC_CHAT_URL from shadowing production … ([1b053e1](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/1b053e1ccffdda407f26123b8e3781f76b983678))
+* prevent loopback AION_PUBLIC_CHAT_URL from shadowing production domains in MCP OAuth redirects ([0a183dd](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/0a183dd7757f2860767f680309b4841731323d40))
+
 ## [1.6.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.5.2...v1.6.0) (2026-10-05)
 
 
