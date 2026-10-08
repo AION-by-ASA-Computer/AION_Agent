@@ -37,16 +37,17 @@ export default function AdminLoginPage() {
   const [showDefaultHint, setShowDefaultHint] = useState(false);
   const [mfa, setMfa] = useState<MfaChallenge | null>(null);
   const [ssoProvider, setSsoProvider] = useState<string | null>(null);
-  // Finche' lo stato non arriva mostriamo il form (comportamento precedente).
-  const [passwordVisible, setPasswordVisible] = useState(true);
-  const [emergency, setEmergency] = useState(false);
+  // In SSO il form compare solo se qualche admin ha ancora una password
+  // (migrazione in corso o recupero con ``python -m src.auth.recover``).
+  // null finche' /auth/status non risponde: niente form "lampeggiante".
+  const [showPasswordForm, setShowPasswordForm] = useState<boolean | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     void fetchAuthStatus(true).then((s) => {
       if (cancelled) return;
       setSsoProvider(s.sso_enabled ? s.sso_provider : null);
-      setPasswordVisible(!s.sso_enabled || s.password_login_visible);
+      setShowPasswordForm(!s.sso_enabled || s.admin_password_login);
       setShowDefaultHint(!s.sso_enabled);
     });
     const code = params.get("error");
@@ -61,8 +62,6 @@ export default function AdminLoginPage() {
     const q = new URLSearchParams({ provider: ssoProvider, client: "admin", return_to: next });
     window.location.href = `${apiBase()}/auth/sso/start?${q.toString()}`;
   }
-
-  const showPasswordForm = passwordVisible || emergency;
 
   function completeLogin(j: MfaLoginResult) {
     if (!j.access_token) {
@@ -156,7 +155,9 @@ export default function AdminLoginPage() {
           <p className="text-sm text-gray-400 text-center">Accesso riservato agli amministratori</p>
         </div>
 
-        {mfa ? (
+        {showPasswordForm === null ? (
+          <Loader2 className="animate-spin text-emerald-400" size={22} aria-hidden />
+        ) : mfa ? (
           <TwoFactorStep
             challenge={mfa}
             onSuccess={completeLogin}
@@ -225,15 +226,6 @@ export default function AdminLoginPage() {
             Entra
           </button>
         </form>
-        )}
-        {!showPasswordForm && (
-          <button
-            type="button"
-            onClick={() => setEmergency(true)}
-            className="text-xs text-gray-500 underline-offset-2 hover:text-gray-300 hover:underline"
-          >
-            Accesso di emergenza con password
-          </button>
         )}
         </div>
         )}

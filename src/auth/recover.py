@@ -9,8 +9,8 @@ configurato, ...) un admin rientra cosi'::
     # installazione Docker (install.sh), dalla directory di installazione
     docker compose -f docker-compose.ghcr.yml exec backend python -m src.auth.recover set-password admin
 
-Poi dalla pagina di login admin: "Accesso di emergenza con password". La
-password stampata e' da cambiare al primo accesso; da li' l'admin puo'
+La pagina di login admin torna a mostrare il form password (un admin ne ha
+una). La password stampata e' da cambiare al primo accesso; da li' l'admin puo'
 riportare il login a "password" dalle impostazioni se l'SSO resta rotto.
 """
 

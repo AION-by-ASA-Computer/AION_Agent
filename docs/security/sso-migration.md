@@ -39,7 +39,7 @@ Switching to an SSO mode does **not** generate passwords automatically. Users wh
 - While the migration is active (`origin = migration`, not completed) an IdP identity that is not yet linked can **not** create a new user: login fails with `sso_not_linked`. Only an explicit, authenticated link can attach an identity; there is never auto-linking by email.
 - The migration completes automatically when no user is pending; the password form then disappears from chat-ui.
 - Admin sign-in from admin-ui sends `client: "admin"`: the SSO/password restrictions of the chat client do not apply to users with the `admin` role.
-- In SSO mode the admin-ui login page shows an **"Accedi con Microsoft/Google"** button (`/auth/sso/start?client=admin`, callback purpose `admin_login`, handoff to `/admin/login/sso`). Only users with the `admin` role are accepted; new identities are never provisioned from this flow. The password form is shown only while the migration is pending (or with `AION_SSO_FORCE_PASSWORD=1`); otherwise it sits behind the **"Accesso di emergenza con password"** link.
+- In SSO mode the admin-ui login page shows an **"Accedi con Microsoft/Google"** button (`/auth/sso/start?client=admin`, callback purpose `admin_login`, handoff to `/admin/login/sso`). Only users with the `admin` role are accepted; new identities are never provisioned from this flow. The password form is shown only while at least one admin still has a local password (`admin_password_login` in `GET /auth/status`: migration still pending for an admin, or a password restored with the recovery CLI) or with `AION_SSO_FORCE_PASSWORD=1`. Once every admin has migrated, only the SSO button is shown.
 - Each switch to SSO with `origin = migration` starts a **new** migration: only identities confirmed (linked or used to sign in) after `migration_started_at` count, so identities left over from a previous migration must be confirmed again.
 
 ### Break-glass
@@ -55,7 +55,7 @@ python -m src.auth.recover set-password admin
 docker compose -f docker-compose.ghcr.yml exec backend python -m src.auth.recover set-password admin
 ```
 
-Then use **"Accesso di emergenza con password"** on the admin login page. `--password <value>` sets a specific password instead of a generated one.
+The admin login page then shows the password form again (an admin has a password). `--password <value>` sets a specific password instead of a generated one.
 
 ## 3. The `handoff` State
 

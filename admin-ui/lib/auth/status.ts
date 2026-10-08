@@ -8,7 +8,8 @@ export type AuthStatus = {
   first_setup_complete: boolean;
   sso_enabled: boolean;
   sso_provider: string | null;
-  password_login_visible: boolean;
+  /** In SSO: almeno un admin ha ancora una password (form di login necessario). */
+  admin_password_login: boolean;
 };
 
 const DEFAULT_STATUS: AuthStatus = {
@@ -20,7 +21,7 @@ const DEFAULT_STATUS: AuthStatus = {
   first_setup_complete: false,
   sso_enabled: false,
   sso_provider: null,
-  password_login_visible: true,
+  admin_password_login: true,
 };
 
 let cachedStatus: Promise<AuthStatus> | null = null;
@@ -43,8 +44,8 @@ export function fetchAuthStatus(force = false): Promise<AuthStatus> {
         first_setup_complete: Boolean(j.first_setup_complete),
         sso_enabled: Boolean(j.sso_enabled),
         sso_provider: j.sso_provider || null,
-        password_login_visible:
-          j.password_login_visible === undefined ? true : Boolean(j.password_login_visible),
+        admin_password_login:
+          j.admin_password_login === undefined ? true : Boolean(j.admin_password_login),
       };
     } catch {
       return DEFAULT_STATUS;

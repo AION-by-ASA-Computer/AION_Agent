@@ -1,19 +1,29 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Loader2, AlertCircle } from "lucide-react";
 
 import { apiBase } from "@/lib/api";
+import { adminPath } from "@/lib/paths";
 import { setStoredAuth } from "@/lib/auth/storage";
 import { resetAuthStatusCache } from "@/lib/auth/status";
 
+// Il codice e' monouso: in dev (StrictMode) l'effect gira due volte e la
+// seconda esecuzione non deve trattarlo come mancante.
+let started = false;
+
+/** Navigazione completa: il gate e la cache di stato ripartono da zero. */
+function go(path: string) {
+  window.location.replace(adminPath(path));
+}
+
 /** Riceve il codice di handoff da /auth/sso/callback (purpose=admin_login). */
 export default function AdminSsoExchangePage() {
-  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (started) return;
+    started = true;
     const hash = new URLSearchParams(window.location.hash.substring(1));
     const code = hash.get("code");
     const rawReturn = hash.get("return_to") || "/";
@@ -39,23 +49,24 @@ export default function AdminSsoExchangePage() {
             const j = await res.json();
             errCode = j.detail?.code || errCode;
           } catch {}
-          router.replace(`/login?error=${encodeURIComponent(errCode)}`);
+          go(`/login?error=${encodeURIComponent(errCode)}`);
           return;
         }
         const data = await res.json();
         const roles: string[] = Array.isArray(data.roles) ? data.roles : [];
         if (!data.access_token || !roles.includes("admin")) {
-          router.replace("/login?error=not_admin");
+          go("/login?error=not_admin");
           return;
         }
         setStoredAuth(data.access_token, data.user_id ?? null);
         resetAuthStatusCache();
-        router.replace(returnTo);
+        go(returnTo);
       } catch {
+        started = false;
         setError("Errore di rete durante l'accesso SSO.");
       }
     })();
-  }, [router]);
+  }, []);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] px-4 text-gray-200">
@@ -65,7 +76,7 @@ export default function AdminSsoExchangePage() {
           <p className="text-sm text-red-300">{error}</p>
           <button
             type="button"
-            onClick={() => router.replace("/login")}
+            onClick={() => go("/login")}
             className="rounded-xl bg-emerald-500/20 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-500/30"
           >
             Torna al login

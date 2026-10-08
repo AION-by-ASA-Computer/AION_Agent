@@ -482,8 +482,19 @@ async def auth_status():
         logger.warning("auth_status 2FA check failed: %s", _e)
         two_factor_required = False
 
+    # Login admin-ui in SSO: il form password serve solo se almeno un admin ha
+    # ancora una password (migrazione in corso o recupero via src.auth.recover).
+    admin_password_login = not sso_enabled
+    if sso_enabled:
+        try:
+            admin_password_login = await _admin_with_password_exists(tenant)
+        except Exception as _e:
+            logger.warning("auth_status admin password check failed: %s", _e)
+            admin_password_login = True
+
     # AION_SSO_FORCE_PASSWORD: bypass di emergenza (vedi §5)
     if sso_force_password():
+        admin_password_login = True
         login_mode = "password"
         sso_enabled = False
         sso_provider = None
@@ -498,6 +509,7 @@ async def auth_status():
         "sso_origin": sso_origin,
         "sso_migration_active": sso_migration_active,
         "password_login_visible": password_login_vis,
+        "admin_password_login": admin_password_login,
         "sso_enabled": sso_enabled,
         "sso_provider": sso_provider,
         "two_factor_required": two_factor_required,
@@ -505,6 +517,22 @@ async def auth_status():
         "token_ttl_seconds": _TOKEN_TTL_SEC,
         "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
     }
+
+
+async def _admin_with_password_exists(tenant: str) -> bool:
+    from sqlalchemy import select
+
+    from src.data.engine import get_async_session_maker
+    from src.data.models import User
+    from src.data.user_password import has_role
+
+    async with get_async_session_maker()() as session:
+        users = (
+            await session.execute(
+                select(User).where(User.tenant_id == tenant, User.password_hash.is_not(None))
+            )
+        ).scalars().all()
+    return any(has_role(u, "admin") for u in users)
 
 
 # --- FastAPI dependency: require_chat_auth -----------------------------------

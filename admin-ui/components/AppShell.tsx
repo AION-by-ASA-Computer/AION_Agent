@@ -36,7 +36,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setEmbedded(v);
     setUserId(getStoredUserId());
   }, [pathname]);
-  const isAuthPage = pathname === "/login" || pathname === "/change-password" || pathname === "/first-setup";
+  const isAuthPage =
+    pathname === "/login" ||
+    pathname.startsWith("/login/") ||
+    pathname === "/change-password" ||
+    pathname === "/first-setup";
 
   if (isAuthPage) {
     // Auth pages (login / change-password): no sidebar, full screen.
