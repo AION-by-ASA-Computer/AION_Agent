@@ -12,6 +12,7 @@ import {
   Palette,
   Settings,
   ShieldCheck,
+  SlidersHorizontal,
   User,
 } from "lucide-react";
 
@@ -20,6 +21,7 @@ import { ChangePasswordSection } from "@/components/settings/ChangePasswordSecti
 import { ProfileAvatarEditor } from "@/components/settings/ProfileAvatarEditor";
 import { SettingsCard, SettingsFieldRow } from "@/components/settings/SettingsCard";
 import { SettingsNav, type SettingsTab } from "@/components/settings/SettingsNav";
+import { TuningsSettingsSection } from "@/components/settings/TuningsSettingsSection";
 import { UserMdSection } from "@/components/settings/UserMdSection";
 import { ShellSectionHeader } from "@/components/layout/ShellSectionHeader";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
@@ -71,6 +73,7 @@ function tabFromSearchParam(tab: string | null): SettingsTab {
   if (tab === "user-md" || tab === "instructions") return "instructions";
   if (tab === "appearance") return "appearance";
   if (tab === "security") return "security";
+  if (tab === "tunings" || tab === "tuning" || tab === "runtime" || tab === "presets") return "tunings";
   return "profile";
 }
 
@@ -111,6 +114,7 @@ export default function SettingsPage() {
       { id: "appearance" as const, label: t("settings.tab.appearance"), icon: Palette },
       { id: "security" as const, label: t("settings.tab.security"), icon: ShieldCheck },
       { id: "instructions" as const, label: t("settings.tab.instructions"), icon: FileText },
+      { id: "tunings" as const, label: t("settings.tab.tunings") || t("sidebar.tunings"), icon: SlidersHorizontal },
     ],
     [t],
   );
@@ -384,7 +388,10 @@ export default function SettingsPage() {
         <div className="grid gap-8 md:grid-cols-[220px_1fr]">
           <SettingsNav
             activeTab={activeTab}
-            onChange={setActiveTab}
+            onChange={(tab) => {
+              setActiveTab(tab);
+              router.replace(`/settings?tab=${tab}`, { scroll: false });
+            }}
             items={navItems}
           />
 
@@ -536,6 +543,16 @@ export default function SettingsPage() {
                   )
                 }
                 onSave={() => void handleSaveUserMd()}
+              />
+            ) : null}
+
+            {activeTab === "tunings" ? (
+              <TuningsSettingsSection
+                initialTab={
+                  searchParams.get("tab") === "presets" || searchParams.get("sub") === "presets"
+                    ? "presets"
+                    : "runtime"
+                }
               />
             ) : null}
           </div>

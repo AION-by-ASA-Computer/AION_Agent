@@ -16,6 +16,7 @@ export type MergeableChatMessage = {
   createdAt?: string;
   completedAt?: string;
   durationMs?: number;
+  generatedFiles?: { rp: string; label: string }[];
 };
 
 function textLen(m: MergeableChatMessage): number {
@@ -32,6 +33,7 @@ export function preferRicherMessage<T extends MergeableChatMessage>(local: T, se
       createdAt: local.createdAt || server.createdAt,
       completedAt: local.completedAt || server.completedAt,
       durationMs: local.durationMs ?? server.durationMs,
+      generatedFiles: local.generatedFiles || server.generatedFiles,
     };
   }
 
@@ -47,6 +49,7 @@ export function preferRicherMessage<T extends MergeableChatMessage>(local: T, se
       createdAt: local.createdAt || server.createdAt,
       completedAt: local.completedAt || server.completedAt,
       durationMs: local.durationMs ?? server.durationMs,
+      generatedFiles: local.generatedFiles || server.generatedFiles,
     };
   }
 
@@ -63,6 +66,7 @@ export function preferRicherMessage<T extends MergeableChatMessage>(local: T, se
     createdAt: local.createdAt || server.createdAt,
     completedAt: local.completedAt || server.completedAt,
     durationMs: local.durationMs ?? server.durationMs,
+    generatedFiles: local.generatedFiles || server.generatedFiles,
   };
 }
 

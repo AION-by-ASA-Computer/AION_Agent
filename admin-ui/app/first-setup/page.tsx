@@ -1038,10 +1038,10 @@ export default function FirstSetupPage() {
                         embForm.provider === "google"
                           ? "https://generativelanguage.googleapis.com/v1beta/models"
                           : embForm.provider === "ollama"
-                          ? "http://host.docker.internal:11434/v1/embeddings or http://localhost:11434/v1/embeddings"
-                          : embForm.provider === "vllm"
-                          ? "http://host.docker.internal:8000/v1/embeddings or http://localhost:8000/v1/embeddings"
-                          : "http://host.docker.internal:8000/v1/embeddings or https://api.openai.com/v1/embeddings"
+                            ? "http://host.docker.internal:11434/v1/embeddings or http://localhost:11434/v1/embeddings"
+                            : embForm.provider === "vllm"
+                              ? "http://host.docker.internal:8000/v1/embeddings or http://localhost:8000/v1/embeddings"
+                              : "http://host.docker.internal:8000/v1/embeddings or https://api.openai.com/v1/embeddings"
                       }
                     />
                     <p className="text-[11px] text-gray-500">

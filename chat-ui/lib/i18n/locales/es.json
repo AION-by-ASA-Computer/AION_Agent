@@ -19,6 +19,7 @@
       "appearance": "Apariencia",
       "security": "Seguridad",
       "instructions": "Instrucciones",
+      "tunings": "Ajustes y Parámetros",
       "runtime": "Runtime",
       "presets": "Presets"
     },
@@ -198,7 +199,8 @@
         "weekly": "Cada semana",
         "monthly": "Cada mes",
         "hourly": "Cada hora",
-        "every_n_minutes": "Cada X minutos"
+        "every_n_minutes": "Cada X minutos",
+        "custom": "Personalizado (expresión cron)"
       },
       "hour_label": "Hora",
       "minute_label": "Minuto",

@@ -19,6 +19,7 @@
       "appearance": "Apparence",
       "security": "Sécurité",
       "instructions": "Instructions",
+      "tunings": "Réglages et Paramètres",
       "runtime": "Runtime",
       "presets": "Préréglages"
     },
@@ -225,7 +226,8 @@
         "weekly": "Chaque {{day}} à {{time}}",
         "monthly": "Le {{dom}} de chaque mois à {{time}}",
         "hourly": "Chaque heure à la minute {{minute}}",
-        "every_n_minutes": "Toutes les {{n}} minutes"
+        "every_n_minutes": "Toutes les {{n}} minutes",
+        "custom": "Personnalisé (expression cron)"
       }
     }
   },

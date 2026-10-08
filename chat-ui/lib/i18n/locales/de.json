@@ -19,6 +19,7 @@
       "appearance": "Erscheinungsbild",
       "security": "Sicherheit",
       "instructions": "Anweisungen",
+      "tunings": "Tuning & Parameter",
       "runtime": "Runtime",
       "presets": "Presets"
     },
@@ -198,7 +199,8 @@
         "weekly": "Wöchentlich",
         "monthly": "Monatlich",
         "hourly": "Stündlich",
-        "every_n_minutes": "Alle X Minuten"
+        "every_n_minutes": "Alle X Minuten",
+        "custom": "Benutzerdefiniert"
       },
       "hour_label": "Stunde",
       "minute_label": "Minute",

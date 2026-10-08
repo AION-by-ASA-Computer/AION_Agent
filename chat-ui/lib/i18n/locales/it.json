@@ -20,6 +20,7 @@
       "appearance": "Preferenze",
       "security": "Sicurezza",
       "instructions": "Istruzioni",
+      "tunings": "Tuning e parametri",
       "runtime": "Runtime",
       "presets": "Preset"
     },
@@ -105,6 +106,10 @@
         "saving": "Salvataggio..."
       }
     },
+    "tunings": {
+      "title": "Tuning e parametri",
+      "desc": "Configura i parametri del modello, controlli di generazione, step di esecuzione e preset runtime."
+    },
     "runtime": {
       "loading": "Caricamento impostazioni runtime…",
       "hint": "I valori .env sono i default iniziali. Le modifiche valgono dal turno successivo.",
@@ -173,6 +178,7 @@
     "profile": "Profilo",
     "search_placeholder": "Cerca conversazioni…",
     "favorites": "Preferiti",
+    "recent": "Recenti",
     "add_favorite": "Aggiungi ai preferiti",
     "remove_favorite": "Rimuovi dai preferiti",
     "rename": "Rinomina",
@@ -233,6 +239,12 @@
     "resume": "Riprendi",
     "delete": "Elimina",
     "delete_confirm": "Eliminare questa automazione?",
+    "delete_dialog_title": "Elimina automazione",
+    "delete_dialog_subtitle": "Conferma eliminazione permanente",
+    "delete_dialog_warning": "Attenzione: azione irreversibile",
+    "delete_dialog_desc": "Sei sicuro di voler eliminare l'automazione",
+    "delete_dialog_desc_end": "Tutte le prossime esecuzioni pianificate verranno rimosse definitivamente.",
+    "delete_dialog_btn": "Elimina definitivamente",
     "open_session": "Apri sessione fissa",
     "recent_runs": "Esecuzioni recenti",
     "runs_loading": "Caricamento esecuzioni…",
@@ -309,7 +321,8 @@
         "weekly": "Ogni {{day}} alle {{time}}",
         "monthly": "Il giorno {{dom}} di ogni mese alle {{time}}",
         "hourly": "Ogni ora al minuto {{minute}}",
-        "every_n_minutes": "Ogni {{n}} minuti"
+        "every_n_minutes": "Ogni {{n}} minuti",
+        "custom": "Personalizzato (espressione cron)"
       }
     }
   },

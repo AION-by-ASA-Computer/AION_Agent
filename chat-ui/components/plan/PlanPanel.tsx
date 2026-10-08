@@ -226,7 +226,7 @@ export function PlanPanel({
                 <div className="flex items-start gap-2.5">
                   <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-orange-500/15 text-orange-600 dark:text-orange-400 font-bold text-[11px]">1</span>
                   <p>
-                    Attiva la modalità <strong className="text-foreground">Plan</strong> dal selettore agente nella barra di scrittura in basso.
+                    Attiva la modalità <strong className="text-foreground">Plan</strong> dal selettore "modalità" nel menù vicino alla barra di scrittura in basso.
                   </p>
                 </div>
                 <div className="flex items-start gap-2.5">

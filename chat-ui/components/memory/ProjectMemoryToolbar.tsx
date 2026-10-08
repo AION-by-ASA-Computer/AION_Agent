@@ -94,7 +94,7 @@ export function ProjectMemoryToolbar({
   const isHero = variant === "hero";
 
   return (
-    <div ref={containerRef} className={cn("relative w-full", className)}>
+    <div ref={containerRef} className={cn("relative w-full", open ? "z-50" : "z-10", className)}>
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
@@ -113,7 +113,7 @@ export function ProjectMemoryToolbar({
           {/* Prominent Database Icon Container */}
           <div
             className={cn(
-              "flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500/20 to-blue-600/20 text-sky-600 dark:text-sky-400 border border-sky-500/30 group-hover:scale-105 transition-transform shadow-xs",
+              "flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-rose-500/20 to-red-600/20 text-rose-500 dark:text-rose-400 border border-rose-500/30 group-hover:scale-105 transition-transform shadow-xs",
               isHero ? "size-10" : "size-7"
             )}
           >
@@ -161,27 +161,43 @@ export function ProjectMemoryToolbar({
       {/* Custom Dropdown Popover */}
       {open && (
         <div
-          className="absolute left-0 right-0 top-full z-50 mt-1.5 max-h-72 overflow-hidden rounded-2xl border border-border bg-card dark:bg-neutral-900 p-2 shadow-2xl backdrop-blur-2xl animate-in fade-in-0 zoom-in-95 duration-150"
+          className="absolute left-0 right-0 top-full z-[100] mt-1.5 max-h-80 overflow-hidden rounded-2xl border border-border bg-popover text-popover-foreground dark:bg-zinc-900 p-2.5 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-150"
           role="listbox"
         >
-          {projects.length > 3 && (
-            <div className="relative mb-2 px-1 pt-1">
-              <Search
-                size={13}
-                className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-              />
-              <input
-                type="text"
-                className="w-full rounded-xl border border-border/60 bg-muted/40 py-1.5 pl-8 pr-3 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-primary/50"
-                placeholder="Cerca progetto..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                autoFocus
-              />
-            </div>
-          )}
+          <div className="flex items-center justify-between border-b border-border/40 pb-2 px-1">
+            <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+              Seleziona Progetto Memoria
+            </span>
+            <span className="text-[11px] text-muted-foreground font-medium">
+              {filteredProjects.length} {filteredProjects.length === 1 ? "progetto" : "progetti"}
+            </span>
+          </div>
 
-          <div className="max-h-52 overflow-y-auto space-y-1 custom-scrollbar pr-0.5">
+          <div className="relative my-2">
+            <Search
+              size={13}
+              className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+            />
+            <input
+              type="text"
+              className="w-full rounded-xl border border-input bg-muted/40 py-1.5 pl-8 pr-7 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              placeholder="Cerca progetto..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              autoFocus
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch("")}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-0.5 rounded-full cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="max-h-56 overflow-y-auto space-y-1 custom-scrollbar pr-0.5">
             {filteredProjects.length === 0 ? (
               <div className="px-3 py-4 text-center text-xs text-muted-foreground">
                 {projects.length === 0 ? "Nessun progetto disponibile" : "Nessun risultato trovato"}
@@ -199,10 +215,10 @@ export function ProjectMemoryToolbar({
                       setSearch("");
                     }}
                     className={cn(
-                      "flex w-full items-center justify-between gap-2.5 rounded-xl p-2.5 text-left text-xs transition-all cursor-pointer",
+                      "flex w-full items-center justify-between gap-2.5 rounded-xl border p-2 text-left text-xs transition cursor-pointer",
                       isSelected
-                        ? "bg-primary/15 text-primary font-bold dark:bg-primary/20 ring-1 ring-primary/30"
-                        : "text-foreground hover:bg-muted/70 dark:hover:bg-neutral-800/80"
+                        ? "border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 font-bold shadow-xs"
+                        : "border-transparent hover:bg-muted/60 text-foreground"
                     )}
                     role="option"
                     aria-selected={isSelected}
@@ -210,23 +226,23 @@ export function ProjectMemoryToolbar({
                     <div className="flex min-w-0 items-center gap-2.5">
                       <div
                         className={cn(
-                          "flex size-7 shrink-0 items-center justify-center rounded-lg",
+                          "flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition-colors",
                           isSelected
-                            ? "bg-primary/20 text-primary"
+                            ? "bg-rose-500/20 text-rose-600 dark:text-rose-400"
                             : "bg-muted text-muted-foreground"
                         )}
                       >
-                        <Folder size={14} />
+                        <Database size={13} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate font-semibold leading-tight">{p.display_name}</p>
+                        <p className="truncate font-semibold leading-tight text-foreground">{p.display_name}</p>
                         <p className="font-mono text-[10px] text-muted-foreground truncate mt-0.5">
                           {p.slug}
                         </p>
                       </div>
                     </div>
                     {isSelected && (
-                      <Check size={14} className="shrink-0 text-primary" aria-hidden />
+                      <Check size={14} className="shrink-0 text-rose-600 dark:text-rose-400" aria-hidden />
                     )}
                   </button>
                 );
