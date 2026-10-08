@@ -4,7 +4,7 @@ import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 
-export type SettingsTab = "profile" | "appearance" | "security" | "instructions";
+export type SettingsTab = "profile" | "appearance" | "security" | "instructions" | "tunings";
 
 export function SettingsNav({
   activeTab,

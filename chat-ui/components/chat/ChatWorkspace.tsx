@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star, Search, Cpu, Bot } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star, Search, Cpu, Bot, Shield } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -98,7 +98,8 @@ import {
 } from "@/lib/api/user-preferences";
 import type { ChatChunk, TurnSegment, TurnState, WebSourceCard, ContextBudgetState } from "@/lib/sse/types";
 import { webSearchSourceRows } from "@/lib/sse/webToolParse";
-import { isToolOffloadSessionPath } from "@/lib/session-file-paths";
+import { isToolOffloadSessionPath, isUserFacingGeneratedFile } from "@/lib/session-file-paths";
+import { GeneratedFileCard } from "@/components/chat/GeneratedFileCard";
 
 import { ChatHeader } from "@/components/layout/ChatHeader";
 import { ContextBudgetBar, ContextBudgetGauge } from "@/components/chat/ContextBudgetBar";
@@ -220,6 +221,7 @@ type ChatMessage = {
   createdAt?: string;
   completedAt?: string;
   durationMs?: number;
+  generatedFiles?: { rp: string; label: string }[];
 };
 
 function parseWebHostInput(raw: string): string | null {
@@ -1456,6 +1458,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   } = useConversationTranscriptRefs();
 
   const messagesContainerRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const [messagesContainerEl, setMessagesContainerEl] = useState<HTMLDivElement | null>(null);
+
+  const setMessagesContainerCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    messagesContainerRef.current = node;
+    setMessagesContainerEl(node);
+  }, []);
+
   // True while the user has manually scrolled up during a stream — disables auto-scroll.
   const userScrolledAwayRef = useRef(false);
   // Threshold: how many px from the bottom counts as "at bottom".
@@ -1467,16 +1477,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     if (container) {
       container.scrollTo({ top: container.scrollHeight, behavior });
     }
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior, block: "end" });
+    }
   }, []);
 
   // Detect manual scroll-away during streaming so we don't fight the user.
   // When they scroll back near the bottom, re-engage auto-scroll.
   useEffect(() => {
-    const container = messagesContainerRef.current;
+    const container = messagesContainerEl;
     if (!container) return;
 
     const onScroll = () => {
-      if (!streamingRef.current) return;
       const distFromBottom =
         container.scrollHeight - container.scrollTop - container.clientHeight;
       if (distFromBottom > SCROLL_THRESHOLD + 40) {
@@ -1490,27 +1502,25 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
     container.addEventListener("scroll", onScroll, { passive: true });
     return () => container.removeEventListener("scroll", onScroll);
-  }, []); // stable: runs once after mount
+  }, [messagesContainerEl]);
 
   // ResizeObserver: fires on every content height change (tokens, tool cards, images…).
-  // This is the core of reliable auto-scroll — React effects are too coarse-grained.
+  // Observes when messagesContainerEl mounts and its contents expand.
   useEffect(() => {
-    const container = messagesContainerRef.current;
+    const container = messagesContainerEl;
     if (!container) return;
 
     const ro = new ResizeObserver(() => {
-      if (!streamingRef.current) return;
       if (userScrolledAwayRef.current) return;
-      // Instant scroll (no smooth) to avoid lag between height changes.
       container.scrollTop = container.scrollHeight;
     });
 
-    // Observe the inner content div (first child), not the scroll container itself.
     const inner = container.firstElementChild;
     if (inner) ro.observe(inner);
+    ro.observe(container);
 
     return () => ro.disconnect();
-  }, []); // stable: ResizeObserver lives for the component lifetime
+  }, [messagesContainerEl]);
 
   // Reset "scrolled away" flag when streaming starts so each new turn starts locked.
   useEffect(() => {
@@ -1520,6 +1530,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       scrollToBottom("auto");
     }
   }, [streaming, scrollToBottom]);
+
+  // Continuously follow stream content and message changes if user hasn't scrolled away
+  useEffect(() => {
+    if (userScrolledAwayRef.current) return;
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [turnVisual, streaming, messages.length]);
 
   // Scroll to bottom when a new conversation is selected or history finishes loading.
   useEffect(() => {
@@ -2358,12 +2377,27 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           const rows = await listSessionFilesSubdir(conversationId, userId, sub, token);
           for (const row of rows) {
             const rp = row.relative_path;
-            if (!rp || seenFilesRef.current.has(rp) || isToolOffloadSessionPath(rp)) continue;
+            if (!rp || seenFilesRef.current.has(rp) || !isUserFacingGeneratedFile(rp)) continue;
             seenFilesRef.current.add(rp);
             newLinks.push({ rp, label: row.name || rp });
           }
         }
         setPostTurnFiles(newLinks);
+        if (newLinks.length > 0) {
+          setMessages((prev) => {
+            const lastIdx = prev.findLastIndex((m) => m.role === "assistant");
+            if (lastIdx < 0) return prev;
+            const updated = [...prev];
+            const target = updated[lastIdx];
+            const existing = target.generatedFiles || [];
+            const merged = [...existing];
+            for (const nl of newLinks) {
+              if (!merged.some((m) => m.rp === nl.rp)) merged.push(nl);
+            }
+            updated[lastIdx] = { ...target, generatedFiles: merged };
+            return updated;
+          });
+        }
         refreshMcpAlerts({ probe: false });
         try {
           if (activeConversationRef.current !== conversationId) return;
@@ -2820,9 +2854,68 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     const loadEpoch = bumpHistoryLoadEpoch();
     const ac = new AbortController();
     seenFilesRef.current = new Set();
-    queueMicrotask(() => {
-      if (activeConversationRef.current === cid) setPostTurnFiles([]);
-    });
+    // Hydrate existing user-facing generated files and charts for this conversation on reload
+    void (async () => {
+      const newLinks: { rp: string; label: string }[] = [];
+      for (const sub of ["workspace", "derived"] as const) {
+        try {
+          const rows = await listSessionFilesSubdir(cid, userId, sub, token);
+          for (const row of rows) {
+            const rp = row.relative_path;
+            if (!rp || !isUserFacingGeneratedFile(rp) || seenFilesRef.current.has(rp)) continue;
+            seenFilesRef.current.add(rp);
+            newLinks.push({ rp, label: row.name || rp });
+          }
+        } catch {
+          // non-fatal
+        }
+      }
+      if (activeConversationRef.current === cid) {
+        setPostTurnFiles(newLinks);
+        if (newLinks.length > 0) {
+          setMessages((prev) => {
+            if (prev.length === 0) return prev;
+            const updated = [...prev];
+            for (const nl of newLinks) {
+              let matchedIdx = -1;
+              for (let i = updated.length - 1; i >= 0; i--) {
+                const msg = updated[i];
+                if (msg.role !== "assistant") continue;
+                const matchesStep = msg.steps?.some((s) => {
+                  const inputStr = typeof s.input === "string" ? s.input : JSON.stringify(s.input || {});
+                  return inputStr.includes(nl.label) || inputStr.includes(nl.rp);
+                });
+                const matchesArt = msg.artifacts?.some((a) => {
+                  const artKey = "storage_key" in a ? a.storage_key : a.savedPath || "";
+                  const artName = "original_name" in a ? a.original_name : a.title || "";
+                  return artKey === nl.rp || artName === nl.label;
+                });
+                if (matchesStep || matchesArt) {
+                  matchedIdx = i;
+                  break;
+                }
+              }
+              if (matchedIdx < 0) {
+                matchedIdx = updated.findLastIndex((m) => m.role === "assistant");
+              }
+              if (matchedIdx >= 0) {
+                const target = updated[matchedIdx];
+                const existing = target.generatedFiles || [];
+                if (!existing.some((e) => e.rp === nl.rp)) {
+                  updated[matchedIdx] = { ...target, generatedFiles: [...existing, nl] };
+                }
+              }
+            }
+            return updated;
+          });
+        }
+      }
+    })();
+    void fetchSessionCharts(cid, userId, token)
+      .then((ch) => {
+        if (activeConversationRef.current === cid) setPostTurnCharts(ch);
+      })
+      .catch(() => {});
     fetchConversationHistory(cid, userId, token, ac.signal)
       .then((result) => {
         if (isStaleHistoryLoad(cid, loadEpoch)) return;
@@ -3200,6 +3293,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
     */
     setInput("");
+    userScrolledAwayRef.current = false;
+    requestAnimationFrame(() => {
+      scrollToBottom("auto");
+    });
     try {
       await refreshThreads();
     } catch (e: unknown) {
@@ -3589,10 +3686,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             setIsAgentModeOpen(false);
           }}
           className={cn(
-            "focus-ring inline-flex h-8 max-w-[8.5rem] sm:max-w-[12rem] items-center gap-1.5 rounded-full border px-2.5 text-[0.786em] font-medium shadow-2xs backdrop-blur-md transition-all duration-200",
+            "focus-ring inline-flex h-9 sm:h-9.5 max-w-[9.5rem] sm:max-w-[13.5rem] items-center gap-1.5 rounded-full border px-3 text-[0.825rem] font-medium shadow-2xs backdrop-blur-md transition-all duration-200",
             isProfileOpen
               ? "border-primary/40 bg-primary/10 text-primary shadow-xs"
-              : "border-black/[0.08] bg-card/60 text-muted-foreground hover:bg-card/90 hover:text-foreground dark:border-white/[0.08] dark:bg-card/40 dark:hover:bg-card/70"
+              : "border-black/[0.08] bg-card/70 text-muted-foreground hover:bg-card/95 hover:text-foreground dark:border-white/[0.12] dark:bg-card/80 dark:hover:bg-card/95"
           )}
           title={activeProfileName || t("chat.profile.label")}
         >
@@ -3604,7 +3701,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         </button>
 
         {isProfileOpen && (
-          <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,32rem)] rounded-2xl border border-border bg-card p-2.5 text-card-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
+          <div className="absolute bottom-full left-0 z-50 mb-2 w-[min(100vw-2rem,32rem)] rounded-2xl border border-border bg-popover p-2.5 text-popover-foreground shadow-2xl ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
             <div className="flex items-center justify-between border-b border-border/40 pb-2 px-1">
               <div className="text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground">
                 {t("chat.profile.select")}
@@ -3744,18 +3841,18 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             setIsAgentModeOpen(false);
           }}
           className={cn(
-            "focus-ring inline-flex size-8 items-center justify-center rounded-full border shadow-2xs backdrop-blur-md transition-all duration-200 active:scale-95",
+            "focus-ring inline-flex size-9 sm:size-9.5 items-center justify-center rounded-full border shadow-2xs backdrop-blur-md transition-all duration-200 active:scale-95",
             isPlusOpen || !webSearchEnabled || thinkingEnabled || agentMode !== "normal" || selectedProvider
               ? "border-primary/40 bg-primary/10 text-primary shadow-xs"
-              : "border-black/[0.08] bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground dark:border-white/[0.08] dark:bg-card/40 dark:hover:bg-card/70"
+              : "border-black/[0.08] bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground dark:border-white/[0.12] dark:bg-card/80 dark:hover:bg-card/95"
           )}
           title="Opzioni chat, modalità e parametri"
         >
-          <Plus size={14} className={cn("transition-transform duration-200", isPlusOpen && "rotate-45")} aria-hidden />
+          <Plus size={16} className={cn("transition-transform duration-200", isPlusOpen && "rotate-45")} aria-hidden />
         </button>
 
         {isPlusOpen && (
-          <div className="absolute bottom-full left-0 z-50 mb-2 w-56 rounded-2xl border border-border bg-card p-1.5 text-card-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
+          <div className="absolute bottom-full left-0 z-50 mb-2 w-56 rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground shadow-2xl ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200">
             <button
               type="button"
               className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-primary transition-colors text-left"
@@ -3809,7 +3906,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 <div className="absolute bottom-full left-0 z-50 pb-1.5 w-60 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
                   <div
                     onMouseEnter={() => setIsModelSubOpen(true)}
-                    className="w-full rounded-2xl border border-border bg-card p-1.5 shadow-2xl animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2"
+                    className="w-full rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground shadow-2xl ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2"
                   >
                     <div className="px-2.5 py-1 text-[0.714em] font-semibold text-muted-foreground border-b border-border/45 mb-1">
                       {t("chat.model.select")}
@@ -4361,6 +4458,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           token={token}
           profileSlug={activeProfileSlug}
           projectSlug={sqlQueryProject}
+          onChangeProject={handleProjectChange}
           onOpenPanel={() => setDockTab("memory")}
         />
       </div>
@@ -4403,30 +4501,33 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           <button
             type="button"
             onClick={stop}
-            className="focus-ring inline-flex size-8 items-center justify-center rounded-full bg-destructive/20 text-destructive transition-all duration-200 hover:scale-105 hover:bg-destructive/30 active:scale-95"
+            className="focus-ring inline-flex size-9 sm:size-9.5 items-center justify-center rounded-full bg-destructive/20 text-destructive transition-all duration-200 hover:scale-105 hover:bg-destructive/30 active:scale-95 cursor-pointer"
           >
-            <Square size={12} aria-hidden fill="currentColor" />
+            <Square size={13} aria-hidden fill="currentColor" />
           </button>
         ) : (
           <button
-            type="button"
-            onClick={() => void send()}
+            type="submit"
             disabled={
               !input.trim() ||
               isProjectRequiredButMissing ||
               sendBlockedByUploads
             }
+            onClick={(e) => {
+              e.preventDefault();
+              if (!sendBlockedByUploads) void send();
+            }}
             title={
               sendBlockedByUploads ? t("chat.upload.send_blocked") : undefined
             }
             className={cn(
-              "focus-ring inline-flex size-8 items-center justify-center rounded-full transition-all duration-300 ease-out",
+              "focus-ring inline-flex size-9 sm:size-9.5 items-center justify-center rounded-full transition-all duration-300 ease-out",
               input.trim() && !isProjectRequiredButMissing && !sendBlockedByUploads
                 ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:scale-105 hover:bg-primary/95 active:scale-95 cursor-pointer"
                 : "bg-muted text-muted-foreground/40 opacity-40 cursor-not-allowed pointer-events-none scale-95"
             )}
           >
-            <Send size={13} aria-hidden className={input.trim() ? "translate-x-px" : ""} />
+            <Send size={15} aria-hidden className={input.trim() ? "translate-x-px" : ""} />
           </button>
         )}
       </div>
@@ -4530,15 +4631,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         <div
           ref={composerContainerRef}
           className={cn(
-            "relative flex min-w-0 flex-col overflow-visible border shadow-md backdrop-blur-xl transition-[border-radius,padding,border-color,background-color,box-shadow,gap] duration-200 ease-out",
+            "relative flex min-w-0 flex-col overflow-visible border shadow-lg backdrop-blur-xl transition-[border-radius,padding,border-color,background-color,box-shadow,gap] duration-200 ease-out",
             isMultiLine
-              ? "rounded-[22px] px-3.5 pt-2.5 pb-2 gap-1.5"
-              : "rounded-[28px] p-1.5 px-3 min-h-[48px] sm:min-h-[50px] justify-center",
+              ? "rounded-[24px] px-4 pt-3 pb-2.5 gap-2"
+              : "rounded-[30px] p-2 px-3.5 sm:px-4 min-h-[54px] sm:min-h-[56px] justify-center",
             agentMode === "plan"
-              ? "border-orange-500/35 bg-card/60 focus-within:border-orange-500/60 focus-within:shadow-[0_0_24px_-4px_rgba(249,115,22,0.25)] dark:bg-card/35"
+              ? "border-orange-500/40 bg-card/85 focus-within:border-orange-500/70 focus-within:shadow-[0_4px_28px_-4px_rgba(249,115,22,0.3)] dark:bg-card/90"
               : agentMode === "deep_research"
-                ? "border-violet-500/35 bg-card/60 focus-within:border-violet-500/60 focus-within:shadow-[0_0_24px_-4px_rgba(139,92,246,0.25)] dark:bg-card/35"
-                : "border-black/[0.08] bg-card/60 hover:border-black/15 focus-within:border-primary/50 focus-within:shadow-[0_0_25px_-5px_hsl(var(--primary)/0.18)] dark:border-white/[0.09] dark:bg-card/35 dark:hover:border-white/15",
+                ? "border-violet-500/40 bg-card/85 focus-within:border-violet-500/70 focus-within:shadow-[0_4px_28px_-4px_rgba(139,92,246,0.3)] dark:bg-card/90"
+                : "border-border/80 bg-card/85 hover:border-border focus-within:border-primary/60 focus-within:ring-2 focus-within:ring-primary/20 focus-within:shadow-[0_4px_28px_-4px_hsl(var(--primary)/0.2)] dark:border-border/90 dark:bg-card/90 dark:hover:border-border",
           )}
         >
           {/* Hidden file input */}
@@ -4595,10 +4696,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 }}
                 placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}
                 className={cn(
-                  "chat-font box-border w-full resize-none break-words border-0 bg-transparent text-sm text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/60 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
+                  "chat-font box-border w-full resize-none break-words border-0 bg-transparent text-[0.95rem] sm:text-[1.025rem] text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/60 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
                   isMultiLine
-                    ? "min-h-[28px] max-h-[220px] px-1 py-1 leading-[22px] overflow-y-auto custom-scrollbar"
-                    : "h-[28px] min-h-[28px] max-h-[28px] px-2 py-1 leading-[20px] overflow-hidden whitespace-nowrap"
+                    ? "min-h-[34px] max-h-[220px] px-1 py-1 leading-[24px] overflow-y-auto custom-scrollbar"
+                    : "h-[32px] min-h-[32px] max-h-[32px] px-2 py-0.5 leading-[24px] overflow-hidden whitespace-nowrap"
                 )}
                 rows={1}
               />
@@ -4641,8 +4742,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             "bg-[radial-gradient(ellipse_80%_60%_at_50%_38%,rgba(225,29,72,0.12),rgba(159,18,57,0.04)_45%,transparent_75%)] dark:bg-[radial-gradient(ellipse_80%_60%_at_50%_38%,rgba(225,29,72,0.18),rgba(159,18,57,0.06)_48%,transparent_80%)]",
           )}
         >
-          {/* Subtle floating non-intrusive status when session tools are warming up */}
-          {sessionPrepareStatus === "warming" && !streaming ? (
+          {/* Floating non-intrusive status when session tools are warming up (in top position only for new/empty chat) */}
+          {showEmptyState && sessionPrepareStatus === "warming" && !streaming ? (
             <div
               className="pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 z-30 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/85 px-3.5 py-1 text-xs font-medium text-muted-foreground shadow-xs backdrop-blur-md animate-in fade-in slide-in-from-top-2 duration-300"
               role="status"
@@ -4667,7 +4768,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           ) : (
             <div className="flex flex-1 flex-col overflow-hidden min-h-0">
               <div
-                ref={messagesContainerRef}
+                ref={setMessagesContainerCallbackRef}
                 className="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-8 flex flex-col justify-start transition-all duration-300 ease-out"
                 aria-busy={streaming}
                 aria-live="polite"
@@ -4829,7 +4930,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   "ml-auto max-w-[min(92%,42rem)] sm:max-w-[min(70%,42rem)] rounded-3xl text-foreground [&_a]:text-foreground [&_code]:bg-background [&_code]:text-foreground",
                                   editingMessageId === m.id
                                     ? "bg-transparent p-0"
-                                    : "border border-border/40 bg-muted/45 py-3 px-4",
+                                    : "border border-border/60 bg-muted/60 dark:bg-muted/80 dark:border-border py-3 px-4 shadow-2xs",
                                 )
                                 : cn(
                                   "mr-auto max-w-[min(92%,48rem)] bg-transparent text-foreground",
@@ -4984,6 +5085,25 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                 {t("chat.edit.no_reasoning", { level: "min" })}
                               </p>
                             ) : null}
+                            {m.role === "assistant" && (
+                              (() => {
+                                const files = m.generatedFiles || (
+                                  (m.id === lastAssistantMessageId && postTurnFiles.length > 0) ? postTurnFiles : undefined
+                                );
+                                if (!files || files.length === 0) return null;
+                                return (
+                                  <div className="mt-3.5 mb-2 w-full max-w-xl space-y-2">
+                                    {files.map((f) => (
+                                      <GeneratedFileCard
+                                        key={f.rp}
+                                        filename={f.label}
+                                        downloadUrl={sessionDownloadUrl(conversationId, f.rp, token)}
+                                      />
+                                    ))}
+                                  </div>
+                                );
+                              })()
+                            )}
                           </div>
 
                           {m.role === "user" && editingMessageId !== m.id ? (
@@ -5279,33 +5399,28 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       ) : null}
                     </div>
                   ) : null}
-                  {(postTurnCharts.length > 0 || postTurnFiles.length > 0) && (
-                    <div className="mr-auto mt-2 w-full max-w-4xl rounded-2xl border border-border bg-card/40 px-5 py-4 shadow-sm">
-                      <SessionCharts charts={postTurnCharts} />
-                      {postTurnFiles.length > 0 && (
-                        <div className="mt-3 text-xs">
-                          <div className="mb-1 font-medium text-muted-foreground">{t("chat.session_files_new")}</div>
-                          <ul className="list-inside list-disc space-y-1">
-                            {postTurnFiles.map((f) => (
-                              <li key={f.rp}>
-                                <a
-                                  className="focus-ring rounded text-primary underline-offset-2 hover:underline"
-                                  href={sessionDownloadUrl(conversationId, f.rp, token)}
-                                >
-                                  {f.label}
-                                </a>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+                  {postTurnCharts.length > 0 && (
+                    <div className="mr-auto mt-3 w-full max-w-xl space-y-2.5">
+                      <div className="rounded-2xl border border-border bg-card/40 px-5 py-4 shadow-sm">
+                        <SessionCharts charts={postTurnCharts} />
+                      </div>
                     </div>
                   )}
+                  <div ref={messagesEndRef} className="h-4 w-full shrink-0" aria-hidden="true" />
                 </div>
               </div>
 
               <div className="relative z-20 min-w-0 shrink-0 bg-transparent px-3 p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:p-4 sm:pb-6 backdrop-blur-none transition-all duration-300 ease-out">
-                <div className="mx-auto w-full min-w-0 max-w-3xl">
+                <div className="mx-auto w-full min-w-0 max-w-3xl flex flex-col items-center">
+                  {sessionPrepareStatus === "warming" && !streaming ? (
+                    <div
+                      className="pointer-events-none mb-2.5 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-background/85 px-3.5 py-1 text-xs font-medium text-muted-foreground shadow-xs backdrop-blur-md animate-in fade-in slide-in-from-bottom-2 duration-300"
+                      role="status"
+                    >
+                      <Loader2 className="size-3.5 shrink-0 animate-spin text-primary" aria-hidden />
+                      <ShimmerText>{t("chat.session_preparing")}</ShimmerText>
+                    </div>
+                  ) : null}
                   {renderComposer()}
                 </div>
               </div>

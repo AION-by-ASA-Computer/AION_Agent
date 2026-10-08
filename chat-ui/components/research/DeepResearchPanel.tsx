@@ -939,7 +939,7 @@ export function DeepResearchPanel({
               <div className="flex items-start gap-2.5">
                 <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-violet-500/15 text-violet-600 dark:text-violet-400 font-bold text-[11px]">1</span>
                 <p>
-                  Seleziona la modalità <strong className="text-foreground">Deep Research</strong> dal selettore agente nella barra di scrittura in basso.
+                  Seleziona la modalità <strong className="text-foreground">Deep Research</strong> dal selettore "modalità" nel menù vicino alla barra di scrittura in basso.
                 </p>
               </div>
               <div className="flex items-start gap-2.5">

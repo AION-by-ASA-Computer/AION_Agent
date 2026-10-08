@@ -19,6 +19,7 @@
       "appearance": "Erscheinungsbild",
       "security": "Sicherheit",
       "instructions": "Anweisungen",
+      "tunings": "Tuning & Parameter",
       "runtime": "Runtime",
       "presets": "Presets"
     },
@@ -36,7 +37,11 @@
         "thinking": "Thinking",
         "advanced": "Erweitert"
       },
-      "enum": { "min": "Min", "medium": "Mittel", "max": "Max" },
+      "enum": {
+        "min": "Min",
+        "medium": "Mittel",
+        "max": "Max"
+      },
       "fields": {
         "max_agent_steps": "Max. Agent-Steps",
         "max_tool_calls": "Max. Tool-Aufrufe",
@@ -194,7 +199,8 @@
         "weekly": "Wöchentlich",
         "monthly": "Monatlich",
         "hourly": "Stündlich",
-        "every_n_minutes": "Alle X Minuten"
+        "every_n_minutes": "Alle X Minuten",
+        "custom": "Benutzerdefiniert"
       },
       "hour_label": "Stunde",
       "minute_label": "Minute",

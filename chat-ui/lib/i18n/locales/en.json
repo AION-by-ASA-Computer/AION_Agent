@@ -20,6 +20,7 @@
       "appearance": "Appearance",
       "security": "Security",
       "instructions": "Instructions",
+      "tunings": "Tuning & Parameters",
       "runtime": "Runtime",
       "presets": "Presets"
     },
@@ -105,6 +106,10 @@
         "saving": "Saving..."
       }
     },
+    "tunings": {
+      "title": "Tuning & Parameters",
+      "desc": "Configure model parameters, generation controls, execution steps, and runtime presets."
+    },
     "runtime": {
       "loading": "Loading runtime settings…",
       "hint": "Env values are the starting defaults. Changes apply to the next turn.",
@@ -173,6 +178,7 @@
     "profile": "Profile",
     "search_placeholder": "Search conversations…",
     "favorites": "Favorites",
+    "recent": "Recent",
     "add_favorite": "Add to favorites",
     "remove_favorite": "Remove from favorites",
     "rename": "Rename",
@@ -233,6 +239,12 @@
     "resume": "Resume",
     "delete": "Delete",
     "delete_confirm": "Delete this automation?",
+    "delete_dialog_title": "Delete automation",
+    "delete_dialog_subtitle": "Confirm permanent deletion",
+    "delete_dialog_warning": "Warning: irreversible action",
+    "delete_dialog_desc": "Are you sure you want to delete the automation",
+    "delete_dialog_desc_end": "All future scheduled executions will be permanently removed.",
+    "delete_dialog_btn": "Delete permanently",
     "open_session": "Open fixed session",
     "recent_runs": "Recent runs",
     "runs_loading": "Loading runs…",
@@ -282,7 +294,8 @@
         "weekly": "Once a week",
         "monthly": "Once a month",
         "hourly": "Every hour",
-        "every_n_minutes": "Every few minutes"
+        "every_n_minutes": "Every few minutes",
+        "custom": "Custom (cron expression)"
       },
       "hour_label": "Hour",
       "minute_label": "Minute",

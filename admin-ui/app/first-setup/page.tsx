@@ -496,11 +496,11 @@ export default function FirstSetupPage() {
           // Find the enabled provider, or fallback to the first active
           const active = provData.find((p: any) => p.enabled) || provData[0];
           if (active && active.provider) {
-             await apiFetch(`${apiBase()}/admin/auth/login-mode`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ mode: active.provider })
-             });
+            await apiFetch(`${apiBase()}/admin/auth/login-mode`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ mode: active.provider })
+            });
           }
         }
       }
@@ -1030,10 +1030,10 @@ export default function FirstSetupPage() {
                         embForm.provider === "google"
                           ? "https://generativelanguage.googleapis.com/v1beta/models"
                           : embForm.provider === "ollama"
-                          ? "http://host.docker.internal:11434/v1/embeddings or http://localhost:11434/v1/embeddings"
-                          : embForm.provider === "vllm"
-                          ? "http://host.docker.internal:8000/v1/embeddings or http://localhost:8000/v1/embeddings"
-                          : "http://host.docker.internal:8000/v1/embeddings or https://api.openai.com/v1/embeddings"
+                            ? "http://host.docker.internal:11434/v1/embeddings or http://localhost:11434/v1/embeddings"
+                            : embForm.provider === "vllm"
+                              ? "http://host.docker.internal:8000/v1/embeddings or http://localhost:8000/v1/embeddings"
+                              : "http://host.docker.internal:8000/v1/embeddings or https://api.openai.com/v1/embeddings"
                       }
                     />
                     <p className="text-[11px] text-gray-500">
@@ -1604,10 +1604,10 @@ export default function FirstSetupPage() {
                     <p className="text-xs text-gray-400">Opzionale: configura l'accesso tramite Google Workspace o Microsoft Entra ID.</p>
                   </div>
                 </div>
-                
-                <SsoConfigPanel 
-                  isSetup={true} 
-                  onStatusChange={(enabled, validated) => setSsoStatus({ enabled, validated })}
+
+                <SsoConfigPanel
+                  isSetup={true}
+                  onStatusChange={(enabled: boolean, validated: boolean) => setSsoStatus({ enabled, validated })}
                 />
               </div>
             )}

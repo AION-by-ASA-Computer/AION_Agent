@@ -60,7 +60,7 @@ export function MemoryDockPanel({
     <div className="flex h-full min-h-0 flex-col bg-background/50 text-sm">
       {/* 1. Subpage Navigation Header (Visible ONLY inside subpages, NOT duplicated in Overview) */}
       {view !== "overview" && (
-        <header className="shrink-0 space-y-2.5 border-b border-black/[0.06] dark:border-white/[0.08] bg-gradient-to-b from-rose-500/[0.04] via-card/40 to-transparent p-3.5 backdrop-blur-xl animate-in fade-in-0 duration-150">
+        <header className="relative z-30 shrink-0 space-y-2.5 border-b border-black/[0.06] dark:border-white/[0.08] bg-gradient-to-b from-rose-500/[0.04] via-card/40 to-transparent p-3.5 backdrop-blur-xl animate-in fade-in-0 duration-150">
           <div className="flex items-center justify-between gap-2">
             <button
               type="button"
@@ -148,44 +148,45 @@ export function MemoryDockPanel({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         {/* OVERVIEW VIEW (Centered layout exactly like Plan and Research) */}
         {view === "overview" && (
-          <div className="flex-1 overflow-y-auto p-4 space-y-5 custom-scrollbar animate-in fade-in-0 duration-200">
-            {/* Centered Hero Section (Like Plan & Deep Research) */}
-            <div className="flex flex-col items-center text-center pt-2 pb-1">
-              {/* Large Centered Red Icon Container */}
-              <div className="relative mb-3 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-lg shadow-rose-500/25 ring-4 ring-rose-500/10">
-                <Database size={28} />
+          <div className="flex-1 overflow-y-auto p-4 flex flex-col custom-scrollbar animate-in fade-in-0 duration-200">
+            <div className="w-full my-auto py-2 space-y-5">
+              {/* Centered Hero Section (Like Plan & Deep Research) */}
+              <div className="flex flex-col items-center text-center">
+                {/* Large Centered Red Icon Container */}
+                <div className="relative mb-3 flex size-14 items-center justify-center rounded-2xl bg-gradient-to-br from-rose-500 to-red-600 text-white shadow-lg shadow-rose-500/25 ring-4 ring-rose-500/10">
+                  <Database size={28} />
+                </div>
+
+                {/* Title & Mnemos Badge */}
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-foreground">Modalità Memoria</h3>
+                  <span className="rounded-full border border-rose-500/30 bg-rose-500/15 px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                    Mnemos
+                  </span>
+                </div>
+
+                {/* Description */}
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground max-w-sm">
+                  L&apos;agente memorizza query SQL verificate, note di business e preferenze personali per risposte contestualizzate e precise.
+                </p>
               </div>
 
-              {/* Title & Mnemos Badge */}
-              <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-foreground">Modalità Memoria</h3>
-                <span className="rounded-full border border-rose-500/30 bg-rose-500/15 px-2.5 py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
-                  Mnemos
-                </span>
-              </div>
-
-              {/* Description */}
-              <p className="mt-2 text-sm leading-relaxed text-muted-foreground max-w-sm">
-                L&apos;agente memorizza query SQL verificate, note di business e preferenze personali per risposte contestualizzate e precise.
-              </p>
-            </div>
-
-            {/* Prominent Large Project Selector */}
-            {(showSqlQueryMemory || showNavigationMemory) && (
-              <div className="space-y-1.5 w-full">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 px-1">
-                  Progetto Selezionato
-                </span>
-                <ProjectMemoryToolbar
-                  variant="hero"
-                  userId={userId}
-                  token={token}
-                  profileSlug={profileSlug}
-                  value={projectSlug}
-                  onChange={onProjectChange}
-                />
-              </div>
-            )}
+              {/* Prominent Large Project Selector */}
+              {(showSqlQueryMemory || showNavigationMemory) && (
+                <div className="space-y-1.5 w-full relative z-20">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 px-1">
+                    Progetto Selezionato
+                  </span>
+                  <ProjectMemoryToolbar
+                    variant="hero"
+                    userId={userId}
+                    token={token}
+                    profileSlug={profileSlug}
+                    value={projectSlug}
+                    onChange={onProjectChange}
+                  />
+                </div>
+              )}
 
             {/* 3 Memory Navigation Cards */}
             <div className="space-y-2 w-full">
@@ -287,7 +288,8 @@ export function MemoryDockPanel({
               )}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
         {/* DETAIL VIEW: QUERY SQL */}
         {view === "query" && showSqlQueryMemory && (

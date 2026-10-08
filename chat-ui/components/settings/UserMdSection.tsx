@@ -2,7 +2,7 @@
 
 import { AlertTriangle, HelpCircle, Save } from "lucide-react";
 
-import { ProfileOptionGrid } from "@/components/chat/ProfileOptionGrid";
+import { ProfileSelectorDropdown } from "@/components/chat/ProfileSelectorDropdown";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 import { SettingsCard } from "./SettingsCard";
@@ -50,18 +50,15 @@ export function UserMdSection({
         </span>
       </div>
 
-      <div className="space-y-2 pb-4">
-        <label className="text-[0.714em] font-bold tracking-wider uppercase text-muted-foreground/80">
-          {t("settings.usermd.profile_label")}
-        </label>
+      <div className="pb-4">
         {loadingProfiles ? (
           <p className="text-xs italic text-muted-foreground">{t("settings.usermd.profile_loading")}</p>
         ) : (
-          <ProfileOptionGrid
+          <ProfileSelectorDropdown
             profiles={profiles}
             value={selectedProfile}
             onChange={onProfileChange}
-            emptyLabel={t("settings.usermd.profile_none")}
+            label={t("settings.usermd.profile_label")}
           />
         )}
       </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, Suspense, type ReactNode } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { AppShell } from "@/components/layout/AppShell";
 import { ThreadSidebar } from "@/components/layout/ThreadSidebar";
@@ -17,14 +17,16 @@ import { loadRuntimeSettings } from "@/lib/runtime/runtime-settings-store";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
 
 function TuningsDeepLink() {
+  const router = useRouter();
   const searchParams = useSearchParams();
-  const { openTunings } = useShellActions();
 
   useEffect(() => {
-    const raw = searchParams.get("tunings") || searchParams.get("settings");
+    const raw = searchParams.get("tunings");
     const tab = parseTuningsTabFromQuery(raw);
-    if (tab) openTunings(tab);
-  }, [searchParams, openTunings]);
+    if (tab) {
+      router.push(`/settings?tab=tunings&sub=${tab}`);
+    }
+  }, [searchParams, router]);
 
   return null;
 }

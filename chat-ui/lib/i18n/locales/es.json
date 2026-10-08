@@ -19,6 +19,7 @@
       "appearance": "Apariencia",
       "security": "Seguridad",
       "instructions": "Instrucciones",
+      "tunings": "Ajustes y Parámetros",
       "runtime": "Runtime",
       "presets": "Presets"
     },
@@ -36,7 +37,11 @@
         "thinking": "Thinking",
         "advanced": "Avanzado"
       },
-      "enum": { "min": "Mín", "medium": "Medio", "max": "Máx" },
+      "enum": {
+        "min": "Mín",
+        "medium": "Medio",
+        "max": "Máx"
+      },
       "fields": {
         "max_agent_steps": "Pasos máximos del agente",
         "max_tool_calls": "Llamadas máximas a tools",
@@ -194,7 +199,8 @@
         "weekly": "Cada semana",
         "monthly": "Cada mes",
         "hourly": "Cada hora",
-        "every_n_minutes": "Cada X minutos"
+        "every_n_minutes": "Cada X minutos",
+        "custom": "Personalizado (expresión cron)"
       },
       "hour_label": "Hora",
       "minute_label": "Minuto",

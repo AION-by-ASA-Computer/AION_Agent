@@ -14,7 +14,6 @@ import {
   PanelLeftOpen,
   Plug,
   Search,
-  SlidersHorizontal,
   Star,
   Trash2,
   X,
@@ -22,23 +21,16 @@ import {
 
 import { type ConversationSummary } from "@/lib/api/aion";
 import { apiBase } from "@/lib/config";
-import { BUCKET_ORDER, groupByBucket, type DateBucket } from "@/lib/date-groups";
 import type { ShellSection } from "@/lib/shell/use-conversation-threads";
-import { useShellActions } from "@/lib/shell/shell-context";
 import { cn } from "@/lib/cn";
 import { ChatBrand } from "../brand/ChatBrand";
 import { SidebarProfileMenu } from "./SidebarProfileMenu";
-import { SidebarTuningsPanel } from "@/components/settings/SidebarTuningsPanel";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { useT } from "@/lib/i18n/use-t";
 import { usePathname } from "next/navigation";
 
 function isFavorite(c: ConversationSummary) {
   return c.metadata?.favorite === true || c.metadata?.favorite === "true";
-}
-
-function bucketLabelKey(bucket: DateBucket) {
-  return `sidebar.bucket_${bucket}` as const;
 }
 
 export function ThreadSidebar({
@@ -73,14 +65,7 @@ export function ThreadSidebar({
   const token = useStoredToken();
   const isLoggedIn = Boolean(token);
   const t = useT();
-  const {
-    sidebarPanel,
-    tuningsTab,
-    openTunings,
-    closeTunings,
-    setTuningsTab,
-  } = useShellActions();
-  const tuningsOpen = sidebarPanel === "tunings";
+
 
   const [searchQuery, setSearchQuery] = useState("");
   const [profileLabel, setProfileLabel] = useState(userId);
@@ -143,7 +128,6 @@ export function ThreadSidebar({
     () => filteredItems.filter((c) => !isFavorite(c)),
     [filteredItems],
   );
-  const dateGroups = useMemo(() => groupByBucket(normalItems), [normalItems]);
 
   const startNewChat = () => {
     const id = crypto.randomUUID();
@@ -155,24 +139,15 @@ export function ThreadSidebar({
   };
 
   const navItems: Array<{
-    section: ShellSection | "tunings";
+    section: ShellSection;
     href: string;
     icon: typeof MessageSquare;
     label: string;
   }> = [
-    { section: "chat", href: chatHomeHref, icon: MessageSquare, label: t("sidebar.chat") },
-    { section: "integrations", href: "/integrations", icon: Plug, label: t("sidebar.integrations") },
-    { section: "schedules", href: "/schedules", icon: Clock, label: t("sidebar.schedules") },
-    { section: "tunings", href: "#tunings", icon: SlidersHorizontal, label: t("sidebar.tunings") },
-  ];
-
-  const openTuningsPanel = () => {
-    if (isCollapsed) onToggleCollapse?.();
-    openTunings("runtime");
-    if (pathname.startsWith("/integrations") || pathname.startsWith("/schedules")) {
-      router.push(`${chatHomeHref}?tunings=runtime`);
-    }
-  };
+      { section: "chat", href: chatHomeHref, icon: MessageSquare, label: t("sidebar.chat") },
+      { section: "integrations", href: "/integrations", icon: Plug, label: t("sidebar.integrations") },
+      { section: "schedules", href: "/schedules", icon: Clock, label: t("sidebar.schedules") },
+    ];
 
   const conversationList = (
     <>
@@ -198,13 +173,11 @@ export function ThreadSidebar({
         </>
       ) : null}
 
-      {BUCKET_ORDER.map((bucket) => {
-        const bucketItems = dateGroups.get(bucket);
-        if (!bucketItems?.length) return null;
-        return (
-          <div key={bucket} className="mt-2">
-            <SectionHeader>{t(bucketLabelKey(bucket))}</SectionHeader>
-            {bucketItems.map((c) => (
+      {normalItems.length > 0 ? (
+        <div className="mt-1">
+          <SectionHeader>{t("sidebar.recent")}</SectionHeader>
+          <div className="space-y-0.5">
+            {normalItems.map((c) => (
               <ConversationRow
                 key={c.id}
                 conv={c}
@@ -218,8 +191,8 @@ export function ThreadSidebar({
               />
             ))}
           </div>
-        );
-      })}
+        </div>
+      ) : null}
 
       {filteredItems.length === 0 ? (
         <p className="mt-4 px-2 text-xs text-muted-foreground">{t("sidebar.no_conversations")}</p>
@@ -266,34 +239,13 @@ export function ThreadSidebar({
         <nav className="flex flex-col items-center gap-1.5">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active =
-              item.section === "tunings" ? tuningsOpen : !tuningsOpen && activeSection === item.section;
-            if (item.section === "tunings") {
-              return (
-                <button
-                  key={item.section}
-                  type="button"
-                  title={item.label}
-                  aria-label={item.label}
-                  onClick={openTuningsPanel}
-                  className={cn(
-                    "inline-flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200",
-                    active
-                      ? "bg-primary/10 text-primary dark:bg-white/10 dark:text-foreground border border-primary/15 dark:border-white/10"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-4 w-4" aria-hidden />
-                </button>
-              );
-            }
+            const active = activeSection === item.section;
             return (
               <Link
                 key={item.section}
                 href={item.href}
                 title={item.label}
                 aria-label={item.label}
-                onClick={() => closeTunings()}
                 className={cn(
                   "inline-flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200",
                   active
@@ -357,27 +309,17 @@ export function ThreadSidebar({
         <nav className="mt-3.5 flex flex-col gap-1 px-2.5">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active =
-              item.section === "tunings" ? tuningsOpen : !tuningsOpen && activeSection === item.section;
+            const active = activeSection === item.section;
             const className = cn(
               "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-300 ease-out",
               active
                 ? "bg-primary/10 text-primary dark:bg-white/10 dark:text-foreground border border-primary/15 dark:border-white/10 shadow-2xs font-semibold"
                 : "text-muted-foreground hover:translate-x-1 hover:bg-muted/50 hover:text-foreground dark:hover:bg-white/[0.06]",
             );
-            if (item.section === "tunings") {
-              return (
-                <button key={item.section} type="button" onClick={openTuningsPanel} className={className}>
-                  <Icon className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110" aria-hidden />
-                  <span className="truncate">{item.label}</span>
-                </button>
-              );
-            }
             return (
               <Link
                 key={item.section}
                 href={item.href}
-                onClick={() => closeTunings()}
                 className={className}
               >
                 <Icon className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110" aria-hidden />
@@ -388,39 +330,31 @@ export function ThreadSidebar({
         </nav>
       </div>
 
-      {tuningsOpen ? (
-        <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-sidebar-border/45 pt-3">
-          <SidebarTuningsPanel tab={tuningsTab} onTabChange={setTuningsTab} />
+      <div className="mt-3 shrink-0 px-3 pb-2">
+        <div className="flex items-center gap-2 rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-background/50 dark:bg-card/40 px-2.5 py-1.5 backdrop-blur-md transition-all duration-200 focus-within:border-primary/50 focus-within:shadow-[0_0_12px_rgba(var(--primary-rgb),0.12)]">
+          <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t("sidebar.search_placeholder")}
+            className="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+            aria-label={t("sidebar.search_placeholder")}
+          />
+          {searchQuery ? (
+            <button
+              type="button"
+              onClick={() => setSearchQuery("")}
+              className="rounded p-0.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+              aria-label={t("btn.cancel")}
+            >
+              <X className="h-3 w-3" aria-hidden />
+            </button>
+          ) : null}
         </div>
-      ) : (
-        <>
-          <div className="mt-3 shrink-0 px-3 pb-2">
-            <div className="flex items-center gap-2 rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-background/50 dark:bg-card/40 px-2.5 py-1.5 backdrop-blur-md transition-all duration-200 focus-within:border-primary/50 focus-within:shadow-[0_0_12px_rgba(var(--primary-rgb),0.12)]">
-              <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder={t("sidebar.search_placeholder")}
-                className="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
-                aria-label={t("sidebar.search_placeholder")}
-              />
-              {searchQuery ? (
-                <button
-                  type="button"
-                  onClick={() => setSearchQuery("")}
-                  className="rounded p-0.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
-                  aria-label={t("btn.cancel")}
-                >
-                  <X className="h-3 w-3" aria-hidden />
-                </button>
-              ) : null}
-            </div>
-          </div>
+      </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-width:thin]">{conversationList}</div>
-        </>
-      )}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-width:thin]">{conversationList}</div>
 
       <div className="shrink-0">{profileFooter}</div>
     </aside>
@@ -429,7 +363,7 @@ export function ThreadSidebar({
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-1 mt-3.5 flex items-center gap-1.5 px-3 text-[0.714em] font-bold uppercase tracking-wider text-muted-foreground/80">
+    <div className="mb-1.5 mt-3 flex items-center gap-1.5 px-3 text-[10.5px] font-bold uppercase tracking-widest text-muted-foreground/60 select-none">
       {children}
     </div>
   );
@@ -547,10 +481,10 @@ function ConversationRow({
   return (
     <div
       className={cn(
-        "group relative flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-sm transition-all duration-200 ease-out",
+        "group relative flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs sm:text-[13px] transition-all duration-200 ease-out",
         isActive || menuOpen
-          ? "bg-primary/10 text-primary dark:bg-white/10 dark:text-foreground border border-primary/15 dark:border-white/10 shadow-2xs font-medium"
-          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground dark:hover:bg-white/[0.05]",
+          ? "bg-primary/10 text-primary dark:bg-primary/15 dark:text-primary border border-primary/25 shadow-2xs font-semibold"
+          : "text-foreground/80 hover:text-foreground hover:bg-muted/60 dark:hover:bg-white/[0.06]",
       )}
     >
       <Link
