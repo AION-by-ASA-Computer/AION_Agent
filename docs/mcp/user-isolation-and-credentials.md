@@ -105,7 +105,7 @@ Lo script `scripts/upgrade-aion.sh` / `upgrade_core.py` invoca il seed in modo n
 Il flusso OAuth 2.0 (Authorization Code + PKCE S256) è implementato in `src/api/v1/mcp_integrations.py`:
 
 - `GET /v1/integrations/oauth/start` — avvio flow con discovery RFC 9728/8414 e registrazione dinamica client opzionale (`AION_MCP_OAUTH_DYNAMIC_REGISTRATION`, default `1`).
-- `GET /v1/integrations/oauth/callback` — callback browser con redirect verso chat-ui.
+- `GET /v1/integrations/oauth/callback` — callback browser con redirect verso chat-ui (`<chat>/integrations`). Base chat-ui risolta in ordine: `AION_CHAT_URL` / `AION_PUBLIC_CHAT_URL` non-loopback → `AION_OAUTH_REDIRECT_BASE_URL` / `AION_PUBLIC_API_URL` pubblico (senza `/api`) → `AION_PUBLIC_CHAT_URL` loopback (dev) → header proxy / `DOMAIN`.
 - `POST /v1/integrations/oauth/callback` — scambio codice/token programmatico.
 - `GET /v1/integrations/{slug}/oauth-status` — stato connessione utente.
 

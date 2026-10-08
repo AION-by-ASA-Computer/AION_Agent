@@ -711,6 +711,9 @@ config = {
 domain = config['DOMAIN']
 base_url = "http://localhost" if domain == ":80" or not domain else (domain if domain.startswith("http") else f"https://{domain}")
 config['AION_PUBLIC_API_URL'] = f"{base_url}/api"
+# chat-ui is served at the Caddy root: OAuth MCP callback redirects to {base_url}/integrations
+config['AION_CHAT_URL'] = base_url
+config['AION_PUBLIC_CHAT_URL'] = base_url
 config['AION_CORS_ORIGINS'] = base_url
 config['NEXT_PUBLIC_AION_API_URL'] = "/api"
 config['NEXT_PUBLIC_AION_ADMIN_UI_URL'] = "/admin"
