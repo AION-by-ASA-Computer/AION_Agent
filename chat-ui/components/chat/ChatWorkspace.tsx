@@ -466,7 +466,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const fetchLlmProviders = async () => {
     setProvidersLoading(true);
     try {
-      const res = await fetch(`${apiBase()}/admin/llm-providers`, {
+      const res = await fetch(`${apiBase()}/v1/llm-providers`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
