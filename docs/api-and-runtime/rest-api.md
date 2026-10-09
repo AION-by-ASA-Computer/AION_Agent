@@ -124,6 +124,8 @@ Each allowed profile is one model. `id` is the profile slug (the value clients m
 
 Sampling fields (`temperature`, `max_tokens`, and the rest) are ignored. Generation limits stay on AION runtime settings.
 
+Thinking is **off** on every completion, the same as the chat-ui Thinking toggle set to off (`reasoning_effort=off`, `enable_thinking=false`). Clients that cannot send extra fields get that behavior with a normal `messages` body. A custom field is possible later; it is not read today.
+
 **Session.** Clients usually resend the whole transcript every call. AION keeps short-term memory on one session so tools and files survive the next turn:
 
 1. `X-AION-Conversation-Id` or `metadata.aion_conversation_id` when the client can set them.

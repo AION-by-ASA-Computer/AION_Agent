@@ -92,6 +92,62 @@ async def probe_mcp_server(
         }
 
 
+_SECRET_ENV_MARKERS = (
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "api_key",
+    "apikey",
+    "oauth",
+    "authorization",
+)
+
+
+def env_key_is_secret(key: str) -> bool:
+    k = (key or "").lower()
+    return any(marker in k for marker in _SECRET_ENV_MARKERS)
+
+
+def merge_probe_env(
+    template: Dict[str, Any],
+    resolved: Dict[str, Any],
+) -> tuple[Dict[str, Any], List[str]]:
+    """Build the env for an admin MCP probe.
+
+    Resolved per-user secrets are kept. Unresolved secrets are reported and
+    must not be replaced with a fake bearer token (GitHub rejects that as a
+    badly formatted Authorization header). Other unresolved placeholders still
+    get a typed mock so local servers can boot.
+    """
+    from src.runtime.credential_store import (
+        generate_probe_mock_value,
+        normalize_inline_secret,
+    )
+
+    out: Dict[str, Any] = {}
+    missing: List[str] = []
+    for key, raw in (template or {}).items():
+        if not isinstance(raw, str) or "${" not in raw:
+            out[key] = raw
+            continue
+        val = resolved.get(key)
+        text = str(val).strip() if val is not None else ""
+        unresolved = (not text) or "${" in text or text == raw
+        if not unresolved:
+            out[key] = (
+                normalize_inline_secret(text, cred_key="OAUTH_TOKEN")
+                if env_key_is_secret(key)
+                else text
+            )
+            continue
+        if env_key_is_secret(key):
+            missing.append(key)
+            continue
+        out[key] = generate_probe_mock_value(key)
+    return out, missing
+
+
 def classify_mcp_error(
     error_msg: str, cfg: Optional[Dict[str, Any]] = None
 ) -> Dict[str, str]:
@@ -141,6 +197,8 @@ def classify_mcp_error(
         or "invalid_client" in low
         or "invalid_grant" in low
         or "api key" in low
+        or "badly formatted" in low
+        or "authorization header" in low
     ):
         return {
             "error_type": "auth_failed",

@@ -214,6 +214,7 @@ def test_completion_maps_model_to_profile_and_ignores_tools(client, monkeypatch)
         async def run(self, user_input, **kwargs):
             seen["user_input"] = user_input
             seen["metadata"] = kwargs.get("metadata")
+            seen["reasoning_effort"] = kwargs.get("reasoning_effort")
             return await super().run(user_input, **kwargs)
 
     monkeypatch.setattr("src.main.get_agent", get_agent)
@@ -243,6 +244,7 @@ def test_completion_maps_model_to_profile_and_ignores_tools(client, monkeypatch)
     assert seen["profile"] == "ops"
     assert seen["provider"] == "local-llm"
     assert seen["session_id"] == "thread-1234"
+    assert seen["reasoning_effort"] == "off"
     assert "remote_tool" not in seen["user_input"]
 
 

@@ -267,6 +267,19 @@ def _credential_lookup_keys(key: str) -> tuple[str, ...]:
     return (k,) + aliases
 
 
+_BEARER_PREFIX_KEYS = frozenset({"OAUTH_TOKEN", "API_KEY"})
+
+
+def normalize_inline_secret(value: str, *, cred_key: str = "") -> str:
+    """Drop a leading ``Bearer`` scheme. Callers add it again in the header."""
+    text = (value or "").strip()
+    if cred_key and cred_key not in _BEARER_PREFIX_KEYS:
+        return text
+    if text.lower().startswith("bearer "):
+        return text[7:].strip()
+    return text
+
+
 def _normalize_expiry(expires_at: Optional[datetime]) -> Optional[datetime]:
     if not expires_at:
         return None
@@ -704,11 +717,11 @@ async def resolve_user_credential_string(
                 effective_uid, slug, cred_key, tenant_id=tenant_id
             )
             if val is not None:
-                return val
+                return normalize_inline_secret(val, cred_key=cred_key)
         env_name = f"{full_prefix}__{cred_key}"
         val = os.environ.get(env_name)
         if val is not None:
-            return val
+            return normalize_inline_secret(val, cred_key=cred_key)
         return ""
 
     m2 = _USER_CREDENTIAL_SIMPLE_RE.match(obj)

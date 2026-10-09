@@ -616,6 +616,7 @@ async def chat_completions(
                 result = await pipeline.run(
                     user_input,
                     message_source="user_input",
+                    reasoning_effort="off",
                     metadata={"source": "openai_compat"},
                     runtime=runtime,
                 )
@@ -671,6 +672,7 @@ async def chat_completions(
                 async for event in pipeline.run_stream(
                     user_input,
                     message_source="user_input",
+                    reasoning_effort="off",
                     metadata={"source": "openai_compat"},
                     runtime=runtime,
                 ):
