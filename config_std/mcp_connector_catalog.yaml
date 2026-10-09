@@ -12,7 +12,8 @@
 #     setup_doc_url: (opzionale) guida configurazione provider
 #     admin_setup_hint: (opzionale) testo mostrato in Admin → MCP Hub
 #   oauth_provider: (opzionale) id tecnico provider; default: id connettore
-#   featured_remote: true  → mostrato in Hub marketplace e preset modal
+#   featured_remote: true  → connettore remoto mostrato in Hub marketplace e preset modal
+#   featured_catalog: true → connettore stdio mostrato nella stessa griglia (non nel modal remoto)
 #   remote_url_template: true → URL contiene placeholder (es. {tenant_id}); install manuale
 #   default_credential_mode: per_user
 
@@ -259,6 +260,7 @@ connectors:
     install_type: stdio
     auth_type: oauth2
     oauth_provider: microsoft
+    featured_catalog: true
     default_credential_mode: per_user
     description: >
       Microsoft Graph via @softeria/ms-365-mcp-server (posta, calendario,
