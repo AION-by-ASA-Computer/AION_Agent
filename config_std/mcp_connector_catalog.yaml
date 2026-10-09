@@ -253,6 +253,56 @@ connectors:
     registry_search_hint: hubspot mcp
     approval_status: aion_recommended
 
+  - id: ms365
+    title: Microsoft 365
+    category: productivity
+    install_type: stdio
+    auth_type: oauth2
+    oauth_provider: microsoft
+    default_credential_mode: per_user
+    description: >
+      Microsoft Graph via @softeria/ms-365-mcp-server (posta, calendario,
+      OneDrive, attività). AION ottiene il token OAuth per utente e lo passa
+      al processo. Serve un'app Entra ID propria: l'app predefinita Softeria
+      non conosce il redirect di AION. Diverso da SharePoint/OneDrive Agent 365.
+    tags: [microsoft, outlook, onedrive, calendar, graph, oauth]
+    mcp_name_hints: [ms365, ms-365, microsoft365, ms_365]
+    official_doc_url: https://github.com/softeria/ms-365-mcp-server
+    mcp_upstream_docs_url: https://github.com/softeria/ms-365-mcp-server#readme
+    setup_doc_url: https://github.com/softeria/ms-365-mcp-server#authentication
+    registry_search_hint: ms-365-mcp-server softeria
+    approval_status: aion_recommended
+    admin_setup_hint: >
+      Registra un'app Entra (piattaforma Web) con il redirect
+      /v1/integrations/oauth/callback (in Docker /api/v1/...), incolla
+      client id e secret nel Hub, poi ogni utente fa Accedi in chat.
+      Guida: docs/mcp/microsoft-365.md. Il preset di default è in sola lettura.
+    oauth:
+      authorization_endpoint: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
+      token_url: https://login.microsoftonline.com/common/oauth2/v2.0/token
+      client_credentials_required: true
+      scopes:
+        - offline_access
+        - openid
+        - profile
+        - https://graph.microsoft.com/User.Read
+        - https://graph.microsoft.com/Mail.Read
+        - https://graph.microsoft.com/Calendars.Read
+        - https://graph.microsoft.com/Contacts.Read
+        - https://graph.microsoft.com/Files.Read
+        - https://graph.microsoft.com/Tasks.Read
+      authorize_params:
+        prompt: consent
+        response_mode: query
+    runtime_env_aliases:
+      MS365_MCP_OAUTH_TOKEN:
+        - OAUTH_TOKEN
+    example_registry_block: |
+      # command: npx
+      # args: ["-y", "@softeria/ms-365-mcp-server", "--org-mode", "--read-only", "--preset", "mail,calendar,files,tasks"]
+      # env: {"MS365_MCP_OAUTH_TOKEN": "${AION_USER_MS365__OAUTH_TOKEN}", "MS365_MCP_TENANT_ID": "common", "MS365_MCP_ORG_MODE": "true"}
+      # description: Microsoft 365 (Graph) via Softeria. Token per utente emesso da AION.
+
   - id: microsoft_sharepoint
     title: Microsoft SharePoint
     category: knowledge
