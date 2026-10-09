@@ -120,6 +120,26 @@ def test_chat_base_url_prefers_explicit_public_chat_url(
     assert mod._chat_base_url() == "https://chat.example.com"
 
 
+def test_chat_base_url_loopback_public_chat_url_does_not_shadow_domain(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """install.sh .env kept the dev default localhost:8003 → must not win over the domain."""
+    monkeypatch.setenv("AION_CHAT_URL", "http://localhost:8003")
+    monkeypatch.setenv("AION_PUBLIC_CHAT_URL", "http://localhost:8003")
+    monkeypatch.setenv("AION_OAUTH_REDIRECT_BASE_URL", "https://agent.example.com/api")
+    assert mod._chat_base_url() == "https://agent.example.com"
+
+
+def test_chat_base_url_local_dev_keeps_loopback_public_chat_url(
+    monkeypatch: pytest.MonkeyPatch, oauth_request: MagicMock
+) -> None:
+    monkeypatch.setenv("AION_CHAT_URL", "http://localhost:8003")
+    monkeypatch.setenv("AION_PUBLIC_CHAT_URL", "http://localhost:8003")
+    monkeypatch.setenv("AION_PUBLIC_API_URL", "http://localhost:8001")
+    monkeypatch.delenv("AION_OAUTH_REDIRECT_BASE_URL", raising=False)
+    assert mod._chat_base_url(oauth_request) == "http://localhost:8003"
+
+
 def test_chat_base_url_from_proxy_headers(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("AION_CHAT_URL", raising=False)
     monkeypatch.delenv("AION_OAUTH_REDIRECT_BASE_URL", raising=False)

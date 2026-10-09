@@ -139,6 +139,7 @@ PROTECTED_ENV_KEYS: frozenset[str] = frozenset(
         "AION_FASTAPI_URL",
         "AION_PUBLIC_API_URL",
         "AION_CHAT_URL",
+        "AION_PUBLIC_CHAT_URL",
         "AION_ADMIN_UI_URL",
         "AION_CORS_ORIGINS",
         "AION_REDIS_URL",
