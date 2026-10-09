@@ -29,7 +29,10 @@ from .mcp_credential_discovery import (
     merge_schema_sources,
 )
 from .mcp_manager import mcp_manager
-from .runtime.mcp_integration_helpers import strip_oauth_token_fields_from_schema
+from .runtime.mcp_integration_helpers import (
+    oauth_alias_dest_keys,
+    strip_oauth_token_fields_from_schema,
+)
 
 CredentialMode = Literal["none", "org_shared", "per_user"]
 
@@ -448,8 +451,12 @@ async def sync_mcp_server_config_from_registry(
         discovered_schema=discovery.schema,
     )
     mode = credential_mode or infer_credential_mode(raw_cfg, connector_row, discovery)
-    if _remote_bridge_uses_oauth(raw_cfg, discovery, connector_row):
-        schema = strip_oauth_token_fields_from_schema(schema)
+    if connector_requires_oauth(connector_row) or _remote_bridge_uses_oauth(
+        raw_cfg, discovery, connector_row
+    ):
+        schema = strip_oauth_token_fields_from_schema(
+            schema, extra_keys=oauth_alias_dest_keys(connector_row)
+        )
     meta = _display_meta_from_connector(connector_row, server_slug)
     connector_id = (
         raw_cfg.get("aion_connector_id") or meta.get("aion_connector_id") or ""
@@ -504,12 +511,50 @@ async def sync_mcp_server_config_from_registry(
                 row.oauth_config_json = json.dumps(oauth_cfg)
                 if _remote_bridge_uses_oauth(raw_cfg, discovery, connector_row):
                     current_schema = json.loads(row.credential_schema_json or "[]")
-                    cleaned = strip_oauth_token_fields_from_schema(current_schema)
+                    cleaned = strip_oauth_token_fields_from_schema(
+                        current_schema,
+                        extra_keys=oauth_alias_dest_keys(connector_row),
+                    )
                     if cleaned != current_schema:
                         row.credential_schema_json = json.dumps(cleaned)
                 # Auto-abilita i server remote-bridge esistenti ancora disabilitati
                 if not row.is_enabled_for_users:
                     row.is_enabled_for_users = True
+            elif connector_requires_oauth(connector_row):
+                try:
+                    oauth_cfg = (
+                        json.loads(row.oauth_config_json)
+                        if row.oauth_config_json
+                        else {}
+                    )
+                except Exception:
+                    oauth_cfg = {}
+                oauth_meta = oauth_ui_metadata_from_connector(
+                    connector_row,
+                    fallback_provider=str(
+                        oauth_cfg.get("provider") or connector_id or ""
+                    ),
+                    fallback_display_name=str(
+                        oauth_cfg.get("oauth_display_name")
+                        or row.display_name
+                        or meta.get("display_name")
+                        or ""
+                    ),
+                )
+                oauth_cfg["provider"] = oauth_meta["provider"]
+                oauth_cfg["oauth_display_name"] = oauth_meta["oauth_display_name"]
+                oauth_cfg = merge_oauth_config(
+                    oauth_cfg,
+                    oauth_config_from_connector(connector_row),
+                    catalog_overrides=True,
+                )
+                row.oauth_config_json = json.dumps(oauth_cfg)
+                current_schema = json.loads(row.credential_schema_json or "[]")
+                cleaned = strip_oauth_token_fields_from_schema(
+                    current_schema, extra_keys=oauth_alias_dest_keys(connector_row)
+                )
+                if cleaned != current_schema:
+                    row.credential_schema_json = json.dumps(cleaned)
             if connector_id:
                 row.aion_connector_id = connector_id
             if meta.get("description") and not row.description:
@@ -526,6 +571,20 @@ async def sync_mcp_server_config_from_registry(
                     connector_row=connector_row,
                     connector_id=connector_id,
                     display_name=meta.get("display_name"),
+                )
+            elif connector_requires_oauth(connector_row):
+                oauth_meta = oauth_ui_metadata_from_connector(
+                    connector_row,
+                    fallback_provider=str(connector_id or ""),
+                    fallback_display_name=str(meta.get("display_name") or ""),
+                )
+                oauth_cfg = merge_oauth_config(
+                    {
+                        "provider": oauth_meta["provider"],
+                        "oauth_display_name": oauth_meta["oauth_display_name"],
+                    },
+                    oauth_config_from_connector(connector_row),
+                    catalog_overrides=True,
                 )
             # I server remote-bridge vengono abilitati per gli utenti automaticamente
             # perché l'admin li ha installati esplicitamente per la configurazione per-utente

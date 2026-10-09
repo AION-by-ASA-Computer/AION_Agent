@@ -280,6 +280,7 @@ connectors:
       client id e secret nel Hub, poi ogni utente fa Accedi in chat.
       Guida: docs/mcp/microsoft-365.md. Il preset di default è in sola lettura.
     oauth:
+      authorization_server: https://login.microsoftonline.com/common/v2.0
       authorization_endpoint: https://login.microsoftonline.com/common/oauth2/v2.0/authorize
       token_url: https://login.microsoftonline.com/common/oauth2/v2.0/token
       client_credentials_required: true

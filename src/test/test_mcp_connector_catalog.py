@@ -88,6 +88,7 @@ def test_ms365_oauth_config_from_catalog():
     assert row.get("install_type") == "stdio"
     assert row.get("auth_type") == "oauth2"
     oauth = oauth_config_from_connector(row)
+    assert oauth["authorization_server"] == "https://login.microsoftonline.com/common/v2.0"
     assert oauth["token_url"].endswith("/oauth2/v2.0/token")
     assert oauth.get("client_credentials_required") is True
     assert "offline_access" in oauth["scopes"]
