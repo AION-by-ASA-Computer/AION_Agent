@@ -121,10 +121,19 @@ def test_publish_tools_updates_haystack_invoker_snapshot():
         set_turn_runtime,
     )
 
+    class _State:
+        def __init__(self):
+            self.data = {"tools": []}
+
+        def set(self, key, value):
+            self.data[key] = value
+
     class _Ctx:
         def __init__(self):
-            self.chat_generator_inputs = {"tools": []}
-            self.tool_invoker_inputs = {"tools": []}
+            self.tools = []
+            self.state = _State()
+            self.chat_generator_inputs = {}
+            self.tool_execution_inputs = {}
 
     class _Agent:
         def __init__(self):
@@ -149,11 +158,50 @@ def test_publish_tools_updates_haystack_invoker_snapshot():
             [_Tool("MicrosoftOutlookMail_ListEmails")], session_id=sid
         )
         assert [t.name for t in attached] == ["MicrosoftOutlookMail_ListEmails"]
-        assert ctx.tool_invoker_inputs["tools"][0].name == (
+        assert ctx.tools[0].name == "MicrosoftOutlookMail_ListEmails"
+        assert ctx.state.data["tools"][0].name == "MicrosoftOutlookMail_ListEmails"
+        assert ctx.tool_execution_inputs["tools"][0].name == (
             "MicrosoftOutlookMail_ListEmails"
         )
-        assert ctx.chat_generator_inputs["tools"][0].name == (
-            "MicrosoftOutlookMail_ListEmails"
-        )
+    finally:
+        clear_turn_runtime(sid)
+
+
+def test_publish_tools_injects_cached_agent_tools_into_current_run():
+    """A previous turn left ClickUp on agent.tools; this run still has the resident set."""
+    from src.runtime.turn_compaction import (
+        clear_turn_runtime,
+        set_agent_execution_context,
+        set_turn_runtime,
+    )
+
+    class _Ctx:
+        def __init__(self):
+            self.tools = [_Tool("skill_search")]
+            self.chat_generator_inputs = {}
+            self.tool_execution_inputs = {}
+
+    class _Agent:
+        def __init__(self):
+            self.tools = [_Tool("skill_search"), _Tool("clickup_filter_tasks")]
+            self.max_agent_steps = 5
+
+    agent = _Agent()
+    ctx = _Ctx()
+    sid = "publish-clickup-cached"
+    set_turn_runtime(
+        session_id=sid,
+        loop=None,
+        queue=None,
+        stop_event=None,
+        agent=agent,
+        profile_name="apple_watch_assistant",
+        user_id="admin",
+    )
+    try:
+        set_agent_execution_context(ctx)
+        attached = publish_tools([_Tool("clickup_filter_tasks")], session_id=sid)
+        assert [t.name for t in attached] == ["clickup_filter_tasks"]
+        assert [t.name for t in ctx.tools] == ["skill_search", "clickup_filter_tasks"]
     finally:
         clear_turn_runtime(sid)

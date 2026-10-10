@@ -276,36 +276,75 @@ async def _mcp_group_tools(
     return list(built or [])
 
 
-def publish_tools(extra: Iterable[Any], *, session_id: str = "") -> List[Any]:
-    """Append tools to the live agent and to the current Haystack execution inputs.
+def _tool_name(tool: Any) -> str:
+    return str(getattr(tool, "name", None) or "")
 
-    The tool runs on the API loop. The execution context lives on the agent
-    thread, so it is read from the turn registry, not from a ContextVar.
-    """
-    from src.runtime.turn_compaction import _agent_exec_ctx, resolve_turn_runtime
 
-    attached: List[Any] = []
-    rt = resolve_turn_runtime(session_id or None)
-    agent = rt.get("agent") if isinstance(rt, dict) else None
-    current: List[Any] = list(getattr(agent, "tools", None) or []) if agent else []
-    names = {getattr(t, "name", None) for t in current}
+def _as_tool_list(tools: Any) -> List[Any]:
+    if tools is None:
+        return []
+    if isinstance(tools, list):
+        return list(tools)
+    try:
+        return list(tools)
+    except TypeError:
+        return [tools]
+
+
+def _extend_tool_collection(existing: Any, extra: Sequence[Any]) -> Tuple[Any, List[Any]]:
+    """Append named tools that are not already present. Returns (collection, added)."""
+    current = _as_tool_list(existing)
+    names = {_tool_name(t) for t in current if _tool_name(t)}
+    added: List[Any] = []
     for tool in extra:
-        name = getattr(tool, "name", None)
+        name = _tool_name(tool)
         if not name or name in names:
             continue
         current.append(tool)
         names.add(name)
-        attached.append(tool)
-    if agent is not None:
-        agent.tools = current
+        added.append(tool)
+    return current, added
+
+
+def publish_tools(extra: Iterable[Any], *, session_id: str = "") -> List[Any]:
+    """Append tools to the cached agent and to the live Haystack run.
+
+    Haystack 2.x re-reads ``exe_context.tools`` on every step and injects that
+    snapshot into the chat generator and the tool executor. Writing only
+    ``agent.tools`` or ``chat_generator_inputs["tools"]`` leaves the current
+    turn on the resident set, so ``activate_tool_group`` looks successful
+    while ``clickup_*`` / Outlook tools stay ``not found``.
+    """
+    from src.runtime.turn_compaction import _agent_exec_ctx, resolve_turn_runtime
+
+    incoming = [t for t in extra if _tool_name(t)]
+    if not incoming:
+        return []
+
+    rt = resolve_turn_runtime(session_id or None)
+    agent = rt.get("agent") if isinstance(rt, dict) else None
     exec_ctx = rt.get("agent_exec_ctx") if isinstance(rt, dict) else None
     if exec_ctx is None and _agent_exec_ctx is not None:
         exec_ctx = _agent_exec_ctx.get()
-    if exec_ctx is not None and current:
-        gen_inputs = getattr(exec_ctx, "chat_generator_inputs", None)
-        if isinstance(gen_inputs, dict):
-            gen_inputs["tools"] = current
-        inv_inputs = getattr(exec_ctx, "tool_invoker_inputs", None)
-        if isinstance(inv_inputs, dict):
-            inv_inputs["tools"] = current
-    return attached
+
+    if agent is not None:
+        agent.tools, _ = _extend_tool_collection(getattr(agent, "tools", None), incoming)
+
+    live_added: List[Any] = incoming
+    if exec_ctx is not None:
+        live, live_added = _extend_tool_collection(getattr(exec_ctx, "tools", None), incoming)
+        exec_ctx.tools = live
+        state = getattr(exec_ctx, "state", None)
+        if state is not None and hasattr(state, "set"):
+            try:
+                state.set("tools", _as_tool_list(live))
+            except Exception:
+                logger.debug("publish_tools: could not write state.tools", exc_info=True)
+        # Haystack injects tools from exe_context.tools each step; keep these
+        # in sync for older snapshots / tests that still read the dicts.
+        for attr in ("chat_generator_inputs", "tool_execution_inputs", "tool_invoker_inputs"):
+            payload = getattr(exec_ctx, attr, None)
+            if isinstance(payload, dict):
+                payload["tools"] = live
+
+    return live_added or incoming
