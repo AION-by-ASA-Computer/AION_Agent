@@ -859,6 +859,23 @@ class MCPManager:
     def _clear_warm_failure(self, pool_scope_id: str, server_name: str) -> None:
         self._warm_failures.pop((pool_scope_id, server_name), None)
 
+    def clear_oauth_disconnect_state(
+        self, user_id: str, server_name: str, *, tenant_id: str = "default"
+    ) -> None:
+        """Forget a 'not connected' warm skip after this user stores an OAuth token."""
+        safe = sanitize_user_id(user_id)
+        tid = (tenant_id or "default").strip() or "default"
+        pool_sid = f"__user__{safe}__{tid}"
+        self._clear_warm_failure(pool_sid, server_name)
+        for (sid, name), rec in list(self._warm_failures.items()):
+            if name != server_name:
+                continue
+            msg = rec[1] if rec else ""
+            if "credenziali mancanti" not in msg:
+                continue
+            if sid == pool_sid or sid.endswith(f"__{safe}__{tid}"):
+                self._clear_warm_failure(sid, name)
+
     def _is_server_healthy(self, chat_session_id: str, server_name: str) -> bool:
         if not self._is_stdio_server(server_name):
             return True
@@ -1534,6 +1551,24 @@ class MCPManager:
         except Exception as exc:
             logger.debug("MCP warm credential check failed %s: %s", server_name, exc)
             return None
+        from .runtime.mcp_health import env_slot_is_oauth_token
+
+        oauth_token_present: Optional[bool] = None
+
+        async def _has_oauth_token() -> bool:
+            nonlocal oauth_token_present
+            if oauth_token_present is None:
+                from .runtime.credential_store import get_credential
+
+                token = await get_credential(
+                    sanitize_user_id(uid),
+                    server_name,
+                    "OAUTH_TOKEN",
+                    tenant_id=(tid or "default").strip() or "default",
+                )
+                oauth_token_present = bool(token)
+            return oauth_token_present
+
         for key, template in env_block.items():
             if not isinstance(template, str):
                 continue
@@ -1542,6 +1577,8 @@ class MCPManager:
             if needs_user_cred and (
                 val is None or (isinstance(val, str) and not val.strip())
             ):
+                if env_slot_is_oauth_token(str(key), template) and await _has_oauth_token():
+                    continue
                 return f"credenziali mancanti per {server_name} ({key})"
         return None
 

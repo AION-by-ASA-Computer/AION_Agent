@@ -475,8 +475,17 @@ async def chat_prepare(
                 exc,
             )
         finally:
-            from src.runtime.mcp_health import format_session_mcp_errors
+            from src.runtime.mcp_health import (
+                drop_connected_oauth_errors,
+                format_session_mcp_errors,
+            )
 
+            await drop_connected_oauth_errors(
+                body.conversation_id,
+                uid,
+                tenant_id=(os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+                or "default",
+            )
             mcp_errors = format_session_mcp_errors(body.conversation_id, body.profile)
             _prepare_snapshots[dedupe_key] = {
                 "status": status,

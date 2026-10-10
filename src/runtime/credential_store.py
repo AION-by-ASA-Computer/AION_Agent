@@ -407,8 +407,18 @@ async def _persist_oauth_tokens(
         )
 
     from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
+    from src.runtime.mcp_health import clear_mcp_load_errors_for_server
 
     await invalidate_mcp_credentials_runtime(user_id, server_slug, tenant_id=tenant_id)
+    clear_mcp_load_errors_for_server(server_slug)
+    try:
+        from src.mcp_manager import mcp_manager
+
+        mcp_manager.clear_oauth_disconnect_state(
+            user_id, server_slug, tenant_id=tenant_id
+        )
+    except Exception:
+        pass
     return access_token
 
 

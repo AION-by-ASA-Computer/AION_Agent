@@ -45,6 +45,54 @@ def test_normalize_inline_secret_only_for_bearer_keys():
     )
 
 
+def test_connected_oauth_drops_stale_banner():
+    import asyncio
+
+    from src.runtime import credential_store as store
+    from src.runtime.mcp_health import (
+        clear_mcp_load_errors,
+        drop_connected_oauth_errors,
+        env_slot_is_oauth_token,
+        get_last_mcp_load_errors,
+        record_mcp_load_error,
+    )
+
+    assert env_slot_is_oauth_token(
+        "MS365_MCP_OAUTH_TOKEN", "${AION_USER_MS365__MS365_MCP_OAUTH_TOKEN}"
+    )
+    assert not env_slot_is_oauth_token(
+        "CLICKUP_API_KEY", "${AION_USER_CLICKUP__CLICKUP_API_KEY}"
+    )
+
+    async def fake_get(
+        user_id,
+        server_slug,
+        key,
+        *,
+        tenant_id="default",
+        auto_refresh_oauth=True,
+    ):
+        if key == "OAUTH_TOKEN" and server_slug == "ms365" and user_id == "admin":
+            return "graph-access-token"
+        return None
+
+    async def run():
+        sid = "banner-session"
+        record_mcp_load_error(
+            sid, "ms365", "credenziali mancanti per ms365 (MS365_MCP_OAUTH_TOKEN)"
+        )
+        original = store.get_credential
+        store.get_credential = fake_get
+        try:
+            await drop_connected_oauth_errors(sid, "admin", tenant_id="default")
+            return get_last_mcp_load_errors(sid)
+        finally:
+            store.get_credential = original
+            clear_mcp_load_errors(sid)
+
+    assert "ms365" not in asyncio.run(run())
+
+
 def test_missing_user_oauth_points_to_connect():
     classified = classify_mcp_error(
         "credenziali mancanti per ms365 (MS365_MCP_OAUTH_TOKEN)"

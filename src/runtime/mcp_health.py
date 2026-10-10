@@ -33,6 +33,62 @@ def clear_mcp_load_errors(session_id: str, server_slug: Optional[str] = None) ->
         _last_probe_errors.pop(session_id, None)
 
 
+def clear_mcp_load_errors_for_server(server_slug: str) -> None:
+    """Drop a server from every session cache (after that user connects OAuth)."""
+    slug = (server_slug or "").strip()
+    if not slug:
+        return
+    for errs in _last_probe_errors.values():
+        errs.pop(slug, None)
+
+
+def env_slot_is_oauth_token(env_key: str, template: str) -> bool:
+    """True when this registry env slot is the OAuth access token (or its alias)."""
+    key = (env_key or "").strip().upper()
+    if key in ("OAUTH_TOKEN", "OAUTH_REFRESH_TOKEN") or key.endswith("_OAUTH_TOKEN"):
+        return True
+    import re
+
+    match = re.match(
+        r"^\$\{AION_USER_[A-Z0-9_]+__([A-Z0-9_]+)\}$", (template or "").strip()
+    )
+    cred = match.group(1) if match else ""
+    return cred in ("OAUTH_TOKEN", "OAUTH_REFRESH_TOKEN")
+
+
+async def drop_connected_oauth_errors(
+    session_id: str,
+    user_id: str,
+    *,
+    tenant_id: str = "default",
+) -> None:
+    """A stored OAuth token means the account is connected. Drop the stale banner."""
+    if not session_id or not user_id:
+        return
+    cached = get_last_mcp_load_errors(session_id)
+    if not cached:
+        return
+    from src.runtime.credential_store import get_credential
+
+    tid = (tenant_id or "default").strip() or "default"
+    for slug, err in cached.items():
+        if "credenziali mancanti" not in (err or "").lower():
+            continue
+        try:
+            token = await get_credential(
+                user_id, slug, "OAUTH_TOKEN", tenant_id=tid
+            )
+        except Exception:
+            continue
+        if not token:
+            continue
+        clear_mcp_load_errors(session_id, slug)
+        try:
+            mcp_manager.clear_oauth_disconnect_state(user_id, slug, tenant_id=tid)
+        except Exception:
+            pass
+
+
 async def probe_mcp_server(
     server_slug: str,
     *,
