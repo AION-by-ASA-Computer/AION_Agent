@@ -44,6 +44,27 @@ def oauth_alias_dest_keys(connector_row: Optional[Dict[str, Any]]) -> Set[str]:
     return keys
 
 
+def strip_oauth_user_fields_for_server(
+    schema: List[Dict[str, Any]],
+    server_slug: str,
+    server_config: Optional[Dict[str, Any]] = None,
+    *,
+    connector_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Nasconde i token OAuth dallo schema che l'utente dovrebbe compilare a mano."""
+    cfg = dict(server_config or {})
+    if connector_id and not cfg.get("aion_connector_id"):
+        cfg["aion_connector_id"] = connector_id
+    row = resolve_connector_row_for_mcp_server(
+        server_slug, cfg, load_mcp_connector_catalog()
+    )
+    if not connector_requires_oauth(row):
+        return schema
+    return strip_oauth_token_fields_from_schema(
+        schema, extra_keys=oauth_alias_dest_keys(row)
+    )
+
+
 def strip_oauth_token_fields_from_schema(
     schema: List[Dict[str, Any]],
     extra_keys: Optional[Set[str]] = None,

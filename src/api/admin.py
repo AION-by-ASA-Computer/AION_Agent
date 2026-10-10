@@ -1130,8 +1130,16 @@ def _mcp_integration_to_dict(
         enrich_credential_schema_with_env_placeholders,
     )
 
+    from ..runtime.mcp_integration_helpers import strip_oauth_user_fields_for_server
+
     mode = getattr(r, "credential_mode", None) or "none"
     schema = json.loads(r.credential_schema_json or "[]")
+    schema = strip_oauth_user_fields_for_server(
+        schema,
+        r.server_slug,
+        mcp_manager.get_server_config(r.server_slug),
+        connector_id=getattr(r, "aion_connector_id", None),
+    )
     schema = enrich_credential_schema_with_env_placeholders(
         schema, r.server_slug, credential_mode=mode
     )
@@ -1281,7 +1289,18 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
                     credential_schema_from_connector(conn)
                 )
             else:
-                row.credential_schema_json = json.dumps(body.credential_schema)
+                from ..runtime.mcp_integration_helpers import (
+                    strip_oauth_user_fields_for_server,
+                )
+
+                row.credential_schema_json = json.dumps(
+                    strip_oauth_user_fields_for_server(
+                        body.credential_schema,
+                        server_slug,
+                        mcp_manager.get_server_config(server_slug),
+                        connector_id=row.aion_connector_id,
+                    )
+                )
         if body.oauth_config is not None:
             row.oauth_config_json = json.dumps(body.oauth_config)
         if body.user_may_disable is not None:
@@ -1293,7 +1312,16 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
     if body.apply_suggested_env and mode_after in ("per_user", "org_shared"):
         schema_for_env = None
         if body.schema_override and body.credential_schema is not None:
-            schema_for_env = body.credential_schema
+            from ..runtime.mcp_integration_helpers import (
+                strip_oauth_user_fields_for_server,
+            )
+
+            schema_for_env = strip_oauth_user_fields_for_server(
+                body.credential_schema,
+                server_slug,
+                mcp_manager.get_server_config(server_slug),
+                connector_id=getattr(row, "aion_connector_id", None) if row else None,
+            )
         elif row and row.credential_schema_json:
             try:
                 schema_for_env = json.loads(row.credential_schema_json)

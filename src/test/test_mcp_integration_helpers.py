@@ -10,6 +10,7 @@ from src.mcp_connector_catalog import (
 from src.runtime.mcp_integration_helpers import (
     oauth_alias_dest_keys,
     strip_oauth_token_fields_from_schema,
+    strip_oauth_user_fields_for_server,
 )
 
 
@@ -66,6 +67,17 @@ def test_ms365_hides_manual_oauth_token_field():
     ]
     cleaned = strip_oauth_token_fields_from_schema(schema, extra_keys=extra)
     assert [f["key"] for f in cleaned] == ["MS365_MCP_TENANT_ID"]
+
+
+def test_ms365_admin_schema_drops_manual_token_fields():
+    schema = [
+        {"key": "MS365_MCP_OAUTH_TOKEN", "type": "password", "required": True},
+        {"key": "OAUTH_TOKEN", "type": "password", "required": True},
+    ]
+    cleaned = strip_oauth_user_fields_for_server(
+        schema, "ms365", {}, connector_id="ms365"
+    )
+    assert cleaned == []
 
 
 def test_merge_oauth_config_catalog_overrides_bad_discovery():

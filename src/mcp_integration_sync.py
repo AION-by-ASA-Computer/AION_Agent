@@ -317,6 +317,12 @@ def build_integration_preview(
             discovered_schema=discovery.schema,
         )
         mode = credential_mode or infer_credential_mode(cfg, connector_row, discovery)
+        if connector_requires_oauth(connector_row) or _remote_bridge_uses_oauth(
+            cfg, discovery, connector_row
+        ):
+            schema = strip_oauth_token_fields_from_schema(
+                schema, extra_keys=oauth_alias_dest_keys(connector_row)
+            )
         if discovery.config_file_auth and not discovery.has_env_auth and mode == "none":
             warnings_list = validate_policy_vs_registry(
                 server_slug, cfg, mode, credential_schema=schema
@@ -330,7 +336,10 @@ def build_integration_preview(
             warnings_list = validate_policy_vs_registry(
                 server_slug, cfg, mode, credential_schema=schema
             )
-        if discovery.has_env_auth and not schema:
+        oauth_managed = connector_requires_oauth(
+            connector_row
+        ) or _remote_bridge_uses_oauth(cfg, discovery, connector_row)
+        if discovery.has_env_auth and not schema and not oauth_managed:
             warnings_list.append(
                 "Discovery ha trovato env ma schema vuoto — verificare installazione."
             )
@@ -487,6 +496,12 @@ async def sync_mcp_server_config_from_registry(
                     for s in merged
                     if s.get("key") and not str(s["key"]).startswith("AION_USER_")
                 ]
+                if connector_requires_oauth(connector_row) or _remote_bridge_uses_oauth(
+                    raw_cfg, discovery, connector_row
+                ):
+                    merged = strip_oauth_token_fields_from_schema(
+                        merged, extra_keys=oauth_alias_dest_keys(connector_row)
+                    )
                 if merged != current_schema:
                     row.credential_schema_json = json.dumps(merged)
             row.credential_mode = mode
