@@ -104,9 +104,48 @@ async def warm_mcp_at_startup() -> None:
             user_id=user_id,
             tenant_id=tenant_id,
         )
+    await _preload_shared_tool_catalog(user_ids)
     logger.info(
         "MCP startup warm completato (%d server, %d user)", len(servers), len(user_ids)
     )
+
+
+async def _preload_shared_tool_catalog(user_ids: List[str]) -> None:
+    """Fill the list_tools cache for non-session-scoped servers of the default profiles."""
+    from src.agent_profile import profile_manager
+    from src.main import build_mcp_tools
+    from src.mcp_manager import BOOTSTRAP_SESSION_ID, is_session_scoped_server, mcp_manager
+
+    servers: List[str] = []
+    profile_manager.load_all_if_stale()
+    for slug in ("generic_assistant", "aion_std"):
+        profile = profile_manager.get_profile(slug)
+        if not profile:
+            logger.warning("tool catalog preload: profilo %s assente", slug)
+            continue
+        for name in profile.mcp_servers or []:
+            if name in servers or is_session_scoped_server(name):
+                continue
+            servers.append(name)
+    if not servers:
+        return
+    logger.info("tool catalog preload servers=%s", ",".join(servers))
+    for user_id in user_ids:
+        for name in servers:
+            cfg = mcp_manager.get_server_config(name)
+            if not cfg:
+                continue
+            try:
+                await build_mcp_tools(
+                    name, cfg, BOOTSTRAP_SESSION_ID, user_id=user_id
+                )
+            except Exception as exc:
+                logger.warning(
+                    "tool catalog preload failed server=%s user=%s: %s",
+                    name,
+                    user_id,
+                    exc,
+                )
 
 
 def _startup_warm_user_ids() -> List[str]:

@@ -436,7 +436,7 @@ custom_server:
 | `AION_MCP_POOL` | `1` | Pool stdio persistente (obbligatorio per warm) |
 | `AION_MCP_USER_POOL` | `1` | Worker condivisi per utente/tenant tra chat |
 | `AION_MCP_SESSION_ENV_INJECT` | `0` (code) / `1` (env) | Inietta sessione/profilo a ogni `call_tool` |
-| `AION_MCP_SESSION_SCOPED_SERVERS` | `session_sandbox,promo_render,ocr_mcp,skills_hub,memory,aion_subagents` | Server con pool per chat session (sandbox isolati anche con `AION_MCP_USER_POOL=1`) |
+| `AION_MCP_SESSION_SCOPED_SERVERS` | `session_sandbox,promo_render,ocr_mcp,skills_hub,aion_subagents` | Server con pool per chat session (sandbox isolati anche con `AION_MCP_USER_POOL=1`) |
 | `AION_MCP_STARTUP_WARM` | `1` | Warm MCP al boot API |
 | `AION_MCP_STARTUP_WARM_ASYNC` | `0` | `1` = warm in background (healthcheck prima del warm) |
 | `AION_MCP_STARTUP_WARM_PROFILES` | `aion_std,generic_assistant` | CSV profili, o `*` = tutti |

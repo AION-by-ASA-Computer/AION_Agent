@@ -696,7 +696,11 @@ def _register_mcp_tool_function(server_name: str, tool_name: str, session_id: st
 
 
 async def build_mcp_tools(
-    name: str, server_config: Dict[str, Any], session_id: str, user_id: str = "default"
+    name: str,
+    server_config: Dict[str, Any],
+    session_id: str,
+    user_id: str = "default",
+    timings: Optional[Dict[str, Any]] = None,
 ):
     """Discovers tools from an MCP server using the manager and optional sandboxing."""
     discovered_tools = []
@@ -726,13 +730,53 @@ async def build_mcp_tools(
 
     try:
         list_timeout = float(os.getenv("AION_MCP_LIST_TOOLS_TIMEOUT_SEC", "90"))
-        # Session-scoped pool: stesso stdio per tutta la chat (AION_MCP_POOL=1)
-        async with mcp_manager.session_context(
-            name, chat_session_id=session_id
-        ) as session:
-            tools_result = await asyncio.wait_for(
-                session.list_tools(), timeout=list_timeout
+        from src.mcp_manager import is_session_scoped_server
+        from src.runtime.mcp_tool_catalog import mcp_tool_catalog
+
+        tenant_id = (
+            os.getenv("AION_DEFAULT_TENANT_ID") or "default"
+        ).strip() or "default"
+        catalog_key = None
+        cached_specs = None
+        if not is_session_scoped_server(name):
+            catalog_key = mcp_tool_catalog.key(
+                user_id=user_id or "default",
+                tenant_id=tenant_id,
+                server_name=name,
+                server_config=server_config,
             )
+            cached_specs = mcp_tool_catalog.get(catalog_key)
+
+        t_list_start = time.perf_counter()
+        if cached_specs is not None:
+            raw_tools = cached_specs
+            logger.info("mcp_tool_catalog hit server=%s count=%d", name, len(raw_tools))
+        else:
+            # Session-scoped pool: stesso stdio per tutta la chat (AION_MCP_POOL=1)
+            async with mcp_manager.session_context(
+                name, chat_session_id=session_id
+            ) as session:
+                tools_result = await asyncio.wait_for(
+                    session.list_tools(), timeout=list_timeout
+                )
+            raw_tools = []
+            for mcp_tool in tools_result.tools:
+                schema = getattr(mcp_tool, "inputSchema", None) or {
+                    "type": "object",
+                    "properties": {},
+                }
+                if hasattr(schema, "model_dump"):
+                    schema = schema.model_dump()
+                raw_tools.append(
+                    {
+                        "name": mcp_tool.name,
+                        "description": mcp_tool.description or "",
+                        "input_schema": schema,
+                    }
+                )
+            if catalog_key is not None:
+                mcp_tool_catalog.put(catalog_key, raw_tools)
+        t_listed = time.perf_counter()
 
         enabled_tools = server_config.get("enabled_tools")
         enabled_set = (
@@ -745,21 +789,27 @@ async def build_mcp_tools(
             and ("probe" in session_id.lower() or session_id == BOOTSTRAP_SESSION_ID)
         )
 
-        for mcp_tool in tools_result.tools:
+        for spec in raw_tools:
             if (
                 enabled_set is not None
                 and not is_probe
-                and mcp_tool.name not in enabled_set
+                and spec["name"] not in enabled_set
             ):
                 continue
-            fn = _register_mcp_tool_function(name, mcp_tool.name, session_id)
+            fn = _register_mcp_tool_function(name, spec["name"], session_id)
             haystack_tool = Tool(
-                name=mcp_tool.name,
-                description=mcp_tool.description or f"MCP Tool: {mcp_tool.name}",
+                name=spec["name"],
+                description=spec["description"] or f"MCP Tool: {spec['name']}",
                 function=fn,
-                parameters=mcp_tool.inputSchema,
+                parameters=spec["input_schema"],
             )
             discovered_tools.append(haystack_tool)
+        if timings is not None:
+            per_server = timings.setdefault("list_tools_ms", {})
+            per_server[name] = int(round((t_listed - t_list_start) * 1000))
+            timings["wrapper_ms"] = int(timings.get("wrapper_ms") or 0) + int(
+                round((time.perf_counter() - t_listed) * 1000)
+            )
 
         filter_note = (
             f" (filtered to {len(discovered_tools)} enabled)"
@@ -864,7 +914,12 @@ def _build_chat_generation_kwargs() -> Tuple[Dict[str, Any], str]:
     return gen_kw, cache_sig
 
 
-async def build_all_tools(session_id: str, profile, user_id: str = "default"):
+async def build_all_tools(
+    session_id: str,
+    profile,
+    user_id: str = "default",
+    timings: Optional[Dict[str, Any]] = None,
+):
     """Build tools: delegation legacy, tool nativi da registry, poi MCP."""
     from .runtime.orchestration_tools import (
         ORCHESTRATION_BUILTIN_SERVER,
@@ -875,7 +930,10 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
     _purge_aion_mcp_tool_functions(session_id)
     all_tools = []
 
-    if "aion_subagents" in profile.mcp_servers:
+    from src.runtime.tool_exposure import resident_mcp_servers
+
+    resident_slugs = set(resident_mcp_servers(profile.mcp_servers or []))
+    if "aion_subagents" in resident_slugs:
         from .runtime.subagent_tools import get_delegation_tool
 
         all_tools.append(get_delegation_tool(session_id, user_id))
@@ -925,7 +983,7 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
     except Exception as ex:
         logger.debug("MCP user preference filter skipped: %s", ex)
 
-    profile_slugs = set(profile.mcp_servers or [])
+    profile_slugs = resident_slugs
 
     mcp_discover_names = [
         server_name
@@ -942,7 +1000,11 @@ async def build_all_tools(session_id: str, profile, user_id: str = "default"):
             )
             return []
         return await build_mcp_tools(
-            server_name, server_config, session_id, user_id=user_id
+            server_name,
+            server_config,
+            session_id,
+            user_id=user_id,
+            timings=timings,
         )
 
     if mcp_discover_names:
@@ -1011,6 +1073,7 @@ async def get_agent(
     Con AION_AGENT_CACHE=1 riusa agente + tool discovery per la stessa tripletta
     (session_id, profilo, user_id) cosÃ¬ i worker MCP restano caldi e non si ripete il log di init.
     """
+    build_t0 = time.perf_counter()
     logger.info(
         "agent_build_start profile=%s session=%s user=%s",
         profile_name,
@@ -1148,6 +1211,10 @@ async def get_agent(
             gen_kw=gen_kw,
             skill_prompt_mode=skill_prompt_mode,
             llm_provider_name=llm_provider_name,
+            phases={
+                "t0": build_t0,
+                "profile_ms": int(round((time.perf_counter() - build_t0) * 1000)),
+            },
         )
     except BaseException as exc:
         if build_leader and build_waiter is not None and not build_waiter.done():
@@ -1174,16 +1241,26 @@ async def _finish_get_agent_build(
     gen_kw: Dict[str, Any],
     skill_prompt_mode: str,
     llm_provider_name: Optional[str] = None,
+    phases: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Any, str]:
+    phases = phases or {}
+    build_timings: Dict[str, Any] = {"list_tools_ms": {}, "wrapper_ms": 0}
+    from src.runtime.tool_exposure import resident_mcp_servers
+
+    warm_servers = resident_mcp_servers(profile.mcp_servers or [])
+    t_warm = time.perf_counter()
     # Pre-avvio MCP stdio del profilo (pool per sessione), poi discovery tool
     await mcp_manager.warm_session(
         session_id,
-        profile.mcp_servers,
+        warm_servers,
         profile_slug=profile.slug,
         user_id=user_id,
         tenant_id=tenant_id,
     )
-    tools = await build_all_tools(session_id, profile, user_id=user_id)
+    phases["warm_ms"] = int(round((time.perf_counter() - t_warm) * 1000))
+    tools = await build_all_tools(
+        session_id, profile, user_id=user_id, timings=build_timings
+    )
 
     # 5. Plan Mode: rimuovi fisicamente i tool mutanti dalla lista passata al LLM.
     # Il blocco avviene a livello di protocollo (il LLM non vede i tool nella sua context window),
@@ -1523,7 +1600,25 @@ async def _finish_get_agent_build(
             "Using env-based LiteLLMChatGeneratorWrapper for model: %s", llm_model
         )
 
+    from src.runtime.tool_exposure import (
+        defer_tool_groups_enabled,
+        make_activate_tool_group_tool,
+        select_resident_tools,
+    )
+
+    if defer_tool_groups_enabled():
+        tools = select_resident_tools(tools)
+        tools.append(
+            make_activate_tool_group_tool(
+                session_id=session_id,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                profile=profile,
+            )
+        )
+
     # 3. Inizializza l'Agente Haystack (skill: index o full via AION_SKILL_SYSTEM_PROMPT_MODE)
+    t_prompt = time.perf_counter()
     _prompt_provider = ""
     _prompt_model = llm_model
     if provider_loaded and row is not None:
@@ -1567,6 +1662,7 @@ async def _finish_get_agent_build(
             "2. Explain fixes in detail before applying changes.\n"
             "3. Understand the problem fully before rushing corrective actions."
         )
+    phases["prompt_ms"] = int(round((time.perf_counter() - t_prompt) * 1000))
 
     # Datasource workflow lives in skill `datasource_memory_protocol` (critical_skills);
     # avoid duplicating the same 6-step block via runtime overlay.
@@ -1762,6 +1858,7 @@ async def _finish_get_agent_build(
 
     from src.runtime.tool_error_recovery import get_default_agent_hooks
 
+    t_agent = time.perf_counter()
     agent = create_aion_agent(
         chat_generator=chat_generator,
         tools=tools,
@@ -1772,14 +1869,28 @@ async def _finish_get_agent_build(
         ),
         hooks=get_default_agent_hooks(),
     )
+    phases["agent_ms"] = int(round((time.perf_counter() - t_agent) * 1000))
 
     pair = (agent, profile.slug)
+    t0 = phases.get("t0")
+    total_ms = int(round((time.perf_counter() - t0) * 1000)) if t0 else 0
+    list_tools_ms = build_timings.get("list_tools_ms") or {}
+    list_tools_fmt = ",".join(
+        f"{name}={ms}" for name, ms in sorted(list_tools_ms.items())
+    )
     logger.info(
-        "agent_build_complete profile=%s session=%s tools_count=%d model=%s",
+        "agent_build_done profile=%s session=%s profile_ms=%s warm_ms=%s "
+        "list_tools_ms=%s wrapper_ms=%s prompt_ms=%s agent_ms=%s total_ms=%s tools=%d",
         profile.slug,
         session_id,
+        phases.get("profile_ms", 0),
+        phases.get("warm_ms", 0),
+        list_tools_fmt or "-",
+        build_timings.get("wrapper_ms", 0),
+        phases.get("prompt_ms", 0),
+        phases.get("agent_ms", 0),
+        total_ms,
         len(tools),
-        getattr(chat_generator, "model", llm_model),
     )
     if _AGENT_CACHE_ENABLED:
         async with _AGENT_CACHE_LOCK:

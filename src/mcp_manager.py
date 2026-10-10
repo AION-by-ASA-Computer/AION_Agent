@@ -92,6 +92,11 @@ _DEFAULT_SESSION_SCOPED_SERVERS = frozenset(
 )
 
 
+def is_session_scoped_server(server_name: str) -> bool:
+    """Servers with a worker per chat. Their list_tools payloads are not shared."""
+    return (server_name or "") in _session_scoped_servers()
+
+
 def _user_pool_enabled() -> bool:
     try:
         from .settings import get_settings

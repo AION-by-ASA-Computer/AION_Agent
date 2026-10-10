@@ -519,7 +519,7 @@ _MCP_POOL_ENV_DEFAULTS: dict[str, str] = {
     "AION_MCP_USER_POOL": "1",
     "AION_MCP_SESSION_ENV_INJECT": "0",
     "AION_MCP_SESSION_SCOPED_SERVERS": (
-        "session_sandbox,promo_render,ocr,ocr_mcp,skills_hub,memory,aion_subagents"
+        "session_sandbox,promo_render,ocr,ocr_mcp,skills_hub,aion_subagents"
     ),
     "AION_MCP_STARTUP_WARM": "1",
     "AION_MCP_STARTUP_WARM_ASYNC": "0",

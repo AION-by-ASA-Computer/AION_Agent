@@ -23,6 +23,12 @@ from src.mcp_registry_io import load_registry_file  # noqa: E402
 
 _SKIP_KEYS = frozenset({"_removed"})
 
+# Slugs removed from the product. Upgrade must delete them from local registries.
+# Marketplace servers that are not in this set are left untouched.
+RETIRED_MCP_SLUGS = frozenset(
+    {"mempalace", "memory", "sql_query_memory", "sqlquerymemory"}
+)
+
 
 def merge_mcp_registry_from_std(
     *,
@@ -54,33 +60,89 @@ def merge_mcp_registry_from_std(
         for slug in sorted(std.keys())
         if slug not in _SKIP_KEYS and slug not in local
     ]
-    if not missing:
+    retired = sorted(slug for slug in local if slug in RETIRED_MCP_SLUGS)
+    skill_write_off = _disable_skill_write(local)
+    for overlay in _overlay_paths(root):
+        retired.extend(_strip_retired(overlay, dry_run=dry_run))
+        if overlay.is_file() and not dry_run:
+            overlay_data = load_registry_file(str(overlay))
+            if _disable_skill_write(overlay_data):
+                _write_registry(overlay, overlay_data)
+                skill_write_off = True
+        elif overlay.is_file() and dry_run:
+            if _disable_skill_write(load_registry_file(str(overlay))):
+                skill_write_off = True
+
+    if not missing and not retired and not skill_write_off:
         print("MCP registry: nessuna voce mancante da config_std.")
         return []
 
-    print(f"MCP registry: aggiungo {len(missing)} voce/i da config_std: {', '.join(missing)}")
+    if missing:
+        print(
+            "MCP registry: aggiungo "
+            f"{len(missing)} voce/i da config_std: {', '.join(missing)}"
+        )
+    if retired:
+        print(f"MCP registry: rimuovo slug ritirati: {', '.join(retired)}")
+    if skill_write_off:
+        print("MCP registry: AION_SKILL_WRITE_ENABLED=0 su skills_hub.")
     if dry_run:
         return missing
 
-    blocks: list[str] = []
+    for slug in retired:
+        local.pop(slug, None)
     for slug in missing:
-        payload = {slug: std[slug]}
-        block = yaml.safe_dump(
-            payload,
+        local[slug] = std[slug]
+    _write_registry(dst_path, local)
+    return missing
+
+
+def _disable_skill_write(data: dict) -> bool:
+    """Turn off the old skills_hub default that wrote curated skills during chat."""
+    hub = data.get("skills_hub")
+    if not isinstance(hub, dict):
+        return False
+    env = hub.get("env")
+    if not isinstance(env, dict):
+        return False
+    current = str(env.get("AION_SKILL_WRITE_ENABLED", "0")).strip().lower()
+    if current not in ("1", "true", "yes", "on"):
+        return False
+    env["AION_SKILL_WRITE_ENABLED"] = "0"
+    return True
+
+
+def _overlay_paths(root: Path) -> list[Path]:
+    return [
+        root / "config" / "mcp_registry.local.yaml",
+        root / "data" / "mcp_registry.local.yaml",
+    ]
+
+
+def _strip_retired(path: Path, *, dry_run: bool) -> list[str]:
+    if not path.is_file():
+        return []
+    data = load_registry_file(str(path))
+    retired = sorted(slug for slug in data if slug in RETIRED_MCP_SLUGS)
+    if not retired or dry_run:
+        return retired
+    for slug in retired:
+        data.pop(slug, None)
+    _write_registry(path, data)
+    return retired
+
+
+def _write_registry(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(
+            data,
             allow_unicode=True,
             sort_keys=False,
             default_flow_style=False,
-        ).rstrip()
-        blocks.append(block)
-
-    separator = "\n\n" if dst_path.stat().st_size > 0 else ""
-    with dst_path.open("a", encoding="utf-8") as fh:
-        if separator:
-            fh.write(separator)
-        fh.write("\n\n".join(blocks))
-        fh.write("\n")
-
-    return missing
+        ),
+        encoding="utf-8",
+    )
 
 
 def main() -> None:

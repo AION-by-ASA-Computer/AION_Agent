@@ -66,7 +66,7 @@ skills_hub:
   args: ["-u", "skills_hub/server.py"]
   description: "Ricerca e lettura on-demand delle skill AION (progressive disclosure)"
   env:
-    AION_SKILL_WRITE_ENABLED: "1"
+    AION_SKILL_WRITE_ENABLED: "0"
     # 1 = skill_view/skill_list solo per skill in profile.skills (allineato a src/runtime/skill_profile_gate.py)
     AION_SKILL_VIEW_ENFORCE_PROFILE: "1"
 

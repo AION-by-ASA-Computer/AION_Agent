@@ -186,7 +186,7 @@ class AionSettings(BaseSettings):
         ),
     )
     mcp_session_scoped_servers: str = Field(
-        "session_sandbox,promo_render,ocr,ocr_mcp,skills_hub,memory,aion_subagents",
+        "session_sandbox,promo_render,ocr,ocr_mcp,skills_hub,aion_subagents",
         description=(
             "Comma-separated MCP server names that get a dedicated worker per "
             "chat session (they read AION_CHAT_SESSION_ID at runtime)."
