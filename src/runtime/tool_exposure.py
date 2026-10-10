@@ -201,11 +201,11 @@ def make_activate_tool_group_tool(
                 tools = await _mcp_group_tools(
                     gid, session_id, user_id, tenant_id, profile
                 )
-        if not tools:
-            return f"Error: group '{gid}' produced no tools."
-        attached = publish_tools(tools, session_id=session_id)
-        names = ", ".join(getattr(t, "name", "") for t in attached)
-        return f"Activated group '{gid}'. Tools now available: {names}."
+            if not tools:
+                return f"Error: group '{gid}' produced no tools."
+            attached = publish_tools(tools, session_id=session_id)
+            names = ", ".join(getattr(t, "name", "") for t in attached)
+            return f"Activated group '{gid}'. Tools now available: {names}."
 
         return _run_on_agent_loop(_activate())
 

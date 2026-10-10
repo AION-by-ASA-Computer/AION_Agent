@@ -695,6 +695,22 @@ def _register_mcp_tool_function(server_name: str, tool_name: str, session_id: st
     return fn
 
 
+def _keep_session_profile(session_id: str, user_id: str) -> None:
+    """Do not replace a profile already bound by warm_session."""
+    uid = user_id or "default"
+    existing = mcp_manager.get_session_context(session_id)
+    if existing is None:
+        mcp_manager.set_session_context(
+            session_id, ("generic_assistant", uid, "default")
+        )
+        return
+    if existing.user_id != uid:
+        mcp_manager.set_session_context(
+            session_id,
+            (existing.profile_slug, uid, existing.tenant_id),
+        )
+
+
 async def build_mcp_tools(
     name: str,
     server_config: Dict[str, Any],
@@ -724,9 +740,7 @@ async def build_mcp_tools(
         return build_orchestration_haystack_tools(session_id, user_id)
 
     if session_id:
-        mcp_manager.set_session_context(
-            session_id, ("generic_assistant", user_id or "default", "default")
-        )
+        _keep_session_profile(session_id, user_id)
 
     try:
         list_timeout = float(os.getenv("AION_MCP_LIST_TOOLS_TIMEOUT_SEC", "90"))
