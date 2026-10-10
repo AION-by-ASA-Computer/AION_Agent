@@ -188,7 +188,16 @@ def classify_mcp_error(
             "hint": f"Ensure '{cmd or 'runtime'}' and required dependencies are installed on the server and available in PATH.",
         }
 
-    # 3. Authentication / Unauthorized
+    # 3. Per-user OAuth not connected yet (stdio catalog servers such as ms365).
+    if "credenziali mancanti" in low:
+        return {
+            "error_type": "auth_failed",
+            "category": "Authentication Required",
+            "error": "Questo utente non ha ancora collegato l'account.",
+            "hint": "Apri Integrazioni in chat e premi Connetti. Il token non va scritto nel MCP Hub.",
+        }
+
+    # 4. Authentication / Unauthorized
     if (
         "401" in low
         or "403" in low
@@ -207,7 +216,7 @@ def classify_mcp_error(
             "hint": "Verify credentials in MCP Hub (Org env) or user profile integrations.",
         }
 
-    # 4. Process crash / Syntax error / Script failure
+    # 5. Process crash / Syntax error / Script failure
     if (
         "exit code" in low
         or "closed" in low
@@ -223,7 +232,7 @@ def classify_mcp_error(
             "hint": "Check server command line arguments, runtime parameters, and server logs.",
         }
 
-    # 5. General error
+    # 6. General error
     return {
         "error_type": "general_error",
         "category": "MCP Connection Error",

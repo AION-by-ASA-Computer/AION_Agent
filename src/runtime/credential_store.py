@@ -890,4 +890,50 @@ async def resolve_mcp_env_for_user(
             out[k] = val
         else:
             out[k] = v
+    if not is_probe:
+        await _fill_oauth_alias_env(
+            out, user_id=user_id, tenant_id=tenant_id, server_slug=server_slug
+        )
     return out
+
+
+def _env_slot_filled(val: Any) -> bool:
+    if val is None:
+        return False
+    text = str(val).strip()
+    return bool(text) and not text.startswith("${")
+
+
+async def _fill_oauth_alias_env(
+    env: Dict[str, Any],
+    *,
+    user_id: str,
+    tenant_id: str,
+    server_slug: str,
+) -> None:
+    """Copia OAUTH_TOKEN nella variabile che il processo MCP legge davvero."""
+    from src.mcp_connector_catalog import (
+        _parse_runtime_env_alias_entries,
+        load_mcp_connector_catalog,
+        resolve_connector_row_for_mcp_server,
+    )
+
+    catalog = load_mcp_connector_catalog()
+    row = resolve_connector_row_for_mcp_server(server_slug, {}, catalog)
+    if not row:
+        return
+    for dest, sources in _parse_runtime_env_alias_entries(
+        row.get("runtime_env_aliases")
+    ):
+        if _env_slot_filled(env.get(dest)):
+            continue
+        for src in sources:
+            if _env_slot_filled(env.get(src)):
+                env[dest] = env[src]
+                break
+            val = await get_credential(
+                user_id or "default", server_slug, src, tenant_id=tenant_id
+            )
+            if val:
+                env[dest] = normalize_inline_secret(val, cred_key=src)
+                break

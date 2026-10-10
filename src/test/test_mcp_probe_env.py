@@ -45,6 +45,52 @@ def test_normalize_inline_secret_only_for_bearer_keys():
     )
 
 
+def test_missing_user_oauth_points_to_connect():
+    classified = classify_mcp_error(
+        "credenziali mancanti per ms365 (MS365_MCP_OAUTH_TOKEN)"
+    )
+    assert classified["error_type"] == "auth_failed"
+    assert "Connetti" in classified["hint"]
+
+
+def test_ms365_oauth_token_fills_process_env():
+    import asyncio
+
+    from src.runtime import credential_store as store
+
+    async def fake_get(
+        user_id,
+        server_slug,
+        key,
+        *,
+        tenant_id="default",
+        auto_refresh_oauth=True,
+    ):
+        if key == "OAUTH_TOKEN" and server_slug == "ms365":
+            return "graph-access-token"
+        return None
+
+    async def run():
+        original = store.get_credential
+        store.get_credential = fake_get
+        try:
+            return await store.resolve_mcp_env_for_user(
+                {
+                    "MS365_MCP_OAUTH_TOKEN": (
+                        "${AION_USER_MS365__MS365_MCP_OAUTH_TOKEN}"
+                    )
+                },
+                user_id="alice",
+                tenant_id="default",
+                server_slug="ms365",
+            )
+        finally:
+            store.get_credential = original
+
+    env = asyncio.run(run())
+    assert env["MS365_MCP_OAUTH_TOKEN"] == "graph-access-token"
+
+
 def test_badly_formatted_authorization_is_auth_failure():
     classified = classify_mcp_error(
         "bad request: Authorization header is badly formatted"
