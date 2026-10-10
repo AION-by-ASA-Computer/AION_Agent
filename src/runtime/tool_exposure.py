@@ -201,11 +201,11 @@ def make_activate_tool_group_tool(
                 tools = await _mcp_group_tools(
                     gid, session_id, user_id, tenant_id, profile
                 )
-            if not tools:
-                return f"Error: group '{gid}' produced no tools."
-            attached = publish_tools(tools)
-            names = ", ".join(getattr(t, "name", "") for t in attached)
-            return f"Activated group '{gid}'. Tools now available: {names}."
+        if not tools:
+            return f"Error: group '{gid}' produced no tools."
+        attached = publish_tools(tools, session_id=session_id)
+        names = ", ".join(getattr(t, "name", "") for t in attached)
+        return f"Activated group '{gid}'. Tools now available: {names}."
 
         return _run_on_agent_loop(_activate())
 
@@ -276,12 +276,16 @@ async def _mcp_group_tools(
     return list(built or [])
 
 
-def publish_tools(extra: Iterable[Any]) -> List[Any]:
-    """Append tools to the live agent and to the current Haystack execution inputs."""
+def publish_tools(extra: Iterable[Any], *, session_id: str = "") -> List[Any]:
+    """Append tools to the live agent and to the current Haystack execution inputs.
+
+    The tool runs on the API loop. The execution context lives on the agent
+    thread, so it is read from the turn registry, not from a ContextVar.
+    """
     from src.runtime.turn_compaction import _agent_exec_ctx, resolve_turn_runtime
 
     attached: List[Any] = []
-    rt = resolve_turn_runtime()
+    rt = resolve_turn_runtime(session_id or None)
     agent = rt.get("agent") if isinstance(rt, dict) else None
     current: List[Any] = list(getattr(agent, "tools", None) or []) if agent else []
     names = {getattr(t, "name", None) for t in current}
@@ -294,7 +298,9 @@ def publish_tools(extra: Iterable[Any]) -> List[Any]:
         attached.append(tool)
     if agent is not None:
         agent.tools = current
-    exec_ctx = _agent_exec_ctx.get() if _agent_exec_ctx is not None else None
+    exec_ctx = rt.get("agent_exec_ctx") if isinstance(rt, dict) else None
+    if exec_ctx is None and _agent_exec_ctx is not None:
+        exec_ctx = _agent_exec_ctx.get()
     if exec_ctx is not None and current:
         gen_inputs = getattr(exec_ctx, "chat_generator_inputs", None)
         if isinstance(gen_inputs, dict):

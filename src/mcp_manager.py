@@ -1585,6 +1585,20 @@ class MCPManager:
                 exc,
             )
 
+    def _profile_mcp_servers(self, profile_slug: str) -> Optional[set]:
+        """Server MCP del profilo. None se il profilo non si riesce a leggere."""
+        try:
+            from .agent_profile import profile_manager
+
+            profile_manager.load_all_if_stale()
+            profile = profile_manager.get_profile(profile_slug)
+        except Exception as exc:
+            logger.debug("profile mcp servers %s: %s", profile_slug, exc)
+            return None
+        if profile is None:
+            return None
+        return {name for name in (profile.mcp_servers or []) if name}
+
     async def warm_session(
         self,
         chat_session_id: str,
@@ -1624,33 +1638,37 @@ class MCPManager:
         except Exception as e:
             logger.warning("Failed to initialize health metrics in warm_session: %s", e)
 
-        # Rilascia worker non più nel profilo (session-scoped o user-pool condiviso).
+        # Un warm parziale (activate_tool_group di un solo server) non è un
+        # cambio profilo: i worker già accesi di questa chat restano fino
+        # all'idle del pool. Si spengono solo i server assenti dal profilo
+        # nuovo, e solo su questa sessione.
         try:
+            profile_changed = bool(
+                old_profile_slug and old_profile_slug != profile_slug
+            )
+            allowed: Optional[set] = None
+            if profile_changed:
+                allowed = self._profile_mcp_servers(profile_slug)
+                if allowed is None:
+                    logger.warning(
+                        "Cambio profilo %s -> %s senza elenco MCP: non spengo i worker di %s",
+                        old_profile_slug,
+                        profile_slug,
+                        chat_session_id[:8],
+                    )
+                    profile_changed = False
             to_stop = []
-            user_pool_key = f"__user__{sanitize_user_id(user_id)}__{(tenant_id or 'default').strip() or 'default'}"
-            async with self._pool_lock:
-                for (sid, sname), worker in list(self._pool.items()):
-                    if sid == chat_session_id:
-                        if sname not in server_names:
+            if profile_changed and allowed is not None:
+                async with self._pool_lock:
+                    for (sid, sname), worker in list(self._pool.items()):
+                        if sid == chat_session_id and sname not in allowed:
                             to_stop.append((sid, sname))
-                        elif old_profile_slug and old_profile_slug != profile_slug:
-                            to_stop.append((sid, sname))
-                    elif sid == user_pool_key and sname not in server_names:
-                        # Worker user-pool restano caldi tra profili/chat (startup warm).
-                        pass
-                    elif not str(sid).startswith("__user__"):
-                        ctx = self._session_ctx.get(sid)
-                        if ctx:
-                            if len(ctx) == 2:
-                                p_slug, uid = ctx
-                            else:
-                                p_slug, uid, _tid = ctx
-                            if uid == user_id and p_slug != profile_slug:
-                                to_stop.append((sid, sname))
 
             for sid, sname in to_stop:
                 logger.info(
-                    "Profilo cambiato: rilascio worker '%s' della sessione '%s' non più presente/attivo",
+                    "Profilo cambiato %s -> %s: rilascio worker '%s' della sessione '%s'",
+                    old_profile_slug,
+                    profile_slug,
                     sname,
                     sid,
                 )
