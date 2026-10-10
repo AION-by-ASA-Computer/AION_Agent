@@ -1666,26 +1666,41 @@ class MCPManager:
             if not self._is_stdio_server(name):
                 return
             pool_sid = self._resolve_pool_key(chat_session_id, name)[0]
-            if self._warm_circuit_open(pool_sid, name):
-                msg = self._warm_failure_message(pool_sid, name)
-                logger.debug(
-                    "MCP warm skip (circuit) server=%s pool=%s",
-                    name,
-                    pool_sid[:16],
-                )
+            if self._is_server_healthy(chat_session_id, name):
+                self._clear_warm_failure(pool_sid, name)
                 try:
-                    from .runtime.mcp_health import record_mcp_load_error
+                    from .runtime.mcp_health import clear_mcp_load_errors
 
-                    record_mcp_load_error(chat_session_id, name, msg)
+                    clear_mcp_load_errors(chat_session_id, name)
                 except Exception:
                     pass
-                return
-            if self._is_server_healthy(chat_session_id, name):
                 key = self._resolve_pool_key(chat_session_id, name)
                 worker = self._pool.get(key)
                 if worker is not None:
                     worker.last_access = asyncio.get_event_loop().time()
                 return
+            if self._warm_circuit_open(pool_sid, name):
+                msg = self._warm_failure_message(pool_sid, name)
+                if "credenziali mancanti" in msg:
+                    still_missing = await self._warm_credentials_missing(
+                        chat_session_id, name
+                    )
+                    if not still_missing:
+                        self._clear_warm_failure(pool_sid, name)
+                        msg = ""
+                if msg:
+                    logger.debug(
+                        "MCP warm skip (circuit) server=%s pool=%s",
+                        name,
+                        pool_sid[:16],
+                    )
+                    try:
+                        from .runtime.mcp_health import record_mcp_load_error
+
+                        record_mcp_load_error(chat_session_id, name, msg)
+                    except Exception:
+                        pass
+                    return
             cfg = self.get_server_config(name)
             if cfg:
                 missing = self.stdio_entrypoint_missing(name, cfg)
@@ -1859,6 +1874,9 @@ class MCPManager:
             from .runtime.mcp_health import clear_mcp_load_errors
 
             clear_mcp_load_errors(sid, server_name)
+            self._clear_warm_failure(
+                self._resolve_pool_key(sid, server_name)[0], server_name
+            )
             return result
         except (TimeoutError, asyncio.TimeoutError):
             await self.restart_worker(sid, server_name)
