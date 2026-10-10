@@ -26,6 +26,7 @@ from ..runtime.mcp_health import (
     classify_mcp_error,
     clear_mcp_load_errors,
     get_last_mcp_load_errors,
+    merge_probe_env,
 )
 
 
@@ -46,7 +47,7 @@ except ImportError:
     pass
 from ..agent_pipeline import AgentPipeline
 from ..main import get_agent, set_event_loop
-from .auth_login import require_admin_role
+from .auth_login import ChatAuthIdentity, require_admin_role
 from .settings_api import router as settings_router
 
 from .ltm_admin import router as ltm_admin_router
@@ -1129,8 +1130,16 @@ def _mcp_integration_to_dict(
         enrich_credential_schema_with_env_placeholders,
     )
 
+    from ..runtime.mcp_integration_helpers import strip_oauth_user_fields_for_server
+
     mode = getattr(r, "credential_mode", None) or "none"
     schema = json.loads(r.credential_schema_json or "[]")
+    schema = strip_oauth_user_fields_for_server(
+        schema,
+        r.server_slug,
+        mcp_manager.get_server_config(r.server_slug),
+        connector_id=getattr(r, "aion_connector_id", None),
+    )
     schema = enrich_credential_schema_with_env_placeholders(
         schema, r.server_slug, credential_mode=mode
     )
@@ -1280,7 +1289,18 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
                     credential_schema_from_connector(conn)
                 )
             else:
-                row.credential_schema_json = json.dumps(body.credential_schema)
+                from ..runtime.mcp_integration_helpers import (
+                    strip_oauth_user_fields_for_server,
+                )
+
+                row.credential_schema_json = json.dumps(
+                    strip_oauth_user_fields_for_server(
+                        body.credential_schema,
+                        server_slug,
+                        mcp_manager.get_server_config(server_slug),
+                        connector_id=row.aion_connector_id,
+                    )
+                )
         if body.oauth_config is not None:
             row.oauth_config_json = json.dumps(body.oauth_config)
         if body.user_may_disable is not None:
@@ -1292,7 +1312,16 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
     if body.apply_suggested_env and mode_after in ("per_user", "org_shared"):
         schema_for_env = None
         if body.schema_override and body.credential_schema is not None:
-            schema_for_env = body.credential_schema
+            from ..runtime.mcp_integration_helpers import (
+                strip_oauth_user_fields_for_server,
+            )
+
+            schema_for_env = strip_oauth_user_fields_for_server(
+                body.credential_schema,
+                server_slug,
+                mcp_manager.get_server_config(server_slug),
+                connector_id=getattr(row, "aion_connector_id", None) if row else None,
+            )
         elif row and row.credential_schema_json:
             try:
                 schema_for_env = json.loads(row.credential_schema_json)
@@ -2970,7 +2999,10 @@ async def install_mcp_from_catalog_endpoint(connector_id: str):
 
 
 @router.post("/mcp/{name}/probe")
-async def probe_mcp_server(name: str):
+async def probe_mcp_server(
+    name: str,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+):
     """Esegue list_tools sul server MCP (handshake) per validazione post-install."""
     from ..main import build_mcp_tools
 
@@ -3015,22 +3047,39 @@ async def probe_mcp_server(name: str):
     await mcp_manager.release_session("mcp-probe")
 
     try:
-        # Per i server in modalità per-utente (${AION_USER_...}), iniettiamo valori fittizi di test
-        # con tipo semantico coerente (porta, email, booleani, rate limit) per consentire l'handshake e list_tools
-        probe_cfg = dict(cfg)
-        if "env" in probe_cfg and isinstance(probe_cfg["env"], dict):
-            from src.runtime.credential_store import generate_probe_mock_value
+        from src.identity import sanitize_user_id
+        from src.runtime.credential_store import resolve_mcp_env_for_user
 
-            mock_env = {}
-            for k, v in probe_cfg["env"].items():
-                if isinstance(v, str) and "${AION_USER_" in v:
-                    mock_env[k] = generate_probe_mock_value(k)
-                else:
-                    mock_env[k] = v
-            probe_cfg["env"] = mock_env
+        probe_user_id = sanitize_user_id(auth.identifier or auth.user_row_id or None)
+        probe_cfg = dict(cfg)
+        template_env = (
+            probe_cfg.get("env") if isinstance(probe_cfg.get("env"), dict) else {}
+        )
+        resolved_env = await resolve_mcp_env_for_user(
+            template_env,
+            user_id=probe_user_id,
+            tenant_id="default",
+            server_slug=name,
+        )
+        probe_env, missing_secrets = merge_probe_env(template_env, resolved_env)
+        if missing_secrets:
+            return {
+                "ok": False,
+                "server_slug": name,
+                "error_type": "auth_failed",
+                "error": "Per-user OAuth or API secret is not available for this admin user.",
+                "hint": (
+                    "Connect the integration in chat-ui with the same user that is "
+                    "running this probe. The probe no longer sends a placeholder token."
+                ),
+                "tools": [],
+                "tool_count": 0,
+            }
+        if template_env:
+            probe_cfg["env"] = probe_env
 
         tools = await build_mcp_tools(
-            name, probe_cfg, session_id="mcp-probe", user_id="admin-probe"
+            name, probe_cfg, session_id="mcp-probe", user_id=probe_user_id
         )
 
         enabled_tools_list = cfg.get("enabled_tools")

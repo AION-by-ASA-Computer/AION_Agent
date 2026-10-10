@@ -81,6 +81,20 @@ def test_github_oauth_config_from_catalog():
     assert oauth.get("client_credentials_required") is True
 
 
+def test_ms365_oauth_config_from_catalog():
+    catalog = load_mcp_connector_catalog()
+    row = _connector_by_id(catalog, "ms365")
+    assert row is not None
+    assert row.get("install_type") == "stdio"
+    assert row.get("auth_type") == "oauth2"
+    oauth = oauth_config_from_connector(row)
+    assert oauth["authorization_server"] == "https://login.microsoftonline.com/common/v2.0"
+    assert oauth["token_url"].endswith("/oauth2/v2.0/token")
+    assert oauth.get("client_credentials_required") is True
+    assert "offline_access" in oauth["scopes"]
+    assert "https://graph.microsoft.com/Mail.Read" in oauth["scopes"]
+
+
 def test_sharepoint_oauth_resolves_tenant_from_remote_url():
     catalog = load_mcp_connector_catalog()
     row = _connector_by_id(catalog, "microsoft_sharepoint")

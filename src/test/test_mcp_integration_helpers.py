@@ -1,11 +1,17 @@
 """Public integration dict helpers (OAuth remote MCP)."""
 
 from src.mcp_connector_catalog import (
+    _connector_by_id,
+    load_mcp_connector_catalog,
     merge_oauth_config,
     oauth_config_from_connector,
     oauth_ui_metadata_from_connector,
 )
-from src.runtime.mcp_integration_helpers import strip_oauth_token_fields_from_schema
+from src.runtime.mcp_integration_helpers import (
+    oauth_alias_dest_keys,
+    strip_oauth_token_fields_from_schema,
+    strip_oauth_user_fields_for_server,
+)
 
 
 def test_oauth_ui_metadata_from_catalog_row():
@@ -47,6 +53,31 @@ def test_strip_oauth_token_fields():
     ]
     cleaned = strip_oauth_token_fields_from_schema(schema)
     assert [f["key"] for f in cleaned] == ["API_KEY"]
+
+
+def test_ms365_hides_manual_oauth_token_field():
+    row = _connector_by_id(load_mcp_connector_catalog(), "ms365")
+    assert row is not None
+    extra = oauth_alias_dest_keys(row)
+    assert "MS365_MCP_OAUTH_TOKEN" in extra
+    schema = [
+        {"key": "OAUTH_TOKEN", "type": "oauth"},
+        {"key": "MS365_MCP_OAUTH_TOKEN", "type": "password"},
+        {"key": "MS365_MCP_TENANT_ID", "type": "text"},
+    ]
+    cleaned = strip_oauth_token_fields_from_schema(schema, extra_keys=extra)
+    assert [f["key"] for f in cleaned] == ["MS365_MCP_TENANT_ID"]
+
+
+def test_ms365_admin_schema_drops_manual_token_fields():
+    schema = [
+        {"key": "MS365_MCP_OAUTH_TOKEN", "type": "password", "required": True},
+        {"key": "OAUTH_TOKEN", "type": "password", "required": True},
+    ]
+    cleaned = strip_oauth_user_fields_for_server(
+        schema, "ms365", {}, connector_id="ms365"
+    )
+    assert cleaned == []
 
 
 def test_merge_oauth_config_catalog_overrides_bad_discovery():

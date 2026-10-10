@@ -13,6 +13,7 @@ from src.data.engine import get_async_session_maker
 from src.data.ids import new_uuid7_str
 from src.data.models import McpServerConfig, UserMcpCredential, UserMcpPreference
 from src.mcp_connector_catalog import (
+    _parse_runtime_env_alias_entries,
     connector_requires_oauth,
     load_mcp_connector_catalog,
     merge_oauth_config,
@@ -30,10 +31,48 @@ from src.runtime.credential_store import (
 _OAUTH_MANAGED_KEYS = frozenset({"OAUTH_TOKEN", "OAUTH_REFRESH_TOKEN"})
 
 
+def oauth_alias_dest_keys(connector_row: Optional[Dict[str, Any]]) -> Set[str]:
+    """Env del processo che AION riempie a partire da OAUTH_TOKEN (es. MS365_MCP_OAUTH_TOKEN)."""
+    if not connector_row:
+        return set()
+    keys: Set[str] = set()
+    for dest, sources in _parse_runtime_env_alias_entries(
+        connector_row.get("runtime_env_aliases")
+    ):
+        if any(src in _OAUTH_MANAGED_KEYS for src in sources):
+            keys.add(dest)
+    return keys
+
+
+def strip_oauth_user_fields_for_server(
+    schema: List[Dict[str, Any]],
+    server_slug: str,
+    server_config: Optional[Dict[str, Any]] = None,
+    *,
+    connector_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Nasconde i token OAuth dallo schema che l'utente dovrebbe compilare a mano."""
+    cfg = dict(server_config or {})
+    if connector_id and not cfg.get("aion_connector_id"):
+        cfg["aion_connector_id"] = connector_id
+    row = resolve_connector_row_for_mcp_server(
+        server_slug, cfg, load_mcp_connector_catalog()
+    )
+    if not connector_requires_oauth(row):
+        return schema
+    return strip_oauth_token_fields_from_schema(
+        schema, extra_keys=oauth_alias_dest_keys(row)
+    )
+
+
 def strip_oauth_token_fields_from_schema(
     schema: List[Dict[str, Any]],
+    extra_keys: Optional[Set[str]] = None,
 ) -> List[Dict[str, Any]]:
-    return [s for s in schema if str(s.get("key") or "") not in _OAUTH_MANAGED_KEYS]
+    banned = set(_OAUTH_MANAGED_KEYS)
+    if extra_keys:
+        banned.update(extra_keys)
+    return [s for s in schema if str(s.get("key") or "") not in banned]
 
 
 def credentials_feature_enabled() -> bool:
@@ -267,7 +306,9 @@ async def integration_row_to_public_dict(
         or (_is_remote_bridge and remote_auth_type not in (None, "none"))
     )
     if has_oauth:
-        schema = strip_oauth_token_fields_from_schema(schema)
+        schema = strip_oauth_token_fields_from_schema(
+            schema, extra_keys=oauth_alias_dest_keys(connector_row)
+        )
 
     admin_oauth_configured = (not has_oauth) or oauth_admin_credentials_configured(
         oauth_cfg
