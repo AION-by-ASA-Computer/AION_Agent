@@ -97,16 +97,60 @@ resolve_podman_target() {
 
 # Esegue un comando come TARGET_USER con XDG_RUNTIME_DIR/DBUS impostati
 # (senza, 'systemctl --user' fallisce con "Failed to connect to bus").
+# Se la shell corrente ha un GID diverso da quello di /etc/passwd (es. dopo
+# 'newgrp docker' → gid 988), newuidmap rifiuta il namespace rootless:
+# in quel caso si passa da 'sudo -u', che ripristina il gruppo primario.
 as_target() {
     local runtime_dir="/run/user/${TARGET_UID}"
     local envs=("XDG_RUNTIME_DIR=${runtime_dir}" "DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime_dir}/bus")
-    if [ "$(id -u)" = "$TARGET_UID" ]; then
+    if [ "$(id -u)" = "$TARGET_UID" ] && [ "$(id -g)" = "$TARGET_GID" ]; then
         env "${envs[@]}" "$@"
     elif command -v runuser >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
         (cd / && runuser -u "$TARGET_USER" -- env "${envs[@]}" "$@")
     else
-        (cd / && $SUDO -u "$TARGET_USER" env "${envs[@]}" "$@")
+        (cd / && sudo -u "$TARGET_USER" -g "#${TARGET_GID}" env "${envs[@]}" "$@")
     fi
+}
+
+# ---------------------------------------------------------------------------
+# Accesso a Docker senza 'newgrp docker'
+# ---------------------------------------------------------------------------
+# Su un host nuovo l'utente non è nel gruppo docker (o lo è ma la shell non
+# l'ha ancora attivo). Invece di chiedere usermod + newgrp/relogin, lo script
+# aggiunge l'utente al gruppo e invoca docker tramite 'sg docker', solo per i
+# comandi docker: Podman continua a girare con il gruppo primario (vedi as_target).
+DOCKER_VIA_SG=0
+docker() {
+    if [ "$DOCKER_VIA_SG" -eq 1 ]; then
+        sg docker -c "$(printf '%q ' docker "$@")"
+    else
+        command docker "$@"
+    fi
+}
+
+ensure_docker_access() {
+    if command docker info >/dev/null 2>&1; then
+        return 0
+    fi
+    if [ "$(id -u)" -eq 0 ] || ! command -v sg >/dev/null 2>&1; then
+        echo "[error] Docker daemon non in esecuzione o non accessibile."
+        return 1
+    fi
+    local me
+    me="$(id -un)"
+    if ! id -nG "$me" | tr ' ' '\n' | grep -qx docker \
+        && ! getent group docker | cut -d: -f4 | tr ',' '\n' | grep -qx "$me"; then
+        echo "[info] Aggiungo l'utente $me al gruppo docker (sudo usermod -aG docker $me)..."
+        sudo usermod -aG docker "$me" || return 1
+    fi
+    if sg docker -c "docker info" >/dev/null 2>&1; then
+        DOCKER_VIA_SG=1
+        echo "[ok] Docker accessibile tramite il gruppo docker (sg), senza newgrp/relogin."
+        return 0
+    fi
+    echo "[error] Docker daemon non in esecuzione o non accessibile anche con il gruppo docker."
+    echo "        Verifica: sudo systemctl status docker"
+    return 1
 }
 
 setup_podman_sandbox() {
@@ -183,7 +227,8 @@ setup_podman_sandbox() {
     fi
     if ! as_target podman info >/dev/null; then
         echo "[error] 'podman info' fallito per l'utente $TARGET_USER."
-        echo "        Se vedi 'newuidmap ... different user', esegui un nuovo login (non 'newgrp docker')."
+        echo "        Se vedi 'OCI permission denied' dopo un tentativo fallito, lo storage Podman"
+        echo "        è inizializzato a metà: rm -rf ~/.local/share/containers e rilancia."
         return 1
     fi
     echo "[ok] Podman rootless pronto: $PODMAN_SOCK"
@@ -646,10 +691,7 @@ if [[ "$SUBCOMMAND" == "upgrade" ]]; then
         echo "[error] docker compose v2 è richiesto."
         exit 1
     fi
-    if ! docker info >/dev/null 2>&1; then
-        echo "[error] Docker daemon non in esecuzione o non accessibile."
-        exit 1
-    fi
+    ensure_docker_access || exit 1
     echo "[ok] Preflight checks superati."
     do_upgrade
     exit 0
@@ -681,10 +723,7 @@ if ! docker compose version >/dev/null 2>&1; then
     exit 1
 fi
 
-if ! docker info >/dev/null 2>&1; then
-    echo "[error] Docker daemon is not running or not accessible."
-    exit 1
-fi
+ensure_docker_access || exit 1
 echo "[ok] Preflight checks passed."
 
 # --- Step 0.5: Resolve 'latest' to specific version ---
