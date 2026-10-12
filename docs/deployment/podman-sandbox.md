@@ -116,6 +116,7 @@ Default container network is `none`. When `AION_SANDBOX_ALLOW_PACKAGE_INSTALL=1`
 | Socket path is a **directory** | `docker compose stop backend && sudo rm -rf /run/user/$(id -u)/podman/podman.sock && systemctl --user start podman.socket` |
 | Permission denied on volume | SELinux `:Z` or UID mapping; ensure session dir owned by host user |
 | Permission denied `/opt/venv/bin/python` | Do not chmod session `.venv` symlinks; update to latest `container_runtime.py` and recreate backend |
+| `crun: make .../merged private: Permission denied` (any `--userns=keep-id` run fails, also with runc) | `AION_SANDBOX_CONTAINER_USERNS=root`: sandbox runs as container root, which rootless Podman maps to the host user. The setup script probes this and sets it automatically |
 | Orphan `aion-sandbox-*` containers | `podman ps -a --filter label=aion.component=session_sandbox`; stop manually |
 | macOS dev | Use `AION_SANDBOX_BACKEND=subprocess` (no Podman socket) |
 

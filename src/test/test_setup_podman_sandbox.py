@@ -47,3 +47,9 @@ def test_is_registry_image():
     assert not _is_registry_image("aion/sandbox:latest")
     assert not _is_registry_image("localhost/aion/sandbox:latest")
     assert not _is_registry_image("sandbox:latest")
+
+
+def test_build_env_values_userns(tmp_path):
+    assert _build_env_values(tmp_path)["AION_SANDBOX_CONTAINER_USERNS"] == "keep-id"
+    values = _build_env_values(tmp_path, userns="root")
+    assert values["AION_SANDBOX_CONTAINER_USERNS"] == "root"

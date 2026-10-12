@@ -48,6 +48,7 @@ ENV_KEYS: Tuple[str, ...] = (
     "AION_SANDBOX_CONTAINER_CPUS",
     "AION_SANDBOX_CONTAINER_PIDS_LIMIT",
     "AION_SANDBOX_LIVE_SRC",
+    "AION_SANDBOX_CONTAINER_USERNS",
 )
 
 
@@ -205,7 +206,7 @@ def _selinux_default() -> str:
 
 
 def _build_env_values(
-    repo: Path, image: str = DEFAULT_SANDBOX_IMAGE
+    repo: Path, image: str = DEFAULT_SANDBOX_IMAGE, userns: str = "keep-id"
 ) -> Dict[str, str]:
     uid = str(os.getuid())
     gid = str(os.getgid())
@@ -227,6 +228,7 @@ def _build_env_values(
         "AION_SANDBOX_CONTAINER_PIDS_LIMIT": "256",
         # Registry image (GHCR install): no host src/ to overlay, the image ships it.
         "AION_SANDBOX_LIVE_SRC": "0" if _is_registry_image(image) else "1",
+        "AION_SANDBOX_CONTAINER_USERNS": userns,
     }
 
 
@@ -378,6 +380,44 @@ def _build_sandbox_image(
         )
 
 
+def _probe_run(image: str, user_args: List[str]) -> bool:
+    cmd = ["podman", "run", "--rm", *user_args, "--entrypoint", "/bin/sh", image]
+    proc = subprocess.run(
+        cmd + ["-c", "true"], text=True, capture_output=True, check=False
+    )
+    return proc.returncode == 0
+
+
+def _detect_userns_mode(image: str, *, dry_run: bool) -> str:
+    """
+    ``keep-id`` when Podman can run it, else ``root`` (container root == host user).
+
+    Some hosts (e.g. kernel 7.x + Podman 4.9) fail every ``--userns=keep-id`` run with
+    ``make .../merged private: Permission denied`` regardless of runtime or AppArmor.
+    """
+    if dry_run:
+        _log("[dry-run] probe podman run --userns=keep-id")
+        return "keep-id"
+    if subprocess.run(
+        ["podman", "image", "exists", image], capture_output=True, check=False
+    ).returncode != 0:
+        _warn(f"Immagine {image} assente — salto probe keep-id (default keep-id).")
+        return "keep-id"
+    if _probe_run(
+        image, ["--userns=keep-id", "--user", f"{os.getuid()}:{os.getgid()}"]
+    ):
+        _log("Probe --userns=keep-id: OK")
+        return "keep-id"
+    if _probe_run(image, ["--user", "0:0"]):
+        _warn(
+            "--userns=keep-id non funziona su questo host: uso "
+            "AION_SANDBOX_CONTAINER_USERNS=root (root del container = utente host)."
+        )
+        return "root"
+    _warn("Probe container fallito sia con keep-id sia con root — verifica podman run a mano.")
+    return "keep-id"
+
+
 def _verify(image: str, *, dry_run: bool) -> None:
     if dry_run:
         return
@@ -494,8 +534,17 @@ def main() -> None:
     _log("\n[3/5] Directory sessioni host...")
     _prepare_sessions_dir(repo, dry_run=args.dry_run)
 
-    _log("\n[4/5] Configurazione .env...")
-    values = _build_env_values(repo, args.image)
+    if not args.skip_build:
+        _log("\n[4/5] Immagine sandbox...")
+        _build_sandbox_image(
+            repo, args.image, args.compose_file, dry_run=args.dry_run
+        )
+    else:
+        _log("\n[4/5] Build immagine sandbox — skip")
+
+    _log("\n[5/5] Configurazione .env...")
+    userns = _detect_userns_mode(args.image, dry_run=args.dry_run)
+    values = _build_env_values(repo, args.image, userns)
     if not env_path.is_file():
         example = repo / ".env.example"
         if example.is_file() and not args.dry_run:
@@ -504,14 +553,6 @@ def main() -> None:
         elif not example.is_file() and not args.dry_run:
             env_path.write_text("", encoding="utf-8")
     _merge_env_file(env_path, values, dry_run=args.dry_run)
-
-    if not args.skip_build:
-        _log("\n[5/5] Immagine sandbox...")
-        _build_sandbox_image(
-            repo, args.image, args.compose_file, dry_run=args.dry_run
-        )
-    else:
-        _log("\n[5/5] Build immagine sandbox — skip")
 
     _log("\nVerifica...")
     _verify(args.image, dry_run=args.dry_run)

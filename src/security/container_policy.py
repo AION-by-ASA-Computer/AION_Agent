@@ -41,12 +41,23 @@ def _network_mode() -> str:
     return "none"
 
 
-def _container_run_user() -> Optional[str]:
+def _container_user_args() -> List[str]:
+    """
+    Map the sandbox user onto the host deploy user so session files stay owned by it.
+
+    ``AION_SANDBOX_CONTAINER_USERNS``:
+    - ``keep-id`` (default): container uid/gid == host uid/gid (nested user namespace).
+    - ``root``: container root, which rootless Podman already maps to the host user.
+      For hosts where ``--userns=keep-id`` fails (``make .../merged private: Permission denied``).
+    """
     if not (os.environ.get("AION_SANDBOX_HOST_DATA_DIR") or "").strip():
-        return None
+        return []
+    mode = (os.environ.get("AION_SANDBOX_CONTAINER_USERNS") or "keep-id").strip().lower()
+    if mode == "root":
+        return ["--user", "0:0"]
     uid = (os.environ.get("AION_SANDBOX_HOST_UID") or "1000").strip()
     gid = (os.environ.get("AION_SANDBOX_HOST_GID") or "1000").strip()
-    return f"{uid}:{gid}"
+    return ["--userns=keep-id", "--user", f"{uid}:{gid}"]
 
 
 SANDBOX_FS_POLICY_CONTAINER_PATH = "/etc/aion/fs_policy.yaml"
@@ -133,9 +144,7 @@ def build_container_run_argv(
         ]
     )
 
-    run_user = _container_run_user()
-    if run_user:
-        argv.extend(["--userns=keep-id", "--user", run_user])
+    argv.extend(_container_user_args())
 
     env = {
         "AION_CHAT_SESSION_ID": session_id,

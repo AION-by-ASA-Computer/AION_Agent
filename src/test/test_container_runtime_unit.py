@@ -95,6 +95,27 @@ class TestContainerPolicy(unittest.TestCase):
         self.assertIn("--userns=keep-id", argv)
         self.assertIn("1000:1000", argv)
 
+    def test_run_argv_userns_root_mode(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AION_SANDBOX_HOST_DATA_DIR": "/host/data",
+                "AION_SANDBOX_HOST_UID": "1000",
+                "AION_SANDBOX_HOST_GID": "1000",
+                "AION_SANDBOX_CONTAINER_USERNS": "root",
+            },
+            clear=False,
+        ):
+            argv = build_container_run_argv(
+                runtime="podman",
+                image="aion/sandbox:latest",
+                session_id="sess-1234",
+                session_host_path=Path("/host/data/sessions/sess-1234"),
+            )
+        self.assertNotIn("--userns=keep-id", argv)
+        self.assertIn("0:0", argv)
+        self.assertNotIn("1000:1000", argv)
+
     def test_run_argv_mounts_fs_policy_when_configured(self):
         import tempfile
 
