@@ -117,12 +117,12 @@ def build_container_run_argv(
     # Live Python sources: Podman often keeps a stale sandbox image while backend bind-mounts
     # config_std/mcp_servers_std. Overlay host src/ so session_exec/session_venv fixes apply
     # without rebuilding aion/sandbox:latest on every deploy.
-    src_host = resolve_host_src_mount()
+    src_host = resolve_host_src_mount(image)
     if src_host is not None:
         src_mount = f"{src_host}:/app/src:ro{_selinux_mount_suffix()}"
         argv.extend(["-v", src_mount])
 
-    skills_req_host = resolve_host_skills_requirements_mount()
+    skills_req_host = resolve_host_skills_requirements_mount(image)
     if skills_req_host is not None:
         req_mount = (
             f"{skills_req_host}:/app/requirements-sandbox-skills.txt:ro"

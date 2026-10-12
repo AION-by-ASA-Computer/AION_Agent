@@ -126,6 +126,82 @@ _lock_release() {
     rm -f "$1"
 }
 
+# ---------------------------------------------------------------------------
+# Podman rootless helpers — condivisi da install (step 4.5) e upgrade
+# ---------------------------------------------------------------------------
+SANDBOX_IMAGE_REPO="ghcr.io/aion-by-asa-computer/aion-sandbox"
+
+# Esegue "$@" come utente Podman rootless: l'utente corrente, oppure chi ha
+# invocato sudo (Podman rootless non va configurato per root).
+_as_podman_user() {
+    if [ "$(id -u)" -ne 0 ]; then
+        "$@"
+        return
+    fi
+    if [ -z "${SUDO_USER:-}" ] || [ "$SUDO_USER" = "root" ]; then
+        echo "[warning] Podman rootless richiede un utente non-root: rilancia install.sh"
+        echo "          come utente di deploy (o con sudo da quell'utente)."
+        return 1
+    fi
+    local deploy_uid
+    deploy_uid="$(id -u "$SUDO_USER")"
+    loginctl enable-linger "$SUDO_USER" || true
+    for _ in {1..10}; do
+        [ -d "/run/user/$deploy_uid" ] && break
+        sleep 1
+    done
+    sudo -u "$SUDO_USER" -H env \
+        USER="$SUDO_USER" \
+        XDG_RUNTIME_DIR="/run/user/$deploy_uid" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$deploy_uid/bus" \
+        "$@"
+}
+
+# Allinea la sandbox Podman alla versione $1: pull nello storage dell'utente
+# rootless e aggiornamento di AION_SANDBOX_CONTAINER_IMAGE nel .env.
+# Immagini personalizzate (es. build locali) non vengono toccate.
+_upgrade_sandbox_image() {
+    local next="$1"
+    local current target
+    current=$(python3 -c "
+import re
+try:
+    m = re.findall(r'^AION_SANDBOX_CONTAINER_IMAGE=(.*)$', open('.env').read(), re.MULTILINE)
+    print(m[-1].strip() if m else '')
+except Exception: print('')
+" 2>/dev/null || true)
+    case "$current" in
+        "${SANDBOX_IMAGE_REPO}":*) ;;
+        "")
+            echo "[info] Sandbox Podman non configurata nel .env — skip."
+            return 0 ;;
+        *)
+            echo "[info] AION_SANDBOX_CONTAINER_IMAGE=$current è personalizzata — non aggiornata."
+            return 0 ;;
+    esac
+    target="${SANDBOX_IMAGE_REPO}:${next}"
+    if [ "$current" = "$target" ]; then
+        return 0
+    fi
+    if ! command -v podman >/dev/null 2>&1; then
+        echo "[info] podman non installato (sandbox subprocess) — skip."
+        return 0
+    fi
+    echo "[hop] podman pull $target..."
+    if ! _as_podman_user podman pull "$target" </dev/null; then
+        echo "[warning] podman pull $target fallito: la sandbox resta su $current."
+        return 0
+    fi
+    python3 - "$target" <<'PY'
+import re, sys
+txt = open('.env').read()
+txt = re.sub(r'^AION_SANDBOX_CONTAINER_IMAGE=.*$',
+             'AION_SANDBOX_CONTAINER_IMAGE=' + sys.argv[1], txt, flags=re.MULTILINE)
+open('.env', 'w').write(txt)
+PY
+    echo "[ok] Sandbox Podman: $current → $target"
+}
+
 do_upgrade() {
     echo ""
     echo "=== AION Agent — Modalità Upgrade GHCR (v2) ==="
@@ -422,8 +498,7 @@ except: print('')
         # 7d. Pull di tutte le immagini (.env ha già AION_VERSION=<next>)
         echo "[hop] docker compose pull (tutte le immagini)..."
         docker compose -f docker-compose.ghcr.yml pull
-        echo "[hop] docker pull sandbox image..."
-        docker pull "ghcr.io/aion-by-asa-computer/aion-sandbox:${NEXT}" || true
+        _upgrade_sandbox_image "${NEXT}"
 
         # 7e. Restart stack
         echo "[hop] docker compose up -d..."
@@ -807,33 +882,12 @@ fi
 # monta AION_PODMAN_SOCKET_HOST, Docker crea al suo posto una directory di root.
 run_podman_setup() {
     local args=(
-        --image "ghcr.io/aion-by-asa-computer/aion-sandbox:${AION_VERSION}"
+        --image "${SANDBOX_IMAGE_REPO}:${AION_VERSION}"
         --compose-file docker-compose.ghcr.yml
         -y
     )
     # stdin da /dev/null: con `curl | bash` lo stdin è lo script stesso.
-    if [ "$(id -u)" -ne 0 ]; then
-        bash scripts/setup-podman-sandbox.sh "${args[@]}" </dev/null
-        return
-    fi
-    if [ -z "${SUDO_USER:-}" ] || [ "$SUDO_USER" = "root" ]; then
-        echo "[warning] Podman rootless richiede un utente non-root: rilancia install.sh"
-        echo "          come utente di deploy (o con sudo da quell'utente)."
-        return 1
-    fi
-    # Lanciato con sudo: Podman rootless va configurato per l'utente che ha invocato sudo.
-    local deploy_uid
-    deploy_uid="$(id -u "$SUDO_USER")"
-    loginctl enable-linger "$SUDO_USER" || true
-    for _ in {1..10}; do
-        [ -d "/run/user/$deploy_uid" ] && break
-        sleep 1
-    done
-    sudo -u "$SUDO_USER" -H env \
-        USER="$SUDO_USER" \
-        XDG_RUNTIME_DIR="/run/user/$deploy_uid" \
-        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$deploy_uid/bus" \
-        bash scripts/setup-podman-sandbox.sh "${args[@]}" </dev/null
+    _as_podman_user bash scripts/setup-podman-sandbox.sh "${args[@]}" </dev/null
 }
 
 if [ "$AION_SKIP_PODMAN" -eq 1 ]; then
@@ -871,8 +925,6 @@ echo "[ok] Wrote .aion-install.json"
 if [ "$AION_SKIP_START" -eq 0 ]; then
     echo "--- Step 6: Starting Stack ---"
     docker compose -f docker-compose.ghcr.yml pull
-    echo "[info] Pulling sandbox image..."
-    docker pull "ghcr.io/aion-by-asa-computer/aion-sandbox:${AION_VERSION}" || true
     docker compose -f docker-compose.ghcr.yml up -d --no-build --remove-orphans
     
     echo "Waiting for backend to be healthy..."

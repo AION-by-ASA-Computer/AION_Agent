@@ -40,6 +40,16 @@ configured for `$SUDO_USER`; plain root is skipped. Use `--no-podman`
 (or `AION_SKIP_PODMAN=1`) to keep the subprocess sandbox. A failed Podman setup is
 non-fatal: the installer prints the command to retry.
 
+`install.sh upgrade` keeps the sandbox in step with the backend on every hop: it runs
+`podman pull ghcr.io/aion-by-asa-computer/aion-sandbox:<next>` as the rootless user
+(`$SUDO_USER` under sudo) and rewrites `AION_SANDBOX_CONTAINER_IMAGE` in `.env`.
+Custom images (e.g. `localhost/aion/sandbox:<branch>`) are left untouched; if the pull
+fails the previous image is kept and a warning is printed.
+
+`AION_SANDBOX_LIVE_SRC` defaults by image when unset: `0` for registry-qualified images
+(`ghcr.io/...`), `1` for local ones (`aion/sandbox:latest`, `localhost/...`). `.env` files
+from older installs therefore need no change.
+
 ## Host setup (manual)
 
 ```bash
