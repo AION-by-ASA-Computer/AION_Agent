@@ -47,6 +47,7 @@ ENV_KEYS: Tuple[str, ...] = (
     "AION_SANDBOX_CONTAINER_MEMORY",
     "AION_SANDBOX_CONTAINER_CPUS",
     "AION_SANDBOX_CONTAINER_PIDS_LIMIT",
+    "AION_SANDBOX_LIVE_SRC",
 )
 
 
@@ -224,6 +225,8 @@ def _build_env_values(
         "AION_SANDBOX_CONTAINER_MEMORY": "512m",
         "AION_SANDBOX_CONTAINER_CPUS": "1.0",
         "AION_SANDBOX_CONTAINER_PIDS_LIMIT": "256",
+        # Registry image (GHCR install): no host src/ to overlay, the image ships it.
+        "AION_SANDBOX_LIVE_SRC": "0" if _is_registry_image(image) else "1",
     }
 
 

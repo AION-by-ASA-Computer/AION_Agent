@@ -27,8 +27,25 @@ def resolve_host_repo_root() -> Optional[Path]:
     return Path(host_data).expanduser().resolve().parent
 
 
+def _live_src_overlay_enabled() -> bool:
+    """
+    Overlay host ``src/`` and skills requirements only on repo checkouts.
+
+    GHCR installs (``scripts/install.sh``) have no host ``src/``: the sandbox image
+    already ships the matching version, so ``AION_SANDBOX_LIVE_SRC=0`` there.
+    """
+    return os.environ.get("AION_SANDBOX_LIVE_SRC", "1").strip().lower() not in (
+        "0",
+        "false",
+        "no",
+        "off",
+    )
+
+
 def resolve_host_src_mount() -> Optional[Path]:
     """Host ``src/`` directory to overlay ``/app/src`` in session sandbox containers."""
+    if not _live_src_overlay_enabled():
+        return None
     root = resolve_host_repo_root()
     if root is None:
         return None
@@ -37,6 +54,8 @@ def resolve_host_src_mount() -> Optional[Path]:
 
 def resolve_host_skills_requirements_mount() -> Optional[Path]:
     """Host ``requirements-sandbox-skills.txt`` for session venv bootstrap in sandboxes."""
+    if not _live_src_overlay_enabled():
+        return None
     root = resolve_host_repo_root()
     if root is None:
         return None

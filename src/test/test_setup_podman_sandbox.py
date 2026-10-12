@@ -37,6 +37,8 @@ def test_build_env_values_custom_image(tmp_path):
     image = "ghcr.io/aion-by-asa-computer/aion-sandbox:1.6.1"
     values = _build_env_values(tmp_path, image)
     assert values["AION_SANDBOX_CONTAINER_IMAGE"] == image
+    assert values["AION_SANDBOX_LIVE_SRC"] == "0"
+    assert _build_env_values(tmp_path)["AION_SANDBOX_LIVE_SRC"] == "1"
 
 
 def test_is_registry_image():
