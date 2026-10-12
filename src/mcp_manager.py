@@ -1581,7 +1581,10 @@ class MCPManager:
             if needs_user_cred and (
                 val is None or (isinstance(val, str) and not val.strip())
             ):
-                if env_slot_is_oauth_token(str(key), template) and await _has_oauth_token():
+                if (
+                    env_slot_is_oauth_token(str(key), template)
+                    and await _has_oauth_token()
+                ):
                     continue
                 return f"credenziali mancanti per {server_name} ({key})"
         return None

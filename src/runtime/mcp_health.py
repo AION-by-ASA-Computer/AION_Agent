@@ -75,9 +75,7 @@ async def drop_connected_oauth_errors(
         if "credenziali mancanti" not in (err or "").lower():
             continue
         try:
-            token = await get_credential(
-                user_id, slug, "OAUTH_TOKEN", tenant_id=tid
-            )
+            token = await get_credential(user_id, slug, "OAUTH_TOKEN", tenant_id=tid)
         except Exception:
             continue
         if not token:

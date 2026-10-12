@@ -93,9 +93,7 @@ def test_activate_mcp_group_returns_tool_names(monkeypatch):
     async def _fake_mcp(*_args, **_kwargs):
         return [_Tool("list_events")]
 
-    monkeypatch.setattr(
-        "src.runtime.tool_exposure._mcp_group_tools", _fake_mcp
-    )
+    monkeypatch.setattr("src.runtime.tool_exposure._mcp_group_tools", _fake_mcp)
     monkeypatch.setattr(
         "src.runtime.tool_exposure.publish_tools",
         lambda tools, session_id="": list(tools),
@@ -118,9 +116,7 @@ def test_build_mcp_tools_keeps_warmed_profile():
     from src.mcp_manager import mcp_manager
 
     sid = "keep-profile-session"
-    mcp_manager.set_session_context(
-        sid, ("apple_watch_assistant", "admin", "default")
-    )
+    mcp_manager.set_session_context(sid, ("apple_watch_assistant", "admin", "default"))
     try:
         _keep_session_profile(sid, "admin")
         ctx = mcp_manager.get_session_context(sid)

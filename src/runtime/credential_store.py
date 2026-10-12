@@ -33,15 +33,14 @@ OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = int(
 _oauth_refresh_locks: Dict[Tuple[str, str, str], asyncio.Lock] = {}
 
 
-def _oauth_refresh_lock(
-    user_id: str, server_slug: str, tenant_id: str
-) -> asyncio.Lock:
+def _oauth_refresh_lock(user_id: str, server_slug: str, tenant_id: str) -> asyncio.Lock:
     key = (user_id, server_slug, tenant_id)
     lock = _oauth_refresh_locks.get(key)
     if lock is None:
         lock = asyncio.Lock()
         _oauth_refresh_locks[key] = lock
     return lock
+
 
 _USER_CREDENTIAL_RE = re.compile(r"^\$\{(AION_USER_[A-Z0-9_]+)__([A-Z0-9_]+)\}$")
 _USER_CREDENTIAL_SIMPLE_RE = re.compile(r"^\$\{(AION_USER_[A-Z0-9_]+)\}$")

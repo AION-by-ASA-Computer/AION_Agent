@@ -74,9 +74,7 @@ async def test_second_session_reuses_schema_and_builds_a_new_wrapper(monkeypatch
 
     monkeypatch.setattr(mcp_manager, "stdio_entrypoint_missing", lambda *_a, **_k: None)
     monkeypatch.setattr(mcp_manager, "session_context", lambda *_a, **_k: _Ctx())
-    monkeypatch.setattr(
-        "src.mcp_manager.is_session_scoped_server", lambda _name: False
-    )
+    monkeypatch.setattr("src.mcp_manager.is_session_scoped_server", lambda _name: False)
     clear_mcp_tool_catalog()
     cfg = {"type": "stdio", "command": "python", "args": ["-u", "grafana/server.py"]}
     try:

@@ -79,7 +79,9 @@ def _run_on_agent_loop(coro: Any) -> Any:
     loop = _GLOBAL_LOOP
     if loop is not None and loop.is_running():
         fut = asyncio.run_coroutine_threadsafe(coro, loop)
-        return fut.result(timeout=float(os.getenv("AION_TOOL_GROUP_ACTIVATE_TIMEOUT_SEC", "90")))
+        return fut.result(
+            timeout=float(os.getenv("AION_TOOL_GROUP_ACTIVATE_TIMEOUT_SEC", "90"))
+        )
     try:
         running = asyncio.get_running_loop()
     except RuntimeError:
@@ -338,9 +340,13 @@ def _pool_for(session_id: str) -> List[Any]:
     rt = resolve_turn_runtime(session_id or None)
     agent = rt.get("agent") if isinstance(rt, dict) else None
     agent_tools = (
-        list(getattr(agent, "_aion_deferred_tools", None) or []) if agent is not None else []
+        list(getattr(agent, "_aion_deferred_tools", None) or [])
+        if agent is not None
+        else []
     )
-    merged, _added = _extend_tool_collection(agent_tools, deferred_tools_for(session_id))
+    merged, _added = _extend_tool_collection(
+        agent_tools, deferred_tools_for(session_id)
+    )
     return merged
 
 
@@ -391,7 +397,9 @@ def _load_group_tools(
     tenant_id: str,
     profile: Any,
 ) -> List[Any]:
-    if group in deferred_native_groups(getattr(profile, "native_tool_groups", None) or []):
+    if group in deferred_native_groups(
+        getattr(profile, "native_tool_groups", None) or []
+    ):
         return _native_group_tools(group, session_id, user_id, profile)
 
     async def _activate() -> List[Any]:
@@ -413,7 +421,9 @@ def make_tool_search_tool(
         pool = _pool_for(session_id)
         catalog = sorted({_tool_name(t) for t in pool if _tool_name(t)})
         groups = activatable_groups(profile)
-        available = ", ".join(catalog + [g for g in groups if g not in catalog]) or "(none)"
+        available = (
+            ", ".join(catalog + [g for g in groups if g not in catalog]) or "(none)"
+        )
         if not q:
             return "Error: query required. Available: " + available
 
@@ -424,10 +434,13 @@ def make_tool_search_tool(
         matches = rank_tools(q, pool)
         top = matches[0] if matches else None
         strong = bool(top) and (
-            _tool_name(top).lower() == q.lower() or _norm_query(_tool_name(top)) == _norm_query(q)
+            _tool_name(top).lower() == q.lower()
+            or _norm_query(_tool_name(top)) == _norm_query(q)
         )
         if strong:
-            chosen = [t for t in matches if _norm_query(_tool_name(t)) == _norm_query(q)] or matches
+            chosen = [
+                t for t in matches if _norm_query(_tool_name(t)) == _norm_query(q)
+            ] or matches
         else:
             group = _group_for_query(q, profile)
             if group:
@@ -499,7 +512,9 @@ def make_activate_tool_group_tool(
     def activate_tool_group(group: str) -> str:
         gid = (group or "").strip()
         if not gid:
-            return "Error: group name required. Available: " + ", ".join(sorted(allowed))
+            return "Error: group name required. Available: " + ", ".join(
+                sorted(allowed)
+            )
         if gid not in allowed:
             return (
                 f"Error: group '{gid}' is not on this profile. "
@@ -575,7 +590,9 @@ async def _mcp_group_tools(
 
     cfg = mcp_manager.get_server_config(server_name)
     if not cfg:
-        logger.warning("activate_tool_group: server %s missing from registry", server_name)
+        logger.warning(
+            "activate_tool_group: server %s missing from registry", server_name
+        )
         return []
     await mcp_manager.warm_session(
         session_id,
@@ -584,9 +601,7 @@ async def _mcp_group_tools(
         user_id=user_id,
         tenant_id=tenant_id,
     )
-    built = await build_mcp_tools(
-        server_name, cfg, session_id, user_id=user_id
-    )
+    built = await build_mcp_tools(server_name, cfg, session_id, user_id=user_id)
     return list(built or [])
 
 
@@ -605,7 +620,9 @@ def _as_tool_list(tools: Any) -> List[Any]:
         return [tools]
 
 
-def _extend_tool_collection(existing: Any, extra: Sequence[Any]) -> Tuple[Any, List[Any]]:
+def _extend_tool_collection(
+    existing: Any, extra: Sequence[Any]
+) -> Tuple[Any, List[Any]]:
     """Append named tools that are not already present. Returns (collection, added)."""
     current = _as_tool_list(existing)
     names = {_tool_name(t) for t in current if _tool_name(t)}
@@ -642,21 +659,31 @@ def publish_tools(extra: Iterable[Any], *, session_id: str = "") -> List[Any]:
         exec_ctx = _agent_exec_ctx.get()
 
     if agent is not None:
-        agent.tools, _ = _extend_tool_collection(getattr(agent, "tools", None), incoming)
+        agent.tools, _ = _extend_tool_collection(
+            getattr(agent, "tools", None), incoming
+        )
 
     live_added: List[Any] = incoming
     if exec_ctx is not None:
-        live, live_added = _extend_tool_collection(getattr(exec_ctx, "tools", None), incoming)
+        live, live_added = _extend_tool_collection(
+            getattr(exec_ctx, "tools", None), incoming
+        )
         exec_ctx.tools = live
         state = getattr(exec_ctx, "state", None)
         if state is not None and hasattr(state, "set"):
             try:
                 state.set("tools", _as_tool_list(live))
             except Exception:
-                logger.debug("publish_tools: could not write state.tools", exc_info=True)
+                logger.debug(
+                    "publish_tools: could not write state.tools", exc_info=True
+                )
         # Haystack injects tools from exe_context.tools each step; keep these
         # in sync for older snapshots / tests that still read the dicts.
-        for attr in ("chat_generator_inputs", "tool_execution_inputs", "tool_invoker_inputs"):
+        for attr in (
+            "chat_generator_inputs",
+            "tool_execution_inputs",
+            "tool_invoker_inputs",
+        ):
             payload = getattr(exec_ctx, attr, None)
             if isinstance(payload, dict):
                 payload["tools"] = live

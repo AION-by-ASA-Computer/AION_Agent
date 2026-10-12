@@ -114,7 +114,11 @@ async def _preload_shared_tool_catalog(user_ids: List[str]) -> None:
     """Fill the list_tools cache for non-session-scoped servers of the default profiles."""
     from src.agent_profile import profile_manager
     from src.main import build_mcp_tools
-    from src.mcp_manager import BOOTSTRAP_SESSION_ID, is_session_scoped_server, mcp_manager
+    from src.mcp_manager import (
+        BOOTSTRAP_SESSION_ID,
+        is_session_scoped_server,
+        mcp_manager,
+    )
 
     servers: List[str] = []
     profile_manager.load_all_if_stale()
@@ -136,9 +140,7 @@ async def _preload_shared_tool_catalog(user_ids: List[str]) -> None:
             if not cfg:
                 continue
             try:
-                await build_mcp_tools(
-                    name, cfg, BOOTSTRAP_SESSION_ID, user_id=user_id
-                )
+                await build_mcp_tools(name, cfg, BOOTSTRAP_SESSION_ID, user_id=user_id)
             except Exception as exc:
                 logger.warning(
                     "tool catalog preload failed server=%s user=%s: %s",
