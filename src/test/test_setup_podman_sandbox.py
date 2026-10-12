@@ -7,6 +7,7 @@ import os
 from scripts.setup_podman_sandbox import (
     ENV_BLOCK_HEADER,
     _build_env_values,
+    _is_registry_image,
     _merge_env_file,
 )
 
@@ -30,3 +31,17 @@ def test_merge_env_file_inserts_block(tmp_path):
     assert "AION_SANDBOX_BACKEND=container" in text
     assert "FOO=bar" in text
     assert text.count("AION_SANDBOX_BACKEND=") == 1
+
+
+def test_build_env_values_custom_image(tmp_path):
+    image = "ghcr.io/aion-by-asa-computer/aion-sandbox:1.6.1"
+    values = _build_env_values(tmp_path, image)
+    assert values["AION_SANDBOX_CONTAINER_IMAGE"] == image
+
+
+def test_is_registry_image():
+    assert _is_registry_image("ghcr.io/aion-by-asa-computer/aion-sandbox:1.6.1")
+    assert _is_registry_image("registry.local:5000/aion/sandbox:latest")
+    assert not _is_registry_image("aion/sandbox:latest")
+    assert not _is_registry_image("localhost/aion/sandbox:latest")
+    assert not _is_registry_image("sandbox:latest")

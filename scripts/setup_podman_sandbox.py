@@ -5,6 +5,10 @@ Install and configure Podman rootless for AION session sandbox (container mode).
 Usage:
   ./scripts/setup-podman-sandbox.sh
   python scripts/setup_podman_sandbox.py [--dry-run] [--skip-install] [--skip-build] [-y]
+      [--image IMAGE] [--compose-file FILE]
+
+With a registry-qualified --image (e.g. ghcr.io/...:1.6.1, used by install.sh)
+the sandbox image is pulled with Podman instead of built locally with Docker.
 
 See docs/deployment/podman-sandbox.md
 """
@@ -25,6 +29,8 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 ENV_BLOCK_HEADER = (
     "# --- Podman session sandbox (auto: scripts/setup-podman-sandbox.sh) ---"
 )
+
+DEFAULT_SANDBOX_IMAGE = "aion/sandbox:latest"
 
 ENV_KEYS: Tuple[str, ...] = (
     "AION_SANDBOX_BACKEND",
@@ -197,7 +203,9 @@ def _selinux_default() -> str:
     return "0"
 
 
-def _build_env_values(repo: Path) -> Dict[str, str]:
+def _build_env_values(
+    repo: Path, image: str = DEFAULT_SANDBOX_IMAGE
+) -> Dict[str, str]:
     uid = str(os.getuid())
     gid = str(os.getgid())
     data_dir = (repo / "data").resolve()
@@ -208,7 +216,7 @@ def _build_env_values(repo: Path) -> Dict[str, str]:
         "AION_SANDBOX_HOST_UID": uid,
         "AION_SANDBOX_HOST_GID": gid,
         "AION_CONTAINER_RUNTIME": "podman",
-        "AION_SANDBOX_CONTAINER_IMAGE": "aion/sandbox:latest",
+        "AION_SANDBOX_CONTAINER_IMAGE": image,
         "AION_PODMAN_SOCKET": "/run/podman/podman.sock",
         "AION_SANDBOX_FAIL_CLOSED": "1",
         "AION_SANDBOX_MCP_JAIL": "1",
@@ -304,11 +312,43 @@ def _prepare_sessions_dir(repo: Path, *, dry_run: bool) -> None:
     os.chmod(sessions, 0o775)
 
 
-def _build_sandbox_image(repo: Path, *, dry_run: bool) -> None:
+def _is_registry_image(image: str) -> bool:
+    """True when the first path component is a registry host (ghcr.io, localhost:5000, ...)."""
+    first = image.split("/", 1)[0]
+    return "/" in image and ("." in first or ":" in first) and first != "localhost"
+
+
+def _compose_cmd(compose_file: Optional[str]) -> List[str]:
+    cmd = ["docker", "compose"]
+    if compose_file:
+        cmd += ["-f", compose_file]
+    return cmd
+
+
+def _pull_sandbox_image(image: str, *, dry_run: bool) -> None:
+    cmd = ["podman", "pull", image]
+    if dry_run:
+        _log(f"[dry-run] {' '.join(cmd)}")
+        return
+    if _run(cmd, check=False).returncode != 0:
+        _warn(f"podman pull fallito — riprova manualmente: podman pull {image}")
+
+
+def _build_sandbox_image(
+    repo: Path, image: str, compose_file: Optional[str], *, dry_run: bool
+) -> None:
+    if _is_registry_image(image):
+        _pull_sandbox_image(image, dry_run=dry_run)
+        return
     if not _has_cmd("docker"):
         _warn("docker non trovato — salta build immagine sandbox.")
         return
-    compose = ["docker", "compose", "--profile", "sandbox-build", "build", "sandbox"]
+    compose = _compose_cmd(compose_file) + [
+        "--profile",
+        "sandbox-build",
+        "build",
+        "sandbox",
+    ]
     if dry_run:
         _log(f"[dry-run] {' '.join(compose)}")
         _log("[dry-run] docker save aion/sandbox:latest | podman load")
@@ -335,43 +375,42 @@ def _build_sandbox_image(repo: Path, *, dry_run: bool) -> None:
         )
 
 
-def _verify(*, dry_run: bool) -> None:
+def _verify(image: str, *, dry_run: bool) -> None:
     if dry_run:
         return
     _run(["podman", "info"], capture=False)
     sock = _podman_socket_path()
     if not sock.is_socket():
         _fail(f"Verifica fallita: {sock} non è un socket")
-    listed = subprocess.run(
-        ["podman", "images", "--format", "{{.Repository}}:{{.Tag}}"],
-        text=True,
+    exists = subprocess.run(
+        ["podman", "image", "exists", image],
         capture_output=True,
         check=False,
     )
-    if (
-        "aion/sandbox:latest" not in listed.stdout
-        and "docker.io/aion/sandbox:latest" not in listed.stdout
-    ):
+    if exists.returncode != 0:
         _warn(
-            "Immagine aion/sandbox:latest non trovata in Podman — esegui build o podman load."
+            f"Immagine {image} non trovata in Podman — esegui build/podman load o podman pull."
         )
 
 
-def _maybe_restart_backend(repo: Path, *, dry_run: bool, assume_yes: bool) -> None:
+def _maybe_restart_backend(
+    repo: Path, compose_file: Optional[str], *, dry_run: bool, assume_yes: bool
+) -> None:
     if not _has_cmd("docker"):
         return
+    compose = _compose_cmd(compose_file)
     ps = subprocess.run(
-        ["docker", "compose", "ps", "--status", "running", "--services"],
+        compose + ["ps", "--status", "running", "--services"],
         cwd=str(repo),
         text=True,
         capture_output=True,
         check=False,
     )
     if "backend" not in (ps.stdout or ""):
-        _log("Backend non in esecuzione — avvia con: docker compose up -d")
+        _log(f"Backend non in esecuzione — avvia con: {' '.join(compose)} up -d")
         return
     if dry_run:
-        _log("[dry-run] docker compose up -d --build backend")
+        _log(f"[dry-run] {' '.join(compose)} up -d --build backend")
         return
     if not assume_yes:
         try:
@@ -382,10 +421,10 @@ def _maybe_restart_backend(repo: Path, *, dry_run: bool, assume_yes: bool) -> No
             answer = "n"
         if answer not in ("y", "yes", "s", "si"):
             _log(
-                "Salta restart. Esegui manualmente: docker compose up -d --build backend"
+                f"Salta restart. Esegui manualmente: {' '.join(compose)} up -d --build backend"
             )
             return
-    _run(["docker", "compose", "up", "-d", "--build", "backend"], cwd=str(repo))
+    _run(compose + ["up", "-d", "--build", "backend"], cwd=str(repo))
 
 
 def main() -> None:
@@ -410,6 +449,16 @@ def main() -> None:
         "--yes",
         action="store_true",
         help="Non chiedere conferma per restart backend",
+    )
+    parser.add_argument(
+        "--image",
+        default=DEFAULT_SANDBOX_IMAGE,
+        help="Immagine sandbox da configurare; se qualificata con registry viene scaricata con podman pull",
+    )
+    parser.add_argument(
+        "--compose-file",
+        default=None,
+        help="File compose per build/restart (es. docker-compose.ghcr.yml)",
     )
     args = parser.parse_args()
 
@@ -443,7 +492,7 @@ def main() -> None:
     _prepare_sessions_dir(repo, dry_run=args.dry_run)
 
     _log("\n[4/5] Configurazione .env...")
-    values = _build_env_values(repo)
+    values = _build_env_values(repo, args.image)
     if not env_path.is_file():
         example = repo / ".env.example"
         if example.is_file() and not args.dry_run:
@@ -454,19 +503,23 @@ def main() -> None:
     _merge_env_file(env_path, values, dry_run=args.dry_run)
 
     if not args.skip_build:
-        _log("\n[5/5] Build immagine sandbox...")
-        _build_sandbox_image(repo, dry_run=args.dry_run)
+        _log("\n[5/5] Immagine sandbox...")
+        _build_sandbox_image(
+            repo, args.image, args.compose_file, dry_run=args.dry_run
+        )
     else:
         _log("\n[5/5] Build immagine sandbox — skip")
 
     _log("\nVerifica...")
-    _verify(dry_run=args.dry_run)
+    _verify(args.image, dry_run=args.dry_run)
 
     _log("\nOrdine di avvio consigliato:")
     _log("  1. systemctl --user start podman.socket")
-    _log("  2. docker compose up -d")
+    _log(f"  2. {' '.join(_compose_cmd(args.compose_file))} up -d")
 
-    _maybe_restart_backend(repo, dry_run=args.dry_run, assume_yes=args.yes)
+    _maybe_restart_backend(
+        repo, args.compose_file, dry_run=args.dry_run, assume_yes=args.yes
+    )
     _log("\nSetup completato.")
 
 

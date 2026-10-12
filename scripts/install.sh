@@ -11,6 +11,7 @@ export CADDY_HTTP_PORT="${CADDY_HTTP_PORT:-80}"
 export CADDY_HTTPS_PORT="${CADDY_HTTPS_PORT:-443}"
 AION_SKIP_TUNING="${AION_SKIP_TUNING:-0}"
 AION_SKIP_START="${AION_SKIP_START:-0}"
+AION_SKIP_PODMAN="${AION_SKIP_PODMAN:-0}"
 FORCE=0
 USE_LOCAL=0
 AION_YES=0
@@ -40,6 +41,7 @@ Options:
   --email <email>    Email for Let's Encrypt
   --no-tuning        Skip optimal environment tuning
   --no-start         Do not start the stack after installation
+  --no-podman        Skip Podman rootless setup (session sandbox falls back to subprocess)
   --force            Overwrite existing .env if present
   --local            Use local repository files instead of downloading from GitHub (for testing)
   --yes|-y           Skip interactive confirmations (upgrade mode)
@@ -56,6 +58,7 @@ while [[ $# -gt 0 ]]; do
         --email) export LETS_ENCRYPT_EMAIL="$2"; shift 2 ;;
         --no-tuning) AION_SKIP_TUNING=1; shift ;;
         --no-start) AION_SKIP_START=1; shift ;;
+        --no-podman) AION_SKIP_PODMAN=1; shift ;;
         --force) FORCE=1; shift ;;
         --local) USE_LOCAL=1; shift ;;
         --yes|-y) AION_YES=1; shift ;;
@@ -613,6 +616,9 @@ fetch "docker/Caddyfile" "docker/Caddyfile"
 fetch "scripts/apply_optimal_aion_env.py" "scripts/apply_optimal_aion_env.py"
 fetch "scripts/env_tuning_profiles.py" "scripts/env_tuning_profiles.py"
 fetch ".env.example" ".env.example"
+fetch "scripts/setup-podman-sandbox.sh" "scripts/setup-podman-sandbox.sh"
+fetch "scripts/setup_podman_sandbox.py" "scripts/setup_podman_sandbox.py"
+chmod +x scripts/setup-podman-sandbox.sh
 
 echo "[ok] Files downloaded."
 
@@ -794,6 +800,57 @@ if [ "$AION_SKIP_TUNING" -eq 0 ]; then
     fi
 else
     echo "--- Step 4: Skipping Tuning ---"
+fi
+
+# --- Step 4.5: Podman rootless sandbox ---
+# Gira prima dell'avvio dello stack: se il socket non esiste quando Docker
+# monta AION_PODMAN_SOCKET_HOST, Docker crea al suo posto una directory di root.
+run_podman_setup() {
+    local args=(
+        --image "ghcr.io/aion-by-asa-computer/aion-sandbox:${AION_VERSION}"
+        --compose-file docker-compose.ghcr.yml
+        -y
+    )
+    # stdin da /dev/null: con `curl | bash` lo stdin è lo script stesso.
+    if [ "$(id -u)" -ne 0 ]; then
+        bash scripts/setup-podman-sandbox.sh "${args[@]}" </dev/null
+        return
+    fi
+    if [ -z "${SUDO_USER:-}" ] || [ "$SUDO_USER" = "root" ]; then
+        echo "[warning] Podman rootless richiede un utente non-root: rilancia install.sh"
+        echo "          come utente di deploy (o con sudo da quell'utente)."
+        return 1
+    fi
+    # Lanciato con sudo: Podman rootless va configurato per l'utente che ha invocato sudo.
+    local deploy_uid
+    deploy_uid="$(id -u "$SUDO_USER")"
+    loginctl enable-linger "$SUDO_USER" || true
+    for _ in {1..10}; do
+        [ -d "/run/user/$deploy_uid" ] && break
+        sleep 1
+    done
+    sudo -u "$SUDO_USER" -H env \
+        USER="$SUDO_USER" \
+        XDG_RUNTIME_DIR="/run/user/$deploy_uid" \
+        DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$deploy_uid/bus" \
+        bash scripts/setup-podman-sandbox.sh "${args[@]}" </dev/null
+}
+
+if [ "$AION_SKIP_PODMAN" -eq 1 ]; then
+    echo "--- Step 4.5: Skipping Podman Sandbox Setup ---"
+elif [ "$(uname -s)" != "Linux" ]; then
+    echo "--- Step 4.5: Skipping Podman Sandbox Setup (solo Linux; sandbox subprocess) ---"
+else
+    echo "--- Step 4.5: Podman Sandbox Setup ---"
+    if run_podman_setup; then
+        echo "[ok] Podman sandbox configurata."
+    else
+        echo "[warning] Setup Podman fallito: verifica AION_SANDBOX_BACKEND nel .env"
+        echo "          (subprocess se il socket Podman non è stato creato)."
+        echo "          Per riprovare: cd $AION_INSTALL_DIR && ./scripts/setup-podman-sandbox.sh \\"
+        echo "            --image ghcr.io/aion-by-asa-computer/aion-sandbox:${AION_VERSION} \\"
+        echo "            --compose-file docker-compose.ghcr.yml"
+    fi
 fi
 
 # --- Step 5 & 6: Startup & State ---

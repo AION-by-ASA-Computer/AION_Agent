@@ -26,7 +26,19 @@ The script:
 6. Builds `aion/sandbox:latest` with Docker and loads it into Podman
 7. Optionally rebuilds the backend container
 
-Flags: `--dry-run`, `--skip-install`, `--skip-build`, `-y` (non-interactive restart).
+Flags: `--dry-run`, `--skip-install`, `--skip-build`, `-y` (non-interactive restart),
+`--image <ref>` (sandbox image written to `.env`; a registry-qualified ref such as
+`ghcr.io/...:1.6.1` is pulled with `podman pull` instead of built with Docker),
+`--compose-file <file>` (compose file used for build/restart, e.g. `docker-compose.ghcr.yml`).
+
+### GHCR installer
+
+`scripts/install.sh` downloads both setup scripts and runs them on Linux (step 4.5,
+before the stack starts) with the versioned `ghcr.io/aion-by-asa-computer/aion-sandbox`
+image and `docker-compose.ghcr.yml`. When launched via `sudo`, Podman rootless is
+configured for `$SUDO_USER`; plain root is skipped. Use `--no-podman`
+(or `AION_SKIP_PODMAN=1`) to keep the subprocess sandbox. A failed Podman setup is
+non-fatal: the installer prints the command to retry.
 
 ## Host setup (manual)
 
