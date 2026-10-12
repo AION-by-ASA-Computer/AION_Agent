@@ -1294,8 +1294,7 @@ export default function MCPHub() {
                   {displayedMarketItems.map((item) => {
                     const isInstallingThis = installingId === item.id;
                     const isThirdPartyOAuth =
-                      item.install_type === "remote" ||
-                      (item.source === "Smithery" && Boolean(item.deployment_url || item.is_remote || item.remote));
+                      item.install_type === "remote" && item.source !== "Smithery";
 
                     const docUrl =
                       item.url ||
@@ -1314,12 +1313,17 @@ export default function MCPHub() {
                                 ? `https://github.com/${item.name}`
                                 : undefined);
 
+                    const isCatalogItem =
+                      item.source === "Smithery" && (item.catalog_only || !docUrl?.includes("github.com"));
+
                     return (
                       <div
                         key={item.id}
-                        className={`glass-card flex flex-col justify-between bg-[#141417]/90 border rounded-2xl p-5.5 backdrop-blur-md transition-all duration-200 shadow-xl group ${isThirdPartyOAuth
-                          ? "border-sky-500/30 bg-gradient-to-br from-sky-500/5 via-[#141417] to-[#101012] hover:border-sky-400/70 shadow-sky-500/5 hover:shadow-sky-500/10"
-                          : "border-purple-500/30 bg-gradient-to-br from-purple-500/5 via-[#141417] to-[#101012] hover:border-purple-400/70 shadow-purple-500/5 hover:shadow-purple-500/10"
+                        className={`glass-card flex flex-col justify-between bg-[#141417]/90 border rounded-2xl p-5.5 backdrop-blur-md transition-all duration-200 shadow-xl group ${isCatalogItem
+                          ? "border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 via-[#141417] to-[#101012] hover:border-emerald-400/70 shadow-emerald-500/5 hover:shadow-emerald-500/10"
+                          : isThirdPartyOAuth
+                            ? "border-sky-500/30 bg-gradient-to-br from-sky-500/5 via-[#141417] to-[#101012] hover:border-sky-400/70 shadow-sky-500/5 hover:shadow-sky-500/10"
+                            : "border-purple-500/30 bg-gradient-to-br from-purple-500/5 via-[#141417] to-[#101012] hover:border-purple-400/70 shadow-purple-500/5 hover:shadow-purple-500/10"
                           }`}
                       >
                         {/* Top Section */}
@@ -1338,12 +1342,20 @@ export default function MCPHub() {
                                 />
                               ) : (
                                 <div
-                                  className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${isThirdPartyOAuth
-                                    ? "bg-sky-500/15 border-sky-500/30 text-sky-400"
-                                    : "bg-purple-500/15 border-purple-500/30 text-purple-400"
+                                  className={`w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 ${isCatalogItem
+                                    ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-400"
+                                    : isThirdPartyOAuth
+                                      ? "bg-sky-500/15 border-sky-500/30 text-sky-400"
+                                      : "bg-purple-500/15 border-purple-500/30 text-purple-400"
                                     }`}
                                 >
-                                  {isThirdPartyOAuth ? <Globe className="w-5 h-5" /> : <Box className="w-5 h-5 text-purple-400" />}
+                                  {isCatalogItem ? (
+                                    <Globe className="w-5 h-5 text-emerald-400" />
+                                  ) : isThirdPartyOAuth ? (
+                                    <Globe className="w-5 h-5" />
+                                  ) : (
+                                    <Box className="w-5 h-5 text-purple-400" />
+                                  )}
                                 </div>
                               )}
                               <div className="min-w-0">
@@ -1353,7 +1365,11 @@ export default function MCPHub() {
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     title={`Open repository or documentation (${docUrl})`}
-                                    className={`group/link inline-flex items-center gap-1.5 text-white transition-colors max-w-full ${isThirdPartyOAuth ? "hover:text-sky-300" : "hover:text-purple-300"
+                                    className={`group/link inline-flex items-center gap-1.5 text-white transition-colors max-w-full ${isCatalogItem
+                                      ? "hover:text-emerald-300"
+                                      : isThirdPartyOAuth
+                                        ? "hover:text-sky-300"
+                                        : "hover:text-purple-300"
                                       }`}
                                   >
                                     <h3 className="text-base font-bold truncate">{item.name}</h3>
@@ -1372,7 +1388,22 @@ export default function MCPHub() {
                           </p>
 
                           {/* Center Installation Type Banner */}
-                          {isThirdPartyOAuth ? (
+                          {isCatalogItem ? (
+                            <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300">
+                              <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
+                              <div className="min-w-0">
+                                <div className="text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                                  <span>Smithery Catalog</span>
+                                  {item.verified && (
+                                    <span className="text-[10px] bg-emerald-500/20 text-emerald-300 px-1.5 py-0.5 rounded border border-emerald-500/30">Verified</span>
+                                  )}
+                                </div>
+                                <div className="text-[11px] text-emerald-400/80 truncate">
+                                  Catalog entry — view schema &amp; documentation
+                                </div>
+                              </div>
+                            </div>
+                          ) : isThirdPartyOAuth ? (
                             <div className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-300">
                               <KeyRound className="w-4 h-4 text-sky-400 shrink-0" />
                               <div className="min-w-0">
@@ -1401,7 +1432,20 @@ export default function MCPHub() {
 
                         {/* Footer: Action Button */}
                         <div className="pt-3.5 mt-3.5 border-t border-white/10 flex items-center justify-end">
-                          {isThirdPartyOAuth ? (
+                          {isCatalogItem ? (
+                            docUrl ? (
+                              <a
+                                href={docUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-xs font-bold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                              >
+                                <ExternalLink className="w-3.5 h-3.5" /> View in Catalog
+                              </a>
+                            ) : (
+                              <span className="text-xs text-gray-500 font-medium">Catalog only</span>
+                            )
+                          ) : isThirdPartyOAuth ? (
                             <button
                               type="button"
                               onClick={() => {
@@ -1449,10 +1493,10 @@ export default function MCPHub() {
                                   package_url: item.qualified_name || item.name,
                                   source: item.source,
                                   url: item.url,
-                                  is_remote: item.remote || Boolean(item.deployment_url),
-                                  deployment_url: item.deployment_url,
-                                  remote_url: item.deployment_url,
-                                  install_type: item.install_type,
+                                  is_remote: false,
+                                  deployment_url: "",
+                                  remote_url: "",
+                                  install_type: item.install_type || "zero-install",
                                 });
                                 setZeroWizardOpen(true);
                               }}

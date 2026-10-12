@@ -289,7 +289,7 @@ async def integration_row_to_public_dict(
     )
 
     hints: List[Dict[str, Any]] = []
-    if show_form and credentials_feature_enabled() and not anonymous and user_enabled:
+    if show_form and credentials_feature_enabled() and not anonymous:
         if hints_map is not None:
             hints = hints_map.get(r.server_slug, [])
         else:

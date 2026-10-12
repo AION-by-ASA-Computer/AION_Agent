@@ -66,12 +66,12 @@ export function ProfileSelectorDropdown({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex w-full items-center justify-between gap-3 rounded-2xl border border-input bg-background/80 px-3.5 py-2.5 text-left transition hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer",
-          open && "border-primary ring-2 ring-primary/20",
+          "flex w-full items-center justify-between gap-3 rounded-2xl border border-border/80 dark:border-white/15 bg-background dark:bg-black/50 px-3.5 py-2.5 text-left transition hover:border-border dark:hover:border-white/25 focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 outline-none cursor-pointer",
+          open && "border-zinc-400 dark:border-zinc-500 ring-2 ring-zinc-400/20",
         )}
       >
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-xs">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-muted/80 dark:bg-zinc-800 text-foreground border border-border/60 dark:border-white/10 font-bold text-xs">
             {selectedProfile ? selectedProfile.name.charAt(0).toUpperCase() : "A"}
           </div>
           <div className="min-w-0 flex-1">
@@ -94,7 +94,7 @@ export function ProfileSelectorDropdown({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 z-[60] mt-1.5 w-full rounded-2xl border border-border bg-popover text-popover-foreground p-2.5 shadow-2xl ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95 duration-150">
+        <div className="absolute top-full left-0 z-[60] mt-1.5 w-full rounded-2xl border border-border/80 dark:border-white/15 bg-popover dark:bg-zinc-900 text-popover-foreground p-2.5 shadow-2xl ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95 duration-150">
           <div className="flex items-center justify-between border-b border-border/40 pb-2 px-1">
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
               Seleziona Profilo
@@ -111,7 +111,7 @@ export function ProfileSelectorDropdown({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cerca profilo o abilità…"
-              className="w-full rounded-xl border border-input bg-muted/40 pl-8 pr-7 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+              className="w-full rounded-xl border border-border/80 dark:border-white/15 bg-muted/40 dark:bg-black/50 pl-8 pr-7 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-zinc-400 dark:focus:border-zinc-500 focus:bg-background focus:outline-none focus:ring-2 focus:ring-zinc-400/20 transition-all"
               autoFocus
             />
             {search && (
@@ -140,7 +140,7 @@ export function ProfileSelectorDropdown({
                   className={cn(
                     "flex w-full items-center justify-between gap-2.5 rounded-xl border p-2 text-left transition cursor-pointer",
                     isSelected
-                      ? "border-primary/50 bg-primary/10 text-primary shadow-xs font-semibold"
+                      ? "border-border/80 dark:border-white/15 bg-muted dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
                       : "border-transparent hover:bg-muted/60 text-foreground",
                   )}
                 >
@@ -149,7 +149,7 @@ export function ProfileSelectorDropdown({
                       className={cn(
                         "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition-colors",
                         isSelected
-                          ? "bg-primary text-primary-foreground"
+                          ? "bg-foreground text-background"
                           : "bg-muted text-muted-foreground",
                       )}
                     >
@@ -164,7 +164,7 @@ export function ProfileSelectorDropdown({
                       ) : null}
                     </div>
                   </div>
-                  {isSelected && <Check className="h-4 w-4 shrink-0 text-primary ml-2" />}
+                  {isSelected && <Check className="h-4 w-4 shrink-0 text-foreground ml-2" />}
                 </button>
               );
             })}

@@ -2137,6 +2137,7 @@ async def get_market_config(
     from ..marketplaces.smithery_client import (
         get_smithery_server_details,
         extract_normalized_envs_from_schema,
+        has_smithery_proprietary_auth,
     )
 
     details = get_smithery_server_details(target_name)
@@ -2145,11 +2146,22 @@ async def get_market_config(
             status_code=404, detail=f"Dettagli non trovati per {target_name}"
         )
 
+    if has_smithery_proprietary_auth(details, target_name):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Il server {target_name} richiede autenticazione proprietaria Smithery OAuth e non può essere installato. Smithery è utilizzabile solo come catalogo.",
+        )
+
     normalized_envs = extract_normalized_envs_from_schema(details)
     connections = details.get("connections") or []
     runtime = "node"
     deployment_url = (details.get("deploymentUrl") or "").strip()
-    is_remote = bool(details.get("remote")) or bool(deployment_url)
+
+    # Ignora proxy proprietari Smithery (*.run.tools / smithery.ai)
+    if "run.tools" in deployment_url.lower() or "smithery.ai" in deployment_url.lower():
+        deployment_url = ""
+
+    is_remote = False
 
     if (
         connections
@@ -2157,16 +2169,13 @@ async def get_market_config(
         and isinstance(connections[0], dict)
     ):
         runtime = connections[0].get("runtime") or "node"
-        if not deployment_url:
-            deployment_url = (connections[0].get("deploymentUrl") or "").strip()
-        if connections[0].get("type") in ("http", "sse"):
+        conn_dep = (connections[0].get("deploymentUrl") or "").strip()
+        if conn_dep and "run.tools" not in conn_dep.lower() and "smithery.ai" not in conn_dep.lower():
+            deployment_url = conn_dep
+        if connections[0].get("type") in ("http", "sse") and deployment_url:
             is_remote = True
 
     q_name = (details.get("qualifiedName") or target_name).strip()
-    if is_remote and not deployment_url:
-        clean_host_slug = q_name.replace("/", "--").replace("@", "")
-        deployment_url = f"https://{clean_host_slug}.run.tools"
-
     auth_type = "oauth2"
     credential_mode = "per_user"
 

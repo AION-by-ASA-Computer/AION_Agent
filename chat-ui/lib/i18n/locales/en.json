@@ -764,6 +764,7 @@
   "artifacts": {
     "title": "Files",
     "no_artifacts": "No files or artifacts generated in this session.",
+    "empty_folder": "No files in this folder.",
     "source": {
       "live": "streaming",
       "history": "history"

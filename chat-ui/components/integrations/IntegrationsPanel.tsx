@@ -299,21 +299,21 @@ export function IntegrationsPanel() {
 
         {/* Barra Filtri: Ricerca e Tab Categorie */}
         {integrations.length > 0 ? (
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2 border-b border-border/60">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pb-2 border-b border-border/70 dark:border-white/10">
             {/* Tab di selezione categoria */}
-            <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-muted/40 border border-border/60">
+            <div className="flex flex-wrap items-center gap-1.5 p-1 rounded-2xl bg-muted/40 dark:bg-zinc-900/80 border border-border/70 dark:border-white/10 shadow-2xs">
               <button
                 type="button"
                 onClick={() => setSelectedTab("all")}
                 className={cn(
                   "focus-ring inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition cursor-pointer",
                   selectedTab === "all"
-                    ? "bg-background text-foreground shadow-sm"
+                    ? "bg-background dark:bg-zinc-800 text-foreground shadow-xs border border-border/60 dark:border-white/10"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 <span>{t("integrationsPage.tab_all") || "Tutti"}</span>
-                <span className="rounded-full bg-muted px-1.5 py-0.2 text-[10px] font-bold">
+                <span className="rounded-full bg-muted dark:bg-zinc-700/60 px-1.5 py-0.2 text-[10px] font-bold">
                   {integrations.length}
                 </span>
               </button>
@@ -324,7 +324,7 @@ export function IntegrationsPanel() {
                 className={cn(
                   "focus-ring inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition cursor-pointer",
                   selectedTab === "configured"
-                    ? "bg-background text-emerald-600 dark:text-emerald-400 shadow-sm"
+                    ? "bg-background dark:bg-zinc-800 text-emerald-600 dark:text-emerald-400 shadow-xs border border-emerald-500/30"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -341,7 +341,7 @@ export function IntegrationsPanel() {
                 className={cn(
                   "focus-ring inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition cursor-pointer",
                   selectedTab === "pending"
-                    ? "bg-background text-amber-600 dark:text-amber-400 shadow-sm"
+                    ? "bg-background dark:bg-zinc-800 text-amber-600 dark:text-amber-400 shadow-xs border border-amber-500/30"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -358,7 +358,7 @@ export function IntegrationsPanel() {
                 className={cn(
                   "focus-ring inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition cursor-pointer",
                   selectedTab === "system"
-                    ? "bg-background text-sky-600 dark:text-sky-400 shadow-sm"
+                    ? "bg-background dark:bg-zinc-800 text-sky-600 dark:text-sky-400 shadow-xs border border-sky-500/30"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -376,13 +376,13 @@ export function IntegrationsPanel() {
                   className={cn(
                     "focus-ring inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition cursor-pointer",
                     selectedTab === "disabled"
-                      ? "bg-background text-muted-foreground shadow-sm"
+                      ? "bg-background dark:bg-zinc-800 text-muted-foreground shadow-xs border border-border/60 dark:border-white/10"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
                   <XCircle className="h-3.5 w-3.5" />
                   <span>{t("integrationsPage.tab_disabled") || "Disattivati"}</span>
-                  <span className="rounded-full bg-muted px-1.5 py-0.2 text-[10px] font-bold">
+                  <span className="rounded-full bg-muted dark:bg-zinc-700/60 px-1.5 py-0.2 text-[10px] font-bold">
                     {disabled.length}
                   </span>
                 </button>
@@ -397,7 +397,7 @@ export function IntegrationsPanel() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder={t("integrationsPage.search_placeholder") || "Cerca integrazione…"}
-                className="w-full rounded-xl border border-border/80 bg-background pl-9 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                className="w-full rounded-xl border border-border/80 dark:border-white/15 bg-background/90 dark:bg-black/40 pl-9 pr-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 dark:focus:ring-zinc-400/20 outline-none transition"
               />
             </div>
           </div>

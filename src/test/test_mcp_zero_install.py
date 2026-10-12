@@ -254,3 +254,108 @@ def test_zero_install_remote_smithery_server(monkeypatch: pytest.MonkeyPatch, tm
             assert cfg.credential_mode == "per_user"
 
     asyncio.run(run_test())
+
+
+def test_smithery_proprietary_auth_detection_and_catalog_filtering():
+    from src.marketplaces.smithery_client import (
+        has_smithery_proprietary_auth,
+        search_smithery_servers,
+    )
+
+    # 1. Verifica identificazione autenticazione proprietaria Smithery
+    by_smithery_server = {
+        "qualifiedName": "gmail",
+        "bySmithery": True,
+        "deploymentUrl": "https://gmail.run.tools",
+        "verified": True,
+    }
+    assert has_smithery_proprietary_auth(by_smithery_server, "gmail") is True
+
+    run_tools_server = {
+        "qualifiedName": "some/proxy",
+        "homepage": "https://smithery.ai/servers/some/proxy",
+        "deploymentUrl": "https://some-proxy.run.tools",
+    }
+    assert has_smithery_proprietary_auth(run_tools_server, "some/proxy") is True
+
+    standard_gh_server = {
+        "qualifiedName": "user/my-mcp",
+        "bySmithery": False,
+        "repository": "https://github.com/user/my-mcp",
+        "homepage": "https://github.com/user/my-mcp",
+        "verified": False,
+    }
+    assert has_smithery_proprietary_auth(standard_gh_server, "user/my-mcp") is False
+
+    # 2. Mock risposta search_smithery_servers
+    mock_payload = {
+        "servers": [
+            {
+                "qualifiedName": "gmail",
+                "bySmithery": True,
+                "verified": True,
+                "deploymentUrl": "https://gmail.run.tools",
+            },
+            {
+                "qualifiedName": "googlecalendar",
+                "bySmithery": True,
+                "verified": True,
+                "deploymentUrl": "https://googlecalendar.run.tools",
+            },
+            {
+                "qualifiedName": "random/unverified-custom",
+                "bySmithery": False,
+                "verified": False,
+                "homepage": "https://custom-site.com/tool",
+            },
+            {
+                "qualifiedName": "user/github-mcp",
+                "bySmithery": False,
+                "verified": False,
+                "repository": "https://github.com/user/github-mcp",
+                "displayName": "GitHub MCP",
+            },
+            {
+                "qualifiedName": "verified-partner",
+                "bySmithery": False,
+                "verified": True,
+                "homepage": "https://partner.com",
+                "displayName": "Partner MCP",
+            },
+        ]
+    }
+
+    class MockResponse:
+        status_code = 200
+
+        def json(self):
+            return mock_payload
+
+    with patch("requests.get", return_value=MockResponse()):
+        results = search_smithery_servers("test")
+
+    result_names = [r["qualified_name"] for r in results]
+    # Deve escludere gmail e googlecalendar (autenticazione proprietaria Smithery)
+    assert "gmail" not in result_names
+    assert "googlecalendar" not in result_names
+    # Deve escludere quello non verificato e non GitHub
+    assert "random/unverified-custom" not in result_names
+
+    # Deve mantenere solo quello standard GitHub e quello verificato
+    assert "user/github-mcp" in result_names
+    assert "verified-partner" in result_names
+
+    # Verifica metadati catalogo (non usati come proxy remoto)
+    gh_item = next(r for r in results if r["qualified_name"] == "user/github-mcp")
+    assert gh_item["remote"] is False
+    assert gh_item["deployment_url"] == ""
+    assert gh_item["install_type"] == "git"
+    assert gh_item["is_github"] is True
+
+    partner_item = next(r for r in results if r["qualified_name"] == "verified-partner")
+    assert partner_item["remote"] is False
+    assert partner_item["deployment_url"] == ""
+    assert partner_item["install_type"] == "catalog"
+    assert partner_item["verified"] is True
+    assert partner_item["catalog_only"] is True
+

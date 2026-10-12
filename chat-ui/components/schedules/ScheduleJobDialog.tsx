@@ -87,11 +87,11 @@ function FloatingInput({
         required={required}
         placeholder={isFloating ? placeholder : ""}
         className={cn(
-          "peer w-full rounded-2xl border border-input bg-background/80 transition-all duration-200 outline-none text-foreground",
+          "peer w-full rounded-2xl border border-border/80 dark:border-white/15 bg-background dark:bg-black/50 transition-all duration-200 outline-none text-foreground hover:border-border dark:hover:border-white/25",
           isTitle
             ? "px-4 pt-6 pb-2.5 text-base sm:text-lg font-semibold tracking-tight"
             : "px-4 pt-5 pb-2 text-sm",
-          isFocused ? "border-primary ring-2 ring-primary/20" : "hover:border-border",
+          isFocused ? "border-zinc-400 dark:border-zinc-500 ring-2 ring-zinc-400/20 dark:ring-zinc-400/20" : "",
           className,
         )}
       />
@@ -103,11 +103,11 @@ function FloatingInput({
             ? cn(
               "top-1.5 font-semibold uppercase tracking-wider",
               isTitle
-                ? "text-[10px] text-muted-foreground peer-focus:text-primary"
-                : "text-[11px] text-primary",
+                ? "text-[10px] text-muted-foreground peer-focus:text-foreground"
+                : "text-[11px] text-foreground",
             )
             : cn(
-              "font-normal text-muted-foreground",
+              "font-medium text-muted-foreground",
               isTitle ? "top-4 text-base" : "top-3.5 text-sm",
             ),
         )}
@@ -200,8 +200,8 @@ function ProjectSelectorDropdown({
         type="button"
         onClick={() => setOpen((v) => !v)}
         className={cn(
-          "flex w-full items-center justify-between gap-3 rounded-2xl border border-input bg-background/80 px-3.5 py-2.5 text-left transition hover:border-primary/50 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none cursor-pointer",
-          open && "border-primary ring-2 ring-primary/20",
+          "flex w-full items-center justify-between gap-3 rounded-2xl border border-border/80 dark:border-white/15 bg-background dark:bg-black/50 px-3.5 py-2.5 text-left transition hover:border-border dark:hover:border-white/25 focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 outline-none cursor-pointer",
+          open && "border-zinc-400 dark:border-zinc-500 ring-2 ring-zinc-400/20",
         )}
       >
         <div className="flex items-center gap-3 min-w-0">
@@ -228,7 +228,7 @@ function ProjectSelectorDropdown({
       </button>
 
       {open && (
-        <div className="absolute top-full left-0 z-[60] mt-1.5 w-full rounded-2xl border border-border bg-popover text-popover-foreground dark:bg-zinc-900 p-2.5 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-150">
+        <div className="absolute top-full left-0 z-[60] mt-1.5 w-full rounded-2xl border border-border/80 dark:border-white/15 bg-popover dark:bg-zinc-900 text-popover-foreground p-2.5 shadow-2xl animate-in fade-in-0 zoom-in-95 duration-150">
           <div className="flex items-center justify-between border-b border-border/40 pb-2 px-1">
             <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
               Seleziona Progetto Memoria
@@ -246,7 +246,7 @@ function ProjectSelectorDropdown({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Cerca progetto memoria…"
-                className="w-full rounded-xl border border-input bg-muted/40 pl-8 pr-7 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:bg-background focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
+                className="w-full rounded-xl border border-border/80 dark:border-white/15 bg-muted/40 dark:bg-black/50 pl-8 pr-7 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:border-zinc-400 dark:focus:border-zinc-500 focus:bg-background focus:outline-none focus:ring-2 focus:ring-zinc-400/20 transition-all"
               />
               {search && (
                 <button
@@ -274,7 +274,7 @@ function ProjectSelectorDropdown({
                   className={cn(
                     "flex w-full items-center justify-between gap-2.5 rounded-xl border p-2 text-left transition cursor-pointer",
                     isSelected
-                      ? "border-primary/50 bg-primary/10 text-primary shadow-xs"
+                      ? "border-border/80 dark:border-white/15 bg-muted dark:bg-zinc-800 text-foreground shadow-xs font-semibold"
                       : "border-transparent hover:bg-muted/60 text-foreground",
                   )}
                 >
@@ -283,7 +283,7 @@ function ProjectSelectorDropdown({
                       className={cn(
                         "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-bold transition-colors",
                         isSelected
-                          ? "bg-primary text-primary-foreground"
+                          ? "bg-foreground text-background"
                           : "bg-muted text-muted-foreground",
                       )}
                     >
@@ -300,7 +300,7 @@ function ProjectSelectorDropdown({
                       ) : null}
                     </div>
                   </div>
-                  {isSelected && <Check className="h-4 w-4 shrink-0 text-primary ml-2" />}
+                  {isSelected && <Check className="h-4 w-4 shrink-0 text-foreground ml-2" />}
                 </button>
               );
             })}
@@ -424,12 +424,12 @@ export function ScheduleJobDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 sm:p-6 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="max-h-[92vh] w-full max-w-2xl flex flex-col rounded-3xl border border-border bg-card text-card-foreground shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 sm:p-6 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="max-h-[92vh] w-full max-w-2xl flex flex-col rounded-3xl border border-border/80 dark:border-white/10 bg-card dark:bg-[#18181b] text-card-foreground shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent">
         {/* Header Modale */}
-        <div className="flex items-center justify-between border-b border-border p-5 sm:p-6 bg-muted/20 shrink-0">
+        <div className="flex items-center justify-between border-b border-border/70 dark:border-white/10 p-5 sm:p-6 bg-muted/25 dark:bg-zinc-900/60 shrink-0">
           <div className="flex items-center gap-3.5 min-w-0 pr-4">
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary shadow-sm">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/80 dark:border-white/10 bg-muted/60 dark:bg-zinc-800 text-foreground dark:text-zinc-200 shadow-sm">
               <CalendarClock className="h-5 w-5" aria-hidden />
             </div>
             <div className="min-w-0 flex-1">
@@ -444,7 +444,7 @@ export function ScheduleJobDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition cursor-pointer shrink-0"
+            className="rounded-xl p-2 text-muted-foreground hover:bg-muted dark:hover:bg-zinc-800 hover:text-foreground transition cursor-pointer shrink-0"
             aria-label={t("schedulesPage.cancel")}
           >
             <X className="h-5 w-5" />
@@ -452,9 +452,9 @@ export function ScheduleJobDialog({
         </div>
 
         {/* Form Container */}
-        <form onSubmit={(e) => void save(e)} className="flex flex-col flex-1 min-h-0 overflow-hidden bg-card">
+        <form onSubmit={(e) => void save(e)} className="flex flex-col flex-1 min-h-0 overflow-hidden bg-card dark:bg-[#18181b]">
           {/* Form Body Scrollabile */}
-          <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6">
+          <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-6 bg-muted/10 dark:bg-zinc-950/40">
             {/* 1. Nome dell'automazione */}
             <div>
               <FloatingInput
@@ -469,9 +469,9 @@ export function ScheduleJobDialog({
             </div>
 
             {/* 2. Pianificazione & Frequenza */}
-            <div className="rounded-2xl border border-border/70 bg-muted/25 p-4 space-y-4 shadow-xs">
-              <div className="flex items-center gap-2 border-b border-border/40 pb-2">
-                <Clock className="h-4 w-4 text-primary" />
+            <div className="rounded-2xl border border-border/80 dark:border-white/10 bg-card/90 dark:bg-zinc-900/70 p-4 sm:p-5 space-y-4 shadow-xs">
+              <div className="flex items-center gap-2 border-b border-border/60 dark:border-white/10 pb-2.5">
+                <Clock className="h-4 w-4 text-muted-foreground dark:text-zinc-400" />
                 <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
                   {t("schedulesPage.schedule_label")}
                 </span>
@@ -486,7 +486,7 @@ export function ScheduleJobDialog({
                 />
               </div>
 
-              <div className="pt-2 border-t border-border/50">
+              <div className="pt-2 border-t border-border/60 dark:border-white/10">
                 <label className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("schedulesPage.field_timezone")}
                 </label>
@@ -494,7 +494,7 @@ export function ScheduleJobDialog({
                   value={timezone}
                   onValueChange={setTimezone}
                   items={tzItems}
-                  triggerClassName="w-full max-w-none"
+                  triggerClassName="w-full max-w-none border-border/80 dark:border-white/15 bg-background dark:bg-black/50"
                 />
               </div>
             </div>
@@ -528,7 +528,7 @@ export function ScheduleJobDialog({
             <div className="space-y-2.5">
               <div className="flex items-center justify-between pb-1">
                 <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
+                  <Sparkles className="h-4 w-4 text-amber-500 dark:text-amber-400" />
                   <span className="text-xs font-semibold uppercase tracking-wide text-foreground">
                     {t("schedulesPage.field_prompt")}
                   </span>
@@ -548,7 +548,7 @@ export function ScheduleJobDialog({
                       setPrompt(t(`schedulesPage.templates.${key}.prompt`));
                       if (!name.trim()) setName(t(`schedulesPage.templates.${key}.name`));
                     }}
-                    className="rounded-full border border-border/80 bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground transition hover:border-primary/50 hover:bg-primary/10 hover:text-primary cursor-pointer"
+                    className="rounded-full border border-border/80 dark:border-white/10 bg-background/90 dark:bg-zinc-800/80 px-3 py-1 text-xs font-medium text-muted-foreground transition hover:border-foreground/30 hover:bg-muted dark:hover:bg-zinc-700/60 hover:text-foreground cursor-pointer shadow-2xs"
                   >
                     {t(`schedulesPage.templates.${key}.name`)}
                   </button>
@@ -562,14 +562,14 @@ export function ScheduleJobDialog({
                 required
                 rows={4}
                 placeholder={t("schedulesPage.prompt_placeholder") || "Descrivi l'istruzione o la query da eseguire periodicamente..."}
-                className="w-full rounded-2xl border border-input bg-background/80 p-3.5 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/60 transition-all duration-200 outline-none resize-y hover:border-border focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="w-full rounded-2xl border border-border/80 dark:border-white/15 bg-background dark:bg-black/50 p-3.5 text-sm leading-relaxed text-foreground placeholder:text-muted-foreground/60 transition-all duration-200 outline-none resize-y hover:border-border dark:hover:border-white/25 focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 dark:focus:ring-zinc-400/20"
               />
             </div>
 
             {/* 6. Conversazione */}
-            <fieldset className="space-y-2 rounded-2xl border border-border/70 bg-muted/25 p-3.5 shadow-xs">
+            <fieldset className="space-y-2 rounded-2xl border border-border/80 dark:border-white/10 bg-card/90 dark:bg-zinc-900/70 p-4 shadow-xs">
               <legend className="flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <MessageSquare className="h-3.5 w-3.5 text-primary" />
+                <MessageSquare className="h-3.5 w-3.5 text-muted-foreground dark:text-zinc-400" />
                 <span>{t("schedulesPage.session_legend")}</span>
               </legend>
               <ComposerOptionRow
@@ -596,18 +596,18 @@ export function ScheduleJobDialog({
           </div>
 
           {/* Footer Fisso */}
-          <div className="border-t border-border p-4 sm:px-6 bg-muted/20 flex items-center justify-end gap-3 shrink-0">
+          <div className="border-t border-border/70 dark:border-white/10 p-4 sm:px-6 bg-muted/25 dark:bg-zinc-900/60 flex items-center justify-end gap-3 shrink-0">
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition cursor-pointer"
+              className="rounded-xl border border-border/80 dark:border-white/15 bg-background dark:bg-zinc-800/80 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted dark:hover:bg-zinc-700/80 transition cursor-pointer"
             >
               {t("schedulesPage.cancel")}
             </button>
             <button
               type="submit"
               disabled={saving}
-              className="rounded-xl bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition cursor-pointer disabled:opacity-50"
+              className="rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 font-semibold px-5 py-2 text-xs shadow-sm hover:bg-zinc-800 dark:hover:bg-white transition cursor-pointer disabled:opacity-50"
             >
               {saving
                 ? t("schedulesPage.saving")
@@ -707,7 +707,7 @@ export function ScheduleJobRuns({
         {chatId ? (
           <Link
             href={`/c/${chatId}`}
-            className="shrink-0 rounded-lg border border-border bg-background px-2.5 py-1 text-[11px] font-semibold text-primary hover:bg-muted transition"
+            className="shrink-0 rounded-lg border border-border/80 dark:border-white/10 bg-background dark:bg-zinc-800/80 px-2.5 py-1 text-[11px] font-semibold text-foreground dark:text-zinc-200 hover:text-sky-600 dark:hover:text-sky-400 hover:border-sky-500/30 transition shadow-2xs"
           >
             {t("schedulesPage.open_run_chat")}
           </Link>
@@ -726,7 +726,7 @@ export function ScheduleJobRuns({
           <button
             type="button"
             onClick={toggleExpanded}
-            className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline cursor-pointer"
+            className="inline-flex items-center gap-1 text-[11px] font-semibold text-sky-600 dark:text-sky-400 hover:underline cursor-pointer"
           >
             {isExpanded ? (
               <>

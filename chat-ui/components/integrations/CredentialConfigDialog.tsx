@@ -412,15 +412,15 @@ export function CredentialConfigDialog({
       return (
         <div
           key={custom.id}
-          className="rounded-2xl border-2 border-primary/25 bg-card p-4 sm:p-5 shadow-xs space-y-3.5 transition hover:border-primary/40"
+          className="rounded-2xl border border-border/80 dark:border-white/10 bg-card/90 dark:bg-zinc-900/80 p-4 sm:p-5 shadow-xs space-y-3.5 transition hover:border-border dark:hover:border-white/20"
         >
           {/* Header del campo con Titolo, Badge e Cestino */}
-          <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-2.5">
+          <div className="flex items-center justify-between gap-2 border-b border-border/60 dark:border-white/10 pb-2.5">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-xs font-bold text-foreground truncate">
                 {custom.label.trim() || custom.key || "Nuova Variabile"}
               </span>
-              <span className="text-[10px] font-semibold bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+              <span className="text-[10px] font-semibold bg-muted dark:bg-zinc-800 text-foreground px-2 py-0.5 rounded-full border border-border/60 dark:border-white/10">
                 Personalizzata
               </span>
             </div>
@@ -442,7 +442,7 @@ export function CredentialConfigDialog({
                 Nome Variabile ENV
               </label>
               <input
-                className="w-full rounded-xl border border-input bg-background px-3 py-2 font-mono text-xs font-semibold text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                className="w-full rounded-xl border border-border/80 dark:border-white/15 bg-background dark:bg-black/50 px-3 py-2 font-mono text-xs font-semibold text-foreground focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 dark:focus:ring-zinc-400/20 outline-none transition"
                 value={custom.key}
                 onChange={(e) => {
                   const nextKey = normalizeKey(e.target.value);
@@ -465,7 +465,7 @@ export function CredentialConfigDialog({
                 Etichetta Descrittiva
               </label>
               <input
-                className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs text-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition"
+                className="w-full rounded-xl border border-border/80 dark:border-white/15 bg-background dark:bg-black/50 px-3 py-2 text-xs text-foreground focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 dark:focus:ring-zinc-400/20 outline-none transition"
                 value={custom.label}
                 onChange={(e) => {
                   setCustomFields((prev) =>
@@ -480,14 +480,14 @@ export function CredentialConfigDialog({
               <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
                 Tipo Variabile
               </label>
-              <div className="flex items-center rounded-xl border border-input bg-muted/40 p-0.5 text-xs">
+              <div className="flex items-center rounded-xl border border-border/80 dark:border-white/15 bg-muted/40 dark:bg-black/40 p-0.5 text-xs">
                 <button
                   type="button"
                   onClick={() => updateCustomFieldType(custom.id, "password")}
                   className={cn(
                     "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg font-medium transition cursor-pointer",
                     custom.type === "password"
-                      ? "bg-background text-foreground shadow-xs font-bold"
+                      ? "bg-background dark:bg-zinc-800 text-foreground shadow-xs font-bold border border-border/50 dark:border-white/10"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -500,7 +500,7 @@ export function CredentialConfigDialog({
                   className={cn(
                     "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg font-medium transition cursor-pointer",
                     custom.type === "text"
-                      ? "bg-background text-foreground shadow-xs font-bold"
+                      ? "bg-background dark:bg-zinc-800 text-foreground shadow-xs font-bold border border-border/50 dark:border-white/10"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -513,7 +513,7 @@ export function CredentialConfigDialog({
                   className={cn(
                     "flex-1 flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg font-medium transition cursor-pointer",
                     custom.type === "boolean"
-                      ? "bg-background text-foreground shadow-xs font-bold"
+                      ? "bg-background dark:bg-zinc-800 text-foreground shadow-xs font-bold border border-border/50 dark:border-white/10"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -527,14 +527,14 @@ export function CredentialConfigDialog({
               <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
                 Obbligatorietà
               </label>
-              <div className="flex items-center rounded-xl border border-input bg-muted/40 p-0.5 text-xs">
+              <div className="flex items-center rounded-xl border border-border/80 dark:border-white/15 bg-muted/40 dark:bg-black/40 p-0.5 text-xs">
                 <button
                   type="button"
                   onClick={() => updateCustomFieldRequired(custom.id, false)}
                   className={cn(
                     "flex-1 py-1.5 px-2 rounded-lg font-medium transition cursor-pointer text-center",
                     !custom.required
-                      ? "bg-background text-foreground shadow-xs font-bold"
+                      ? "bg-background dark:bg-zinc-800 text-foreground shadow-xs font-bold border border-border/50 dark:border-white/10"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -546,7 +546,7 @@ export function CredentialConfigDialog({
                   className={cn(
                     "flex-1 py-1.5 px-2 rounded-lg font-medium transition cursor-pointer text-center",
                     custom.required
-                      ? "bg-destructive/15 text-destructive shadow-xs font-bold"
+                      ? "bg-destructive/15 text-destructive shadow-xs font-bold border border-destructive/30"
                       : "text-muted-foreground hover:text-foreground",
                   )}
                 >
@@ -557,12 +557,12 @@ export function CredentialConfigDialog({
           </div>
 
           {/* Campo di Inserimento Valore */}
-          <div className="pt-1 border-t border-border/40">
+          <div className="pt-1 border-t border-border/60 dark:border-white/10">
             <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
               Valore
             </label>
             {custom.type === "boolean" ? (
-              <div className="p-2.5 rounded-xl border border-input bg-background">
+              <div className="p-2.5 rounded-xl border border-border/80 dark:border-white/15 bg-background dark:bg-black/50">
                 <Switch
                   id={`field-${field.key}`}
                   checked={values[field.key] === "true"}
@@ -585,8 +585,8 @@ export function CredentialConfigDialog({
                   onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
                   placeholder="Inserisci password o token segreto…"
                   className={cn(
-                    "w-full rounded-xl border bg-background px-3.5 py-2.5 pr-12 font-mono text-xs sm:text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition",
-                    missing ? "border-destructive ring-2 ring-destructive/20" : "border-input",
+                    "w-full rounded-xl border bg-background dark:bg-black/50 px-3.5 py-2.5 pr-12 font-mono text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 dark:focus:ring-zinc-400/20 outline-none transition",
+                    missing ? "border-destructive ring-2 ring-destructive/20" : "border-border/80 dark:border-white/15",
                   )}
                 />
                 <button
@@ -611,8 +611,8 @@ export function CredentialConfigDialog({
                 onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
                 placeholder="Inserisci valore…"
                 className={cn(
-                  "w-full rounded-xl border bg-background px-3.5 py-2.5 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition",
-                  missing ? "border-destructive ring-2 ring-destructive/20" : "border-input",
+                  "w-full rounded-xl border bg-background dark:bg-black/50 px-3.5 py-2.5 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 dark:focus:ring-zinc-400/20 outline-none transition",
+                  missing ? "border-destructive ring-2 ring-destructive/20" : "border-border/80 dark:border-white/15",
                 )}
               />
             )}
@@ -629,7 +629,7 @@ export function CredentialConfigDialog({
       return (
         <div
           key={field.key}
-          className="rounded-2xl border border-border/70 bg-card p-4 transition hover:border-border shadow-xs flex items-center justify-between gap-3"
+          className="rounded-2xl border border-border/80 dark:border-white/10 bg-card/90 dark:bg-zinc-900/70 p-4 transition hover:border-border dark:hover:border-white/20 shadow-xs flex items-center justify-between gap-3"
         >
           <div className="flex-1">
             <Switch
@@ -681,7 +681,7 @@ export function CredentialConfigDialog({
     return (
       <div
         key={field.key}
-        className="rounded-2xl border border-border/70 bg-card p-4 sm:p-4.5 transition hover:border-border shadow-xs space-y-2.5"
+        className="rounded-2xl border border-border/80 dark:border-white/10 bg-card/90 dark:bg-zinc-900/70 p-4 sm:p-4.5 transition hover:border-border dark:hover:border-white/20 shadow-xs space-y-2.5"
       >
         {/* Intestazione del Campo: Label, Obbligatorio, Nome Chiave ENV, Cestino */}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -703,7 +703,7 @@ export function CredentialConfigDialog({
 
           <div className="flex items-center gap-2">
             {field.key && (
-              <span className="text-[11px] font-mono text-muted-foreground bg-muted/60 px-2 py-0.5 rounded border border-border/40">
+              <span className="text-[11px] font-mono text-muted-foreground bg-muted/60 dark:bg-zinc-800/80 px-2 py-0.5 rounded border border-border/40 dark:border-white/10">
                 {field.key}
               </span>
             )}
@@ -751,8 +751,8 @@ export function CredentialConfigDialog({
                 }}
                 placeholder={`Inserisci ${labelText.toLowerCase()}…`}
                 className={cn(
-                  "w-full rounded-xl border bg-background px-3.5 py-2.5 pr-12 text-xs sm:text-sm text-foreground font-mono placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition",
-                  missing ? "border-destructive ring-2 ring-destructive/20" : "border-input",
+                  "w-full rounded-xl border bg-background dark:bg-black/50 px-3.5 py-2.5 pr-12 text-xs sm:text-sm text-foreground font-mono placeholder:text-muted-foreground/60 focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 dark:focus:ring-zinc-400/20 outline-none transition",
+                  missing ? "border-destructive ring-2 ring-destructive/20" : "border-border/80 dark:border-white/15",
                   isMaskedSecret && !showPlain && "text-muted-foreground tracking-widest",
                 )}
               />
@@ -766,7 +766,7 @@ export function CredentialConfigDialog({
                 title={showPlain ? "Nascondi valore" : "Mostra valore in chiaro"}
               >
                 {isLoadingSecret ? (
-                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
                 ) : showPlain ? (
                   <EyeOff className="h-4 w-4" />
                 ) : (
@@ -782,8 +782,8 @@ export function CredentialConfigDialog({
               onChange={(e) => setValues((v) => ({ ...v, [field.key]: e.target.value }))}
               placeholder={`Inserisci ${labelText.toLowerCase()}…`}
               className={cn(
-                "w-full rounded-xl border bg-background px-3.5 py-2.5 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition",
-                missing ? "border-destructive ring-2 ring-destructive/20" : "border-input",
+                "w-full rounded-xl border bg-background dark:bg-black/50 px-3.5 py-2.5 text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 dark:focus:ring-zinc-400/20 outline-none transition",
+                missing ? "border-destructive ring-2 ring-destructive/20" : "border-border/80 dark:border-white/15",
               )}
             />
           )}
@@ -873,20 +873,20 @@ export function CredentialConfigDialog({
   }, [advancedFields, customFields]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 sm:p-6 backdrop-blur-sm animate-in fade-in duration-200">
-      <div className="max-h-[90vh] w-full max-w-2xl flex flex-col rounded-3xl border border-border bg-card text-card-foreground shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 sm:p-6 backdrop-blur-md animate-in fade-in duration-200">
+      <div className="max-h-[92vh] w-full max-w-2xl flex flex-col rounded-3xl border border-border/80 dark:border-white/10 bg-card dark:bg-[#18181b] text-card-foreground shadow-2xl overflow-hidden relative animate-in zoom-in-95 duration-200 before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent">
         {/* Header Modale */}
-        <div className="flex items-center justify-between border-b border-border p-5 sm:p-6 bg-muted/20 shrink-0">
+        <div className="flex items-center justify-between border-b border-border/70 dark:border-white/10 p-5 sm:p-6 bg-muted/25 dark:bg-zinc-900/60 shrink-0">
           <div className="flex items-center gap-3.5 min-w-0 pr-4">
             {integration.icon_url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={integration.icon_url}
                 alt=""
-                className="h-11 w-11 shrink-0 rounded-2xl border border-border object-cover shadow-sm"
+                className="h-11 w-11 shrink-0 rounded-2xl border border-border/80 dark:border-white/10 object-cover shadow-sm"
               />
             ) : (
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary shadow-sm">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-border/80 dark:border-white/10 bg-muted/60 dark:bg-zinc-800 text-foreground dark:text-zinc-200 shadow-sm">
                 <Plug className="h-5 w-5" aria-hidden />
               </div>
             )}
@@ -904,7 +904,7 @@ export function CredentialConfigDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl p-2 text-muted-foreground hover:bg-muted hover:text-foreground transition cursor-pointer shrink-0"
+            className="rounded-xl p-2 text-muted-foreground hover:bg-muted dark:hover:bg-zinc-800 hover:text-foreground transition cursor-pointer shrink-0"
             aria-label={t("integrationsPage.cancel")}
           >
             <X className="h-5 w-5" />
@@ -912,40 +912,49 @@ export function CredentialConfigDialog({
         </div>
 
         {/* Corpo scrollabile del Form */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 bg-background">
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4 bg-muted/10 dark:bg-zinc-950/40">
           {/* Sezione OAuth se applicabile */}
           {integration.has_oauth ? (
-            <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4 text-center space-y-2.5">
+            <div className="rounded-2xl border border-border/80 dark:border-white/10 bg-card/90 dark:bg-zinc-900/70 p-4 text-center space-y-3 shadow-xs">
               <h3 className="text-sm font-bold text-foreground">
                 {t("integrationsPage.oauth_title_service", { service: providerLabel })}
               </h3>
               {hasOAuthToken ? (
                 <>
-                  <p className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                    {t("integrationsPage.oauth_connected_service", { service: providerLabel })}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handleOAuthLogin}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-background px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-muted cursor-pointer"
-                  >
-                    <Plug className="h-3.5 w-3.5" aria-hidden />
-                    {t("integrationsPage.oauth_reconnect")}
-                  </button>
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">
+                    <Check className="h-3 w-3" />
+                    <span>{t("integrationsPage.oauth_connected_service", { service: providerLabel })}</span>
+                  </div>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleOAuthLogin}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl border border-border/80 dark:border-white/15 bg-background dark:bg-zinc-800/80 px-4 py-2 text-xs font-semibold text-foreground transition hover:bg-muted dark:hover:bg-zinc-700/80 cursor-pointer"
+                    >
+                      <Plug className="h-3.5 w-3.5" aria-hidden />
+                      {t("integrationsPage.oauth_reconnect")}
+                    </button>
+                  </div>
                 </>
               ) : (
                 <>
+                  <div className="inline-flex items-center gap-1.5 rounded-full border border-amber-500/35 bg-amber-500/15 dark:bg-amber-400/10 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 dark:text-amber-300">
+                    <Lock className="h-3 w-3 text-amber-600 dark:text-amber-400" />
+                    <span>Autenticazione richiesta</span>
+                  </div>
                   <p className="text-xs text-muted-foreground max-w-md mx-auto">
                     {t("integrationsPage.oauth_intro_service", { service: providerLabel })}
                   </p>
-                  <button
-                    type="button"
-                    onClick={handleOAuthLogin}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2 text-xs font-bold text-primary-foreground shadow transition hover:bg-primary/90 cursor-pointer"
-                  >
-                    <Plug className="h-3.5 w-3.5" aria-hidden />
-                    {getOAuthButtonText()}
-                  </button>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={handleOAuthLogin}
+                      className="inline-flex items-center justify-center gap-2 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 px-5 py-2 text-xs font-semibold shadow-sm transition hover:bg-zinc-800 dark:hover:bg-white cursor-pointer"
+                    >
+                      <Plug className="h-3.5 w-3.5" aria-hidden />
+                      {getOAuthButtonText()}
+                    </button>
+                  </div>
                 </>
               )}
             </div>
@@ -957,7 +966,7 @@ export function CredentialConfigDialog({
               {renderFieldGroup(
                 basicAuthFields,
                 "Credenziali di Accesso",
-                <KeyRound className="h-4 w-4 text-primary" />,
+                <KeyRound className="h-4 w-4 text-amber-500" />,
               )}
               {renderFieldGroup(
                 basicConnFields,
@@ -974,18 +983,18 @@ export function CredentialConfigDialog({
 
           {/* Parametri Avanzati (Accordion con raggruppamenti interni) */}
           {advancedFields.length > 0 ? (
-            <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-xs">
+            <div className="overflow-hidden rounded-2xl border border-border/80 dark:border-white/10 bg-card/90 dark:bg-zinc-900/70 shadow-xs">
               <button
                 type="button"
                 onClick={() => setIsAdvancedOpen((prev) => !prev)}
                 className="flex w-full items-center justify-between p-4 text-left text-xs sm:text-sm font-bold transition hover:bg-muted/30 focus:outline-none cursor-pointer"
               >
                 <div className="flex items-center gap-2 text-foreground">
-                  <SlidersHorizontal className="h-4 w-4 text-primary" />
+                  <SlidersHorizontal className="h-4 w-4 text-muted-foreground dark:text-zinc-400" />
                   <span>
                     {t("integrationsPage.advanced_settings") || "Parametri Avanzati"}
                   </span>
-                  <span className="rounded-full bg-muted px-2 py-0.2 text-[10px] font-bold text-muted-foreground">
+                  <span className="rounded-full bg-muted dark:bg-zinc-800 px-2 py-0.2 text-[10px] font-bold text-muted-foreground">
                     {advancedFields.length}
                   </span>
                 </div>
@@ -998,11 +1007,11 @@ export function CredentialConfigDialog({
               </button>
 
               {isAdvancedOpen ? (
-                <div className="border-t border-border p-4.5 space-y-5 bg-background/50">
+                <div className="border-t border-border/70 dark:border-white/10 p-4.5 space-y-5 bg-muted/20 dark:bg-zinc-950/50">
                   {renderFieldGroup(
                     advAuthFields,
                     "Autenticazione & Account",
-                    <Lock className="h-3.5 w-3.5 text-primary" />,
+                    <Lock className="h-3.5 w-3.5 text-amber-500" />,
                   )}
                   {renderFieldGroup(
                     advConnFields,
@@ -1025,7 +1034,7 @@ export function CredentialConfigDialog({
             <button
               type="button"
               onClick={addCustomField}
-              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border/80 p-3.5 text-xs font-bold text-muted-foreground hover:text-foreground hover:border-primary/50 hover:bg-muted/20 transition cursor-pointer"
+              className="flex w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border/80 dark:border-white/15 p-3.5 text-xs font-bold text-muted-foreground hover:text-foreground hover:border-foreground/30 hover:bg-muted/30 transition cursor-pointer"
             >
               <Plus className="h-4 w-4" aria-hidden />
               {t("integrationsPage.add_credential")}
@@ -1041,11 +1050,11 @@ export function CredentialConfigDialog({
         </div>
 
         {/* Footer con Azioni */}
-        <div className="border-t border-border p-4 sm:p-5 bg-muted/20 flex items-center justify-end gap-3 shrink-0">
+        <div className="border-t border-border/70 dark:border-white/10 p-4 sm:p-5 bg-muted/25 dark:bg-zinc-900/60 flex items-center justify-end gap-3 shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted transition cursor-pointer"
+            className="rounded-xl border border-border/80 dark:border-white/15 bg-background dark:bg-zinc-800/80 px-4 py-2 text-xs font-semibold text-foreground hover:bg-muted dark:hover:bg-zinc-700/80 transition cursor-pointer"
           >
             {oauthOnly && hasOAuthToken ? t("integrationsPage.close") : t("integrationsPage.cancel")}
           </button>
@@ -1054,7 +1063,7 @@ export function CredentialConfigDialog({
               type="button"
               onClick={() => void save()}
               disabled={saving}
-              className="rounded-xl bg-primary px-5 py-2 text-xs font-semibold text-primary-foreground shadow-sm hover:bg-primary/90 transition cursor-pointer disabled:opacity-50"
+              className="rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 px-5 py-2 text-xs font-semibold shadow-sm hover:bg-zinc-800 dark:hover:bg-white transition cursor-pointer disabled:opacity-50"
             >
               {saving ? t("integrationsPage.saving") : t("integrationsPage.save")}
             </button>

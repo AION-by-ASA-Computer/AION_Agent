@@ -311,6 +311,11 @@ async def patch_integration_preference(
     await set_user_mcp_preference(
         user_id, server_slug, body.is_active, tenant_id=tenant
     )
+    from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
+
+    await invalidate_mcp_credentials_runtime(
+        user_id, server_slug, tenant_id=tenant
+    )
     clear_integrations_cache()
     return {"ok": True, "server_slug": server_slug, "is_active": body.is_active}
 
@@ -359,6 +364,9 @@ async def save_credentials(
             tenant_id=tenant,
             display_hint=hint,
         )
+
+    # When credentials are saved, automatically activate the integration for this user
+    await set_user_mcp_preference(user_id, body.server_slug, True, tenant_id=tenant)
 
     from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
 
@@ -702,6 +710,7 @@ async def oauth_callback(
         oauth_cfg,
         tenant_id=tenant,
     )
+    await set_user_mcp_preference(user_id, body.server_slug, True, tenant_id=tenant)
 
     clear_integrations_cache()
     return {"ok": True, "server_slug": body.server_slug}
@@ -1073,6 +1082,7 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
         oauth_cfg,
         tenant_id=tenant,
     )
+    await set_user_mcp_preference(user_id, server_slug, True, tenant_id=tenant)
 
     return RedirectResponse(
         url=f"{chat_base}/integrations?oauth_status=success&server_slug={server_slug}"
