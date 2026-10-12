@@ -52,7 +52,9 @@ def _container_user_args() -> List[str]:
     """
     if not (os.environ.get("AION_SANDBOX_HOST_DATA_DIR") or "").strip():
         return []
-    mode = (os.environ.get("AION_SANDBOX_CONTAINER_USERNS") or "keep-id").strip().lower()
+    mode = (
+        (os.environ.get("AION_SANDBOX_CONTAINER_USERNS") or "keep-id").strip().lower()
+    )
     if mode == "root":
         return ["--user", "0:0"]
     uid = (os.environ.get("AION_SANDBOX_HOST_UID") or "1000").strip()
