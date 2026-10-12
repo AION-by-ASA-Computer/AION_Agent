@@ -427,8 +427,13 @@
   },
   "chat": {
     "pii": {
+      "review_label": "Revisione PII",
+      "tags_menu": "Tag PII",
       "tags_label": "Tag da censurare",
-      "tags_none": "Nessun tag selezionato: nessun dato verrà censurato."
+      "select_all": "Seleziona tutti",
+      "deselect_all": "Deseleziona tutti",
+      "tags_none": "Nessun tag selezionato: nessun dato verrà censurato.",
+      "review_auto_off": "Deselezionando tutte le etichette, PII Review viene disattivato."
     },
     "thinking": {
       "label": "Ragionamento (Thinking)",

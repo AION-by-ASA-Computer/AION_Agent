@@ -29,7 +29,7 @@ import {
 } from "@/lib/sse/webToolParse";
 import { formatToolInput, toolInputPreview } from "@/lib/sse/formatToolInput";
 import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
-import { artifactLanguage } from "@/lib/artifacts";
+import { artifactLanguage, isPiiReviewArtifact } from "@/lib/artifacts";
 import { sessionDownloadUrl } from "@/lib/api/aion";
 import { SafeErrorBoundary } from "@/components/ui/ErrorBoundary";
 import { CodeGenerationLoader } from "@/components/chat/CodeGenerationLoader";
@@ -267,6 +267,7 @@ function CompactTurnActivityInner({
         continue;
       }
       if (seg.kind === "artifact") {
+        if (isPiiReviewArtifact(seg)) continue;
         const planCheck = isPlanArtifact
           ? isPlanArtifact(
               { identifier: seg.id, type: seg.artType, title: seg.title },

@@ -277,8 +277,13 @@
   },
   "chat": {
     "pii": {
+      "review_label": "PII-Überprüfung",
+      "tags_menu": "PII-Tags",
       "tags_label": "Zu zensierende Tags",
-      "tags_none": "Keine Tags ausgewählt: es wird nichts zensiert."
+      "select_all": "Alle auswählen",
+      "deselect_all": "Alle abwählen",
+      "tags_none": "Keine Tags ausgewählt: es wird nichts zensiert.",
+      "review_auto_off": "Wenn alle Tags abgewählt werden, wird PII Review deaktiviert."
     },
     "thinking": {
       "label": "Nachdenken",

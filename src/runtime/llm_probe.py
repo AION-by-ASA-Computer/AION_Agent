@@ -465,6 +465,8 @@ async def check_pii_capabilities(
                     if support_pii and isinstance(raw_tags, list)
                     else []
                 )
+
+                logger.info("SUPPORT PII %s %s", support_pii, pii_tags)
                 return {"support_pii": support_pii, "pii_tags": pii_tags}
     except Exception as e:
         logger.debug("PII capabilities check failed for %s: %s", endpoint, e)

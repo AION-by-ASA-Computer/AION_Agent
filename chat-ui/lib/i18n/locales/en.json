@@ -427,8 +427,13 @@
   },
   "chat": {
     "pii": {
+      "review_label": "PII Review",
+      "tags_menu": "PII Tags",
       "tags_label": "Tags to redact",
-      "tags_none": "No tags selected: nothing will be redacted."
+      "select_all": "Select all",
+      "deselect_all": "Deselect all",
+      "tags_none": "No tags selected: nothing will be redacted.",
+      "review_auto_off": "Deselecting all tags turns PII Review off."
     },
     "thinking": {
       "label": "Thinking",

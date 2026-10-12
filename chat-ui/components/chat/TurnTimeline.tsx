@@ -22,7 +22,7 @@ import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
 import { CodeGenerationLoader } from "@/components/chat/CodeGenerationLoader";
 import { GeneratedFileCard } from "@/components/chat/GeneratedFileCard";
 import { isUserFacingGeneratedFile } from "@/lib/session-file-paths";
-import { artifactLanguage } from "@/lib/artifacts";
+import { artifactLanguage, isPiiReviewArtifact } from "@/lib/artifacts";
 import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 import { sessionDownloadUrl } from "@/lib/api/aion";
 import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
@@ -88,6 +88,16 @@ export function TurnTimeline({
         {outputSegments.map((seg, idx) => {
           const isLast = idx === outputSegments.length - 1;
           if (seg.kind === "artifact") {
+            if (isPiiReviewArtifact(seg)) {
+              return (
+                <PiiReviewArtifactBlock
+                  key={seg.id}
+                  content={seg.buffer}
+                  onAction={onPiiAction}
+                  assistantMessageId={messageId}
+                />
+              );
+            }
             const planCheck = isPlanArtifact
               ? isPlanArtifact(
                 { identifier: seg.id, type: seg.artType, title: seg.title },
@@ -273,7 +283,7 @@ export function TurnTimeline({
           );
         }
         if (seg.kind === "artifact") {
-          if (seg.artType === "pii_review") {
+          if (isPiiReviewArtifact(seg)) {
             return (
               <PiiReviewArtifactBlock
                 key={seg.id}

@@ -242,8 +242,10 @@ export function ArtifactsPanel({
       savedPath.includes("execution_plan") ||
       typeLabel === "plan" ||
       lang === "plan";
+    const isPiiReview =
+      typeLabel === "pii_review" || /(^|\/)pii_review\b/.test(savedPath);
 
-    return !isExecutionPlan;
+    return !isExecutionPlan && !isPiiReview;
   });
 
   const handleItemClick = (itemId: string) => {

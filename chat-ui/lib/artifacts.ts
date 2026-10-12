@@ -16,3 +16,8 @@ export function artifactLanguage(artType: string, savedPath?: string): string {
   if (t === "html") return "html";
   return t || "text";
 }
+
+/** PII review artifacts render as an interactive confirm/reject card, never as code or a download. */
+export function isPiiReviewArtifact(seg: { kind?: string; artType?: string }): boolean {
+  return seg.kind === "artifact" && (seg.artType || "").trim().toLowerCase() === "pii_review";
+}
