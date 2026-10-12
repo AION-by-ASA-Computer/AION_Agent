@@ -121,6 +121,46 @@
         "save": "Guardar Instrucciones",
         "saving": "Guardando..."
       }
+    },
+    "appearance": {
+      "desc": "Tema de la interfaz, tamaño de texto e idioma de la aplicación.",
+      "font_scale_desc": "Ajustar el texto en toda la aplicación.",
+      "font_scale_label": "Tamaño de texto",
+      "language_label": "Idioma de la interfaz",
+      "theme_desc": "Elige entre modo claro u oscuro.",
+      "theme_label": "Tema",
+      "title": "Apariencia"
+    },
+    "profile": {
+      "appearance_saved": "Apariencia del perfil actualizada.",
+      "avatar_too_large": "La imagen debe ser menor de 256 KB.",
+      "color_label": "Color del perfil",
+      "desc": "Foto, color de avatar y datos de la cuenta que se muestran en la barra lateral.",
+      "remove_photo": "Eliminar foto",
+      "shortcuts_desc": "Acceso rápido a las secciones principales de la aplicación.",
+      "title": "Perfil",
+      "upload_photo": "Subir foto",
+      "username_hint": "Identificador de inicio de sesión. Debe ser único."
+    },
+    "security": {
+      "confirm_password": "Confirmar contraseña",
+      "current_password": "Contraseña actual",
+      "must_change_desc": "Por seguridad, actualiza tu contraseña antes de continuar.",
+      "must_change_title": "Contraseña temporal",
+      "new_password": "Nueva contraseña",
+      "password_desc": "Actualiza la contraseña de tu cuenta.",
+      "password_error": "No se pudo actualizar la contraseña.",
+      "password_hint": "Al menos 6 caracteres.",
+      "password_min": "La nueva contraseña debe tener al menos 6 caracteres.",
+      "password_mismatch": "La confirmación no coincide con la nueva contraseña.",
+      "password_title": "Contraseña",
+      "password_updated": "Contraseña actualizada con éxito.",
+      "update_password": "Actualizar contraseña"
+    },
+    "subtitle": "Gestiona tu perfil, apariencia, seguridad e instrucciones personalizadas.",
+    "tunings": {
+      "desc": "Configura los parámetros del modelo, controles de generación, pasos de ejecución y preajustes de runtime.",
+      "title": "Ajustes y Parámetros"
     }
   },
   "sidebar": {
@@ -141,7 +181,25 @@
       "language": "Idioma",
       "customize": "Personalizar instrucciones",
       "logout": "Cerrar sesión"
-    }
+    },
+    "add_favorite": "Añadir a favoritos",
+    "bucket_older": "Más antiguas",
+    "bucket_previous_30_days": "Últimos 30 días",
+    "bucket_previous_7_days": "Últimos 7 días",
+    "bucket_today": "Hoy",
+    "bucket_yesterday": "Ayer",
+    "chat": "Chat",
+    "chat_options": "Opciones de chat",
+    "collapse": "Contraer barra lateral",
+    "delete": "Eliminar",
+    "expand": "Expandir barra lateral",
+    "favorites": "Favoritos",
+    "profile": "Perfil",
+    "recent": "Recientes",
+    "remove_favorite": "Quitar de favoritos",
+    "rename": "Renombrar",
+    "search_placeholder": "Buscar conversaciones…",
+    "theme": "Tema"
   },
   "schedulesPage": {
     "title": "Automatizaciones",
@@ -227,7 +285,45 @@
         "weekly": "Cada {{day}} a las {{time}}",
         "monthly": "El día {{dom}} de cada mes a las {{time}}",
         "hourly": "Cada hora en el minuto {{minute}}",
-        "every_n_minutes": "Cada {{n}} minutos"
+        "every_n_minutes": "Cada {{n}} minutos",
+        "custom": "Personalizado (cron: {{expr}})"
+      }
+    },
+    "delete_dialog_btn": "Eliminar permanentemente",
+    "delete_dialog_desc": "¿Seguro que deseas eliminar la automatización",
+    "delete_dialog_desc_end": "Todas las futuras ejecuciones programadas se eliminarán permanentemente.",
+    "delete_dialog_subtitle": "Confirmar eliminación permanente",
+    "delete_dialog_title": "Eliminar automatización",
+    "delete_dialog_warning": "Advertencia: acción irreversible",
+    "profile_none": "No hay perfiles disponibles",
+    "prompt_templates": "Plantillas rápidas",
+    "session_fixed_desc": "Reutiliza un mismo hilo para que el agente recuerde ejecuciones anteriores.",
+    "session_new_desc": "Comienza desde cero cada vez — ideal para informes aislados.",
+    "stats": {
+      "active": "Activas",
+      "paused": "Pausadas",
+      "total": "Total"
+    },
+    "templates": {
+      "briefing": {
+        "desc": "Resumen diario de prioridades y calendario",
+        "name": "Informe matutino",
+        "prompt": "Dame un resumen matutino conciso: prioridades principales, tareas vencidas hoy y un bloque de enfoque sugerido."
+      },
+      "inbox": {
+        "desc": "Resumen semanal de hilos pendientes",
+        "name": "Resumen de bandeja de entrada",
+        "prompt": "Resume lo que debo seguir esta semana. Agrupa por urgencia y sugiere próximas acciones."
+      },
+      "research": {
+        "desc": "Seguimiento de un tema con fuentes actualizadas",
+        "name": "Pulso de investigación",
+        "prompt": "Investiga las últimas novedades sobre [tema]. Cita fuentes y destaca lo que cambió desde la semana pasada."
+      },
+      "weekly": {
+        "desc": "Retrospectiva de los viernes y plan para la próxima semana",
+        "name": "Revisión semanal",
+        "prompt": "Haz mi revisión semanal: logros, obstáculos, lecciones aprendidas y tres objetivos para la próxima semana."
       }
     }
   },
@@ -258,7 +354,62 @@
     "add_credential": "Añadir campo de credencial",
     "custom_field": "extra",
     "new_field_label": "Nuevo campo",
-    "field_label": "Etiqueta"
+    "field_label": "Etiqueta",
+    "admin_setup_required": "Algunas integraciones aún no están disponibles. Pide a tu administrador que configure correctamente el client ID y client secret en MCP Hub.",
+    "badge_connected": "conectada",
+    "badge_disabled": "desactivada",
+    "badge_pending_short": "por configurar",
+    "badge_system": "activa",
+    "checklist_env": "Admin: aplica el entorno sugerido con los marcadores ${AION_USER_*}.",
+    "checklist_hub": "Admin: habilita el servidor en MCP Hub → Habilitar en el chat.",
+    "checklist_login": "Debes haber iniciado sesión para guardar credenciales.",
+    "checklist_per_user": "Admin: establece el modo de credenciales en Por usuario y guarda.",
+    "close": "Cerrar",
+    "composer_alerts_mixed": "Las integraciones requieren atención",
+    "composer_pending": "Configuración de integración requerida",
+    "composer_runtime_errors": "Errores de integración en tiempo de ejecución",
+    "credential_expired": "caducada",
+    "disabled_hint": "Integración desactivada: vuelve a activarla para usarla en el chat.",
+    "disconnect": "Desconectar",
+    "disconnect_error": "Error al desconectar OAuth",
+    "empty_hint": "Las integraciones conectan tus cuentas a los servicios MCP habilitados por el administrador.",
+    "feature_disabled": "Las credenciales de usuario están desactivadas en el servidor (AION_MCP_USER_CREDENTIALS=0).",
+    "field_saved_encrypted": "Valor guardado y protegido",
+    "field_saved_placeholder": "•••••••••••• (valor guardado)",
+    "filter_no_results": "No se encontraron integraciones con este filtro.",
+    "modify_field_hint": "Deja sin cambios para conservar el valor guardado, o escribe para reemplazarlo.",
+    "oauth_callback_missing_slug": "Error en callback OAuth: falta el identificador de la integración.",
+    "oauth_callback_state_mismatch": "Comprobación de seguridad OAuth fallida: el estado no coincide.",
+    "oauth_connect_service": "Conectar {{service}}",
+    "oauth_connected": "OAuth conectado",
+    "oauth_connected_service": "{{service}} conectado",
+    "oauth_exchange_error": "Error en el intercambio de tokens OAuth",
+    "oauth_intro": "Conecta esta integración iniciando sesión de forma segura con tu cuenta.",
+    "oauth_intro_service": "Autoriza el acceso a tu cuenta {{service}}. Serás redirigido para iniciar sesión de forma segura.",
+    "oauth_login_service": "Iniciar sesión con {{service}}",
+    "oauth_network_error": "Error de red al iniciar OAuth.",
+    "oauth_reconnect": "Reconectar cuenta",
+    "oauth_required": "OAuth requerido",
+    "oauth_required_service": "Conectar {{service}}",
+    "oauth_start_error": "No se pudo iniciar OAuth",
+    "oauth_title": "Autenticación OAuth2",
+    "oauth_title_service": "Iniciar sesión con {{service}}",
+    "oauth_unknown_error": "Error desconocido",
+    "search_placeholder": "Buscar integraciones por nombre o descripción…",
+    "section_disabled": "Desactivadas",
+    "section_system": "Activas del sistema",
+    "stats": {
+      "configured": "Conectadas",
+      "pending": "Por configurar",
+      "total": "Total"
+    },
+    "tab_all": "Todas",
+    "tab_configured": "Conectadas",
+    "tab_disabled": "Desactivadas",
+    "tab_pending": "Por configurar",
+    "tab_system": "Activas del sistema",
+    "toggle_active": "Activa",
+    "toggle_error": "No se pudo actualizar el estado de la integración"
   },
   "header": {
     "toggle_sidebar": {
@@ -291,7 +442,12 @@
       "min": "Thinking: Mínimo",
       "med": "Thinking: Medio",
       "max": "Thinking: Máximo",
-      "disable": "Desactivar"
+      "disable": "Desactivar",
+      "disable_desc": "Omitir razonamiento extendido para respuestas más rápidas.",
+      "max_desc": "Razonamiento más profundo para problemas difíciles; respuestas más lentas.",
+      "med_desc": "Profundidad equilibrada antes de responder.",
+      "min_desc": "Razonamiento ligero — ideal para preguntas cotidianas.",
+      "select": "Nivel de razonamiento"
     },
     "stream_recovery": "El agente sigue trabajando en este chat en el servidor. Actualización automática…",
     "agent_status": {
@@ -348,7 +504,11 @@
     "profile": {
       "label": "Perfil",
       "select": "Seleccionar Perfil",
-      "none": "Sin perfiles"
+      "none": "Sin perfiles",
+      "active_hint": "Herramientas, habilidades y fuentes de memoria para este chat.",
+      "customize": "Personalizar perfil e instrucciones",
+      "favorite_active": "Perfil predeterminado",
+      "favorite_set": "Establecer como perfil predeterminado"
     },
     "model": {
       "label": "Modelo",
@@ -437,7 +597,98 @@
       "no_domains": "Sin dominios específicos",
       "no_domains_desc": "Agregue fuentes arriba para limitar la búsqueda.",
       "clear_list": "Limpiar lista",
-      "save_preferences": "Guardar preferencias"
+      "save_preferences": "Guardar preferencias",
+      "off_desc": "Las respuestas utilizan únicamente el contexto local y los archivos adjuntos.",
+      "off_short": "Web desactivada",
+      "on_desc": "Busca en la web cuando el modelo necesita información actualizada.",
+      "on_short": "Web activada"
+    },
+    "agent_mode": {
+      "ask": "Preguntar",
+      "ask_desc": "Respuestas de solo lectura sin efectos secundarios de herramientas.",
+      "beta": "Beta",
+      "debug": "Depuración",
+      "debug_desc": "Trazas detalladas para diagnóstico.",
+      "deep_research": "Investigación profunda",
+      "deep_research_desc": "Investigación web autónoma con panel dedicado.",
+      "label": "Modo de agente",
+      "normal": "Normal",
+      "normal_desc": "Chat estándar — herramientas y memoria según configuración.",
+      "plan": "Plan / Plan de tareas",
+      "plan_desc": "Divide el trabajo en pasos antes de ejecutar.",
+      "select": "Seleccionar modo de agente",
+      "soon": "Próximamente"
+    },
+    "context_budget": {
+      "aria": "Saturación de contexto {{pct}} por ciento",
+      "gauge_aria": "Contexto al {{pct}}%. Haz clic para ver detalles.",
+      "gauge_idle": "Contexto LLM — haz clic para ver detalles",
+      "messages": "{{count}} mensajes",
+      "parts": {
+        "assistant": "Asistente",
+        "compaction": "Compactación",
+        "memory_injections": "Memoria/LTM",
+        "other": "Otro",
+        "reasoning": "Razonamiento",
+        "skills": "Habilidades",
+        "system_messages": "Mensajes del sistema",
+        "system_prompt": "Prompt del sistema",
+        "tool_results": "Otras herramientas",
+        "tool_specs": "Especificaciones de herramientas",
+        "user": "Usuario",
+        "web_tools": "Búsqueda/descarga web"
+      },
+      "title": "Contexto LLM",
+      "trigger": "Umbral de compactación {{pct}}%",
+      "unavailable": "El resumen del contexto está disponible mientras se procesa un mensaje."
+    },
+    "empty": {
+      "greeting_user": "¿En qué piensas, {{name}}?",
+      "hint_attach": "Arrastra archivos aquí o usa + para adjuntar",
+      "subtitle": "Pregunta lo que sea, adjunta un archivo o activa la búsqueda web — las respuestas se transmiten en tiempo real.",
+      "subtitle_profile": "Perfil activo: {{profile}}. Pregunta cualquier cosa, adjunta archivos o inicia una tarea.",
+      "suggestions": {
+        "attach": "Resume un documento que adjuntaré",
+        "explain": "Explica un concepto difícil de forma sencilla",
+        "plan": "Esboza un plan de inicio de proyecto",
+        "research": "Investiga un tema con fuentes"
+      },
+      "title": "¿En qué puedo ayudarte?"
+    },
+    "generating": {
+      "document": "Generando documento…",
+      "document_named": "Generando {{title}}…",
+      "plan": "Generando plan…",
+      "script": "Generando script…",
+      "script_named": "Generando {{title}}…"
+    },
+    "mcp_errors_details": "Detalles",
+    "mcp_errors_hint": "Algunas integraciones no se pudieron iniciar. Puedes seguir chateando con las herramientas cargadas.",
+    "message": {
+      "archived_context": "Anterior en la conversación (no en el contexto activo del agente)"
+    },
+    "reasoning": {
+      "label": "Razonamiento",
+      "streaming": "Razonamiento en curso…"
+    },
+    "session_preparing": "Preparando integraciones y herramientas…",
+    "sql_project": {
+      "hint": "Proyecto SQL / navegación activo (haz clic para abrir panel). Nuevos mensajes usan este proyecto."
+    },
+    "turn_outcome": {
+      "empty_final": "El turno terminó sin texto de respuesta visible en el chat.",
+      "persisted_no_visible_text": "El turno guardó mensajes (ej. solo herramientas) sin texto final visible del asistente.",
+      "reasoning_budget_no_answer": "El turno se detuvo porque el razonamiento superó el presupuesto Thinking {{effort}} (~{{max_chars}} caracteres / {{max_events}} fragmentos en el primer paso LLM) antes de una respuesta visible. El bloque de Razonamiento solo contiene pensamiento interno (~{{reasoning_len}} caracteres). Prueba: desactiva Thinking desde el menú +, baja el nivel, escribe «Continuar», o ajusta los límites en Ajustes y parámetros.",
+      "reasoning_only_no_answer": "El modelo solo produjo razonamiento interno (~{{reasoning_len}} caracteres) sin respuesta visible en el chat (Thinking: {{effort}}). Reintenta con un mensaje más corto, desactiva Thinking desde el menú +, o pide explícitamente una respuesta final.",
+      "tools_without_final_answer": "El agente ejecutó {{tool_calls}} llamadas a herramientas pero no escribió un resumen final en el chat.{{stop_reason}}"
+    },
+    "upload": {
+      "button": "Subir archivo adjunto",
+      "done": "Carga completa",
+      "failed": "Error de carga",
+      "retry": "Reintentar",
+      "send_blocked": "Espera a que finalicen las cargas de archivos",
+      "uploading": "Subiendo… {{progress}}%"
     }
   },
   "login": {
@@ -527,7 +778,22 @@
     "uploads": "Uploads",
     "derived": "Derived",
     "workspace": "Workspace",
-    "refresh": "Actualizar"
+    "refresh": "Actualizar",
+    "empty_folder": "No hay archivos en esta carpeta.",
+    "live_preview": "Vista previa en directo",
+    "live_preview_empty": "Esperando contenido…",
+    "tool_results": {
+      "col_size": "Tamaño",
+      "col_target": "Destino",
+      "col_tool": "Herramienta",
+      "empty_file": "El archivo está vacío.",
+      "hint": "Selecciona Ver en una fila para leer la respuesta descargada de la herramienta.",
+      "inline_only": "Esta llamada se mantuvo en línea en el contexto (por debajo del límite de descarga) — no se guardó ningún archivo separado.",
+      "loading": "Cargando salida de herramienta…",
+      "title": "Actividad de herramientas",
+      "view": "Ver"
+    },
+    "tool_results_folder": "Resultados de herramientas (descarga)"
   },
   "plan": {
     "title": "Plan",
@@ -599,7 +865,30 @@
       "profile": "Perfil",
       "dep": "dep"
     },
-    "missing_props": "TaskPlanManagerV4: faltan props."
+    "missing_props": "TaskPlanManagerV4: faltan props.",
+    "editor": {
+      "add_task": "Añadir tarea",
+      "context_label": "Contexto",
+      "context_placeholder": "Contexto o restricciones opcionales…",
+      "export_md": "Exportar markdown",
+      "goal_label": "Objetivo",
+      "goal_placeholder": "Describe el objetivo general…",
+      "preview_md": "Vista previa de markdown",
+      "remove_task": "Eliminar",
+      "task_deps_label": "Depende de",
+      "task_deps_placeholder": "tarea_01, tarea_02",
+      "task_desc_label": "Descripción",
+      "task_id_label": "ID",
+      "task_title_label": "Título",
+      "tasks_label": "Tareas"
+    },
+    "execution": {
+      "deliverable": "Entregable",
+      "open_deliverable": "Abrir entregable",
+      "retry": "Reintentando tarea `{{id}}`…",
+      "running": "Ejecutando tareas del plan…",
+      "task_error": "La tarea `{{id}}` falló después del reintento — omitida."
+    }
   },
   "theme": {
     "toggle": {
@@ -621,7 +910,15 @@
     "tab_navigation": "Navegación",
     "hint_query": "Filtra, verifica o edita los SELECT que el agente guardó en este proyecto.",
     "hint_navigation": "Notas estructuradas: puntos de entrada, JOINs, trampas y descubrimientos.",
-    "open_panel": "Abrir panel de memoria (ajustes del proyecto)"
+    "open_panel": "Abrir panel de memoria (ajustes del proyecto)",
+    "hint_debug": "Inspeccionar árbol de resúmenes, vista previa de activación, estado de compresión y nodos obsoletos.",
+    "hint_notes": "Notas Mnemos de proyecto: hechos, escollos, decisiones y lecciones aprendidas.",
+    "hint_user": "Tus notas Mnemos personales — preferencias, identidad y hechos compartidos entre proyectos.",
+    "no_capabilities": "Este perfil no expone memoria SQL ni Mnemos.",
+    "tab_debug": "Depuración",
+    "tab_notes": "Proyecto",
+    "tab_user": "Tú",
+    "user_scope_hint": "Memoria personal vinculada a tu cuenta (no al proyecto activo)."
   },
   "memory_project": {
     "label": "Proyecto",
@@ -689,7 +986,9 @@
     "empty": "Sin memoria de navegación para este proyecto.",
     "delete_confirm": "¿Eliminar este drawer de navegación?",
     "edit": "Editar drawer",
-    "no_content": "(sin contenido — actualiza o edita el drawer)"
+    "no_content": "(sin contenido — actualiza o edita el drawer)",
+    "active_wing": "Ala activa",
+    "other_wings_hint": "No hay cajones en esta ala, pero MemPalace tiene datos en otras alas — cambia de proyecto en el chat o migra la memoria."
   },
   "khub_file": {
     "title": "Documento",
@@ -750,5 +1049,121 @@
     "start_failed": "No se pudo iniciar la vinculación SSO.",
     "bad_response": "Respuesta no válida del servidor.",
     "network": "Error de red."
+  },
+  "user_memory": {
+    "empty": "No hay notas personales todavía. Añade una aquí o pide al agente que recuerde algo sobre ti.",
+    "status_line": "{{active}} activas / {{total}} totales · {{digests}} resúmenes listos · {{stale}} obsoletos"
+  },
+  "turn": {
+    "outcome": {
+      "control_events": "Turno detenido automáticamente: demasiados eventos de control.",
+      "no_progress": "Turno detenido automáticamente: sin progreso durante {seconds}s.",
+      "plan_invalid_response": "Modo plan: respuesta del asistente no válida.",
+      "stream_events": "Turno detenido automáticamente: demasiados eventos de transmisión.",
+      "tool_calls": "Turno detenido automáticamente: demasiadas llamadas a herramientas.",
+      "tool_events": "Turno detenido automáticamente: demasiados eventos de herramientas.",
+      "turn_timeout": "Turno detenido automáticamente: tiempo de espera agotado ({seconds}s)."
+    }
+  },
+  "prompt_debug": {
+    "copy_all": "Copiar todo",
+    "copy_section": "Copiar",
+    "disabled_hint": "Establece AION_PROMPT_DEBUG=1 y NEXT_PUBLIC_AION_PROMPT_DEBUG=1 en el .env raíz, luego reinicia el backend y chat-ui.",
+    "disabled_title": "Depuración de prompt desactivada",
+    "empty": "Aún no hay instantáneas. Envía un mensaje para capturar el prompt completo enviado al agente.",
+    "no_injects": "No se registraron inyecciones manuales para este turno.",
+    "output": {
+      "coerced": "Plan adaptado (postprocesamiento)",
+      "model": "Respuesta del asistente (bruta)",
+      "pending": "Esperando finalización del turno — la salida aparecerá aquí al terminar el streaming."
+    },
+    "search_placeholder": "Buscar en el prompt (ej. English, español, MODALIDAD…)…",
+    "stats": {
+      "count": "mensajes",
+      "messages": "tokens de mensajes",
+      "overhead": "sobrecarga",
+      "total": "tokens totales"
+    },
+    "tab": {
+      "injects": "Inyecciones",
+      "messages": "Mensajes",
+      "output": "Salida del modelo",
+      "raw": "Bruto completo",
+      "system": "Sistema",
+      "tools": "Herramientas"
+    },
+    "title": "Prompt",
+    "turn_select": "Turno"
+  },
+  "project_memory": {
+    "all_categories": "Todas las categorías",
+    "cancel": "Cancelar",
+    "categories": {
+      "decision": "Decisión",
+      "event": "Evento",
+      "fact": "Hecho",
+      "pitfall": "Escollo",
+      "preference": "Preferencia",
+      "task": "Tarea"
+    },
+    "delete_confirm": "Eliminar permanentemente",
+    "delete_desc_active": "¿Cómo deseas proceder con esta nota?",
+    "delete_desc_superseded": "¿Eliminar permanentemente esta nota archivada de la base de datos? Esta acción no se puede deshacer.",
+    "delete_hard_btn": "Eliminar Permanentemente (Hard Delete)",
+    "delete_hard_desc": "La nota se eliminará definitivamente de la base de datos y del índice FTS.",
+    "delete_soft_btn": "Archivar (Soft Delete)",
+    "delete_soft_desc": "La nota pasa a estar 'reemplazada'. El agente no la usará pero se mantendrá en el historial.",
+    "delete_title_active": "Eliminar o archivar nota",
+    "delete_title_superseded": "Eliminar permanentemente nota",
+    "edit_note": "Editar nota",
+    "empty": "Aún no hay notas de proyecto. Añade una aquí o pide al agente que recuerde una lección.",
+    "importance": "Importancia",
+    "importance_short": "imp",
+    "new_note": "Nueva nota",
+    "note_placeholder": "Nota de una sola línea (máx. 500 caracteres)",
+    "save": "Guardar",
+    "search_current": "Solo actuales",
+    "search_historical": "Incluir historial",
+    "search_placeholder": "Buscar notas…",
+    "session": "sesión",
+    "status_active": "Activas",
+    "status_all": "Todos los estados",
+    "status_line": "{{active}} activas / {{total}} totales · {{digests}} resúmenes listos · {{stale}} obsoletos",
+    "status_superseded": "Reemplazadas"
+  },
+  "project_memory_debug": {
+    "compress": "Comprimir",
+    "compress_none": "Nada que comprimir (todos los resúmenes actualizados).",
+    "digest_ready": "listo",
+    "digest_stale": "obsoleto",
+    "digests_empty": "No hay nodos de resumen todavía. Ejecuta comprimir tras añadir varias notas.",
+    "filter_all": "Todos los resúmenes",
+    "filter_ready": "Solo listos",
+    "filter_stale": "Solo obsoletos",
+    "level": "nivel",
+    "no_seq": "No hay notas en este ámbito de proyecto todavía.",
+    "no_summary": "(sin resumen)",
+    "overview_help": "Mnemos almacena notas en orden seq y construye un árbol binario de resúmenes. Los resúmenes obsoletos necesitan compresión tras nuevas notas o ediciones.",
+    "refresh": "Actualizar",
+    "seq_hint": "índice monótono para activación/compresión",
+    "stat_active": "Notas activas",
+    "stat_digests_ready": "Resúmenes listos",
+    "stat_digests_stale": "Resúmenes obsoletos",
+    "stat_levels": "Niveles",
+    "stat_seq": "Intervalo seq",
+    "stat_superseded": "Reemplazadas",
+    "tab_digests": "Resúmenes",
+    "tab_overview": "Visión general",
+    "tab_tree": "Árbol binario",
+    "tab_wake": "Vista previa de activación",
+    "total": "total",
+    "tree_back": "Atrás",
+    "tree_empty": "Rama vacía",
+    "tree_left": "Hijo izquierdo",
+    "tree_right": "Hijo derecho",
+    "tree_root": "Raíz [0, n)",
+    "wake_empty": "No hay filas de activación — añade notas o baja el umbral de activación.",
+    "wake_help": "Líneas que el agente inyectaría al inicio del turno (algoritmo de activación, presupuesto limitado).",
+    "zoom_error": "Error de zoom"
   }
 }

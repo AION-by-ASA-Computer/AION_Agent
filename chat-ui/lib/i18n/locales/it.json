@@ -294,7 +294,8 @@
         "weekly": "Una volta a settimana",
         "monthly": "Una volta al mese",
         "hourly": "Ogni ora",
-        "every_n_minutes": "Ogni tot minuti"
+        "every_n_minutes": "Ogni tot minuti",
+        "custom": "Personalizzato (espressione cron)"
       },
       "hour_label": "Ora",
       "minute_label": "Minuto",

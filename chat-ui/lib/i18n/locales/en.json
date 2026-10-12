@@ -322,7 +322,8 @@
         "weekly": "Every {{day}} at {{time}}",
         "monthly": "Day {{dom}} of each month at {{time}}",
         "hourly": "Every hour at minute {{minute}}",
-        "every_n_minutes": "Every {{n}} minutes"
+        "every_n_minutes": "Every {{n}} minutes",
+        "custom": "Custom (cron: {{expr}})"
       }
     }
   },
@@ -445,7 +446,8 @@
       "disable_desc": "Skip extended reasoning for the fastest replies.",
       "min_desc": "Light reasoning — good for everyday questions.",
       "med_desc": "Balanced depth before answering.",
-      "max_desc": "Deepest reasoning for hard problems; slower replies."
+      "max_desc": "Deepest reasoning for hard problems; slower replies.",
+      "select": "Select thinking budget"
     },
     "stream_recovery": "The agent is still working on this chat on the server. Refreshing automatically…",
     "agent_status": {

@@ -25,6 +25,7 @@ import { getStoredUserId, setStoredAuth } from "@/lib/auth/storage";
 import { resetAuthStatusCache } from "@/lib/auth/status";
 import { AdminBrand } from "@/components/brand/AdminBrand";
 import { VersionUpdateBanner } from "@/components/VersionUpdateBanner";
+import { useT } from "@/lib/i18n/use-t";
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
@@ -47,6 +48,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return <main className="h-screen w-screen overflow-auto bg-[#0a0a0a]">{children}</main>;
   }
 
+  const t = useT();
+
   function logout() {
     setStoredAuth(null, null);
     resetAuthStatusCache();
@@ -54,21 +57,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   const navItems = [
-    { name: "Dashboard", href: "/", icon: LayoutDashboard },
-    { name: "Users Management", href: "/users", icon: Users },
-    { name: "Agent Profiles", href: "/profiles", icon: Users },
-    { name: "Evaluation & Metrics", href: "/metrics", icon: BarChart3 },
-    { name: "Smoke Tests", href: "/diagnostics", icon: FlaskConical },
-    { name: "Skill Registry", href: "/skills", icon: Zap },
-    { name: "MCP Hub", href: "/hub", icon: Globe },
-    { name: "Conversations", href: "/conversations", icon: ClipboardList },
-    { name: "Feedback", href: "/feedback", icon: MessageSquare },
-    { name: "Scheduled jobs", href: "/schedules", icon: Clock },
-    { name: "API Keys", href: "/api-keys", icon: ShieldCheck },
-    { name: "Memory", href: "/memory", icon: Brain },
-    { name: "Security Audit", href: "/security", icon: ShieldCheck },
-    { name: "System Health", href: "/system", icon: LayoutDashboard },
-    { name: "Settings", href: "/settings", icon: Settings },
+    { name: t("admin_nav.dashboard"), href: "/", icon: LayoutDashboard },
+    { name: t("admin_nav.users"), href: "/users", icon: Users },
+    { name: t("admin_nav.profiles"), href: "/profiles", icon: Users },
+    { name: t("admin_nav.metrics"), href: "/metrics", icon: BarChart3 },
+    { name: t("admin_nav.diagnostics"), href: "/diagnostics", icon: FlaskConical },
+    { name: t("admin_nav.skills"), href: "/skills", icon: Zap },
+    { name: t("admin_nav.hub"), href: "/hub", icon: Globe },
+    { name: t("admin_nav.conversations"), href: "/conversations", icon: ClipboardList },
+    { name: t("admin_nav.feedback"), href: "/feedback", icon: MessageSquare },
+    { name: t("admin_nav.schedules"), href: "/schedules", icon: Clock },
+    { name: t("admin_nav.api_keys"), href: "/api-keys", icon: ShieldCheck },
+    { name: t("admin_nav.memory"), href: "/memory", icon: Brain },
+    { name: t("admin_nav.security"), href: "/security", icon: ShieldCheck },
+    { name: t("admin_nav.system"), href: "/system", icon: LayoutDashboard },
+    { name: t("admin_nav.settings"), href: "/settings", icon: Settings },
   ];
 
   return (
@@ -118,7 +121,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             className="w-full flex items-center gap-3 px-4 py-2 text-md text-gray-400 hover:text-white hover:bg-[#141414] rounded-lg transition-all"
           >
             <LogOut className="w-4 h-4" />
-            Logout
+            {t("admin_nav.logout")}
           </button>
           <div className="pt-2 text-md text-gray-600 px-4">
             {process.env.NEXT_PUBLIC_AION_VERSION ? `v${process.env.NEXT_PUBLIC_AION_VERSION}` : "VERSION_NOT_FOUND"} Production Ready
