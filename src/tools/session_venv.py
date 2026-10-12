@@ -37,9 +37,12 @@ def session_venv_dir(session_id: str) -> Path:
 
 
 def session_venv_python(session_id: str) -> Path:
+    # Confine only the venv dir: bin/python is a symlink to the base interpreter
+    # outside the session, and it must be invoked via the symlink to load pyvenv.cfg.
+    vdir = session_venv_dir(session_id)
     if os.name == "nt":
-        return Path(session_fs(session_id, ".venv/Scripts/python.exe"))
-    return Path(session_fs(session_id, ".venv/bin/python"))
+        return vdir / "Scripts" / "python.exe"
+    return vdir / "bin" / "python"
 
 
 def session_venv_exists(session_id: str) -> bool:
