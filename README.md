@@ -87,6 +87,8 @@ You can run AION Agent using a standalone one-liner installer that downloads the
 curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash
 ```
 
+On Linux (apt/dnf) the installer also installs and configures **Podman rootless** for the session sandbox (`AION_SANDBOX_BACKEND=container`); it needs `sudo` for packages, subuid/subgid and `loginctl enable-linger`. Pass `--no-podman` (or `AION_SANDBOX_BACKEND=subprocess`) to skip it and use the `subprocess` sandbox.
+
 **Managing existing volumes:**
 If you have previously installed AION via GHCR, the global Docker volume `aion-agent_aion_data` may already exist. The installer will pause and ask you to choose how to handle it:
 - **Fresh start (delete old data):** Run with `AION_RESET_DATA=1`.
