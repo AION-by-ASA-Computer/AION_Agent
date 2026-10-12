@@ -23,12 +23,15 @@ def test_generic_assistant_does_not_inline_incremental_protocol():
     body = _prompt("generic_assistant")
     assert "incremental_execution_protocol" in body
     assert "When to load this skill" not in body
+    assert "tool_search" in body
+    assert "MCP server `memory`" not in body
     assert count_tokens(body) < 8000
 
 
 def test_aion_std_lists_grafana_as_a_group_not_a_schema():
     body = _prompt("aion_std")
     assert "grafana" in body
-    assert "activate_tool_group" in body
+    assert "tool_search" in body
+    assert "activate_tool_group" not in body
     assert "input_schema" not in body
     assert count_tokens(body) < 8000

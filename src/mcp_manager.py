@@ -1569,8 +1569,12 @@ class MCPManager:
                 oauth_token_present = bool(token)
             return oauth_token_present
 
+        from .mcp_integration_sync import is_static_mcp_env_key
+
         for key, template in env_block.items():
             if not isinstance(template, str):
+                continue
+            if is_static_mcp_env_key(str(key)):
                 continue
             needs_user_cred = "${AION_USER_" in template
             val = resolved.get(key)

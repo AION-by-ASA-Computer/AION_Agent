@@ -9,22 +9,24 @@ version: 5
 
 # Filesystem Tools Protocol
 
+Tools marked **search** are not in the initial tool list. Call `tool_search` with the exact name, then call the tool on the next step. Tools marked **loaded** are already callable.
+
 ## When to use each filesystem tool
 
 | Scenario | Recommended tool |
 |----------|------------------|
-| Create a new file | **`sandbox_write_workspace_file`** — read first if the file may already exist |
-| Append to a large JSON/CSV in chunks | **`sandbox_append_workspace_file`** — when one write would truncate tool JSON |
-| Small targeted change on existing file | **`sandbox_edit_workspace_file`** — always `relative_path`, `old_string`, `new_string` (optional `replace_all`) |
-| Multi-file or incremental patch (GPT) | **`sandbox_apply_patch`** |
-| Find where a pattern appears | `sandbox_grep_content` |
-| List files by wildcard/pattern | `sandbox_fnmatch_glob` |
-| Read part of a large file | `sandbox_read_file_chunk` |
-| Read a whole workspace script / text file | `sandbox_read_text_file` — **omit `max_bytes`** (do not pass 3000/5000) |
-| List offloaded tool outputs (web_fetch, etc.) | `sandbox_list_files(subdir="tool_results")` then `sandbox_read_file_chunk` on `derived/tool_results/...` |
-| Search inside offloaded tool text | `sandbox_grep_content(..., relative_root="derived", glob_filter="tool_results/*.txt")` |
-| Execute Python script | `sandbox_run_python_file` (`workspace/*.py` only) |
-| Office skill helpers (unpack/pack) | `skill_view(docx)` then `sandbox_exec_allowlisted` on `scripts/office/...` |
+| Create a new file | **loaded** `sandbox_write_workspace_file` — read first if the file may already exist |
+| Append to a large JSON/CSV in chunks | **search** `sandbox_append_workspace_file` — when one write would truncate tool JSON |
+| Small targeted change on existing file | **loaded** `sandbox_edit_workspace_file` — always `relative_path`, `old_string`, `new_string` (optional `replace_all`) |
+| Multi-file or incremental patch | **search** `sandbox_apply_patch` |
+| Find where a pattern appears | **loaded** `sandbox_grep_content` |
+| List files by wildcard/pattern | **search** `sandbox_fnmatch_glob` |
+| Read part of a large file | **loaded** `sandbox_read_file_chunk` |
+| Read a whole workspace script / text file | **loaded** `sandbox_read_text_file` — **omit `max_bytes`** (do not pass 3000/5000) |
+| List offloaded tool outputs (web_fetch, etc.) | **loaded** `sandbox_list_files(subdir="tool_results")` then `sandbox_read_file_chunk` on `derived/tool_results/...` |
+| Search inside offloaded tool text | **loaded** `sandbox_grep_content(..., relative_root="derived", glob_filter="tool_results/*.txt")` |
+| Execute Python script | **loaded** `sandbox_run_python_file` (`workspace/*.py` only) |
+| Office skill helpers (unpack/pack) | `skill_view(docx)` then **search** `sandbox_exec_allowlisted` on `scripts/office/...` |
 | After docx unpack (read/grep/edit XML) | Unpack to **`workspace/unpacked/`**; then `sandbox_grep_content`, `sandbox_read_text_file`, `sandbox_edit_workspace_file` under `workspace/unpacked/` |
 | Install npm packages (docx, …) | `sandbox_install_npm_packages` (not `sandbox_exec_allowlisted`) |
 | Find orchestration plan for this chat | **`list_session_execution_plans`** — **never** `sandbox_fnmatch_glob("execution_plan_*.md")` |

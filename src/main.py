@@ -1615,15 +1615,20 @@ async def _finish_get_agent_build(
         )
 
     from src.runtime.tool_exposure import (
+        attach_deferred_pool,
         defer_tool_groups_enabled,
-        make_activate_tool_group_tool,
-        select_resident_tools,
+        format_deferred_catalog,
+        make_tool_search_tool,
+        partition_resident_tools,
+        remember_deferred_tools,
     )
 
+    deferred_pool: list = []
     if defer_tool_groups_enabled():
-        tools = select_resident_tools(tools)
+        tools, deferred_pool = partition_resident_tools(tools)
+        remember_deferred_tools(session_id, deferred_pool)
         tools.append(
-            make_activate_tool_group_tool(
+            make_tool_search_tool(
                 session_id=session_id,
                 user_id=user_id,
                 tenant_id=tenant_id,
@@ -1676,6 +1681,8 @@ async def _finish_get_agent_build(
             "2. Explain fixes in detail before applying changes.\n"
             "3. Understand the problem fully before rushing corrective actions."
         )
+    if deferred_pool:
+        system_prompt += format_deferred_catalog(deferred_pool)
     phases["prompt_ms"] = int(round((time.perf_counter() - t_prompt) * 1000))
 
     # Datasource workflow lives in skill `datasource_memory_protocol` (critical_skills);
@@ -1883,6 +1890,8 @@ async def _finish_get_agent_build(
         ),
         hooks=get_default_agent_hooks(),
     )
+    if deferred_pool:
+        attach_deferred_pool(agent, deferred_pool)
     phases["agent_ms"] = int(round((time.perf_counter() - t_agent) * 1000))
 
     pair = (agent, profile.slug)

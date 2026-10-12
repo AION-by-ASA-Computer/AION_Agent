@@ -12,6 +12,8 @@ tags:
 
 When the profile exposes `web_search` and `web_fetch_page`:
 
+If either name is missing from the tool list, call `tool_search` with that exact name first (`web_search` or `web_fetch_page`). The next step can call the tool.
+
 1. **Sequence**: use `web_search` first with clear queries; use `web_fetch_page` on only 1–3 relevant URLs when snippets are insufficient.
 2. **Language**: keep the user's language; queries may be in the same language or in English if that improves retrieval (state in the query when needed).
 3. **Slice, don't hoard**: prefer a few purposeful searches over many near-duplicate queries. When building a **file deliverable**, follow `incremental_execution_protocol`: persist each slice to `workspace/*` before opening a new research line on a **different** slice.

@@ -30,6 +30,8 @@ def test_build_ms365_stdio_config():
     assert "--read-only" in (cfg.get("args") or [])
     env = cfg.get("env") or {}
     assert env.get("MS365_MCP_OAUTH_TOKEN") == "${AION_USER_MS365__OAUTH_TOKEN}"
+    assert env.get("MS365_MCP_TENANT_ID") == "common"
+    assert env.get("MS365_MCP_ORG_MODE") == "true"
     assert cfg.get("aion_connector_id") == "ms365"
 
 

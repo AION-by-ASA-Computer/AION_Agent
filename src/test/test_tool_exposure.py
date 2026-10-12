@@ -9,9 +9,12 @@ os.environ.setdefault("AION_DEFER_TOOL_GROUPS", "1")
 from types import SimpleNamespace
 
 from src.runtime.tool_exposure import (
+    clear_deferred_tools,
     deferred_prompt_section,
     make_activate_tool_group_tool,
+    make_tool_search_tool,
     publish_tools,
+    remember_deferred_tools,
     resident_mcp_servers,
     select_resident_tools,
 )
@@ -34,15 +37,27 @@ def test_select_resident_keeps_memory_and_skill_search():
         _Tool("skill_search"),
         _Tool("web_search"),
         _Tool("sandbox_read_text_file"),
+        _Tool("sandbox_run_python_file"),
+        _Tool("sandbox_run_node_file"),
+        _Tool("sandbox_install_python_packages"),
+        _Tool("sandbox_install_npm_packages"),
+        _Tool("sandbox_edit_workspace_file"),
         _Tool("sandbox_execute_python"),
+        _Tool("sandbox_apply_patch"),
         _Tool("memory_recall"),
     ]
     kept = [t.name for t in select_resident_tools(tools)]
     assert "skill_search" in kept
     assert "sandbox_read_text_file" in kept
+    assert "sandbox_run_python_file" in kept
+    assert "sandbox_run_node_file" in kept
+    assert "sandbox_install_python_packages" in kept
+    assert "sandbox_install_npm_packages" in kept
+    assert "sandbox_edit_workspace_file" in kept
     assert "memory_recall" in kept
     assert "web_search" not in kept
     assert "sandbox_execute_python" not in kept
+    assert "sandbox_apply_patch" not in kept
 
 
 def test_activate_lists_deferred_and_remaining_sandbox_tools():
@@ -69,7 +84,8 @@ def test_deferred_section_lists_grafana_without_schema():
     )
     text = deferred_prompt_section(profile)
     assert "grafana" in text
-    assert "activate_tool_group" in text
+    assert "tool_search" in text
+    assert "activate_tool_group" not in text
     assert "input_schema" not in text
 
 
@@ -205,3 +221,123 @@ def test_publish_tools_injects_cached_agent_tools_into_current_run():
         assert [t.name for t in ctx.tools] == ["skill_search", "clickup_filter_tasks"]
     finally:
         clear_turn_runtime(sid)
+
+
+def test_tool_search_publishes_named_sandbox_tool():
+    from src.runtime.turn_compaction import (
+        clear_turn_runtime,
+        set_agent_execution_context,
+        set_turn_runtime,
+    )
+
+    class _Ctx:
+        def __init__(self):
+            self.tools = [_Tool("skill_search")]
+            self.chat_generator_inputs = {}
+            self.tool_execution_inputs = {}
+
+    class _Agent:
+        def __init__(self):
+            self.tools = [_Tool("skill_search")]
+            self._aion_deferred_tools = []
+
+    sid = "search-exec-allow"
+    agent = _Agent()
+    ctx = _Ctx()
+    remember_deferred_tools(sid, [_Tool("sandbox_exec_allowlisted")])
+    set_turn_runtime(
+        session_id=sid,
+        loop=None,
+        queue=None,
+        stop_event=None,
+        agent=agent,
+        profile_name="generic_assistant",
+        user_id="default",
+    )
+    try:
+        set_agent_execution_context(ctx)
+        profile = SimpleNamespace(
+            slug="generic_assistant",
+            mcp_servers=["skills_hub", "session_sandbox"],
+            native_tool_groups=["mnemos"],
+        )
+        tool = make_tool_search_tool(
+            session_id=sid, user_id="default", tenant_id="default", profile=profile
+        )
+        message = tool.function("sandbox_exec_allowlisted")
+        assert "sandbox_exec_allowlisted" in message
+        assert [t.name for t in ctx.tools] == [
+            "skill_search",
+            "sandbox_exec_allowlisted",
+        ]
+    finally:
+        clear_turn_runtime(sid)
+        clear_deferred_tools(sid)
+
+
+def test_tool_search_warms_only_ocr(monkeypatch):
+    seen = []
+
+    async def _fake_mcp(server_name, *_args, **_kwargs):
+        seen.append(server_name)
+        return [_Tool("ocr_file")]
+
+    monkeypatch.setattr("src.runtime.tool_exposure._mcp_group_tools", _fake_mcp)
+    sid = "search-ocr-only"
+    profile = SimpleNamespace(
+        slug="generic_assistant",
+        mcp_servers=["skills_hub", "session_sandbox", "ocr", "charts"],
+        native_tool_groups=["mnemos"],
+    )
+    tool = make_tool_search_tool(
+        session_id=sid, user_id="default", tenant_id="default", profile=profile
+    )
+    try:
+        message = tool.function("ocr")
+        assert seen == ["ocr"]
+        assert "ocr_file" in message
+    finally:
+        clear_deferred_tools(sid)
+
+
+def test_tool_search_unknown_lists_names_without_publishing():
+    from src.runtime.turn_compaction import (
+        clear_turn_runtime,
+        set_agent_execution_context,
+        set_turn_runtime,
+    )
+
+    class _Ctx:
+        def __init__(self):
+            self.tools = [_Tool("skill_search")]
+            self.tool_execution_inputs = {}
+
+    sid = "search-miss"
+    ctx = _Ctx()
+    remember_deferred_tools(sid, [_Tool("sandbox_apply_patch")])
+    set_turn_runtime(
+        session_id=sid,
+        loop=None,
+        queue=None,
+        stop_event=None,
+        agent=None,
+        profile_name="generic_assistant",
+        user_id="default",
+    )
+    try:
+        set_agent_execution_context(ctx)
+        profile = SimpleNamespace(
+            slug="generic_assistant",
+            mcp_servers=["skills_hub", "session_sandbox"],
+            native_tool_groups=["mnemos"],
+        )
+        tool = make_tool_search_tool(
+            session_id=sid, user_id="default", tenant_id="default", profile=profile
+        )
+        message = tool.function("not_a_real_tool")
+        assert "sandbox_apply_patch" in message
+        assert "No tool matched" in message
+        assert [t.name for t in ctx.tools] == ["skill_search"]
+    finally:
+        clear_turn_runtime(sid)
+        clear_deferred_tools(sid)

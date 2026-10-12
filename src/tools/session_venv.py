@@ -37,9 +37,17 @@ def session_venv_dir(session_id: str) -> Path:
 
 
 def session_venv_python(session_id: str) -> Path:
+    """Path of the session interpreter.
+
+    ``.venv/bin/python`` is a symlink to the system interpreter. Resolving that
+    symlink would leave ``data/`` and ``session_fs`` would reject it as outside
+    the session, so the check stops at the bin directory.
+    """
     if os.name == "nt":
-        return Path(session_fs(session_id, ".venv/Scripts/python.exe"))
-    return Path(session_fs(session_id, ".venv/bin/python"))
+        bin_rel, name = ".venv/Scripts", "python.exe"
+    else:
+        bin_rel, name = ".venv/bin", "python"
+    return Path(session_fs(session_id, bin_rel)) / name
 
 
 def session_venv_exists(session_id: str) -> bool:
