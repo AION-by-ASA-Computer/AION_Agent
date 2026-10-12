@@ -2659,6 +2659,21 @@ class AgentPipeline:
                                             )
                                             if pending:
                                                 yield _track_sse(pending)
+                                        elif (
+                                            pe.artifact_type or ""
+                                        ).strip().lower() == "pii_review":
+                                            # Not persisted to workspace/attachments.
+                                            yield _track_sse(
+                                                {
+                                                    "type": "artifact_end",
+                                                    "artifact": {
+                                                        "identifier": pe.artifact_id,
+                                                        "type": pe.artifact_type,
+                                                        "title": pe.artifact_title,
+                                                        "saved": False,
+                                                    },
+                                                }
+                                            )
                                         else:
                                             path, version = artifact_manager.save(
                                                 pe.artifact_id,

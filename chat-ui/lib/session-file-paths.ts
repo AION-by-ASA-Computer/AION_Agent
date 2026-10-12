@@ -47,6 +47,8 @@ export function isUserFacingGeneratedFile(relativePathOrName?: string | null): b
 
   const fileName = rel.split("/").pop() || "";
   if (!fileName || fileName.startsWith(".")) return false;
+  // PII review payloads (older sessions saved them as workspace/pii_review.txt).
+  if (/^pii_review\b/i.test(fileName)) return false;
 
   const dotIdx = fileName.lastIndexOf(".");
   if (dotIdx === -1) {

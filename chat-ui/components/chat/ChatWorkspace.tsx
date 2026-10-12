@@ -1211,24 +1211,40 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     }
   }, []);
 
+  /** Salva gli esclusi; se nessun tag resta censurato, PII Review non ha senso e si disattiva. */
+  const applyPiiExcludedTags = useCallback((next: string[]) => {
+    setPiiExcludedTags(next);
+    persistPiiExcludedTags(next);
+    if (piiAvailableTags.length > 0 && piiAvailableTags.every((x) => next.includes(x))) {
+      setPiiReviewEnabled(false);
+    }
+  }, [piiAvailableTags, persistPiiExcludedTags]);
+
   const togglePiiTag = useCallback((tag: string) => {
-    setPiiExcludedTags((prev) => {
-      const next = prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag];
-      persistPiiExcludedTags(next);
-      return next;
-    });
-  }, [persistPiiExcludedTags]);
+    const prev = piiExcludedTags;
+    applyPiiExcludedTags(prev.includes(tag) ? prev.filter((x) => x !== tag) : [...prev, tag]);
+  }, [piiExcludedTags, applyPiiExcludedTags]);
 
   /** Seleziona (tutti censurati) o deseleziona (nessuno censurato) tutti i tag disponibili. */
   const setAllPiiTags = useCallback((selectAll: boolean) => {
-    setPiiExcludedTags((prev) => {
-      const next = selectAll
+    const prev = piiExcludedTags;
+    applyPiiExcludedTags(
+      selectAll
         ? prev.filter((x) => !piiAvailableTags.includes(x))
-        : Array.from(new Set([...prev, ...piiAvailableTags]));
+        : Array.from(new Set([...prev, ...piiAvailableTags])),
+    );
+  }, [piiExcludedTags, piiAvailableTags, applyPiiExcludedTags]);
+
+  /** Attiva/disattiva PII Review; all'attivazione, se nessun tag è selezionato, li riseleziona tutti. */
+  const togglePiiReview = useCallback(() => {
+    const enabling = !piiReviewEnabled;
+    setPiiReviewEnabled(enabling);
+    if (enabling && piiAvailableTags.length > 0 && piiAvailableTags.every((x) => piiExcludedTags.includes(x))) {
+      const next = piiExcludedTags.filter((x) => !piiAvailableTags.includes(x));
+      setPiiExcludedTags(next);
       persistPiiExcludedTags(next);
-      return next;
-    });
-  }, [piiAvailableTags, persistPiiExcludedTags]);
+    }
+  }, [piiReviewEnabled, piiAvailableTags, piiExcludedTags, persistPiiExcludedTags]);
 
   const piiExcludeTagsForTurn = useMemo(() => {
     if (!piiReviewSupported) return undefined;
@@ -2252,7 +2268,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             const aid = String(art.identifier || "");
             if (aid && isPlanArtifact(art)) {
               updatePlanDockStreaming(aid, "", art);
-            } else if (aid) {
+            } else if (aid && String(art.type || "").trim().toLowerCase() !== "pii_review") {
               setDockTab("artifacts");
             }
           }
@@ -4452,9 +4468,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 <div className="my-1 border-t border-border/45" />
                 <button
                   type="button"
-                  onClick={() => {
-                    setPiiReviewEnabled((prev) => !prev);
-                  }}
+                  onClick={togglePiiReview}
                   onMouseEnter={() => {
                     closePlusSubMenus();
                   }}
@@ -4559,6 +4573,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                           {piiAvailableTags.length === 0 ? (
                             <div className="px-2.5 py-2 text-[0.714em] text-muted-foreground text-center">
                               {t("chat.pii.tags_none")}
+                            </div>
+                          ) : null}
+
+                          {piiReviewEnabled && piiAvailableTags.length > 0 ? (
+                            <div className="px-2.5 pt-1.5 text-[0.714em] text-muted-foreground">
+                              {t("chat.pii.review_auto_off")}
                             </div>
                           ) : null}
                         </div>

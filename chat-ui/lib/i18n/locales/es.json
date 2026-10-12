@@ -282,7 +282,8 @@
       "tags_label": "Etiquetas a censurar",
       "select_all": "Seleccionar todo",
       "deselect_all": "Deseleccionar todo",
-      "tags_none": "Ninguna etiqueta seleccionada: no se censurará nada."
+      "tags_none": "Ninguna etiqueta seleccionada: no se censurará nada.",
+      "review_auto_off": "Al deseleccionar todas las etiquetas, PII Review se desactiva."
     },
     "thinking": {
       "label": "Pensamiento",

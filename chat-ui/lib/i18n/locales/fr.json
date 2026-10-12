@@ -282,7 +282,8 @@
       "tags_label": "Tags à censurer",
       "select_all": "Tout sélectionner",
       "deselect_all": "Tout désélectionner",
-      "tags_none": "Aucun tag sélectionné : rien ne sera censuré."
+      "tags_none": "Aucun tag sélectionné : rien ne sera censuré.",
+      "review_auto_off": "Désélectionner tous les tags désactive PII Review."
     },
     "thinking": {
       "label": "Réflexion",

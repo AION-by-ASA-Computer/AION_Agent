@@ -432,7 +432,8 @@
       "tags_label": "Tags to redact",
       "select_all": "Select all",
       "deselect_all": "Deselect all",
-      "tags_none": "No tags selected: nothing will be redacted."
+      "tags_none": "No tags selected: nothing will be redacted.",
+      "review_auto_off": "Deselecting all tags turns PII Review off."
     },
     "thinking": {
       "label": "Thinking",
