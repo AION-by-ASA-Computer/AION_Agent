@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Root del clone (solo per --local): va risolta prima di qualsiasi cd, altrimenti
+# un path relativo (bash ./scripts/install.sh) punta alla directory sbagliata.
+LOCAL_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-.}")/.." 2>/dev/null && pwd || true)"
+
 # --- Config Variables & Defaults ---
 export AION_INSTALL_DIR="${AION_INSTALL_DIR:-$PWD/aion-agent}"
 export AION_VERSION="${AION_VERSION:-latest}"
@@ -678,8 +682,7 @@ fetch() {
     local dest="$2"
     if [ "$USE_LOCAL" -eq 1 ]; then
         # When running with --local, we assume the script is executed from the local clone.
-        # Determine repo root relative to the script path.
-        local repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+        local repo_dir="$LOCAL_REPO_DIR"
         echo "Copying local $src..."
         # Create destination directory if it doesn't exist
         mkdir -p "$(dirname "$dest")"
