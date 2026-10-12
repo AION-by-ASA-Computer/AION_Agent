@@ -5,6 +5,27 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.6.1...v1.7.0) (2026-10-12)
+
+
+### Features
+
+* add AION_SANDBOX_LIVE_SRC environment variable to conditionally disable live host source code and requirements mounting in container sandboxes ([d6b8ed2](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/d6b8ed2917cc31621fb97d8a8a8307e032fdbd28))
+* add configurable container userns support with automatic probe and fallback for podman sandbox ([e142a91](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/e142a91bb00c9bd187f6ceb380b6b843cf1f254b))
+* add support for registry-qualified sandbox images and automated Podman setup in installer ([e1bbd70](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/e1bbd70e2558aad55e893ef6efd5344e74a68227))
+* automate sandbox container image upgrades and default live source mounts by image type ([55cd636](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/55cd6366b5ecd9c11fe221983c240f1969efefb7))
+
+
+### Bug Fixes
+
+* allow venv python symlinks pointing outside the session directory and add regression tests ([8976b3d](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/8976b3dc38d12965d47b46de4204e448c1e890d8))
+* fix podman root for pgx ([09d3737](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/09d37371cd767b9fe2e43aa3f219b6dae1905d44))
+
+
+### Documentation
+
+* document podman sandbox testing, isolation model, and troubleshooting steps ([6f71047](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/6f71047b47ebc4514acbad65b1f0a9605a6d1b8f))
+
 ## [1.6.1](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.6.0...v1.6.1) (2026-10-08)
 
 
