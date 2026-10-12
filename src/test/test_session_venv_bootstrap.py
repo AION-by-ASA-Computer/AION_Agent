@@ -106,3 +106,37 @@ def test_bootstrap_skills_runs_pip_on_host(
     assert captured["argv"][:4] == [str(vpy), "-m", "pip", "install"]
     assert captured["argv"][-2:] == ["-r", str(req)]
     assert (vdir / ".aion_skills_bootstrapped").is_file()
+
+
+def test_venv_python_symlink_outside_session_is_allowed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # bin/python points at the base interpreter outside the session (regression:
+    # realpath confinement rejected it with "path fuori dalla sessione").
+    monkeypatch.setenv("AION_DATA_DIR", str(tmp_path))
+    monkeypatch.delenv("AION_SANDBOX_FLAT_SESSION_ROOT", raising=False)
+    outside = tmp_path / "base" / "python3"
+    outside.parent.mkdir()
+    outside.write_text("", encoding="utf-8")
+    venv_bin = tmp_path / "sessions" / "sess-1234" / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    (venv_bin / "python").symlink_to(outside)
+
+    py = session_venv.session_venv_python("sess-1234")
+    assert py == venv_bin / "python"
+    assert session_venv.session_venv_exists("sess-1234")
+
+
+def test_venv_dir_symlink_outside_session_still_rejected(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("AION_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.delenv("AION_SANDBOX_FLAT_SESSION_ROOT", raising=False)
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    sess = tmp_path / "data" / "sessions" / "sess-1234"
+    sess.mkdir(parents=True)
+    (sess / ".venv").symlink_to(elsewhere)
+
+    with pytest.raises(ValueError, match="fuori dalla sessione"):
+        session_venv.session_venv_python("sess-1234")

@@ -95,6 +95,27 @@ class TestContainerPolicy(unittest.TestCase):
         self.assertIn("--userns=keep-id", argv)
         self.assertIn("1000:1000", argv)
 
+    def test_run_argv_userns_root_mode(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AION_SANDBOX_HOST_DATA_DIR": "/host/data",
+                "AION_SANDBOX_HOST_UID": "1000",
+                "AION_SANDBOX_HOST_GID": "1000",
+                "AION_SANDBOX_CONTAINER_USERNS": "root",
+            },
+            clear=False,
+        ):
+            argv = build_container_run_argv(
+                runtime="podman",
+                image="aion/sandbox:latest",
+                session_id="sess-1234",
+                session_host_path=Path("/host/data/sessions/sess-1234"),
+            )
+        self.assertNotIn("--userns=keep-id", argv)
+        self.assertIn("0:0", argv)
+        self.assertNotIn("1000:1000", argv)
+
     def test_run_argv_mounts_fs_policy_when_configured(self):
         import tempfile
 
@@ -165,6 +186,60 @@ class TestContainerPolicy(unittest.TestCase):
                 ":/app/requirements-sandbox-skills.txt:ro",
                 joined,
             )
+
+    def test_run_argv_skips_live_src_when_disabled(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AION_SANDBOX_HOST_DATA_DIR": "/home/test/aion-agent/data",
+                "AION_SANDBOX_LIVE_SRC": "0",
+            },
+            clear=False,
+        ):
+            argv = build_container_run_argv(
+                runtime="podman",
+                image="ghcr.io/aion-by-asa-computer/aion-sandbox:1.6.1",
+                session_id="sess-1234",
+                session_host_path=Path("/home/test/aion-agent/data/sessions/sess-1234"),
+            )
+        joined = " ".join(argv)
+        self.assertNotIn(":/app/src:", joined)
+        self.assertNotIn(":/app/requirements-sandbox-skills.txt:", joined)
+
+    def _argv_live_src_default(self, image, live_src=None):
+        env = {k: v for k, v in os.environ.items() if k != "AION_SANDBOX_LIVE_SRC"}
+        env["AION_SANDBOX_HOST_DATA_DIR"] = "/home/test/aion-agent/data"
+        if live_src is not None:
+            env["AION_SANDBOX_LIVE_SRC"] = live_src
+        with patch.dict(os.environ, env, clear=True):
+            argv = build_container_run_argv(
+                runtime="podman",
+                image=image,
+                session_id="sess-1234",
+                session_host_path=Path("/home/test/aion-agent/data/sessions/sess-1234"),
+            )
+        return " ".join(argv)
+
+    def test_live_src_unset_registry_image_skips_overlay(self):
+        # .env from older GHCR installs has no AION_SANDBOX_LIVE_SRC.
+        joined = self._argv_live_src_default(
+            "ghcr.io/aion-by-asa-computer/aion-sandbox:1.6.2"
+        )
+        self.assertNotIn(":/app/src:", joined)
+        self.assertNotIn(":/app/requirements-sandbox-skills.txt:", joined)
+
+    def test_live_src_unset_local_image_keeps_overlay(self):
+        for image in ("aion/sandbox:latest", "localhost/aion/sandbox:dev"):
+            joined = self._argv_live_src_default(image)
+            self.assertIn(":/app/src:", joined, image)
+
+    def test_live_src_explicit_overrides_image_default(self):
+        joined = self._argv_live_src_default(
+            "ghcr.io/aion-by-asa-computer/aion-sandbox:1.6.2", live_src="1"
+        )
+        self.assertIn(":/app/src:", joined)
+        joined = self._argv_live_src_default("aion/sandbox:latest", live_src="0")
+        self.assertNotIn(":/app/src:", joined)
 
 
 class TestContainerPaths(unittest.TestCase):
