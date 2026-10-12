@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from scripts.setup_podman_sandbox import (
     ENV_BLOCK_HEADER,
@@ -30,3 +31,45 @@ def test_merge_env_file_inserts_block(tmp_path):
     assert "AION_SANDBOX_BACKEND=container" in text
     assert "FOO=bar" in text
     assert text.count("AION_SANDBOX_BACKEND=") == 1
+
+
+def test_build_env_values_ghcr_image_without_host_src(tmp_path):
+    values = _build_env_values(
+        tmp_path, image="ghcr.io/x/aion-sandbox:1.2.3", host_src=False
+    )
+    assert values["AION_SANDBOX_CONTAINER_IMAGE"] == "ghcr.io/x/aion-sandbox:1.2.3"
+    assert values["AION_SANDBOX_MOUNT_HOST_SRC"] == "0"
+
+
+def test_target_user_is_sudo_caller_not_root(monkeypatch):
+    import pwd
+
+    import scripts.setup_podman_sandbox as mod
+
+    me = pwd.getpwuid(os.getuid())
+    monkeypatch.setattr(mod.os, "geteuid", lambda: 0)
+    monkeypatch.setenv("SUDO_USER", me.pw_name)
+    user = mod._target_user()
+    assert (user.name, user.uid, user.gid) == (me.pw_name, me.pw_uid, me.pw_gid)
+    assert mod._podman_socket_path() == Path(
+        f"/run/user/{me.pw_uid}/podman/podman.sock"
+    )
+
+
+def test_as_target_resets_primary_group_after_newgrp(monkeypatch):
+    """Shell with 'newgrp docker' active: podman must not inherit that gid."""
+    import scripts.setup_podman_sandbox as mod
+
+    user = mod._target_user()
+    monkeypatch.setattr(mod.os, "getgid", lambda: user.gid + 12345)
+    argv = mod._as_target(["podman", "info"])
+    assert argv[:5] == ["sudo", "-u", user.name, "-g", f"#{user.gid}"]
+    assert argv[-2:] == ["podman", "info"]
+
+
+def test_as_target_runs_directly_with_matching_ids():
+    import scripts.setup_podman_sandbox as mod
+
+    argv = mod._as_target(["podman", "info"])
+    assert argv[0] == "env"
+    assert any(a.startswith("XDG_RUNTIME_DIR=/run/user/") for a in argv)

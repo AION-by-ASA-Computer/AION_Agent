@@ -79,46 +79,13 @@ else
 fi
 export AION_REF
 
-# ===========================================================================
-# Podman rootless (session sandbox, AION_SANDBOX_BACKEND=container)
-# ===========================================================================
-# Porting bash di scripts/setup_podman_sandbox.py + fix della guida
-# "Podman Sandbox per AION": l'installer GHCR non clona il repo, quindi non
-# può invocare quello script. Configura Podman per l'utente che ha lanciato
-# l'installer (SUDO_USER se eseguito con sudo), mai per root.
-# ---------------------------------------------------------------------------
-resolve_podman_target() {
-    TARGET_USER="${SUDO_USER:-$(id -un)}"
-    TARGET_UID="$(id -u "$TARGET_USER")"
-    TARGET_GID="$(id -g "$TARGET_USER")"
-    PODMAN_SOCK="/run/user/${TARGET_UID}/podman/podman.sock"
-    if [ "$(id -u)" -eq 0 ]; then SUDO=""; else SUDO="sudo"; fi
-}
-
-# Esegue un comando come TARGET_USER con XDG_RUNTIME_DIR/DBUS impostati
-# (senza, 'systemctl --user' fallisce con "Failed to connect to bus").
-# Se la shell corrente ha un GID diverso da quello di /etc/passwd (es. dopo
-# 'newgrp docker' → gid 988), newuidmap rifiuta il namespace rootless:
-# in quel caso si passa da 'sudo -u', che ripristina il gruppo primario.
-as_target() {
-    local runtime_dir="/run/user/${TARGET_UID}"
-    local envs=("XDG_RUNTIME_DIR=${runtime_dir}" "DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime_dir}/bus")
-    if [ "$(id -u)" = "$TARGET_UID" ] && [ "$(id -g)" = "$TARGET_GID" ]; then
-        env "${envs[@]}" "$@"
-    elif command -v runuser >/dev/null 2>&1 && [ "$(id -u)" -eq 0 ]; then
-        (cd / && runuser -u "$TARGET_USER" -- env "${envs[@]}" "$@")
-    else
-        (cd / && sudo -u "$TARGET_USER" -g "#${TARGET_GID}" env "${envs[@]}" "$@")
-    fi
-}
-
 # ---------------------------------------------------------------------------
 # Accesso a Docker senza 'newgrp docker'
 # ---------------------------------------------------------------------------
 # Su un host nuovo l'utente non è nel gruppo docker (o lo è ma la shell non
 # l'ha ancora attivo). Invece di chiedere usermod + newgrp/relogin, lo script
 # aggiunge l'utente al gruppo e invoca docker tramite 'sg docker', solo per i
-# comandi docker: Podman continua a girare con il gruppo primario (vedi as_target).
+# comandi docker: Podman continua a girare con il gruppo primario (vedi scripts/setup_podman_sandbox.py).
 DOCKER_VIA_SG=0
 docker() {
     if [ "$DOCKER_VIA_SG" -eq 1 ]; then
@@ -153,98 +120,42 @@ ensure_docker_access() {
     return 1
 }
 
-setup_podman_sandbox() {
-    echo "--- Step 2b: Podman rootless sandbox ---"
-    resolve_podman_target
-    echo "[info] Utente target Podman: $TARGET_USER (uid=$TARGET_UID gid=$TARGET_GID)"
-
-    # 1. Pacchetti
-    if ! command -v podman >/dev/null 2>&1; then
-        echo "[info] Installazione Podman..."
-        if command -v apt-get >/dev/null 2>&1; then
-            $SUDO apt-get update || return 1
-            $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
-                podman slirp4netns fuse-overlayfs uidmap dbus-user-session || return 1
-        elif command -v dnf >/dev/null 2>&1; then
-            $SUDO dnf install -y podman slirp4netns fuse-overlayfs || return 1
-        elif command -v yum >/dev/null 2>&1; then
-            $SUDO yum install -y podman slirp4netns fuse-overlayfs || return 1
-        else
-            echo "[error] Package manager non supportato: installa podman manualmente"
-            echo "        oppure rilancia con --no-podman (sandbox subprocess)."
-            return 1
-        fi
-    else
-        echo "[ok] Podman già installato: $(podman --version)"
-    fi
-
-    # 2. subuid/subgid (solo append: non tocca mappature esistenti)
-    local subid_changed=0
-    local f
-    for f in /etc/subuid /etc/subgid; do
-        if ! grep -q "^${TARGET_USER}:" "$f" 2>/dev/null; then
-            echo "${TARGET_USER}:100000:65536" | $SUDO tee -a "$f" >/dev/null
-            echo "[ok] Aggiunta mappatura ${TARGET_USER}:100000:65536 in $f"
-            subid_changed=1
-        fi
-    done
-
-    # 3. Linger: avvia la sessione systemd utente al boot (socket attivo senza login)
-    $SUDO loginctl enable-linger "$TARGET_USER" || return 1
-    local i
-    for i in $(seq 1 20); do
-        [ -S "/run/user/${TARGET_UID}/bus" ] && break
-        sleep 0.5
-    done
-    if [ ! -S "/run/user/${TARGET_UID}/bus" ]; then
-        echo "[error] Bus systemd utente non disponibile in /run/user/${TARGET_UID}/bus."
-        echo "        Su Debian/Ubuntu serve il pacchetto dbus-user-session."
-        return 1
-    fi
-
-    # 4. podman.sock creato come directory da un 'docker compose up' precedente
-    if [ -d "$PODMAN_SOCK" ]; then
-        echo "[warning] $PODMAN_SOCK è una directory (compose avviato prima del socket): la rimuovo."
-        docker compose -f docker-compose.ghcr.yml down >/dev/null 2>&1 || true
-        $SUDO rm -rf "$PODMAN_SOCK"
-    fi
-    if [ -d "$(dirname "$PODMAN_SOCK")" ]; then
-        $SUDO chown -R "${TARGET_UID}:${TARGET_GID}" "$(dirname "$PODMAN_SOCK")"
-    fi
-
-    # 5. Socket utente
-    if [ "$subid_changed" -eq 1 ]; then
-        as_target podman system migrate >/dev/null 2>&1 || true
-    fi
-    as_target systemctl --user daemon-reload
-    as_target systemctl --user enable --now podman.socket || return 1
-
-    # 6. Verifica
-    if [ ! -S "$PODMAN_SOCK" ]; then
-        echo "[error] Socket Podman non valido: $PODMAN_SOCK"
-        echo "        Diagnostica: systemctl --user status podman.socket"
-        return 1
-    fi
-    if ! as_target podman info >/dev/null; then
-        echo "[error] 'podman info' fallito per l'utente $TARGET_USER."
-        echo "        Se vedi 'OCI permission denied' dopo un tentativo fallito, lo storage Podman"
-        echo "        è inizializzato a metà: rm -rf ~/.local/share/containers e rilancia."
-        return 1
-    fi
-    echo "[ok] Podman rootless pronto: $PODMAN_SOCK"
+# ---------------------------------------------------------------------------
+# Podman rootless (session sandbox, AION_SANDBOX_BACKEND=container)
+# ---------------------------------------------------------------------------
+# Delega a scripts/setup_podman_sandbox.py (estratto dall'immagine backend):
+# installa Podman, configura subuid/linger/podman.socket per l'utente che ha
+# lanciato l'installer (SUDO_USER se via sudo), aggiorna il blocco sandbox del
+# .env e scarica l'immagine sandbox GHCR nello store Podman di quell'utente.
+run_podman_setup() {
+    local image="ghcr.io/aion-by-asa-computer/aion-sandbox:$1"
+    shift
+    python3 scripts/setup_podman_sandbox.py \
+        --image "$image" --no-host-src --no-restart "$@"
 }
 
-# Scarica l'immagine sandbox nello store Podman dell'utente target (i container
-# di sessione sono lanciati da Podman, che non vede le immagini di Docker).
-pull_sandbox_image_podman() {
-    local image="$1"
-    resolve_podman_target
-    echo "[info] podman pull $image (utente $TARGET_USER)..."
-    if as_target podman pull "$image"; then
-        return 0
-    fi
-    echo "[warning] podman pull fallito, provo docker pull + podman load..."
-    docker pull "$image" && docker save "$image" | as_target podman load
+# Le versioni precedenti dello script non supportano l'install GHCR (--no-host-src).
+podman_setup_supported() {
+    grep -q -- '--no-host-src' scripts/setup_podman_sandbox.py 2>/dev/null
+}
+
+# ---------------------------------------------------------------------------
+# Script Python eseguiti sull'host (tuning .env, setup Podman)
+# ---------------------------------------------------------------------------
+# Sono già nell'immagine backend (/app/scripts): si copiano da lì invece di
+# scaricarli da GitHub, così restano allineati alla versione dello stack.
+BACKEND_IMAGE_REPO="ghcr.io/aion-by-asa-computer/aion-backend"
+HOST_SCRIPTS="apply_optimal_aion_env.py env_tuning_profiles.py setup_podman_sandbox.py"
+
+extract_host_scripts() {
+    local image="$1" cid f rc=0
+    cid=$(docker create "$image") || return 1
+    mkdir -p scripts
+    for f in $HOST_SCRIPTS; do
+        docker cp "$cid:/app/scripts/$f" "scripts/$f" || { rc=1; break; }
+    done
+    docker rm "$cid" >/dev/null
+    return $rc
 }
 
 # ===========================================================================
@@ -259,6 +170,7 @@ pull_sandbox_image_podman() {
 #   6. Backup file host (via container immagine corrente)
 #      Backup volume Docker aion_data (via docker run --rm alpine tar)
 #   7. Loop hop: fetch infra files → docker pull backend:<next> →
+#      script host estratti dall'immagine →
 #      docker run --rm <new image> upgrade_runner.py →
 #      docker compose pull → up -d → health-check
 #   8. Aggiorna .aion-install.json
@@ -303,7 +215,7 @@ do_upgrade() {
     echo "=== AION Agent — Modalità Upgrade GHCR (v2) ==="
     echo ""
 
-    local BACKEND_IMAGE="ghcr.io/aion-by-asa-computer/aion-backend"
+    local BACKEND_IMAGE="$BACKEND_IMAGE_REPO"
 
     # ------------------------------------------------------------------
     # 1. Precondizioni
@@ -532,9 +444,7 @@ print(' '.join(chain))
         echo "[hop] Aggiorno file infrastrutturali da ${NEXT_REF}..."
         for SRC in \
             "docker-compose.ghcr.yml" \
-            "docker/Caddyfile" \
-            "scripts/apply_optimal_aion_env.py" \
-            "scripts/env_tuning_profiles.py"; do
+            "docker/Caddyfile"; do
 
             mkdir -p "$(dirname "$SRC")"
             if ! curl -fsSL --retry 3 \
@@ -549,6 +459,9 @@ print(' '.join(chain))
         if ! docker pull "${BACKEND_IMAGE}:${NEXT}"; then
             echo "[error] Impossibile scaricare ${BACKEND_IMAGE}:${NEXT} — abort hop."
             exit 1
+        fi
+        if ! extract_host_scripts "${BACKEND_IMAGE}:${NEXT}"; then
+            echo "[warning] Script host non aggiornati da ${BACKEND_IMAGE}:${NEXT} — si usa la versione esistente."
         fi
 
         # 7c. Container usa e getta: migrazione dalla nuova immagine
@@ -595,9 +508,10 @@ except: print('')
         echo "[hop] docker compose pull (tutte le immagini)..."
         docker compose -f docker-compose.ghcr.yml pull
         echo "[hop] pull sandbox image..."
-        if grep -q '^AION_SANDBOX_BACKEND=container' .env; then
-            pull_sandbox_image_podman "ghcr.io/aion-by-asa-computer/aion-sandbox:${NEXT}" \
-                || echo "[warning] Immagine sandbox non disponibile in Podman."
+        if grep -q '^AION_SANDBOX_BACKEND=container' .env && podman_setup_supported; then
+            # Riallinea socket/.env e scarica la nuova immagine nello store Podman
+            run_podman_setup "$NEXT" --skip-install \
+                || echo "[warning] Setup Podman/immagine sandbox ${NEXT} non riuscito."
         else
             docker pull "ghcr.io/aion-by-asa-computer/aion-sandbox:${NEXT}" || true
         fi
@@ -782,38 +696,38 @@ fetch() {
     fi
 }
 
+# File infrastrutturali usati da docker compose sull'host (non sono nell'immagine)
 fetch "docker-compose.ghcr.yml" "docker-compose.ghcr.yml"
 fetch "docker/Caddyfile" "docker/Caddyfile"
-fetch "scripts/apply_optimal_aion_env.py" "scripts/apply_optimal_aion_env.py"
-fetch "scripts/env_tuning_profiles.py" "scripts/env_tuning_profiles.py"
 fetch ".env.example" ".env.example"
+
+# Script Python host: dal clone con --local, altrimenti dall'immagine backend
+if [ "$USE_LOCAL" -eq 1 ]; then
+    for f in $HOST_SCRIPTS; do
+        fetch "scripts/$f" "scripts/$f"
+    done
+else
+    echo "Pulling ${BACKEND_IMAGE_REPO}:${AION_VERSION} (host scripts)..."
+    if ! docker pull "${BACKEND_IMAGE_REPO}:${AION_VERSION}" \
+        || ! extract_host_scripts "${BACKEND_IMAGE_REPO}:${AION_VERSION}"; then
+        echo "[error] Impossibile estrarre gli script da ${BACKEND_IMAGE_REPO}:${AION_VERSION}"
+        exit 1
+    fi
+fi
 
 echo "[ok] Files downloaded."
 
-# --- Step 2b: Podman rootless sandbox ---
+# --- Sandbox backend: container (Podman rootless) salvo opt-out ---
 export AION_SANDBOX_BACKEND_RESOLVED="container"
 if [ "$NO_PODMAN" -eq 1 ]; then
-    echo "--- Step 2b: Skipping Podman (--no-podman): sandbox subprocess ---"
+    echo "[info] --no-podman: sandbox subprocess."
     AION_SANDBOX_BACKEND_RESOLVED="subprocess"
 elif [ "$(uname -s)" != "Linux" ]; then
-    echo "--- Step 2b: Podman rootless supportato solo su Linux: sandbox subprocess ---"
+    echo "[info] Podman rootless supportato solo su Linux: sandbox subprocess."
     AION_SANDBOX_BACKEND_RESOLVED="subprocess"
-else
-    if ! setup_podman_sandbox; then
-        echo ""
-        echo "[error] Setup Podman fallito: lo stack non viene avviato senza socket"
-        echo "        (Docker creerebbe una directory al posto di podman.sock)."
-        echo "        Correggi l'errore sopra e rilancia, oppure usa --no-podman."
-        exit 1
-    fi
-    export AION_PODMAN_SOCKET_HOST_RESOLVED="$PODMAN_SOCK"
-    export AION_SANDBOX_HOST_UID="$TARGET_UID"
-    export AION_SANDBOX_HOST_GID="$TARGET_GID"
-    if [ -e /sys/fs/selinux ]; then
-        export AION_SANDBOX_CONTAINER_SELINUX=1
-    else
-        export AION_SANDBOX_CONTAINER_SELINUX=0
-    fi
+elif ! podman_setup_supported; then
+    echo "[warning] La versione ${AION_VERSION} non supporta la sandbox container su install GHCR: sandbox subprocess."
+    AION_SANDBOX_BACKEND_RESOLVED="subprocess"
 fi
 
 # --- Step 3: Generate .env ---
@@ -873,8 +787,7 @@ config = {
     'AION_VERSION': os.environ.get('AION_VERSION', 'latest'),
     'AION_SANDBOX_CONTAINER_IMAGE': f"ghcr.io/aion-by-asa-computer/aion-sandbox:{os.environ.get('AION_VERSION', 'latest')}",
     'AION_SANDBOX_HOST_DATA_DIR': os.path.join(os.environ['AION_INSTALL_DIR'], 'data'),
-    'AION_PODMAN_SOCKET_HOST': os.environ.get('AION_PODMAN_SOCKET_HOST_RESOLVED')
-        or f"/run/user/{os.environ.get('SUDO_UID') or os.getuid()}/podman/podman.sock",
+    'AION_PODMAN_SOCKET_HOST': f"/run/user/{os.environ.get('SUDO_UID') or os.getuid()}/podman/podman.sock",
     'AION_REDIS_URL': f"redis://:{redis_password}@redis:6379/0",
     'AION_DB_URL': 'sqlite+aiosqlite:///data/aion.db',
     'AION_DATA_DIR': '/app/data',
@@ -919,17 +832,9 @@ config['AION_CORS_ORIGINS'] = base_url
 config['NEXT_PUBLIC_AION_API_URL'] = "/api"
 config['NEXT_PUBLIC_AION_ADMIN_UI_URL'] = "/admin"
 
-# Sandbox config
-# Step 2b ha già configurato Podman rootless (o scelto subprocess con --no-podman)
+# Sandbox config: in modalità container il blocco completo (UID/GID, SELinux,
+# AION_SANDBOX_MOUNT_HOST_SRC=0, ...) lo scrive scripts/setup_podman_sandbox.py (Step 3b)
 config['AION_SANDBOX_BACKEND'] = os.environ.get('AION_SANDBOX_BACKEND_RESOLVED', 'container')
-if config['AION_SANDBOX_BACKEND'] == 'container':
-    config['AION_CONTAINER_RUNTIME'] = 'podman'
-    config['AION_PODMAN_SOCKET'] = '/run/podman/podman.sock'
-    config['AION_SANDBOX_FAIL_CLOSED'] = '1'
-    config['AION_SANDBOX_MCP_JAIL'] = '1'
-    for k in ('AION_SANDBOX_HOST_UID', 'AION_SANDBOX_HOST_GID', 'AION_SANDBOX_CONTAINER_SELINUX'):
-        if os.environ.get(k):
-            config[k] = os.environ[k]
 
 # Quando AION_REUSE_DATA=1 o la chiave è già nel .env target, non sovrascrivere
 # AION_CREDENTIAL_ENCRYPTION_KEY: cambiarla renderebbe illeggibile il DB esistente.
@@ -971,12 +876,22 @@ EOF
 chmod 644 .env
 echo "[ok] .env generated."
 
+# --- Step 3b: Podman rootless sandbox ---
+if [ "$AION_SANDBOX_BACKEND_RESOLVED" = "container" ]; then
+    echo "--- Step 3b: Podman rootless sandbox ---"
+    if ! run_podman_setup "$AION_VERSION"; then
+        echo ""
+        echo "[error] Setup Podman fallito: lo stack non viene avviato senza socket"
+        echo "        (Docker creerebbe una directory al posto di podman.sock)."
+        echo "        Correggi l'errore sopra e rilancia, oppure usa --no-podman."
+        exit 1
+    fi
+fi
+
 # Fix ownership if run with sudo
 if [ -n "${SUDO_USER:-}" ]; then
     chown -R "$SUDO_USER" "$AION_INSTALL_DIR"
 fi
-# I container Podman rootless (--userns=keep-id) scrivono in data/sessions
-chmod 775 data/sessions
 
 if [ -z "${AION_API_URL:-}" ] || [ -z "${AION_LLM_API_KEY:-}" ]; then
     echo ""
@@ -1021,11 +936,9 @@ echo "[ok] Wrote .aion-install.json"
 if [ "$AION_SKIP_START" -eq 0 ]; then
     echo "--- Step 6: Starting Stack ---"
     docker compose -f docker-compose.ghcr.yml pull
-    echo "[info] Pulling sandbox image..."
-    if [ "$AION_SANDBOX_BACKEND_RESOLVED" = "container" ]; then
-        pull_sandbox_image_podman "ghcr.io/aion-by-asa-computer/aion-sandbox:${AION_VERSION}" \
-            || echo "[warning] Immagine sandbox non disponibile in Podman: la prima esecuzione di codice fallirà."
-    else
+    # In modalità container l'immagine sandbox è già nello store Podman (Step 3b)
+    if [ "$AION_SANDBOX_BACKEND_RESOLVED" != "container" ]; then
+        echo "[info] Pulling sandbox image..."
         docker pull "ghcr.io/aion-by-asa-computer/aion-sandbox:${AION_VERSION}" || true
     fi
     docker compose -f docker-compose.ghcr.yml up -d --no-build --remove-orphans

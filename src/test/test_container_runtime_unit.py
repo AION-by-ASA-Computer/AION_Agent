@@ -166,6 +166,25 @@ class TestContainerPolicy(unittest.TestCase):
                 joined,
             )
 
+    def test_run_argv_skips_host_src_when_overlay_disabled(self):
+        with patch.dict(
+            os.environ,
+            {
+                "AION_SANDBOX_HOST_DATA_DIR": "/home/u/aion-agent/data",
+                "AION_SANDBOX_MOUNT_HOST_SRC": "0",
+            },
+            clear=False,
+        ):
+            argv = build_container_run_argv(
+                runtime="podman",
+                image="aion/sandbox:latest",
+                session_id="sess-1234",
+                session_host_path=Path("/tmp/sess-1234"),
+            )
+        joined = " ".join(argv)
+        self.assertNotIn(":/app/src:", joined)
+        self.assertNotIn(":/app/requirements-sandbox-skills.txt:", joined)
+
 
 class TestContainerPaths(unittest.TestCase):
     def test_resolve_host_repo_path(self):

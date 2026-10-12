@@ -24,8 +24,9 @@ Vantaggi rispetto all'approccio "scarica script da GitHub ed eseguilo sull'host"
 Flusso:
   1. Sincronizza config_std/ → /app/config/ (merge non-distruttivo)
   2. Sincronizza mcp_servers_std/ → /app/mcp_servers/ (merge non-distruttivo)
-  3. Esegue scripts/upgrades/<to_version>.py se presente (con UpgradeContext)
-  4. Aggiorna AION_VERSION=<to_version> in /app/.env
+  3. Migrazioni .env comuni (upgrade_core.migrate_env_file, le stesse di upgrade-aion)
+  4. Esegue scripts/upgrades/<to_version>.py se presente (con UpgradeContext)
+  5. Aggiorna AION_VERSION=<to_version> in /app/.env
 """
 from __future__ import annotations
 
@@ -81,6 +82,29 @@ def _sync_dir(src: Path, dst: Path, label: str) -> None:
         copied += 1
 
     print(f"[runner] {label}: {copied} file copiati, {skipped} già presenti (preservati).")
+
+
+# ---------------------------------------------------------------------------
+# Migrazioni .env condivise con upgrade-aion
+# ---------------------------------------------------------------------------
+
+
+def _migrate_env(dry_run: bool) -> None:
+    """Applica al .env montato le migrazioni di upgrade_core (rename legacy,
+    chiavi deprecate, default mancanti): un solo elenco per clone e GHCR.
+    """
+    env_path = ROOT / ".env"
+    if not env_path.is_file():
+        print(f"[runner] WARN: {env_path} non trovato — migrazioni .env saltate.", file=sys.stderr)
+        return
+
+    import upgrade_core  # importato dall'immagine (scripts/ è nel sys.path)
+
+    report = upgrade_core.Report()
+    rc = upgrade_core.migrate_env_file(env_path, dry_run=dry_run, report=report)
+    if rc != 0:
+        print(f"[runner] ERRORE: migrazioni .env fallite (rc={rc}).", file=sys.stderr)
+        sys.exit(rc)
 
 
 # ---------------------------------------------------------------------------
@@ -197,12 +221,16 @@ def main() -> None:
         label="mcp_servers_std → mcp_servers",
     )
 
-    # 3. Script per-versione
-    print("\n[runner] === Step 3: script per-versione ===")
+    # 3. Migrazioni .env comuni (prima dello script per-versione, che vede i nomi nuovi)
+    print("\n[runner] === Step 3: migrazioni .env ===")
+    _migrate_env(args.dry_run)
+
+    # 4. Script per-versione
+    print("\n[runner] === Step 4: script per-versione ===")
     _run_version_script(args.to_version, args.dry_run)
 
-    # 4. Aggiorna AION_VERSION nel .env
-    print("\n[runner] === Step 4: aggiorna AION_VERSION ===")
+    # 5. Aggiorna AION_VERSION nel .env
+    print("\n[runner] === Step 5: aggiorna AION_VERSION ===")
     _update_aion_version(args.to_version, args.dry_run)
 
     print(f"\n[runner] Migrazione{dry_tag} {args.from_version} → {args.to_version} COMPLETATA.")

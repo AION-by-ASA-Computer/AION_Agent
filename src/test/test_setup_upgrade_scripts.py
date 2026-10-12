@@ -137,6 +137,26 @@ def test_upgrade_runner_dry_run_updates_version(tmp_path, upgrade_runner, monkey
     assert "AION_VERSION=1.5.2" in env.read_text(encoding="utf-8")
 
 
+def test_upgrade_runner_applies_shared_env_migrations(
+    tmp_path, upgrade_runner, monkeypatch
+):
+    """GHCR runner applies the same .env migrations as upgrade-aion."""
+    env = tmp_path / ".env"
+    env.write_text(
+        "AION_VERSION=1.0.0\nAION_CHAINLIT_PASSWORD_AUTH=1\nAION_CHAT_MAX_TOKENS=4096\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(upgrade_runner, "ROOT", tmp_path)
+
+    upgrade_runner._migrate_env(dry_run=False)
+
+    text = env.read_text(encoding="utf-8")
+    assert "AION_CHAINLIT_PASSWORD_AUTH" not in text
+    assert "AION_CHAT_PASSWORD_AUTH=1" in text
+    assert "AION_CHAT_MAX_TOKENS=4096" in text
+    assert "AION_SANDBOX_ALLOW_PACKAGE_INSTALL=" in text
+
+
 def test_setup_core_dry_run_non_interactive(tmp_path):
     env_out = tmp_path / ".env"
     env_out.write_text("AION_CHAT_PASSWORD_AUTH=0\n", encoding="utf-8")

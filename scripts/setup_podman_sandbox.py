@@ -6,6 +6,13 @@ Usage:
   ./scripts/setup-podman-sandbox.sh
   python scripts/setup_podman_sandbox.py [--dry-run] [--skip-install] [--skip-build] [-y]
 
+GHCR installs (scripts/install.sh) call it with a pre-built image and no host checkout:
+  python3 scripts/setup_podman_sandbox.py --image ghcr.io/...:<ver> --no-host-src --no-restart
+
+Podman is always configured for the invoking user (``SUDO_USER`` under sudo, never
+root) and run with that user's primary group: a shell where ``newgrp docker`` is
+active would otherwise make ``newuidmap`` refuse the rootless user namespace.
+
 See docs/deployment/podman-sandbox.md
 """
 
@@ -13,12 +20,14 @@ from __future__ import annotations
 
 import argparse
 import os
+import pwd
 import re
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -41,7 +50,11 @@ ENV_KEYS: Tuple[str, ...] = (
     "AION_SANDBOX_CONTAINER_MEMORY",
     "AION_SANDBOX_CONTAINER_CPUS",
     "AION_SANDBOX_CONTAINER_PIDS_LIMIT",
+    "AION_SANDBOX_MOUNT_HOST_SRC",
 )
+
+DEFAULT_IMAGE = "aion/sandbox:latest"
+SUBID_RANGE = "100000:65536"
 
 
 def _log(msg: str) -> None:
@@ -78,6 +91,54 @@ def _has_cmd(name: str) -> bool:
     return shutil.which(name) is not None
 
 
+def _sudo() -> List[str]:
+    return [] if os.geteuid() == 0 else ["sudo"]
+
+
+class TargetUser(NamedTuple):
+    name: str
+    uid: int
+    gid: int
+
+    @property
+    def runtime_dir(self) -> Path:
+        return Path(f"/run/user/{self.uid}")
+
+
+def _target_user() -> TargetUser:
+    """User that owns the rootless Podman: the sudo caller, not root."""
+    name = os.environ.get("SUDO_USER") if os.geteuid() == 0 else None
+    entry = pwd.getpwnam(name) if name else pwd.getpwuid(os.getuid())
+    return TargetUser(entry.pw_name, entry.pw_uid, entry.pw_gid)
+
+
+def _as_target(cmd: List[str]) -> List[str]:
+    """
+    Wrap ``cmd`` to run as the target user with its primary group and the
+    systemd user-session env (``systemctl --user`` needs XDG_RUNTIME_DIR/DBUS).
+    """
+    user = _target_user()
+    env = [
+        "env",
+        f"XDG_RUNTIME_DIR={user.runtime_dir}",
+        f"DBUS_SESSION_BUS_ADDRESS=unix:path={user.runtime_dir}/bus",
+    ]
+    if os.getuid() == user.uid and os.getgid() == user.gid:
+        return env + cmd
+    if os.geteuid() == 0 and _has_cmd("runuser"):
+        return ["runuser", "-u", user.name, "--"] + env + cmd
+    return ["sudo", "-u", user.name, "-g", f"#{user.gid}"] + env + cmd
+
+
+def _run_as_target(
+    cmd: List[str], *, check: bool = True, capture: bool = False
+) -> subprocess.CompletedProcess:
+    _log(f"  $ {' '.join(cmd)}")
+    return subprocess.run(
+        _as_target(cmd), check=check, text=True, capture_output=capture, cwd="/"
+    )
+
+
 def _detect_pkg_manager() -> Optional[str]:
     if _has_cmd("apt-get"):
         return "apt"
@@ -99,14 +160,16 @@ def _install_podman(*, dry_run: bool) -> None:
         _fail(
             "Package manager non supportato. Installa podman manualmente e rilancia con --skip-install."
         )
+    sudo = _sudo()
     if pm == "apt":
-        cmd = ["sudo", "apt-get", "update"]
+        cmd = sudo + ["apt-get", "update"]
         if dry_run:
             _log(f"[dry-run] {' '.join(cmd)}")
         else:
             _run(cmd)
-        install = [
-            "sudo",
+        install = sudo + [
+            "env",
+            "DEBIAN_FRONTEND=noninteractive",
             "apt-get",
             "install",
             "-y",
@@ -114,10 +177,11 @@ def _install_podman(*, dry_run: bool) -> None:
             "slirp4netns",
             "fuse-overlayfs",
             "uidmap",
+            # bus systemd utente: senza, 'systemctl --user' non funziona via linger
+            "dbus-user-session",
         ]
     elif pm in ("dnf", "yum"):
-        install = [
-            "sudo",
+        install = sudo + [
             pm,
             "install",
             "-y",
@@ -126,8 +190,7 @@ def _install_podman(*, dry_run: bool) -> None:
             "fuse-overlayfs",
         ]
     else:
-        install = [
-            "sudo",
+        install = sudo + [
             "pacman",
             "-S",
             "--noconfirm",
@@ -141,44 +204,92 @@ def _install_podman(*, dry_run: bool) -> None:
     _run(install)
 
 
+def _ensure_subids(*, dry_run: bool) -> bool:
+    """Append ``user:100000:65536`` to /etc/subuid|subgid if missing. Returns True if changed."""
+    user = _target_user()
+    changed = False
+    for path in (Path("/etc/subuid"), Path("/etc/subgid")):
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            text = ""
+        if re.search(rf"^{re.escape(user.name)}:", text, re.MULTILINE):
+            continue
+        line = f"{user.name}:{SUBID_RANGE}"
+        if dry_run:
+            _log(f"[dry-run] echo {line} >> {path}")
+            continue
+        subprocess.run(
+            _sudo() + ["tee", "-a", str(path)],
+            input=line + "\n",
+            text=True,
+            stdout=subprocess.DEVNULL,
+            check=True,
+        )
+        _log(f"Aggiunta mappatura {line} in {path}")
+        changed = True
+    return changed
+
+
 def _podman_socket_path() -> Path:
-    return Path(f"/run/user/{os.getuid()}/podman/podman.sock")
+    return _target_user().runtime_dir / "podman" / "podman.sock"
 
 
 def _cleanup_bogus_socket(*, dry_run: bool) -> None:
     sock = _podman_socket_path()
     parent = sock.parent
+    user = _target_user()
     if sock.is_dir():
         _warn(
             f"{sock} è una directory (tipico se docker compose è partito prima del socket)."
         )
-        if parent.is_dir() and os.geteuid() == 0:
-            shutil.rmtree(sock)
+        if dry_run:
+            _log(f"[dry-run] sudo rm -rf {sock}")
         else:
-            _log(f"Rimuovi manualmente: sudo rm -rf {sock}")
-            if not dry_run:
-                _run(["sudo", "rm", "-rf", str(sock)], check=False)
-    elif parent.is_dir() and not os.access(parent, os.W_OK):
+            _run(_sudo() + ["rm", "-rf", str(sock)], check=False)
+    if parent.is_dir() and parent.stat().st_uid != user.uid:
         _log(f"Correggo permessi su {parent} (owner root da mount Docker precedente).")
         if not dry_run:
             _run(
-                ["sudo", "chown", "-R", f"{os.getuid()}:{os.getgid()}", str(parent)],
+                _sudo() + ["chown", "-R", f"{user.uid}:{user.gid}", str(parent)],
                 check=False,
             )
 
 
-def _enable_podman_socket(*, dry_run: bool) -> None:
-    linger = ["loginctl", "enable-linger", os.environ.get("USER", "")]
+def _wait_user_bus(timeout: float = 10.0) -> bool:
+    bus = _target_user().runtime_dir / "bus"
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if bus.is_socket():
+            return True
+        time.sleep(0.5)
+    return bus.is_socket()
+
+
+def _enable_podman_socket(*, dry_run: bool, subids_changed: bool) -> None:
+    user = _target_user()
+    linger = _sudo() + ["loginctl", "enable-linger", user.name]
     if dry_run:
         _log(f"[dry-run] {' '.join(linger)}")
     else:
-        _run(linger, check=False)
+        _run(linger)
+        if not _wait_user_bus():
+            _fail(
+                f"Bus systemd utente non disponibile in {user.runtime_dir}/bus "
+                "(Debian/Ubuntu: installa dbus-user-session)."
+            )
     _cleanup_bogus_socket(dry_run=dry_run)
-    unit = ["systemctl", "--user", "enable", "--now", "podman.socket"]
     if dry_run:
-        _log(f"[dry-run] {' '.join(unit)}")
+        _log("[dry-run] systemctl --user enable --now podman.socket")
         return
-    proc = subprocess.run(unit, text=True, capture_output=True)
+    if subids_changed:
+        _run_as_target(["podman", "system", "migrate"], check=False, capture=True)
+    _run_as_target(["systemctl", "--user", "daemon-reload"], check=False)
+    proc = _run_as_target(
+        ["systemctl", "--user", "enable", "--now", "podman.socket"],
+        check=False,
+        capture=True,
+    )
     if proc.returncode != 0:
         _warn(proc.stderr.strip() or proc.stdout.strip())
         _fail(
@@ -197,18 +308,19 @@ def _selinux_default() -> str:
     return "0"
 
 
-def _build_env_values(repo: Path) -> Dict[str, str]:
-    uid = str(os.getuid())
-    gid = str(os.getgid())
+def _build_env_values(
+    repo: Path, *, image: str = DEFAULT_IMAGE, host_src: bool = True
+) -> Dict[str, str]:
+    user = _target_user()
     data_dir = (repo / "data").resolve()
     return {
         "AION_SANDBOX_BACKEND": "container",
         "AION_PODMAN_SOCKET_HOST": str(_podman_socket_path()),
         "AION_SANDBOX_HOST_DATA_DIR": str(data_dir),
-        "AION_SANDBOX_HOST_UID": uid,
-        "AION_SANDBOX_HOST_GID": gid,
+        "AION_SANDBOX_HOST_UID": str(user.uid),
+        "AION_SANDBOX_HOST_GID": str(user.gid),
         "AION_CONTAINER_RUNTIME": "podman",
-        "AION_SANDBOX_CONTAINER_IMAGE": "aion/sandbox:latest",
+        "AION_SANDBOX_CONTAINER_IMAGE": image,
         "AION_PODMAN_SOCKET": "/run/podman/podman.sock",
         "AION_SANDBOX_FAIL_CLOSED": "1",
         "AION_SANDBOX_MCP_JAIL": "1",
@@ -216,6 +328,9 @@ def _build_env_values(repo: Path) -> Dict[str, str]:
         "AION_SANDBOX_CONTAINER_MEMORY": "512m",
         "AION_SANDBOX_CONTAINER_CPUS": "1.0",
         "AION_SANDBOX_CONTAINER_PIDS_LIMIT": "256",
+        # GHCR: nessun checkout sull'host, src/ è già nell'immagine sandbox
+        # (un bind-mount di <repo>/src inesistente fa fallire 'podman run').
+        "AION_SANDBOX_MOUNT_HOST_SRC": "1" if host_src else "0",
     }
 
 
@@ -302,6 +417,17 @@ def _prepare_sessions_dir(repo: Path, *, dry_run: bool) -> None:
         return
     sessions.mkdir(parents=True, exist_ok=True)
     os.chmod(sessions, 0o775)
+    if os.geteuid() == 0:
+        user = _target_user()
+        os.chown(sessions, user.uid, user.gid)
+
+
+def _podman_load_from_docker(image: str) -> bool:
+    save = subprocess.Popen(["docker", "save", image], stdout=subprocess.PIPE)
+    assert save.stdout is not None
+    load = subprocess.run(_as_target(["podman", "load"]), stdin=save.stdout, check=False)
+    save.wait()
+    return load.returncode == 0 and save.returncode == 0
 
 
 def _build_sandbox_image(repo: Path, *, dry_run: bool) -> None:
@@ -311,49 +437,60 @@ def _build_sandbox_image(repo: Path, *, dry_run: bool) -> None:
     compose = ["docker", "compose", "--profile", "sandbox-build", "build", "sandbox"]
     if dry_run:
         _log(f"[dry-run] {' '.join(compose)}")
-        _log("[dry-run] docker save aion/sandbox:latest | podman load")
+        _log(f"[dry-run] docker save {DEFAULT_IMAGE} | podman load")
         return
     _run(compose, cwd=str(repo))
     if not _has_cmd("podman"):
         return
     _log("Import immagine sandbox in Podman...")
-    save = subprocess.Popen(
-        ["docker", "save", "aion/sandbox:latest"],
-        stdout=subprocess.PIPE,
-    )
-    assert save.stdout is not None
-    load = subprocess.run(["podman", "load"], stdin=save.stdout, check=False)
-    save.wait()
-    if load.returncode != 0:
+    if not _podman_load_from_docker(DEFAULT_IMAGE):
         _warn(
-            "podman load fallito — prova: docker save aion/sandbox:latest | podman load"
+            f"podman load fallito — prova: docker save {DEFAULT_IMAGE} | podman load"
         )
     else:
-        _run(
-            ["podman", "tag", "aion/sandbox:latest", "localhost/aion/sandbox:latest"],
+        _run_as_target(
+            ["podman", "tag", DEFAULT_IMAGE, f"localhost/{DEFAULT_IMAGE}"],
             check=False,
         )
 
 
-def _verify(*, dry_run: bool) -> None:
+def _pull_sandbox_image(image: str, *, dry_run: bool) -> None:
+    """Pull a pre-built image (GHCR) into the target user's Podman store."""
+    if dry_run:
+        _log(f"[dry-run] podman pull {image}")
+        return
+    if _run_as_target(["podman", "pull", image], check=False).returncode == 0:
+        return
+    _warn("podman pull fallito, provo docker pull + podman load...")
+    if (
+        _has_cmd("docker")
+        and _run(["docker", "pull", image], check=False).returncode == 0
+        and _podman_load_from_docker(image)
+    ):
+        return
+    _fail(f"Immagine sandbox {image} non disponibile in Podman.")
+
+
+def _verify(*, image: str, dry_run: bool) -> None:
     if dry_run:
         return
-    _run(["podman", "info"], capture=False)
+    info = _run_as_target(["podman", "info"], check=False, capture=True)
+    if info.returncode != 0:
+        _warn(info.stderr.strip())
+        _fail(
+            f"'podman info' fallito per l'utente {_target_user().name}. Se vedi "
+            "'OCI permission denied' dopo un tentativo fallito, lo storage è "
+            "inizializzato a metà: rm -rf ~/.local/share/containers e rilancia."
+        )
     sock = _podman_socket_path()
     if not sock.is_socket():
         _fail(f"Verifica fallita: {sock} non è un socket")
-    listed = subprocess.run(
-        ["podman", "images", "--format", "{{.Repository}}:{{.Tag}}"],
-        text=True,
-        capture_output=True,
-        check=False,
+    exists = _run_as_target(
+        ["podman", "image", "exists", image], check=False, capture=True
     )
-    if (
-        "aion/sandbox:latest" not in listed.stdout
-        and "docker.io/aion/sandbox:latest" not in listed.stdout
-    ):
+    if exists.returncode != 0:
         _warn(
-            "Immagine aion/sandbox:latest non trovata in Podman — esegui build o podman load."
+            f"Immagine {image} non trovata in Podman — esegui build o podman load."
         )
 
 
@@ -406,6 +543,21 @@ def main() -> None:
         "--skip-build", action="store_true", help="Salta build/import immagine sandbox"
     )
     parser.add_argument(
+        "--image",
+        help="Immagine sandbox pre-built (es. GHCR) da scaricare con podman pull "
+        "invece di costruirla; scritta in AION_SANDBOX_CONTAINER_IMAGE",
+    )
+    parser.add_argument(
+        "--no-host-src",
+        action="store_true",
+        help="Nessun checkout sull'host (install GHCR): AION_SANDBOX_MOUNT_HOST_SRC=0",
+    )
+    parser.add_argument(
+        "--no-restart",
+        action="store_true",
+        help="Non riavviare il backend (lo stack viene avviato dal chiamante)",
+    )
+    parser.add_argument(
         "-y",
         "--yes",
         action="store_true",
@@ -422,10 +574,12 @@ def main() -> None:
 
     repo = _REPO_ROOT
     env_path = repo / ".env"
+    image = args.image or DEFAULT_IMAGE
+    user = _target_user()
 
     _log("=== AION Podman sandbox setup ===")
     _log(f"Repo: {repo}")
-    _log(f"User: {os.getuid()}:{os.getgid()}")
+    _log(f"User: {user.name} ({user.uid}:{user.gid})")
 
     if not args.skip_install:
         _log("\n[1/5] Installazione Podman...")
@@ -437,13 +591,14 @@ def main() -> None:
     if args.dry_run and not _has_cmd("podman"):
         _log("[dry-run] systemctl --user enable --now podman.socket")
     else:
-        _enable_podman_socket(dry_run=args.dry_run)
+        subids_changed = _ensure_subids(dry_run=args.dry_run)
+        _enable_podman_socket(dry_run=args.dry_run, subids_changed=subids_changed)
 
     _log("\n[3/5] Directory sessioni host...")
     _prepare_sessions_dir(repo, dry_run=args.dry_run)
 
     _log("\n[4/5] Configurazione .env...")
-    values = _build_env_values(repo)
+    values = _build_env_values(repo, image=image, host_src=not args.no_host_src)
     if not env_path.is_file():
         example = repo / ".env.example"
         if example.is_file() and not args.dry_run:
@@ -453,20 +608,23 @@ def main() -> None:
             env_path.write_text("", encoding="utf-8")
     _merge_env_file(env_path, values, dry_run=args.dry_run)
 
-    if not args.skip_build:
+    if args.image:
+        _log("\n[5/5] Pull immagine sandbox...")
+        _pull_sandbox_image(image, dry_run=args.dry_run)
+    elif not args.skip_build:
         _log("\n[5/5] Build immagine sandbox...")
         _build_sandbox_image(repo, dry_run=args.dry_run)
     else:
         _log("\n[5/5] Build immagine sandbox — skip")
 
     _log("\nVerifica...")
-    _verify(dry_run=args.dry_run)
+    _verify(image=image, dry_run=args.dry_run)
 
-    _log("\nOrdine di avvio consigliato:")
-    _log("  1. systemctl --user start podman.socket")
-    _log("  2. docker compose up -d")
-
-    _maybe_restart_backend(repo, dry_run=args.dry_run, assume_yes=args.yes)
+    if not args.no_restart:
+        _log("\nOrdine di avvio consigliato:")
+        _log("  1. systemctl --user start podman.socket")
+        _log("  2. docker compose up -d")
+        _maybe_restart_backend(repo, dry_run=args.dry_run, assume_yes=args.yes)
     _log("\nSetup completato.")
 
 

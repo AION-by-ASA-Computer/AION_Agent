@@ -21,8 +21,13 @@ docker run --rm \
 `upgrade_runner.py` (entrypoint del container) esegue in sequenza:
 1. Sync `config_std/` → `config/` (merge non-distruttivo)
 2. Sync `mcp_servers_std/` → `mcp_servers/` (merge non-distruttivo)
-3. `scripts/upgrades/<next>.py` se presente (con UpgradeContext — pieno stack Python)
-4. Aggiorna `AION_VERSION=<next>` nel `.env` montato
+3. Migrazioni `.env` comuni: `upgrade_core.migrate_env_file` (le stesse di
+   `upgrade-aion`: rename legacy, chiavi deprecate, default mancanti)
+4. `scripts/upgrades/<next>.py` se presente (con UpgradeContext — pieno stack Python)
+5. Aggiorna `AION_VERSION=<next>` nel `.env` montato
+
+Le nuove chiavi `.env` vanno aggiunte in `upgrade_core.py` (`_ENV_MIGRATIONS`),
+non qui: gli script per-versione servono solo per migrazioni specifiche di una release.
 
 ## Convenzione
 

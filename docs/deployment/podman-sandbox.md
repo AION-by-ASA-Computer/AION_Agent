@@ -28,6 +28,15 @@ The script:
 
 Flags: `--dry-run`, `--skip-install`, `--skip-build`, `-y` (non-interactive restart).
 
+GHCR installs (`scripts/install.sh`) call the script automatically with
+`--image ghcr.io/aion-by-asa-computer/aion-sandbox:<version> --no-host-src --no-restart`:
+the image is pulled into Podman instead of built, and `AION_SANDBOX_MOUNT_HOST_SRC=0`
+skips the live `src/` overlay (there is no checkout on the host).
+
+Podman is configured for the invoking user (`SUDO_USER` under `sudo`, never root)
+and run with that user's primary group, so a shell with `newgrp docker` active
+does not trigger the `newuidmap ... different user` error.
+
 ## Host setup (manual)
 
 ```bash

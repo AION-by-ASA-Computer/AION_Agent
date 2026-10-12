@@ -1370,6 +1370,50 @@ def _ensure_web_search_env_keys(
     return 0
 
 
+_ENV_MIGRATIONS = (
+    _ensure_web_search_env_keys,
+    _ensure_context_compress_env_keys,
+    _ensure_mcp_pool_env_keys,
+    _ensure_profile_env_keys,
+    _ensure_sql_qm_env_keys,
+    _ensure_mempalace_nav_env_keys,
+    _ensure_mnemos_env_keys,
+    _ensure_harness_v2_env_keys,
+    _ensure_optimal_tool_format_env_keys,
+    _ensure_skill_view_env_keys,
+    _ensure_skill_lifecycle_env_keys,
+    _ensure_agent_mode_env_keys,
+    _ensure_plan_mode_env_keys,
+    _ensure_tool_runtime_env_keys,
+    _ensure_tool_offload_env_keys,
+    _ensure_deep_research_env_keys,
+    _ensure_cron_env_keys,
+    _ensure_sandbox_env_keys,
+    _ensure_docker_compose_env_keys,
+)
+
+
+def migrate_env_file(env_path: Path, *, dry_run: bool, report: Report) -> int:
+    """Migrazioni .env comuni a tutti i flussi di upgrade.
+
+    Rinomina chiavi legacy, rimuove le deprecate e aggiunge i default mancanti
+    (mai sovrascrive valori esistenti). Usata da upgrade-aion (venv e --docker)
+    e dal container di migrazione GHCR (scripts/upgrade_runner.py).
+    """
+    rc = _migrate_env_legacy_keys(env_path, dry_run=dry_run, report=report)
+    if rc != 0:
+        return rc
+    rc = _migrate_docker_data_paths_in_env(env_path, dry_run=dry_run, report=report)
+    if rc != 0:
+        return rc
+    for migrate in _ENV_MIGRATIONS:
+        rc = migrate(env_path, dry_run=dry_run, report=report)
+        if rc != 0:
+            return rc
+    _warn_public_orchestration_secret(env_path, report=report)
+    return 0
+
+
 def _python_exec(base_python: str) -> str:
     py = VENV_DIR / "bin" / "python"
     if os.name == "nt":
@@ -1495,103 +1539,7 @@ def _docker_upgrade(args, report: Report) -> int:
         report.log_warn("Backup skipped by flag")
 
     # Migrazione legacy AION_CHAINLIT_* → AION_CHAT_* prima di sync_config/check.
-    rc = _migrate_env_legacy_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _migrate_docker_data_paths_in_env(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_web_search_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_context_compress_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_mcp_pool_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_profile_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_sql_qm_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_mempalace_nav_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_mnemos_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_harness_v2_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_optimal_tool_format_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_skill_lifecycle_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_agent_mode_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_plan_mode_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_tool_runtime_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_tool_offload_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    _warn_public_orchestration_secret(Path(args.env_file), report=report)
-    rc = _ensure_deep_research_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_cron_env_keys(Path(args.env_file), dry_run=args.dry_run, report=report)
-    if rc != 0:
-        return rc
-    rc = _ensure_sandbox_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
-    if rc != 0:
-        return rc
-    rc = _ensure_docker_compose_env_keys(
-        Path(args.env_file), dry_run=args.dry_run, report=report
-    )
+    rc = migrate_env_file(Path(args.env_file), dry_run=args.dry_run, report=report)
     if rc != 0:
         return rc
 
@@ -1790,110 +1738,7 @@ def main() -> int:
 
         # Migrazione chiavi env legacy (AION_CHAINLIT_* → AION_CHAT_*).
         # Eseguita PRIMA di setup_core.py cosi' il setup vede i nomi nuovi.
-        rc = _migrate_env_legacy_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _migrate_docker_data_paths_in_env(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_web_search_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_context_compress_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_mcp_pool_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_profile_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_sql_qm_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_mempalace_nav_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_mnemos_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_harness_v2_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_optimal_tool_format_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_skill_view_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_skill_lifecycle_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_agent_mode_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_plan_mode_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_tool_runtime_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_tool_offload_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        _warn_public_orchestration_secret(Path(args.env_file), report=report)
-        rc = _ensure_deep_research_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_cron_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_sandbox_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
-        if rc != 0:
-            return rc
-        rc = _ensure_docker_compose_env_keys(
-            Path(args.env_file), dry_run=args.dry_run, report=report
-        )
+        rc = migrate_env_file(Path(args.env_file), dry_run=args.dry_run, report=report)
         if rc != 0:
             return rc
 
