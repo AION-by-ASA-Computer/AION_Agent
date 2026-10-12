@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
 from scripts.setup_podman_sandbox import (
@@ -73,3 +74,52 @@ def test_as_target_runs_directly_with_matching_ids():
     argv = mod._as_target(["podman", "info"])
     assert argv[0] == "env"
     assert any(a.startswith("XDG_RUNTIME_DIR=/run/user/") for a in argv)
+
+
+def test_build_env_values_includes_userns(tmp_path):
+    assert _build_env_values(tmp_path)["AION_SANDBOX_CONTAINER_USERNS"] == "keep-id"
+    values = _build_env_values(tmp_path, userns="host-root")
+    assert values["AION_SANDBOX_CONTAINER_USERNS"] == "host-root"
+
+
+def _fake_runner(results):
+    calls = []
+
+    def run(cmd, *, check=True, capture=False):
+        calls.append(cmd)
+        if cmd[:3] == ["podman", "image", "exists"]:
+            rc = 0
+        elif "--userns=keep-id" in cmd:
+            rc = results["keep-id"]
+        else:
+            rc = results["host-root"]
+        return subprocess.CompletedProcess(cmd, rc, stdout="", stderr="err")
+
+    return run, calls
+
+
+def test_probe_userns_prefers_keep_id(monkeypatch):
+    import scripts.setup_podman_sandbox as mod
+
+    run, calls = _fake_runner({"keep-id": 0, "host-root": 0})
+    monkeypatch.setattr(mod, "_has_cmd", lambda _c: True)
+    monkeypatch.setattr(mod, "_run_as_target", run)
+    assert mod._probe_userns_mode("img", dry_run=False) == "keep-id"
+    assert not any("0:0" in c for c in calls)
+
+
+def test_probe_userns_falls_back_to_host_root(monkeypatch):
+    import scripts.setup_podman_sandbox as mod
+
+    run, calls = _fake_runner({"keep-id": 126, "host-root": 0})
+    monkeypatch.setattr(mod, "_has_cmd", lambda _c: True)
+    monkeypatch.setattr(mod, "_run_as_target", run)
+    assert mod._probe_userns_mode("img", dry_run=False) == "host-root"
+    assert calls[-1][-3:] == ["--user", "0:0", "img"]
+
+
+def test_probe_userns_dry_run_skips_podman(monkeypatch):
+    import scripts.setup_podman_sandbox as mod
+
+    monkeypatch.setattr(mod, "_run_as_target", lambda *a, **k: 1 / 0)
+    assert mod._probe_userns_mode("img", dry_run=True) == "keep-id"

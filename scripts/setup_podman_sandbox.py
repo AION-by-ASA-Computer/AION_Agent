@@ -51,6 +51,7 @@ ENV_KEYS: Tuple[str, ...] = (
     "AION_SANDBOX_CONTAINER_CPUS",
     "AION_SANDBOX_CONTAINER_PIDS_LIMIT",
     "AION_SANDBOX_MOUNT_HOST_SRC",
+    "AION_SANDBOX_CONTAINER_USERNS",
 )
 
 DEFAULT_IMAGE = "aion/sandbox:latest"
@@ -309,7 +310,11 @@ def _selinux_default() -> str:
 
 
 def _build_env_values(
-    repo: Path, *, image: str = DEFAULT_IMAGE, host_src: bool = True
+    repo: Path,
+    *,
+    image: str = DEFAULT_IMAGE,
+    host_src: bool = True,
+    userns: str = "keep-id",
 ) -> Dict[str, str]:
     user = _target_user()
     data_dir = (repo / "data").resolve()
@@ -331,6 +336,7 @@ def _build_env_values(
         # GHCR: nessun checkout sull'host, src/ è già nell'immagine sandbox
         # (un bind-mount di <repo>/src inesistente fa fallire 'podman run').
         "AION_SANDBOX_MOUNT_HOST_SRC": "1" if host_src else "0",
+        "AION_SANDBOX_CONTAINER_USERNS": userns,
     }
 
 
@@ -471,6 +477,49 @@ def _pull_sandbox_image(image: str, *, dry_run: bool) -> None:
     _fail(f"Immagine sandbox {image} non disponibile in Podman.")
 
 
+def _probe_userns_mode(image: str, *, dry_run: bool) -> str:
+    """
+    Start the sandbox image through the Podman socket, as the backend does.
+    Prefer ``--userns=keep-id``; fall back to ``host-root`` (container root =
+    host user in rootless Podman) where keep-id cannot mount the rootfs.
+    """
+    if dry_run or not _has_cmd("podman"):
+        return "keep-id"
+    exists = _run_as_target(
+        ["podman", "image", "exists", image], check=False, capture=True
+    )
+    if exists.returncode != 0:
+        _warn(f"Immagine {image} assente — verifica userns saltata (keep-id).")
+        return "keep-id"
+    user = _target_user()
+    base = [
+        "podman",
+        "--url",
+        f"unix://{_podman_socket_path()}",
+        "run",
+        "--rm",
+        "--entrypoint",
+        "true",
+    ]
+    keep_id = _run_as_target(
+        base + ["--userns=keep-id", "--user", f"{user.uid}:{user.gid}", image],
+        check=False,
+        capture=True,
+    )
+    if keep_id.returncode == 0:
+        return "keep-id"
+    _warn(keep_id.stderr.strip())
+    host_root = _run_as_target(
+        base + ["--user", "0:0", image], check=False, capture=True
+    )
+    if host_root.returncode == 0:
+        _log("--userns=keep-id non supportato su questo host: uso host-root.")
+        return "host-root"
+    _warn(host_root.stderr.strip())
+    _fail(f"Il container sandbox {image} non parte tramite il socket Podman.")
+    return "keep-id"  # unreachable
+
+
 def _verify(*, image: str, dry_run: bool) -> None:
     if dry_run:
         return
@@ -597,8 +646,20 @@ def main() -> None:
     _log("\n[3/5] Directory sessioni host...")
     _prepare_sessions_dir(repo, dry_run=args.dry_run)
 
-    _log("\n[4/5] Configurazione .env...")
-    values = _build_env_values(repo, image=image, host_src=not args.no_host_src)
+    if args.image:
+        _log("\n[4/5] Pull immagine sandbox...")
+        _pull_sandbox_image(image, dry_run=args.dry_run)
+    elif not args.skip_build:
+        _log("\n[4/5] Build immagine sandbox...")
+        _build_sandbox_image(repo, dry_run=args.dry_run)
+    else:
+        _log("\n[4/5] Build immagine sandbox — skip")
+
+    _log("\n[5/5] Configurazione .env...")
+    userns = _probe_userns_mode(image, dry_run=args.dry_run)
+    values = _build_env_values(
+        repo, image=image, host_src=not args.no_host_src, userns=userns
+    )
     if not env_path.is_file():
         example = repo / ".env.example"
         if example.is_file() and not args.dry_run:
@@ -607,15 +668,6 @@ def main() -> None:
         elif not example.is_file() and not args.dry_run:
             env_path.write_text("", encoding="utf-8")
     _merge_env_file(env_path, values, dry_run=args.dry_run)
-
-    if args.image:
-        _log("\n[5/5] Pull immagine sandbox...")
-        _pull_sandbox_image(image, dry_run=args.dry_run)
-    elif not args.skip_build:
-        _log("\n[5/5] Build immagine sandbox...")
-        _build_sandbox_image(repo, dry_run=args.dry_run)
-    else:
-        _log("\n[5/5] Build immagine sandbox — skip")
 
     _log("\nVerifica...")
     _verify(image=image, dry_run=args.dry_run)

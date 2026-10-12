@@ -37,6 +37,14 @@ Podman is configured for the invoking user (`SUDO_USER` under `sudo`, never root
 and run with that user's primary group, so a shell with `newgrp docker` active
 does not trigger the `newuidmap ... different user` error.
 
+Before writing `.env`, the script starts the sandbox image through the Podman
+socket (as the backend does) with `--userns=keep-id`. On hosts where keep-id
+cannot mount the container rootfs (seen with Podman 4.9.3 on Ubuntu 24.04:
+`crun: make .../merged private: Permission denied`) it falls back to
+`AION_SANDBOX_CONTAINER_USERNS=host-root`: the sandbox runs as container root,
+which rootless Podman maps to the host user, so `/session` files stay owned by
+`AION_SANDBOX_HOST_UID:GID`.
+
 ## Host setup (manual)
 
 ```bash

@@ -49,6 +49,16 @@ def _container_run_user() -> Optional[str]:
     return f"{uid}:{gid}"
 
 
+def _container_userns_mode() -> str:
+    """
+    ``keep-id`` (default): the container user is mapped 1:1 to the host user.
+    ``host-root``: container root, which rootless Podman maps to the host user
+    (fallback for hosts where keep-id cannot mount the rootfs, e.g. Podman 4.9).
+    """
+    mode = (os.environ.get("AION_SANDBOX_CONTAINER_USERNS") or "keep-id").strip().lower()
+    return mode if mode in ("keep-id", "host-root") else "keep-id"
+
+
 SANDBOX_FS_POLICY_CONTAINER_PATH = "/etc/aion/fs_policy.yaml"
 
 
@@ -135,7 +145,10 @@ def build_container_run_argv(
 
     run_user = _container_run_user()
     if run_user:
-        argv.extend(["--userns=keep-id", "--user", run_user])
+        if _container_userns_mode() == "host-root":
+            argv.extend(["--user", "0:0"])
+        else:
+            argv.extend(["--userns=keep-id", "--user", run_user])
 
     env = {
         "AION_CHAT_SESSION_ID": session_id,
