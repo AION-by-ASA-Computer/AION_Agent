@@ -882,5 +882,112 @@
   },
   "admin_memory": {
     "new_project": "New project"
+  },
+  "admin_schedules": {
+    "title": "Scheduled jobs",
+    "subtitle": "Recurring prompts that run an agent on a cron schedule. Pause one, run it now, or read what it did.",
+    "refresh": "Refresh",
+    "loading": "Loading scheduled jobs…",
+    "error": "Couldn't load scheduled jobs.",
+    "retry": "Try again",
+    "scheduler": {
+      "title": "Global scheduler",
+      "on_title": "Scheduler is running",
+      "on_body": "Enabled jobs fire on their cron schedule.",
+      "off_title": "Scheduler is off",
+      "off_body": "Nothing fires automatically, even enabled jobs. Turn it on to resume.",
+      "toast_on": "Scheduler enabled.",
+      "toast_off": "Scheduler disabled.",
+      "toggle_failed": "Couldn't change the scheduler."
+    },
+    "list": {
+      "search": "Search name, user, profile or prompt",
+      "status_aria": "Filter by status",
+      "status_all": "All",
+      "status_on": "Active",
+      "status_off": "Paused",
+      "all_users": "All users",
+      "count": "{{n}} jobs",
+      "count_filtered": "{{shown}} of {{total}}",
+      "col_job": "Job",
+      "col_user": "User",
+      "col_profile": "Profile",
+      "col_next": "Next run",
+      "col_last": "Last run",
+      "col_actions": "Actions",
+      "empty_title": "No jobs match",
+      "empty_body": "Clear the filters or search for something else.",
+      "clear": "Clear filters",
+      "none_title": "No scheduled jobs yet",
+      "none_body": "Jobs created from the chat show up here, with their schedule and run history.",
+      "paused": "Paused",
+      "session_fixed": "Fixed session",
+      "session_new": "New session each run"
+    },
+    "status": {
+      "success": "Succeeded",
+      "error": "Failed",
+      "running": "Running"
+    },
+    "actions": {
+      "edit": "Edit",
+      "run": "Run now",
+      "history": "Run history",
+      "delete": "Delete",
+      "enable": "Enable {{name}}",
+      "disable": "Pause {{name}}"
+    },
+    "toast": {
+      "updated": "Job updated.",
+      "run_started": "Run started: {{name}}",
+      "run_failed": "Couldn't start the run.",
+      "deleted": "Job deleted.",
+      "save_failed": "Couldn't save the job.",
+      "update_failed": "Couldn't update the job.",
+      "delete_failed": "Couldn't delete the job."
+    },
+    "edit": {
+      "title": "Edit job",
+      "name": "Name",
+      "cron": "Schedule (cron)",
+      "cron_hint": "Five fields: minute, hour, day, month, weekday.",
+      "timezone": "Timezone",
+      "prompt": "Prompt",
+      "profile": "Profile",
+      "session_mode": "Session",
+      "sql_project": "SQL query project",
+      "sql_none": "None",
+      "sql_empty": "No SQL projects yet. Create one in Memory.",
+      "enabled": "Active",
+      "enabled_hint": "Fires on schedule while on.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…"
+    },
+    "runs": {
+      "title": "Runs · {{name}}",
+      "loading": "Loading runs…",
+      "empty": "No runs yet.",
+      "close": "Close"
+    },
+    "delete": {
+      "title": "Delete job",
+      "body": "This permanently removes {{name}} and its run history.",
+      "confirm_label": "Type {{name}} to confirm",
+      "cancel": "Cancel",
+      "confirm": "Delete job",
+      "deleting": "Deleting…"
+    },
+    "restart": {
+      "title": "Restart required",
+      "body_on": "Enabling the scheduler restarts the API container. Background work stops for a few seconds.",
+      "body_off": "Disabling the scheduler restarts the API container. Background work stops for a few seconds.",
+      "cancel": "Cancel",
+      "confirm": "Restart and apply",
+      "working_title": "Restarting the API",
+      "working_body": "Applying the scheduler setting. This usually takes 5–10 seconds.",
+      "done": "API restarted, scheduler setting applied.",
+      "slow": "The API is taking too long to restart. Check it manually."
+    }
   }
 }

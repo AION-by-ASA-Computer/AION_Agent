@@ -882,5 +882,112 @@
   },
   "admin_memory": {
     "new_project": "Nouveau projet"
+  },
+  "admin_schedules": {
+    "title": "Tâches planifiées",
+    "subtitle": "Des prompts récurrents qui lancent un agent selon un calendrier cron. Mettez-les en pause, exécutez-les maintenant ou relisez ce qu'ils ont fait.",
+    "refresh": "Actualiser",
+    "loading": "Chargement des tâches…",
+    "error": "Impossible de charger les tâches.",
+    "retry": "Réessayer",
+    "scheduler": {
+      "title": "Planificateur global",
+      "on_title": "Le planificateur est actif",
+      "on_body": "Les tâches activées se lancent selon leur calendrier cron.",
+      "off_title": "Le planificateur est désactivé",
+      "off_body": "Rien ne se lance automatiquement, même les tâches activées. Activez-le pour reprendre.",
+      "toast_on": "Planificateur activé.",
+      "toast_off": "Planificateur désactivé.",
+      "toggle_failed": "Impossible de modifier le planificateur."
+    },
+    "list": {
+      "search": "Rechercher nom, utilisateur, profil ou prompt",
+      "status_aria": "Filtrer par statut",
+      "status_all": "Toutes",
+      "status_on": "Actives",
+      "status_off": "En pause",
+      "all_users": "Tous les utilisateurs",
+      "count": "{{n}} tâches",
+      "count_filtered": "{{shown}} sur {{total}}",
+      "col_job": "Tâche",
+      "col_user": "Utilisateur",
+      "col_profile": "Profil",
+      "col_next": "Prochaine exécution",
+      "col_last": "Dernière exécution",
+      "col_actions": "Actions",
+      "empty_title": "Aucune tâche ne correspond",
+      "empty_body": "Effacez les filtres ou cherchez autre chose.",
+      "clear": "Effacer les filtres",
+      "none_title": "Aucune tâche planifiée",
+      "none_body": "Les tâches créées depuis le chat apparaissent ici, avec leur calendrier et leur historique.",
+      "paused": "En pause",
+      "session_fixed": "Session fixe",
+      "session_new": "Nouvelle session à chaque exécution"
+    },
+    "status": {
+      "success": "Réussie",
+      "error": "Échouée",
+      "running": "En cours"
+    },
+    "actions": {
+      "edit": "Modifier",
+      "run": "Exécuter maintenant",
+      "history": "Historique des exécutions",
+      "delete": "Supprimer",
+      "enable": "Activer {{name}}",
+      "disable": "Mettre {{name}} en pause"
+    },
+    "toast": {
+      "updated": "Tâche mise à jour.",
+      "run_started": "Exécution lancée : {{name}}",
+      "run_failed": "Impossible de lancer l'exécution.",
+      "deleted": "Tâche supprimée.",
+      "save_failed": "Impossible d'enregistrer la tâche.",
+      "update_failed": "Impossible de mettre à jour la tâche.",
+      "delete_failed": "Impossible de supprimer la tâche."
+    },
+    "edit": {
+      "title": "Modifier la tâche",
+      "name": "Nom",
+      "cron": "Calendrier (cron)",
+      "cron_hint": "Cinq champs : minute, heure, jour, mois, jour de la semaine.",
+      "timezone": "Fuseau horaire",
+      "prompt": "Prompt",
+      "profile": "Profil",
+      "session_mode": "Session",
+      "sql_project": "Projet de requêtes SQL",
+      "sql_none": "Aucun",
+      "sql_empty": "Aucun projet SQL. Créez-en un dans Mémoire.",
+      "enabled": "Active",
+      "enabled_hint": "Se lance selon le calendrier tant qu'elle est active.",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…"
+    },
+    "runs": {
+      "title": "Exécutions · {{name}}",
+      "loading": "Chargement des exécutions…",
+      "empty": "Aucune exécution.",
+      "close": "Fermer"
+    },
+    "delete": {
+      "title": "Supprimer la tâche",
+      "body": "Supprime définitivement {{name}} et son historique d'exécutions.",
+      "confirm_label": "Saisissez {{name}} pour confirmer",
+      "cancel": "Annuler",
+      "confirm": "Supprimer la tâche",
+      "deleting": "Suppression…"
+    },
+    "restart": {
+      "title": "Redémarrage requis",
+      "body_on": "Activer le planificateur redémarre le conteneur API. Les tâches de fond s'arrêtent quelques secondes.",
+      "body_off": "Désactiver le planificateur redémarre le conteneur API. Les tâches de fond s'arrêtent quelques secondes.",
+      "cancel": "Annuler",
+      "confirm": "Redémarrer et appliquer",
+      "working_title": "Redémarrage de l'API",
+      "working_body": "Application du réglage. Cela prend en général 5 à 10 secondes.",
+      "done": "API redémarrée, réglage appliqué.",
+      "slow": "Le redémarrage de l'API est trop long. Vérifiez manuellement."
+    }
   }
 }

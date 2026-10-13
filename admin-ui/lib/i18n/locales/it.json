@@ -882,5 +882,112 @@
   },
   "admin_memory": {
     "new_project": "Nuovo progetto"
+  },
+  "admin_schedules": {
+    "title": "Job pianificati",
+    "subtitle": "Prompt ricorrenti che avviano un agente secondo una pianificazione cron. Sospendili, eseguili subito o leggi cosa hanno fatto.",
+    "refresh": "Aggiorna",
+    "loading": "Caricamento dei job…",
+    "error": "Impossibile caricare i job.",
+    "retry": "Riprova",
+    "scheduler": {
+      "title": "Scheduler globale",
+      "on_title": "Lo scheduler è attivo",
+      "on_body": "I job abilitati partono secondo la loro pianificazione cron.",
+      "off_title": "Lo scheduler è spento",
+      "off_body": "Nulla parte in automatico, nemmeno i job abilitati. Attivalo per riprendere.",
+      "toast_on": "Scheduler attivato.",
+      "toast_off": "Scheduler disattivato.",
+      "toggle_failed": "Impossibile modificare lo scheduler."
+    },
+    "list": {
+      "search": "Cerca nome, utente, profilo o prompt",
+      "status_aria": "Filtra per stato",
+      "status_all": "Tutti",
+      "status_on": "Attivi",
+      "status_off": "In pausa",
+      "all_users": "Tutti gli utenti",
+      "count": "{{n}} job",
+      "count_filtered": "{{shown}} di {{total}}",
+      "col_job": "Job",
+      "col_user": "Utente",
+      "col_profile": "Profilo",
+      "col_next": "Prossima esecuzione",
+      "col_last": "Ultima esecuzione",
+      "col_actions": "Azioni",
+      "empty_title": "Nessun job corrisponde",
+      "empty_body": "Azzera i filtri o cerca altro.",
+      "clear": "Azzera i filtri",
+      "none_title": "Nessun job pianificato",
+      "none_body": "I job creati dalla chat compaiono qui, con pianificazione e storico delle esecuzioni.",
+      "paused": "In pausa",
+      "session_fixed": "Sessione fissa",
+      "session_new": "Nuova sessione a ogni esecuzione"
+    },
+    "status": {
+      "success": "Riuscita",
+      "error": "Fallita",
+      "running": "In corso"
+    },
+    "actions": {
+      "edit": "Modifica",
+      "run": "Esegui ora",
+      "history": "Storico esecuzioni",
+      "delete": "Elimina",
+      "enable": "Attiva {{name}}",
+      "disable": "Sospendi {{name}}"
+    },
+    "toast": {
+      "updated": "Job aggiornato.",
+      "run_started": "Esecuzione avviata: {{name}}",
+      "run_failed": "Impossibile avviare l'esecuzione.",
+      "deleted": "Job eliminato.",
+      "save_failed": "Impossibile salvare il job.",
+      "update_failed": "Impossibile aggiornare il job.",
+      "delete_failed": "Impossibile eliminare il job."
+    },
+    "edit": {
+      "title": "Modifica job",
+      "name": "Nome",
+      "cron": "Pianificazione (cron)",
+      "cron_hint": "Cinque campi: minuto, ora, giorno, mese, giorno della settimana.",
+      "timezone": "Fuso orario",
+      "prompt": "Prompt",
+      "profile": "Profilo",
+      "session_mode": "Sessione",
+      "sql_project": "Progetto query SQL",
+      "sql_none": "Nessuno",
+      "sql_empty": "Nessun progetto SQL. Creane uno in Memoria.",
+      "enabled": "Attivo",
+      "enabled_hint": "Parte secondo la pianificazione finché è attivo.",
+      "cancel": "Annulla",
+      "save": "Salva",
+      "saving": "Salvataggio…"
+    },
+    "runs": {
+      "title": "Esecuzioni · {{name}}",
+      "loading": "Caricamento esecuzioni…",
+      "empty": "Nessuna esecuzione.",
+      "close": "Chiudi"
+    },
+    "delete": {
+      "title": "Elimina job",
+      "body": "Rimuove definitivamente {{name}} e il suo storico delle esecuzioni.",
+      "confirm_label": "Digita {{name}} per confermare",
+      "cancel": "Annulla",
+      "confirm": "Elimina job",
+      "deleting": "Eliminazione…"
+    },
+    "restart": {
+      "title": "Riavvio necessario",
+      "body_on": "Attivare lo scheduler riavvia il container API. Le attività in background si fermano per qualche secondo.",
+      "body_off": "Disattivare lo scheduler riavvia il container API. Le attività in background si fermano per qualche secondo.",
+      "cancel": "Annulla",
+      "confirm": "Riavvia e applica",
+      "working_title": "Riavvio dell'API",
+      "working_body": "Applico l'impostazione dello scheduler. Di solito servono 5–10 secondi.",
+      "done": "API riavviata, impostazione applicata.",
+      "slow": "L'API impiega troppo a riavviarsi. Controlla manualmente."
+    }
   }
 }

@@ -882,5 +882,112 @@
   },
   "admin_memory": {
     "new_project": "Nuevo proyecto"
+  },
+  "admin_schedules": {
+    "title": "Tareas programadas",
+    "subtitle": "Prompts recurrentes que lanzan un agente según un calendario cron. Páusalas, ejecútalas ya o revisa lo que hicieron.",
+    "refresh": "Actualizar",
+    "loading": "Cargando tareas…",
+    "error": "No se pudieron cargar las tareas.",
+    "retry": "Reintentar",
+    "scheduler": {
+      "title": "Programador global",
+      "on_title": "El programador está activo",
+      "on_body": "Las tareas habilitadas se lanzan según su calendario cron.",
+      "off_title": "El programador está apagado",
+      "off_body": "Nada se lanza automáticamente, ni siquiera las tareas habilitadas. Actívalo para reanudar.",
+      "toast_on": "Programador activado.",
+      "toast_off": "Programador desactivado.",
+      "toggle_failed": "No se pudo cambiar el programador."
+    },
+    "list": {
+      "search": "Buscar nombre, usuario, perfil o prompt",
+      "status_aria": "Filtrar por estado",
+      "status_all": "Todas",
+      "status_on": "Activas",
+      "status_off": "En pausa",
+      "all_users": "Todos los usuarios",
+      "count": "{{n}} tareas",
+      "count_filtered": "{{shown}} de {{total}}",
+      "col_job": "Tarea",
+      "col_user": "Usuario",
+      "col_profile": "Perfil",
+      "col_next": "Próxima ejecución",
+      "col_last": "Última ejecución",
+      "col_actions": "Acciones",
+      "empty_title": "Ninguna tarea coincide",
+      "empty_body": "Quita los filtros o busca otra cosa.",
+      "clear": "Quitar filtros",
+      "none_title": "Aún no hay tareas programadas",
+      "none_body": "Las tareas creadas desde el chat aparecen aquí, con su calendario e historial.",
+      "paused": "En pausa",
+      "session_fixed": "Sesión fija",
+      "session_new": "Sesión nueva en cada ejecución"
+    },
+    "status": {
+      "success": "Correcta",
+      "error": "Fallida",
+      "running": "En curso"
+    },
+    "actions": {
+      "edit": "Editar",
+      "run": "Ejecutar ahora",
+      "history": "Historial de ejecuciones",
+      "delete": "Eliminar",
+      "enable": "Activar {{name}}",
+      "disable": "Pausar {{name}}"
+    },
+    "toast": {
+      "updated": "Tarea actualizada.",
+      "run_started": "Ejecución iniciada: {{name}}",
+      "run_failed": "No se pudo iniciar la ejecución.",
+      "deleted": "Tarea eliminada.",
+      "save_failed": "No se pudo guardar la tarea.",
+      "update_failed": "No se pudo actualizar la tarea.",
+      "delete_failed": "No se pudo eliminar la tarea."
+    },
+    "edit": {
+      "title": "Editar tarea",
+      "name": "Nombre",
+      "cron": "Calendario (cron)",
+      "cron_hint": "Cinco campos: minuto, hora, día, mes, día de la semana.",
+      "timezone": "Zona horaria",
+      "prompt": "Prompt",
+      "profile": "Perfil",
+      "session_mode": "Sesión",
+      "sql_project": "Proyecto de consultas SQL",
+      "sql_none": "Ninguno",
+      "sql_empty": "Aún no hay proyectos SQL. Crea uno en Memoria.",
+      "enabled": "Activa",
+      "enabled_hint": "Se lanza según el calendario mientras esté activa.",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando…"
+    },
+    "runs": {
+      "title": "Ejecuciones · {{name}}",
+      "loading": "Cargando ejecuciones…",
+      "empty": "Aún no hay ejecuciones.",
+      "close": "Cerrar"
+    },
+    "delete": {
+      "title": "Eliminar tarea",
+      "body": "Elimina de forma permanente {{name}} y su historial de ejecuciones.",
+      "confirm_label": "Escribe {{name}} para confirmar",
+      "cancel": "Cancelar",
+      "confirm": "Eliminar tarea",
+      "deleting": "Eliminando…"
+    },
+    "restart": {
+      "title": "Reinicio necesario",
+      "body_on": "Activar el programador reinicia el contenedor de la API. Las tareas en segundo plano se detienen unos segundos.",
+      "body_off": "Desactivar el programador reinicia el contenedor de la API. Las tareas en segundo plano se detienen unos segundos.",
+      "cancel": "Cancelar",
+      "confirm": "Reiniciar y aplicar",
+      "working_title": "Reiniciando la API",
+      "working_body": "Aplicando el ajuste del programador. Suele tardar 5–10 segundos.",
+      "done": "API reiniciada, ajuste aplicado.",
+      "slow": "La API tarda demasiado en reiniciarse. Compruébalo manualmente."
+    }
   }
 }

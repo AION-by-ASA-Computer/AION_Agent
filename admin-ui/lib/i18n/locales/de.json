@@ -882,5 +882,112 @@
   },
   "admin_memory": {
     "new_project": "Neues Projekt"
+  },
+  "admin_schedules": {
+    "title": "Geplante Jobs",
+    "subtitle": "Wiederkehrende Prompts, die einen Agenten per Cron-Zeitplan starten. Pausieren, sofort ausführen oder nachlesen, was passiert ist.",
+    "refresh": "Aktualisieren",
+    "loading": "Jobs werden geladen…",
+    "error": "Jobs konnten nicht geladen werden.",
+    "retry": "Erneut versuchen",
+    "scheduler": {
+      "title": "Globaler Scheduler",
+      "on_title": "Scheduler läuft",
+      "on_body": "Aktive Jobs starten nach ihrem Cron-Zeitplan.",
+      "off_title": "Scheduler ist aus",
+      "off_body": "Nichts startet automatisch, auch aktive Jobs nicht. Einschalten, um fortzufahren.",
+      "toast_on": "Scheduler aktiviert.",
+      "toast_off": "Scheduler deaktiviert.",
+      "toggle_failed": "Scheduler konnte nicht geändert werden."
+    },
+    "list": {
+      "search": "Name, Benutzer, Profil oder Prompt suchen",
+      "status_aria": "Nach Status filtern",
+      "status_all": "Alle",
+      "status_on": "Aktiv",
+      "status_off": "Pausiert",
+      "all_users": "Alle Benutzer",
+      "count": "{{n}} Jobs",
+      "count_filtered": "{{shown}} von {{total}}",
+      "col_job": "Job",
+      "col_user": "Benutzer",
+      "col_profile": "Profil",
+      "col_next": "Nächster Lauf",
+      "col_last": "Letzter Lauf",
+      "col_actions": "Aktionen",
+      "empty_title": "Keine passenden Jobs",
+      "empty_body": "Filter zurücksetzen oder anders suchen.",
+      "clear": "Filter zurücksetzen",
+      "none_title": "Noch keine geplanten Jobs",
+      "none_body": "Im Chat erstellte Jobs erscheinen hier mit Zeitplan und Laufverlauf.",
+      "paused": "Pausiert",
+      "session_fixed": "Feste Sitzung",
+      "session_new": "Neue Sitzung pro Lauf"
+    },
+    "status": {
+      "success": "Erfolgreich",
+      "error": "Fehlgeschlagen",
+      "running": "Läuft"
+    },
+    "actions": {
+      "edit": "Bearbeiten",
+      "run": "Jetzt ausführen",
+      "history": "Laufverlauf",
+      "delete": "Löschen",
+      "enable": "{{name}} aktivieren",
+      "disable": "{{name}} pausieren"
+    },
+    "toast": {
+      "updated": "Job aktualisiert.",
+      "run_started": "Lauf gestartet: {{name}}",
+      "run_failed": "Lauf konnte nicht gestartet werden.",
+      "deleted": "Job gelöscht.",
+      "save_failed": "Job konnte nicht gespeichert werden.",
+      "update_failed": "Job konnte nicht aktualisiert werden.",
+      "delete_failed": "Job konnte nicht gelöscht werden."
+    },
+    "edit": {
+      "title": "Job bearbeiten",
+      "name": "Name",
+      "cron": "Zeitplan (Cron)",
+      "cron_hint": "Fünf Felder: Minute, Stunde, Tag, Monat, Wochentag.",
+      "timezone": "Zeitzone",
+      "prompt": "Prompt",
+      "profile": "Profil",
+      "session_mode": "Sitzung",
+      "sql_project": "SQL-Abfrageprojekt",
+      "sql_none": "Keines",
+      "sql_empty": "Noch keine SQL-Projekte. Lege eines unter Memory an.",
+      "enabled": "Aktiv",
+      "enabled_hint": "Startet nach Zeitplan, solange aktiv.",
+      "cancel": "Abbrechen",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…"
+    },
+    "runs": {
+      "title": "Läufe · {{name}}",
+      "loading": "Läufe werden geladen…",
+      "empty": "Noch keine Läufe.",
+      "close": "Schließen"
+    },
+    "delete": {
+      "title": "Job löschen",
+      "body": "{{name}} und der Laufverlauf werden dauerhaft entfernt.",
+      "confirm_label": "Zur Bestätigung {{name}} eingeben",
+      "cancel": "Abbrechen",
+      "confirm": "Job löschen",
+      "deleting": "Wird gelöscht…"
+    },
+    "restart": {
+      "title": "Neustart erforderlich",
+      "body_on": "Das Aktivieren des Schedulers startet den API-Container neu. Hintergrundaufgaben stehen einige Sekunden still.",
+      "body_off": "Das Deaktivieren des Schedulers startet den API-Container neu. Hintergrundaufgaben stehen einige Sekunden still.",
+      "cancel": "Abbrechen",
+      "confirm": "Neu starten und anwenden",
+      "working_title": "API wird neu gestartet",
+      "working_body": "Scheduler-Einstellung wird angewendet. Das dauert meist 5–10 Sekunden.",
+      "done": "API neu gestartet, Einstellung angewendet.",
+      "slow": "Der API-Neustart dauert zu lange. Bitte manuell prüfen."
+    }
   }
 }
