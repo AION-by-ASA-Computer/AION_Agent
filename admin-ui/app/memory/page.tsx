@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api/headers";
+import { useT } from "@/lib/i18n/use-t";
 import {
   Folder,
   FolderPlus,
@@ -10,7 +11,6 @@ import {
   UserMinus,
   Trash2,
   Edit2,
-  RefreshCw,
   Loader2,
   CheckCircle,
   Shield,
@@ -87,6 +87,7 @@ interface ProfileRow {
 }
 
 export default function MemoryPage() {
+  const t = useT();
   const [toast, setToast] = useState<ToastState>(null);
   const show = useCallback((message: string, variant: "success" | "error" = "success") => {
     setToast({ message, variant });
@@ -367,24 +368,11 @@ export default function MemoryPage() {
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
-            className={outlineBtn}
-            onClick={() => void fetchProjects({ notify: true })}
-            disabled={loading}
-          >
-            {loading ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-            ) : (
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-            )}
-            Refresh
-          </button>
-          <button
-            type="button"
             className={solidBtn}
             onClick={() => setIsCreateOpen(true)}
           >
             <FolderPlus className="h-4 w-4" aria-hidden />
-            New Project
+            {t("admin_memory.new_project")}
           </button>
         </div>
       </header>
@@ -401,7 +389,7 @@ export default function MemoryPage() {
             <div className="mt-6 flex flex-wrap justify-center gap-2">
               <button type="button" className={solidBtn} onClick={() => setIsCreateOpen(true)}>
                 <Plus className="h-4 w-4" aria-hidden />
-                New Project
+                {t("admin_memory.new_project")}
               </button>
             </div>
           </div>

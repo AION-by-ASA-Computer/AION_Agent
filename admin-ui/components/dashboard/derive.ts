@@ -267,7 +267,7 @@ export function deriveDashboard(d: DashboardData, t: T, locale: string) {
       severity: "warn",
       title: t(`${k}.attention.feedback_negative`, { count: negatives.length }),
       detail: latest ? `“${latest.feedback_comment!.trim().slice(0, 90)}”` : undefined,
-      href: "/feedback",
+      href: "/conversations?feedback=disliked",
       action: t(`${k}.attention.action_feedback`),
     });
   }

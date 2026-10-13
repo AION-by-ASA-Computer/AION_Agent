@@ -7,7 +7,6 @@ import {
   HeartPulse,
   KeyRound,
   LayoutDashboard,
-  MessageSquareText,
   MessagesSquare,
   Server,
   Settings,
@@ -54,7 +53,6 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     labelKey: "admin_nav.groups.operations",
     items: [
       { id: "conversations", href: "/conversations", icon: MessagesSquare, labelKey: "admin_nav.conversations" },
-      { id: "feedback", href: "/feedback", icon: MessageSquareText, labelKey: "admin_nav.feedback" },
       { id: "schedules", href: "/schedules", icon: Clock, labelKey: "admin_nav.schedules" },
     ],
   },

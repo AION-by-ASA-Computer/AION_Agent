@@ -7,6 +7,8 @@ export type Conversation = {
   message_count: number;
   updated_at: string | number;
   disliked_count?: number;
+  liked_count?: number;
+  comment_count?: number;
   error_count?: number;
 };
 
@@ -21,6 +23,7 @@ export type ThreadStep = {
 export type ThreadArtifact = {
   id: string;
   kind?: string | null;
+  mime?: string | null;
   original_name?: string | null;
   storage_key?: string | null;
   size_bytes?: number | null;

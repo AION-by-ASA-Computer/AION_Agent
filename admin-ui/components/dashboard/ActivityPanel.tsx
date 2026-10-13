@@ -112,7 +112,7 @@ export function ActivityPanel({
           </div>
         ))}
         <Link
-          href="/feedback"
+          href="/conversations?feedback=disliked"
           className="focus-ring col-span-2 flex flex-col gap-1 border-t border-border/50 px-5 py-4 transition-colors hover:bg-secondary/40 lg:col-span-1 lg:border-l lg:border-t-0"
         >
           <div className="text-xs text-muted-foreground">{t(`${k}.feedback`)}</div>

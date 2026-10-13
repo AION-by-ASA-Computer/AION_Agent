@@ -3941,7 +3941,25 @@ async def list_conversations_global(limit: int = 200):
         ids = [r.id for r in rows]
         disliked: dict[str, int] = {}
         errored: dict[str, int] = {}
+        liked: dict[str, int] = {}
+        commented: dict[str, int] = {}
         if ids:
+            q_up = (
+                select(Message.conversation_id, func.count())
+                .where(Message.conversation_id.in_(ids), Message.rating == 1)
+                .group_by(Message.conversation_id)
+            )
+            liked = {cid: n for cid, n in (await session.execute(q_up)).all()}
+            q_com = (
+                select(Message.conversation_id, func.count())
+                .where(
+                    Message.conversation_id.in_(ids),
+                    Message.feedback_comment.is_not(None),
+                    Message.feedback_comment != "",
+                )
+                .group_by(Message.conversation_id)
+            )
+            commented = {cid: n for cid, n in (await session.execute(q_com)).all()}
             q_down = (
                 select(Message.conversation_id, func.count())
                 .where(Message.conversation_id.in_(ids), Message.rating == -1)
@@ -3966,6 +3984,8 @@ async def list_conversations_global(limit: int = 200):
                     "updated_at": r.updated_at,
                     "metadata": json.loads(r.metadata_json or "{}"),
                     "disliked_count": disliked.get(r.id, 0),
+                    "liked_count": liked.get(r.id, 0),
+                    "comment_count": commented.get(r.id, 0),
                     "error_count": errored.get(r.id, 0),
                 }
                 for r in rows

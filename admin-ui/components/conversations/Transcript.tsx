@@ -1,89 +1,98 @@
 "use client";
 
 import { useState } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { ChevronRight, Download, FileText, Paperclip, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
+import { Brain, ChevronRight, Download, FileText, Paperclip, ThumbsDown, ThumbsUp, Wrench } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { getStoredToken } from "@/lib/auth/storage";
 import { cn } from "@/lib/cn";
-import { md } from "@/components/skills/SkillPreview";
 import type { ThreadArtifact, ThreadMessage, ThreadStep } from "./types";
 import { isFlagged } from "./types";
-import { timeOnly, toMs } from "./format";
+import { dayBucket, timeOnly, toMs } from "./format";
+import { CodeArtifact, GeneratedFile, PiiReview, PiiReviewFile, artifactLanguage, parseContent } from "./chat/artifacts";
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 const k = "admin_conversations.detail";
 
+/** Same markdown surface as chat-ui: `.prose-chat` rules plus bordered code blocks and scrollable tables. */
+const mdComponents: Components = {
+  a: (p) => <a target="_blank" rel="noreferrer" {...p} />,
+  table: (p) => (
+    <div className="table-wrapper">
+      <table {...p} />
+    </div>
+  ),
+  pre: ({ children }) => <>{children}</>,
+  code: ({ className, children, ...p }) => {
+    const lang = /language-(\w+)/.exec(className || "")?.[1];
+    if (!lang) return <code {...p}>{children}</code>;
+    return (
+      <div className="not-prose my-3 overflow-hidden rounded-xl border border-border/80 bg-[#0d1117] text-[12px] shadow-sm ring-1 ring-black/5 dark:ring-white/10">
+        <div className="border-b border-white/10 bg-[#161b22] px-3.5 py-2 font-mono text-[0.86em] font-medium uppercase tracking-wide text-[#8b949e]">{lang}</div>
+        <pre className="m-0 max-h-[min(32rem,55vh)] overflow-auto whitespace-pre-wrap break-words p-4 font-mono leading-[1.65] text-[#e6edf3]">
+          <code>{String(children).replace(/\n$/, "")}</code>
+        </pre>
+      </div>
+    );
+  },
+};
+
 function Markdown({ text }: { text: string }) {
   return (
-    <div className="text-sm leading-relaxed [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={md}>
+    <div className="prose-chat">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>
         {text}
       </ReactMarkdown>
     </div>
   );
 }
 
-function Disclosure({
-  open,
-  onToggle,
-  label,
-  tone,
-  children,
-}: {
-  open: boolean;
-  onToggle: () => void;
-  label: React.ReactNode;
-  tone?: "error";
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <button
-        type="button"
-        onClick={onToggle}
-        aria-expanded={open}
-        className={cn(
-          "focus-ring -ml-2 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium transition-colors hover:bg-secondary",
-          tone === "error" ? "text-destructive" : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <ChevronRight className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-90")} aria-hidden />
-        {label}
-      </button>
-      {open && <div className="mt-1.5">{children}</div>}
-    </div>
-  );
-}
-
 const pre =
-  "max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-secondary px-3 py-2 font-mono text-xs leading-relaxed";
+  "max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-muted/50 px-3 py-2 font-mono text-xs leading-relaxed";
 
-function Steps({ steps, t }: { steps: ThreadStep[]; t: T }) {
+/** chat-ui's compact activity: one quiet line ("N tool calls"), reasoning and tool calls underneath on a rail. */
+function Activity({ m, t }: { m: ThreadMessage; t: T }) {
+  const steps = m.steps ?? [];
+  const reasoning = m.reasoning?.trim() ?? "";
   const failed = steps.filter((s) => s.is_error).length;
   const [open, setOpen] = useState(failed > 0);
+  const [thinkOpen, setThinkOpen] = useState(false);
+  if (!steps.length && !reasoning) return null;
   return (
-    <Disclosure
-      open={open}
-      onToggle={() => setOpen((v) => !v)}
-      tone={failed ? "error" : undefined}
-      label={
-        <>
-          <Wrench className="h-3.5 w-3.5" aria-hidden />
-          {t(`${k}.tool_calls`, { n: steps.length })}
-          {failed > 0 && <span>· {t(`${k}.tool_errors`, { n: failed })}</span>}
-        </>
-      }
-    >
-      <ol className="flex flex-col gap-1.5">
-        {steps.map((s) => (
-          <li key={s.id} className="rounded-xl border border-border/70 bg-card">
-            <StepRow step={s} t={t} />
-          </li>
-        ))}
-      </ol>
-    </Disclosure>
+    <div className="mb-1 text-[13px] leading-5">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className={cn("focus-ring group inline-flex max-w-full items-center gap-1 rounded-md py-0.5 pr-1 text-left transition-colors", failed ? "text-destructive" : "text-muted-foreground hover:text-foreground")}
+      >
+        <span className="truncate">
+          {steps.length ? t(`${k}.tool_calls`, { n: steps.length }) : t(`${k}.reasoning`)}
+          {failed > 0 && ` · ${t(`${k}.tool_errors`, { n: failed })}`}
+        </span>
+        <ChevronRight size={14} className={cn("shrink-0 opacity-50 transition-transform duration-200 group-hover:opacity-80", open && "rotate-90")} aria-hidden />
+      </button>
+      {open && (
+        <div className="ml-1.5 mt-1.5 space-y-2.5 border-l border-border/70 pl-4">
+          {reasoning && (
+            <div>
+              <button type="button" onClick={() => setThinkOpen((v) => !v)} aria-expanded={thinkOpen} className="focus-ring inline-flex items-center gap-2 rounded-lg text-muted-foreground transition-colors hover:text-foreground">
+                <Brain size={14} className="opacity-80" aria-hidden />
+                <span className="text-xs font-medium">{t(`${k}.reasoning`)}</span>
+                <ChevronRight size={13} className={cn("opacity-60 transition-transform duration-200", thinkOpen && "rotate-90")} aria-hidden />
+              </button>
+              {thinkOpen && <div className="mt-1.5 whitespace-pre-wrap rounded-lg bg-muted/35 px-3 py-2.5 text-[0.929em] leading-relaxed text-muted-foreground">{reasoning}</div>}
+            </div>
+          )}
+          {steps.map((s) => (
+            <div key={s.id} className="rounded-xl border border-border/60 bg-muted/30">
+              <StepRow step={s} t={t} />
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -215,6 +224,60 @@ function ToolMessage({ m }: { m: ThreadMessage }) {
   );
 }
 
+function Rating({ m, t }: { m: ThreadMessage; t: T }) {
+  if (m.rating === 1)
+    return (
+      <span className="inline-flex items-center gap-1 font-medium text-success">
+        <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
+        {t(`${k}.liked`)}
+      </span>
+    );
+  if (m.rating === -1)
+    return (
+      <span className="inline-flex items-center gap-1 font-medium text-destructive">
+        <ThumbsDown className="h-3.5 w-3.5" aria-hidden />
+        {t(`${k}.disliked`)}
+      </span>
+    );
+  return null;
+}
+
+/** The agent's answer: prose, inline `<aion_artifact>` blocks and stored attachments, each drawn like chat-ui. */
+function AssistantBody({ m, convId, t }: { m: ThreadMessage; convId: string; t: T }) {
+  const parts = parseContent(m.content ?? "");
+  const inline = new Set(parts.flatMap((p) => (p.kind === "artifact" ? [p.identifier, p.title, p.type].filter(Boolean) : [])));
+  const stored = (m.artifacts ?? []).filter((a) => {
+    if (isPlan(a)) return false;
+    const name = a.original_name || "";
+    return !(name && inline.has(name));
+  });
+  return (
+    <>
+      {parts.map((p, i) =>
+        p.kind === "text" ? (
+          <Markdown key={i} text={p.text.trim()} />
+        ) : p.type === "pii_review" ? (
+          <PiiReview key={i} content={p.body} t={t} />
+        ) : (
+          <CodeArtifact key={i} title={p.title || p.identifier || p.type} language={artifactLanguage(p.type)} code={p.body} defaultOpen t={t} />
+        ),
+      )}
+      {stored.map((a) => {
+        const url = downloadUrl(convId, a);
+        if ((a.mime || a.original_name) === "pii_review") return <PiiReviewFile key={a.id} url={url} t={t} />;
+        if (a.kind === "artifact" && /\.(txt|md|py|js|ts|tsx|jsx|json|html|css|ya?ml|sh)$/i.test(a.storage_key || ""))
+          return <CodeArtifact key={a.id} title={a.original_name || a.id} language={artifactLanguage(a.mime || "", a.storage_key ?? "")} path={a.storage_key ?? undefined} downloadUrl={url} t={t} />;
+        return (
+          <div key={a.id} className="max-w-xl">
+            <GeneratedFile name={a.original_name || a.storage_key || a.id} size={a.size_bytes ?? undefined} downloadUrl={url} t={t} />
+          </div>
+        );
+      })}
+    </>
+  );
+}
+
+/** The thread exactly as chat-ui draws it: user bubble on the right, the agent's turn plain on the left. */
 export function Transcript({
   messages,
   convId,
@@ -228,79 +291,80 @@ export function Transcript({
   showTools: boolean;
   t: T;
 }) {
-  const [reasoningOpen, setReasoningOpen] = useState<Record<string, boolean>>({});
   const rows = messages.filter((m) => showTools || !m.tool_name);
+  const days = rows.map((m) => {
+    const ms = toMs(m.created_at);
+    return ms ? dayBucket(ms, t) : null;
+  });
 
   return (
-    <ol className="flex flex-col gap-6">
-      {rows.map((m) => {
+    <ol className="chat-font mx-auto flex w-full max-w-3xl flex-col text-[14px] text-foreground">
+      {rows.map((m, i) => {
+        const ms = toMs(m.created_at);
+        const day = days[i];
+        const showDay = !!day && day.key !== (days.slice(0, i).reverse().find(Boolean)?.key ?? "");
         const isUser = m.role === "user";
         const isTool = !!m.tool_name;
         const flagged = isFlagged(m);
-        const when = timeOnly(toMs(m.created_at));
         const hl = m.id === highlightId;
+        const prev = i > 0 ? rows[i - 1] : null;
+        const gap = i === 0 ? "" : !isUser && prev?.role === "user" ? "mt-0.5" : isUser && prev && prev.role !== "user" ? "mt-6" : "mt-4";
+        const afterUser = !isUser && prev?.role === "user";
+        const meta = (
+          <div className={cn("flex flex-wrap items-center gap-x-2 gap-y-0.5 px-1 text-[11px] text-muted-foreground/80", isUser && "justify-end")}>
+            {isTool && <span className="font-medium text-muted-foreground">{t(`${k}.tool`)}</span>}
+            {timeOnly(ms) && <span className="tabular-nums">{timeOnly(ms)}</span>}
+            <span className="tabular-nums">#{m.seq}</span>
+            <Rating m={m} t={t} />
+          </div>
+        );
         return (
-          <li
-            key={m.id}
-            id={`message-${m.id}`}
-            data-flagged={flagged ? "true" : undefined}
-            className={cn(
-              "scroll-mt-24 flex flex-col gap-2 rounded-2xl transition-colors duration-700",
-              (hl || flagged) && "-mx-3 px-3 py-3",
-              hl ? "bg-warning/10" : flagged && "bg-destructive/[0.06]",
+          <li key={m.id} className={gap}>
+            {showDay && (
+              <div className="my-6 flex items-center gap-3 text-xs font-medium text-muted-foreground" role="separator">
+                <span className="h-px flex-1 bg-border/60" />
+                {day!.label}
+                <span className="h-px flex-1 bg-border/60" />
+              </div>
             )}
-          >
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <span className={cn("font-semibold", !isUser && !isTool && "text-foreground")}>
-                {isTool ? `${t(`${k}.tool`)} · ${m.tool_name}` : isUser ? t(`${k}.human`) : t(`${k}.agent`)}
-              </span>
-              <span className="tabular-nums">#{m.seq}</span>
-              {when && <span className="tabular-nums">{when}</span>}
-              {m.rating === 1 && (
-                <span className="inline-flex items-center gap-1 font-medium text-success">
-                  <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
-                  {t(`${k}.liked`)}
-                </span>
-              )}
-              {m.rating === -1 && (
-                <span className="inline-flex items-center gap-1 font-medium text-destructive">
-                  <ThumbsDown className="h-3.5 w-3.5" aria-hidden />
-                  {t(`${k}.disliked`)}
-                </span>
+            <div id={`message-${m.id}`} data-flagged={flagged ? "true" : undefined} className="scroll-mt-28">
+              {isUser ? (
+                <div className="flex flex-col items-end gap-1">
+                  {m.artifacts && m.artifacts.length > 0 && (
+                    <div className="max-w-[min(92%,42rem)]">
+                      <Artifacts items={m.artifacts} convId={convId} t={t} />
+                    </div>
+                  )}
+                  <div
+                    className={cn(
+                      "max-w-[min(92%,42rem)] rounded-3xl border border-border/60 bg-muted/60 px-4 py-3 shadow-2xs sm:max-w-[min(70%,42rem)] dark:border-border dark:bg-muted/80",
+                      hl && "ring-2 ring-warning/60",
+                    )}
+                  >
+                    <Markdown text={m.content?.trim() || ""} />
+                  </div>
+                  {meta}
+                </div>
+              ) : (
+                <div
+                  className={cn(
+                    "mr-auto flex max-w-[min(100%,48rem)] flex-col gap-2 rounded-2xl px-5 transition-colors duration-700",
+                    afterUser ? "pb-2 pt-0.5" : "py-3",
+                    hl ? "bg-warning/10" : flagged && "bg-destructive/[0.06]",
+                  )}
+                >
+                  <Activity m={m} t={t} />
+                  {isTool ? <ToolMessage m={m} /> : <AssistantBody m={m} convId={convId} t={t} />}
+                  {m.feedback_comment && (
+                    <p className="rounded-xl border border-border/60 bg-muted/40 px-3 py-2 text-sm">
+                      <span className="mr-1.5 text-xs font-medium text-muted-foreground">{t(`${k}.comment`)}</span>
+                      {m.feedback_comment}
+                    </p>
+                  )}
+                  {meta}
+                </div>
               )}
             </div>
-
-            {isTool ? (
-              <ToolMessage m={m} />
-            ) : isUser ? (
-              <div className="max-w-[46rem] rounded-2xl bg-secondary px-4 py-3">
-                <Markdown text={m.content?.trim() || ""} />
-              </div>
-            ) : (
-              <div className="max-w-[46rem]">
-                <Markdown text={m.content?.trim() || ""} />
-              </div>
-            )}
-
-            {m.feedback_comment && (
-              <p className="max-w-[46rem] rounded-xl bg-secondary/70 px-3 py-2 text-sm">
-                <span className="mr-1.5 text-xs font-medium text-muted-foreground">{t(`${k}.comment`)}</span>
-                {m.feedback_comment}
-              </p>
-            )}
-
-            {m.reasoning?.trim() && (
-              <Disclosure
-                open={!!reasoningOpen[m.id]}
-                onToggle={() => setReasoningOpen((s) => ({ ...s, [m.id]: !s[m.id] }))}
-                label={t(`${k}.reasoning`)}
-              >
-                <pre className={cn(pre, "max-w-[46rem]")}>{m.reasoning}</pre>
-              </Disclosure>
-            )}
-
-            {m.steps && m.steps.length > 0 && <Steps steps={m.steps} t={t} />}
-            {m.artifacts && m.artifacts.length > 0 && <Artifacts items={m.artifacts} convId={convId} t={t} />}
           </li>
         );
       })}
