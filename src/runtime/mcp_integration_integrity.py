@@ -16,7 +16,10 @@ from src.mcp_connector_catalog import (
 )
 from src.mcp_integration_sync import (
     _AION_USER_RE,
+    _canonical_oauth_placeholder,
     _slug_env_prefix,
+    is_oauth_process_token_key,
+    is_static_mcp_env_key,
     validate_policy_vs_registry,
 )
 
@@ -395,8 +398,14 @@ async def scan_mcp_integrity() -> Dict[str, Any]:
                 key = str(field.get("key") or "").strip()
                 if not key:
                     continue
+                if is_static_mcp_env_key(key):
+                    continue
                 expected = f"${{AION_USER_{prefix}__{key}}}"
                 env_val = str(env.get(key) or "").strip()
+                if is_oauth_process_token_key(key):
+                    canonical = _canonical_oauth_placeholder(slug)
+                    if env_val in (expected, canonical) or _AION_USER_RE.match(env_val):
+                        continue
                 if env_val and env_val != expected and not _AION_USER_RE.match(env_val):
                     issues.append(
                         {

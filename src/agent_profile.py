@@ -217,8 +217,11 @@ class AgentProfile:
             from .mcp_manager import mcp_manager
             from .runtime.mcp_tooling_prompt import build_mcp_tooling_prompt_section
 
+            from .runtime.tool_exposure import resident_mcp_servers
+
             mcp_extra = build_mcp_tooling_prompt_section(
-                self.mcp_servers, mcp_manager.get_server_config
+                resident_mcp_servers(self.mcp_servers),
+                mcp_manager.get_server_config,
             )
             if mcp_extra:
                 parts.append(mcp_extra)
@@ -277,14 +280,15 @@ class AgentProfile:
                     parts.append(
                         f"- **`{s['name']}`** ({tags}): {s.get('description', '')}"
                     )
-                try:
-                    from .runtime.system_prompt import build_skills_catalog_xml
 
-                    catalog = build_skills_catalog_xml(allowed_names=other_skills)
-                    if catalog:
-                        parts.append(catalog)
-                except Exception:
-                    pass
+        try:
+            from .runtime.tool_exposure import deferred_prompt_section
+
+            deferred = deferred_prompt_section(self)
+            if deferred:
+                parts.append(deferred)
+        except Exception:
+            pass
 
         if os.getenv("AION_SOUL_MEMORY_USER_SPLIT", "0").lower() in (
             "1",

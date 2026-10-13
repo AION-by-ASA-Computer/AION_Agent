@@ -38,10 +38,76 @@ CredentialMode = Literal["none", "org_shared", "per_user"]
 
 _AION_USER_RE = re.compile(r"^\$\{AION_USER_")
 _ENV_PLACEHOLDER_RE = re.compile(r"^\$\{[A-Z0-9_]+\}$")
+_STATIC_MCP_ENV_KEY_RE = re.compile(r"(?:^|_)(TENANT_ID|TENANT|ORG_MODE)$", re.I)
+_SECRET_ENV_KEY_RE = re.compile(
+    r"TOKEN|SECRET|PASSWORD|API_KEY|PAT|BEARER|CREDENTIAL|REFRESH",
+    re.I,
+)
 
 
 def _slug_env_prefix(server_slug: str) -> str:
     return server_slug.upper().replace("-", "_")
+
+
+def is_static_mcp_env_key(key: str) -> bool:
+    """True for process config (tenant, org-mode) that must stay a literal in per_user env."""
+    k = (key or "").strip()
+    if not k or k.startswith("AION_USER_"):
+        return False
+    return bool(_STATIC_MCP_ENV_KEY_RE.search(k))
+
+
+def is_oauth_process_token_key(key: str) -> bool:
+    """Env the MCP process reads for the Graph/OAuth access token (not the DB key)."""
+    k = (key or "").strip().upper()
+    return bool(k) and k != "OAUTH_TOKEN" and k.endswith("_OAUTH_TOKEN")
+
+
+def _canonical_oauth_placeholder(server_slug: str) -> str:
+    return f"${{AION_USER_{_slug_env_prefix(server_slug)}__OAUTH_TOKEN}}"
+
+
+def _catalog_literal_env(connector_row: Optional[Dict[str, Any]]) -> Dict[str, str]:
+    """Literal env values from the catalog example block (e.g. TENANT_ID=common)."""
+    if not isinstance(connector_row, dict):
+        return {}
+    block = connector_row.get("example_registry_block") or ""
+    env_obj: Any = None
+    for line in str(block).splitlines():
+        s = line.strip().lstrip("#").strip()
+        if not s.lower().startswith("env:"):
+            continue
+        raw = s.split(":", 1)[1].strip()
+        if not raw:
+            break
+        try:
+            env_obj = json.loads(raw)
+        except Exception:
+            try:
+                import yaml
+
+                env_obj = yaml.safe_load(raw)
+            except Exception:
+                env_obj = None
+        break
+    if not isinstance(env_obj, dict):
+        return {}
+    out: Dict[str, str] = {}
+    for k, v in env_obj.items():
+        if not k or v is None:
+            continue
+        if isinstance(v, bool):
+            text = "true" if v else "false"
+        else:
+            text = str(v).strip()
+        if text and not text.startswith("${"):
+            out[str(k).strip()] = text
+    return out
+
+
+def _oauth_dest_keys(connector_row: Optional[Dict[str, Any]]) -> Set[str]:
+    keys = set(oauth_alias_dest_keys(connector_row))
+    return {k for k in keys if k}
 
 
 def credential_schema_from_connector(
@@ -111,23 +177,95 @@ def credential_schema_from_connector(
 def suggest_registry_env_for_per_user(
     server_slug: str,
     schema: List[Dict[str, Any]],
+    *,
+    current_env: Optional[Dict[str, Any]] = None,
+    connector_row: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, str]:
-    """Genera env con placeholder ${AION_USER_<SLUG>__<KEY>} per ogni chiave dello schema."""
+    """Genera env per_user: placeholder sulle credenziali, letterali su tenant/org-mode."""
     prefix = _slug_env_prefix(server_slug)
+    current_env = current_env or {}
+    literals = _catalog_literal_env(connector_row)
+    oauth_dests = set(_oauth_dest_keys(connector_row))
+    canonical = _canonical_oauth_placeholder(server_slug)
     out: Dict[str, str] = {}
-    for field in schema:
-        key = field.get("key")
-        if not key:
-            continue
-        k_str = str(key).strip()
+
+    def _base_key(raw: Any) -> str:
+        k_str = str(raw or "").strip()
         if k_str.startswith("AION_USER_") and "__" in k_str:
-            base_key = k_str.split("__", 1)[1]
-        else:
-            base_key = k_str
-        ph = f"${{AION_USER_{prefix}__{base_key}}}"
-        out[base_key] = ph
-        out[f"AION_USER_{prefix}__{base_key}"] = ph
+            return k_str.split("__", 1)[1]
+        return k_str
+
+    def _suggested_value(base_key: str) -> Optional[str]:
+        if not base_key or base_key.startswith("AION_USER_"):
+            return None
+        if is_static_mcp_env_key(base_key):
+            if base_key in literals:
+                return literals[base_key]
+            cur = str(current_env.get(base_key) or "").strip()
+            if cur and not _AION_USER_RE.match(cur):
+                return cur
+            return None
+        if (
+            base_key in oauth_dests
+            or is_oauth_process_token_key(base_key)
+            or base_key == "OAUTH_TOKEN"
+        ):
+            return canonical
+        return f"${{AION_USER_{prefix}__{base_key}}}"
+
+    for field in schema:
+        base_key = _base_key(field.get("key"))
+        val = _suggested_value(base_key)
+        if not val:
+            continue
+        out[base_key] = val
+        if val.startswith("${AION_USER_") and not is_oauth_process_token_key(base_key):
+            out[f"AION_USER_{prefix}__{base_key}"] = val
+
+    for dest in oauth_dests:
+        out[dest] = canonical
+    for key, lit in literals.items():
+        out[key] = lit
+        out.pop(f"AION_USER_{prefix}__{key}", None)
     return out
+
+
+def restore_static_and_oauth_env(
+    server_slug: str,
+    env: Dict[str, Any],
+    *,
+    connector_row: Optional[Dict[str, Any]] = None,
+) -> Dict[str, str]:
+    """Keep catalog literals and map process OAuth dest keys to OAUTH_TOKEN."""
+    prefix = _slug_env_prefix(server_slug)
+    out = {str(k): v for k, v in (env or {}).items()}
+    literals = _catalog_literal_env(connector_row)
+    oauth_dests = set(_oauth_dest_keys(connector_row))
+    for key in list(out.keys()):
+        if is_oauth_process_token_key(str(key)):
+            oauth_dests.add(str(key))
+    canonical = _canonical_oauth_placeholder(server_slug)
+
+    for dest in oauth_dests:
+        out[dest] = canonical
+        out.pop(f"AION_USER_{prefix}__{dest}", None)
+
+    for key, lit in literals.items():
+        out[key] = lit
+        out.pop(f"AION_USER_{prefix}__{key}", None)
+
+    for key in list(out.keys()):
+        if not is_static_mcp_env_key(str(key)):
+            continue
+        val = str(out.get(key) or "").strip()
+        if _AION_USER_RE.match(val):
+            if key in literals:
+                out[key] = literals[key]
+            else:
+                out.pop(key, None)
+        out.pop(f"AION_USER_{prefix}__{key}", None)
+
+    return {k: (str(v) if v is not None else "") for k, v in out.items()}
 
 
 def suggest_registry_env_for_org_shared(schema: List[Dict[str, Any]]) -> Dict[str, str]:
@@ -151,6 +289,10 @@ def _env_has_literal_secrets(
     for k, v in (env or {}).items():
         if only_keys is not None and k not in only_keys:
             continue
+        if is_static_mcp_env_key(str(k)):
+            continue
+        if is_oauth_process_token_key(str(k)):
+            continue
         if v is None:
             continue
         s = str(v).strip()
@@ -159,6 +301,8 @@ def _env_has_literal_secrets(
         if _AION_USER_RE.match(s):
             continue
         if _ENV_PLACEHOLDER_RE.match(s):
+            continue
+        if not _SECRET_ENV_KEY_RE.search(str(k)):
             continue
         return True
     return False
@@ -253,8 +397,13 @@ def validate_policy_vs_registry(
                 if k in env
                 and str(env.get(k) or "").strip()
                 and not _AION_USER_RE.match(str(env.get(k) or "").strip())
+                and not is_static_mcp_env_key(k)
+                and not is_oauth_process_token_key(k)
             ]
-            if bad or not _env_uses_per_user_placeholders(env_scope):
+            if bad or (
+                not _env_uses_per_user_placeholders(env_scope)
+                and any(not is_static_mcp_env_key(k) for k in schema_keys)
+            ):
                 if not any(
                     w.startswith("Modalità per_utente ma il registry") for w in warnings
                 ):
@@ -347,7 +496,12 @@ def build_integration_preview(
             warnings_list.append(
                 f"Il server remoto non è raggiungibile: {discovery.remote_error or 'timeout o errore di connessione'}"
             )
-        suggested_per_user = suggest_registry_env_for_per_user(server_slug, schema)
+        suggested_per_user = suggest_registry_env_for_per_user(
+            server_slug,
+            schema,
+            current_env=cfg.get("env") or {},
+            connector_row=connector_row,
+        )
         suggested_org = suggest_registry_env_for_org_shared(schema)
         return {
             "ok": True,
@@ -690,6 +844,10 @@ def normalize_env_override(
 
     if credential_mode == "per_user":
         for key, val in out.items():
+            if is_static_mcp_env_key(key):
+                continue
+            if is_oauth_process_token_key(key) and "OAUTH_TOKEN" in val:
+                continue
             if not _AION_USER_RE.match(val):
                 warnings.append(
                     f"per_user: valore di '{key}' dovrebbe usare placeholder ${{AION_USER_{slug_upper}__{key}}}"
@@ -725,6 +883,8 @@ def merge_suggested_env_into_registry(
         else (preview.get("credential_schema") or [])
     )
 
+    connector_row = preview.get("connector") if isinstance(preview, dict) else None
+
     if not schema and env:
         schema = []
         for k in env.keys():
@@ -735,6 +895,10 @@ def merge_suggested_env_into_registry(
                 base_key = k_str.split("__", 1)[1]
             else:
                 base_key = k_str
+            if is_static_mcp_env_key(base_key) or is_oauth_process_token_key(base_key):
+                continue
+            if base_key in ("OAUTH_TOKEN", "OAUTH_REFRESH_TOKEN"):
+                continue
             if not any(str(f.get("key") or "").strip() == base_key for f in schema):
                 schema.append(
                     {
@@ -754,7 +918,12 @@ def merge_suggested_env_into_registry(
         preview_warnings = list(preview.get("warnings") or [])
         preview_warnings.extend(norm_warnings)
     elif credential_mode == "per_user":
-        suggested = suggest_registry_env_for_per_user(server_slug, schema)
+        suggested = suggest_registry_env_for_per_user(
+            server_slug,
+            schema,
+            current_env=env,
+            connector_row=connector_row if isinstance(connector_row, dict) else None,
+        )
         preview_warnings = preview.get("warnings") or []
     elif credential_mode == "org_shared":
         suggested = suggest_registry_env_for_org_shared(schema)
@@ -776,6 +945,12 @@ def merge_suggested_env_into_registry(
                 env[k] = v
     else:
         env.update(suggested)
+    if credential_mode == "per_user":
+        env = restore_static_and_oauth_env(
+            server_slug,
+            env,
+            connector_row=connector_row if isinstance(connector_row, dict) else None,
+        )
     mcp_manager.update_server_config(server_slug, {"env": env})
     cfg_after = mcp_manager.get_server_config(server_slug) or {}
     cfg_after = {**cfg_after, "env": env}

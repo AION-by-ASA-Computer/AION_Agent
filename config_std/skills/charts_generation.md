@@ -9,6 +9,8 @@ version: 1
 
 # Interactive Dynamic Charts (render_chart MCP)
 
+`render_chart` is not in the initial tool list. Call `tool_search("render_chart")` once, then call `render_chart` on the next step.
+
 This skill guides you on how to dynamically generate interactive, native charts (Line, Area, Bar) directly in the user's Chat Workspace using the `charts` MCP `render_chart` tool. 
 
 ---

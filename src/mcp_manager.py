@@ -92,6 +92,11 @@ _DEFAULT_SESSION_SCOPED_SERVERS = frozenset(
 )
 
 
+def is_session_scoped_server(server_name: str) -> bool:
+    """Servers with a worker per chat. Their list_tools payloads are not shared."""
+    return (server_name or "") in _session_scoped_servers()
+
+
 def _user_pool_enabled() -> bool:
     try:
         from .settings import get_settings
@@ -854,6 +859,23 @@ class MCPManager:
     def _clear_warm_failure(self, pool_scope_id: str, server_name: str) -> None:
         self._warm_failures.pop((pool_scope_id, server_name), None)
 
+    def clear_oauth_disconnect_state(
+        self, user_id: str, server_name: str, *, tenant_id: str = "default"
+    ) -> None:
+        """Forget a 'not connected' warm skip after this user stores an OAuth token."""
+        safe = sanitize_user_id(user_id)
+        tid = (tenant_id or "default").strip() or "default"
+        pool_sid = f"__user__{safe}__{tid}"
+        self._clear_warm_failure(pool_sid, server_name)
+        for (sid, name), rec in list(self._warm_failures.items()):
+            if name != server_name:
+                continue
+            msg = rec[1] if rec else ""
+            if "credenziali mancanti" not in msg:
+                continue
+            if sid == pool_sid or sid.endswith(f"__{safe}__{tid}"):
+                self._clear_warm_failure(sid, name)
+
     def _is_server_healthy(self, chat_session_id: str, server_name: str) -> bool:
         if not self._is_stdio_server(server_name):
             return True
@@ -1529,14 +1551,41 @@ class MCPManager:
         except Exception as exc:
             logger.debug("MCP warm credential check failed %s: %s", server_name, exc)
             return None
+        from .runtime.mcp_health import env_slot_is_oauth_token
+
+        oauth_token_present: Optional[bool] = None
+
+        async def _has_oauth_token() -> bool:
+            nonlocal oauth_token_present
+            if oauth_token_present is None:
+                from .runtime.credential_store import get_credential
+
+                token = await get_credential(
+                    sanitize_user_id(uid),
+                    server_name,
+                    "OAUTH_TOKEN",
+                    tenant_id=(tid or "default").strip() or "default",
+                )
+                oauth_token_present = bool(token)
+            return oauth_token_present
+
+        from .mcp_integration_sync import is_static_mcp_env_key
+
         for key, template in env_block.items():
             if not isinstance(template, str):
+                continue
+            if is_static_mcp_env_key(str(key)):
                 continue
             needs_user_cred = "${AION_USER_" in template
             val = resolved.get(key)
             if needs_user_cred and (
                 val is None or (isinstance(val, str) and not val.strip())
             ):
+                if (
+                    env_slot_is_oauth_token(str(key), template)
+                    and await _has_oauth_token()
+                ):
+                    continue
                 return f"credenziali mancanti per {server_name} ({key})"
         return None
 
@@ -1580,6 +1629,20 @@ class MCPManager:
                 exc,
             )
 
+    def _profile_mcp_servers(self, profile_slug: str) -> Optional[set]:
+        """Server MCP del profilo. None se il profilo non si riesce a leggere."""
+        try:
+            from .agent_profile import profile_manager
+
+            profile_manager.load_all_if_stale()
+            profile = profile_manager.get_profile(profile_slug)
+        except Exception as exc:
+            logger.debug("profile mcp servers %s: %s", profile_slug, exc)
+            return None
+        if profile is None:
+            return None
+        return {name for name in (profile.mcp_servers or []) if name}
+
     async def warm_session(
         self,
         chat_session_id: str,
@@ -1619,33 +1682,37 @@ class MCPManager:
         except Exception as e:
             logger.warning("Failed to initialize health metrics in warm_session: %s", e)
 
-        # Rilascia worker non più nel profilo (session-scoped o user-pool condiviso).
+        # Un warm parziale (activate_tool_group di un solo server) non è un
+        # cambio profilo: i worker già accesi di questa chat restano fino
+        # all'idle del pool. Si spengono solo i server assenti dal profilo
+        # nuovo, e solo su questa sessione.
         try:
+            profile_changed = bool(
+                old_profile_slug and old_profile_slug != profile_slug
+            )
+            allowed: Optional[set] = None
+            if profile_changed:
+                allowed = self._profile_mcp_servers(profile_slug)
+                if allowed is None:
+                    logger.warning(
+                        "Cambio profilo %s -> %s senza elenco MCP: non spengo i worker di %s",
+                        old_profile_slug,
+                        profile_slug,
+                        chat_session_id[:8],
+                    )
+                    profile_changed = False
             to_stop = []
-            user_pool_key = f"__user__{sanitize_user_id(user_id)}__{(tenant_id or 'default').strip() or 'default'}"
-            async with self._pool_lock:
-                for (sid, sname), worker in list(self._pool.items()):
-                    if sid == chat_session_id:
-                        if sname not in server_names:
+            if profile_changed and allowed is not None:
+                async with self._pool_lock:
+                    for (sid, sname), worker in list(self._pool.items()):
+                        if sid == chat_session_id and sname not in allowed:
                             to_stop.append((sid, sname))
-                        elif old_profile_slug and old_profile_slug != profile_slug:
-                            to_stop.append((sid, sname))
-                    elif sid == user_pool_key and sname not in server_names:
-                        # Worker user-pool restano caldi tra profili/chat (startup warm).
-                        pass
-                    elif not str(sid).startswith("__user__"):
-                        ctx = self._session_ctx.get(sid)
-                        if ctx:
-                            if len(ctx) == 2:
-                                p_slug, uid = ctx
-                            else:
-                                p_slug, uid, _tid = ctx
-                            if uid == user_id and p_slug != profile_slug:
-                                to_stop.append((sid, sname))
 
             for sid, sname in to_stop:
                 logger.info(
-                    "Profilo cambiato: rilascio worker '%s' della sessione '%s' non più presente/attivo",
+                    "Profilo cambiato %s -> %s: rilascio worker '%s' della sessione '%s'",
+                    old_profile_slug,
+                    profile_slug,
                     sname,
                     sid,
                 )

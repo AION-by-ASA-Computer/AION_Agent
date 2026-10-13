@@ -31,6 +31,47 @@ from src.runtime.credential_store import (
 _OAUTH_MANAGED_KEYS = frozenset({"OAUTH_TOKEN", "OAUTH_REFRESH_TOKEN"})
 
 
+def oauth_access_token_fresh(hints: List[Dict[str, Any]]) -> bool:
+    return any(
+        h.get("key") == "OAUTH_TOKEN" and not h.get("is_expired") for h in (hints or [])
+    )
+
+
+def oauth_refresh_token_present(hints: List[Dict[str, Any]]) -> bool:
+    return any(
+        h.get("key") == "OAUTH_REFRESH_TOKEN" and not h.get("is_expired")
+        for h in (hints or [])
+    )
+
+
+def oauth_user_session_configured(hints: List[Dict[str, Any]]) -> bool:
+    """True when the user still has a usable OAuth session (access or refresh)."""
+    return oauth_access_token_fresh(hints) or oauth_refresh_token_present(hints)
+
+
+async def refresh_oauth_hints_if_needed(
+    user_id: str,
+    server_slug: str,
+    tenant_id: str,
+    hints: List[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Renew an expired access token before the UI treats the integration as disconnected."""
+    if oauth_access_token_fresh(hints) or not oauth_refresh_token_present(hints):
+        return hints
+    from src.runtime.credential_store import refresh_oauth_access_token
+
+    try:
+        await refresh_oauth_access_token(
+            user_id,
+            server_slug,
+            tenant_id=tenant_id,
+            delete_on_failure=False,
+        )
+    except Exception:
+        return hints
+    return await list_credentials_hints(user_id, server_slug, tenant_id=tenant_id)
+
+
 def oauth_alias_dest_keys(connector_row: Optional[Dict[str, Any]]) -> Set[str]:
     """Env del processo che AION riempie a partire da OAUTH_TOKEN (es. MS365_MCP_OAUTH_TOKEN)."""
     if not connector_row:
@@ -337,6 +378,10 @@ async def integration_row_to_public_dict(
             hints = await list_credentials_hints(
                 user_id, r.server_slug, tenant_id=tenant_id
             )
+        if has_oauth and hints:
+            hints = await refresh_oauth_hints_if_needed(
+                user_id, r.server_slug, tenant_id, hints
+            )
 
     # Include saved credential keys not in admin schema so users can still edit them.
     if show_form and hints:
@@ -369,11 +414,9 @@ async def integration_row_to_public_dict(
             continue
         hint_keys_expanded.add(hk)
         hint_keys_expanded.update(credential_key_aliases(hk))
-    has_valid_oauth_token = any(
-        h.get("key") == "OAUTH_TOKEN" and not h.get("is_expired") for h in hints
-    )
+    has_valid_oauth_session = oauth_user_session_configured(hints)
     if has_oauth and show_form and not req_keys:
-        configured = has_valid_oauth_token
+        configured = has_valid_oauth_session
     else:
         configured = (
             (not r.requires_user_credentials)
@@ -384,7 +427,7 @@ async def integration_row_to_public_dict(
             )
         )
         if has_oauth and show_form and req_keys:
-            configured = configured and has_valid_oauth_token
+            configured = configured and has_valid_oauth_session
 
     if show_form:
         from src.runtime.mcp_integration_integrity import (

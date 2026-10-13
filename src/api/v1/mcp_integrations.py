@@ -261,6 +261,9 @@ async def list_runtime_mcp_errors(
             session_id=sid,
         )
     else:
+        from src.runtime.mcp_health import drop_connected_oauth_errors
+
+        await drop_connected_oauth_errors(sid, user_id, tenant_id=_tenant_id())
         cached = get_last_mcp_load_errors(sid)
         from src.runtime.mcp_health import _clean_error_message, _hint_for_error
         from src.mcp_manager import mcp_manager

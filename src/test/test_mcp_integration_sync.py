@@ -6,7 +6,9 @@ from src.mcp_credential_discovery import discover_mcp_credentials, merge_schema_
 from src.mcp_integration_sync import (
     credential_schema_from_connector,
     infer_credential_mode,
+    restore_static_and_oauth_env,
     suggest_registry_env_for_per_user,
+    validate_policy_vs_registry,
 )
 
 
@@ -94,6 +96,68 @@ def test_infer_mode_org_shared_literal() -> None:
     cfg = {"env": {"CLICKUP_API_KEY": "pk_live_abc"}}
     conn = {"credential_fields": [{"key": "CLICKUP_API_KEY"}]}
     assert infer_credential_mode(cfg, conn) == "org_shared"
+
+
+def test_ms365_suggest_keeps_tenant_literals() -> None:
+    from src.mcp_connector_catalog import _connector_by_id, load_mcp_connector_catalog
+
+    row = _connector_by_id(load_mcp_connector_catalog(), "ms365")
+    assert row is not None
+    env = suggest_registry_env_for_per_user(
+        "ms365",
+        [{"key": "MS365_MCP_TENANT_ID"}, {"key": "MS365_MCP_OAUTH_TOKEN"}],
+        current_env={
+            "MS365_MCP_OAUTH_TOKEN": "${AION_USER_MS365__OAUTH_TOKEN}",
+            "MS365_MCP_TENANT_ID": "common",
+            "MS365_MCP_ORG_MODE": "true",
+        },
+        connector_row=row,
+    )
+    assert env["MS365_MCP_OAUTH_TOKEN"] == "${AION_USER_MS365__OAUTH_TOKEN}"
+    assert env["MS365_MCP_TENANT_ID"] == "common"
+    assert env["MS365_MCP_ORG_MODE"] == "true"
+    assert "AION_USER_MS365__MS365_MCP_TENANT_ID" not in env
+    assert "AION_USER_MS365__MS365_MCP_OAUTH_TOKEN" not in env
+
+
+def test_ms365_restore_rewrites_double_prefixed_placeholders() -> None:
+    from src.mcp_connector_catalog import _connector_by_id, load_mcp_connector_catalog
+
+    row = _connector_by_id(load_mcp_connector_catalog(), "ms365")
+    assert row is not None
+    repaired = restore_static_and_oauth_env(
+        "ms365",
+        {
+            "MS365_MCP_OAUTH_TOKEN": "${AION_USER_MS365__MS365_MCP_OAUTH_TOKEN}",
+            "MS365_MCP_TENANT_ID": "${AION_USER_MS365__MS365_MCP_TENANT_ID}",
+            "MS365_MCP_ORG_MODE": "${AION_USER_MS365__MS365_MCP_ORG_MODE}",
+            "AION_USER_MS365__MS365_MCP_TENANT_ID": "${AION_USER_MS365__MS365_MCP_TENANT_ID}",
+            "AION_USER_MS365__MS365_MCP_ORG_MODE": "${AION_USER_MS365__MS365_MCP_ORG_MODE}",
+            "OAUTH_TOKEN": "${AION_USER_MS365__OAUTH_TOKEN}",
+        },
+        connector_row=row,
+    )
+    assert repaired["MS365_MCP_OAUTH_TOKEN"] == "${AION_USER_MS365__OAUTH_TOKEN}"
+    assert repaired["MS365_MCP_TENANT_ID"] == "common"
+    assert repaired["MS365_MCP_ORG_MODE"] == "true"
+    assert "AION_USER_MS365__MS365_MCP_TENANT_ID" not in repaired
+    assert "AION_USER_MS365__MS365_MCP_ORG_MODE" not in repaired
+
+
+def test_ms365_literals_do_not_fail_policy_validation() -> None:
+    warnings = validate_policy_vs_registry(
+        "ms365",
+        {
+            "env": {
+                "MS365_MCP_OAUTH_TOKEN": "${AION_USER_MS365__OAUTH_TOKEN}",
+                "MS365_MCP_TENANT_ID": "common",
+                "MS365_MCP_ORG_MODE": "true",
+            }
+        },
+        "per_user",
+        credential_schema=[],
+    )
+    assert warnings == []
 
 
 def test_clickup_catalog_per_user_env_e2e() -> None:

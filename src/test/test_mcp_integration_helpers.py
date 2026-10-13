@@ -9,9 +9,26 @@ from src.mcp_connector_catalog import (
 )
 from src.runtime.mcp_integration_helpers import (
     oauth_alias_dest_keys,
+    oauth_user_session_configured,
     strip_oauth_token_fields_from_schema,
     strip_oauth_user_fields_for_server,
 )
+
+
+def test_oauth_session_configured_with_refresh_token_only():
+    hints = [
+        {"key": "OAUTH_TOKEN", "is_expired": True},
+        {"key": "OAUTH_REFRESH_TOKEN", "is_expired": False},
+    ]
+    assert oauth_user_session_configured(hints) is True
+
+
+def test_oauth_session_not_configured_when_both_tokens_gone():
+    assert oauth_user_session_configured([]) is False
+    assert (
+        oauth_user_session_configured([{"key": "OAUTH_TOKEN", "is_expired": True}])
+        is False
+    )
 
 
 def test_oauth_ui_metadata_from_catalog_row():

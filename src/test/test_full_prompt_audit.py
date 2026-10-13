@@ -38,8 +38,8 @@ def _aion_std_prompt() -> str:
 
 def test_aion_std_inlines_critical_protocol_skills():
     body = _aion_std_prompt()
-    for slug in ("core_protocol", "artifact_protocol"):
-        assert f"### Protocol rules ({slug})" in body
+    assert "### Protocol rules (core_protocol)" in body
+    assert "### Protocol rules (artifact_protocol)" not in body
 
 
 def test_aion_std_tool_first_file_delivery():

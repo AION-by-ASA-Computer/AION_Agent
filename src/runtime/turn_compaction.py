@@ -483,6 +483,9 @@ def emit_context_budget_sse(
 def set_agent_execution_context(exec_ctx: Any) -> None:
     if _agent_exec_ctx is not None:
         _agent_exec_ctx.set(exec_ctx)
+    rt = resolve_turn_runtime()
+    if isinstance(rt, dict):
+        rt["agent_exec_ctx"] = exec_ctx
     messages = _messages_from_exec_ctx(exec_ctx)
     if messages:
         rt = resolve_turn_runtime()
@@ -495,6 +498,9 @@ def set_agent_execution_context(exec_ctx: Any) -> None:
 def clear_agent_execution_context() -> None:
     if _agent_exec_ctx is not None:
         _agent_exec_ctx.set(None)
+    rt = resolve_turn_runtime()
+    if isinstance(rt, dict):
+        rt.pop("agent_exec_ctx", None)
 
 
 def clear_turn_runtime(session_id: Optional[str] = None) -> None:
