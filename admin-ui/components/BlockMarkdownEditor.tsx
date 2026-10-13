@@ -22,10 +22,10 @@ import {
 const inlineMdComponents: React.ComponentProps<typeof ReactMarkdown>["components"] = {
   // Avoid <p> wrappers for inline content
   p: ({ children }) => <span>{children}</span>,
-  strong: ({ children }) => <strong className="font-bold text-white">{children}</strong>,
-  em: ({ children }) => <em className="italic text-slate-300">{children}</em>,
+  strong: ({ children }) => <strong className="font-bold text-foreground">{children}</strong>,
+  em: ({ children }) => <em className="italic text-foreground/85">{children}</em>,
   code: ({ children }) => (
-    <code className="font-mono text-emerald-300 bg-emerald-500/10 rounded px-1 py-0.5 text-[0.88em] border border-emerald-500/20">
+    <code className="font-mono text-success bg-success/10 rounded px-1 py-0.5 text-[0.88em] border border-success/20">
       {children}
     </code>
   ),
@@ -34,13 +34,13 @@ const inlineMdComponents: React.ComponentProps<typeof ReactMarkdown>["components
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="text-blue-400 underline underline-offset-2 hover:text-blue-300 transition-colors"
+      className="text-primary underline underline-offset-2 hover:opacity-80 transition-colors"
       onClick={(e) => e.stopPropagation()}
     >
       {children}
     </a>
   ),
-  del: ({ children }) => <del className="line-through text-slate-500">{children}</del>,
+  del: ({ children }) => <del className="line-through text-muted-foreground">{children}</del>,
 };
 
 // --- Types ---
@@ -498,12 +498,12 @@ const BlockNode = React.memo(({
   const previewContent = (() => {
     if (block.content === "") {
       // Empty block: show a faint placeholder so the row has height
-      return <span className="text-gray-600 select-none">&nbsp;</span>;
+      return <span className="text-muted-foreground/60 select-none">&nbsp;</span>;
     }
     switch (block.type) {
       case "h1":
         return (
-          <h1 className="text-3xl font-bold tracking-tight text-white leading-tight">
+          <h1 className="text-3xl font-bold tracking-tight text-foreground leading-tight">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={inlineMdComponents}>
               {block.content}
             </ReactMarkdown>
@@ -511,7 +511,7 @@ const BlockNode = React.memo(({
         );
       case "h2":
         return (
-          <h2 className="text-2xl font-bold tracking-tight text-white leading-tight">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground leading-tight">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={inlineMdComponents}>
               {block.content}
             </ReactMarkdown>
@@ -519,7 +519,7 @@ const BlockNode = React.memo(({
         );
       case "h3":
         return (
-          <h3 className="text-xl font-semibold text-white leading-tight">
+          <h3 className="text-xl font-semibold text-foreground leading-tight">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={inlineMdComponents}>
               {block.content}
             </ReactMarkdown>
@@ -527,14 +527,14 @@ const BlockNode = React.memo(({
         );
       case "code":
         return (
-          <pre className="w-full font-mono text-[0.85rem] text-emerald-300 bg-emerald-950/30 border border-emerald-800/30 rounded-lg px-3 py-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
+          <pre className="w-full font-mono text-[0.85rem] text-success bg-success/[0.08] border border-success/20 rounded-lg px-3 py-2 overflow-x-auto whitespace-pre-wrap break-all leading-relaxed">
             <code>{block.content}</code>
           </pre>
         );
       default:
         // text, list, task → inline markdown
         return (
-          <span className="leading-relaxed text-slate-300 text-[1rem]">
+          <span className="leading-relaxed text-foreground/85 text-[1rem]">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={inlineMdComponents}>
               {block.content}
             </ReactMarkdown>
@@ -545,7 +545,7 @@ const BlockNode = React.memo(({
 
   return (
     <div 
-      className={`group flex items-start gap-3 px-3 py-1.5 rounded-lg transition-colors relative cursor-text ${isFocused ? "bg-white/5" : "hover:bg-white/5"}`}
+      className={`group flex items-start gap-3 px-3 py-1.5 rounded-lg transition-colors relative cursor-text ${isFocused ? "bg-foreground/[0.04]" : "hover:bg-foreground/[0.04]"}`}
       onClick={(e) => {
         const target = e.target as HTMLElement;
         if (target.tagName === "INPUT" && (target as HTMLInputElement).type === "checkbox") {
@@ -568,11 +568,11 @@ const BlockNode = React.memo(({
           checked={!!block.checked}
           onChange={(e) => updateBlock(block.id, { checked: e.target.checked })}
           disabled={isLocked}
-          className="mt-1.5 w-4 h-4 rounded border-white/20 bg-black/40 text-blue-500 focus:ring-blue-500/20 cursor-pointer disabled:opacity-50"
+          className="mt-1.5 w-4 h-4 rounded border-border bg-muted/60 text-primary focus:ring-blue-500/20 cursor-pointer disabled:opacity-50"
         />
       )}
       {block.type === "list" && (
-        <div className="mt-1.5 text-gray-500">•</div>
+        <div className="mt-1.5 text-muted-foreground">•</div>
       )}
 
       <div className="flex-1 relative min-w-0">
@@ -590,7 +590,7 @@ const BlockNode = React.memo(({
               rows={1}
               placeholder={!isLocked ? "Type '/' for commands..." : ""}
               style={inputStyles}
-              className="placeholder:text-gray-600"
+              className="placeholder:text-muted-foreground/60"
             />
 
             {showSlashMenu && (
@@ -913,7 +913,7 @@ export function BlockMarkdownEditor({
 
   return (
     <div 
-      className="flex flex-col border border-white/10 rounded-2xl bg-black/40 overflow-hidden shadow-inner group-focus-within:border-blue-500/50 transition-all duration-300"
+      className="flex flex-col border border-border rounded-2xl bg-muted/60 overflow-hidden shadow-inner group-focus-within:border-primary/50 transition-all duration-300"
       style={{ minHeight: height }}
     >
       <div 
@@ -949,7 +949,7 @@ export function BlockMarkdownEditor({
         ))}
         {blocks.length === 0 && (
           <div 
-            className="h-full flex items-center justify-center text-gray-600 italic cursor-text"
+            className="h-full flex items-center justify-center text-muted-foreground/60 italic cursor-text"
             onClick={() => addBlock("", "text")}
           >
             {placeholder}
@@ -957,7 +957,7 @@ export function BlockMarkdownEditor({
         )}
       </div>
       
-      <div className="px-4 py-2 bg-white/5 border-t border-white/5 flex items-center justify-between text-[10px] text-gray-500 font-mono">
+      <div className="px-4 py-2 bg-foreground/[0.04] border-t border-border/50 flex items-center justify-between text-[10px] text-muted-foreground font-mono">
         <div className="flex gap-4">
           <span>{blocks.length} blocks</span>
           <span>{value.length} chars</span>
