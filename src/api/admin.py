@@ -1,5 +1,6 @@
 # src/api/admin.py
 import logging
+import re
 import os
 import yaml
 import frontmatter
@@ -860,6 +861,98 @@ async def promote_skill(name: str):
     return {"status": "verified", "name": name}
 
 
+class SkillRename(BaseModel):
+    new_name: str
+
+
+_SKILL_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+
+
+@router.post("/skills/{name}/rename")
+async def rename_skill(name: str, body: SkillRename):
+    """Rename a skill on disk and rewrite every profile that references it."""
+    from ..runtime.profile_sync_state import record_profile_after_admin_save
+
+    new = body.new_name.strip().lower().replace(" ", "_")
+    if not _SKILL_SLUG_RE.match(new):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid name: use lowercase letters, digits, '_' or '-'.",
+        )
+    skill_registry.reload()
+    path = skill_registry.get_skill_path(name)
+    if not path:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    if new == name:
+        return {"status": "unchanged", "name": name, "profiles": []}
+    if skill_registry.skill_exists(new):
+        raise HTTPException(status_code=409, detail=f"A skill named '{new}' already exists")
+    fallback = skill_registry.curated_fallback_dir.resolve()
+    from_fallback = fallback == path.resolve().parent or fallback in path.resolve().parents
+
+    roots = {
+        skill_registry.curated_dir.resolve(),
+        skill_registry.generated_dir.resolve(),
+    }
+    is_package = (
+        path.name.lower() in ("skill.md", "index.md") and path.parent.resolve() not in roots
+    )
+    if from_fallback:
+        # Shipped skills are read-only: copy into the writable dir; the old name gets hidden below.
+        new_file = skill_registry.curated_dir / f"{new}.md"
+        if new_file.exists():
+            raise HTTPException(status_code=409, detail=f"'{new_file.name}' already exists on disk")
+        new_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, new_file)
+    elif is_package:
+        dest_dir = path.parent.with_name(new)
+        if dest_dir.exists():
+            raise HTTPException(status_code=409, detail=f"'{dest_dir.name}' already exists on disk")
+        path.parent.rename(dest_dir)
+        new_file = dest_dir / path.name
+    else:
+        new_file = path.with_name(f"{new}.md")
+        if new_file.exists():
+            raise HTTPException(status_code=409, detail=f"'{new_file.name}' already exists on disk")
+        path.rename(new_file)
+
+    skill_registry.unhide(new)
+    # The frontmatter `name` wins over the file stem when the registry loads skills.
+    post = frontmatter.loads(new_file.read_text(encoding="utf-8"))
+    post.metadata["name"] = new
+    new_file.write_text(frontmatter.dumps(post), encoding="utf-8")
+
+    skill_registry.reload()
+    if skill_registry.skill_exists(name):
+        # A shipped copy (config_std) still defines the old name: hide it so it's a rename, not a copy.
+        skill_registry.hide(name)
+
+    updated: List[str] = []
+    profile_manager.load_all()
+    for p in list(profile_manager._profiles.values()):
+        in_skills = name in (p.skills or [])
+        in_critical = name in (p.critical_skills or [])
+        if not (in_skills or in_critical):
+            continue
+        src_path = profile_manager.profile_yaml_path(p.slug)
+        data = yaml.safe_load(src_path.read_text(encoding="utf-8")) or {}
+        for key in ("skills", "critical_skills"):
+            items = data.get(key)
+            if isinstance(items, list):
+                data[key] = [new if x == name else x for x in items]
+        out = profile_manager.profile_yaml_path(p.slug, for_write=True)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with open(out, "w", encoding="utf-8") as fh:
+            yaml.dump(data, fh, allow_unicode=True, sort_keys=False)
+        record_profile_after_admin_save(out)
+        updated.append(p.name)
+
+    profile_manager.invalidate()
+    profile_manager.load_all_if_stale(force=True)
+    skill_registry.reload()
+    return {"status": "success", "name": new, "profiles": updated}
+
+
 @router.get("/skills/{name}")
 async def get_skill(name: str):
     skill_registry.reload()
@@ -879,6 +972,7 @@ async def get_skill(name: str):
 
 @router.post("/skills")
 async def save_skill(s: SkillUpdate):
+    skill_registry.unhide(s.name)
     existing_path = skill_registry.get_skill_path(s.name)
     if existing_path:
         rel_path = None
