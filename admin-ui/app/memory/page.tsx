@@ -17,7 +17,6 @@ import {
   Calendar,
   User,
   Plus,
-  AlertTriangle,
   Eye,
   Save,
 } from "lucide-react";
@@ -25,6 +24,8 @@ import { cn } from "@/lib/cn";
 import { apiBase } from "@/lib/api";
 import { PageToast, type ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
+import { Select } from "@/components/ui/Select";
+import { DeleteDialog, nameSlot } from "@/components/ui/ConfirmDialogs";
 import { ghostBtn, inputCls, outlineBtn, solidBtn, dangerBtn } from "@/components/ui/classes";
 
 interface ProjectMember {
@@ -48,6 +49,38 @@ interface Project {
   members: ProjectMember[];
 }
 
+const ROLE_OPTIONS = [
+  { value: "member", label: "Member", description: "Can use the project's memory" },
+  { value: "owner", label: "Owner", description: "Can also manage the project" },
+];
+
+const SCOPE_OPTIONS = [
+  { value: "inherit", label: "Inherit", description: "Use the tenant default" },
+  { value: "shared", label: "Shared", description: "Everyone shares the same results" },
+  { value: "per_user", label: "Per user", description: "Results are isolated per user" },
+];
+
+const SCOPE_LABELS: Record<string, string> = Object.fromEntries(SCOPE_OPTIONS.map((o) => [o.value, o.label]));
+
+const DELETE_TEXT: Record<string, string> = {
+  "delete.title": "Delete this memory project?",
+  "delete.body": `${nameSlot} will be permanently deleted, with all its members and cached queries. This cannot be undone.`,
+  "delete.confirm_label": `Type ${nameSlot} to confirm`,
+  "delete.cancel": "Cancel",
+  "delete.confirm": "Delete",
+  "delete.deleting": "Deleting…",
+};
+
+/** Page strings are plain English; adapts them to the shared dialog's translator signature. */
+const deleteText = (key: string, vars?: Record<string, string | number>) =>
+  (DELETE_TEXT[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_, n) => String(vars?.[n] ?? ""));
+
+function hueOf(key: string): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 360;
+  return h;
+}
+
 interface ProfileRow {
   name: string;
   slug?: string;
@@ -67,6 +100,7 @@ export default function MemoryPage() {
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [projectDetails, setProjectDetails] = useState<Project | null>(null);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [detailsTab, setDetailsTab] = useState<"overview" | "members">("overview");
 
   const [isDeleteProjOpen, setIsDeleteProjOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -287,6 +321,7 @@ export default function MemoryPage() {
     setEditDescription(p.description || "");
     setEditProfileSlug(p.profile_slug || "");
     setIsEditingDetails(false);
+    setDetailsTab("overview");
     setIsDetailsOpen(true);
   };
 
@@ -310,8 +345,10 @@ export default function MemoryPage() {
     }
   };
 
-  const selectCls =
-    "focus-ring w-full rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm transition-colors hover:border-foreground/25 focus:border-foreground/40";
+  const profileOptions = [
+    { value: "", label: "No profile" },
+    ...profiles.map((p) => ({ value: p.slug || p.name.replace(/\s+/g, "_").toLowerCase(), label: p.name })),
+  ];
 
   return (
     <div className="mx-auto flex max-w-[84rem] flex-col gap-6">
@@ -456,233 +493,197 @@ export default function MemoryPage() {
         )}
       </section>
 
-      {/* MODAL: Project Details & Members */}
+      {/* MODAL: Project details & members */}
       {isDetailsOpen && projectDetails && (
         <Dialog
-          title={isEditingDetails ? "Edit Project" : projectDetails.display_name}
+          title={isEditingDetails ? "Edit project" : projectDetails.display_name}
           closeLabel="Close"
           onClose={closeDetails}
           className="max-w-2xl"
         >
           <div className="flex flex-col gap-5">
-            <p className="font-mono text-xs text-muted-foreground">slug: {projectDetails.slug}</p>
+            <p className="-mt-1 font-mono text-xs text-muted-foreground">{projectDetails.slug}</p>
 
-            {isEditingDetails ? (
-              <form onSubmit={handleEditProject} className="flex flex-col gap-4">
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium">Display Name</span>
-                  <input
-                    required
-                    value={editDisplayName}
-                    onChange={(e) => setEditDisplayName(e.target.value)}
-                    className={inputCls}
-                  />
-                </label>
-
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium">Description</span>
-                  <textarea
-                    value={editDescription}
-                    onChange={(e) => setEditDescription(e.target.value)}
-                    rows={3}
-                    className={cn(inputCls, "resize-none")}
-                  />
-                </label>
-
-                <label className="flex flex-col gap-1.5">
-                  <span className="text-sm font-medium">Linked Profile</span>
-                  <select
-                    value={editProfileSlug}
-                    onChange={(e) => setEditProfileSlug(e.target.value)}
-                    className={selectCls}
-                  >
-                    <option value="">— No Profile —</option>
-                    {profiles.map((p) => {
-                      const s = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
-                      return (
-                        <option key={p.name} value={s}>
-                          {p.name}
-                        </option>
-                      );
-                    })}
-                  </select>
-                </label>
-
-                <div className="flex justify-end gap-2 pt-1">
-                  <button type="button" onClick={() => setIsEditingDetails(false)} className={ghostBtn}>
-                    Cancel
-                  </button>
-                  <button type="submit" disabled={loading} className={solidBtn}>
-                    {loading ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                    ) : (
-                      <Save className="h-3.5 w-3.5" aria-hidden />
+            <div role="tablist" aria-label="Project sections" className="flex gap-1 border-b border-border">
+              {(["overview", "members"] as const).map((id) => {
+                const active = detailsTab === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setDetailsTab(id)}
+                    className={cn(
+                      "focus-ring -mb-px flex items-center gap-2 border-b-2 px-3 pb-2.5 pt-1 text-sm font-medium transition-colors",
+                      active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                     )}
-                    Save Details
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <>
-                {projectDetails.description && (
-                  <p className="text-sm leading-relaxed text-muted-foreground">{projectDetails.description}</p>
-                )}
-
-                <div className="rounded-2xl border border-border/60 bg-secondary/30 px-4 py-3">
-                  <dl className="grid gap-2 text-sm sm:grid-cols-2">
-                    <div className="flex items-center gap-2">
-                      <Shield className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                      <dt className="text-muted-foreground">Datasource</dt>
-                      <dd className="ml-auto font-mono text-xs font-medium">{projectDetails.datasource_key}</dd>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                      <dt className="text-muted-foreground">Creator</dt>
-                      <dd className="ml-auto text-xs font-medium">{projectDetails.created_by || "system"}</dd>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Shield className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                      <dt className="text-muted-foreground">Scope</dt>
-                      <dd className="ml-auto font-mono text-xs font-medium uppercase">{projectDetails.scope_mode}</dd>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                      <dt className="text-muted-foreground">Created</dt>
-                      <dd className="ml-auto text-xs tabular-nums">{formatDate(projectDetails.created_at)}</dd>
-                    </div>
-                    {projectDetails.profile_slug && (
-                      <div className="flex items-center gap-2 sm:col-span-2">
-                        <CheckCircle className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                        <dt className="text-muted-foreground">Profile</dt>
-                        <dd className="ml-auto font-mono text-xs font-medium">{projectDetails.profile_slug}</dd>
-                      </div>
-                    )}
-                  </dl>
-                </div>
-
-                <div className="flex justify-end">
-                  <button type="button" onClick={() => setIsEditingDetails(true)} className={ghostBtn}>
-                    <Edit2 className="h-3.5 w-3.5" aria-hidden />
-                    Edit Details
-                  </button>
-                </div>
-              </>
-            )}
-
-            {/* Members section */}
-            <div className="flex flex-col gap-3 border-t border-border/60 pt-4">
-              <h3 className="text-sm font-semibold">
-                Members
-                <span className="ml-1.5 rounded-full bg-secondary px-1.5 py-px text-xs tabular-nums text-muted-foreground">
-                  {projectDetails.members?.length || 0}
-                </span>
-              </h3>
-
-              <form
-                onSubmit={(e) => handleAddMember(e, projectDetails.slug)}
-                className="flex flex-col gap-2 sm:flex-row sm:items-end"
-              >
-                <label className="flex flex-1 flex-col gap-1.5">
-                  <span className="text-xs font-medium text-muted-foreground">User ID or email</span>
-                  <input
-                    required
-                    placeholder="e.g. mario.rossi, user@example.com"
-                    value={memberUserIdentifier}
-                    onChange={(e) => setMemberUserIdentifier(e.target.value)}
-                    className={inputCls}
-                  />
-                </label>
-                <label className="flex w-full flex-col gap-1.5 sm:w-36">
-                  <span className="text-xs font-medium text-muted-foreground">Role</span>
-                  <select
-                    value={memberRole}
-                    onChange={(e) => setMemberRole(e.target.value)}
-                    className={selectCls}
                   >
-                    <option value="member">Member</option>
-                    <option value="owner">Owner</option>
-                  </select>
-                </label>
-                <button type="submit" disabled={loading} className={solidBtn}>
-                  {loading ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                  ) : (
-                    <UserPlus className="h-3.5 w-3.5" aria-hidden />
-                  )}
-                  Add
-                </button>
-              </form>
-
-              {!projectDetails.members || projectDetails.members.length === 0 ? (
-                <p className="py-4 text-center text-sm text-muted-foreground">No members enrolled.</p>
-              ) : (
-                <div className="overflow-hidden rounded-2xl border border-border/60">
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b border-border/40 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                        <th className="px-4 py-3" scope="col">User</th>
-                        <th className="px-4 py-3" scope="col">Role</th>
-                        <th className="px-4 py-3" scope="col">Added By</th>
-                        <th className="px-4 py-3 text-right" scope="col">Action</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/40">
-                      {projectDetails.members.map((member) => (
-                        <tr key={member.user_identifier} className="transition-colors hover:bg-secondary/30">
-                          <td
-                            className="max-w-[180px] truncate px-4 py-3 font-mono text-xs font-medium"
-                            title={member.user_identifier}
-                          >
-                            {member.user_identifier}
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="rounded-lg border border-border bg-secondary px-2 py-0.5 text-xs font-medium uppercase tracking-wide">
-                              {member.role}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-xs text-muted-foreground">
-                            {member.invited_by || "system"}
-                          </td>
-                          <td className="px-4 py-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setMemberToDelete({
-                                  projectSlug: projectDetails.slug,
-                                  userIdentifier: member.user_identifier,
-                                });
-                                setIsDeleteMemberOpen(true);
-                              }}
-                              title="Revoke access"
-                              className={cn(ghostBtn, "hover:text-destructive")}
-                            >
-                              <UserMinus className="h-3.5 w-3.5" aria-hidden />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                    {id === "overview" ? "Overview" : "Members"}
+                    {id === "members" && (
+                      <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+                        {projectDetails.members?.length || 0}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Footer actions */}
-            <div className="flex items-center gap-2 border-t border-border/60 pt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setProjectToDelete(projectDetails);
-                  setIsDeleteProjOpen(true);
-                }}
-                className={cn(ghostBtn, "mr-auto hover:text-destructive")}
-              >
-                <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                Delete Project
-              </button>
-              <button type="button" onClick={closeDetails} className={ghostBtn}>
-                Close
-              </button>
+            <div className="max-h-[56vh] overflow-y-auto pr-1" role="tabpanel">
+              {detailsTab === "overview" &&
+                (isEditingDetails ? (
+                  <form onSubmit={handleEditProject} className="flex flex-col gap-4">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium">Display name</span>
+                      <input required autoFocus value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} className={inputCls} />
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium">Description</span>
+                      <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} className={cn(inputCls, "resize-none")} />
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium">Linked profile</span>
+                      <Select value={editProfileSlug} onChange={setEditProfileSlug} options={profileOptions} />
+                    </label>
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button type="button" onClick={() => setIsEditingDetails(false)} className={ghostBtn}>
+                        Cancel
+                      </button>
+                      <button type="submit" disabled={loading} className={solidBtn}>
+                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Save className="h-3.5 w-3.5" aria-hidden />}
+                        Save changes
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="flex flex-col gap-5">
+                    <p className={cn("text-sm leading-relaxed", projectDetails.description ? "text-foreground" : "text-muted-foreground")}>
+                      {projectDetails.description || "No description."}
+                    </p>
+
+                    <dl className="grid gap-x-6 gap-y-3 rounded-2xl border border-border/70 p-4 text-sm sm:grid-cols-2">
+                      {[
+                        {
+                          icon: Shield,
+                          label: "Source database",
+                          value: projectDetails.datasource_key.startsWith("default:") ? "Not configured" : projectDetails.datasource_key,
+                          mono: !projectDetails.datasource_key.startsWith("default:"),
+                          hint: projectDetails.datasource_key.startsWith("default:")
+                            ? "No Postgres connection was found when this project was created."
+                            : "Queries learned here are kept separate from other databases.",
+                        },
+                        { icon: Users, label: "Scope", value: SCOPE_LABELS[projectDetails.scope_mode] ?? projectDetails.scope_mode },
+                        { icon: CheckCircle, label: "Linked profile", value: projectDetails.profile_slug || "None", mono: Boolean(projectDetails.profile_slug) },
+                        { icon: User, label: "Created by", value: projectDetails.created_by || "system" },
+                        { icon: Calendar, label: "Created", value: formatDate(projectDetails.created_at) },
+                      ].map(({ icon: Icon, label, value, mono, hint }) => (
+                        <div key={label} className="flex min-w-0 flex-col gap-0.5">
+                          <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Icon className="h-3.5 w-3.5" aria-hidden />
+                            {label}
+                          </dt>
+                          <dd className={cn("truncate", mono && "font-mono text-[13px]")} title={hint ?? value}>
+                            {value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+
+                    <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProjectToDelete(projectDetails);
+                          setIsDeleteProjOpen(true);
+                        }}
+                        className={cn(ghostBtn, "hover:text-destructive")}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        Delete project
+                      </button>
+                      <button type="button" onClick={() => setIsEditingDetails(true)} className={cn(outlineBtn, "ml-auto")}>
+                        <Edit2 className="h-3.5 w-3.5" aria-hidden />
+                        Edit details
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+              {detailsTab === "members" && (
+                <div className="flex flex-col gap-4">
+                  <form onSubmit={(e) => handleAddMember(e, projectDetails.slug)} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+                      <span className="text-sm font-medium">Add a member</span>
+                      <input
+                        required
+                        placeholder="User ID or email"
+                        value={memberUserIdentifier}
+                        onChange={(e) => setMemberUserIdentifier(e.target.value)}
+                        className={inputCls}
+                      />
+                    </label>
+                    <div className="sm:w-40">
+                      <Select value={memberRole} onChange={setMemberRole} aria-label="Role" options={ROLE_OPTIONS} />
+                    </div>
+                    <button type="submit" disabled={loading || !memberUserIdentifier.trim()} className={cn(solidBtn, "h-[2.625rem] justify-center")}>
+                      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <UserPlus className="h-3.5 w-3.5" aria-hidden />}
+                      Add
+                    </button>
+                  </form>
+
+                  {!projectDetails.members || projectDetails.members.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center">
+                      <p className="text-sm font-medium">No members yet</p>
+                      <p className="mx-auto mt-1 max-w-[40ch] text-sm text-muted-foreground">
+                        Only the people you add here can use this project&apos;s memory.
+                      </p>
+                    </div>
+                  ) : (
+                    <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/70">
+                      {projectDetails.members.map((member) => (
+                        <li key={member.user_identifier} className="flex items-center gap-3 px-4 py-3">
+                          <span
+                            aria-hidden
+                            style={{ "--h": hueOf(member.user_identifier) } as React.CSSProperties}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[oklch(0.93_0.06_var(--h))] text-sm font-semibold uppercase text-[oklch(0.4_0.12_var(--h))] dark:bg-[oklch(0.32_0.07_var(--h))] dark:text-[oklch(0.88_0.08_var(--h))]"
+                          >
+                            {member.user_identifier.charAt(0)}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium" title={member.user_identifier}>
+                              {member.user_identifier}
+                            </div>
+                            <div className="truncate text-xs text-muted-foreground">
+                              Added by {member.invited_by || "system"} · {formatDate(member.created_at)}
+                            </div>
+                          </div>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-md px-2 py-0.5 text-xs font-medium",
+                              member.role === "owner" ? "bg-foreground text-background" : "bg-secondary text-muted-foreground",
+                            )}
+                          >
+                            {member.role === "owner" ? "Owner" : "Member"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMemberToDelete({ projectSlug: projectDetails.slug, userIdentifier: member.user_identifier });
+                              setIsDeleteMemberOpen(true);
+                            }}
+                            aria-label={`Revoke access for ${member.user_identifier}`}
+                            title="Revoke access"
+                            className={cn(ghostBtn, "h-8 w-8 shrink-0 justify-center px-0 hover:text-destructive")}
+                          >
+                            <UserMinus className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </Dialog>
@@ -740,34 +741,12 @@ export default function MemoryPage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium">Linked Profile</span>
-                <select
-                  value={createProfileSlug}
-                  onChange={(e) => setCreateProfileSlug(e.target.value)}
-                  className={selectCls}
-                >
-                  <option value="">— No Profile —</option>
-                  {profiles.map((p) => {
-                    const s = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
-                    return (
-                      <option key={p.name} value={s}>
-                        {p.name}
-                      </option>
-                    );
-                  })}
-                </select>
+                <Select value={createProfileSlug} onChange={setCreateProfileSlug} options={profileOptions} />
               </label>
 
               <label className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium">Scope Mode</span>
-                <select
-                  value={createScopeMode}
-                  onChange={(e) => setCreateScopeMode(e.target.value)}
-                  className={selectCls}
-                >
-                  <option value="inherit">Inherit (tenant default)</option>
-                  <option value="shared">Shared (everyone shares)</option>
-                  <option value="per_user">Per User (isolated)</option>
-                </select>
+                <Select value={createScopeMode} onChange={setCreateScopeMode} options={SCOPE_OPTIONS} />
               </label>
             </div>
 
@@ -783,55 +762,19 @@ export default function MemoryPage() {
         </Dialog>
       )}
 
-      {/* CONFIRM: Delete Project */}
+      {/* CONFIRM: Delete Project (type the name to confirm) */}
       {isDeleteProjOpen && projectToDelete && (
-        <Dialog
-          title="Delete Project"
-          closeLabel="Cancel"
+        <DeleteDialog
+          name={projectToDelete.display_name}
+          busy={loading}
+          ns="delete"
+          t={deleteText}
+          onConfirm={() => void handleDeleteProject()}
           onClose={() => {
             setIsDeleteProjOpen(false);
             setProjectToDelete(null);
           }}
-        >
-          <div className="flex flex-col gap-4">
-            <div
-              className="flex items-start gap-3 rounded-2xl bg-destructive/10 px-4 py-3 text-sm"
-              role="alert"
-            >
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
-              <p>
-                You are about to permanently delete{" "}
-                <strong className="font-semibold">&quot;{projectToDelete.display_name}&quot;</strong>{" "}
-                ({projectToDelete.slug}). All associated members and cached queries will be removed.
-              </p>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                className={ghostBtn}
-                onClick={() => {
-                  setIsDeleteProjOpen(false);
-                  setProjectToDelete(null);
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={() => void handleDeleteProject()}
-                disabled={loading}
-                className={dangerBtn}
-              >
-                {loading ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
-                ) : (
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                )}
-                {loading ? "Deleting…" : "Delete Project"}
-              </button>
-            </div>
-          </div>
-        </Dialog>
+        />
       )}
 
       {/* CONFIRM: Revoke Member Access */}
