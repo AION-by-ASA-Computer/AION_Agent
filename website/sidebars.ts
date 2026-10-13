@@ -94,6 +94,7 @@ const sidebars: SidebarsConfig = {
         'mcp/promo-render',
         'mcp/user-isolation-and-credentials',
         'mcp/connector-catalog',
+        'mcp/microsoft-365',
         'mcp/hub-wizard',
         'mcp/orchestration',
       ],

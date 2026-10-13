@@ -19,6 +19,20 @@ def test_build_clickup_registry_config_remote():
     assert cfg.get("auth_env_var", "").endswith("__OAUTH_TOKEN")
 
 
+def test_build_ms365_stdio_config():
+    catalog = load_mcp_connector_catalog()
+    row = _connector_by_id(catalog, "ms365")
+    assert row is not None
+    slug, cfg = build_registry_config_for_connector(row)
+    assert slug == "ms365"
+    assert cfg.get("command") == "npx"
+    assert "@softeria/ms-365-mcp-server" in (cfg.get("args") or [])
+    assert "--read-only" in (cfg.get("args") or [])
+    env = cfg.get("env") or {}
+    assert env.get("MS365_MCP_OAUTH_TOKEN") == "${AION_USER_MS365__OAUTH_TOKEN}"
+    assert cfg.get("aion_connector_id") == "ms365"
+
+
 def test_build_email_imap_stdio_config():
     catalog = load_mcp_connector_catalog()
     row = _connector_by_id(catalog, "email_imap")

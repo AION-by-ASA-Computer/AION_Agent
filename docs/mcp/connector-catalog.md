@@ -43,6 +43,8 @@ Non serve codice né stringhe i18n per servizio: `title` e `auth_type` guidano A
 
 Per SharePoint/OneDrive gli endpoint Entra usano `{tenant_id}` nel catalogo; al runtime viene sostituito con il GUID estratto dall’`remote_url` installato (`…/tenants/{guid}/servers/…`).
 
+**Microsoft 365 (Softeria)** è un connettore stdio separato da Agent 365: AION fa il login Graph e passa il token al processo `npx`. La registrazione Entra, i tenant `common` / `consumers` e i preset sono in [microsoft-365.md](microsoft-365.md).
+
 Campi aggiuntivi utili:
 
 - `remote_url_template: true` — URL con placeholder (es. `{tenant_id}`) da completare prima dell'install;

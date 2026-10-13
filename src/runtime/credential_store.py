@@ -267,6 +267,19 @@ def _credential_lookup_keys(key: str) -> tuple[str, ...]:
     return (k,) + aliases
 
 
+_BEARER_PREFIX_KEYS = frozenset({"OAUTH_TOKEN", "API_KEY"})
+
+
+def normalize_inline_secret(value: str, *, cred_key: str = "") -> str:
+    """Drop a leading ``Bearer`` scheme. Callers add it again in the header."""
+    text = (value or "").strip()
+    if cred_key and cred_key not in _BEARER_PREFIX_KEYS:
+        return text
+    if text.lower().startswith("bearer "):
+        return text[7:].strip()
+    return text
+
+
 def _normalize_expiry(expires_at: Optional[datetime]) -> Optional[datetime]:
     if not expires_at:
         return None
@@ -704,11 +717,11 @@ async def resolve_user_credential_string(
                 effective_uid, slug, cred_key, tenant_id=tenant_id
             )
             if val is not None:
-                return val
+                return normalize_inline_secret(val, cred_key=cred_key)
         env_name = f"{full_prefix}__{cred_key}"
         val = os.environ.get(env_name)
         if val is not None:
-            return val
+            return normalize_inline_secret(val, cred_key=cred_key)
         return ""
 
     m2 = _USER_CREDENTIAL_SIMPLE_RE.match(obj)
@@ -877,4 +890,50 @@ async def resolve_mcp_env_for_user(
             out[k] = val
         else:
             out[k] = v
+    if not is_probe:
+        await _fill_oauth_alias_env(
+            out, user_id=user_id, tenant_id=tenant_id, server_slug=server_slug
+        )
     return out
+
+
+def _env_slot_filled(val: Any) -> bool:
+    if val is None:
+        return False
+    text = str(val).strip()
+    return bool(text) and not text.startswith("${")
+
+
+async def _fill_oauth_alias_env(
+    env: Dict[str, Any],
+    *,
+    user_id: str,
+    tenant_id: str,
+    server_slug: str,
+) -> None:
+    """Copia OAUTH_TOKEN nella variabile che il processo MCP legge davvero."""
+    from src.mcp_connector_catalog import (
+        _parse_runtime_env_alias_entries,
+        load_mcp_connector_catalog,
+        resolve_connector_row_for_mcp_server,
+    )
+
+    catalog = load_mcp_connector_catalog()
+    row = resolve_connector_row_for_mcp_server(server_slug, {}, catalog)
+    if not row:
+        return
+    for dest, sources in _parse_runtime_env_alias_entries(
+        row.get("runtime_env_aliases")
+    ):
+        if _env_slot_filled(env.get(dest)):
+            continue
+        for src in sources:
+            if _env_slot_filled(env.get(src)):
+                env[dest] = env[src]
+                break
+            val = await get_credential(
+                user_id or "default", server_slug, src, tenant_id=tenant_id
+            )
+            if val:
+                env[dest] = normalize_inline_secret(val, cred_key=src)
+                break

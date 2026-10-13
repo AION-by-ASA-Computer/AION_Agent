@@ -5,6 +5,7 @@ from . import (
     conversations,
     files,
     mcp_integrations,
+    openai_compat,
     project_memory,
     query_memory,
     runtime_settings,
@@ -16,6 +17,7 @@ from src.api.cron_user import router as cron_user_router
 api_v1_router = APIRouter(prefix="/v1")
 api_v1_router.include_router(conversations.router, tags=["v1-conversations"])
 api_v1_router.include_router(chat.router, tags=["v1-chat"])
+api_v1_router.include_router(openai_compat.router)
 api_v1_router.include_router(query_memory.router, tags=["v1-query-memory"])
 api_v1_router.include_router(project_memory.router, tags=["v1-project-memory"])
 api_v1_router.include_router(user_memory.router, tags=["v1-user-memory"])

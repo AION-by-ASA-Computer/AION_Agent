@@ -657,6 +657,16 @@ export default function MCPHub() {
     );
   }, [connectorRows]);
 
+  const hubCatalogConnectors = useMemo(() => {
+    return (
+      connectorRows as Array<RemoteCatalogPreset & { featured_catalog?: boolean }>
+    ).filter(
+      (c) =>
+        (c.featured_remote && c.install_type === "remote" && Boolean(c.remote_url)) ||
+        (c.install_type === "stdio" && c.featured_catalog),
+    );
+  }, [connectorRows]);
+
   const handleInstallFromCatalog = async (connectorId: string, row?: Record<string, unknown>) => {
     if (row?.remote_url_template) {
       openRemoteInstall({
@@ -716,10 +726,10 @@ export default function MCPHub() {
 
   const filteredFeaturedConnectors = useMemo(() => {
     if (marketCategory === "all" || marketCategory === "official") {
-      return featuredRemoteConnectors;
+      return hubCatalogConnectors;
     }
-    return featuredRemoteConnectors.filter((c) => categorizeMcp(c as any) === marketCategory);
-  }, [featuredRemoteConnectors, marketCategory]);
+    return hubCatalogConnectors.filter((c) => categorizeMcp(c as any) === marketCategory);
+  }, [hubCatalogConnectors, marketCategory]);
 
   const filteredInstalledItems = useMemo(() => {
     return Object.entries(installedItems).filter(([name, config]: [string, any]) => {
@@ -1227,9 +1237,11 @@ export default function MCPHub() {
                               )}
                             </div>
                             <div className="text-[11px] text-emerald-400/80 truncate">
-                              {hasOAuth
-                                ? "Official integration with verified OAuth authentication"
-                                : "Pre-verified official integration with direct support"}
+                              {c.install_type === "stdio"
+                                ? "Runs on the AION backend. Each user signs in from chat."
+                                : hasOAuth
+                                  ? "Official integration with verified OAuth authentication"
+                                  : "Pre-verified official integration with direct support"}
                             </div>
                           </div>
                         </div>

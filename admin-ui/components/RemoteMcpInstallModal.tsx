@@ -22,6 +22,7 @@ export type RemoteCatalogPreset = {
   auth_type?: string;
   official_doc_url?: string;
   featured_remote?: boolean;
+  featured_catalog?: boolean;
   install_type?: string;
 };
 

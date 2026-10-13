@@ -271,6 +271,27 @@ async def list_runtime_mcp_errors(
         for slug, err in cached.items():
             if slug not in profile_slugs:
                 continue
+            if "credenziali mancanti" in err:
+                old_ctx = mcp_manager._session_ctx.get(sid)
+                profile_slug = old_ctx[0] if old_ctx else profile.strip()
+                tenant_id = old_ctx[2] if old_ctx and len(old_ctx) > 2 else "default"
+                mcp_manager._session_ctx[sid] = (profile_slug, user_id, tenant_id)
+                try:
+                    still_missing = await mcp_manager._warm_credentials_missing(
+                        sid, slug
+                    )
+                finally:
+                    if old_ctx is None:
+                        mcp_manager._session_ctx.pop(sid, None)
+                    else:
+                        mcp_manager._session_ctx[sid] = old_ctx
+                if not still_missing:
+                    from src.runtime.mcp_health import clear_mcp_load_errors
+
+                    clear_mcp_load_errors(sid, slug)
+                    pool_sid = mcp_manager._resolve_pool_key(sid, slug)[0]
+                    mcp_manager._clear_warm_failure(pool_sid, slug)
+                    continue
             cfg = mcp_manager.get_server_config(slug) or {}
             hint = _hint_for_error(slug, cfg, err)
             rows.append(
