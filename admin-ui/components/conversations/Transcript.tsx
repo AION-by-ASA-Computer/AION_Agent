@@ -38,7 +38,7 @@ const mdComponents: Components = {
   },
 };
 
-function Markdown({ text }: { text: string }) {
+export function Markdown({ text }: { text: string }) {
   return (
     <div className="prose-chat">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>

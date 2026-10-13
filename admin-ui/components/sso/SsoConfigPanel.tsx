@@ -3,7 +3,19 @@
 import { useEffect, useRef, useState } from "react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
-import { Shield, Copy, Check, AlertTriangle, ExternalLink, Loader2, Info, Save } from "lucide-react";
+import { Shield, Copy, Check, AlertTriangle, Loader2, Info, Save } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
+
+/** Il provider accetta l'attivazione solo se la verifica ha meno di 30 minuti. */
+const VALIDATION_TTL_MS = 30 * 60 * 1000;
+
+function validatedAtMs(v: string | null): number {
+  if (!v) return 0;
+  // Il backend puo' mandare timestamp UTC senza fuso: senza "Z" verrebbero letti come ora locale.
+  const ms = Date.parse(/(Z|[+-]\d\d:?\d\d)$/.test(v) ? v : `${v}Z`);
+  return Number.isFinite(ms) ? ms : 0;
+}
 
 export function SsoConfigPanel({
   forcedProvider,
@@ -40,10 +52,23 @@ export function SsoConfigPanel({
     };
   }, [forcedProvider]);
 
+  // "Validata" vale solo per 30 minuti: allo scadere il banner sparisce da solo.
+  const [now, setNow] = useState(() => Date.now());
+  const expiresAt = validatedAtMs(validatedAt) + VALIDATION_TTL_MS;
+  const fresh = !!validatedAt && expiresAt > now;
   useEffect(() => {
-    onValidatedChange?.(!!validatedAt);
+    if (!validatedAt) return;
+    setNow(Date.now());
+    const wait = expiresAt - Date.now();
+    if (wait <= 0) return;
+    const id = setTimeout(() => setNow(Date.now()), wait + 250);
+    return () => clearTimeout(id);
+  }, [validatedAt, expiresAt]);
+
+  useEffect(() => {
+    onValidatedChange?.(fresh);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [validatedAt]);
+  }, [fresh]);
 
   // Il redirect URI da registrare sull'IdP e' quello che il BACKEND usa davvero
   // (dietro Caddy e' sotto /api, in dev e' su un'altra porta): non va dedotto da window.location.
@@ -181,162 +206,161 @@ export function SsoConfigPanel({
   };
 
   if (loading) {
-    return <div className="text-sm text-gray-400 animate-pulse">Caricamento configurazione SSO...</div>;
+    return (
+      <div className="flex items-center gap-2 px-1 py-6 text-sm text-muted-foreground" role="status">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        Caricamento configurazione SSO…
+      </div>
+    );
   }
 
+  const labelCls = "text-sm font-medium";
+  const linkCls = "font-medium underline underline-offset-4 hover:text-foreground";
+
   return (
-    <div className="space-y-6 w-full text-left p-6 rounded-xl border border-[#222] bg-[#070707]">
-      <div className="space-y-6">
+    <div className="flex w-full flex-col gap-5 rounded-2xl border border-border/70 bg-card p-5 text-left sm:p-6">
+      <div className="rounded-xl bg-secondary/60 px-4 py-3.5 text-sm">
+        {forcedProvider === "microsoft" && (
+          <div className="flex flex-col gap-2">
+            <h4 className="flex items-center gap-2 font-semibold"><Info className="h-4 w-4 text-muted-foreground" aria-hidden /> Come configurare Microsoft Entra ID</h4>
+            <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+              <li>Vai su <a href="https://entra.microsoft.com/" target="_blank" rel="noreferrer" className={linkCls}>Microsoft Entra admin center</a> &gt; <strong>App registrations</strong> &gt; <strong>New registration</strong>.</li>
+              <li>Scegli <strong>Web</strong> come Redirect URI e incolla l'URI fornito qui sotto. Clicca <strong>Register</strong>.</li>
+              <li>Dalla pagina <strong>Overview</strong>, copia <em>Application (client) ID</em> e <em>Directory (tenant) ID</em> e incollali qui sotto.</li>
+              <li>Vai su <strong>Certificates & secrets</strong>, crea un nuovo <strong>Client secret</strong> e copia il <em>Value</em>.</li>
+            </ol>
+          </div>
+        )}
+        {forcedProvider === "google" && (
+          <div className="flex flex-col gap-2">
+            <h4 className="flex items-center gap-2 font-semibold"><Info className="h-4 w-4 text-muted-foreground" aria-hidden /> Come configurare Google Workspace</h4>
+            <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
+              <li>Vai su <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className={linkCls}>Google Cloud Console</a> e seleziona il tuo progetto.</li>
+              <li>Se non l'hai fatto, configura prima la <strong>OAuth consent screen</strong> da <em>APIs & Services</em>.</li>
+              <li>Vai su <strong>Credentials</strong> &gt; <strong>+ Create Credentials</strong> &gt; <strong>OAuth client ID</strong> (tipo: Web application).</li>
+              <li>In <strong>Authorized redirect URIs</strong> incolla l'URI fornito qui sotto e clicca <strong>Create</strong>.</li>
+              <li>Copia <em>Client ID</em> e <em>Client secret</em> mostrati a schermo e incollali qui sotto.</li>
+            </ol>
+          </div>
+        )}
+      </div>
 
-        <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 text-sm text-gray-300">
-          {forcedProvider === "microsoft" && (
-            <div className="space-y-2">
-              <h4 className="font-bold text-white flex items-center gap-2"><Info className="w-4 h-4 text-blue-400" /> Come configurare Microsoft Entra ID</h4>
-              <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-400">
-                <li>Vai su <a href="https://entra.microsoft.com/" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Microsoft Entra admin center</a> &gt; <strong>App registrations</strong> &gt; <strong>New registration</strong>.</li>
-                <li>Scegli <strong>Web</strong> come Redirect URI e incolla l'URI fornito qui sotto. Clicca <strong>Register</strong>.</li>
-                <li>Dalla pagina <strong>Overview</strong>, copia <em>Application (client) ID</em> e <em>Directory (tenant) ID</em> e incollali qui sotto.</li>
-                <li>Vai su <strong>Certificates & secrets</strong>, crea un nuovo <strong>Client secret</strong> e copia il <em>Value</em>.</li>
-              </ol>
-            </div>
-          )}
-          {forcedProvider === "google" && (
-            <div className="space-y-2">
-              <h4 className="font-bold text-white flex items-center gap-2"><Info className="w-4 h-4 text-blue-400" /> Come configurare Google Workspace</h4>
-              <ol className="list-decimal pl-5 space-y-1 text-xs text-gray-400">
-                <li>Vai su <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">Google Cloud Console</a> e seleziona il tuo progetto.</li>
-                <li>Se non l'hai fatto, configura prima la <strong>OAuth consent screen</strong> da <em>APIs & Services</em>.</li>
-                <li>Vai su <strong>Credentials</strong> &gt; <strong>+ Create Credentials</strong> &gt; <strong>OAuth client ID</strong> (tipo: Web application).</li>
-                <li>In <strong>Authorized redirect URIs</strong> incolla l'URI fornito qui sotto e clicca <strong>Create</strong>.</li>
-                <li>Copia <em>Client ID</em> e <em>Client secret</em> mostrati a schermo e incollali qui sotto.</li>
-              </ol>
-            </div>
-          )}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        {forcedProvider === "microsoft" && (
+          <label className="flex flex-col gap-1.5 md:col-span-2">
+            <span className={labelCls}>Directory (tenant) ID</span>
+            <input type="text" value={directoryId} onChange={(e) => setDirectoryId(e.target.value)} className={cn(inputCls, "font-mono")} placeholder="es. 82865…" />
+          </label>
+        )}
+
+        <label className="flex flex-col gap-1.5">
+          <span className={labelCls}>Client ID</span>
+          <input type="text" value={clientId} onChange={(e) => setClientId(e.target.value)} className={cn(inputCls, "font-mono")} placeholder="Client ID / Application ID" />
+        </label>
+
+        <label className="flex flex-col gap-1.5">
+          <span className={labelCls}>Client secret</span>
+          <input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} autoComplete="new-password" className={inputCls} placeholder={validatedAt && !clientSecret ? "•••••••• (lascia vuoto per non modificare)" : "Client secret"} />
+        </label>
+
+        <label className="flex flex-col gap-1.5 md:col-span-2">
+          <span className={labelCls}>
+            {forcedProvider === "google" ? "Dominio Google Workspace" : "Dominio Microsoft Entra ID"}
+            <span className="font-normal text-muted-foreground"> · opzionale, es. azienda.it</span>
+          </span>
+          <input type="text" value={allowedDomains} onChange={(e) => setAllowedDomains(e.target.value)} className={inputCls} placeholder="Restringi il login a questo dominio (separa più domini con una virgola)" />
+        </label>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <h4 className={labelCls}>Redirect URI autorizzato</h4>
+        <p className="text-xs text-muted-foreground">
+          Copia questo link e incollalo nella configurazione della tua app {forcedProvider === "microsoft" ? "su Azure Portal" : "sulla Google Cloud Console"}.
+        </p>
+        <div className="flex items-center gap-2">
+          <code className="min-w-0 flex-1 truncate rounded-xl border border-border bg-background px-3.5 py-2.5 font-mono text-xs">{redirectUri || "…"}</code>
+          <button type="button" onClick={handleCopy} className={cn(outlineBtn, "w-9 shrink-0 justify-center px-0")} aria-label={copied ? "Copiato" : "Copia redirect URI"}>
+            {copied ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
+          </button>
         </div>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {forcedProvider === "microsoft" && (
-            <div className="space-y-2 md:col-span-2">
-              <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Directory (tenant) ID</label>
-              <input type="text" value={directoryId} onChange={(e) => setDirectoryId(e.target.value)} className="w-full bg-black border border-[#333] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all" placeholder="es. 82865..." />
-            </div>
-          )}
-
-          <div className="space-y-2 md:col-span-1">
-            <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Client ID</label>
-            <input type="text" value={clientId} onChange={(e) => setClientId(e.target.value)} className="w-full bg-black border border-[#333] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all" placeholder="Client ID / Application ID" />
-          </div>
-
-          <div className="space-y-2 md:col-span-1">
-            <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Client Secret</label>
-            <input type="password" value={clientSecret} onChange={(e) => setClientSecret(e.target.value)} className="w-full bg-black border border-[#333] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all" placeholder={validatedAt && !clientSecret ? "•••••••••••• (lascia vuoto per non modificare)" : "Client Secret"} />
-          </div>
-
-          <div className="space-y-2 md:col-span-2">
-            <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
-              {forcedProvider === "google" ? "Dominio Google Workspace" : "Dominio Microsoft Entra ID"} (opzionale, es. azienda.it)
-            </label>
-            <input type="text" value={allowedDomains} onChange={(e) => setAllowedDomains(e.target.value)} className="w-full bg-black border border-[#333] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all" placeholder="Restringi il login solo a questo dominio (o separati da virgola)" />
-          </div>
+      {error && (
+        <div className="flex items-start gap-3 rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <div>{error}</div>
         </div>
+      )}
 
-        <div className="p-4 rounded-xl bg-blue-500/5 border border-blue-500/20 space-y-2">
-          <h4 className="text-xs font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
-            <ExternalLink className="w-4 h-4" /> Redirect URI Autorizzato
-          </h4>
-          <p className="text-xs text-gray-400">
-            Copia questo link e incollalo nella configurazione della tua app {forcedProvider === "microsoft" ? "su Azure Portal" : "sulla Google Cloud Console"}.
-          </p>
-          <div className="flex gap-2 items-center">
-            <code className="flex-1 bg-black p-2 rounded text-xs text-blue-300 font-mono truncate border border-[#333]">
-              {redirectUri || "…"}
-            </code>
-            <button type="button" onClick={handleCopy} className="p-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors">
-              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+      {fresh || (isActive && validatedAt) ? (
+        <div className="flex flex-col gap-3">
+          {fresh && (
+            <div className="flex items-center justify-between gap-3 rounded-2xl bg-success/10 px-4 py-3 text-sm text-success">
+            <div className="flex items-center gap-2.5">
+              <Check className="h-4 w-4 shrink-0" aria-hidden />
+              <span className="font-medium">Configurazione validata</span>
+            </div>
+            <button type="button" onClick={() => { setValidatedAt(null); }} className="focus-ring rounded-md text-xs font-medium underline underline-offset-4">
+              Reimposta
             </button>
           </div>
-        </div>
-
-        {error && (
-          <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-start gap-3 text-sm">
-            <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-            <div>{error}</div>
-          </div>
-        )}
-
-        {validatedAt ? (
-            <div className="space-y-4">
-              <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-between text-sm">
-                <div className="flex items-center gap-3">
-                  <Check className="w-5 h-5 shrink-0" />
-                  <span className="font-semibold">Configurazione validata con successo!</span>
-                </div>
-                <button type="button" onClick={() => { setValidatedAt(null); }} className="text-xs underline hover:text-emerald-300">
-                  Reimposta
-                </button>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  disabled={saving}
-                  onClick={async () => {
-                    setSaving(true);
-                    try {
-                      const domainsList = allowedDomains.split(",").map(d => d.trim()).filter(d => d);
-                      const res = await apiFetch(`${apiBase()}/admin/sso/providers/${forcedProvider}`, {
-                        method: "PUT",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({
-                          client_id: clientId,
-                          directory_tenant_id: forcedProvider === "microsoft" ? directoryId : undefined,
-                          allowed_domains: domainsList.length > 0 ? domainsList : undefined,
-                          auto_provision: true,
-                          default_roles: ["user"],
-                        }),
-                      });
-                      if (!res.ok) throw new Error("Errore nel salvataggio");
-                      fetchProviders(); // Refresh per confermare
-                    } catch (err: any) {
-                      setError(err.message);
-                    } finally {
-                      setSaving(false);
-                    }
-                  }}
-                  className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all bg-[#222] text-white hover:bg-[#333]"
-                >
-                  {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Save className="w-5 h-5" />} Salva Modifiche Domini
-                </button>
-                {!isActive && (
-                  <button
-                    type="button"
-                    onClick={() => onActivate?.()}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all bg-emerald-600 text-white hover:bg-emerald-500"
-                  >
-                    Imposta come Predefinito
-                  </button>
-                )}
-              </div>
-            </div>
-        ) : (
-          <button
-            type="button"
-            disabled={saving || verifying || !clientId || (forcedProvider === "microsoft" && !directoryId)}
-            onClick={handleSaveAndVerify}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-bold transition-all bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {verifying ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" /> In attesa della validazione nel popup...
-              </>
-            ) : (
-              <>
-                <Shield className="w-5 h-5" /> Salva e verifica con il mio account
-              </>
+          )}
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              disabled={saving}
+              onClick={async () => {
+                setSaving(true);
+                try {
+                  const domainsList = allowedDomains.split(",").map(d => d.trim()).filter(d => d);
+                  const res = await apiFetch(`${apiBase()}/admin/sso/providers/${forcedProvider}`, {
+                    method: "PUT",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      client_id: clientId,
+                      directory_tenant_id: forcedProvider === "microsoft" ? directoryId : undefined,
+                      allowed_domains: domainsList.length > 0 ? domainsList : undefined,
+                      auto_provision: true,
+                      default_roles: ["user"],
+                    }),
+                  });
+                  if (!res.ok) throw new Error("Errore nel salvataggio");
+                  fetchProviders(); // Refresh per confermare
+                } catch (err: any) {
+                  setError(err.message);
+                } finally {
+                  setSaving(false);
+                }
+              }}
+              className={outlineBtn}
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Save className="h-3.5 w-3.5" aria-hidden />} Salva modifiche domini
+            </button>
+            {!isActive && fresh && (
+              <button type="button" onClick={() => onActivate?.()} className={solidBtn}>
+                Imposta come predefinito
+              </button>
             )}
-          </button>
-        )}
-
-      </div>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          disabled={saving || verifying || !clientId || (forcedProvider === "microsoft" && !directoryId)}
+          onClick={handleSaveAndVerify}
+          className={cn(solidBtn, "justify-center sm:self-start")}
+        >
+          {verifying ? (
+            <>
+              <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> In attesa della validazione nel popup…
+            </>
+          ) : (
+            <>
+              <Shield className="h-3.5 w-3.5" aria-hidden /> Salva e verifica con il mio account
+            </>
+          )}
+        </button>
+      )}
     </div>
   );
 }

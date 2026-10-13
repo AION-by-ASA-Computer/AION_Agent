@@ -72,18 +72,18 @@ export function TwoFactorPanel() {
   };
 
   if (loading) {
-    return <Loader2 className="w-5 h-5 animate-spin text-gray-500" />;
+    return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />;
   }
   if (!status) return null;
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4 rounded-xl border border-[#262626] bg-[#141414] p-4">
-        <div className="flex items-start gap-3">
-          <ShieldCheck className="w-5 h-5 text-emerald-400 mt-0.5" />
-          <div>
-            <div className="text-sm font-semibold text-white">Richiedi 2FA al login con password</div>
-            <div className="text-xs text-gray-400 mt-1">
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 bg-card px-5 py-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="min-w-0">
+            <div className="text-sm font-medium">Richiedi 2FA al login con password</div>
+            <div className="mt-0.5 text-xs tabular-nums text-muted-foreground">
               Utenti configurati: {status.enrolled_users} / {status.password_users}
               {status.required && !status.effective && !status.force_disabled && " · non attivo con SSO"}
             </div>
@@ -93,32 +93,33 @@ export function TwoFactorPanel() {
           type="button"
           role="switch"
           aria-checked={status.required}
+          aria-label="Richiedi 2FA al login con password"
           disabled={saving || (!status.available && !status.required)}
           onClick={() => toggle(!status.required)}
-          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition disabled:opacity-50 ${
-            status.required ? "bg-emerald-500/40 border-emerald-500/50" : "bg-white/5 border-white/10"
+          className={`focus-ring relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${
+            status.required ? "bg-foreground" : "bg-secondary border border-border"
           }`}
         >
           <span
-            className={`inline-block h-4 w-4 rounded-full bg-white transition-transform ${
-              status.required ? "translate-x-6" : "translate-x-1"
+            className={`inline-block h-4 w-4 rounded-full transition-transform ${
+              status.required ? "translate-x-6 bg-background" : "translate-x-1 bg-muted-foreground"
             }`}
           />
         </button>
       </div>
       {!status.available && (
-        <div className="flex items-start gap-2 text-xs text-amber-300">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
+        <div className="flex items-start gap-2 px-1 text-xs text-warning" role="status">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
           Il 2FA vale solo per il login classico: con SSO attivo non viene applicato.
         </div>
       )}
       {status.force_disabled && (
-        <div className="flex items-start gap-2 text-xs text-amber-300">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
+        <div className="flex items-start gap-2 px-1 text-xs text-warning" role="status">
+          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
           AION_2FA_FORCE_DISABLE=1 è impostato sul server: il 2FA è temporaneamente ignorato.
         </div>
       )}
-      {error && <div className="text-xs text-red-400">{error}</div>}
+      {error && <div className="px-1 text-xs text-destructive" role="alert">{error}</div>}
     </div>
   );
 }

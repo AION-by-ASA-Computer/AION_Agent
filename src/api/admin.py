@@ -3660,13 +3660,61 @@ class UserProfilesUpdate(BaseModel):
 @router.get("/users")
 async def list_users():
     """List all users in the unified database."""
-    from ..data.models import User
+    from ..data.models import User, UserSsoIdentity
     from ..data.user_password import get_roles
+    from ..auth.sso.login_mode import get_login_settings, is_identity_confirmed
+
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+    settings = await get_login_settings(tenant)
+    login_mode = settings.get("login_mode") or "password"
+    provider = settings.get("sso_provider")
+    since = settings.get("migration_started_at")
 
     async with get_async_session_maker()() as session:
         q = select(User).order_by(User.created_at.desc())
         rows = (await session.execute(q)).scalars().all()
+        identities: Dict[str, list] = {}
+        for ident in (await session.execute(select(UserSsoIdentity))).scalars().all():
+            identities.setdefault(ident.user_id, []).append(ident)
+
+        def auth_info(r) -> Dict[str, Any]:
+            idents = identities.get(r.id, [])
+            has_password = r.password_hash is not None
+            exempt = bool(getattr(r, "sso_migration_exempt", False))
+            confirmed = bool(
+                provider
+                and any(
+                    i.provider == provider and is_identity_confirmed(i, since)
+                    for i in idents
+                )
+            )
+            # Metodo di accesso corrente: in modalita' SSO conta solo il provider
+            # attivo se confermato; altrimenti (migrazione non fatta) la password.
+            # Le identita' di provider precedenti non sono piu' valide.
+            if login_mode != "password" and provider and confirmed:
+                login_method = provider
+            elif has_password:
+                login_method = "password"
+            else:
+                login_method = None
+            return {
+                "has_password": has_password,
+                "login_method": login_method,
+                "sso_providers": sorted({i.provider for i in idents}),
+                "sso_migration_exempt": exempt,
+                # Da migrare: SSO attivo, ha ancora la password, non esonerato
+                # e non ha confermato l'identita' sul provider attivo.
+                "migration_pending": bool(
+                    login_mode != "password"
+                    and provider
+                    and has_password
+                    and not exempt
+                    and not confirmed
+                ),
+            }
+
         return {
+            "login_mode": login_mode,
             "users": [
                 {
                     "id": r.id,
@@ -3681,9 +3729,10 @@ async def list_users():
                     "totp_enabled": r.totp_enabled_at is not None,
                     "created_at": r.created_at,
                     "last_active_at": r.last_active_at,
+                    **auth_info(r),
                 }
                 for r in rows
-            ]
+            ],
         }
 
 
