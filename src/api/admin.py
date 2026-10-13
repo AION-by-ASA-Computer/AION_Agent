@@ -82,7 +82,7 @@ from ..data.models import (
     McpServerConfig,
 )
 from ..data.ids import new_uuid7_str
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 
 logger = logging.getLogger("aion.api.admin")
 
@@ -3932,11 +3932,28 @@ async def delete_message_feedback(message_id: str):
 
 
 @router.get("/conversations/global")
-async def list_conversations_global(limit: int = 50):
-    """List all conversations across all users/tenants."""
+async def list_conversations_global(limit: int = 200):
+    """List all conversations across all users/tenants, with per-thread issue counters."""
+    limit = max(1, min(int(limit), 1000))
     async with get_async_session_maker()() as session:
         q = select(Conversation).order_by(Conversation.updated_at.desc()).limit(limit)
         rows = (await session.execute(q)).scalars().all()
+        ids = [r.id for r in rows]
+        disliked: dict[str, int] = {}
+        errored: dict[str, int] = {}
+        if ids:
+            q_down = (
+                select(Message.conversation_id, func.count())
+                .where(Message.conversation_id.in_(ids), Message.rating == -1)
+                .group_by(Message.conversation_id)
+            )
+            disliked = {cid: n for cid, n in (await session.execute(q_down)).all()}
+            q_err = (
+                select(Step.conversation_id, func.count())
+                .where(Step.conversation_id.in_(ids), Step.is_error != 0)
+                .group_by(Step.conversation_id)
+            )
+            errored = {cid: n for cid, n in (await session.execute(q_err)).all()}
         return {
             "conversations": [
                 {
@@ -3948,9 +3965,12 @@ async def list_conversations_global(limit: int = 50):
                     "message_count": r.message_count,
                     "updated_at": r.updated_at,
                     "metadata": json.loads(r.metadata_json or "{}"),
+                    "disliked_count": disliked.get(r.id, 0),
+                    "error_count": errored.get(r.id, 0),
                 }
                 for r in rows
-            ]
+            ],
+            "limit": limit,
         }
 
 

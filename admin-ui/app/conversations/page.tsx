@@ -1,518 +1,406 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle, ArrowLeft, ArrowDown, Check, Copy, Loader2, RefreshCw, ThumbsDown } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
-import { getStoredToken } from "@/lib/auth/storage";
-import { MessageSquare, User, Clock, ChevronRight, Search, X, Terminal, Bot, RefreshCw, Paperclip, FileCode, Layers, Download, ThumbsUp, ThumbsDown } from "lucide-react";
-import { CustomDatePicker } from "@/components/CustomDatePicker";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/use-t";
+import { ghostBtn, outlineBtn } from "@/components/ui/classes";
+import { SearchField } from "@/components/ui/SearchField";
+import { Select } from "@/components/ui/Select";
+import { Transcript } from "@/components/conversations/Transcript";
+import { dayBucket, fullWhen, shortWhen, toMs } from "@/components/conversations/format";
+import { isFlagged, needsAttention, type Conversation, type ThreadMessage } from "@/components/conversations/types";
 
-import { Suspense } from "react";
+const k = "admin_conversations";
+const FETCH_LIMIT = 500;
+const RANGES = [
+  { id: "24h", ms: 24 * 3600_000 },
+  { id: "7d", ms: 7 * 86400_000 },
+  { id: "30d", ms: 30 * 86400_000 },
+  { id: "all", ms: 0 },
+] as const;
+type RangeId = (typeof RANGES)[number]["id"];
+
+const NO_MESSAGES: ThreadMessage[] = [];
+type Thread = { id: string; state: "loading" | "ready" | "error"; messages: ThreadMessage[] };
 
 function ConversationsContent() {
-  const [convs, setConvs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [selectedConv, setSelectedConv] = useState<any | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
+  const t = useT();
+  const router = useRouter();
+  const params = useSearchParams();
+  const selectedId = params.get("id");
+  const messageParam = params.get("message");
 
-  const searchParams = useSearchParams();
-  const preselectedId = searchParams.get("id");
-  const preselectedMessageId = searchParams.get("message");
+  const [convs, setConvs] = useState<Conversation[]>([]);
+  const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
+  const [query, setQuery] = useState("");
+  const [range, setRange] = useState<RangeId>("all");
+  const [profile, setProfile] = useState("");
+  const [attention, setAttention] = useState(false);
+  const [showTools, setShowTools] = useState(false);
+  const [thread, setThread] = useState<Thread | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const flagCursor = useRef(-1);
 
-  useEffect(() => {
-    if (preselectedId && convs.length > 0) {
-      const found = convs.find(c => c.id === preselectedId);
-      if (found) {
-        handleSelectConv(found);
-      }
-    }
-  }, [preselectedId, convs]);
-
-  useEffect(() => {
-    if (preselectedMessageId && messages.length > 0) {
-      setTimeout(() => {
-        const el = document.getElementById(`message-${preselectedMessageId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-      }, 100);
-    }
-  }, [preselectedMessageId, messages]);
-
-  const fetchConvs = () => {
-    setLoading(true);
-    apiFetch(`${apiBase()}/admin/conversations/global`)
-      .then(res => res.ok ? res.json() : Promise.reject(res))
-      .then(data => {
+  const loadList = useCallback(() => {
+    apiFetch(`${apiBase()}/admin/conversations/global?limit=${FETCH_LIMIT}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
         setConvs(data.conversations || []);
-        setLoading(false);
+        setNow(Date.now());
+        setListState("ready");
       })
-      .catch(err => {
-        console.error("Conversations fetch failed", err);
-        setConvs([]);
-        setLoading(false);
-      });
-  };
-
-  useEffect(() => {
-    fetchConvs();
+      .catch(() => setListState("error"));
   }, []);
 
-  const handleStartDateChange = (val: string) => {
-    setStartDate(val);
-    if (endDate && val > endDate) {
-      setEndDate(val);
+  useEffect(() => {
+    loadList();
+  }, [loadList]);
+
+  const refresh = () => {
+    setListState("loading");
+    loadList();
+  };
+
+  // Thread is keyed on the URL, so deep links from Feedback, reloads and back/forward all behave.
+  useEffect(() => {
+    if (!selectedId) return;
+    let live = true;
+    flagCursor.current = -1;
+    apiFetch(`${apiBase()}/admin/conversations/${encodeURIComponent(selectedId)}/messages?include_internal=true`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => live && setThread({ id: selectedId, state: "ready", messages: data.messages || [] }))
+      .catch(() => live && setThread({ id: selectedId, state: "error", messages: [] }));
+    return () => {
+      live = false;
+    };
+  }, [selectedId]);
+
+  const current = thread && thread.id === selectedId ? thread : null; // null while the next thread loads
+
+  useEffect(() => {
+    if (!messageParam || !current || current.state !== "ready") return;
+    const id = window.setTimeout(() => {
+      document.getElementById(`message-${messageParam}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 120);
+    return () => window.clearTimeout(id);
+  }, [messageParam, current]);
+
+  const select = (id: string) => router.replace(`/conversations?id=${encodeURIComponent(id)}`, { scroll: false });
+  const close = () => router.replace("/conversations", { scroll: false });
+
+  const profiles = useMemo(() => Array.from(new Set(convs.map((c) => c.profile_slug).filter(Boolean))).sort(), [convs]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const floor = RANGES.find((r) => r.id === range)!.ms;
+    return convs.filter((c) => {
+      if (floor && now - toMs(c.updated_at) > floor) return false;
+      if (profile && c.profile_slug !== profile) return false;
+      if (attention && !needsAttention(c)) return false;
+      if (!q) return true;
+      return [c.title, c.id, c.user_id, c.tenant_id, c.profile_slug].some((v) => (v || "").toLowerCase().includes(q));
+    });
+  }, [convs, query, range, profile, attention, now]);
+
+  const todayLabel = t(`${k}.list.today`);
+  const groups = useMemo(() => {
+    const out: { key: string; label: string; items: Conversation[] }[] = [];
+    for (const c of visible) {
+      const b = dayBucket(toMs(c.updated_at), t, now);
+      const last = out[out.length - 1];
+      if (last && last.key === b.key) last.items.push(c);
+      else out.push({ ...b, items: [c] });
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible, now, todayLabel]);
+
+  const attentionTotal = useMemo(() => convs.filter(needsAttention).length, [convs]);
+  const filtering = !!query || range !== "all" || !!profile || attention;
+  const clearFilters = () => {
+    setQuery("");
+    setRange("all");
+    setProfile("");
+    setAttention(false);
+  };
+
+  const summary = convs.find((c) => c.id === selectedId) ?? null;
+  const messages = current?.messages ?? NO_MESSAGES;
+  const flaggedIds = useMemo(() => messages.filter(isFlagged).map((m) => m.id), [messages]);
+  const toolCount = messages.filter((m) => m.tool_name).length;
+
+  const nextFlag = () => {
+    if (!flaggedIds.length) return;
+    flagCursor.current = (flagCursor.current + 1) % flaggedIds.length;
+    document.getElementById(`message-${flaggedIds[flagCursor.current]}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  };
+
+  const copyId = async () => {
+    if (!selectedId) return;
+    try {
+      await navigator.clipboard.writeText(selectedId);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    } catch {
+      /* clipboard unavailable */
     }
   };
 
-  const handleEndDateChange = (val: string) => {
-    setEndDate(val);
-    if (startDate && val < startDate) {
-      setStartDate(val);
-    }
-  };
-
-  const handleSelectConv = (conv: any) => {
-    setSelectedConv(conv);
-    setLoadingMessages(true);
-    apiFetch(`${apiBase()}/admin/conversations/${conv.id}/messages?include_internal=true`)
-      .then(res => res.json())
-      .then(data => {
-        setMessages(data.messages || []);
-        setLoadingMessages(false);
-      })
-      .catch(err => {
-        console.error("Failed to fetch messages", err);
-        setMessages([]);
-        setLoadingMessages(false);
-      });
-  };
-
-  const filteredConvs = convs.filter(c => {
-    const query = searchQuery.toLowerCase();
-    const titleMatch = (c.title || "").toLowerCase().includes(query);
-    const idMatch = c.id.toLowerCase().includes(query);
-    const userMatch = (c.user_id || "").toLowerCase().includes(query);
-    const tenantMatch = (c.tenant_id || "").toLowerCase().includes(query);
-    const profileMatch = (c.profile_slug || "").toLowerCase().includes(query);
-    const textMatch = titleMatch || idMatch || userMatch || tenantMatch || profileMatch;
-
-    let dateMatch = true;
-    if (startDate || endDate) {
-      const convDate = new Date(c.updated_at);
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        if (convDate < start) dateMatch = false;
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        if (convDate > end) dateMatch = false;
-      }
-    }
-
-    return textMatch && dateMatch;
-  });
+  const title = summary?.title || t(`${k}.list.untitled`);
+  const detailOpen = !!selectedId;
+  const noneAtAll = listState === "ready" && convs.length === 0;
 
   return (
-    <div className="space-y-8 pb-12">
-      {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-6">
-        <div className="space-y-1">
-          <h2 className="text-3xl font-extrabold tracking-tight text-white">Interaction Ledger</h2>
-          <p className="text-md text-gray-400 max-w-xl mt-2">
-            Cross-tenant monitoring of all AION Agent conversations.
-          </p>
+    <div className="mx-auto flex max-w-[84rem] flex-col gap-6">
+      <header className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-[28px]">{t(`${k}.title`)}</h1>
+          <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.subtitle`)}</p>
         </div>
-        <button
-          onClick={fetchConvs}
-          disabled={loading}
-          className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 transition-all transform active:scale-95 cursor-pointer disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> REFRESH LEDGER
+        <button type="button" className={outlineBtn} onClick={refresh} disabled={listState === "loading"}>
+          <RefreshCw className={cn("h-3.5 w-3.5", listState === "loading" && "animate-spin")} aria-hidden />
+          {t(`${k}.refresh`)}
         </button>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Conversations List (Left Column) */}
-        <div className="lg:col-span-5 xl:col-span-4 flex flex-col h-[78vh] space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
-              Active Sessions ({filteredConvs.length})
-            </h3>
-          </div>
+      {noneAtAll ? (
+        <div className="flex flex-col items-center rounded-3xl border border-dashed border-border px-6 py-20 text-center">
+          <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.list.none_title`)}</h2>
+          <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">{t(`${k}.list.none_body`)}</p>
+        </div>
+      ) : (
+        <div className="grid items-start gap-6 lg:grid-cols-[22rem_minmax(0,1fr)]">
+          {/* ───────── List ───────── */}
+          <aside className={cn("flex min-w-0 flex-col gap-3 lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)]", detailOpen && "hidden lg:flex")}>
+            <SearchField value={query} onChange={setQuery} placeholder={t(`${k}.list.search`)} />
 
-          {/* Filters */}
-          <div className="space-y-2">
-            <div className="relative group">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 group-focus-within:text-blue-400 transition-colors" />
-              <input
-                type="text"
-                placeholder="Search by title, user, tenant..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder:text-gray-600 focus:border-blue-500/80 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-inner"
-              />
-              {searchQuery && (
+            <div role="group" aria-label={t(`${k}.list.range_aria`)} className="grid grid-cols-4 gap-1 rounded-xl bg-secondary p-1">
+              {RANGES.map((r) => (
                 <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors p-1 cursor-pointer"
+                  key={r.id}
+                  type="button"
+                  aria-pressed={range === r.id}
+                  onClick={() => setRange(r.id)}
+                  className={cn(
+                    "focus-ring h-8 truncate rounded-lg px-1 text-xs font-medium transition-colors",
+                    range === r.id ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  )}
                 >
-                  <X className="w-4 h-4" />
+                  {t(`${k}.list.range_${r.id}`)}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2">
+              {profiles.length > 1 && (
+                <Select
+                  size="sm"
+                  className="min-w-0 flex-1"
+                  aria-label={t(`${k}.list.profile_aria`)}
+                  value={profile}
+                  onChange={setProfile}
+                  options={[{ value: "", label: t(`${k}.list.profile_all`) }, ...profiles.map((p) => ({ value: p, label: p }))]}
+                />
+              )}
+              {attentionTotal > 0 && (
+                <button
+                  type="button"
+                  aria-pressed={attention}
+                  onClick={() => setAttention((v) => !v)}
+                  className={cn(
+                    "focus-ring inline-flex h-9 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors",
+                    attention ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-border bg-card hover:bg-secondary",
+                    profiles.length <= 1 && "flex-1 justify-center",
+                  )}
+                >
+                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                  {t(`${k}.list.attention`)}
+                  <span className="tabular-nums text-muted-foreground">{attentionTotal}</span>
                 </button>
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <CustomDatePicker
-                label="Da data"
-                value={startDate}
-                maxDate={endDate || undefined}
-                onChange={handleStartDateChange}
-                placeholder="Inizio"
-              />
-              <CustomDatePicker
-                label="A data"
-                value={endDate}
-                minDate={startDate || undefined}
-                onChange={handleEndDateChange}
-                placeholder="Fine"
-              />
-            </div>
-            {(startDate || endDate) && (
-              <div className="flex justify-end">
-                <button
-                  onClick={() => { setStartDate(""); setEndDate(""); }}
-                  className="text-[10px] text-blue-400 hover:text-blue-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-                >
-                  <X className="w-3 h-3" /> Resetta filtro date
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Sessions Cards */}
-          <div className="space-y-3 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
-            {loading && convs.length === 0 ? (
-              <div className="py-12 text-center text-gray-500 animate-pulse text-sm">
-                Loading interaction records...
-              </div>
-            ) : filteredConvs.map((c) => {
-              const isSelected = selectedConv?.id === c.id;
-
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => handleSelectConv(c)}
-                  className={`group relative p-4 rounded-2xl border backdrop-blur-sm cursor-pointer transition-all duration-200 flex items-center justify-between ${isSelected
-                    ? "bg-gradient-to-r from-blue-600/15 to-indigo-600/5 border-blue-500/50 shadow-lg shadow-blue-500/10 translate-x-1"
-                    : "bg-[#121212]/80 border-white/5 hover:border-white/15 hover:bg-[#181818]"
-                    }`}
-                >
-                  {isSelected && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-blue-500 rounded-r-full shadow-[0_0_8px_#3b82f6]" />
+            <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+              {listState === "loading" ? (
+                <div className="flex items-center gap-2 px-1 py-6 text-sm text-muted-foreground" role="status">
+                  <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                  {t(`${k}.loading`)}
+                </div>
+              ) : listState === "error" ? (
+                <div className="flex flex-col items-start gap-3 px-1 py-6">
+                  <p className="text-sm text-destructive">{t(`${k}.error`)}</p>
+                  <button type="button" className={outlineBtn} onClick={refresh}>
+                    {t(`${k}.retry`)}
+                  </button>
+                </div>
+              ) : visible.length === 0 ? (
+                <div className="px-1 py-6">
+                  <h2 className="text-sm font-semibold">{t(`${k}.list.empty_title`)}</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{t(`${k}.list.empty_body`)}</p>
+                  {filtering && (
+                    <button type="button" className={cn(ghostBtn, "-ml-2 mt-2")} onClick={clearFilters}>
+                      {t(`${k}.list.clear`)}
+                    </button>
                   )}
+                </div>
+              ) : (
+                <nav aria-label={t(`${k}.list.aria`)} className="flex flex-col gap-4">
+                  {groups.map((g) => (
+                    <section key={g.key}>
+                      <h2 className="px-3 pb-1 text-xs font-medium text-muted-foreground">{g.label}</h2>
+                      <ul className="flex flex-col gap-0.5">
+                        {g.items.map((c) => {
+                          const active = c.id === selectedId;
+                          const down = c.disliked_count ?? 0;
+                          const errs = c.error_count ?? 0;
+                          return (
+                            <li key={c.id}>
+                              <button
+                                type="button"
+                                aria-current={active ? "true" : undefined}
+                                onClick={() => !active && select(c.id)}
+                                className={cn(
+                                  "focus-ring w-full rounded-xl px-3 py-2.5 text-left transition-colors",
+                                  active ? "bg-secondary" : "hover:bg-secondary/60",
+                                )}
+                              >
+                                <div className="flex items-baseline gap-2">
+                                  <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.title || t(`${k}.list.untitled`)}</span>
+                                  <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{shortWhen(toMs(c.updated_at), now)}</span>
+                                </div>
+                                <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span className="min-w-0 flex-1 truncate">
+                                    {c.user_id}
+                                    {c.profile_slug ? ` · ${c.profile_slug}` : ""}
+                                  </span>
+                                  {down > 0 && (
+                                    <span className="inline-flex shrink-0 items-center gap-0.5 font-medium text-destructive" title={t(`${k}.detail.disliked`)}>
+                                      <ThumbsDown className="h-3 w-3" aria-hidden />
+                                      {down}
+                                    </span>
+                                  )}
+                                  {errs > 0 && (
+                                    <span className="inline-flex shrink-0 items-center gap-0.5 font-medium text-destructive" title={t(`${k}.detail.tool_errors`, { n: errs })}>
+                                      <AlertTriangle className="h-3 w-3" aria-hidden />
+                                      {errs}
+                                    </span>
+                                  )}
+                                  <span className="shrink-0 tabular-nums">{t(`${k}.list.messages`, { n: c.message_count })}</span>
+                                </div>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </section>
+                  ))}
+                  {convs.length >= FETCH_LIMIT && !filtering && (
+                    <p className="px-3 text-xs text-muted-foreground">{t(`${k}.list.truncated`, { n: FETCH_LIMIT })}</p>
+                  )}
+                </nav>
+              )}
+            </div>
+          </aside>
 
-                  <div className="flex items-center gap-4 min-w-0 pr-4 flex-1">
-                    <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400 shrink-0">
-                      <MessageSquare className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-bold text-base text-white truncate flex items-center gap-2">
-                        {c.title || 'Untitled Session'}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-400 truncate mt-1">
-                        <span className="flex items-center gap-1"><User className="w-3 h-3 text-gray-500 shrink-0" /> <span className="truncate">{c.user_id}</span></span>
-                        <span>•</span>
-                        <span className="uppercase text-[10px] font-bold text-gray-500 shrink-0">{c.tenant_id}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#141414] text-gray-400 border border-[#262626] uppercase shrink-0">
-                          {c.profile_slug}
-                        </span>
-                        <span className="text-[10px] text-gray-500 ml-auto flex items-center gap-1 shrink-0">
-                          <Clock className="w-3 h-3" /> {new Date(c.updated_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
+          {/* ───────── Thread ───────── */}
+          <section className={cn("min-w-0", !detailOpen && "hidden lg:block")} aria-busy={!current}>
+            {!detailOpen ? (
+              <div className="rounded-3xl border border-dashed border-border px-6 py-20 text-center">
+                <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.detail.pick_title`)}</h2>
+                <p className="mt-1.5 text-sm text-muted-foreground">{t(`${k}.detail.pick_body`)}</p>
+              </div>
+            ) : (
+              <div className="rounded-3xl border border-border/70 bg-card">
+                <div className="flex flex-col gap-3 border-b border-border/60 p-5 sm:p-6">
+                  <div className="flex items-start gap-2">
+                    <button type="button" className={cn(ghostBtn, "-ml-2 -mt-1 shrink-0 lg:hidden")} onClick={close}>
+                      <ArrowLeft className="h-4 w-4" aria-hidden />
+                      <span className="sr-only">{t(`${k}.list.back`)}</span>
+                    </button>
+                    <h2 className="min-w-0 flex-1 text-balance text-lg font-semibold tracking-[-0.015em]">{title}</h2>
+                    <button type="button" className={cn(ghostBtn, "-mr-2 -mt-1 shrink-0")} onClick={copyId} title={selectedId ?? undefined}>
+                      {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
+                      <span role="status">{copied ? t(`${k}.detail.copied`) : t(`${k}.detail.copy_id`)}</span>
+                    </button>
                   </div>
+                  {summary && (
+                    <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
+                      <Meta label={t(`${k}.detail.user`)} value={summary.user_id} />
+                      <Meta label={t(`${k}.detail.tenant`)} value={summary.tenant_id} />
+                      <Meta label={t(`${k}.detail.profile`)} value={summary.profile_slug} />
+                      <Meta label={t(`${k}.detail.updated`)} value={fullWhen(toMs(summary.updated_at))} />
+                    </dl>
+                  )}
+                </div>
 
-                  <div className="flex items-center gap-2 shrink-0 ml-2">
-                    <span className="text-xs font-bold text-blue-400 bg-blue-500/10 px-2 py-1 rounded-lg border border-blue-500/20">
-                      {c.message_count}
-                    </span>
-                    <ChevronRight
-                      className={`w-4 h-4 transition-transform ${isSelected
-                        ? "text-blue-400 translate-x-0.5"
-                        : "text-gray-600 group-hover:text-gray-400"
-                        }`}
-                    />
+                <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-border/60 bg-card/95 px-5 py-2 backdrop-blur-sm sm:px-6">
+                  <span className="text-sm tabular-nums text-muted-foreground">
+                    {t(`${k}.list.messages`, { n: messages.length || summary?.message_count || 0 })}
+                  </span>
+                  <div className="ml-auto flex flex-wrap items-center gap-1">
+                    {flaggedIds.length > 0 && (
+                      <button type="button" className={cn(ghostBtn, "text-destructive hover:text-destructive")} onClick={nextFlag} title={t(`${k}.detail.next_flag`)}>
+                        <ArrowDown className="h-3.5 w-3.5" aria-hidden />
+                        {t(`${k}.detail.flagged`, { n: flaggedIds.length })}
+                      </button>
+                    )}
+                    {toolCount > 0 && (
+                      <button
+                        type="button"
+                        aria-pressed={showTools}
+                        onClick={() => setShowTools((v) => !v)}
+                        className={cn(ghostBtn, showTools && "bg-secondary text-foreground")}
+                      >
+                        {t(`${k}.detail.show_tools`)}
+                        <span className="tabular-nums">{toolCount}</span>
+                      </button>
+                    )}
                   </div>
                 </div>
-              );
-            })}
 
-            {filteredConvs.length === 0 && !loading && (
-              <div className="flex flex-col items-center justify-center text-center py-12 px-4 bg-[#121212]/50 border border-white/5 rounded-2xl">
-                <Search className="w-8 h-8 text-gray-600 mb-2" />
-                <p className="text-sm font-semibold text-gray-400">No sessions found</p>
-                <p className="text-xs text-gray-600 mt-1 max-w-xs">
-                  Try adjusting your search query or refresh the ledger.
-                </p>
+                <div className="p-5 sm:p-6">
+                  {!current ? (
+                    <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground" role="status">
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      {t(`${k}.detail.loading`)}
+                    </div>
+                  ) : current.state === "error" ? (
+                    <p className="py-10 text-sm text-destructive">{t(`${k}.detail.load_error`)}</p>
+                  ) : messages.length === 0 ? (
+                    <p className="py-10 text-sm text-muted-foreground">{t(`${k}.detail.no_messages`)}</p>
+                  ) : (
+                    <Transcript messages={messages} convId={current.id} highlightId={messageParam} showTools={showTools} t={t} />
+                  )}
+                </div>
               </div>
             )}
-          </div>
+          </section>
         </div>
-
-        {/* Audit Log / Detail Area (Right Column) */}
-        <div className="lg:col-span-7 xl:col-span-8 flex flex-col h-[78vh]">
-          {selectedConv ? (
-            <div className="glass-card flex-1 flex flex-col p-6 sm:p-8 border border-white/10 rounded-3xl bg-gradient-to-b from-[#181818]/90 to-[#121212]/90 shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
-
-              {/* Header */}
-              <div className="flex justify-between items-center pb-5 border-b border-white/10 shrink-0 mb-6">
-                <div className="flex items-center gap-4 min-w-0 pr-4">
-                  <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400 shrink-0">
-                    <MessageSquare className="w-6 h-6" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-xl font-bold text-white truncate font-mono">
-                      {selectedConv.title || 'Untitled Session'}
-                    </h3>
-                    <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
-                      <span className="font-mono text-[10px] bg-black/40 px-2 py-0.5 rounded border border-white/5 truncate max-w-[200px]">{selectedConv.id}</span>
-                      <span>•</span>
-                      <span className="text-blue-400 font-semibold uppercase tracking-wider text-[10px] shrink-0">{selectedConv.profile_slug}</span>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedConv(null)}
-                  className="p-2 text-gray-500 hover:text-white hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Metadata row */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-black/30 p-4 rounded-2xl border border-white/5 shrink-0 mb-6">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Identity</div>
-                  <div className="text-sm font-semibold text-gray-200 mt-1 flex items-center gap-1.5 truncate">
-                    <User className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                    <span className="truncate">{selectedConv.user_id}</span>
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Tenant</div>
-                  <div className="text-sm font-semibold text-gray-200 mt-1 uppercase font-mono truncate">{selectedConv.tenant_id}</div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Last Activity</div>
-                  <div className="text-sm font-semibold text-gray-200 mt-1 flex items-center gap-1.5 truncate">
-                    <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                    <span className="truncate">{new Date(selectedConv.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Messages</div>
-                  <div className="text-sm font-semibold text-blue-400 mt-1">{selectedConv.message_count} messages</div>
-                </div>
-              </div>
-
-              {/* Messages Audit Log */}
-              <div className="flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar space-y-4 pb-4">
-                {loadingMessages ? (
-                  <div className="py-20 text-center text-gray-500 flex flex-col items-center gap-3">
-                    <RefreshCw className="w-6 h-6 animate-spin text-blue-500" />
-                    <span className="text-xs font-semibold">Loading audit trail...</span>
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="py-20 text-center text-gray-600 italic text-sm">No messages recorded in this session.</div>
-                ) : (
-                  messages.map((m) => {
-                    const isHighlighted = m.id === preselectedMessageId;
-                    return (
-                      <div
-                        key={m.id}
-                        id={`message-${m.id}`}
-                        className={`flex gap-4 p-4 rounded-2xl transition-all duration-300 ${
-                          isHighlighted
-                            ? "bg-blue-500/10 border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)] ring-2 ring-blue-500/20"
-                            : m.role === "user"
-                              ? "bg-white/[0.02] border border-white/5"
-                              : m.tool_name
-                                ? "bg-amber-500/[0.02] border border-amber-500/10"
-                                : "bg-blue-500/[0.04] border border-blue-500/10"
-                        }`}
-                      >
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 ${m.role === 'user'
-                        ? 'bg-gray-500/10 border-gray-500/20 text-gray-400'
-                        : m.tool_name
-                          ? 'bg-amber-500/10 border-amber-500/20 text-amber-500'
-                          : 'bg-blue-500/10 border-blue-500/20 text-blue-400'
-                        }`}>
-                        {m.role === 'user' ? <User className="w-4 h-4" /> : m.tool_name ? <Terminal className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                      </div>
-                      <div className="space-y-1.5 flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`text-[10px] font-bold uppercase tracking-widest ${m.role === 'user' ? 'text-gray-400' : m.tool_name ? 'text-amber-500' : 'text-blue-400'
-                            } flex items-center gap-1.5`}>
-                            {m.role === 'user' ? 'Human' : m.tool_name ? `Tool: ${m.tool_name}` : 'AION Agent'}
-                            {m.rating === 1 && (
-                              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full lowercase tracking-normal normal-case">
-                                <ThumbsUp className="w-3 h-3 text-emerald-400 shrink-0" /> liked
-                              </span>
-                            )}
-                            {m.rating === -1 && (
-                              <span className="flex items-center gap-1 text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full lowercase tracking-normal normal-case">
-                                <ThumbsDown className="w-3 h-3 text-rose-400 shrink-0" /> disliked
-                              </span>
-                            )}
-                          </span>
-                          <span className="text-[9px] font-mono text-gray-600">#{m.seq}</span>
-                        </div>
-                        <div className={`text-sm leading-relaxed break-words prose prose-invert max-w-none prose-sm prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/5 prose-table:border prose-table:border-white/10 prose-th:bg-white/5 prose-th:p-2 prose-td:p-2 prose-td:border-b prose-td:border-white/5 ${m.role === 'user' ? 'text-gray-300' : 'text-white font-medium'}`}>
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {m.content?.trim() || ""}
-                          </ReactMarkdown>
-                        </div>
-
-                        {/* Steps (Tool Calls) */}
-                        {m.steps && m.steps.length > 0 && (
-                          <div className="mt-3 space-y-1.5 pt-2 border-t border-white/5">
-                            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1">
-                              <Terminal className="w-3 h-3 text-amber-500" /> Tool Execution Steps ({m.steps.length})
-                            </div>
-                            <div className="grid grid-cols-1 gap-1.5">
-                              {m.steps.map((s: any) => (
-                                <div key={s.id} className="bg-black/30 border border-white/5 rounded-xl p-2.5 text-xs font-mono space-y-1">
-                                  <div className="flex items-center justify-between text-amber-400 font-bold">
-                                    <span>{s.name}</span>
-                                    {s.is_error ? <span className="text-red-400 font-sans text-[10px] bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">ERROR</span> : <span className="text-green-400 font-sans text-[10px] bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/20">SUCCESS</span>}
-                                  </div>
-                                  {s.input && (
-                                    <div className="text-gray-400 text-[11px] truncate">Input: {s.input}</div>
-                                  )}
-                                  {s.output && (
-                                    <div className="text-gray-300 text-[11px] bg-black/40 p-1.5 rounded border border-white/5 max-h-32 overflow-y-auto custom-scrollbar whitespace-pre-wrap font-mono">
-                                      {s.output}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Plan Artifact */}
-                        {(() => {
-                          const planArt = m.artifacts?.find((a: any) => a.kind === 'plan' || (a.original_name || '').toLowerCase().includes('execution_plan'));
-                          if (!planArt) return null;
-                          const token = getStoredToken();
-                          const downloadUrl = planArt.storage_key ? `${apiBase()}/sessions/${encodeURIComponent(selectedConv.id)}/download?relative_path=${encodeURIComponent(planArt.storage_key)}${token ? `&access_token=${encodeURIComponent(token)}` : ''}` : undefined;
-                          return (
-                            <div className="mt-3 pt-2 border-t border-white/5">
-                              <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 space-y-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2 text-blue-400 font-bold text-xs">
-                                    <Layers className="w-4 h-4" /> AION Execution Plan
-                                  </div>
-                                  {downloadUrl && (
-                                    <a
-                                      href={downloadUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-white rounded-lg text-xs font-semibold transition-colors border border-blue-500/30 shadow-sm"
-                                    >
-                                      <Download className="w-3.5 h-3.5" /> Download
-                                    </a>
-                                  )}
-                                </div>
-                                <div className="text-xs text-gray-300 font-mono bg-black/40 p-2.5 rounded-xl border border-white/5 max-h-48 overflow-y-auto custom-scrollbar whitespace-pre-wrap">
-                                  {planArt.content || `[Plan File: ${planArt.original_name || planArt.storage_key}]`}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {/* General Artifacts & Attachments */}
-                        {(() => {
-                          const genArts = m.artifacts?.filter((a: any) => a.kind !== 'plan' && !(a.original_name || '').toLowerCase().includes('execution_plan'));
-                          if (!genArts || genArts.length === 0) return null;
-                          const token = getStoredToken();
-                          return (
-                            <div className="mt-3 pt-2 border-t border-white/5">
-                              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1">
-                                <Paperclip className="w-3 h-3 text-blue-400" /> {m.role === 'user' ? 'Allegati Utente' : 'Artefatti Generati'} ({genArts.length})
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {genArts.map((a: any) => {
-                                  const downloadUrl = a.storage_key ? `${apiBase()}/sessions/${encodeURIComponent(selectedConv.id)}/download?relative_path=${encodeURIComponent(a.storage_key)}${token ? `&access_token=${encodeURIComponent(token)}` : ''}` : undefined;
-                                  return (
-                                    <div key={a.id} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl pl-3 pr-1.5 py-1.5 text-xs text-gray-200 shadow-sm">
-                                      <FileCode className="w-3.5 h-3.5 text-blue-400" />
-                                      <span className="font-mono font-semibold truncate max-w-[200px]">{a.original_name || a.storage_key || a.id}</span>
-                                      {a.size_bytes && <span className="text-[10px] text-gray-500">({Math.round(a.size_bytes / 1024)}KB)</span>}
-                                      {downloadUrl && (
-                                        <a
-                                          href={downloadUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors ml-1"
-                                          title="Download file"
-                                        >
-                                          <Download className="w-3.5 h-3.5" />
-                                        </a>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  );
-                })
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="glass-card flex-1 flex flex-col items-center justify-center text-center p-12 space-y-6 border border-white/5 rounded-3xl min-h-[450px]">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-blue-500/10 to-indigo-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shadow-xl shadow-blue-500/5">
-                <MessageSquare className="w-10 h-10" />
-              </div>
-              <div className="space-y-2 max-w-sm">
-                <h3 className="text-xl font-bold text-white">Select an Audit Session</h3>
-                <p className="text-sm text-gray-400 leading-relaxed">
-                  Choose a conversation session from the list on the left to inspect real-time interaction logs, human prompts, tool calls, and agent responses.
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
 
-export default function GlobalConversations() {
+function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <Suspense fallback={<div className="py-20 text-center text-gray-500 animate-pulse">Loading conversations ledger...</div>}>
+    <div className="min-w-0">
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 truncate font-medium" title={value}>
+        {value || "—"}
+      </dd>
+    </div>
+  );
+}
+
+export default function ConversationsPage() {
+  return (
+    <Suspense fallback={null}>
       <ConversationsContent />
     </Suspense>
   );
 }
-

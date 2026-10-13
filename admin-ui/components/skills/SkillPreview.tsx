@@ -10,7 +10,7 @@ import { Dialog } from "@/components/profiles/Dialog";
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 
-const md: Components = {
+export const md: Components = {
   h1: (p) => <h1 className="mb-3 mt-6 text-lg font-semibold tracking-[-0.015em] first:mt-0" {...p} />,
   h2: (p) => <h2 className="mb-2 mt-6 text-base font-semibold first:mt-0" {...p} />,
   h3: (p) => <h3 className="mb-2 mt-5 text-sm font-semibold first:mt-0" {...p} />,
