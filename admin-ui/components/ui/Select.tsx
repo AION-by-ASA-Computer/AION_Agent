@@ -278,20 +278,20 @@ export function Select<V extends string = string>({
                   onClick={() => choose(i)}
                   className={cn(
                     "flex cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm transition-colors",
-                    i === active && "bg-secondary",
+                    isSel ? "bg-foreground text-background" : i === active && "bg-secondary",
                     o.disabled && "cursor-not-allowed opacity-45",
                   )}
                 >
                   {o.icon && (
-                    <span className="flex shrink-0 text-muted-foreground" aria-hidden>
+                    <span className={cn("flex shrink-0", !isSel && "text-muted-foreground")} aria-hidden>
                       {o.icon}
                     </span>
                   )}
                   <span className="min-w-0 flex-1">
                     <span className={cn("block truncate", isSel && "font-semibold")}>{o.label}</span>
-                    {o.description && <span className="block text-xs text-muted-foreground">{o.description}</span>}
+                    {o.description && <span className={cn("block text-xs", isSel ? "text-background/70" : "text-muted-foreground")}>{o.description}</span>}
                   </span>
-                  {isSel && <Check className="h-4 w-4 shrink-0 text-foreground" aria-hidden />}
+                  {isSel && <Check className="h-4 w-4 shrink-0" aria-hidden />}
                 </li>
               );
             })}

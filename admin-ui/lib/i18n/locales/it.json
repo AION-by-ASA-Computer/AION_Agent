@@ -1001,5 +1001,292 @@
       "done": "API riavviata, impostazione applicata.",
       "slow": "L'API impiega troppo a riavviarsi. Controlla manualmente."
     }
+  },
+  "admin_metrics": {
+    "title": "Metriche",
+    "subtitle": "Token, turni e affidabilità dei tool sui tuoi agenti.",
+    "configure": "Osservabilità",
+    "refresh": "Aggiorna",
+    "retry": "Riprova",
+    "error": "Impossibile caricare le metriche.",
+    "stale": "Aggiornamento non riuscito. Mostro gli ultimi dati ricevuti.",
+    "loading": "Caricamento metriche…",
+    "updated_at": "Aggiornato alle {{time}}",
+    "live_on": "Live",
+    "live_off": "In pausa",
+    "live_hint": "Si aggiorna ogni 3 secondi quando è attivo",
+    "range_all": "Tutto",
+    "range_name": {
+      "1h": "Ultima ora",
+      "6h": "Ultime 6 ore",
+      "24h": "Ultime 24 ore",
+      "7d": "Ultimi 7 giorni",
+      "30d": "Ultimi 30 giorni",
+      "all": "Tutto lo storico"
+    },
+    "source": {
+      "prometheus": "Prometheus connesso",
+      "local": "Metriche locali",
+      "local_detail": "Prometheus non è raggiungibile: mostro i contatori in memoria."
+    },
+    "filter": {
+      "all_users": "Tutti gli utenti",
+      "all_profiles": "Tutti i profili",
+      "user": "Utente",
+      "profile": "Profilo",
+      "range": "Intervallo di tempo"
+    },
+    "summary": {
+      "title": "Attività",
+      "chart": "{{metric}} nel tempo",
+      "tokens": "Token",
+      "input": "Input",
+      "output": "Output",
+      "reasoning": "Reasoning",
+      "last_turn_tokens": "Ultimo turno: {{n}}",
+      "turns": "Turni",
+      "failures": "Falliti",
+      "turns_hint": "Interazioni utente completate",
+      "n_turns": "{{n}} turni",
+      "tools": "Chiamate tool",
+      "success_rate": "Successo",
+      "tools_hint": "Invocazioni di MCP e skill",
+      "n_calls": "{{n}} chiamate",
+      "duration": "Tempo medio turno",
+      "p95": "P95",
+      "last_turn": "Ultimo turno",
+      "duration_hint": "Tempo medio di risposta su tutti i profili"
+    },
+    "col": {
+      "profile": "Profilo",
+      "user": "Utente",
+      "tokens": "Token",
+      "mix": "In · Out · Reasoning",
+      "turns": "Turni",
+      "tools": "Chiamate tool",
+      "success": "Successo",
+      "duration": "Tempo medio",
+      "tool": "Tool",
+      "server": "Server MCP",
+      "calls": "Chiamate",
+      "errors": "Errori"
+    },
+    "profiles": {
+      "title": "Per profilo",
+      "count": "{{n}}",
+      "empty": "Nessuna attività per profilo. Intervallo: {{range}}."
+    },
+    "users": {
+      "title": "Per utente",
+      "count": "{{n}}",
+      "empty": "Nessuna attività per utente. Intervallo: {{range}}.",
+      "profiles_n": "Profili: {{n}}",
+      "no_breakdown": "Nessun dettaglio per profilo registrato per questo utente.",
+      "share": "{{n}}% dei turni di questo utente",
+      "profile_stats": "{{turns}} turni · {{tokens}} token · {{calls}} chiamate tool",
+      "no_tools": "Nessuna chiamata tool",
+      "tool_title": "Server: {{server}} · Chiamate: {{calls}} · Errori: {{errors}}",
+      "err": "{{n}} err"
+    },
+    "tools": {
+      "title": "Tool e server MCP",
+      "count": "{{n}}",
+      "count_filtered": "{{shown}} / {{total}}",
+      "search": "Cerca tool o server",
+      "no_match": "Nessun tool corrisponde a “{{q}}”.",
+      "empty": "Nessuna chiamata tool. Intervallo: {{range}}."
+    },
+    "models": {
+      "title": "Token per modello",
+      "count": "{{n}}",
+      "empty": "Nessun consumo di token. Intervallo: {{range}}.",
+      "tokens": "{{n}} token"
+    },
+    "errors": {
+      "title": "Errori MCP",
+      "count": "{{n}}",
+      "none": "Nessun errore MCP",
+      "none_detail": "Tutte le chiamate tool in questo intervallo sono riuscite.",
+      "profile": "Profilo: {{profile}}",
+      "limit_label": "Errori mostrati",
+      "limit_n": "Ultimi {{n}}",
+      "limit_all": "Tutti ({{n}})"
+    },
+    "config": {
+      "title": "Impostazioni di osservabilità",
+      "subtitle": "Prometheus, OpenTelemetry e Opik. Il salvataggio può riavviare l'API.",
+      "close": "Chiudi",
+      "save": "Salva impostazioni",
+      "saved_to": "Salvato in",
+      "loading": "Caricamento impostazioni…",
+      "test": "Prova",
+      "tab_prometheus": "Prometheus",
+      "tab_otel": "OpenTelemetry",
+      "tab_opik": "Opik",
+      "prom_url": "URL del server Prometheus",
+      "prom_url_hint": "Usato per le query PromQL dei grafici di questa pagina.",
+      "expose": "Esponi l'endpoint di scraping",
+      "expose_hint": "Permette a Prometheus o Grafana Agent di leggere questa API.",
+      "metrics_path": "Percorso di scraping",
+      "otel_enable": "Invia dati OpenTelemetry",
+      "otel_enable_hint": "Invia trace e metriche a un collector OTLP come Jaeger, Phoenix, Tempo o OpenLit.",
+      "otel_endpoint": "Endpoint del collector",
+      "otel_protocol": "Protocollo",
+      "otel_service": "Nome del servizio",
+      "otel_interval": "Intervallo di export (ms)",
+      "otel_content": "Includi prompt e risposte nelle trace",
+      "otel_content_hint": "Salva prompt utente e output dell'assistente negli attributi degli span.",
+      "opik_enable": "Invia trace a Opik",
+      "opik_enable_hint": "Versioning dei prompt, tracing e punteggi di feedback in self-hosting.",
+      "opik_url": "Endpoint Opik",
+      "opik_project": "Nome progetto",
+      "opik_key": "Chiave API",
+      "show_key": "Mostra chiave API",
+      "hide_key": "Nascondi chiave API",
+      "load_failed": "Impossibile caricare le impostazioni dal server.",
+      "saved": "Impostazioni salvate.",
+      "restarted": "L'API è stata riavviata e le nuove impostazioni sono attive.",
+      "restart_timeout": "L'API ci mette troppo a tornare online. Verifica manualmente.",
+      "probe_ok": "Connesso.",
+      "probe_fail": "Connessione non riuscita.",
+      "probe_network": "Errore di rete durante il test della connessione."
+    },
+    "restart": {
+      "title": "Riavvio dell'API",
+      "body": "Le nuove impostazioni richiedono un riavvio. La pagina si riconnette da sola, di solito in uno o due minuti."
+    }
+  },
+  "admin_diagnostics": {
+    "title": "Smoke test",
+    "subtitle": "Esegui gli scenari end-to-end su un profilo e ispeziona ogni passaggio: ragionamento, chiamate agli strumenti, risultati e report con punteggio.",
+    "profile_label": "Profilo da testare",
+    "profile_loading": "Caricamento profili…",
+    "run": "Avvia suite",
+    "stop": "Interrompi",
+    "scenarios": {
+      "title": "Scenari",
+      "summary_idle": "Non ancora eseguiti",
+      "summary": "{done} di {total} completati",
+      "summary_score": "punteggio medio {score}",
+      "item": {
+        "excel": {
+          "name": "Analisi dati Excel",
+          "desc": "KPI, Pareto 80/20 e trend"
+        },
+        "pdf": {
+          "name": "Recupero da PDF lungo",
+          "desc": "Manuale Tesla: porte e frenata"
+        },
+        "word": {
+          "name": "Generazione Word strutturata",
+          "desc": "Agenda della riunione di kickoff"
+        }
+      },
+      "file_input": "File in ingresso",
+      "file_output": "File prodotto",
+      "tools_one": "1 strumento",
+      "tools_other": "{count} strumenti",
+      "view_result": "Vedi risultato",
+      "status": {
+        "idle": "In attesa",
+        "running": "In corso",
+        "completed": "Completato",
+        "failed": "Fallito"
+      }
+    },
+    "tabs": {
+      "aria": "Sezioni dei smoke test",
+      "stream": "Stream live",
+      "report": "Report",
+      "history": "Cronologia"
+    },
+    "stream": {
+      "title": "Attività dell'agente",
+      "live": "Live",
+      "filter_all": "Tutti gli scenari",
+      "filter_aria": "Filtra per scenario",
+      "autoscroll": "Scorrimento automatico",
+      "empty_title": "Ancora nessun evento",
+      "empty_body": "Avvia la suite per vedere ragionamento, chiamate agli strumenti e risposte in tempo reale.",
+      "reasoning": "Ragionamento",
+      "tool_ok": "Eseguito",
+      "tool_error": "Errore dello strumento",
+      "tool_running": "In corso",
+      "expand": "Mostra dettagli",
+      "collapse": "Nascondi dettagli",
+      "input": "Input",
+      "output": "Output",
+      "completed": "{name} completato",
+      "completed_meta": "{seconds}s · {tools} strumenti",
+      "copy_response": "Copia risposta",
+      "copied": "Copiato",
+      "error_title": "Errore durante l'esecuzione",
+      "cancelled": "Suite interrotta dall'utente."
+    },
+    "report": {
+      "title_fallback": "Report smoke test",
+      "stats": "{words} parole · {lines} righe · ~{minutes} min di lettura",
+      "mode_aria": "Modalità di visualizzazione",
+      "mode_preview": "Anteprima",
+      "mode_source": "Sorgente",
+      "mode_split": "Affiancata",
+      "copy": "Copia Markdown",
+      "copied": "Copiato",
+      "download": "Scarica .md",
+      "empty_title": "Nessun report selezionato",
+      "empty_body": "Avvia la suite oppure apri un report salvato dalla Cronologia."
+    },
+    "history": {
+      "title": "Report salvati",
+      "refresh": "Aggiorna",
+      "loading": "Caricamento report…",
+      "error": "Impossibile caricare i report salvati.",
+      "empty_title": "Nessun report salvato",
+      "empty_body": "Ogni esecuzione scrive il proprio report in {path}",
+      "kind_suite": "Suite completa",
+      "kind_single": "Singolo scenario",
+      "open": "Apri"
+    },
+    "result": {
+      "tabs_aria": "Sezioni del risultato",
+      "tab_final": "Risposta",
+      "tab_eval": "Valutazione",
+      "tab_charts": "Grafici",
+      "tab_files": "File",
+      "tab_timeline": "Timeline",
+      "tab_reasoning": "Ragionamento",
+      "meta_profile": "Profilo",
+      "meta_duration": "Durata",
+      "meta_tools": "Strumenti",
+      "report_file": "File del report",
+      "close": "Chiudi",
+      "no_output": "Nessuna risposta testuale registrata.",
+      "copy_text": "Copia testo",
+      "copied": "Copiato",
+      "score": "{score} / {max}",
+      "grade": "Voto {rating}",
+      "passed": "Superato",
+      "failed": "Non superato",
+      "eval_default": "Valutazione deterministica su 10 criteri, senza variabilità da LLM-judge. Soglia di superamento: 60.",
+      "criteria_title": "Criteri",
+      "criteria_count": "{passed} di {total} soddisfatti",
+      "criteria_none": "Nessun dettaglio dei criteri per questo test.",
+      "points": "{points} / {max} pt",
+      "download": "Scarica",
+      "timeline_step": "Passo {n}",
+      "timeline_reasoning": "Ragionamento",
+      "timeline_tool": "Strumento: {name}"
+    },
+    "markdown": {
+      "copy": "Copia",
+      "copied": "Copiato",
+      "image_error": "Impossibile caricare l'immagine {name}"
+    },
+    "charts": {
+      "no_data": "Nessun dato disponibile per questo grafico.",
+      "no_numeric": "Nessuna serie numerica rilevata.",
+      "render_error": "Impossibile renderizzare il grafico: {error}",
+      "fallback_title": "Grafico {n}"
+    }
   }
 }

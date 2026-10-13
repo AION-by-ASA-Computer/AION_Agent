@@ -1001,5 +1001,292 @@
       "done": "API restarted, scheduler setting applied.",
       "slow": "The API is taking too long to restart. Check it manually."
     }
+  },
+  "admin_metrics": {
+    "title": "Metrics",
+    "subtitle": "Tokens, turns and tool reliability across your agents.",
+    "configure": "Observability",
+    "refresh": "Refresh",
+    "retry": "Try again",
+    "error": "Metrics could not be loaded.",
+    "stale": "Couldn't refresh just now. Showing the last data received.",
+    "loading": "Loading metrics…",
+    "updated_at": "Updated {{time}}",
+    "live_on": "Live",
+    "live_off": "Paused",
+    "live_hint": "Refreshes every 3 seconds while on",
+    "range_all": "All",
+    "range_name": {
+      "1h": "Last hour",
+      "6h": "Last 6 hours",
+      "24h": "Last 24 hours",
+      "7d": "Last 7 days",
+      "30d": "Last 30 days",
+      "all": "All time"
+    },
+    "source": {
+      "prometheus": "Prometheus connected",
+      "local": "Local metrics",
+      "local_detail": "Prometheus is unreachable; showing in-process counters."
+    },
+    "filter": {
+      "all_users": "All users",
+      "all_profiles": "All profiles",
+      "user": "User",
+      "profile": "Profile",
+      "range": "Time range"
+    },
+    "summary": {
+      "title": "Activity",
+      "chart": "{{metric}} over time",
+      "tokens": "Tokens",
+      "input": "Input",
+      "output": "Output",
+      "reasoning": "Reasoning",
+      "last_turn_tokens": "Last turn: {{n}}",
+      "turns": "Turns",
+      "failures": "Failed",
+      "turns_hint": "Completed user interactions",
+      "n_turns": "{{n}} turns",
+      "tools": "Tool calls",
+      "success_rate": "Success",
+      "tools_hint": "MCP and skill invocations",
+      "n_calls": "{{n}} calls",
+      "duration": "Avg turn time",
+      "p95": "P95",
+      "last_turn": "Last turn",
+      "duration_hint": "Mean response time across profiles"
+    },
+    "col": {
+      "profile": "Profile",
+      "user": "User",
+      "tokens": "Tokens",
+      "mix": "In · Out · Reasoning",
+      "turns": "Turns",
+      "tools": "Tool calls",
+      "success": "Success",
+      "duration": "Avg time",
+      "tool": "Tool",
+      "server": "MCP server",
+      "calls": "Calls",
+      "errors": "Errors"
+    },
+    "profiles": {
+      "title": "By profile",
+      "count": "{{n}}",
+      "empty": "No profile activity. Range: {{range}}."
+    },
+    "users": {
+      "title": "By user",
+      "count": "{{n}}",
+      "empty": "No user activity. Range: {{range}}.",
+      "profiles_n": "Profiles: {{n}}",
+      "no_breakdown": "No profile breakdown recorded for this user.",
+      "share": "{{n}}% of this user's turns",
+      "profile_stats": "{{turns}} turns · {{tokens}} tokens · {{calls}} tool calls",
+      "no_tools": "No tool calls",
+      "tool_title": "Server: {{server}} · Calls: {{calls}} · Errors: {{errors}}",
+      "err": "{{n}} err"
+    },
+    "tools": {
+      "title": "Tools and MCP servers",
+      "count": "{{n}}",
+      "count_filtered": "{{shown}} / {{total}}",
+      "search": "Search tool or server",
+      "no_match": "No tool matches “{{q}}”.",
+      "empty": "No tool calls. Range: {{range}}."
+    },
+    "models": {
+      "title": "Tokens by model",
+      "count": "{{n}}",
+      "empty": "No token usage. Range: {{range}}.",
+      "tokens": "{{n}} tokens"
+    },
+    "errors": {
+      "title": "MCP errors",
+      "count": "{{n}}",
+      "none": "No MCP errors",
+      "none_detail": "Every tool call in this range completed.",
+      "profile": "Profile: {{profile}}",
+      "limit_label": "Errors shown",
+      "limit_n": "Last {{n}}",
+      "limit_all": "All ({{n}})"
+    },
+    "config": {
+      "title": "Observability settings",
+      "subtitle": "Prometheus, OpenTelemetry and Opik. Saving may restart the API.",
+      "close": "Close",
+      "save": "Save settings",
+      "saved_to": "Saved to",
+      "loading": "Loading current settings…",
+      "test": "Test",
+      "tab_prometheus": "Prometheus",
+      "tab_otel": "OpenTelemetry",
+      "tab_opik": "Opik",
+      "prom_url": "Prometheus server URL",
+      "prom_url_hint": "Used to run PromQL queries for the charts on this page.",
+      "expose": "Expose the scraping endpoint",
+      "expose_hint": "Lets Prometheus or Grafana Agent scrape this API.",
+      "metrics_path": "Scraping path",
+      "otel_enable": "Send OpenTelemetry data",
+      "otel_enable_hint": "Pushes traces and metrics to an OTLP collector such as Jaeger, Phoenix, Tempo or OpenLit.",
+      "otel_endpoint": "Collector endpoint",
+      "otel_protocol": "Protocol",
+      "otel_service": "Service name",
+      "otel_interval": "Export interval (ms)",
+      "otel_content": "Include prompts and replies in traces",
+      "otel_content_hint": "Stores user prompts and assistant output in span attributes.",
+      "opik_enable": "Send traces to Opik",
+      "opik_enable_hint": "Self-hosted prompt versioning, tracing and feedback scores.",
+      "opik_url": "Opik endpoint",
+      "opik_project": "Project name",
+      "opik_key": "API key",
+      "show_key": "Show API key",
+      "hide_key": "Hide API key",
+      "load_failed": "Couldn't load the current settings from the server.",
+      "saved": "Settings saved.",
+      "restarted": "The API restarted and the new settings are active.",
+      "restart_timeout": "The API took too long to come back. Check it manually.",
+      "probe_ok": "Connected.",
+      "probe_fail": "Connection failed.",
+      "probe_network": "Network error while testing the connection."
+    },
+    "restart": {
+      "title": "Restarting the API",
+      "body": "The new settings need a restart. This page reconnects on its own, usually within a minute or two."
+    }
+  },
+  "admin_diagnostics": {
+    "title": "Smoke tests",
+    "subtitle": "Run the end-to-end scenarios against a profile and inspect every step: reasoning, tool calls, deliverables and the scored report.",
+    "profile_label": "Profile under test",
+    "profile_loading": "Loading profiles…",
+    "run": "Run suite",
+    "stop": "Stop",
+    "scenarios": {
+      "title": "Scenarios",
+      "summary_idle": "Not run yet",
+      "summary": "{done} of {total} finished",
+      "summary_score": "average score {score}",
+      "item": {
+        "excel": {
+          "name": "Excel data analysis",
+          "desc": "KPIs, Pareto 80/20 and trends"
+        },
+        "pdf": {
+          "name": "Long PDF retrieval",
+          "desc": "Tesla manual: door and braking operations"
+        },
+        "word": {
+          "name": "Structured Word generation",
+          "desc": "Project kickoff meeting agenda"
+        }
+      },
+      "file_input": "Input file",
+      "file_output": "Output file",
+      "tools_one": "1 tool",
+      "tools_other": "{count} tools",
+      "view_result": "View result",
+      "status": {
+        "idle": "Pending",
+        "running": "Running",
+        "completed": "Completed",
+        "failed": "Failed"
+      }
+    },
+    "tabs": {
+      "aria": "Smoke test sections",
+      "stream": "Live stream",
+      "report": "Report",
+      "history": "History"
+    },
+    "stream": {
+      "title": "Agent activity",
+      "live": "Live",
+      "filter_all": "All scenarios",
+      "filter_aria": "Filter by scenario",
+      "autoscroll": "Auto-scroll",
+      "empty_title": "Nothing streamed yet",
+      "empty_body": "Run the suite to watch reasoning, tool calls and answers arrive in real time.",
+      "reasoning": "Reasoning",
+      "tool_ok": "Executed",
+      "tool_error": "Tool error",
+      "tool_running": "In progress",
+      "expand": "Show details",
+      "collapse": "Hide details",
+      "input": "Input",
+      "output": "Output",
+      "completed": "{name} finished",
+      "completed_meta": "{seconds}s · {tools} tools",
+      "copy_response": "Copy response",
+      "copied": "Copied",
+      "error_title": "Error during execution",
+      "cancelled": "Suite cancelled by user."
+    },
+    "report": {
+      "title_fallback": "Smoke test report",
+      "stats": "{words} words · {lines} lines · ~{minutes} min read",
+      "mode_aria": "View mode",
+      "mode_preview": "Preview",
+      "mode_source": "Source",
+      "mode_split": "Split",
+      "copy": "Copy Markdown",
+      "copied": "Copied",
+      "download": "Download .md",
+      "empty_title": "No report selected",
+      "empty_body": "Run the suite, or open a saved report from History."
+    },
+    "history": {
+      "title": "Saved reports",
+      "refresh": "Refresh",
+      "loading": "Loading reports…",
+      "error": "Couldn't load the saved reports.",
+      "empty_title": "No reports saved yet",
+      "empty_body": "Every run writes its report to {path}",
+      "kind_suite": "Full suite",
+      "kind_single": "Single scenario",
+      "open": "Open"
+    },
+    "result": {
+      "tabs_aria": "Result sections",
+      "tab_final": "Response",
+      "tab_eval": "Evaluation",
+      "tab_charts": "Charts",
+      "tab_files": "Files",
+      "tab_timeline": "Timeline",
+      "tab_reasoning": "Reasoning",
+      "meta_profile": "Profile",
+      "meta_duration": "Duration",
+      "meta_tools": "Tools",
+      "report_file": "Report file",
+      "close": "Close",
+      "no_output": "No final text output was recorded.",
+      "copy_text": "Copy text",
+      "copied": "Copied",
+      "score": "{score} / {max}",
+      "grade": "Grade {rating}",
+      "passed": "Passed",
+      "failed": "Failed",
+      "eval_default": "Deterministic 10-criteria evaluation, with no LLM-judge variance. Pass threshold: 60.",
+      "criteria_title": "Criteria",
+      "criteria_count": "{passed} of {total} satisfied",
+      "criteria_none": "No criteria breakdown for this test.",
+      "points": "{points} / {max} pt",
+      "download": "Download",
+      "timeline_step": "Step {n}",
+      "timeline_reasoning": "Reasoning",
+      "timeline_tool": "Tool: {name}"
+    },
+    "markdown": {
+      "copy": "Copy",
+      "copied": "Copied",
+      "image_error": "Can't load image {name}"
+    },
+    "charts": {
+      "no_data": "No data available for this chart.",
+      "no_numeric": "No numeric series detected.",
+      "render_error": "Unable to render chart: {error}",
+      "fallback_title": "Chart {n}"
+    }
   }
 }

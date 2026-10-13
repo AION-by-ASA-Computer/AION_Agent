@@ -1001,5 +1001,292 @@
       "done": "API reiniciada, ajuste aplicado.",
       "slow": "La API tarda demasiado en reiniciarse. Compruébalo manualmente."
     }
+  },
+  "admin_metrics": {
+    "title": "Métricas",
+    "subtitle": "Tokens, turnos y fiabilidad de las herramientas en tus agentes.",
+    "configure": "Observabilidad",
+    "refresh": "Actualizar",
+    "retry": "Reintentar",
+    "error": "No se pudieron cargar las métricas.",
+    "stale": "No se pudo actualizar. Se muestran los últimos datos recibidos.",
+    "loading": "Cargando métricas…",
+    "updated_at": "Actualizado a las {{time}}",
+    "live_on": "En vivo",
+    "live_off": "En pausa",
+    "live_hint": "Se actualiza cada 3 segundos mientras está activo",
+    "range_all": "Todo",
+    "range_name": {
+      "1h": "Última hora",
+      "6h": "Últimas 6 horas",
+      "24h": "Últimas 24 horas",
+      "7d": "Últimos 7 días",
+      "30d": "Últimos 30 días",
+      "all": "Todo el historial"
+    },
+    "source": {
+      "prometheus": "Prometheus conectado",
+      "local": "Métricas locales",
+      "local_detail": "Prometheus no está disponible: se muestran los contadores en memoria."
+    },
+    "filter": {
+      "all_users": "Todos los usuarios",
+      "all_profiles": "Todos los perfiles",
+      "user": "Usuario",
+      "profile": "Perfil",
+      "range": "Intervalo de tiempo"
+    },
+    "summary": {
+      "title": "Actividad",
+      "chart": "{{metric}} a lo largo del tiempo",
+      "tokens": "Tokens",
+      "input": "Entrada",
+      "output": "Salida",
+      "reasoning": "Razonamiento",
+      "last_turn_tokens": "Último turno: {{n}}",
+      "turns": "Turnos",
+      "failures": "Fallidos",
+      "turns_hint": "Interacciones de usuario completadas",
+      "n_turns": "{{n}} turnos",
+      "tools": "Llamadas a herramientas",
+      "success_rate": "Éxito",
+      "tools_hint": "Invocaciones de MCP y skills",
+      "n_calls": "{{n}} llamadas",
+      "duration": "Duración media del turno",
+      "p95": "P95",
+      "last_turn": "Último turno",
+      "duration_hint": "Tiempo medio de respuesta en todos los perfiles"
+    },
+    "col": {
+      "profile": "Perfil",
+      "user": "Usuario",
+      "tokens": "Tokens",
+      "mix": "Ent. · Sal. · Razon.",
+      "turns": "Turnos",
+      "tools": "Llamadas",
+      "success": "Éxito",
+      "duration": "Tiempo medio",
+      "tool": "Herramienta",
+      "server": "Servidor MCP",
+      "calls": "Llamadas",
+      "errors": "Errores"
+    },
+    "profiles": {
+      "title": "Por perfil",
+      "count": "{{n}}",
+      "empty": "Sin actividad por perfil. Intervalo: {{range}}."
+    },
+    "users": {
+      "title": "Por usuario",
+      "count": "{{n}}",
+      "empty": "Sin actividad por usuario. Intervalo: {{range}}.",
+      "profiles_n": "Perfiles: {{n}}",
+      "no_breakdown": "No hay desglose por perfil registrado para este usuario.",
+      "share": "{{n}} % de los turnos de este usuario",
+      "profile_stats": "{{turns}} turnos · {{tokens}} tokens · {{calls}} llamadas",
+      "no_tools": "Sin llamadas a herramientas",
+      "tool_title": "Servidor: {{server}} · Llamadas: {{calls}} · Errores: {{errors}}",
+      "err": "{{n}} err."
+    },
+    "tools": {
+      "title": "Herramientas y servidores MCP",
+      "count": "{{n}}",
+      "count_filtered": "{{shown}} / {{total}}",
+      "search": "Buscar herramienta o servidor",
+      "no_match": "Ninguna herramienta coincide con «{{q}}».",
+      "empty": "Sin llamadas a herramientas. Intervalo: {{range}}."
+    },
+    "models": {
+      "title": "Tokens por modelo",
+      "count": "{{n}}",
+      "empty": "Sin consumo de tokens. Intervalo: {{range}}.",
+      "tokens": "{{n}} tokens"
+    },
+    "errors": {
+      "title": "Errores MCP",
+      "count": "{{n}}",
+      "none": "Sin errores MCP",
+      "none_detail": "Todas las llamadas a herramientas de este intervalo se completaron.",
+      "profile": "Perfil: {{profile}}",
+      "limit_label": "Errores mostrados",
+      "limit_n": "Últimos {{n}}",
+      "limit_all": "Todos ({{n}})"
+    },
+    "config": {
+      "title": "Ajustes de observabilidad",
+      "subtitle": "Prometheus, OpenTelemetry y Opik. Guardar puede reiniciar la API.",
+      "close": "Cerrar",
+      "save": "Guardar ajustes",
+      "saved_to": "Se guarda en",
+      "loading": "Cargando los ajustes actuales…",
+      "test": "Probar",
+      "tab_prometheus": "Prometheus",
+      "tab_otel": "OpenTelemetry",
+      "tab_opik": "Opik",
+      "prom_url": "URL del servidor Prometheus",
+      "prom_url_hint": "Se usa para las consultas PromQL de los gráficos de esta página.",
+      "expose": "Exponer el endpoint de scraping",
+      "expose_hint": "Permite que Prometheus o Grafana Agent lean esta API.",
+      "metrics_path": "Ruta de scraping",
+      "otel_enable": "Enviar datos de OpenTelemetry",
+      "otel_enable_hint": "Envía trazas y métricas a un colector OTLP como Jaeger, Phoenix, Tempo u OpenLit.",
+      "otel_endpoint": "Endpoint del colector",
+      "otel_protocol": "Protocolo",
+      "otel_service": "Nombre del servicio",
+      "otel_interval": "Intervalo de exportación (ms)",
+      "otel_content": "Incluir prompts y respuestas en las trazas",
+      "otel_content_hint": "Guarda los prompts del usuario y la salida del asistente en los atributos de los spans.",
+      "opik_enable": "Enviar trazas a Opik",
+      "opik_enable_hint": "Versionado de prompts, trazado y puntuaciones de feedback autoalojados.",
+      "opik_url": "Endpoint de Opik",
+      "opik_project": "Nombre del proyecto",
+      "opik_key": "Clave de API",
+      "show_key": "Mostrar clave de API",
+      "hide_key": "Ocultar clave de API",
+      "load_failed": "No se pudieron cargar los ajustes actuales del servidor.",
+      "saved": "Ajustes guardados.",
+      "restarted": "La API se reinició y los nuevos ajustes están activos.",
+      "restart_timeout": "La API tardó demasiado en volver. Compruébalo manualmente.",
+      "probe_ok": "Conectado.",
+      "probe_fail": "Falló la conexión.",
+      "probe_network": "Error de red al probar la conexión."
+    },
+    "restart": {
+      "title": "Reiniciando la API",
+      "body": "Los nuevos ajustes requieren un reinicio. Esta página se reconecta sola, normalmente en uno o dos minutos."
+    }
+  },
+  "admin_diagnostics": {
+    "title": "Pruebas de humo",
+    "subtitle": "Ejecuta los escenarios de extremo a extremo sobre un perfil e inspecciona cada paso: razonamiento, llamadas a herramientas, entregables e informe puntuado.",
+    "profile_label": "Perfil a probar",
+    "profile_loading": "Cargando perfiles…",
+    "run": "Iniciar suite",
+    "stop": "Detener",
+    "scenarios": {
+      "title": "Escenarios",
+      "summary_idle": "Aún sin ejecutar",
+      "summary": "{done} de {total} terminados",
+      "summary_score": "puntuación media {score}",
+      "item": {
+        "excel": {
+          "name": "Análisis de datos de Excel",
+          "desc": "KPI, Pareto 80/20 y tendencias"
+        },
+        "pdf": {
+          "name": "Recuperación en PDF largo",
+          "desc": "Manual de Tesla: puertas y frenado"
+        },
+        "word": {
+          "name": "Generación estructurada de Word",
+          "desc": "Agenda de la reunión de arranque"
+        }
+      },
+      "file_input": "Archivo de entrada",
+      "file_output": "Archivo generado",
+      "tools_one": "1 herramienta",
+      "tools_other": "{count} herramientas",
+      "view_result": "Ver resultado",
+      "status": {
+        "idle": "Pendiente",
+        "running": "En curso",
+        "completed": "Completado",
+        "failed": "Fallido"
+      }
+    },
+    "tabs": {
+      "aria": "Secciones de las pruebas de humo",
+      "stream": "Flujo en vivo",
+      "report": "Informe",
+      "history": "Historial"
+    },
+    "stream": {
+      "title": "Actividad del agente",
+      "live": "En vivo",
+      "filter_all": "Todos los escenarios",
+      "filter_aria": "Filtrar por escenario",
+      "autoscroll": "Desplazamiento automático",
+      "empty_title": "Aún no se ha emitido nada",
+      "empty_body": "Inicia la suite para ver en tiempo real el razonamiento, las llamadas a herramientas y las respuestas.",
+      "reasoning": "Razonamiento",
+      "tool_ok": "Ejecutado",
+      "tool_error": "Error de herramienta",
+      "tool_running": "En curso",
+      "expand": "Mostrar detalles",
+      "collapse": "Ocultar detalles",
+      "input": "Entrada",
+      "output": "Salida",
+      "completed": "{name} terminado",
+      "completed_meta": "{seconds}s · {tools} herramientas",
+      "copy_response": "Copiar respuesta",
+      "copied": "Copiado",
+      "error_title": "Error durante la ejecución",
+      "cancelled": "Suite cancelada por el usuario."
+    },
+    "report": {
+      "title_fallback": "Informe de prueba de humo",
+      "stats": "{words} palabras · {lines} líneas · ~{minutes} min de lectura",
+      "mode_aria": "Modo de vista",
+      "mode_preview": "Vista previa",
+      "mode_source": "Código",
+      "mode_split": "Dividida",
+      "copy": "Copiar Markdown",
+      "copied": "Copiado",
+      "download": "Descargar .md",
+      "empty_title": "Ningún informe seleccionado",
+      "empty_body": "Inicia la suite o abre un informe guardado desde el Historial."
+    },
+    "history": {
+      "title": "Informes guardados",
+      "refresh": "Actualizar",
+      "loading": "Cargando informes…",
+      "error": "No se pudieron cargar los informes guardados.",
+      "empty_title": "Aún no hay informes guardados",
+      "empty_body": "Cada ejecución escribe su informe en {path}",
+      "kind_suite": "Suite completa",
+      "kind_single": "Escenario único",
+      "open": "Abrir"
+    },
+    "result": {
+      "tabs_aria": "Secciones del resultado",
+      "tab_final": "Respuesta",
+      "tab_eval": "Evaluación",
+      "tab_charts": "Gráficos",
+      "tab_files": "Archivos",
+      "tab_timeline": "Cronología",
+      "tab_reasoning": "Razonamiento",
+      "meta_profile": "Perfil",
+      "meta_duration": "Duración",
+      "meta_tools": "Herramientas",
+      "report_file": "Archivo del informe",
+      "close": "Cerrar",
+      "no_output": "No se registró respuesta de texto final.",
+      "copy_text": "Copiar texto",
+      "copied": "Copiado",
+      "score": "{score} / {max}",
+      "grade": "Nota {rating}",
+      "passed": "Superado",
+      "failed": "No superado",
+      "eval_default": "Evaluación determinista de 10 criterios, sin variabilidad de un LLM-juez. Umbral de aprobación: 60.",
+      "criteria_title": "Criterios",
+      "criteria_count": "{passed} de {total} cumplidos",
+      "criteria_none": "Sin desglose de criterios para esta prueba.",
+      "points": "{points} / {max} pt",
+      "download": "Descargar",
+      "timeline_step": "Paso {n}",
+      "timeline_reasoning": "Razonamiento",
+      "timeline_tool": "Herramienta: {name}"
+    },
+    "markdown": {
+      "copy": "Copiar",
+      "copied": "Copiado",
+      "image_error": "No se pudo cargar la imagen {name}"
+    },
+    "charts": {
+      "no_data": "No hay datos disponibles para este gráfico.",
+      "no_numeric": "No se detectó ninguna serie numérica.",
+      "render_error": "No se pudo mostrar el gráfico: {error}",
+      "fallback_title": "Gráfico {n}"
+    }
   }
 }
