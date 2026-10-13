@@ -968,7 +968,19 @@
       "title": "Exécutions · {{name}}",
       "loading": "Chargement des exécutions…",
       "empty": "Aucune exécution.",
-      "close": "Fermer"
+      "close": "Fermer",
+      "empty_body": "Les exécutions apparaissent ici après le premier déclenchement, planifié ou via Exécuter maintenant.",
+      "summary": "{{n}} exécutions · {{ok}} réussies · {{bad}} échouées",
+      "list_aria": "Exécutions",
+      "detail_aria": "Détail de l'exécution",
+      "open_chat": "Ouvrir la conversation",
+      "no_chat": "Aucune conversation enregistrée pour cette exécution",
+      "started": "Début",
+      "finished": "Fin",
+      "duration": "Durée",
+      "error": "Erreur",
+      "output": "Réponse de l'agent",
+      "no_output": "Aucune réponse enregistrée."
     },
     "delete": {
       "title": "Supprimer la tâche",

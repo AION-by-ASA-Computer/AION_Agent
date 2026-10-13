@@ -968,7 +968,19 @@
       "title": "Läufe · {{name}}",
       "loading": "Läufe werden geladen…",
       "empty": "Noch keine Läufe.",
-      "close": "Schließen"
+      "close": "Schließen",
+      "empty_body": "Läufe erscheinen hier, sobald der Job gestartet wurde – nach Zeitplan oder mit Jetzt ausführen.",
+      "summary": "{{n}} Läufe · {{ok}} erfolgreich · {{bad}} fehlgeschlagen",
+      "list_aria": "Läufe",
+      "detail_aria": "Laufdetails",
+      "open_chat": "Konversation öffnen",
+      "no_chat": "Für diesen Lauf ist keine Konversation gespeichert",
+      "started": "Gestartet",
+      "finished": "Beendet",
+      "duration": "Dauer",
+      "error": "Fehler",
+      "output": "Antwort des Agenten",
+      "no_output": "Keine Antwort erfasst."
     },
     "delete": {
       "title": "Job löschen",

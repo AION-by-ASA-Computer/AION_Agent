@@ -968,7 +968,19 @@
       "title": "Esecuzioni · {{name}}",
       "loading": "Caricamento esecuzioni…",
       "empty": "Nessuna esecuzione.",
-      "close": "Chiudi"
+      "close": "Chiudi",
+      "empty_body": "Le esecuzioni compaiono qui dopo la prima partenza, da pianificazione o con Esegui ora.",
+      "summary": "{{n}} esecuzioni · {{ok}} riuscite · {{bad}} fallite",
+      "list_aria": "Esecuzioni",
+      "detail_aria": "Dettaglio esecuzione",
+      "open_chat": "Apri conversazione",
+      "no_chat": "Nessuna conversazione salvata per questa esecuzione",
+      "started": "Avvio",
+      "finished": "Fine",
+      "duration": "Durata",
+      "error": "Errore",
+      "output": "Risposta dell'agente",
+      "no_output": "Nessuna risposta registrata."
     },
     "delete": {
       "title": "Elimina job",

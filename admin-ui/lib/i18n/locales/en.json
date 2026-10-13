@@ -968,7 +968,19 @@
       "title": "Runs · {{name}}",
       "loading": "Loading runs…",
       "empty": "No runs yet.",
-      "close": "Close"
+      "close": "Close",
+      "empty_body": "Runs appear here once the job has fired, on schedule or with Run now.",
+      "summary": "{{n}} runs · {{ok}} succeeded · {{bad}} failed",
+      "list_aria": "Runs",
+      "detail_aria": "Run details",
+      "open_chat": "Open conversation",
+      "no_chat": "No conversation saved for this run",
+      "started": "Started",
+      "finished": "Finished",
+      "duration": "Duration",
+      "error": "Error",
+      "output": "Agent reply",
+      "no_output": "No reply captured."
     },
     "delete": {
       "title": "Delete job",

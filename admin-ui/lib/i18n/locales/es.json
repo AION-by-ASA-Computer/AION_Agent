@@ -968,7 +968,19 @@
       "title": "Ejecuciones · {{name}}",
       "loading": "Cargando ejecuciones…",
       "empty": "Aún no hay ejecuciones.",
-      "close": "Cerrar"
+      "close": "Cerrar",
+      "empty_body": "Las ejecuciones aparecen aquí tras el primer disparo, programado o con Ejecutar ahora.",
+      "summary": "{{n}} ejecuciones · {{ok}} correctas · {{bad}} fallidas",
+      "list_aria": "Ejecuciones",
+      "detail_aria": "Detalle de la ejecución",
+      "open_chat": "Abrir conversación",
+      "no_chat": "No hay conversación guardada para esta ejecución",
+      "started": "Inicio",
+      "finished": "Fin",
+      "duration": "Duración",
+      "error": "Error",
+      "output": "Respuesta del agente",
+      "no_output": "No se capturó respuesta."
     },
     "delete": {
       "title": "Eliminar tarea",

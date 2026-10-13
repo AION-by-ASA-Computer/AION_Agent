@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, History, Loader2, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, ExternalLink, History, Loader2, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
+import { chatUrl } from "@/lib/paths";
 import { getLocale } from "@/lib/i18n/i18n-store";
 import { PageToast, ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
@@ -14,6 +15,8 @@ import { Select } from "@/components/ui/Select";
 import { SearchField } from "@/components/ui/SearchField";
 import { ghostBtn, inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
 import { fullWhen, shortWhen, toMs } from "@/components/conversations/format";
+import { Transcript } from "@/components/conversations/Transcript";
+import type { ThreadMessage } from "@/components/conversations/types";
 
 const k = "admin_schedules";
 const ALL = "__all";
@@ -42,6 +45,7 @@ type CronRun = {
   finished_at?: string;
   error_message?: string;
   assistant_preview?: string;
+  conversation_id?: string | null;
 };
 
 type Option = { value: string; label: string };
@@ -116,6 +120,157 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
       {children}
       {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
     </label>
+  );
+}
+
+const duration = (r: CronRun) => {
+  const a = toMs(r.started_at);
+  const b = toMs(r.finished_at);
+  if (!a || !b || b < a) return "";
+  const sec = Math.round((b - a) / 1000);
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  return m < 60 ? `${m}m ${sec % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
+};
+
+function RunDetail({ run, t }: { run: CronRun; t: (k: string, v?: Record<string, string | number>) => string }) {
+  const convId = run.conversation_id || null;
+  const [thread, setThread] = useState<{ id: string; state: "ready" | "error"; messages: ThreadMessage[] } | null>(null);
+  const [showTools, setShowTools] = useState(false);
+
+  useEffect(() => {
+    if (!convId) return;
+    let live = true;
+    apiFetch(`${apiBase()}/admin/conversations/${encodeURIComponent(convId)}/messages?include_internal=true`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => live && setThread({ id: convId, state: "ready", messages: data.messages || [] }))
+      .catch(() => live && setThread({ id: convId, state: "error", messages: [] }));
+    return () => {
+      live = false;
+    };
+  }, [convId]);
+
+  const loaded = thread && thread.id === convId ? thread : null;
+  const toolCount = loaded?.messages.filter((m) => m.tool_name).length ?? 0;
+  const href = convId ? chatUrl(`/c/${encodeURIComponent(convId)}`) : null;
+  const chip = "focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors";
+
+  return (
+    <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-background" aria-label={t(`${k}.runs.detail_aria`)}>
+      <header className="flex flex-col gap-3 border-b border-border/60 px-5 py-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusPill status={run.status} t={t} />
+          <div className="ml-auto flex items-center gap-2">
+            {toolCount > 0 && (
+              <button type="button" aria-pressed={showTools} onClick={() => setShowTools((v) => !v)} className={cn(chip, showTools ? "border-foreground/30 bg-secondary" : "border-border hover:bg-secondary")}>
+                {t("admin_conversations.detail.show_tools")}
+                <span className="tabular-nums text-muted-foreground">{toolCount}</span>
+              </button>
+            )}
+            {href ? (
+              <a href={href} target="_blank" rel="noopener" className="focus-ring inline-flex h-9 items-center gap-2 rounded-xl bg-foreground px-3.5 text-sm font-semibold text-background transition-opacity hover:opacity-90">
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                {t(`${k}.runs.open_chat`)}
+              </a>
+            ) : (
+              <span className="text-xs text-muted-foreground">{t(`${k}.runs.no_chat`)}</span>
+            )}
+          </div>
+        </div>
+        <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+          {[
+            [t(`${k}.runs.started`), run.started_at ? fullWhen(toMs(run.started_at)) : "—"],
+            [t(`${k}.runs.finished`), run.finished_at ? fullWhen(toMs(run.finished_at)) : "—"],
+            [t(`${k}.runs.duration`), duration(run) || "—"],
+          ].map(([label, value]) => (
+            <div key={label} className="min-w-0">
+              <dt className="text-xs text-muted-foreground">{label}</dt>
+              <dd className="mt-0.5 tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        {run.error_message && <p className="whitespace-pre-wrap break-words rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive">{run.error_message}</p>}
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-6 sm:px-6" aria-busy={!!convId && !loaded}>
+        {!convId ? (
+          run.assistant_preview ? (
+            <p className="mx-auto max-w-3xl whitespace-pre-wrap break-words text-sm leading-relaxed">{run.assistant_preview}</p>
+          ) : (
+            <p className="py-16 text-center text-sm text-muted-foreground">{t(`${k}.runs.no_output`)}</p>
+          )
+        ) : !loaded ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground" role="status">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            {t("admin_conversations.detail.loading")}
+          </div>
+        ) : loaded.state === "error" ? (
+          <p className="py-16 text-center text-sm text-destructive">{t("admin_conversations.detail.load_error")}</p>
+        ) : loaded.messages.length === 0 ? (
+          <p className="py-16 text-center text-sm text-muted-foreground">{t("admin_conversations.detail.no_messages")}</p>
+        ) : (
+          <Transcript messages={loaded.messages} convId={loaded.id} highlightId={null} showTools={showTools} t={t} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function RunsDialog({ job, runs, loading, now, t, onClose }: { job: CronJob; runs: CronRun[]; loading: boolean; now: number; t: (k: string, v?: Record<string, string | number>) => string; onClose: () => void }) {
+  const [pick, setPick] = useState<string | null>(null);
+  const current = runs.find((r) => r.run_id === pick) ?? runs[0] ?? null;
+  const ok = runs.filter((r) => toneOf(r.status) === "ok").length;
+  const bad = runs.filter((r) => toneOf(r.status) === "bad").length;
+
+  return (
+    <Dialog title={t(`${k}.runs.title`, { name: job.name })} closeLabel={t(`${k}.runs.close`)} onClose={onClose} className="max-w-6xl">
+      <div className="flex flex-col gap-4">
+        <p className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <code className="font-mono tabular-nums text-foreground/80">{job.cron_expression}</code>
+          <span>{job.timezone}</span>
+          {!loading && runs.length > 0 && <span className="tabular-nums">{t(`${k}.runs.summary`, { n: runs.length, ok, bad })}</span>}
+        </p>
+
+        {loading ? (
+          <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground" role="status">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            {t(`${k}.runs.loading`)}
+          </div>
+        ) : runs.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border px-6 py-14 text-center">
+            <p className="text-sm font-medium">{t(`${k}.runs.empty`)}</p>
+            <p className="mx-auto mt-1 max-w-[42ch] text-sm text-muted-foreground">{t(`${k}.runs.empty_body`)}</p>
+          </div>
+        ) : (
+          <div className="grid min-h-0 gap-4 md:h-[min(42rem,72vh)] md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+            <ul className="flex max-h-60 flex-col gap-0.5 overflow-y-auto rounded-2xl border border-border/70 bg-background p-1.5 md:max-h-none" aria-label={t(`${k}.runs.list_aria`)}>
+              {runs.map((r) => {
+                const active = r.run_id === current?.run_id;
+                const ms = toMs(r.started_at);
+                return (
+                  <li key={r.run_id}>
+                    <button
+                      type="button"
+                      aria-current={active ? "true" : undefined}
+                      onClick={() => setPick(r.run_id)}
+                      className={cn("focus-ring flex w-full flex-col items-start gap-1 rounded-xl px-3 py-2 text-left transition-colors", active ? "bg-secondary" : "hover:bg-secondary/60")}
+                    >
+                      <StatusPill status={r.status} t={t} />
+                      <span className="flex w-full items-center justify-between gap-2 text-xs tabular-nums text-muted-foreground">
+                        <span title={fullWhen(ms)}>{ms ? shortWhen(ms, now) : ""}</span>
+                        <span>{duration(r)}</span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {current && <RunDetail key={current.run_id} run={current} t={t} />}
+          </div>
+        )}
+      </div>
+    </Dialog>
   );
 }
 
@@ -648,31 +803,7 @@ export default function SchedulesPage() {
         </Dialog>
       )}
 
-      {runsJob && (
-        <Dialog title={t(`${k}.runs.title`, { name: runsJob.name })} closeLabel={t(`${k}.runs.close`)} onClose={() => setRunsJob(null)} className="max-w-2xl">
-          {runsLoading ? (
-            <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground" role="status">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-              {t(`${k}.runs.loading`)}
-            </div>
-          ) : runs.length === 0 ? (
-            <p className="py-6 text-sm text-muted-foreground">{t(`${k}.runs.empty`)}</p>
-          ) : (
-            <ul className="-mx-2 flex max-h-[60vh] flex-col divide-y divide-border/50 overflow-y-auto">
-              {runs.map((r) => (
-                <li key={r.run_id} className="flex flex-col gap-1.5 px-2 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <StatusPill status={r.status} t={t} />
-                    <span className="text-xs tabular-nums text-muted-foreground">{r.started_at ? fullWhen(toMs(r.started_at)) : ""}</span>
-                  </div>
-                  {r.error_message && <p className="break-words text-sm text-destructive">{r.error_message}</p>}
-                  {r.assistant_preview && <p className="line-clamp-3 text-sm text-muted-foreground">{r.assistant_preview}</p>}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Dialog>
-      )}
+      {runsJob && <RunsDialog job={runsJob} runs={runs} loading={runsLoading} now={now} t={t} onClose={() => setRunsJob(null)} />}
 
       {deleting && <DeleteDialog name={deleting.name} busy={deleteBusy} ns={`${k}.delete`} t={t} onConfirm={confirmDelete} onClose={() => !deleteBusy && setDeleting(null)} />}
 
