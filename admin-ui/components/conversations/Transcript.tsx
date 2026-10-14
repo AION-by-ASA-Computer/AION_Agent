@@ -283,12 +283,15 @@ export function Transcript({
   convId,
   highlightId,
   showTools,
+  renderAfter,
   t,
 }: {
   messages: ThreadMessage[];
   convId: string;
   highlightId: string | null;
   showTools: boolean;
+  /** Extra content under an agent message (e.g. side threads opened from it). */
+  renderAfter?: (m: ThreadMessage) => React.ReactNode;
   t: T;
 }) {
   const rows = messages.filter((m) => showTools || !m.tool_name);
@@ -361,6 +364,7 @@ export function Transcript({
                       {m.feedback_comment}
                     </p>
                   )}
+                  {renderAfter?.(m)}
                   {meta}
                 </div>
               )}

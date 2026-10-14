@@ -1526,13 +1526,16 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   // Auto-scroll to bottom helper (used for non-streaming jumps: conversation load, etc.)
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "auto") => {
+    // Scroll only the feed: scrollIntoView would also scroll overflow-hidden ancestors
+    // and leave the whole layout shifted up until the next wheel scroll.
     const container = messagesContainerRef.current;
-    if (container) {
-      container.scrollTo({ top: container.scrollHeight, behavior });
-    }
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior, block: "end" });
-    }
+    if (!container) return;
+    container.scrollTo({ top: container.scrollHeight, behavior });
+    // Re-snap after layout settles (markdown, images and the dock may still be growing).
+    requestAnimationFrame(() => {
+      if (userScrolledAwayRef.current) return;
+      container.scrollTo({ top: container.scrollHeight, behavior: "auto" });
+    });
   }, []);
 
   // Detect manual scroll-away during streaming so we don't fight the user.
@@ -1596,7 +1599,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   // Scroll to bottom when a new conversation is selected or history finishes loading.
   useEffect(() => {
     if (!streaming) {
-      scrollToBottom("smooth");
+      userScrolledAwayRef.current = false;
+      scrollToBottom("auto");
     }
   }, [conversationId, messages.length, scrollToBottom, streaming]);
 
@@ -5121,7 +5125,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             <div className="flex flex-1 flex-col overflow-hidden min-h-0">
               <div
                 ref={setMessagesContainerCallbackRef}
-                className="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-8 flex flex-col justify-start transition-all duration-300 ease-out"
+                className="flex-1 overflow-y-auto px-3 py-4 sm:px-4 sm:py-8 flex flex-col justify-start"
                 aria-busy={streaming}
                 aria-live="polite"
               >

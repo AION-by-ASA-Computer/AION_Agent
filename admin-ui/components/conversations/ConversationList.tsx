@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, Calendar, ChevronDown, MessageSquare, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Calendar, ChevronDown, ChevronRight, MessageSquare, MessageSquareQuote, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { getLocale } from "@/lib/i18n/i18n-store";
 import { shortWhen, fullWhen, toMs } from "./format";
-import type { Conversation } from "./types";
+import type { Conversation, ConversationFamily } from "./types";
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 const k = "admin_conversations.list";
@@ -35,6 +35,19 @@ export type Filters = Record<FilterCol, string>;
 export type DateRange = { from: string; to: string };
 import { ColumnFilter, type FilterOption } from "@/components/ui/ColumnFilter";
 export type { FilterOption };
+
+/** A list entry: a top-level conversation and the side threads currently shown under it. */
+export type FamilyRow = ConversationFamily & {
+  /** Threads that pass the filters (all of them when the parent itself matches). */
+  shownThreads: Conversation[];
+  expanded: boolean;
+  /** The parent is only context: it is listed because one of its threads matched. */
+  dimmed: boolean;
+  /** Latest activity across the parent and its threads, used for sorting. */
+  latest: number;
+  flagSum: number;
+  threadAttention: boolean;
+};
 
 export const GRID = "md:grid-cols-[minmax(0,2.1fr)_minmax(0,1.4fr)_minmax(0,1fr)_4.5rem_6.5rem_11rem]";
 
@@ -165,12 +178,145 @@ export function DateFilter({ value, onChange, now, t }: { value: DateRange; onCh
   );
 }
 
+function Flags({ c, t }: { c: Conversation; t: T }) {
+  const down = c.disliked_count ?? 0;
+  const errs = c.error_count ?? 0;
+  const up = c.liked_count ?? 0;
+  const notes = c.comment_count ?? 0;
+  return (
+    <>
+      {up > 0 && (
+        <span className="inline-flex items-center gap-1 font-medium text-success" title={t("admin_conversations.detail.liked")}>
+          <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
+          <span className="tabular-nums">{up}</span>
+        </span>
+      )}
+      {down > 0 && (
+        <span className="inline-flex items-center gap-1 font-medium text-destructive" title={t("admin_conversations.detail.disliked")}>
+          <ThumbsDown className="h-3.5 w-3.5" aria-hidden />
+          <span className="tabular-nums">{down}</span>
+        </span>
+      )}
+      {notes > 0 && (
+        <span className="inline-flex items-center gap-1 font-medium text-muted-foreground" title={t(`${k}.feedback_comment`)}>
+          <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+          <span className="tabular-nums">{notes}</span>
+        </span>
+      )}
+      {errs > 0 && (
+        <span className="inline-flex items-center gap-1 font-medium text-destructive" title={t("admin_conversations.detail.tool_errors", { n: errs })}>
+          <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+          <span className="tabular-nums">{errs}</span>
+        </span>
+      )}
+    </>
+  );
+}
+
+/** The highlighted passage a side thread was opened on, as a one-line quote. */
+function Quote({ text }: { text: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+      <MessageSquareQuote className="h-3.5 w-3.5 shrink-0 text-primary/80" aria-hidden />
+      <span className="truncate">“{text}”</span>
+    </span>
+  );
+}
+
+function Row({
+  c,
+  active,
+  child,
+  dimmed,
+  threadCount = 0,
+  threadAttention,
+  onOpen,
+  profileName,
+  now,
+  t,
+}: {
+  c: Conversation;
+  active: boolean;
+  /** Rendered as a side thread nested under its parent. */
+  child?: boolean;
+  dimmed?: boolean;
+  threadCount?: number;
+  threadAttention?: boolean;
+  onOpen: (id: string) => void;
+  profileName: (slug: string) => string;
+  now: number;
+  t: T;
+}) {
+  const ms = toMs(c.updated_at);
+  const isThread = !!c.parent_conversation_id;
+  return (
+    <button
+      type="button"
+      data-conv-id={c.id}
+      aria-current={active ? "true" : undefined}
+      onClick={() => onOpen(c.id)}
+      className={cn(
+        "focus-ring grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 py-3 pl-11 pr-5 text-left transition-colors",
+        GRID,
+        child && "py-2.5",
+        active ? "bg-secondary" : "hover:bg-secondary/60",
+      )}
+    >
+      <span className={cn("flex min-w-0 flex-col gap-1", dimmed && "opacity-60")}>
+        <span className="flex min-w-0 items-center gap-2">
+          <span className={cn("min-w-0 line-clamp-2 break-words font-medium", child ? "text-[13px]" : "text-sm")}>{c.title || t(`${k}.untitled`)}</span>
+          {isThread && !child && (
+            <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">{t(`${k}.thread_badge`)}</span>
+          )}
+          {threadCount > 0 && (
+            <span
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[11px] font-medium tabular-nums",
+                threadAttention ? "border-destructive/40 text-destructive" : "border-border text-muted-foreground",
+              )}
+              title={threadAttention ? t(`${k}.thread_attention`) : undefined}
+            >
+              <MessageSquareQuote className="h-3 w-3" aria-hidden />
+              {t(`${k}.thread_count`, { n: threadCount })}
+            </span>
+          )}
+        </span>
+        {isThread && c.anchor_quote && <Quote text={c.anchor_quote} />}
+      </span>
+
+      <span className="flex items-center justify-end gap-2.5 text-xs md:order-last md:w-full">
+        <Flags c={c} t={t} />
+      </span>
+
+      <span className="col-span-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground md:hidden">
+        <span className="truncate">
+          {c.user_id}
+          {c.profile_slug ? ` · ${profileName(c.profile_slug)}` : ""}
+        </span>
+        <span className="shrink-0">· {t(`${k}.messages`, { n: c.message_count })}</span>
+        <span className="shrink-0 tabular-nums">· {shortWhen(ms, now)}</span>
+      </span>
+
+      <span className={cn("hidden min-w-0 flex-col md:flex", child && "text-muted-foreground")}>
+        <span className="truncate text-sm">{c.user_id}</span>
+        {c.tenant_id && !child && <span className="truncate text-xs text-muted-foreground">{c.tenant_id}</span>}
+      </span>
+      <span className="hidden truncate text-sm text-muted-foreground md:block">{c.profile_slug ? profileName(c.profile_slug) : "—"}</span>
+      <span className="hidden text-right text-sm tabular-nums text-muted-foreground md:block">{c.message_count}</span>
+      <span className="hidden text-right text-sm tabular-nums text-muted-foreground md:block" title={fullWhen(ms)}>
+        {shortWhen(ms, now)}
+      </span>
+    </button>
+  );
+}
+
 export function ConversationList({
   rows,
   selectedId,
   sort,
   onSort,
   onOpen,
+  onToggle,
   filters,
   onFilter,
   userOptions,
@@ -180,11 +326,13 @@ export function ConversationList({
   empty,
   t,
 }: {
-  rows: Conversation[];
+  rows: FamilyRow[];
   selectedId: string | null;
   sort: Sort;
   onSort: (k: SortKey) => void;
   onOpen: (id: string) => void;
+  /** Expands or collapses the side threads of a parent conversation. */
+  onToggle: (parentId: string) => void;
   filters: Filters;
   onFilter: (col: FilterCol, value: string) => void;
   userOptions: FilterOption[];
@@ -198,7 +346,7 @@ export function ConversationList({
   const feedbackOptions = FEEDBACK_VALUES.map((v) => ({ value: v, label: t(`${k}.feedback_${v}`) }));
   return (
     <div className="rounded-3xl border border-border/70 bg-card">
-      <div className={cn("hidden items-center gap-4 border-b border-border/60 px-5 py-2 md:grid", GRID)}>
+      <div className={cn("hidden items-center gap-4 border-b border-border/60 py-2 pl-11 pr-5 md:grid", GRID)}>
         <FilterHead label={t(`${k}.col_conversation`)} value={filters.conversation} onChange={(v) => onFilter("conversation", v)} t={t} />
         <FilterHead label={t(`${k}.col_user`)} value={filters.user} onChange={(v) => onFilter("user", v)} options={userOptions} typeable t={t} />
         <FilterHead label={t(`${k}.col_profile`)} value={filters.profile} onChange={(v) => onFilter("profile", v)} options={profileOptions} t={t} />
@@ -224,77 +372,51 @@ export function ConversationList({
 
       {empty}
       <ul className="overflow-hidden rounded-b-3xl">
-        {rows.map((c) => {
-          const active = c.id === selectedId;
-          const down = c.disliked_count ?? 0;
-          const errs = c.error_count ?? 0;
-          const ms = toMs(c.updated_at);
-          const up = c.liked_count ?? 0;
-          const notes = c.comment_count ?? 0;
-          const flags = (
-            <>
-              {up > 0 && (
-                <span className="inline-flex items-center gap-1 font-medium text-success" title={t("admin_conversations.detail.liked")}>
-                  <ThumbsUp className="h-3.5 w-3.5" aria-hidden />
-                  <span className="tabular-nums">{up}</span>
-                </span>
-              )}
-              {down > 0 && (
-                <span className="inline-flex items-center gap-1 font-medium text-destructive" title={t("admin_conversations.detail.disliked")}>
-                  <ThumbsDown className="h-3.5 w-3.5" aria-hidden />
-                  <span className="tabular-nums">{down}</span>
-                </span>
-              )}
-              {notes > 0 && (
-                <span className="inline-flex items-center gap-1 font-medium text-muted-foreground" title={t(`${k}.feedback_comment`)}>
-                  <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-                  <span className="tabular-nums">{notes}</span>
-                </span>
-              )}
-              {errs > 0 && (
-                <span className="inline-flex items-center gap-1 font-medium text-destructive" title={t("admin_conversations.detail.tool_errors", { n: errs })}>
-                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
-                  <span className="tabular-nums">{errs}</span>
-                </span>
-              )}
-            </>
-          );
+        {rows.map((r) => {
+          const { root } = r;
+          const count = r.shownThreads.length;
+          const groupId = `threads-of-${root.id}`;
           return (
-            <li key={c.id} className="border-b border-border/40 last:border-b-0">
-              <button
-                type="button"
-                data-conv-id={c.id}
-                aria-current={active ? "true" : undefined}
-                onClick={() => onOpen(c.id)}
-                className={cn(
-                  "focus-ring grid w-full grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-0.5 px-5 py-3 text-left transition-colors",
-                  GRID,
-                  active ? "bg-secondary" : "hover:bg-secondary/60",
-                )}
-              >
-                <span className="min-w-0 line-clamp-2 break-words text-sm font-medium">{c.title || t(`${k}.untitled`)}</span>
-
-                <span className="flex items-center justify-end gap-2.5 text-xs md:order-last md:w-full">{flags}</span>
-
-                <span className="col-span-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground md:hidden">
-                  <span className="truncate">
-                    {c.user_id}
-                    {c.profile_slug ? ` · ${profileName(c.profile_slug)}` : ""}
-                  </span>
-                  <span className="shrink-0">· {t(`${k}.messages`, { n: c.message_count })}</span>
-                  <span className="shrink-0 tabular-nums">· {shortWhen(ms, now)}</span>
-                </span>
-
-                <span className="hidden min-w-0 flex-col md:flex">
-                  <span className="truncate text-sm">{c.user_id}</span>
-                  {c.tenant_id && <span className="truncate text-xs text-muted-foreground">{c.tenant_id}</span>}
-                </span>
-                <span className="hidden truncate text-sm text-muted-foreground md:block">{c.profile_slug ? profileName(c.profile_slug) : "—"}</span>
-                <span className="hidden text-right text-sm tabular-nums text-muted-foreground md:block">{c.message_count}</span>
-                <span className="hidden text-right text-sm tabular-nums text-muted-foreground md:block" title={fullWhen(ms)}>
-                  {shortWhen(ms, now)}
-                </span>
-              </button>
+            <li key={root.id} className="relative border-b border-border/40 last:border-b-0">
+              <Row
+                c={root}
+                active={root.id === selectedId}
+                dimmed={r.dimmed}
+                threadCount={r.threads.length}
+                threadAttention={r.threadAttention}
+                onOpen={onOpen}
+                profileName={profileName}
+                now={now}
+                t={t}
+              />
+              {count > 0 && (
+                <button
+                  type="button"
+                  onClick={() => onToggle(root.id)}
+                  aria-expanded={r.expanded}
+                  aria-controls={groupId}
+                  aria-label={r.expanded ? t(`${k}.threads_hide`) : t(`${k}.threads_show`, { n: count })}
+                  title={r.expanded ? t(`${k}.threads_hide`) : t(`${k}.threads_show`, { n: count })}
+                  className="focus-ring absolute left-2.5 top-3 flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground"
+                >
+                  <ChevronRight className={cn("h-4 w-4 transition-transform duration-200 ease-out motion-reduce:transition-none", r.expanded && "rotate-90")} aria-hidden />
+                </button>
+              )}
+              {r.expanded && (
+                <ul id={groupId} aria-label={t(`${k}.threads_of`, { title: root.title || t(`${k}.untitled`) })} className="border-t border-border/30 bg-muted/25">
+                  {r.shownThreads.map((th, i) => {
+                    const last = i === r.shownThreads.length - 1;
+                    return (
+                      <li key={th.id} className="relative border-b border-border/25 last:border-b-0">
+                        {/* Tree connector from the parent's chevron to each thread. */}
+                        <span aria-hidden className={cn("pointer-events-none absolute left-[1.3rem] top-0 w-px bg-border", last ? "h-1/2" : "h-full")} />
+                        <span aria-hidden className="pointer-events-none absolute left-[1.3rem] top-1/2 h-px w-3 bg-border" />
+                        <Row c={th} child active={th.id === selectedId} onOpen={onOpen} profileName={profileName} now={now} t={t} />
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
             </li>
           );
         })}
@@ -302,4 +424,3 @@ export function ConversationList({
     </div>
   );
 }
-

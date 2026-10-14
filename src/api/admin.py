@@ -3982,11 +3982,51 @@ async def delete_message_feedback(message_id: str):
 
 @router.get("/conversations/global")
 async def list_conversations_global(limit: int = 200):
-    """List all conversations across all users/tenants, with per-thread issue counters."""
+    """List all conversations across all users/tenants, with per-thread issue counters.
+
+    ``limit`` caps top-level conversations. Side threads (child conversations) are
+    returned alongside their parent, and a recently active thread pulls in its parent,
+    so the admin list can nest them instead of showing them as standalone chats.
+    """
     limit = max(1, min(int(limit), 1000))
     async with get_async_session_maker()() as session:
-        q = select(Conversation).order_by(Conversation.updated_at.desc()).limit(limit)
-        rows = (await session.execute(q)).scalars().all()
+        is_root = Conversation.parent_conversation_id.is_(None)
+        roots = list(
+            (
+                await session.execute(
+                    select(Conversation).where(is_root).order_by(Conversation.updated_at.desc()).limit(limit)
+                )
+            ).scalars().all()
+        )
+        truncated = len(roots) >= limit
+        recent_threads = (
+            await session.execute(
+                select(Conversation)
+                .where(Conversation.parent_conversation_id.is_not(None))
+                .order_by(Conversation.updated_at.desc())
+                .limit(limit)
+            )
+        ).scalars().all()
+        root_ids = {r.id for r in roots}
+        missing = {t.parent_conversation_id for t in recent_threads} - root_ids
+        if missing:
+            roots += (
+                await session.execute(select(Conversation).where(Conversation.id.in_(missing)))
+            ).scalars().all()
+            root_ids = {r.id for r in roots}
+        threads = (
+            (
+                await session.execute(
+                    select(Conversation).where(Conversation.parent_conversation_id.in_(root_ids))
+                )
+            ).scalars().all()
+            if root_ids
+            else []
+        )
+        # Threads whose parent row no longer exists still get listed (as orphans).
+        seen = root_ids | {t.id for t in threads}
+        threads = list(threads) + [t for t in recent_threads if t.id not in seen]
+        rows = roots + threads
         ids = [r.id for r in rows]
         disliked: dict[str, int] = {}
         errored: dict[str, int] = {}
@@ -4036,11 +4076,25 @@ async def list_conversations_global(limit: int = 200):
                     "liked_count": liked.get(r.id, 0),
                     "comment_count": commented.get(r.id, 0),
                     "error_count": errored.get(r.id, 0),
+                    "parent_conversation_id": r.parent_conversation_id,
+                    "parent_message_id": r.parent_message_id,
+                    "anchor_quote": _side_thread_quote(r),
                 }
                 for r in rows
             ],
             "limit": limit,
+            "truncated": truncated,
         }
+
+
+def _side_thread_quote(conv: Conversation) -> Optional[str]:
+    if not conv.parent_conversation_id:
+        return None
+    try:
+        quote = json.loads(conv.anchor_json or "{}").get("quote")
+    except (ValueError, AttributeError):
+        return None
+    return quote if isinstance(quote, str) and quote else None
 
 
 @router.get("/conversations/{conv_id}/messages")

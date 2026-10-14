@@ -792,7 +792,7 @@
   },
   "admin_conversations": {
     "title": "Conversazioni",
-    "subtitle": "Tutti i thread di utenti e tenant. Trova quelli andati male, poi leggili.",
+    "subtitle": "Tutte le conversazioni di utenti e tenant. Trova quelle andate male, poi leggile.",
     "refresh": "Aggiorna",
     "loading": "Caricamento conversazioni…",
     "error": "Impossibile caricare le conversazioni.",
@@ -812,7 +812,7 @@
       "messages": "{{n}} msg",
       "truncated": "Mostro le ultime {{n}} conversazioni. Restringi la ricerca per trovare le più vecchie.",
       "none_title": "Ancora nessuna conversazione",
-      "none_body": "I thread compaiono qui appena qualcuno parla con un agente.",
+      "none_body": "Le conversazioni compaiono qui appena qualcuno parla con un agente.",
       "col_conversation": "Conversazione",
       "col_user": "Utente",
       "col_profile": "Profilo",
@@ -837,16 +837,22 @@
       "date_hint": "Scegli lo stesso giorno due volte per una data precisa.",
       "date_since": "Dal {{d}}",
       "date_until": "Fino al {{d}}",
-      "date_label": "Data"
+      "date_label": "Data",
+      "thread_badge": "Thread",
+      "thread_count": "Thread · {{n}}",
+      "thread_attention": "Un thread di questa conversazione va controllato",
+      "threads_show": "Mostra i thread ({{n}})",
+      "threads_hide": "Nascondi i thread",
+      "threads_of": "Thread di «{{title}}»"
     },
     "detail": {
       "copy_id": "Copia ID",
       "copied": "Copiato",
       "flagged": "{{n}} segnalati",
       "next_flag": "Prossimo messaggio segnalato",
-      "loading": "Caricamento thread…",
+      "loading": "Caricamento conversazione…",
       "no_messages": "Nessun messaggio in questa conversazione.",
-      "load_error": "Impossibile caricare questo thread.",
+      "load_error": "Impossibile caricare questa conversazione.",
       "show_tools": "Messaggi dei tool",
       "hide_tools": "Nascondi messaggi dei tool",
       "human": "Utente",
@@ -877,7 +883,12 @@
       "artifact_empty": "Nessun contenuto",
       "pii_title": "Revisione dati sensibili",
       "pii_waiting": "In attesa…",
-      "open": "Apri"
+      "open": "Apri",
+      "thread_from": "Thread da",
+      "open_parent": "Apri la conversazione al passaggio evidenziato",
+      "parent_missing": "Thread di una conversazione non più disponibile",
+      "threads": "Thread ({{n}})",
+      "open_thread": "Apri il thread"
     }
   },
   "admin_memory": {

@@ -792,7 +792,7 @@
   },
   "admin_conversations": {
     "title": "Konversationen",
-    "subtitle": "Alle Threads über Nutzer und Mandanten hinweg. Finde die fehlgeschlagenen und lies sie nach.",
+    "subtitle": "Alle Unterhaltungen über Nutzer und Mandanten hinweg. Finde die fehlgeschlagenen und lies sie nach.",
     "refresh": "Aktualisieren",
     "loading": "Konversationen werden geladen…",
     "error": "Konversationen konnten nicht geladen werden.",
@@ -812,7 +812,7 @@
       "messages": "{{n}} Nachr.",
       "truncated": "Zeige die letzten {{n}} Konversationen. Schränke die Suche ein, um ältere zu finden.",
       "none_title": "Noch keine Konversationen",
-      "none_body": "Threads erscheinen hier, sobald jemand mit einem Agenten spricht.",
+      "none_body": "Unterhaltungen erscheinen hier, sobald jemand mit einem Agenten spricht.",
       "col_conversation": "Konversation",
       "col_user": "Nutzer",
       "col_profile": "Profil",
@@ -837,16 +837,22 @@
       "date_hint": "Zweimal denselben Tag wählen für ein genaues Datum.",
       "date_since": "Ab {{d}}",
       "date_until": "Bis {{d}}",
-      "date_label": "Datum"
+      "date_label": "Datum",
+      "thread_badge": "Thread",
+      "thread_count": "Threads · {{n}}",
+      "thread_attention": "Ein Thread dieser Unterhaltung braucht Aufmerksamkeit",
+      "threads_show": "Threads anzeigen ({{n}})",
+      "threads_hide": "Threads ausblenden",
+      "threads_of": "Threads von „{{title}}“"
     },
     "detail": {
       "copy_id": "ID kopieren",
       "copied": "Kopiert",
       "flagged": "{{n}} markiert",
       "next_flag": "Nächste markierte Nachricht",
-      "loading": "Thread wird geladen…",
+      "loading": "Unterhaltung wird geladen…",
       "no_messages": "Keine Nachrichten in dieser Konversation.",
-      "load_error": "Dieser Thread konnte nicht geladen werden.",
+      "load_error": "Diese Unterhaltung konnte nicht geladen werden.",
       "show_tools": "Tool-Nachrichten",
       "hide_tools": "Tool-Nachrichten ausblenden",
       "human": "Nutzer",
@@ -877,7 +883,12 @@
       "artifact_empty": "Kein Inhalt",
       "pii_title": "Prüfung sensibler Daten",
       "pii_waiting": "Wartet …",
-      "open": "Öffnen"
+      "open": "Öffnen",
+      "thread_from": "Thread aus",
+      "open_parent": "Unterhaltung an der markierten Stelle öffnen",
+      "parent_missing": "Thread einer nicht mehr verfügbaren Unterhaltung",
+      "threads": "Threads ({{n}})",
+      "open_thread": "Thread öffnen"
     }
   },
   "admin_memory": {
