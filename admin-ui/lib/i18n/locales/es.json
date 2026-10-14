@@ -792,7 +792,7 @@
   },
   "admin_conversations": {
     "title": "Conversaciones",
-    "subtitle": "Todos los hilos de usuarios y tenants. Encuentra los que salieron mal y léelos.",
+    "subtitle": "Todas las conversaciones de usuarios y tenants. Encuentra las que salieron mal y léelas.",
     "refresh": "Actualizar",
     "loading": "Cargando conversaciones…",
     "error": "No se pudieron cargar las conversaciones.",
@@ -812,7 +812,7 @@
       "messages": "{{n}} msj",
       "truncated": "Mostrando las últimas {{n}} conversaciones. Acota la búsqueda para encontrar las más antiguas.",
       "none_title": "Aún no hay conversaciones",
-      "none_body": "Los hilos aparecen aquí en cuanto alguien habla con un agente.",
+      "none_body": "Las conversaciones aparecen aquí en cuanto alguien habla con un agente.",
       "col_conversation": "Conversación",
       "col_user": "Usuario",
       "col_profile": "Perfil",
@@ -837,16 +837,22 @@
       "date_hint": "Elige el mismo día dos veces para una fecha exacta.",
       "date_since": "Desde el {{d}}",
       "date_until": "Hasta el {{d}}",
-      "date_label": "Fecha"
+      "date_label": "Fecha",
+      "thread_badge": "Hilo",
+      "thread_count": "Hilos · {{n}}",
+      "thread_attention": "Un hilo de esta conversación necesita revisión",
+      "threads_show": "Mostrar hilos ({{n}})",
+      "threads_hide": "Ocultar hilos",
+      "threads_of": "Hilos de «{{title}}»"
     },
     "detail": {
       "copy_id": "Copiar ID",
       "copied": "Copiado",
       "flagged": "{{n}} marcados",
       "next_flag": "Siguiente mensaje marcado",
-      "loading": "Cargando hilo…",
+      "loading": "Cargando conversación…",
       "no_messages": "No hay mensajes en esta conversación.",
-      "load_error": "No se pudo cargar este hilo.",
+      "load_error": "No se pudo cargar esta conversación.",
       "show_tools": "Mensajes de herramientas",
       "hide_tools": "Ocultar mensajes de herramientas",
       "human": "Usuario",
@@ -877,7 +883,12 @@
       "artifact_empty": "Sin contenido",
       "pii_title": "Revisión de datos sensibles",
       "pii_waiting": "En espera…",
-      "open": "Abrir"
+      "open": "Abrir",
+      "thread_from": "Hilo de",
+      "open_parent": "Abrir la conversación en el pasaje resaltado",
+      "parent_missing": "Hilo de una conversación que ya no está disponible",
+      "threads": "Hilos ({{n}})",
+      "open_thread": "Abrir hilo"
     }
   },
   "admin_memory": {

@@ -9,10 +9,10 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 import { ghostBtn, outlineBtn } from "@/components/ui/classes";
 import { SearchField } from "@/components/ui/SearchField";
-import { ConversationList, DateFilter, FEEDBACK_VALUES, flagTotal, matchesFeedback, type DateRange, type FilterCol, type Filters, type Sort, type SortKey } from "@/components/conversations/ConversationList";
+import { ConversationList, DateFilter, FEEDBACK_VALUES, flagTotal, matchesFeedback, type DateRange, type FamilyRow, type FilterCol, type Filters, type Sort, type SortKey } from "@/components/conversations/ConversationList";
 import { Reader } from "@/components/conversations/Reader";
 import { toMs } from "@/components/conversations/format";
-import { needsAttention, type Conversation, type ThreadMessage } from "@/components/conversations/types";
+import { needsAttention, type Conversation, type ConversationFamily, type ThreadMessage } from "@/components/conversations/types";
 
 const k = "admin_conversations";
 const FETCH_LIMIT = 500;
@@ -29,6 +29,7 @@ function ConversationsContent() {
   const messageParam = params.get("message");
 
   const [convs, setConvs] = useState<Conversation[]>([]);
+  const [truncated, setTruncated] = useState(false);
   const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
   const [now, setNow] = useState(() => Date.now());
   const [query, setQuery] = useState("");
@@ -42,12 +43,16 @@ function ConversationsContent() {
   const [sort, setSort] = useState<Sort>({ key: "updated", dir: "desc" });
   const [limit, setLimit] = useState(PAGE);
   const [thread, setThread] = useState<Thread | null>(null);
+  // Explicit expand/collapse choices per parent; unset parents follow the automatic rule.
+  const [expandChoice, setExpandChoice] = useState<Record<string, boolean>>({});
 
   const loadList = useCallback(() => {
     apiFetch(`${apiBase()}/admin/conversations/global?limit=${FETCH_LIMIT}`)
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((data) => {
-        setConvs(data.conversations || []);
+        const list: Conversation[] = data.conversations || [];
+        setConvs(list);
+        setTruncated(data.truncated ?? list.length >= FETCH_LIMIT);
         setNow(Date.now());
         setListState("ready");
       })
@@ -95,7 +100,11 @@ function ConversationsContent() {
     return () => window.clearTimeout(id);
   }, [messageParam, current]);
 
-  const open = useCallback((id: string) => router.replace(`/conversations?id=${encodeURIComponent(id)}`, { scroll: false }), [router]);
+  const open = useCallback(
+    (id: string, messageId?: string | null) =>
+      router.replace(`/conversations?id=${encodeURIComponent(id)}${messageId ? `&message=${encodeURIComponent(messageId)}` : ""}`, { scroll: false }),
+    [router],
+  );
   const close = useCallback(() => {
     const id = selectedId;
     router.replace("/conversations", { scroll: false });
@@ -109,29 +118,72 @@ function ConversationsContent() {
   );
   const setFilter = (col: FilterCol, value: string) => setFilters((f) => ({ ...f, [col]: value }));
 
-  const rows = useMemo(() => {
+  // Side threads are child conversations: group them under their parent.
+  const byId = useMemo(() => new Map(convs.map((c) => [c.id, c])), [convs]);
+  const families = useMemo<ConversationFamily[]>(() => {
+    const kids = new Map<string, Conversation[]>();
+    const out: ConversationFamily[] = [];
+    for (const c of convs) {
+      const pid = c.parent_conversation_id;
+      if (pid && byId.has(pid)) kids.set(pid, [...(kids.get(pid) ?? []), c]);
+    }
+    for (const c of convs) {
+      const pid = c.parent_conversation_id;
+      if (pid && byId.has(pid)) continue;
+      const threads = (kids.get(c.id) ?? []).sort((x, y) => toMs(y.updated_at) - toMs(x.updated_at));
+      out.push({ root: c, threads, orphan: !!pid });
+    }
+    return out;
+  }, [convs, byId]);
+
+  const filtering = !!query || !!(dateRange.from || dateRange.to) || Object.values(filters).some(Boolean) || attention;
+
+  const rows = useMemo<FamilyRow[]>(() => {
     const q = query.trim().toLowerCase();
     const lo = dateRange.from ? new Date(`${dateRange.from}T00:00:00`).getTime() : 0;
     const hi = dateRange.to ? new Date(`${dateRange.to}T23:59:59.999`).getTime() : Infinity;
-    const out = convs.filter((c) => {
+    const matches = (c: Conversation) => {
       const at = toMs(c.updated_at);
       if (at < lo || at > hi) return false;
       if (filters.user && !c.user_id.toLowerCase().includes(filters.user.trim().toLowerCase())) return false;
       if (filters.feedback && !matchesFeedback(c, filters.feedback)) return false;
       if (filters.profile && c.profile_slug !== filters.profile) return false;
       const ct = filters.conversation.trim().toLowerCase();
-      if (ct && !`${c.title || ""} ${c.id}`.toLowerCase().includes(ct)) return false;
+      if (ct && !`${c.title || ""} ${c.anchor_quote || ""} ${c.id}`.toLowerCase().includes(ct)) return false;
       if (attention && !needsAttention(c)) return false;
       if (!q) return true;
-      return [c.title, c.id, c.user_id, c.tenant_id, c.profile_slug, profileName(c.profile_slug)].some((v) => (v || "").toLowerCase().includes(q));
-    });
-    const val = (c: Conversation) => (sort.key === "messages" ? c.message_count : sort.key === "flags" ? flagTotal(c) : toMs(c.updated_at));
+      return [c.title, c.anchor_quote, c.id, c.user_id, c.tenant_id, c.profile_slug, profileName(c.profile_slug)].some((v) => (v || "").toLowerCase().includes(q));
+    };
+    const out: FamilyRow[] = [];
+    for (const f of families) {
+      const rootHit = matches(f.root);
+      const hits = f.threads.filter(matches);
+      if (!rootHit && hits.length === 0) continue;
+      // A family shown only because of a thread keeps its parent as context, dimmed.
+      const shownThreads = rootHit ? f.threads : hits;
+      const auto = (!rootHit && hits.length > 0) || f.threads.some((th) => th.id === selectedId);
+      const members = [f.root, ...f.threads];
+      out.push({
+        ...f,
+        shownThreads,
+        expanded: shownThreads.length > 0 && (expandChoice[f.root.id] ?? auto),
+        dimmed: !rootHit,
+        latest: Math.max(...members.map((c) => toMs(c.updated_at))),
+        flagSum: members.reduce((n, c) => n + flagTotal(c), 0),
+        threadAttention: f.threads.some(needsAttention),
+      });
+    }
+    const val = (r: FamilyRow) => (sort.key === "messages" ? r.root.message_count : sort.key === "flags" ? r.flagSum : r.latest);
     const sign = sort.dir === "asc" ? 1 : -1;
-    return out.sort((a, b) => (val(a) - val(b)) * sign || toMs(b.updated_at) - toMs(a.updated_at));
-  }, [convs, query, dateRange, filters, attention, sort, profileName]);
+    return out.sort((a, b) => (val(a) - val(b)) * sign || b.latest - a.latest);
+  }, [families, query, dateRange, filters, attention, sort, profileName, expandChoice, selectedId]);
 
-  const attentionTotal = useMemo(() => convs.filter(needsAttention).length, [convs]);
-  const filtering = !!query || !!(dateRange.from || dateRange.to) || Object.values(filters).some(Boolean) || attention;
+  const toggleFamily = useCallback(
+    (id: string) => setExpandChoice((m) => ({ ...m, [id]: !(rows.find((r) => r.root.id === id)?.expanded ?? false) })),
+    [rows],
+  );
+
+  const attentionTotal = useMemo(() => families.filter((f) => needsAttention(f.root) || f.threads.some(needsAttention)).length, [families]);
   const clearFilters = () => {
     setQuery("");
     setDateRange({ from: "", to: "" });
@@ -140,14 +192,16 @@ function ConversationsContent() {
   };
 
   const shown = rows.slice(0, limit);
-  const index = selectedId ? rows.findIndex((c) => c.id === selectedId) : -1;
-  const position = index >= 0 ? { index, total: rows.length } : null;
+  // J/K walk what the list shows: each parent, then its threads when expanded.
+  const order = useMemo(() => rows.flatMap((r) => [r.root.id, ...(r.expanded ? r.shownThreads.map((th) => th.id) : [])]), [rows]);
+  const index = selectedId ? order.indexOf(selectedId) : -1;
+  const position = index >= 0 ? { index, total: order.length } : null;
   const step = useCallback(
     (dir: 1 | -1) => {
-      const next = rows[index + dir];
-      if (next) open(next.id);
+      const next = order[index + dir];
+      if (next) open(next);
     },
-    [rows, index, open],
+    [order, index, open],
   );
 
   // Keyboard: Esc closes the reader, J/K walk the list while it is open.
@@ -168,7 +222,9 @@ function ConversationsContent() {
   const onSort = (key: SortKey) => setSort((s) => (s.key === key ? { key, dir: s.dir === "desc" ? "asc" : "desc" } : { key, dir: "desc" }));
 
   const noneAtAll = listState === "ready" && convs.length === 0;
-  const summary = convs.find((c) => c.id === selectedId) ?? null;
+  const summary = (selectedId && byId.get(selectedId)) || null;
+  const parentConv = summary?.parent_conversation_id ? (byId.get(summary.parent_conversation_id) ?? null) : null;
+  const childThreads = useMemo(() => (selectedId ? families.find((f) => f.root.id === selectedId)?.threads ?? [] : []), [families, selectedId]);
 
   return (
     <div className="mx-auto flex max-w-[84rem] flex-col gap-6">
@@ -215,7 +271,7 @@ function ConversationsContent() {
 
             {listState === "ready" && (
               <span className="ml-auto text-sm tabular-nums text-muted-foreground">
-                {filtering ? t(`${k}.list.count_filtered`, { shown: rows.length, total: convs.length }) : t(`${k}.list.count`, { n: convs.length })}
+                {filtering ? t(`${k}.list.count_filtered`, { shown: rows.length, total: families.length }) : t(`${k}.list.count`, { n: families.length })}
               </span>
             )}
           </div>
@@ -234,7 +290,7 @@ function ConversationsContent() {
             </div>
           ) : (
             <>
-              <ConversationList rows={shown} selectedId={selectedId} sort={sort} onSort={onSort} onOpen={open} filters={filters} onFilter={setFilter} userOptions={userOptions} profileOptions={profileOptions} profileName={profileName}
+              <ConversationList rows={shown} selectedId={selectedId} sort={sort} onSort={onSort} onOpen={open} onToggle={toggleFamily} filters={filters} onFilter={setFilter} userOptions={userOptions} profileOptions={profileOptions} profileName={profileName}
                 now={now}
                 t={t}
                 empty={
@@ -257,7 +313,7 @@ function ConversationsContent() {
                     {t(`${k}.list.show_more`, { n: Math.min(PAGE, rows.length - shown.length) })}
                   </button>
                 )}
-                {convs.length >= FETCH_LIMIT && !filtering && <p className="text-xs text-muted-foreground">{t(`${k}.list.truncated`, { n: FETCH_LIMIT })}</p>}
+                {truncated && !filtering && <p className="text-xs text-muted-foreground">{t(`${k}.list.truncated`, { n: FETCH_LIMIT })}</p>}
               </div>
             </>
           )}
@@ -268,6 +324,9 @@ function ConversationsContent() {
         <Reader
           id={selectedId}
           summary={summary}
+          parent={parentConv}
+          threads={childThreads}
+          onOpen={open}
           state={current ? current.state : "loading"}
           messages={current?.messages ?? NO_MESSAGES}
           highlightId={messageParam}

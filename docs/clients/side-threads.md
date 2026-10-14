@@ -58,6 +58,7 @@ sequenceDiagram
 | Dock panel | New dock tab `"thread"`: quote (click to scroll to and flash the passage), title, switcher between the conversation's threads, "open as chat", messages, compact composer. Full-screen sheet on mobile. |
 | Sidebar | Threads are hidden from the main list and nested under their parent (chevron + count, lazily loaded). The parent of the open thread expands automatically. |
 | Full page `/c/{threadId}` | Breadcrumb "Thread from *parent*" with the quote; the back link `/c/{parent}?thread={id}` reopens the thread in the panel. |
+| Admin UI `/conversations` | Threads are nested under their parent (collapsible, with tree connectors and the quote). Filters keep a matching thread's parent as dimmed context; sorting uses the latest activity of the whole family. The reader shows "Thread from *parent*" (opens the parent at the source message) and thread chips under each source answer. |
 
 ## Data model
 
@@ -85,6 +86,10 @@ All endpoints use the usual chat-ui headers (`X-AION-User-Id`, `X-AION-Chat-Ui-S
   `parent_message_id`, `parent_title`, `anchor`.
 - `DELETE /chat-ui/conversations/{id}` — archives the child threads too and releases
   their MCP sessions.
+- `GET /admin/conversations/global` — every row carries `parent_conversation_id`,
+  `parent_message_id` and `anchor_quote`. `limit` caps top-level conversations; their
+  threads are always included, a recently active thread brings its parent along, and
+  `truncated` tells whether older top-level conversations were left out.
 - `POST /v1/chat/stream` — now rejects (`404`) an existing `session_id` owned by another user.
 
 ## Agent context

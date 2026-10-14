@@ -792,7 +792,7 @@
   },
   "admin_conversations": {
     "title": "Conversations",
-    "subtitle": "Tous les fils, tous utilisateurs et tenants confondus. Repérez ceux qui ont mal tourné, puis lisez-les.",
+    "subtitle": "Toutes les conversations, tous utilisateurs et tenants confondus. Repérez celles qui ont mal tourné, puis lisez-les.",
     "refresh": "Actualiser",
     "loading": "Chargement des conversations…",
     "error": "Impossible de charger les conversations.",
@@ -812,7 +812,7 @@
       "messages": "{{n}} msg",
       "truncated": "Affichage des {{n}} dernières conversations. Affinez la recherche pour trouver les plus anciennes.",
       "none_title": "Aucune conversation pour l'instant",
-      "none_body": "Les fils apparaissent ici dès que quelqu'un parle à un agent.",
+      "none_body": "Les conversations apparaissent ici dès que quelqu'un parle à un agent.",
       "col_conversation": "Conversation",
       "col_user": "Utilisateur",
       "col_profile": "Profil",
@@ -837,16 +837,22 @@
       "date_hint": "Choisissez deux fois le même jour pour une date précise.",
       "date_since": "Depuis le {{d}}",
       "date_until": "Jusqu’au {{d}}",
-      "date_label": "Date"
+      "date_label": "Date",
+      "thread_badge": "Fil",
+      "thread_count": "Fils · {{n}}",
+      "thread_attention": "Un fil de cette conversation est à vérifier",
+      "threads_show": "Afficher les fils ({{n}})",
+      "threads_hide": "Masquer les fils",
+      "threads_of": "Fils de « {{title}} »"
     },
     "detail": {
       "copy_id": "Copier l'ID",
       "copied": "Copié",
       "flagged": "{{n}} signalés",
       "next_flag": "Message signalé suivant",
-      "loading": "Chargement du fil…",
+      "loading": "Chargement de la conversation…",
       "no_messages": "Aucun message dans cette conversation.",
-      "load_error": "Impossible de charger ce fil.",
+      "load_error": "Impossible de charger cette conversation.",
       "show_tools": "Messages d'outils",
       "hide_tools": "Masquer les messages d'outils",
       "human": "Utilisateur",
@@ -877,7 +883,12 @@
       "artifact_empty": "Aucun contenu",
       "pii_title": "Revue des données sensibles",
       "pii_waiting": "En attente…",
-      "open": "Ouvrir"
+      "open": "Ouvrir",
+      "thread_from": "Fil de",
+      "open_parent": "Ouvrir la conversation au passage surligné",
+      "parent_missing": "Fil d'une conversation qui n'est plus disponible",
+      "threads": "Fils ({{n}})",
+      "open_thread": "Ouvrir le fil"
     }
   },
   "admin_memory": {

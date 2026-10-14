@@ -10,6 +10,20 @@ export type Conversation = {
   liked_count?: number;
   comment_count?: number;
   error_count?: number;
+  /** Set on side threads: the conversation the thread was opened from. */
+  parent_conversation_id?: string | null;
+  /** Assistant message of the parent the highlighted passage belongs to. */
+  parent_message_id?: string | null;
+  /** The highlighted passage the thread was opened on. */
+  anchor_quote?: string | null;
+};
+
+/** A top-level conversation with its side threads (newest first). */
+export type ConversationFamily = {
+  root: Conversation;
+  threads: Conversation[];
+  /** True when the parent row is missing and a thread stands in as the root. */
+  orphan?: boolean;
 };
 
 export type ThreadStep = {

@@ -792,7 +792,7 @@
   },
   "admin_conversations": {
     "title": "Conversations",
-    "subtitle": "Every thread across users and tenants. Find the ones that went wrong, then read them.",
+    "subtitle": "Every conversation across users and tenants. Find the ones that went wrong, then read them.",
     "refresh": "Refresh",
     "loading": "Loading conversations…",
     "error": "Couldn't load conversations.",
@@ -812,7 +812,7 @@
       "messages": "{{n}} msgs",
       "truncated": "Showing the latest {{n}} conversations. Narrow the search to find older ones.",
       "none_title": "No conversations yet",
-      "none_body": "Threads show up here as soon as someone talks to an agent.",
+      "none_body": "Conversations show up here as soon as someone talks to an agent.",
       "col_conversation": "Conversation",
       "col_user": "User",
       "col_profile": "Profile",
@@ -837,16 +837,22 @@
       "date_hint": "Pick the same day twice for an exact date.",
       "date_since": "Since {{d}}",
       "date_until": "Until {{d}}",
-      "date_label": "Date"
+      "date_label": "Date",
+      "thread_badge": "Thread",
+      "thread_count": "Threads · {{n}}",
+      "thread_attention": "A thread in this conversation needs a look",
+      "threads_show": "Show threads ({{n}})",
+      "threads_hide": "Hide threads",
+      "threads_of": "Threads of “{{title}}”"
     },
     "detail": {
       "copy_id": "Copy ID",
       "copied": "Copied",
       "flagged": "{{n}} flagged",
       "next_flag": "Next flagged message",
-      "loading": "Loading thread…",
+      "loading": "Loading conversation…",
       "no_messages": "No messages in this conversation.",
-      "load_error": "Couldn't load this thread.",
+      "load_error": "Couldn't load this conversation.",
       "show_tools": "Tool messages",
       "hide_tools": "Hide tool messages",
       "human": "User",
@@ -877,7 +883,12 @@
       "artifact_empty": "No content",
       "pii_title": "Sensitive data review",
       "pii_waiting": "Waiting…",
-      "open": "Open"
+      "open": "Open",
+      "thread_from": "Thread from",
+      "open_parent": "Open the conversation at the highlighted passage",
+      "parent_missing": "Thread of a conversation that is no longer available",
+      "threads": "Threads ({{n}})",
+      "open_thread": "Open thread"
     }
   },
   "admin_memory": {
