@@ -34,7 +34,7 @@ interface AuthStatus {
   exempt?: number;
 }
 
-export function SsoMigrationPanel() {
+export function SsoMigrationPanel({ onManage }: { onManage?: () => void } = {}) {
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -236,7 +236,7 @@ export function SsoMigrationPanel() {
           </dl>
 
           <div className="mt-5 flex justify-end">
-            <button type="button" onClick={() => document.getElementById("users-migration")?.scrollIntoView({ behavior: "smooth", block: "start" })} className={outlineBtn}>
+            <button type="button" onClick={onManage} className={outlineBtn}>
               Gestisci utenti <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
           </div>

@@ -128,6 +128,13 @@ class Conversation(Base):
     )
     metadata_json: Mapped[str] = mapped_column("metadata", Text, default="{}")
     tags_json: Mapped[str] = mapped_column("tags", Text, default="[]")
+    # Side thread: conversazione figlia aperta da un passaggio di un messaggio
+    # assistant della conversazione madre (un solo livello di annidamento).
+    parent_conversation_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    parent_message_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    anchor_json: Mapped[str] = mapped_column(Text, default="{}")
 
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan"

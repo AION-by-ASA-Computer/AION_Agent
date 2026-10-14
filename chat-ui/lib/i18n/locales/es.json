@@ -1165,5 +1165,48 @@
     "wake_empty": "No hay filas de activación — añade notas o baja el umbral de activación.",
     "wake_help": "Líneas que el agente inyectaría al inicio del turno (algoritmo de activación, presupuesto limitado).",
     "zoom_error": "Error de zoom"
+  },
+  "sideThread": {
+    "tab": "Hilo",
+    "popover": {
+      "toolbar": "Acciones de la selección",
+      "action": "Profundizar en un hilo",
+      "truncated": "Se usarán los primeros {{max}} caracteres de la selección."
+    },
+    "panel": {
+      "aria": "Hilo de profundización",
+      "new_title": "Nuevo hilo",
+      "open_full": "Abrir como chat",
+      "reveal": "Mostrar el pasaje en la conversación",
+      "passage_missing": "El pasaje ya no está en la respuesta original.",
+      "other_threads": "Otros hilos ({{count}})",
+      "loading": "Cargando el hilo…",
+      "empty": "Pregunta lo que quieras sobre este pasaje. El hilo queda guardado y puedes retomarlo cuando quieras.",
+      "error": "No se pudo completar la solicitud: {{msg}}",
+      "retry": "Reintentar",
+      "dismiss": "Cerrar"
+    },
+    "starters": {
+      "explain": "Explícamelo con palabras sencillas",
+      "example": "Dame un ejemplo concreto",
+      "relevance": "¿Por qué es relevante aquí?"
+    },
+    "composer": {
+      "placeholder": "Pregunta sobre el pasaje…",
+      "send": "Enviar",
+      "stop": "Detener"
+    },
+    "chip_open": "Abrir los hilos de esta respuesta",
+    "chip_aria": "Hilos abiertos desde esta respuesta: {{count}}",
+    "breadcrumb": {
+      "aria": "Origen del hilo",
+      "from": "Hilo de «{{title}}»",
+      "untitled": "conversación sin título"
+    },
+    "sidebar": {
+      "expand": "Mostrar hilos",
+      "collapse": "Ocultar hilos",
+      "count": "{{count}} hilos"
+    }
   }
 }

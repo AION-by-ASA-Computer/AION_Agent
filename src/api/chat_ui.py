@@ -120,6 +120,9 @@ async def list_conversations_chat_ui(
     exclude_scheduled: bool = Query(
         True, description="Hide cron/scheduled-job conversations from sidebar"
     ),
+    include_threads: bool = Query(
+        False, description="Include side threads (child conversations) in the list"
+    ),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
     x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
 ):
@@ -128,17 +131,21 @@ async def list_conversations_chat_ui(
     user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
+        conds = [
+            Conversation.tenant_id == tenant,
+            Conversation.user_id == user_id,
+            Conversation.archived_at.is_(None),
+        ]
+        if not include_threads:
+            conds.append(Conversation.parent_conversation_id.is_(None))
         q = (
             select(Conversation)
-            .where(
-                Conversation.tenant_id == tenant,
-                Conversation.user_id == user_id,
-                Conversation.archived_at.is_(None),
-            )
+            .where(*conds)
             .order_by(Conversation.updated_at.desc())
             .limit(limit * 4 if exclude_scheduled else limit)
         )
         rows = (await session.execute(q)).scalars().all()
+        thread_counts = await _thread_counts(session, tenant, user_id, [r.id for r in rows])
     data = []
     for r in rows:
         meta = json.loads(r.metadata_json or "{}")
@@ -153,11 +160,190 @@ async def list_conversations_chat_ui(
                 "message_count": r.message_count,
                 "metadata": meta,
                 "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                "parent_conversation_id": r.parent_conversation_id,
+                "thread_count": thread_counts.get(r.id, 0),
             }
         )
         if len(data) >= limit:
             break
     return {"data": data}
+
+
+# ---------------------------------------------------------------------------
+# Side threads: conversazioni figlie aperte da un passaggio di un messaggio
+# assistant. Un solo livello di annidamento; il contesto della madre viene
+# iniettato a ogni turno da src/runtime/turn/side_thread_context.py.
+# ---------------------------------------------------------------------------
+
+_THREAD_QUOTE_MAX = 2000
+_THREAD_AFFIX_MAX = 64
+_THREAD_TITLE_MAX = 80
+
+
+def _parse_anchor(raw: Optional[str]) -> Dict[str, Any]:
+    try:
+        parsed = json.loads(raw or "{}")
+        return parsed if isinstance(parsed, dict) else {}
+    except Exception:
+        return {}
+
+
+def _thread_title_from_quote(quote: str) -> str:
+    t = " ".join(quote.split())
+    if len(t) > _THREAD_TITLE_MAX:
+        t = t[: _THREAD_TITLE_MAX - 1].rstrip() + "…"
+    return t
+
+
+def _serialize_thread(r: Conversation) -> Dict[str, Any]:
+    return {
+        "id": r.id,
+        "title": r.title,
+        "parent_conversation_id": r.parent_conversation_id,
+        "parent_message_id": r.parent_message_id,
+        "anchor": _parse_anchor(r.anchor_json),
+        "message_count": r.message_count,
+        "profile_slug": r.profile_slug,
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+        "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+    }
+
+
+async def _thread_counts(session, tenant: str, user_id: str, parent_ids: List[str]) -> Dict[str, int]:
+    if not parent_ids:
+        return {}
+    q = (
+        select(Conversation.parent_conversation_id, func.count(Conversation.id))
+        .where(
+            Conversation.tenant_id == tenant,
+            Conversation.user_id == user_id,
+            Conversation.archived_at.is_(None),
+            Conversation.parent_conversation_id.in_(parent_ids),
+        )
+        .group_by(Conversation.parent_conversation_id)
+    )
+    return {pid: int(n) for pid, n in (await session.execute(q)).all()}
+
+
+class SideThreadCreateBody(BaseModel):
+    parent_message_id: str = Field(..., min_length=1, max_length=64)
+    quote: str = Field(..., min_length=1)
+    prefix: str = ""
+    suffix: str = ""
+
+
+@router.get("/conversations/{conv_id}/threads")
+async def list_side_threads_chat_ui(
+    conv_id: str,
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
+    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+):
+    _check_internal_secret(x_chat_ui_secret)
+    _require_unified()
+    user_id = (x_aion_user_id or "").strip() or "default"
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
+    async with get_async_session_maker()() as session:
+        parent = await session.get(Conversation, conv_id)
+        if not parent:
+            return {"data": []}
+        if parent.tenant_id != tenant or parent.user_id != user_id:
+            raise HTTPException(404, "Not found")
+        q = (
+            select(Conversation)
+            .where(
+                Conversation.tenant_id == tenant,
+                Conversation.user_id == user_id,
+                Conversation.archived_at.is_(None),
+                Conversation.parent_conversation_id == conv_id,
+            )
+            .order_by(Conversation.created_at.asc())
+        )
+        rows = (await session.execute(q)).scalars().all()
+    return {"data": [_serialize_thread(r) for r in rows]}
+
+
+@router.post("/conversations/{conv_id}/threads")
+async def create_side_thread_chat_ui(
+    conv_id: str,
+    body: SideThreadCreateBody,
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
+    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+):
+    _check_internal_secret(x_chat_ui_secret)
+    _require_unified()
+    user_id = (x_aion_user_id or "").strip() or "default"
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
+    quote = body.quote.strip()[:_THREAD_QUOTE_MAX]
+    if not quote:
+        raise HTTPException(422, "Empty quote")
+    anchor = {
+        "quote": quote,
+        "prefix": body.prefix[-_THREAD_AFFIX_MAX:],
+        "suffix": body.suffix[:_THREAD_AFFIX_MAX],
+    }
+    async with get_async_session_maker()() as session:
+        parent = await session.get(Conversation, conv_id)
+        if (
+            not parent
+            or parent.archived_at is not None
+            or parent.tenant_id != tenant
+            or parent.user_id != user_id
+        ):
+            raise HTTPException(404, "Parent conversation not found")
+        if parent.parent_conversation_id:
+            raise HTTPException(409, "Side threads cannot be nested")
+        msg = await fetch_message_by_id_for_conversation(
+            session, body.parent_message_id, conv_id
+        )
+        if msg is None:
+            raise HTTPException(404, "Parent message not found")
+
+        existing_rows = (
+            await session.execute(
+                select(Conversation).where(
+                    Conversation.tenant_id == tenant,
+                    Conversation.user_id == user_id,
+                    Conversation.archived_at.is_(None),
+                    Conversation.parent_conversation_id == conv_id,
+                    Conversation.parent_message_id == body.parent_message_id,
+                )
+            )
+        ).scalars().all()
+        for r in existing_rows:
+            if _parse_anchor(r.anchor_json).get("quote") == quote:
+                return {**_serialize_thread(r), "created": False}
+
+        parent_meta = json.loads(parent.metadata_json or "{}")
+        meta: Dict[str, Any] = {"source": "side_thread"}
+        for key in ("sql_query_project", "agent_mode", "thinking_enabled", "reasoning_effort", "llm_provider_name"):
+            if parent_meta.get(key) is not None:
+                meta[key] = parent_meta[key]
+        child = Conversation(
+            id=new_uuid7_str(),
+            tenant_id=tenant,
+            user_id=user_id,
+            profile_slug=parent.profile_slug,
+            title=_thread_title_from_quote(quote),
+            metadata_json=json.dumps(meta),
+            tags_json=json.dumps([]),
+            project_id=parent.project_id,
+            parent_conversation_id=conv_id,
+            parent_message_id=body.parent_message_id,
+            anchor_json=json.dumps(anchor, ensure_ascii=False),
+        )
+        session.add(child)
+        await session.commit()
+        await session.refresh(child)
+        out = _serialize_thread(child)
+
+    try:
+        from src.session_workspace import sync_parent_uploads_to_child
+
+        sync_parent_uploads_to_child(conv_id, out["id"])
+    except Exception as e:
+        logger.warning("Side thread %s: upload sync from %s failed: %s", out["id"], conv_id, e)
+
+    return {**out, "created": True}
 
 
 @router.post("/conversations")
@@ -400,6 +586,11 @@ async def get_conversation_chat_ui(
             }
         if r.tenant_id != tenant or r.user_id != user_id:
             raise HTTPException(404, "Not found")
+        parent_title: Optional[str] = None
+        if r.parent_conversation_id:
+            parent = await session.get(Conversation, r.parent_conversation_id)
+            if parent is not None and parent.user_id == user_id:
+                parent_title = parent.title
         return {
             "id": r.id,
             "user_id": r.user_id,
@@ -407,6 +598,10 @@ async def get_conversation_chat_ui(
             "title": r.title,
             "message_count": r.message_count,
             "metadata": json.loads(r.metadata_json or "{}"),
+            "parent_conversation_id": r.parent_conversation_id,
+            "parent_message_id": r.parent_message_id,
+            "parent_title": parent_title,
+            "anchor": _parse_anchor(r.anchor_json) if r.parent_conversation_id else None,
         }
 
 
@@ -809,14 +1004,28 @@ async def delete_conversation_chat_ui(
         if not r or r.tenant_id != tenant or r.user_id != user_id:
             raise HTTPException(404, "Not found")
 
-        r.archived_at = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
+        r.archived_at = now
         session.add(r)
+        children = (
+            await session.execute(
+                select(Conversation).where(
+                    Conversation.parent_conversation_id == conv_id,
+                    Conversation.archived_at.is_(None),
+                )
+            )
+        ).scalars().all()
+        for child in children:
+            child.archived_at = now
+            session.add(child)
         await session.commit()
+        released_ids = [conv_id] + [c.id for c in children]
 
     try:
         from src.mcp_manager import mcp_manager
 
-        await mcp_manager.release_session(conv_id)
+        for sid in released_ids:
+            await mcp_manager.release_session(sid)
     except Exception as e:
         logger.warning(
             "Failed to release MCP session for conversation %s: %s", conv_id, e

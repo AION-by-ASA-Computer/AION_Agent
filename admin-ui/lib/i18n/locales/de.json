@@ -1275,7 +1275,9 @@
       "download": "Herunterladen",
       "timeline_step": "Schritt {n}",
       "timeline_reasoning": "Reasoning",
-      "timeline_tool": "Tool: {name}"
+      "timeline_tool": "Tool: {name}",
+      "input": "Eingabe",
+      "output": "Ausgabe"
     },
     "markdown": {
       "copy": "Kopieren",
@@ -1351,7 +1353,8 @@
     "tabs": {
       "aria": "Benutzerbereiche",
       "accounts": "Konten",
-      "signin": "Anmeldung"
+      "signin": "Anmeldung",
+      "migration": "Migration"
     },
     "cols": {
       "user": "Benutzer",
@@ -1493,7 +1496,11 @@
       "confirm_unlink_title": "SSO-Konto trennen?",
       "confirm_unlink_body": "{{name}} verliert die SSO-Verknüpfung. Ohne Passwort kann er sich nicht anmelden, bis du ein temporäres erzeugst.",
       "confirm_unlink": "Trennen",
-      "cancel": "Abbrechen"
+      "cancel": "Abbrechen",
+      "pending": "Ausstehend",
+      "pending_hint": "Meldet sich noch mit Passwort an und hat das SSO-Konto nicht verknüpft.",
+      "migrated": "Migriert",
+      "exempt": "Ausgenommen"
     }
   },
   "admin_api_keys": {
@@ -1804,7 +1811,10 @@
       "title": "Webzugriff",
       "description": "Suchmaschinen und Seitenabruf, die der Agent nutzen kann, samt Begrenzungen.",
       "engines": "Engines",
-      "engines_hint": "Schlüssel und Adressen der verwendeten Suchanbieter.",
+      "engines_hint": "Aktiviere die Engines, die der Agent nutzen darf.",
+      "credentials": "API-Schlüssel und Adressen",
+      "credentials_hint": "Hier erscheinen nur die aktivierten Engines.",
+      "credentials_empty": "Aktiviere oben eine Engine, um ihren Schlüssel einzugeben.",
       "scrapling": "Seitenabruf im Stealth-Modus",
       "scrapling_hint": "Nutzt Scrapling für Seiten, die einfache Anfragen blockieren.",
       "tavily_key": "Tavily-API-Schlüssel",

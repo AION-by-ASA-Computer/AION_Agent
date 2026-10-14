@@ -32,17 +32,17 @@ export function Group({
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-3xl border border-border/60 bg-card/40">
+    <section className="overflow-hidden rounded-2xl border border-border bg-card/60">
       {title && (
-        <header className="flex flex-wrap items-start gap-x-4 gap-y-2 px-5 pb-3 pt-4">
+        <header className="flex flex-wrap items-start gap-x-4 gap-y-2 bg-secondary/60 px-5 py-3.5">
           <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-semibold">{title}</h3>
+            <h3 className="text-[15px] font-semibold tracking-[-0.01em]">{title}</h3>
             {description && <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>}
           </div>
           {action}
         </header>
       )}
-      <div className={cn(title && "border-t border-border/50")}>{children}</div>
+      <div className={cn(title && "border-t border-border")}>{children}</div>
     </section>
   );
 }

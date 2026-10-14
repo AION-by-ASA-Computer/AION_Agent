@@ -29,7 +29,7 @@ type Filters = { user: string; email: string; access: string; migration: string;
 const NO_FILTERS: Filters = { user: "", email: "", access: "", migration: "", twofa: "" };
 const METHODS = ["password", "microsoft", "google"] as const;
 
-type Tab = "accounts" | "signin";
+type Tab = "accounts" | "signin" | "migration";
 type ListState = "loading" | "ready" | "error";
 
 interface UserRow {
@@ -460,9 +460,12 @@ export default function UsersPage() {
     }
   };
 
-  const tabs: { id: Tab; label: string; count?: number }[] = [
+  const tabs: { id: Tab; label: string; count?: number; alert?: boolean }[] = [
     { id: "accounts", label: t(`${k}.tabs.accounts`), count: listState === "ready" ? users.length : undefined },
     { id: "signin", label: t(`${k}.tabs.signin`) },
+    ...(showMigration
+      ? [{ id: "migration" as const, label: t(`${k}.tabs.migration`), count: listState === "ready" ? users.filter((u) => migrationOf(u) === "pending").length : undefined, alert: true }]
+      : []),
   ];
 
   return (
@@ -497,7 +500,7 @@ export default function UsersPage() {
             >
               {x.label}
               {x.count !== undefined && x.count > 0 && (
-                <span className="rounded-full bg-secondary px-1.5 py-px text-xs tabular-nums text-muted-foreground">{x.count}</span>
+                <span className={cn("rounded-full px-1.5 py-px text-xs tabular-nums", x.alert ? "bg-warning/15 font-medium text-warning" : "bg-secondary text-muted-foreground")}>{x.count}</span>
               )}
               <span aria-hidden className={cn("absolute inset-x-3 bottom-0 h-0.5 rounded-full bg-foreground transition-opacity", active ? "opacity-100" : "opacity-0")} />
             </button>
@@ -653,6 +656,18 @@ export default function UsersPage() {
           </>
         )}
 
+        {tab === "migration" && showMigration && (
+          <section aria-labelledby="users-mig-title" className="flex flex-col gap-4">
+            <div>
+              <h2 id="users-mig-title" className="text-lg font-semibold tracking-[-0.015em]">
+                {t(`${k}.migration.title`)}
+              </h2>
+              <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.migration.subtitle`)}</p>
+            </div>
+            <MigrationUsers />
+          </section>
+        )}
+
         {tab === "signin" && (
           <div className="flex flex-col gap-10">
             <section aria-labelledby="users-sso" className="flex flex-col gap-4">
@@ -662,20 +677,8 @@ export default function UsersPage() {
                 </h2>
                 <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.signin.sso_body`)}</p>
               </div>
-              <SsoMigrationPanel />
+              <SsoMigrationPanel onManage={showMigration ? () => setTab("migration") : undefined} />
             </section>
-
-            {showMigration && (
-              <section id="users-migration" aria-labelledby="users-mig-title" className="flex scroll-mt-6 flex-col gap-4 border-t border-border/60 pt-8">
-                <div>
-                  <h2 id="users-mig-title" className="text-lg font-semibold tracking-[-0.015em]">
-                    {t(`${k}.migration.title`)}
-                  </h2>
-                  <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.migration.subtitle`)}</p>
-                </div>
-                <MigrationUsers />
-              </section>
-            )}
 
             {/* TOTP exists only for the classic login; with SSO the provider's own 2FA applies. */}
             {listState === "ready" && loginMode === "password" && (

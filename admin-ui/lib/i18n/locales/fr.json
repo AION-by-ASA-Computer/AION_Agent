@@ -1275,7 +1275,9 @@
       "download": "Télécharger",
       "timeline_step": "Étape {n}",
       "timeline_reasoning": "Raisonnement",
-      "timeline_tool": "Outil : {name}"
+      "timeline_tool": "Outil : {name}",
+      "input": "Entrée",
+      "output": "Sortie"
     },
     "markdown": {
       "copy": "Copier",
@@ -1351,7 +1353,8 @@
     "tabs": {
       "aria": "Sections utilisateurs",
       "accounts": "Comptes",
-      "signin": "Connexion"
+      "signin": "Connexion",
+      "migration": "Migration"
     },
     "cols": {
       "user": "Utilisateur",
@@ -1493,7 +1496,11 @@
       "confirm_unlink_title": "Dissocier le compte SSO ?",
       "confirm_unlink_body": "{{name}} perdra le lien SSO. Sans mot de passe, il ne pourra pas se connecter tant que vous n'en générez pas un temporaire.",
       "confirm_unlink": "Dissocier",
-      "cancel": "Annuler"
+      "cancel": "Annuler",
+      "pending": "En attente",
+      "pending_hint": "Se connecte encore avec un mot de passe et n'a pas lié son compte SSO.",
+      "migrated": "Migré",
+      "exempt": "Exempté"
     }
   },
   "admin_api_keys": {
@@ -1804,7 +1811,10 @@
       "title": "Accès web",
       "description": "Moteurs de recherche et récupération de pages utilisables par l’agent, avec leurs limites.",
       "engines": "Moteurs",
-      "engines_hint": "Clés et adresses des fournisseurs de recherche utilisés.",
+      "engines_hint": "Activez les moteurs que l'agent peut utiliser.",
+      "credentials": "Clés API et adresses",
+      "credentials_hint": "Seuls les moteurs activés apparaissent ici.",
+      "credentials_empty": "Activez un moteur ci-dessus pour saisir sa clé.",
       "scrapling": "Récupération de pages en mode furtif",
       "scrapling_hint": "Utilise Scrapling pour lire les pages qui bloquent les requêtes simples.",
       "tavily_key": "Clé API Tavily",

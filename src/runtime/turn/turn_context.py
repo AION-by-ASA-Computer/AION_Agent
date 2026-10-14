@@ -523,6 +523,22 @@ async def build_turn_context(
         except Exception as budget_exc:
             logger.debug("prompt budget skipped: %s", budget_exc)
 
+    # Side thread: passaggio evidenziato + messaggio d'origine della madre
+    # (ricostruito a ogni turno, mai persistito né estratto in LTM).
+    try:
+        from src.runtime.turn.side_thread_context import build_side_thread_context
+
+        side_ctx = await build_side_thread_context(pipeline.session_id, pipeline.user_id)
+        if side_ctx:
+            augmented_user = _layer_inject(
+                _prompt_inject_layers,
+                "side_thread_context",
+                side_ctx,
+                augmented_user,
+            )
+    except Exception as side_exc:
+        logger.debug("side thread context skipped: %s", side_exc)
+
     # LTM context retrieval
     _pre_ltm = augmented_user
     with_ltm = ltm_orchestrator.build_augmented_user_text(augmented_user, "", wake)

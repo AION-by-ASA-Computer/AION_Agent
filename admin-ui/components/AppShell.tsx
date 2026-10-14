@@ -7,7 +7,7 @@ import { KeyRound, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Sun, X } f
 import { apiBase } from "@/lib/api";
 import { adminPath } from "@/lib/paths";
 import { getStoredUserId, setStoredAuth } from "@/lib/auth/storage";
-import { resetAuthStatusCache } from "@/lib/auth/status";
+import { fetchAuthStatus, resetAuthStatusCache } from "@/lib/auth/status";
 import { AdminBrand } from "@/components/brand/AdminBrand";
 import { VersionUpdateBanner } from "@/components/VersionUpdateBanner";
 import { useT } from "@/lib/i18n/use-t";
@@ -43,6 +43,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     }
   });
   const [mobileOpen, setMobileOpen] = React.useState(false);
+  // With SSO on, passwords are managed by the identity provider: hide the change-password shortcut.
+  const [ssoEnabled, setSsoEnabled] = React.useState(false);
+  React.useEffect(() => {
+    let alive = true;
+    void fetchAuthStatus().then((st) => alive && setSsoEnabled(st.sso_enabled));
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [lastPath, setLastPath] = React.useState(pathname);
   if (lastPath !== pathname) {
     // Route changed: refresh identity/embed flags and close the mobile drawer.
@@ -196,6 +205,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               <ThemeIcon className="h-4 w-4" />
             </button>
+            {!ssoEnabled && (
             <Link
               href="/change-password"
               className={`focus-ring mx-auto flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground ${HOVER}`}
@@ -204,6 +214,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               <KeyRound className="h-4 w-4" />
             </Link>
+            )}
             <button
               type="button"
               onClick={logout}
@@ -234,6 +245,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               <ThemeIcon className="h-4 w-4" />
             </button>
+            {!ssoEnabled && (
             <Link
               href="/change-password"
               className={`focus-ring inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground ${HOVER}`}
@@ -242,6 +254,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             >
               <KeyRound className="h-4 w-4" />
             </Link>
+            )}
             <button
               type="button"
               onClick={logout}

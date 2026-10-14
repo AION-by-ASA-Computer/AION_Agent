@@ -1165,5 +1165,48 @@
     "wake_empty": "Keine Wake-Zeilen — fügen Sie Notizen hinzu oder senken Sie die Wake-Schwelle.",
     "wake_help": "Zeilen, die der Agent zu Beginn der Runde injizieren würde (Wake-Algorithmus, begrenztes Budget).",
     "zoom_error": "Zoom-Fehler"
+  },
+  "sideThread": {
+    "tab": "Thread",
+    "popover": {
+      "toolbar": "Aktionen für die Auswahl",
+      "action": "In einem Thread vertiefen",
+      "truncated": "Es werden nur die ersten {{max}} Zeichen der Auswahl verwendet."
+    },
+    "panel": {
+      "aria": "Vertiefungs-Thread",
+      "new_title": "Neuer Thread",
+      "open_full": "Als Chat öffnen",
+      "reveal": "Passage im Gespräch anzeigen",
+      "passage_missing": "Diese Passage ist nicht mehr in der ursprünglichen Antwort enthalten.",
+      "other_threads": "Weitere Threads ({{count}})",
+      "loading": "Thread wird geladen…",
+      "empty": "Frag etwas zu dieser Passage. Der Thread wird gespeichert, du kannst ihn jederzeit fortsetzen.",
+      "error": "Anfrage konnte nicht abgeschlossen werden: {{msg}}",
+      "retry": "Erneut versuchen",
+      "dismiss": "Schließen"
+    },
+    "starters": {
+      "explain": "Erklär es mir einfach",
+      "example": "Gib mir ein konkretes Beispiel",
+      "relevance": "Warum ist das hier relevant?"
+    },
+    "composer": {
+      "placeholder": "Frag zur Passage…",
+      "send": "Senden",
+      "stop": "Stoppen"
+    },
+    "chip_open": "Threads dieser Antwort öffnen",
+    "chip_aria": "Aus dieser Antwort geöffnete Threads: {{count}}",
+    "breadcrumb": {
+      "aria": "Herkunft des Threads",
+      "from": "Thread aus „{{title}}“",
+      "untitled": "Gespräch ohne Titel"
+    },
+    "sidebar": {
+      "expand": "Threads anzeigen",
+      "collapse": "Threads ausblenden",
+      "count": "{{count}} Threads"
+    }
   }
 }

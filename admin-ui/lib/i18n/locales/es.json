@@ -1275,7 +1275,9 @@
       "download": "Descargar",
       "timeline_step": "Paso {n}",
       "timeline_reasoning": "Razonamiento",
-      "timeline_tool": "Herramienta: {name}"
+      "timeline_tool": "Herramienta: {name}",
+      "input": "Entrada",
+      "output": "Salida"
     },
     "markdown": {
       "copy": "Copiar",
@@ -1351,7 +1353,8 @@
     "tabs": {
       "aria": "Secciones de usuarios",
       "accounts": "Cuentas",
-      "signin": "Acceso"
+      "signin": "Acceso",
+      "migration": "Migración"
     },
     "cols": {
       "user": "Usuario",
@@ -1493,7 +1496,11 @@
       "confirm_unlink_title": "¿Desvincular la cuenta SSO?",
       "confirm_unlink_body": "{{name}} perderá el vínculo SSO. Sin contraseña no podrá entrar hasta que generes una temporal.",
       "confirm_unlink": "Desvincular",
-      "cancel": "Cancelar"
+      "cancel": "Cancelar",
+      "pending": "Pendiente",
+      "pending_hint": "Aún inicia sesión con contraseña y no ha vinculado la cuenta SSO.",
+      "migrated": "Migrado",
+      "exempt": "Exento"
     }
   },
   "admin_api_keys": {
@@ -1804,7 +1811,10 @@
       "title": "Acceso web",
       "description": "Motores de búsqueda y obtención de páginas que el agente puede usar, con sus límites.",
       "engines": "Motores",
-      "engines_hint": "Claves y direcciones de los proveedores de búsqueda que usas.",
+      "engines_hint": "Activa los motores que el agente puede usar.",
+      "credentials": "Claves API y direcciones",
+      "credentials_hint": "Aquí solo aparecen los motores que activaste.",
+      "credentials_empty": "Activa un motor arriba para introducir su clave.",
       "scrapling": "Obtención de páginas en modo sigiloso",
       "scrapling_hint": "Usa Scrapling para leer páginas que bloquean las peticiones simples.",
       "tavily_key": "Clave de API de Tavily",

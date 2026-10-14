@@ -1275,7 +1275,9 @@
       "download": "Scarica",
       "timeline_step": "Passo {n}",
       "timeline_reasoning": "Ragionamento",
-      "timeline_tool": "Strumento: {name}"
+      "timeline_tool": "Strumento: {name}",
+      "input": "Input",
+      "output": "Output"
     },
     "markdown": {
       "copy": "Copia",
@@ -1351,7 +1353,8 @@
     "tabs": {
       "aria": "Sezioni utenti",
       "accounts": "Account",
-      "signin": "Accesso"
+      "signin": "Accesso",
+      "migration": "Migrazione"
     },
     "cols": {
       "user": "Utente",
@@ -1493,7 +1496,11 @@
       "confirm_unlink_title": "Scollegare l'account SSO?",
       "confirm_unlink_body": "{{name}} perderà il collegamento SSO. Senza password non potrà accedere finché non gli generi una password temporanea.",
       "confirm_unlink": "Scollega",
-      "cancel": "Annulla"
+      "cancel": "Annulla",
+      "pending": "In attesa",
+      "pending_hint": "Accede ancora con la password e non ha collegato l'account SSO.",
+      "migrated": "Migrato",
+      "exempt": "Esonerato"
     }
   },
   "admin_api_keys": {
@@ -1804,7 +1811,10 @@
       "title": "Accesso web",
       "description": "Motori di ricerca e recupero pagine che l’agente può usare, con i relativi limiti.",
       "engines": "Motori",
-      "engines_hint": "Chiavi e indirizzi dei provider di ricerca che usi.",
+      "engines_hint": "Attiva i motori che l'agente può usare.",
+      "credentials": "Chiavi e indirizzi",
+      "credentials_hint": "Qui compaiono solo i motori che hai attivato.",
+      "credentials_empty": "Attiva un motore qui sopra per inserire la sua chiave.",
       "scrapling": "Recupero pagine in modalità stealth",
       "scrapling_hint": "Usa Scrapling per leggere pagine che bloccano le richieste semplici.",
       "tavily_key": "Chiave API Tavily",

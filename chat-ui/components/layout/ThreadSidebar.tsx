@@ -5,10 +5,12 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Check,
+  ChevronRight,
   Clock,
   Edit3,
   MessageSquare,
   MessageSquarePlus,
+  MessageSquareQuote,
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
@@ -19,7 +21,7 @@ import {
   X,
 } from "lucide-react";
 
-import { type ConversationSummary } from "@/lib/api/aion";
+import { fetchConversationDetails, listSideThreads, type ConversationSummary, type SideThreadSummary } from "@/lib/api/aion";
 import { apiBase } from "@/lib/config";
 import type { ShellSection } from "@/lib/shell/use-conversation-threads";
 import { cn } from "@/lib/cn";
@@ -68,6 +70,28 @@ export function ThreadSidebar({
 
 
   const [searchQuery, setSearchQuery] = useState("");
+  /** Parent of the open conversation when it is a side thread (to expand it in the list). */
+  const [parentLookup, setParentLookup] = useState<{ id: string; parentId: string | null } | null>(null);
+  const hasThreads = items.some((c) => (c.thread_count ?? 0) > 0);
+  const currentIsTopLevel = items.some((c) => c.id === currentId);
+
+  useEffect(() => {
+    if (!currentId || currentIsTopLevel || !hasThreads || !token) return;
+    let cancelled = false;
+    fetchConversationDetails(currentId, userId, token)
+      .then((d) => {
+        if (cancelled) return;
+        setParentLookup({
+          id: currentId,
+          parentId: d?.parent_conversation_id ? String(d.parent_conversation_id) : null,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [currentId, currentIsTopLevel, hasThreads, userId, token]);
+  const activeParentId = parentLookup?.id === currentId ? parentLookup.parentId : null;
   const [profileLabel, setProfileLabel] = useState(userId);
   const [profileSubtitle, setProfileSubtitle] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -168,6 +192,8 @@ export function ThreadSidebar({
               onRenameConversation={onRenameConversation}
               onToggleFavorite={onToggleFavorite}
               onRefresh={onRefresh}
+              userId={userId}
+              autoExpand={c.id === activeParentId}
             />
           ))}
         </>
@@ -188,6 +214,8 @@ export function ThreadSidebar({
                 onRenameConversation={onRenameConversation}
                 onToggleFavorite={onToggleFavorite}
                 onRefresh={onRefresh}
+                userId={userId}
+                autoExpand={c.id === activeParentId}
               />
             ))}
           </div>
@@ -369,16 +397,7 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
   );
 }
 
-function ConversationRow({
-  conv,
-  currentId,
-  isFavorite: favorite,
-  onSelectConversation,
-  onDeleteConversation,
-  onRenameConversation,
-  onToggleFavorite,
-  onRefresh,
-}: {
+type ConversationRowProps = {
   conv: ConversationSummary;
   currentId: string;
   isFavorite: boolean;
@@ -387,7 +406,108 @@ function ConversationRow({
   onRenameConversation?: (id: string, newTitle: string) => void;
   onToggleFavorite?: (id: string, isFav: boolean) => void;
   onRefresh: () => void;
-}) {
+};
+
+/** A conversation row plus its side threads, lazily loaded and nested under a hairline guide. */
+function ConversationRow({
+  userId,
+  autoExpand = false,
+  ...props
+}: ConversationRowProps & { userId: string; autoExpand?: boolean }) {
+  const t = useT();
+  const token = useStoredToken();
+  const { conv, currentId, onSelectConversation } = props;
+  const count = conv.thread_count ?? 0;
+  // null = follow `autoExpand` (parent of the open thread); a click pins the user's choice.
+  const [expandedChoice, setExpanded] = useState<boolean | null>(null);
+  const expanded = expandedChoice ?? autoExpand;
+  const [children, setChildren] = useState<SideThreadSummary[] | null>(null);
+
+  // (Re)load when opened and whenever the parent's thread count or activity changes.
+  useEffect(() => {
+    if (!expanded || count === 0) return;
+    const ac = new AbortController();
+    void listSideThreads(conv.id, userId, token, ac.signal).then((rows) => {
+      if (!ac.signal.aborted) setChildren(rows);
+    });
+    return () => ac.abort();
+  }, [expanded, count, conv.id, conv.updated_at, userId, token]);
+
+  const toggle =
+    count > 0 ? (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setExpanded(!expanded);
+        }}
+        aria-expanded={expanded}
+        aria-label={expanded ? t("sideThread.sidebar.collapse") : t("sideThread.sidebar.expand")}
+        title={t("sideThread.sidebar.count", { count })}
+        className="flex shrink-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+      >
+        {count}
+        <ChevronRight
+          className={cn("h-3 w-3 transition-transform duration-200", expanded && "rotate-90")}
+          aria-hidden
+        />
+      </button>
+    ) : null;
+
+  return (
+    <div>
+      <ConversationRowInner {...props} threadToggle={toggle} />
+      {expanded && count > 0 ? (
+        <ul className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-2">
+          {children === null ? (
+            <li className="px-2 py-1 text-[11px] text-muted-foreground">…</li>
+          ) : (
+            children.map((th) => {
+              const active = th.id === currentId;
+              const label = th.title?.trim() || th.anchor.quote;
+              return (
+                <li key={th.id}>
+                  <Link
+                    href={`/c/${th.id}`}
+                    onClick={(e) => {
+                      if (onSelectConversation) {
+                        e.preventDefault();
+                        onSelectConversation(th.id);
+                      }
+                    }}
+                    title={label}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition-colors",
+                      active
+                        ? "bg-primary/10 font-semibold text-primary dark:bg-primary/15"
+                        : "text-foreground/70 hover:bg-muted/60 hover:text-foreground dark:hover:bg-white/[0.06]",
+                    )}
+                  >
+                    <MessageSquareQuote className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                    <span className="truncate">{label}</span>
+                  </Link>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function ConversationRowInner({
+  conv,
+  currentId,
+  isFavorite: favorite,
+  onSelectConversation,
+  onDeleteConversation,
+  onRenameConversation,
+  onToggleFavorite,
+  onRefresh,
+  threadToggle,
+}: ConversationRowProps & { threadToggle?: React.ReactNode }) {
   const t = useT();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -503,6 +623,7 @@ function ConversationRow({
         ) : null}
         <span className="truncate transition-transform duration-200 group-hover:translate-x-0.5">{displayTitle}</span>
       </Link>
+      {threadToggle}
 
       <div className={cn("flex items-center gap-0.5 transition-opacity duration-200", menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
         <button

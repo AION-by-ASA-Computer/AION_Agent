@@ -9,4 +9,6 @@ export type DockTab =
   | "query_memory"
   | "navigation_memory"
   | "prompt_debug"
-  | "research";
+  | "research"
+  /** Side thread (child conversation opened from a highlighted passage). */
+  | "thread";

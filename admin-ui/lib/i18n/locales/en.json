@@ -1275,7 +1275,9 @@
       "download": "Download",
       "timeline_step": "Step {n}",
       "timeline_reasoning": "Reasoning",
-      "timeline_tool": "Tool: {name}"
+      "timeline_tool": "Tool: {name}",
+      "input": "Input",
+      "output": "Output"
     },
     "markdown": {
       "copy": "Copy",
@@ -1351,7 +1353,8 @@
     "tabs": {
       "aria": "Users sections",
       "accounts": "Accounts",
-      "signin": "Sign-in"
+      "signin": "Sign-in",
+      "migration": "Migration"
     },
     "cols": {
       "user": "User",
@@ -1493,7 +1496,11 @@
       "confirm_unlink_title": "Unlink the SSO account?",
       "confirm_unlink_body": "{{name}} loses the SSO link. Without a password they can't sign in until you generate a temporary one.",
       "confirm_unlink": "Unlink",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "pending": "Pending",
+      "pending_hint": "Still signs in with a password and hasn't linked the SSO account.",
+      "migrated": "Migrated",
+      "exempt": "Exempt"
     }
   },
   "admin_api_keys": {
@@ -1804,7 +1811,10 @@
       "title": "Web access",
       "description": "Search engines and page fetching the agent can use, and the limits around them.",
       "engines": "Engines",
-      "engines_hint": "Keys and addresses for the search providers you use.",
+      "engines_hint": "Turn on the engines the agent may use.",
+      "credentials": "API keys and addresses",
+      "credentials_hint": "Only the engines you turned on appear here.",
+      "credentials_empty": "Turn on an engine above to enter its key.",
       "scrapling": "Stealth page fetching",
       "scrapling_hint": "Uses Scrapling to read pages that block plain requests.",
       "tavily_key": "Tavily API key",

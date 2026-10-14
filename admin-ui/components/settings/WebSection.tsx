@@ -10,6 +10,9 @@ export function WebSection({ t, settings, set }: SectionCtx) {
   const tog = (key: string) => (v: boolean) => set(key, v ? "1" : "0");
   const on = (key: string) => settings[key] === "1";
   const txt = (key: string, fallback = "") => settings[key] ?? fallback;
+  const tavily = on("AION_WEB_SEARCH_TAVILY_ENABLED");
+  const brave = on("AION_WEB_SEARCH_BRAVE_ENABLED");
+  const searxng = on("AION_WEB_SEARCH_SEARXNG_ENABLED");
   const secret = {
     showLabel: t(`${K}.show_secret`),
     hideLabel: t(`${K}.hide_secret`),
@@ -26,19 +29,30 @@ export function WebSection({ t, settings, set }: SectionCtx) {
           <ToggleRow label="SearXNG" checked={on("AION_WEB_SEARCH_SEARXNG_ENABLED")} onChange={tog("AION_WEB_SEARCH_SEARXNG_ENABLED")} />
           <ToggleRow label={t(`${m}.scrapling`)} description={t(`${m}.scrapling_hint`)} checked={on("AION_SCRAPLING_STEALTH_ENABLED")} onChange={tog("AION_SCRAPLING_STEALTH_ENABLED")} />
         </ToggleList>
-        <div className="border-t border-border/50">
+      </Group>
+
+      <Group title={t(`${m}.credentials`)} description={t(`${m}.credentials_hint`)}>
+        {!(tavily || brave || searxng) ? (
+          <p className="px-5 py-5 text-sm text-muted-foreground">{t(`${m}.credentials_empty`)}</p>
+        ) : (
           <FieldGrid>
-            <Field label={t(`${m}.tavily_key`)} env="AION_TAVILY_API_KEY" hint={t(`${m}.key_masked`)}>
-              <SecretInput value={txt("AION_TAVILY_API_KEY")} onChange={(v) => set("AION_TAVILY_API_KEY", v)} {...secret} />
-            </Field>
-            <Field label={t(`${m}.brave_key`)} env="AION_BRAVE_SEARCH_API_KEY">
-              <SecretInput value={txt("AION_BRAVE_SEARCH_API_KEY")} onChange={(v) => set("AION_BRAVE_SEARCH_API_KEY", v)} {...secret} />
-            </Field>
-            <Field label={t(`${m}.searxng_url`)} env="AION_SEARXNG_BASE_URL" hint={t(`${m}.searxng_hint`)} wide>
-              <TextInput value={txt("AION_SEARXNG_BASE_URL")} mono onChange={(v) => set("AION_SEARXNG_BASE_URL", v)} placeholder="https://search.example.org" />
-            </Field>
+            {tavily && (
+              <Field label={t(`${m}.tavily_key`)} env="AION_TAVILY_API_KEY" hint={t(`${m}.key_masked`)}>
+                <SecretInput value={txt("AION_TAVILY_API_KEY")} onChange={(v) => set("AION_TAVILY_API_KEY", v)} {...secret} />
+              </Field>
+            )}
+            {brave && (
+              <Field label={t(`${m}.brave_key`)} env="AION_BRAVE_SEARCH_API_KEY" hint={t(`${m}.key_masked`)}>
+                <SecretInput value={txt("AION_BRAVE_SEARCH_API_KEY")} onChange={(v) => set("AION_BRAVE_SEARCH_API_KEY", v)} {...secret} />
+              </Field>
+            )}
+            {searxng && (
+              <Field label={t(`${m}.searxng_url`)} env="AION_SEARXNG_BASE_URL" hint={t(`${m}.searxng_hint`)}>
+                <TextInput value={txt("AION_SEARXNG_BASE_URL")} mono onChange={(v) => set("AION_SEARXNG_BASE_URL", v)} placeholder="https://search.example.org" />
+              </Field>
+            )}
           </FieldGrid>
-        </div>
+        )}
       </Group>
 
       <Group title={t(`${m}.routing`)} description={t(`${m}.routing_hint`)}>
@@ -49,10 +63,12 @@ export function WebSection({ t, settings, set }: SectionCtx) {
               onChange={(v) => set("AION_WEB_SEARCH_DEFAULT_PROVIDER", v)}
               aria-label={t(`${m}.default_engine`)}
               options={[
-                { value: "tavily", label: "Tavily" },
-                { value: "brave", label: "Brave Search" },
-                { value: "searxng", label: "SearXNG" },
-              ]}
+                { value: "tavily", label: "Tavily", show: tavily },
+                { value: "brave", label: "Brave Search", show: brave },
+                { value: "searxng", label: "SearXNG", show: searxng },
+              ]
+                .filter((o) => o.show || o.value === txt("AION_WEB_SEARCH_DEFAULT_PROVIDER", "tavily"))
+                .map(({ value, label }) => ({ value, label }))}
             />
           </Field>
           <Field label={t(`${m}.fallback`)} env="AION_WEB_SEARCH_FALLBACK_ORDER" hint={t(`${m}.fallback_hint`)}>
