@@ -473,7 +473,68 @@ export type ConversationSummary = {
   message_count?: number;
   metadata?: Record<string, any>;
   updated_at?: string | null;
+  /** Set on side threads (child conversations); the sidebar list excludes them by default. */
+  parent_conversation_id?: string | null;
+  /** Number of live side threads opened from this conversation. */
+  thread_count?: number;
 };
+
+/** TextQuoteSelector-style anchor of a side thread inside its source assistant message. */
+export type SideThreadAnchor = {
+  quote: string;
+  prefix?: string;
+  suffix?: string;
+};
+
+export type SideThreadSummary = {
+  id: string;
+  title?: string | null;
+  parent_conversation_id: string;
+  parent_message_id: string;
+  anchor: SideThreadAnchor;
+  message_count?: number;
+  profile_slug?: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+};
+
+export async function listSideThreads(
+  conversationId: string,
+  userId: string,
+  token?: string | null,
+  signal?: AbortSignal,
+): Promise<SideThreadSummary[]> {
+  try {
+    const r = await fetch(
+      `${apiBase()}/chat-ui/conversations/${encodeURIComponent(conversationId)}/threads`,
+      { headers: baseUserHeaders(userId, token), signal },
+    );
+    if (!r.ok) return [];
+    const j = (await r.json()) as { data?: SideThreadSummary[] };
+    return j.data || [];
+  } catch {
+    return [];
+  }
+}
+
+/** Creates (or returns the existing) side thread for this anchor. Throws on HTTP errors. */
+export async function createSideThread(
+  conversationId: string,
+  body: { parent_message_id: string } & SideThreadAnchor,
+  userId: string,
+  token?: string | null,
+): Promise<SideThreadSummary & { created: boolean }> {
+  const r = await fetch(
+    `${apiBase()}/chat-ui/conversations/${encodeURIComponent(conversationId)}/threads`,
+    {
+      method: "POST",
+      headers: jsonHeaders(userId, token),
+      body: JSON.stringify(body),
+    },
+  );
+  if (!r.ok) throw new Error(`Side thread HTTP ${r.status}`);
+  return (await r.json()) as SideThreadSummary & { created: boolean };
+}
 
 export async function listChatUiConversations(userId: string, token?: string | null): Promise<ConversationSummary[]> {
   const r = await fetch(`${apiBase()}/chat-ui/conversations?limit=80&exclude_scheduled=true`, {

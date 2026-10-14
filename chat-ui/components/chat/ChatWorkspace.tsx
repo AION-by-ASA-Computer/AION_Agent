@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star, Search, Cpu, Bot, Shield } from "lucide-react";
+import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star, Search, Cpu, Bot, Shield, MessageSquareQuote, CornerUpLeft } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -59,6 +59,9 @@ import {
   type ChatHistoryStep,
   type ProfileRow,
   type SessionChart,
+  listSideThreads,
+  createSideThread,
+  type SideThreadSummary,
 } from "@/lib/api/aion";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
 import { usePendingSessionUploads } from "@/hooks/use-pending-session-uploads";
@@ -138,6 +141,14 @@ import {
   showProjectMemoryUi,
 } from "@/lib/memory/profile-capabilities";
 import { WebSourcesBar } from "@/components/chat/WebResearchViews";
+import { SideThreadPanel, type SideThreadTarget } from "@/components/dock/SideThreadPanel";
+import { SelectionThreadPopover } from "@/components/chat/side-thread/SelectionThreadPopover";
+import { useSideThreadChat } from "@/lib/side-thread/use-side-thread-chat";
+import { useSideThreadHighlights } from "@/lib/side-thread/use-side-thread-highlights";
+import {
+  useTextSelectionAnchor,
+  type TextSelectionState,
+} from "@/lib/side-thread/use-text-selection-anchor";
 import { TurnTimeline, AgentWorkingShimmer } from "@/components/chat/TurnTimeline";
 import { MessageActions } from "@/components/chat/MessageActions";
 import { useAutoResizeTextarea } from "@/lib/hooks/use-auto-resize-textarea";
@@ -927,6 +938,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const planFinalSummaryHandledRef = useRef<Set<string>>(new Set());
   const adoptedResearchRef = useRef<Set<string>>(new Set());
   const [conversationTitle, setConversationTitle] = useState<string | null>(null);
+  /** Set when this conversation is itself a side thread (opened full-page). */
+  const [threadOrigin, setThreadOrigin] = useState<{
+    parentId: string;
+    parentTitle: string | null;
+    quote: string;
+  } | null>(null);
+  const [sideThreads, setSideThreads] = useState<SideThreadSummary[]>([]);
+  const [sideThreadTarget, setSideThreadTarget] = useState<SideThreadTarget | null>(null);
+  const [sideThreadFocusKey, setSideThreadFocusKey] = useState(0);
   const [mcpPending, setMcpPending] = useState<
     Array<{ server_slug: string; display_name: string; reason: string; message: string; integration?: Record<string, unknown> }>
   >([]);
@@ -2786,6 +2806,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     setProfile(defaultProfile);
     setSqlQueryProject(readStoredSqlProject());
     setConversationTitle(null);
+    setThreadOrigin(null);
 
     // 1. Carica prima i valori di fallback locali (localStorage)
     const storedThinking = localStorage.getItem("aion_last_thinking_enabled");
@@ -2821,6 +2842,13 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           }
           if (details.title) {
             setConversationTitle(details.title);
+          }
+          if (details.parent_conversation_id) {
+            setThreadOrigin({
+              parentId: String(details.parent_conversation_id),
+              parentTitle: details.parent_title ?? null,
+              quote: String(details.anchor?.quote ?? ""),
+            });
           }
           if (details.metadata) {
             const meta = details.metadata;
@@ -3381,6 +3409,145 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     [composerTextMax]
   );
 
+  // ── Side threads: child conversations opened from a highlighted passage ──
+  const sideThreadTargetRef = useRef<SideThreadTarget | null>(null);
+  const threadParamHandledRef = useRef<string | null>(null);
+  useEffect(() => {
+    sideThreadTargetRef.current = sideThreadTarget;
+  }, [sideThreadTarget]);
+
+  const reloadSideThreads = useCallback(async () => {
+    const cid = conversationId;
+    if (!cid || !userId) return;
+    const rows = await listSideThreads(cid, userId, token);
+    if (activeConversationRef.current !== cid) return;
+    setSideThreads(rows);
+    // `/c/{parent}?thread={id}` (breadcrumb back link) opens that thread in the panel.
+    const wanted = new URLSearchParams(window.location.search).get("thread");
+    const deepLinked = wanted && threadParamHandledRef.current !== `${cid}:${wanted}`
+      ? rows.find((r) => r.id === wanted)
+      : undefined;
+    if (deepLinked) {
+      threadParamHandledRef.current = `${cid}:${wanted}`;
+      setSideThreadTarget({ kind: "thread", thread: deepLinked });
+      setDockTab("thread");
+      setSideThreadFocusKey((k) => k + 1);
+      return;
+    }
+    setSideThreadTarget((prev) => {
+      if (prev?.kind !== "thread") return prev;
+      const fresh = rows.find((r) => r.id === prev.thread.id);
+      return fresh ? { kind: "thread", thread: fresh } : prev;
+    });
+  }, [conversationId, userId, token]);
+
+  // Reset on conversation switch (render-time adjustment, no extra effect pass).
+  const [sideThreadsFor, setSideThreadsFor] = useState(conversationId);
+  if (sideThreadsFor !== conversationId) {
+    setSideThreadsFor(conversationId);
+    setSideThreads([]);
+    setSideThreadTarget(null);
+    if (dockTab === "thread") setDockTab("none");
+  }
+
+  useEffect(() => {
+    void reloadSideThreads();
+  }, [reloadSideThreads]);
+
+  const ensureSideThread = useCallback(async (): Promise<string> => {
+    const target = sideThreadTargetRef.current;
+    if (!target) throw new Error("No side thread selected");
+    if (target.kind === "thread") return target.thread.id;
+    const created = await createSideThread(
+      conversationId,
+      { parent_message_id: target.messageId, ...target.anchor },
+      userId,
+      token,
+    );
+    setSideThreads((prev) => (prev.some((p) => p.id === created.id) ? prev : [...prev, created]));
+    setSideThreadTarget({ kind: "thread", thread: created });
+    void refreshThreads().catch(() => undefined);
+    return created.id;
+  }, [conversationId, userId, token, refreshThreads]);
+
+  const sideThreadChat = useSideThreadChat({
+    threadId: sideThreadTarget?.kind === "thread" ? sideThreadTarget.thread.id : null,
+    userId,
+    token,
+    settings: {
+      profile: activeProfileSlug,
+      reasoningEffort,
+      thinkingEnabled,
+      llmProviderName: selectedProvider || undefined,
+      toolsView,
+      runtime: getRuntimeValuesForTurn(thinkingEnabled, reasoningEffort),
+    },
+    ensureThread: ensureSideThread,
+    onTurnFinished: () => {
+      void reloadSideThreads();
+      void refreshThreads().catch(() => undefined);
+    },
+  });
+
+  const openSideThread = useCallback(
+    (threadId: string) => {
+      const th = sideThreads.find((x) => x.id === threadId);
+      if (!th) return;
+      setSideThreadTarget({ kind: "thread", thread: th });
+      setDockTab("thread");
+      setSideThreadFocusKey((k) => k + 1);
+    },
+    [sideThreads],
+  );
+
+  const activeSideThreadId = sideThreadTarget?.kind === "thread" ? sideThreadTarget.thread.id : null;
+  const { missing: missingSideThreads, revealThread } = useSideThreadHighlights({
+    container: messagesContainerEl,
+    threads: sideThreads,
+    activeThreadId: dockTab === "thread" ? activeSideThreadId : null,
+    onOpen: openSideThread,
+  });
+
+  const { selection: textSelection, dismiss: dismissTextSelection } = useTextSelectionAnchor(
+    messagesContainerEl,
+    !threadOrigin && chatView.kind === "main",
+  );
+
+  const openSideThreadFromSelection = useCallback(
+    (sel: TextSelectionState) => {
+      dismissTextSelection();
+      const existing = sideThreads.find(
+        (th) => th.parent_message_id === sel.messageId && th.anchor.quote === sel.anchor.quote,
+      );
+      if (existing) {
+        openSideThread(existing.id);
+        return;
+      }
+      setSideThreadTarget({
+        kind: "draft",
+        messageId: sel.messageId,
+        anchor: sel.anchor,
+        truncated: sel.truncated,
+      });
+      setDockTab("thread");
+      setSideThreadFocusKey((k) => k + 1);
+    },
+    [dismissTextSelection, sideThreads, openSideThread],
+  );
+
+  const sideThreadsByMessage = useMemo(() => {
+    const map = new Map<string, SideThreadSummary[]>();
+    for (const th of sideThreads) {
+      const list = map.get(th.parent_message_id) ?? [];
+      list.push(th);
+      map.set(th.parent_message_id, list);
+    }
+    return map;
+  }, [sideThreads]);
+
+  const sideThreadPassageMissing =
+    sideThreadTarget?.kind === "thread" && missingSideThreads.has(sideThreadTarget.thread.id);
+
   const tabsToRender = useMemo(() => {
     const list: DockTab[] = [
       "plan",
@@ -3389,8 +3556,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     ];
     if (showProjectMemory) list.push("memory");
     if (pdfUrl || khubLoading || khubError) list.push("khub_file");
+    if (sideThreadTarget) list.push("thread");
     return list;
-  }, [pdfUrl, khubLoading, khubError, showProjectMemory]);
+  }, [pdfUrl, khubLoading, khubError, showProjectMemory, sideThreadTarget]);
 
   const planLiveMarkdown = useMemo(() => {
     if (!turnVisual) return "";
@@ -3427,6 +3595,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       artifacts: <Paperclip size={13} className="shrink-0" />,
       memory: <Database size={13} className="shrink-0" />,
       khub_file: <FileText size={13} className="shrink-0" />,
+      thread: <MessageSquareQuote size={13} className="shrink-0" />,
     };
 
     return (
@@ -3456,7 +3625,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 onClick={() => setDockTab(tab)}
               >
                 {tabIcons[tab]}
-                <span className="truncate">{t(`${tab}.title`)}</span>
+                <span className="truncate">{tab === "thread" ? t("sideThread.tab") : t(`${tab}.title`)}</span>
               </button>
             );
           })}
@@ -3477,6 +3646,30 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const dockBody = (
     <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      {sideThreadTarget && dockTab === "thread" ? (
+        <SideThreadPanel
+          key={sideThreadTarget.kind === "thread" ? sideThreadTarget.thread.id : `draft:${sideThreadFocusKey}`}
+          target={sideThreadTarget}
+          threads={sideThreads}
+          chat={sideThreadChat}
+          passageMissing={sideThreadPassageMissing}
+          onRevealPassage={() => {
+            if (sideThreadTarget.kind === "thread") revealThread(sideThreadTarget.thread.id);
+            else {
+              const el = messagesContainerEl?.querySelector(
+                `[data-message-id="${CSS.escape(sideThreadTarget.messageId)}"]`,
+              );
+              el?.scrollIntoView({ behavior: "smooth", block: "center" });
+            }
+          }}
+          onSelectThread={openSideThread}
+          focusKey={sideThreadFocusKey}
+          toolsView={toolsView}
+          token={token}
+          renderMarkdownLink={renderMarkdownLink}
+          formatTextWithCitations={formatTextWithCitations}
+        />
+      ) : null}
       {dockTab !== "none" && (
         <div className={cn("h-full min-h-0", dockTab !== "research" && "hidden")}>
           <DeepResearchPanel
@@ -4933,6 +5126,30 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 aria-live="polite"
               >
                 <div className="mx-auto w-full max-w-3xl flex flex-col">
+                  {threadOrigin ? (
+                    <nav
+                      aria-label={t("sideThread.breadcrumb.aria")}
+                      className="mb-6 flex flex-col gap-1.5 border-b border-border/60 pb-4"
+                    >
+                      <Link
+                        href={`/c/${threadOrigin.parentId}?thread=${encodeURIComponent(conversationId)}`}
+                        className="focus-ring inline-flex w-fit max-w-full items-center gap-1.5 rounded-md text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <CornerUpLeft className="size-3.5 shrink-0" aria-hidden />
+                        <span className="truncate">
+                          {t("sideThread.breadcrumb.from", {
+                            title: threadOrigin.parentTitle || t("sideThread.breadcrumb.untitled"),
+                          })}
+                        </span>
+                      </Link>
+                      {threadOrigin.quote ? (
+                        <p className="flex items-start gap-2 text-[14px] leading-relaxed text-foreground/80">
+                          <MessageSquareQuote className="mt-1 size-3.5 shrink-0 text-primary/80" aria-hidden />
+                          <span className="line-clamp-3">{threadOrigin.quote}</span>
+                        </p>
+                      ) : null}
+                    </nav>
+                  ) : null}
                   {historyError ? (
                     <div
                       className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive"
@@ -5070,6 +5287,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                         <div
                           key={m.id}
                           data-message-id={m.id}
+                          data-message-role={m.role}
                           className={cn(
                             "group relative w-full flex flex-col transition-opacity",
                             turnGapClass,
@@ -5357,6 +5575,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   }
                                   pinned
                                   onMemorize={() => handleMemorize(m.id)}
+                                  threadCount={sideThreadsByMessage.get(m.id)?.length ?? 0}
+                                  onOpenThreads={() => {
+                                    const list = sideThreadsByMessage.get(m.id);
+                                    if (list?.length) openSideThread(list[list.length - 1].id);
+                                  }}
                                 />
                               </div>
                               {activeCommentBoxId === m.id && (
@@ -5791,6 +6014,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           </div>
         </div>
       )}
+      {textSelection ? (
+        <SelectionThreadPopover selection={textSelection} onOpen={openSideThreadFromSelection} />
+      ) : null}
     </>
   );
 }

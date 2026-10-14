@@ -1,7 +1,11 @@
 "use client";
 
 import { useRef } from "react";
-import { Plus, Trash2, Key, Lock, FileText, ToggleLeft, Shield } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/use-t";
+import { ghostBtn, inputCls, outlineBtn } from "@/components/ui/classes";
+import { Select } from "@/components/ui/Select";
 import type { CredentialSchemaField } from "@/lib/mcpIntegrationPolicy";
 
 export type { CredentialSchemaField };
@@ -13,12 +17,12 @@ type Props = {
   showEnvPlaceholders?: boolean;
 };
 
-export function CredentialSchemaEditor({
-  value,
-  onChange,
-  className,
-  showEnvPlaceholders = true,
-}: Props) {
+const FIELD_TYPES = ["password", "text", "boolean", "oauth"] as const;
+const labelCls = "mb-1.5 block text-xs font-medium text-muted-foreground";
+
+export function CredentialSchemaEditor({ value, onChange, className, showEnvPlaceholders = true }: Props) {
+  const t = useT();
+  const k = "admin_hub.editors.schema";
   const idMapRef = useRef<WeakMap<CredentialSchemaField, string>>(new WeakMap());
 
   function getFieldId(field: CredentialSchemaField, index: number): string {
@@ -37,8 +41,7 @@ export function CredentialSchemaEditor({
   }
 
   function updateAt(index: number, patch: Partial<CredentialSchemaField>) {
-    const next = value.map((f, i) => (i === index ? { ...f, ...patch } : f));
-    onChange(next);
+    onChange(value.map((f, i) => (i === index ? { ...f, ...patch } : f)));
   }
 
   function removeAt(index: number) {
@@ -49,132 +52,96 @@ export function CredentialSchemaEditor({
     const newId = `cred_field_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     onChange([
       ...value,
-      {
-        _id: newId,
-        key: `FIELD_${value.length + 1}`,
-        label: "New Field",
-        type: "password",
-        required: true,
-      },
+      { _id: newId, key: `FIELD_${value.length + 1}`, label: t(`${k}.new_label`), type: "password", required: true },
     ]);
   }
 
   return (
-    <div className={className}>
-      <div className="mb-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Key className="w-4 h-4 text-blue-400" />
-          <span className="text-xs font-bold uppercase tracking-wider text-gray-200">
-            User Requested Fields ({value.length})
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={addField}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-xs font-bold text-blue-400 hover:bg-blue-500/20 transition cursor-pointer shadow-sm"
-        >
+    <section className={cn("flex flex-col gap-3", className)}>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold">
+          {t(`${k}.title`)} <span className="tabular-nums text-muted-foreground">{value.length}</span>
+        </h3>
+        <button type="button" onClick={addField} className={outlineBtn}>
           <Plus className="h-3.5 w-3.5" aria-hidden />
-          Add field
+          {t(`${k}.add`)}
         </button>
       </div>
 
       {value.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-6 text-center">
-          <p className="text-xs text-gray-400">
-            No fields configured for users.
-          </p>
-          <button
-            type="button"
-            onClick={addField}
-            className="mt-2 text-xs font-bold text-blue-400 hover:underline inline-flex items-center gap-1"
-          >
-            <Plus className="w-3.5 h-3.5" /> Define the first field
+        <div className="rounded-2xl border border-dashed border-border px-4 py-8 text-center">
+          <p className="text-sm text-muted-foreground">{t(`${k}.empty`)}</p>
+          <button type="button" onClick={addField} className={cn(ghostBtn, "mt-2")}>
+            <Plus className="h-3.5 w-3.5" aria-hidden />
+            {t(`${k}.empty_add`)}
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <ul className="flex flex-col gap-2.5">
           {value.map((field, index) => {
             const rowKey = getFieldId(field, index);
             return (
-              <div
-                key={rowKey}
-                className="rounded-2xl border border-white/10 bg-[#121212] p-4 hover:border-white/20 transition-colors shadow-sm space-y-3"
-              >
-                {/* Inputs Row */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-gray-400">
-                      Variable Name (ENV)
-                    </label>
+              <li key={rowKey} className="rounded-2xl border border-border/70 p-3.5">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <label className="block">
+                    <span className={labelCls}>{t(`${k}.var_name`)}</span>
                     <input
-                      className="w-full bg-black/50 border border-white/10 focus:border-blue-500 rounded-xl px-3.5 py-2 text-xs font-mono font-bold text-blue-200 placeholder:text-gray-600 outline-none transition"
+                      className={cn(inputCls, "font-mono text-[13px] font-semibold")}
                       value={field.key}
-                      onChange={(e) =>
-                        updateAt(index, { key: e.target.value.replace(/\s/g, "_").toUpperCase() })
-                      }
-                      placeholder="E.G. API_KEY"
+                      onChange={(e) => updateAt(index, { key: e.target.value.replace(/\s/g, "_").toUpperCase() })}
+                      placeholder={t(`${k}.var_ph`)}
                     />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-xs font-semibold text-gray-400">
-                      User Label
-                    </label>
+                  </label>
+                  <label className="block">
+                    <span className={labelCls}>{t(`${k}.label`)}</span>
                     <input
-                      className="w-full bg-black/50 border border-white/10 focus:border-blue-500 rounded-xl px-3.5 py-2 text-xs font-medium text-white placeholder:text-gray-600 outline-none transition"
+                      className={inputCls}
                       value={field.label}
                       onChange={(e) => updateAt(index, { label: e.target.value })}
-                      placeholder="E.G. Personal API Key"
+                      placeholder={t(`${k}.label_ph`)}
                     />
-                  </div>
+                  </label>
                 </div>
 
-                {/* Controls & Options Bar */}
-                <div className="flex flex-wrap items-center justify-between gap-3 pt-2.5 border-t border-white/5">
-                  <div className="flex items-center gap-3">
-                    <select
-                      className="bg-black/50 border border-white/10 focus:border-blue-500 rounded-xl px-3 py-1.5 text-xs font-medium text-gray-200 outline-none cursor-pointer"
+                <div className="mt-3 flex flex-wrap items-center gap-3 border-t border-border/50 pt-3">
+                  <div className="w-52 max-w-full">
+                    <Select
+                      size="sm"
                       value={field.type}
-                      onChange={(e) =>
-                        updateAt(index, { type: e.target.value as CredentialSchemaField["type"] })
-                      }
-                    >
-                      <option value="password">Password / Secret</option>
-                      <option value="text">Text</option>
-                      <option value="boolean">Toggle (Yes/No)</option>
-                      <option value="oauth">OAuth Token</option>
-                    </select>
-
-                    <label className="flex items-center gap-2 text-xs font-medium text-gray-300 cursor-pointer bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded-xl border border-white/5 transition">
-                      <input
-                        type="checkbox"
-                        checked={field.required}
-                        onChange={(e) => updateAt(index, { required: e.target.checked })}
-                        className="rounded border-white/20 text-blue-500 focus:ring-0"
-                      />
-                      <span>Required</span>
-                    </label>
+                      onChange={(type) => updateAt(index, { type: type as CredentialSchemaField["type"] })}
+                      aria-label={t(`${k}.type`)}
+                      options={FIELD_TYPES.map((id) => ({ value: id, label: t(`${k}.type_${id}`) }))}
+                    />
                   </div>
-
+                  <label className="inline-flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={field.required}
+                      onChange={(e) => updateAt(index, { required: e.target.checked })}
+                      className="h-4 w-4 cursor-pointer accent-[hsl(var(--primary))]"
+                    />
+                    {t(`${k}.required`)}
+                  </label>
                   <button
                     type="button"
                     onClick={() => removeAt(index)}
-                    className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition cursor-pointer"
-                    title="Delete field"
+                    className="focus-ring ml-auto inline-flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    aria-label={t(`${k}.remove`)}
                   >
                     <Trash2 className="h-4 w-4" aria-hidden />
                   </button>
                 </div>
 
                 {showEnvPlaceholders && field.env_placeholder ? (
-                  <div className="text-[11px] font-mono text-gray-500 bg-black/40 px-3 py-1.5 rounded-lg border border-white/5 truncate">
-                    env: <span className="text-indigo-300">{field.registry_env_key || field.key}</span> = &quot;{field.env_placeholder}&quot;
-                  </div>
+                  <p className="mt-3 truncate rounded-lg bg-secondary/60 px-3 py-1.5 font-mono text-xs text-muted-foreground">
+                    env: <span className="text-foreground">{field.registry_env_key || field.key}</span> = &quot;{field.env_placeholder}&quot;
+                  </p>
                 ) : null}
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ul>
       )}
-    </div>
+    </section>
   );
 }

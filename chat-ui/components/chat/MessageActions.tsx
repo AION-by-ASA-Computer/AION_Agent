@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Brain, Check, Copy, RotateCw, ThumbsDown, ThumbsUp } from "lucide-react";
+import { Brain, Check, Copy, MessageSquareQuote, RotateCw, ThumbsDown, ThumbsUp } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 import type { MessageRating } from "@/lib/message-feedback";
@@ -17,6 +17,9 @@ type Props = {
   pinned?: boolean;
   className?: string;
   onMemorize?: () => void;
+  /** Side threads opened from this message (always-available path besides the inline underline). */
+  threadCount?: number;
+  onOpenThreads?: () => void;
 };
 
 function ActionButton({
@@ -65,6 +68,8 @@ export function MessageActions({
   pinned = false,
   className,
   onMemorize,
+  threadCount = 0,
+  onOpenThreads,
 }: Props) {
   const t = useT();
   const [copied, setCopied] = useState(false);
@@ -178,6 +183,23 @@ export function MessageActions({
         <ActionButton label={t("chat.actions.memorize")} onClick={onMemorize}>
           <Brain className="size-4" aria-hidden />
         </ActionButton>
+      ) : null}
+
+      {threadCount > 0 && onOpenThreads ? (
+        <button
+          type="button"
+          onClick={onOpenThreads}
+          title={t("sideThread.chip_open")}
+          aria-label={t("sideThread.chip_aria", { count: threadCount })}
+          className={cn(
+            "ml-1 flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-medium text-muted-foreground transition-colors",
+            "hover:bg-primary/10 hover:text-primary",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+          )}
+        >
+          <MessageSquareQuote className="size-3.5" aria-hidden />
+          <span className="tabular-nums">{threadCount}</span>
+        </button>
       ) : null}
     </div>
   );

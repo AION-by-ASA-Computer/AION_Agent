@@ -1165,5 +1165,48 @@
     "wake_empty": "Aucune ligne de réveil — ajoutez des notes ou baissez le seuil de réveil.",
     "wake_help": "Lignes que l'agent injecterait au début du tour (algorithme de réveil, budget limité).",
     "zoom_error": "Erreur de zoom"
+  },
+  "sideThread": {
+    "tab": "Fil",
+    "popover": {
+      "toolbar": "Actions sur la sélection",
+      "action": "Approfondir dans un fil",
+      "truncated": "Seuls les {{max}} premiers caractères de la sélection seront utilisés."
+    },
+    "panel": {
+      "aria": "Fil d’approfondissement",
+      "new_title": "Nouveau fil",
+      "open_full": "Ouvrir comme chat",
+      "reveal": "Afficher le passage dans la conversation",
+      "passage_missing": "Ce passage ne figure plus dans la réponse d’origine.",
+      "other_threads": "Autres fils ({{count}})",
+      "loading": "Chargement du fil…",
+      "empty": "Posez une question sur ce passage. Le fil est enregistré : vous pourrez le reprendre plus tard.",
+      "error": "Impossible de terminer la requête : {{msg}}",
+      "retry": "Réessayer",
+      "dismiss": "Fermer"
+    },
+    "starters": {
+      "explain": "Explique-le simplement",
+      "example": "Donne-moi un exemple concret",
+      "relevance": "Pourquoi est-ce important ici ?"
+    },
+    "composer": {
+      "placeholder": "Posez une question sur le passage…",
+      "send": "Envoyer",
+      "stop": "Arrêter"
+    },
+    "chip_open": "Ouvrir les fils de cette réponse",
+    "chip_aria": "Fils ouverts depuis cette réponse : {{count}}",
+    "breadcrumb": {
+      "aria": "Origine du fil",
+      "from": "Fil de « {{title}} »",
+      "untitled": "conversation sans titre"
+    },
+    "sidebar": {
+      "expand": "Afficher les fils",
+      "collapse": "Masquer les fils",
+      "count": "{{count}} fils"
+    }
   }
 }

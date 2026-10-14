@@ -100,6 +100,21 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
             "totp_required_changed_at DATETIME",
         )
 
+    # Side threads (w5x6y7z025): stesso motivo del blocco users.roles qui sopra.
+    if await _sqlite_table_exists(conn, "conversations"):
+        for col, ddl in (
+            ("parent_conversation_id", "parent_conversation_id VARCHAR(64)"),
+            ("parent_message_id", "parent_message_id VARCHAR(64)"),
+            ("anchor_json", "anchor_json TEXT NOT NULL DEFAULT '{}'"),
+        ):
+            await _sqlite_add_column_if_missing(conn, "conversations", col, ddl)
+        await _sqlite_create_index_if_missing(
+            conn,
+            "ix_conversations_parent_conversation_id",
+            "CREATE INDEX IF NOT EXISTS ix_conversations_parent_conversation_id "
+            "ON conversations(parent_conversation_id)",
+        )
+
     # Observability + timeline columns (migrate_v3 / g3h4i5j6k007). Skipped when
     # alembic stamp head marks a legacy DB as up-to-date without running migrations.
     if await _sqlite_table_exists(conn, "messages"):

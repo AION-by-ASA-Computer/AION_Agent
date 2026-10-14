@@ -26,6 +26,11 @@ Unlike SaaS AI assistants and hosted APIs, AION Agent is fully self-hosted, sove
 - **Extensibility**: Modular skills (`src/skill_registry.py`), YAML profiles (`config_std/profiles/`), and persistent MCP stdio/SSE connections.
 - **Memory & Storage**: Unified SQLite database (`data/aion.db`) with SQLAlchemy + Alembic, FTS5 full-text search, optional Redis cache, per-session sandboxes (`data/sessions/<session_id>/`).
 - **Security & Auth**: Dual-layer authentication (HMAC-based Chat auth + independent Admin auth), credential encryption, organizational data isolation.
+- **Identity**: Login modes `password`, `microsoft`, `google`; switching to SSO runs a tracked migration (link-account modal, temporary passwords, break-glass recovery). Admin-toggled TOTP 2FA applies to password login. `/admin/*` is always protected.
+- **PII Review & Redaction**: Users review and redact personal data in the chat workspace with configurable redaction tags (select/deselect all); `pii_review` artifacts render without disk persistence.
+- **Integrations & Automation**: Per-user integrations (tool connections via integration cards, MCP OAuth callback), marketplace clients, MCP zero-install, and scheduled jobs (`schedules` in both chat-ui and admin-ui).
+- **Research & Projects**: Chat-ui includes web-research views, a per-turn timeline, reasoning disclosure, and projects for grouping work.
+- **Localization (hard constraint)**: Both UIs ship in English, Italian, German, French, and Spanish (`*/lib/i18n/locales/*.json`). All five are required; every surface must tolerate longer strings (DE/FR) and never hardcode user-facing copy.
 
 ## Brand Commitments
 - **Name**: AION Agent (by ASA Computer)

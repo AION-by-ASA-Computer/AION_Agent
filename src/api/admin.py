@@ -1,5 +1,6 @@
 # src/api/admin.py
 import logging
+import re
 import os
 import yaml
 import frontmatter
@@ -81,7 +82,7 @@ from ..data.models import (
     McpServerConfig,
 )
 from ..data.ids import new_uuid7_str
-from sqlalchemy import select, delete
+from sqlalchemy import select, delete, func
 
 logger = logging.getLogger("aion.api.admin")
 
@@ -860,6 +861,98 @@ async def promote_skill(name: str):
     return {"status": "verified", "name": name}
 
 
+class SkillRename(BaseModel):
+    new_name: str
+
+
+_SKILL_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
+
+
+@router.post("/skills/{name}/rename")
+async def rename_skill(name: str, body: SkillRename):
+    """Rename a skill on disk and rewrite every profile that references it."""
+    from ..runtime.profile_sync_state import record_profile_after_admin_save
+
+    new = body.new_name.strip().lower().replace(" ", "_")
+    if not _SKILL_SLUG_RE.match(new):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid name: use lowercase letters, digits, '_' or '-'.",
+        )
+    skill_registry.reload()
+    path = skill_registry.get_skill_path(name)
+    if not path:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    if new == name:
+        return {"status": "unchanged", "name": name, "profiles": []}
+    if skill_registry.skill_exists(new):
+        raise HTTPException(status_code=409, detail=f"A skill named '{new}' already exists")
+    fallback = skill_registry.curated_fallback_dir.resolve()
+    from_fallback = fallback == path.resolve().parent or fallback in path.resolve().parents
+
+    roots = {
+        skill_registry.curated_dir.resolve(),
+        skill_registry.generated_dir.resolve(),
+    }
+    is_package = (
+        path.name.lower() in ("skill.md", "index.md") and path.parent.resolve() not in roots
+    )
+    if from_fallback:
+        # Shipped skills are read-only: copy into the writable dir; the old name gets hidden below.
+        new_file = skill_registry.curated_dir / f"{new}.md"
+        if new_file.exists():
+            raise HTTPException(status_code=409, detail=f"'{new_file.name}' already exists on disk")
+        new_file.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, new_file)
+    elif is_package:
+        dest_dir = path.parent.with_name(new)
+        if dest_dir.exists():
+            raise HTTPException(status_code=409, detail=f"'{dest_dir.name}' already exists on disk")
+        path.parent.rename(dest_dir)
+        new_file = dest_dir / path.name
+    else:
+        new_file = path.with_name(f"{new}.md")
+        if new_file.exists():
+            raise HTTPException(status_code=409, detail=f"'{new_file.name}' already exists on disk")
+        path.rename(new_file)
+
+    skill_registry.unhide(new)
+    # The frontmatter `name` wins over the file stem when the registry loads skills.
+    post = frontmatter.loads(new_file.read_text(encoding="utf-8"))
+    post.metadata["name"] = new
+    new_file.write_text(frontmatter.dumps(post), encoding="utf-8")
+
+    skill_registry.reload()
+    if skill_registry.skill_exists(name):
+        # A shipped copy (config_std) still defines the old name: hide it so it's a rename, not a copy.
+        skill_registry.hide(name)
+
+    updated: List[str] = []
+    profile_manager.load_all()
+    for p in list(profile_manager._profiles.values()):
+        in_skills = name in (p.skills or [])
+        in_critical = name in (p.critical_skills or [])
+        if not (in_skills or in_critical):
+            continue
+        src_path = profile_manager.profile_yaml_path(p.slug)
+        data = yaml.safe_load(src_path.read_text(encoding="utf-8")) or {}
+        for key in ("skills", "critical_skills"):
+            items = data.get(key)
+            if isinstance(items, list):
+                data[key] = [new if x == name else x for x in items]
+        out = profile_manager.profile_yaml_path(p.slug, for_write=True)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with open(out, "w", encoding="utf-8") as fh:
+            yaml.dump(data, fh, allow_unicode=True, sort_keys=False)
+        record_profile_after_admin_save(out)
+        updated.append(p.name)
+
+    profile_manager.invalidate()
+    profile_manager.load_all_if_stale(force=True)
+    skill_registry.reload()
+    return {"status": "success", "name": new, "profiles": updated}
+
+
 @router.get("/skills/{name}")
 async def get_skill(name: str):
     skill_registry.reload()
@@ -879,6 +972,7 @@ async def get_skill(name: str):
 
 @router.post("/skills")
 async def save_skill(s: SkillUpdate):
+    skill_registry.unhide(s.name)
     existing_path = skill_registry.get_skill_path(s.name)
     if existing_path:
         rel_path = None
@@ -3566,13 +3660,61 @@ class UserProfilesUpdate(BaseModel):
 @router.get("/users")
 async def list_users():
     """List all users in the unified database."""
-    from ..data.models import User
+    from ..data.models import User, UserSsoIdentity
     from ..data.user_password import get_roles
+    from ..auth.sso.login_mode import get_login_settings, is_identity_confirmed
+
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+    settings = await get_login_settings(tenant)
+    login_mode = settings.get("login_mode") or "password"
+    provider = settings.get("sso_provider")
+    since = settings.get("migration_started_at")
 
     async with get_async_session_maker()() as session:
         q = select(User).order_by(User.created_at.desc())
         rows = (await session.execute(q)).scalars().all()
+        identities: Dict[str, list] = {}
+        for ident in (await session.execute(select(UserSsoIdentity))).scalars().all():
+            identities.setdefault(ident.user_id, []).append(ident)
+
+        def auth_info(r) -> Dict[str, Any]:
+            idents = identities.get(r.id, [])
+            has_password = r.password_hash is not None
+            exempt = bool(getattr(r, "sso_migration_exempt", False))
+            confirmed = bool(
+                provider
+                and any(
+                    i.provider == provider and is_identity_confirmed(i, since)
+                    for i in idents
+                )
+            )
+            # Metodo di accesso corrente: in modalita' SSO conta solo il provider
+            # attivo se confermato; altrimenti (migrazione non fatta) la password.
+            # Le identita' di provider precedenti non sono piu' valide.
+            if login_mode != "password" and provider and confirmed:
+                login_method = provider
+            elif has_password:
+                login_method = "password"
+            else:
+                login_method = None
+            return {
+                "has_password": has_password,
+                "login_method": login_method,
+                "sso_providers": sorted({i.provider for i in idents}),
+                "sso_migration_exempt": exempt,
+                # Da migrare: SSO attivo, ha ancora la password, non esonerato
+                # e non ha confermato l'identita' sul provider attivo.
+                "migration_pending": bool(
+                    login_mode != "password"
+                    and provider
+                    and has_password
+                    and not exempt
+                    and not confirmed
+                ),
+            }
+
         return {
+            "login_mode": login_mode,
             "users": [
                 {
                     "id": r.id,
@@ -3587,9 +3729,10 @@ async def list_users():
                     "totp_enabled": r.totp_enabled_at is not None,
                     "created_at": r.created_at,
                     "last_active_at": r.last_active_at,
+                    **auth_info(r),
                 }
                 for r in rows
-            ]
+            ],
         }
 
 
@@ -3838,11 +3981,46 @@ async def delete_message_feedback(message_id: str):
 
 
 @router.get("/conversations/global")
-async def list_conversations_global(limit: int = 50):
-    """List all conversations across all users/tenants."""
+async def list_conversations_global(limit: int = 200):
+    """List all conversations across all users/tenants, with per-thread issue counters."""
+    limit = max(1, min(int(limit), 1000))
     async with get_async_session_maker()() as session:
         q = select(Conversation).order_by(Conversation.updated_at.desc()).limit(limit)
         rows = (await session.execute(q)).scalars().all()
+        ids = [r.id for r in rows]
+        disliked: dict[str, int] = {}
+        errored: dict[str, int] = {}
+        liked: dict[str, int] = {}
+        commented: dict[str, int] = {}
+        if ids:
+            q_up = (
+                select(Message.conversation_id, func.count())
+                .where(Message.conversation_id.in_(ids), Message.rating == 1)
+                .group_by(Message.conversation_id)
+            )
+            liked = {cid: n for cid, n in (await session.execute(q_up)).all()}
+            q_com = (
+                select(Message.conversation_id, func.count())
+                .where(
+                    Message.conversation_id.in_(ids),
+                    Message.feedback_comment.is_not(None),
+                    Message.feedback_comment != "",
+                )
+                .group_by(Message.conversation_id)
+            )
+            commented = {cid: n for cid, n in (await session.execute(q_com)).all()}
+            q_down = (
+                select(Message.conversation_id, func.count())
+                .where(Message.conversation_id.in_(ids), Message.rating == -1)
+                .group_by(Message.conversation_id)
+            )
+            disliked = {cid: n for cid, n in (await session.execute(q_down)).all()}
+            q_err = (
+                select(Step.conversation_id, func.count())
+                .where(Step.conversation_id.in_(ids), Step.is_error != 0)
+                .group_by(Step.conversation_id)
+            )
+            errored = {cid: n for cid, n in (await session.execute(q_err)).all()}
         return {
             "conversations": [
                 {
@@ -3854,9 +4032,14 @@ async def list_conversations_global(limit: int = 50):
                     "message_count": r.message_count,
                     "updated_at": r.updated_at,
                     "metadata": json.loads(r.metadata_json or "{}"),
+                    "disliked_count": disliked.get(r.id, 0),
+                    "liked_count": liked.get(r.id, 0),
+                    "comment_count": commented.get(r.id, 0),
+                    "error_count": errored.get(r.id, 0),
                 }
                 for r in rows
-            ]
+            ],
+            "limit": limit,
         }
 
 

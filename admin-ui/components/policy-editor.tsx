@@ -2,10 +2,13 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { load as yamlLoad } from "js-yaml";
-import {
-  Plus, Trash2, ChevronDown, ChevronUp, Terminal, FolderOpen,
-  FolderX, Gauge, Shield, AlertTriangle, Code, FileText,
-} from "lucide-react";
+import { ChevronDown, Plus, Trash2, TriangleAlert, X } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/use-t";
+import { inputCls, outlineBtn } from "@/components/ui/classes";
+import { Switch } from "@/components/settings/ui";
+
+const k = "admin_settings.policy";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -167,42 +170,39 @@ function policyToYaml(state: FsPolicyState): string {
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function SectionHeader({
-  icon,
+const fieldCls = (readOnly: boolean, invalid = false) =>
+  cn(inputCls, "font-mono text-[13px]", readOnly && "cursor-default border-border/60 text-muted-foreground hover:border-border/60", invalid && "border-destructive/60");
+
+/** Collapsible block of the policy. */
+function Block({
   title,
-  subtitle,
+  hint,
   open,
   onToggle,
+  children,
 }: {
-  icon: React.ReactNode;
   title: string;
-  subtitle?: string;
+  hint: string;
   open: boolean;
   onToggle: () => void;
+  children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onToggle}
-      className="w-full flex items-center justify-between py-3 border-b border-[#1a1a1a] group/sec hover:border-amber-500/20 transition-colors"
-    >
-      <div className="flex items-center gap-2.5">
-        <span className="text-amber-500">{icon}</span>
-        <div className="text-left">
-          <p className="text-sm font-bold text-white">{title}</p>
-          {subtitle && (
-            <p className="text-[10px] text-gray-500 uppercase tracking-wider font-bold">
-              {subtitle}
-            </p>
-          )}
-        </div>
-      </div>
-      {open ? (
-        <ChevronUp className="w-4 h-4 text-gray-500" />
-      ) : (
-        <ChevronDown className="w-4 h-4 text-gray-500" />
-      )}
-    </button>
+    <section className="overflow-hidden rounded-2xl border border-border/60 bg-background/40">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="focus-ring flex w-full items-center gap-3 px-4 py-3.5 text-left transition-colors hover:bg-secondary/40"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold">{title}</span>
+          <span className="block text-xs text-muted-foreground">{hint}</span>
+        </span>
+        <ChevronDown className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200", open && "rotate-180")} aria-hidden />
+      </button>
+      {open && <div className="border-t border-border/50 px-4 py-4">{children}</div>}
+    </section>
   );
 }
 
@@ -212,12 +212,16 @@ function GlobTagList({
   onChange,
   readOnly,
   placeholder,
+  removeLabel,
+  addLabel,
 }: {
   label: string;
   values: string[];
   onChange: (next: string[]) => void;
   readOnly: boolean;
-  placeholder?: string;
+  placeholder: string;
+  removeLabel: string;
+  addLabel: string;
 }) {
   const [draft, setDraft] = useState("");
 
@@ -230,30 +234,27 @@ function GlobTagList({
   };
 
   return (
-    <div className="space-y-2">
-      <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
-        {label}
-      </label>
-      <div className="flex flex-wrap gap-2 p-3 bg-[#070707] border border-[#1f1f1f] rounded-xl min-h-[52px]">
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="flex min-h-[46px] flex-wrap items-center gap-1.5 rounded-xl border border-border bg-background p-1.5">
         {values.map((v, i) => (
-          <span
-            key={i}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs font-mono"
-          >
+          <span key={`${v}-${i}`} className="inline-flex items-center gap-1 rounded-lg bg-secondary py-1 pl-2.5 pr-1.5 font-mono text-xs">
             {v}
             {!readOnly && (
               <button
                 type="button"
                 onClick={() => onChange(values.filter((_, j) => j !== i))}
-                className="text-amber-500/60 hover:text-red-400 transition-colors ml-0.5"
+                aria-label={`${removeLabel} ${v}`}
+                className="focus-ring inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground transition-colors hover:text-destructive"
               >
-                ×
+                <X className="h-3 w-3" aria-hidden />
               </button>
             )}
           </span>
         ))}
+        {values.length === 0 && readOnly && <span className="px-2 text-xs text-muted-foreground">—</span>}
         {!readOnly && (
-          <div className="flex items-center gap-1.5">
+          <span className="flex min-w-[10rem] flex-1 items-center gap-1">
             <input
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
@@ -263,17 +264,20 @@ function GlobTagList({
                   add();
                 }
               }}
-              placeholder={placeholder || "Add glob pattern..."}
-              className="bg-transparent text-xs font-mono text-gray-200 outline-none placeholder:text-gray-700 min-w-[140px]"
+              placeholder={placeholder}
+              aria-label={label}
+              className="h-8 min-w-0 flex-1 bg-transparent px-2 font-mono text-xs outline-none placeholder:text-muted-foreground/70"
             />
             <button
               type="button"
               onClick={add}
-              className="p-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 transition-colors"
+              disabled={!draft.trim()}
+              aria-label={addLabel}
+              className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
             >
-              <Plus className="w-3 h-3" />
+              <Plus className="h-3.5 w-3.5" aria-hidden />
             </button>
-          </div>
+          </span>
         )}
       </div>
     </div>
@@ -293,178 +297,74 @@ function ExecRuleRow({
   onRemove: () => void;
   readOnly: boolean;
 }) {
+  const t = useT();
   const [argvDraft, setArgvDraft] = useState(rule.argv_prefix.join(", "));
   const [posDraft, setPosDraft] = useState(rule.validate_path_positions.join(", "));
 
   const commitArgv = () => {
-    const parts = argvDraft
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    onChange({ ...rule, argv_prefix: parts });
+    onChange({ ...rule, argv_prefix: argvDraft.split(",").map((s) => s.trim()).filter(Boolean) });
   };
 
   const commitPos = () => {
-    const parts = posDraft
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-      .map(Number)
-      .filter((n) => !isNaN(n));
-    onChange({ ...rule, validate_path_positions: parts });
+    onChange({
+      ...rule,
+      validate_path_positions: posDraft.split(",").map((s) => s.trim()).filter(Boolean).map(Number).filter((n) => !isNaN(n)),
+    });
   };
 
+  const missing = !readOnly && !rule.executable.trim();
+
   return (
-    <div className="p-3 bg-[#070707] border border-[#1f1f1f] rounded-xl space-y-3 hover:border-amber-500/20 transition-colors group/rule">
-      <div className="flex items-center justify-between">
-        <span className="text-[10px] font-bold uppercase text-amber-500/60 tracking-wider">
-          Rule #{index + 1}
-        </span>
+    <li className="px-4 py-3.5">
+      <div className="mb-2.5 flex items-center justify-between">
+        <span className="text-xs font-medium text-muted-foreground">{t(`${k}.rule`, { n: index + 1 })}</span>
         {!readOnly && (
           <button
             type="button"
             onClick={onRemove}
-            className="p-1 rounded-md text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover/rule:opacity-100"
+            aria-label={t(`${k}.remove_rule`, { n: index + 1 })}
+            className="focus-ring inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-destructive"
           >
-            <Trash2 className="w-3.5 h-3.5" />
+            <Trash2 className="h-3.5 w-3.5" aria-hidden />
           </button>
         )}
       </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold uppercase text-gray-600 tracking-wider">
-            Executable
-          </label>
+      <div className="grid gap-3 md:grid-cols-3">
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium">{t(`${k}.executable`)}</span>
           <input
             type="text"
             value={rule.executable}
             onChange={(e) => onChange({ ...rule, executable: e.target.value })}
             readOnly={readOnly}
-            placeholder="e.g. python3"
-            className={`w-full bg-[#0d0d0d] border rounded-lg px-3 py-2 text-sm font-mono outline-none transition-all ${
-              readOnly
-                ? "border-[#1a1a1a] text-gray-500"
-                : !rule.executable.trim()
-                ? "border-red-500/50 text-gray-200 focus:border-red-500 focus:ring-1 focus:ring-red-500/20"
-                : "border-[#262626] text-gray-200 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20"
-            }`}
+            aria-invalid={missing || undefined}
+            placeholder="python3"
+            className={fieldCls(readOnly, missing)}
           />
-          {!readOnly && !rule.executable.trim() && (
-            <p className="text-[10px] text-red-500 mt-1">Executable name is required</p>
-          )}
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold uppercase text-gray-600 tracking-wider">
-            Argv Prefix (CSV)
-          </label>
-          <input
-            type="text"
-            value={argvDraft}
-            onChange={(e) => setArgvDraft(e.target.value)}
-            onBlur={commitArgv}
-            readOnly={readOnly}
-            placeholder='e.g. -r, -E'
-            className={`w-full bg-[#0d0d0d] border rounded-lg px-3 py-2 text-sm font-mono outline-none transition-all ${
-              readOnly
-                ? "border-[#1a1a1a] text-gray-500"
-                : "border-[#262626] text-gray-200 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20"
-            }`}
-          />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[10px] font-bold uppercase text-gray-600 tracking-wider">
-            Validate Path Positions (CSV)
-          </label>
-          <input
-            type="text"
-            value={posDraft}
-            onChange={(e) => setPosDraft(e.target.value)}
-            onBlur={commitPos}
-            readOnly={readOnly}
-            placeholder="e.g. 1, 2, 3"
-            className={`w-full bg-[#0d0d0d] border rounded-lg px-3 py-2 text-sm font-mono outline-none transition-all ${
-              readOnly
-                ? "border-[#1a1a1a] text-gray-500"
-                : "border-[#262626] text-gray-200 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20"
-            }`}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ByteInput({
-  label,
-  value,
-  onChange,
-  readOnly,
-  description,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  readOnly: boolean;
-  description?: string;
-}) {
-  const mb = (value / (1024 * 1024)).toFixed(2);
-  return (
-    <div className="space-y-1.5">
-      <div className="flex items-center justify-between">
-        <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
-          {label}
+          {missing && <span className="text-xs text-destructive">{t(`${k}.executable_required`)}</span>}
         </label>
-        <span className="text-[10px] text-gray-600 font-mono">{mb} MB</span>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium">{t(`${k}.argv`)}</span>
+          <input type="text" value={argvDraft} onChange={(e) => setArgvDraft(e.target.value)} onBlur={commitArgv} readOnly={readOnly} placeholder="-r, -E" className={fieldCls(readOnly)} />
+        </label>
+        <label className="flex flex-col gap-1.5">
+          <span className="text-xs font-medium">{t(`${k}.positions`)}</span>
+          <input type="text" value={posDraft} onChange={(e) => setPosDraft(e.target.value)} onBlur={commitPos} readOnly={readOnly} placeholder="1, 2, 3" className={fieldCls(readOnly)} />
+        </label>
       </div>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)}
-        readOnly={readOnly}
-        className={`w-full bg-[#0d0d0d] border rounded-xl px-4 py-2.5 text-sm font-mono outline-none transition-all ${
-          readOnly
-            ? "border-[#1a1a1a] text-gray-500"
-            : "border-[#262626] text-gray-200 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20"
-        }`}
-      />
-      {description && (
-        <p className="text-[10px] text-gray-600">{description}</p>
-      )}
-    </div>
+    </li>
   );
 }
 
-function NumberInput({
-  label,
-  value,
-  onChange,
-  readOnly,
-}: {
-  label: string;
-  value: number;
-  onChange: (v: number) => void;
-  readOnly: boolean;
-}) {
+function NumField({ label, value, onChange, readOnly, bytes }: { label: string; value: number; onChange: (v: number) => void; readOnly: boolean; bytes?: boolean }) {
   return (
-    <div className="space-y-1.5">
-      <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
+    <label className="flex flex-col gap-1.5">
+      <span className="flex items-baseline justify-between gap-2 text-sm font-medium">
         {label}
-      </label>
-      <input
-        type="number"
-        value={value}
-        onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)}
-        readOnly={readOnly}
-        className={`w-full bg-[#0d0d0d] border rounded-xl px-4 py-2.5 text-sm font-mono outline-none transition-all ${
-          readOnly
-            ? "border-[#1a1a1a] text-gray-500"
-            : "border-[#262626] text-gray-200 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20"
-        }`}
-      />
-    </div>
+        {bytes && <span className="font-mono text-xs font-normal tabular-nums text-muted-foreground">{(value / (1024 * 1024)).toFixed(2)} MB</span>}
+      </span>
+      <input type="number" inputMode="numeric" value={value} onChange={(e) => onChange(parseInt(e.target.value, 10) || 0)} readOnly={readOnly} className={fieldCls(readOnly)} />
+    </label>
   );
 }
 
@@ -477,25 +377,21 @@ interface PolicyEditorProps {
 }
 
 export function PolicyEditor({ value, onChange, readOnly = false }: PolicyEditorProps) {
+  const t = useT();
   const [state, setState] = useState<FsPolicyState>(DEFAULT_STATE);
   const [parseError, setParseError] = useState<string | null>(null);
   const [showRaw, setShowRaw] = useState(false);
 
   const [lastSentYaml, setLastSentYaml] = useState<string | null>(null);
 
-  // Track which sections are open
-  const [openSections, setOpenSections] = useState({
-    general: true,
-    filesystem: true,
-    exec: true,
-    limits: false,
-  });
+  const [openSections, setOpenSections] = useState({ general: false, filesystem: true, exec: true, limits: false });
 
   // Parse incoming YAML → state
   useEffect(() => {
     if (!value) return;
     if (value === lastSentYaml) return;
     const { state: parsed, error } = yamlToPolicy(value);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount
     setParseError(error);
     setState(parsed);
   }, [value, lastSentYaml]);
@@ -523,10 +419,7 @@ export function PolicyEditor({ value, onChange, readOnly = false }: PolicyEditor
   const addExecRule = () => {
     update((prev) => ({
       ...prev,
-      exec_allowlist: [
-        ...prev.exec_allowlist,
-        { executable: "", argv_prefix: [], validate_path_positions: [] },
-      ],
+      exec_allowlist: [...prev.exec_allowlist, { executable: "", argv_prefix: [], validate_path_positions: [] }],
     }));
   };
 
@@ -539,259 +432,112 @@ export function PolicyEditor({ value, onChange, readOnly = false }: PolicyEditor
   };
 
   const removeExecRule = (i: number) => {
-    update((prev) => ({
-      ...prev,
-      exec_allowlist: prev.exec_allowlist.filter((_, j) => j !== i),
-    }));
+    update((prev) => ({ ...prev, exec_allowlist: prev.exec_allowlist.filter((_, j) => j !== i) }));
   };
+
+  const setLimit = (key: keyof FsPolicyLimits) => (v: number) => update((p) => ({ ...p, limits: { ...p.limits, [key]: v } }));
 
   const rawPreview = policyToYaml(state);
 
   return (
-    <div className="space-y-1">
+    <div className="flex flex-col gap-3">
       {parseError && (
-        <div className="p-3 mb-4 bg-red-500/10 border border-red-500/20 rounded-xl flex items-start gap-2 text-xs text-red-400">
-          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>
-            <strong>Parse error:</strong> {parseError}
-            <br />
-            Showing defaults. Fix the YAML source or start fresh.
-          </span>
+        <div className="flex items-start gap-2.5 rounded-xl bg-secondary/60 px-3.5 py-3 text-sm" role="alert">
+          <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden />
+          <p className="text-muted-foreground">
+            <strong className="font-medium text-foreground">{t(`${k}.parse_error`)}</strong> {parseError} {t(`${k}.parse_error_hint`)}
+          </p>
         </div>
       )}
 
-      {/* ── General ── */}
-      <div className="bg-[#0d0d0d] rounded-2xl border border-[#1a1a1a] overflow-hidden">
-        <div className="px-5 pt-2">
-          <SectionHeader
-            icon={<FileText className="w-4 h-4" />}
-            title="General"
-            subtitle="Policy Version"
-            open={openSections.general}
-            onToggle={() => toggleSection("general")}
+      <Block title={t(`${k}.fs_title`)} hint={t(`${k}.fs_hint`)} open={openSections.filesystem} onToggle={() => toggleSection("filesystem")}>
+        <div className="flex flex-col gap-4">
+          <GlobTagList
+            label={t(`${k}.allow`)}
+            values={state.filesystem_allow}
+            onChange={(v) => update({ filesystem_allow: v })}
+            readOnly={readOnly}
+            placeholder="workspace/**"
+            removeLabel={t(`${k}.remove`)}
+            addLabel={t(`${k}.add_pattern`)}
+          />
+          <GlobTagList
+            label={t(`${k}.deny`)}
+            values={state.filesystem_deny}
+            onChange={(v) => update({ filesystem_deny: v })}
+            readOnly={readOnly}
+            placeholder="/etc/**"
+            removeLabel={t(`${k}.remove`)}
+            addLabel={t(`${k}.add_pattern`)}
           />
         </div>
-        {openSections.general && (
-          <div className="px-5 pb-5 pt-4">
-            <div className="space-y-1.5 max-w-xs">
-              <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
-                Version
-              </label>
-              <input
-                type="text"
-                value={state.version}
-                onChange={(e) => update({ version: e.target.value })}
-                readOnly={readOnly}
-                placeholder="1.0"
-                className={`w-full bg-[#070707] border rounded-xl px-4 py-2.5 text-sm font-mono outline-none transition-all ${
-                  readOnly
-                    ? "border-[#1a1a1a] text-gray-500"
-                    : "border-[#262626] text-gray-200 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/20"
-                }`}
-              />
+      </Block>
+
+      <Block title={t(`${k}.exec_title`)} hint={t(`${k}.exec_hint`)} open={openSections.exec} onToggle={() => toggleSection("exec")}>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-center gap-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium">{t(`${k}.exec_enabled`)}</p>
+              <p className="text-xs text-muted-foreground">{t(`${k}.exec_enabled_hint`)}</p>
             </div>
+            <Switch checked={state.exec_enabled} disabled={readOnly} onChange={(v) => update({ exec_enabled: v })} label={t(`${k}.exec_enabled`)} />
           </div>
-        )}
-      </div>
 
-      {/* ── Filesystem ── */}
-      <div className="bg-[#0d0d0d] rounded-2xl border border-[#1a1a1a] overflow-hidden">
-        <div className="px-5 pt-2">
-          <SectionHeader
-            icon={<FolderOpen className="w-4 h-4" />}
-            title="Filesystem"
-            subtitle="Allow & Deny glob patterns"
-            open={openSections.filesystem}
-            onToggle={() => toggleSection("filesystem")}
-          />
-        </div>
-        {openSections.filesystem && (
-          <div className="px-5 pb-5 pt-4 space-y-4">
-            <GlobTagList
-              label="Allow Paths"
-              values={state.filesystem_allow}
-              onChange={(v) => update({ filesystem_allow: v })}
-              readOnly={readOnly}
-              placeholder='e.g. workspace/**'
-            />
-            <GlobTagList
-              label="Deny Paths"
-              values={state.filesystem_deny}
-              onChange={(v) => update({ filesystem_deny: v })}
-              readOnly={readOnly}
-              placeholder='e.g. /etc/**'
-            />
-          </div>
-        )}
-      </div>
-
-      {/* ── Exec ── */}
-      <div className="bg-[#0d0d0d] rounded-2xl border border-[#1a1a1a] overflow-hidden">
-        <div className="px-5 pt-2">
-          <SectionHeader
-            icon={<Terminal className="w-4 h-4" />}
-            title="Command Execution"
-            subtitle="Sandbox exec policy & allowlist"
-            open={openSections.exec}
-            onToggle={() => toggleSection("exec")}
-          />
-        </div>
-        {openSections.exec && (
-          <div className="px-5 pb-5 pt-4 space-y-5">
-            {/* Toggle */}
-            <div className="flex items-center justify-between p-4 bg-[#070707] border border-[#1f1f1f] rounded-xl">
-              <div>
-                <p className="text-sm font-bold text-white">Exec Enabled</p>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Allow the agent to execute system commands via the allowlist below.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => !readOnly && update({ exec_enabled: !state.exec_enabled })}
-                className={`w-12 h-6 rounded-full transition-all flex items-center px-1 ${
-                  readOnly
-                    ? "cursor-not-allowed opacity-60"
-                    : "cursor-pointer"
-                } ${state.exec_enabled ? "bg-amber-500" : "bg-gray-700"}`}
-              >
-                <div
-                  className={`w-4 h-4 rounded-full bg-white transition-transform ${
-                    state.exec_enabled ? "translate-x-6" : "translate-x-0"
-                  }`}
-                />
-              </button>
+          {!state.exec_enabled && (
+            <div className="flex items-start gap-2.5 rounded-xl bg-secondary/60 px-3.5 py-3 text-sm text-muted-foreground">
+              <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+              {t(`${k}.exec_off`)}
             </div>
+          )}
 
-            {/* Warning if exec disabled */}
-            {!state.exec_enabled && (
-              <div className="flex items-center gap-2 p-3 bg-yellow-500/5 border border-yellow-500/20 rounded-xl text-xs text-yellow-400">
-                <Shield className="w-4 h-4 shrink-0" />
-                Exec is OFF — the allowlist below is saved but not active until you enable exec.
-              </div>
-            )}
-
-            {/* Allowlist */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <label className="text-[10px] font-bold uppercase text-gray-500 tracking-wider">
-                  Allowlist ({state.exec_allowlist.length} rules)
-                </label>
-                {!readOnly && (
-                  <button
-                    type="button"
-                    onClick={addExecRule}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-xs font-bold hover:bg-amber-500/20 transition-all active:scale-95"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    Add Rule
-                  </button>
-                )}
-              </div>
-
-              {state.exec_allowlist.length === 0 ? (
-                <div className="p-6 text-center text-gray-600 text-sm border border-dashed border-[#1f1f1f] rounded-xl">
-                  <FolderX className="w-8 h-8 mx-auto mb-2 text-gray-700" />
-                  No exec rules defined.
-                  {!readOnly && " Click «Add Rule» to add one."}
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {state.exec_allowlist.map((rule, i) => (
-                    <ExecRuleRow
-                      key={i}
-                      rule={rule}
-                      index={i}
-                      onChange={(next) => updateExecRule(i, next)}
-                      onRemove={() => removeExecRule(i)}
-                      readOnly={readOnly}
-                    />
-                  ))}
-                </div>
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-sm font-medium">{t(`${k}.allowlist`, { count: state.exec_allowlist.length })}</span>
+              {!readOnly && (
+                <button type="button" onClick={addExecRule} className={outlineBtn}>
+                  <Plus className="h-3.5 w-3.5" aria-hidden />
+                  {t(`${k}.add_rule`)}
+                </button>
               )}
             </div>
-          </div>
-        )}
-      </div>
 
-      {/* ── Limits ── */}
-      <div className="bg-[#0d0d0d] rounded-2xl border border-[#1a1a1a] overflow-hidden">
-        <div className="px-5 pt-2">
-          <SectionHeader
-            icon={<Gauge className="w-4 h-4" />}
-            title="Resource Limits"
-            subtitle="File sizes and operation ceilings"
-            open={openSections.limits}
-            onToggle={() => toggleSection("limits")}
-          />
-        </div>
-        {openSections.limits && (
-          <div className="px-5 pb-5 pt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-            <ByteInput
-              label="Max File Read Bytes"
-              value={state.limits.max_file_read_bytes}
-              onChange={(v) => update((p) => ({ ...p, limits: { ...p.limits, max_file_read_bytes: v } }))}
-              readOnly={readOnly}
-            />
-            <ByteInput
-              label="Max File Write Bytes"
-              value={state.limits.max_file_write_bytes}
-              onChange={(v) => update((p) => ({ ...p, limits: { ...p.limits, max_file_write_bytes: v } }))}
-              readOnly={readOnly}
-            />
-            <ByteInput
-              label="Max Edit File Bytes"
-              value={state.limits.max_edit_file_bytes}
-              onChange={(v) => update((p) => ({ ...p, limits: { ...p.limits, max_edit_file_bytes: v } }))}
-              readOnly={readOnly}
-            />
-            <ByteInput
-              label="Grep Max File Bytes"
-              value={state.limits.grep_max_file_bytes}
-              onChange={(v) => update((p) => ({ ...p, limits: { ...p.limits, grep_max_file_bytes: v } }))}
-              readOnly={readOnly}
-            />
-            <NumberInput
-              label="Grep Max Matches"
-              value={state.limits.grep_max_matches}
-              onChange={(v) => update((p) => ({ ...p, limits: { ...p.limits, grep_max_matches: v } }))}
-              readOnly={readOnly}
-            />
-            <NumberInput
-              label="Glob Max Paths"
-              value={state.limits.glob_max_paths}
-              onChange={(v) => update((p) => ({ ...p, limits: { ...p.limits, glob_max_paths: v } }))}
-              readOnly={readOnly}
-            />
-            <NumberInput
-              label="Chunk Max Lines"
-              value={state.limits.chunk_max_lines}
-              onChange={(v) => update((p) => ({ ...p, limits: { ...p.limits, chunk_max_lines: v } }))}
-              readOnly={readOnly}
-            />
+            {state.exec_allowlist.length === 0 ? (
+              <p className="rounded-xl border border-dashed border-border px-4 py-6 text-sm text-muted-foreground">
+                {t(`${k}.no_rules`)} {!readOnly && t(`${k}.no_rules_cta`)}
+              </p>
+            ) : (
+              <ul className="divide-y divide-border/40 overflow-hidden rounded-xl border border-border/60">
+                {state.exec_allowlist.map((rule, i) => (
+                  <ExecRuleRow key={i} rule={rule} index={i} onChange={(next) => updateExecRule(i, next)} onRemove={() => removeExecRule(i)} readOnly={readOnly} />
+                ))}
+              </ul>
+            )}
           </div>
-        )}
-      </div>
+        </div>
+      </Block>
 
-      {/* ── Raw YAML preview ── */}
-      <div className="bg-[#0d0d0d] rounded-2xl border border-[#1a1a1a] overflow-hidden">
-        <div className="px-5 pt-2">
-          <SectionHeader
-            icon={<Code className="w-4 h-4" />}
-            title="Raw YAML Preview"
-            subtitle="Read-only serialized output"
-            open={showRaw}
-            onToggle={() => setShowRaw((p) => !p)}
-          />
+      <Block title={t(`${k}.limits_title`)} hint={t(`${k}.limits_hint`)} open={openSections.limits} onToggle={() => toggleSection("limits")}>
+        <div className="grid gap-x-5 gap-y-4 md:grid-cols-2">
+          <NumField bytes label={t(`${k}.max_read`)} value={state.limits.max_file_read_bytes} onChange={setLimit("max_file_read_bytes")} readOnly={readOnly} />
+          <NumField bytes label={t(`${k}.max_write`)} value={state.limits.max_file_write_bytes} onChange={setLimit("max_file_write_bytes")} readOnly={readOnly} />
+          <NumField bytes label={t(`${k}.max_edit`)} value={state.limits.max_edit_file_bytes} onChange={setLimit("max_edit_file_bytes")} readOnly={readOnly} />
+          <NumField bytes label={t(`${k}.grep_bytes`)} value={state.limits.grep_max_file_bytes} onChange={setLimit("grep_max_file_bytes")} readOnly={readOnly} />
+          <NumField label={t(`${k}.grep_matches`)} value={state.limits.grep_max_matches} onChange={setLimit("grep_max_matches")} readOnly={readOnly} />
+          <NumField label={t(`${k}.glob_paths`)} value={state.limits.glob_max_paths} onChange={setLimit("glob_max_paths")} readOnly={readOnly} />
+          <NumField label={t(`${k}.chunk_lines`)} value={state.limits.chunk_max_lines} onChange={setLimit("chunk_max_lines")} readOnly={readOnly} />
         </div>
-        {showRaw && (
-          <div className="px-5 pb-5 pt-4">
-            <pre className="w-full bg-[#030303] border border-[#1a1a1a] rounded-xl p-4 text-xs font-mono text-amber-400/70 leading-relaxed overflow-x-auto whitespace-pre">
-              {rawPreview}
-            </pre>
-          </div>
-        )}
-      </div>
+      </Block>
+
+      <Block title={t(`${k}.general_title`)} hint={t(`${k}.general_hint`)} open={openSections.general} onToggle={() => toggleSection("general")}>
+        <label className="flex max-w-xs flex-col gap-1.5">
+          <span className="text-sm font-medium">{t(`${k}.version`)}</span>
+          <input type="text" value={state.version} onChange={(e) => update({ version: e.target.value })} readOnly={readOnly} placeholder="1.0" className={fieldCls(readOnly)} />
+        </label>
+      </Block>
+
+      <Block title={t(`${k}.raw_title`)} hint={t(`${k}.raw_hint`)} open={showRaw} onToggle={() => setShowRaw((p) => !p)}>
+        <pre className="overflow-x-auto whitespace-pre rounded-xl border border-border/60 bg-background p-4 font-mono text-xs leading-relaxed text-muted-foreground">{rawPreview}</pre>
+      </Block>
     </div>
   );
 }

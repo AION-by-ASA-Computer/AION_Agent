@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
-import { Shield, Users, Key, AlertTriangle, CheckCircle2, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Key, Loader2 } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { Dialog } from "@/components/profiles/Dialog";
+import { ghostBtn, outlineBtn, solidBtn } from "@/components/ui/classes";
 import { TempPasswordsDialog } from "./TempPasswordsDialog";
 import { SsoConfigPanel } from "./SsoConfigPanel";
 
@@ -32,8 +34,7 @@ interface AuthStatus {
   exempt?: number;
 }
 
-export function SsoMigrationPanel() {
-  const router = useRouter();
+export function SsoMigrationPanel({ onManage }: { onManage?: () => void } = {}) {
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -149,132 +150,116 @@ export function SsoMigrationPanel() {
   };
 
   if (loading) {
-    return <div className="p-8 text-center text-gray-500 animate-pulse">Caricamento stato...</div>;
+    return (
+      <div className="flex items-center gap-2 px-1 py-6 text-sm text-muted-foreground" role="status">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        Caricamento stato…
+      </div>
+    );
   }
 
   if (!status) return null;
 
+  const stats: { label: string; value: number; tone?: string }[] = [
+    { label: "Totali", value: status.total || 0 },
+    { label: "Migrati", value: status.migrated || 0, tone: "text-success" },
+    { label: "In attesa", value: status.pending || 0, tone: "text-warning" },
+    { label: "Esonerati", value: status.exempt || 0, tone: "text-muted-foreground" },
+  ];
+
   return (
-    <div className="space-y-6">
-      {/* Mode Selector */}
-      <div className="flex gap-4">
+    <div className="flex flex-col gap-5">
+      <div role="group" aria-label="Modalità di accesso" className="grid gap-2 sm:grid-cols-3">
         {(["password", "microsoft", "google"] as LoginMode[]).map((m) => {
           const isActive = status.login_mode === m;
           const isSelected = selectedTab === m;
-          
           return (
             <button
               key={m}
+              type="button"
               disabled={saving}
+              aria-pressed={isSelected}
               onClick={() => setSelectedTab(m)}
-              className={`relative flex-1 flex flex-col items-center justify-center gap-2 p-4 rounded-xl border transition-all ${
-                isSelected
-                  ? "bg-blue-500/10 border-blue-500 text-white"
-                  : "bg-[#070707] border-[#222] text-gray-400 hover:border-gray-500 hover:text-gray-200"
-              } ${saving ? "opacity-50 cursor-not-allowed" : ""}`}
-            >
-              {isActive && (
-                <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.8)]" title="Modalità attualmente attiva" />
+              className={cn(
+                "focus-ring flex items-center gap-3 rounded-2xl border px-4 py-3.5 text-left transition-colors disabled:opacity-50",
+                isSelected ? "border-foreground/40 bg-secondary" : "border-border/70 bg-card hover:bg-secondary/60",
               )}
-              {m === "password" && <Key className={`w-6 h-6 ${isActive ? "text-emerald-400" : ""}`} />}
+            >
+              {m === "password" && <Key className="h-5 w-5 shrink-0 text-muted-foreground" aria-hidden />}
               {m === "microsoft" && (
-                <svg className={`h-6 w-6 ${isActive ? "" : "opacity-80"}`} viewBox="0 0 21 21" fill="none"><path d="M0 0H10V10H0V0Z" fill="#f25022"/><path d="M11 0H21V10H11V0Z" fill="#7fba00"/><path d="M0 11H10V21H0V11Z" fill="#00a4ef"/><path d="M11 11H21V21H11V11Z" fill="#ffb900"/></svg>
+                <svg className="h-5 w-5 shrink-0" viewBox="0 0 21 21" fill="none" aria-hidden><path d="M0 0H10V10H0V0Z" fill="#f25022"/><path d="M11 0H21V10H11V0Z" fill="#7fba00"/><path d="M0 11H10V21H0V11Z" fill="#00a4ef"/><path d="M11 11H21V21H11V11Z" fill="#ffb900"/></svg>
               )}
               {m === "google" && (
-                <svg className={`h-6 w-6 ${isActive ? "" : "opacity-80"}`} viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+                <svg className="h-5 w-5 shrink-0" viewBox="0 0 48 48" aria-hidden><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
               )}
-              <span className="font-semibold text-sm capitalize">{m === "password" ? "Normale" : m}</span>
-              {isActive && <span className="text-[10px] text-emerald-500 font-bold uppercase mt-1">Attivo</span>}
+              <span className="min-w-0 flex-1 text-sm font-medium capitalize">{m === "password" ? "Password" : m}</span>
+              {isActive && (
+                <span className="inline-flex shrink-0 items-center gap-1.5 text-xs font-medium text-success">
+                  <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+                  Attivo
+                </span>
+              )}
             </button>
           );
         })}
       </div>
 
       {error && (
-        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-start gap-3 text-sm">
-          <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
+        <div className="flex items-start gap-3 rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <div>{error}</div>
         </div>
       )}
 
-      {/* Migration Tracker (shown only if the selected tab is the active SSO mode and migration is active) */}
       {selectedTab !== "password" && status.login_mode === selectedTab && (
-        <div className="p-6 rounded-xl border border-emerald-500/20 bg-emerald-500/5 space-y-4 animate-in fade-in slide-in-from-top-4">
-          <div className="flex items-center justify-between">
-            <h4 className="text-lg font-bold tracking-tight text-white flex items-center gap-2">
-              <Users className="w-5 h-5 text-emerald-400" />
-              Stato Migrazione Utenti
-            </h4>
+        <div className="rounded-2xl border border-border/70 bg-card p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="text-sm font-semibold">Stato migrazione utenti</h3>
             {status.sso_origin !== "migration" ? (
-              <span className="px-2 py-1 bg-gray-500/20 text-gray-400 text-[10px] font-bold uppercase rounded border border-gray-500/30">
-                Setup Iniziale
-              </span>
+              <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-medium text-muted-foreground">Setup iniziale</span>
             ) : status.sso_migration_active ? (
-              <span className="px-2 py-1 bg-yellow-500/20 text-yellow-500 text-[10px] font-bold uppercase rounded border border-yellow-500/30">
-                In Corso
-              </span>
+              <span className="rounded-full bg-warning/15 px-2.5 py-0.5 text-xs font-medium text-warning">In corso</span>
             ) : (
-              <span className="px-2 py-1 bg-green-500/20 text-green-500 text-[10px] font-bold uppercase rounded border border-green-500/30 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> Completata
+              <span className="inline-flex items-center gap-1 rounded-full bg-success/15 px-2.5 py-0.5 text-xs font-medium text-success">
+                <CheckCircle2 className="h-3 w-3" aria-hidden /> Completata
               </span>
             )}
           </div>
-          
-          <div className="grid grid-cols-4 gap-4">
-            <div className="p-4 bg-black/40 rounded-lg text-center">
-              <div className="text-2xl font-black text-white">{status.total || 0}</div>
-              <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Totali</div>
-            </div>
-            <div className="p-4 bg-black/40 rounded-lg text-center">
-              <div className="text-2xl font-black text-green-400">{status.migrated || 0}</div>
-              <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Migrati</div>
-            </div>
-            <div className="p-4 bg-black/40 rounded-lg text-center">
-              <div className="text-2xl font-black text-yellow-400">{status.pending || 0}</div>
-              <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">In Attesa</div>
-            </div>
-            <div className="p-4 bg-black/40 rounded-lg text-center">
-              <div className="text-2xl font-black text-gray-400">{status.exempt || 0}</div>
-              <div className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Esonerati</div>
-            </div>
-          </div>
 
-          <div className="flex justify-end pt-2">
-            <button
-              onClick={() => router.push("/security/migration")}
-              className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-all"
-            >
-              Gestisci Utenti <ChevronRight className="w-4 h-4" />
+          <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-4">
+            {stats.map((x) => (
+              <div key={x.label}>
+                <dd className={cn("order-2 text-xl font-semibold tabular-nums", x.tone)}>{x.value}</dd>
+                <dt className="text-xs text-muted-foreground">{x.label}</dt>
+              </div>
+            ))}
+          </dl>
+
+          <div className="mt-5 flex justify-end">
+            <button type="button" onClick={onManage} className={outlineBtn}>
+              Gestisci utenti <ChevronRight className="h-4 w-4" aria-hidden />
             </button>
           </div>
         </div>
       )}
 
-      {/* Sso Config panel for the selected SSO provider */}
       {selectedTab !== "password" && (
-        <div className="animate-in fade-in slide-in-from-top-4">
-          <SsoConfigPanel
-            forcedProvider={selectedTab as any}
-            onActivate={() => handleModeChangeRequest(selectedTab)}
-            isActive={status.login_mode === selectedTab}
-          />
-        </div>
+        <SsoConfigPanel
+          forcedProvider={selectedTab as any}
+          onActivate={() => handleModeChangeRequest(selectedTab)}
+          isActive={status.login_mode === selectedTab}
+        />
       )}
 
-      {/* Se siamo in password e non è attiva, mostriamo il tasto per attivarla */}
       {selectedTab === "password" && status.login_mode !== "password" && (
-        <div className="p-6 rounded-xl border border-[#333] bg-[#0a0a0a] space-y-4 animate-in fade-in slide-in-from-top-4 text-center">
-          <Key className="w-8 h-8 text-gray-400 mx-auto" />
-          <h4 className="text-white font-bold">Autenticazione a Password</h4>
-          <p className="text-sm text-gray-400 max-w-md mx-auto">
+        <div className="rounded-2xl border border-border/70 bg-card p-6">
+          <h3 className="text-sm font-semibold">Autenticazione a password</h3>
+          <p className="mt-1 max-w-[56ch] text-sm text-muted-foreground">
             Disattiva il Single Sign-On e torna all'accesso standard tramite password per tutti gli utenti.
           </p>
-          <button
-            onClick={() => handleModeChangeRequest("password")}
-            disabled={loadingSimulation}
-            className="mt-4 px-6 py-2 bg-white text-black font-bold rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
-          >
-            {loadingSimulation ? "Verifica in corso..." : "Imposta come predefinita"}
+          <button type="button" onClick={() => handleModeChangeRequest("password")} disabled={loadingSimulation} className={cn(solidBtn, "mt-4")}>
+            {loadingSimulation && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+            {loadingSimulation ? "Verifica in corso…" : "Imposta come predefinita"}
           </button>
         </div>
       )}
@@ -287,105 +272,100 @@ export function SsoMigrationPanel() {
         message={dialogMessage}
       />
 
-      {/* Modal Conferma Cambio Modalità */}
       {showConfirmDialog && pendingModeChange && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#111] border border-[#333] rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[85vh]">
-            <div className="p-6 border-b border-[#222]">
-              <div className="w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4 border border-yellow-500/20">
-                <AlertTriangle className="w-6 h-6 text-yellow-500" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Conferma Cambio Metodo di Accesso</h3>
-              <p className="text-sm text-gray-400">
-                Stai per cambiare il metodo di accesso attualmente in uso. I seguenti {affectedUsers.length} utenti non possiedono una password per accedere.
-                <br /><br />
-                <strong>Verrà generata una password temporanea per ciascuno (mostrata una sola volta): comunicala agli utenti in modo sicuro.</strong>
-              </p>
-            </div>
-            
-            <div className="p-6 overflow-y-auto flex-1 bg-black/40">
-              <div className="space-y-2">
-                {affectedUsers.map((u, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-lg border border-[#222] bg-[#070707]">
-                    <div>
-                      <div className="text-sm font-medium text-white">{u.identifier}</div>
-                      <div className="text-xs text-gray-500">{u.email}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="p-4 border-t border-[#222] bg-[#0a0a0a] flex justify-end gap-3">
+        <Dialog
+          title="Conferma cambio metodo di accesso"
+          closeLabel="Annulla"
+          className="max-w-xl"
+          onClose={() => {
+            setShowConfirmDialog(false);
+            setPendingModeChange(null);
+          }}
+        >
+          <div className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              Stai per cambiare il metodo di accesso in uso. I seguenti {affectedUsers.length} utenti non hanno una password. Ne verrà generata una temporanea per ciascuno, mostrata una sola volta: comunicala in modo sicuro.
+            </p>
+            <ul className="-mx-1 flex max-h-64 flex-col overflow-y-auto px-1">
+              {affectedUsers.map((u, i) => (
+                <li key={i} className="border-b border-border/40 py-2.5 last:border-b-0">
+                  <div className="text-sm font-medium">{u.identifier}</div>
+                  {u.email && <div className="text-xs text-muted-foreground">{u.email}</div>}
+                </li>
+              ))}
+            </ul>
+            <div className="flex justify-end gap-2">
               <button
+                type="button"
+                className={ghostBtn}
+                disabled={saving}
                 onClick={() => {
                   setShowConfirmDialog(false);
                   setPendingModeChange(null);
                 }}
-                disabled={saving}
-                className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors disabled:opacity-50"
               >
                 Annulla
               </button>
               <button
+                type="button"
+                className={solidBtn}
+                disabled={saving}
                 onClick={async () => {
                   setShowConfirmDialog(false);
                   await handleModeChange(pendingModeChange);
                   setPendingModeChange(null);
                 }}
-                disabled={saving}
-                className="px-4 py-2 bg-yellow-600 hover:bg-yellow-500 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
               >
-                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                Conferma e Genera Password
+                {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+                Conferma e genera password
               </button>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
-      {/* Modal Attivazione SSO */}
+
       {showEnableSsoDialog && pendingModeChange && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#111] border border-[#333] rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
-            <div className="p-6 border-b border-[#222]">
-              <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center mb-4 border border-blue-500/20">
-                <Shield className="w-6 h-6 text-blue-500" />
-              </div>
-              <h3 className="text-xl font-bold text-white mb-2">Attivare il Single Sign-On?</h3>
-              <p className="text-sm text-gray-400">
-                Gli utenti esistenti potranno accedere con la password solo per collegare il proprio account aziendale al primo accesso; poi entreranno solo via SSO. 
-                <br /><br />
-                Il tuo account admin conserva la password come accesso di emergenza.
-              </p>
-            </div>
-            
-            <div className="p-4 bg-[#0a0a0a] flex justify-end gap-3">
+        <Dialog
+          title="Attivare il Single Sign-On?"
+          closeLabel="Annulla"
+          onClose={() => {
+            setShowEnableSsoDialog(false);
+            setPendingModeChange(null);
+          }}
+        >
+          <div className="flex flex-col gap-5">
+            <p className="text-sm text-muted-foreground">
+              Gli utenti esistenti potranno accedere con la password solo per collegare il proprio account aziendale al primo accesso; poi entreranno solo via SSO. Il tuo account admin conserva la password come accesso di emergenza.
+            </p>
+            <div className="flex justify-end gap-2">
               <button
+                type="button"
+                className={ghostBtn}
+                disabled={saving || loadingSimulation}
                 onClick={() => {
                   setShowEnableSsoDialog(false);
                   setPendingModeChange(null);
                 }}
-                disabled={saving || loadingSimulation}
-                className="px-4 py-2 text-sm font-medium text-gray-400 hover:text-white transition-colors disabled:opacity-50"
               >
                 Annulla
               </button>
               <button
+                type="button"
+                className={solidBtn}
+                disabled={saving || loadingSimulation}
                 onClick={async () => {
                   setShowEnableSsoDialog(false);
                   const mode = pendingModeChange;
                   setPendingModeChange(null);
                   await proceedWithModeChange(mode);
                 }}
-                disabled={saving || loadingSimulation}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-bold rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50"
               >
-                {(saving || loadingSimulation) && <Loader2 className="w-4 h-4 animate-spin" />}
+                {(saving || loadingSimulation) && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
                 Attiva SSO
               </button>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

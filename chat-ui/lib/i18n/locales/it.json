@@ -1165,5 +1165,48 @@
     "start_failed": "Impossibile avviare il collegamento SSO.",
     "bad_response": "Risposta non valida dal server.",
     "network": "Errore di rete."
+  },
+  "sideThread": {
+    "tab": "Thread",
+    "popover": {
+      "toolbar": "Azioni sulla selezione",
+      "action": "Approfondisci in un thread",
+      "truncated": "Verranno usati i primi {{max}} caratteri della selezione."
+    },
+    "panel": {
+      "aria": "Thread di approfondimento",
+      "new_title": "Nuovo thread",
+      "open_full": "Apri come chat",
+      "reveal": "Mostra il passaggio nella conversazione",
+      "passage_missing": "Il passaggio non è più presente nella risposta originale.",
+      "other_threads": "Altri thread ({{count}})",
+      "loading": "Caricamento del thread…",
+      "empty": "Chiedi qualcosa su questo passaggio. Il thread resta salvato e puoi riprenderlo quando vuoi.",
+      "error": "Impossibile completare la richiesta: {{msg}}",
+      "retry": "Riprova",
+      "dismiss": "Chiudi"
+    },
+    "starters": {
+      "explain": "Spiegamelo in parole semplici",
+      "example": "Fammi un esempio concreto",
+      "relevance": "Perché è rilevante qui?"
+    },
+    "composer": {
+      "placeholder": "Chiedi del passaggio…",
+      "send": "Invia",
+      "stop": "Interrompi"
+    },
+    "chip_open": "Apri i thread di questa risposta",
+    "chip_aria": "Thread aperti da questa risposta: {{count}}",
+    "breadcrumb": {
+      "aria": "Origine del thread",
+      "from": "Thread da «{{title}}»",
+      "untitled": "conversazione senza titolo"
+    },
+    "sidebar": {
+      "expand": "Mostra i thread",
+      "collapse": "Nascondi i thread",
+      "count": "{{count}} thread"
+    }
   }
 }

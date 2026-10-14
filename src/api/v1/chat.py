@@ -623,6 +623,7 @@ async def chat_stream(
     except Exception as e:
         logger.warning("Failed to set trace attributes in chat_stream endpoint: %s", e)
 
+    conversation_owner_mismatch = False
     if os.getenv("AION_UNIFIED_DB", "1").lower() in ("1", "true", "yes"):
         try:
             from datetime import datetime, timezone
@@ -661,6 +662,8 @@ async def chat_stream(
                     )
                     session.add(r)
                     await session.commit()
+                elif (r.user_id or "") != (uid or ""):
+                    conversation_owner_mismatch = True
                 else:
                     meta = json.loads(r.metadata_json or "{}")
                     updated = False
@@ -712,6 +715,8 @@ async def chat_stream(
             logger.error(
                 "Error ensuring/updating conversation metadata in v1 chat: %s", e
             )
+    if conversation_owner_mismatch:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     from src.runtime.sql_query_project_resolve import resolve_sql_query_project
 
