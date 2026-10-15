@@ -27,16 +27,44 @@ def resolve_host_repo_root() -> Optional[Path]:
     return Path(host_data).expanduser().resolve().parent
 
 
-def resolve_host_src_mount() -> Optional[Path]:
+def is_registry_image(image: str) -> bool:
+    """True when the first path component is a registry host (ghcr.io, localhost:5000, ...)."""
+    first = image.split("/", 1)[0]
+    return "/" in image and ("." in first or ":" in first) and first != "localhost"
+
+
+def _live_src_overlay_enabled(image: Optional[str] = None) -> bool:
+    """
+    Overlay host ``src/`` and skills requirements only on repo checkouts.
+
+    GHCR installs (``scripts/install.sh``) have no host ``src/``: the sandbox image
+    already ships the matching version. When ``AION_SANDBOX_LIVE_SRC`` is unset
+    (e.g. ``.env`` from older installs) a registry-qualified image disables it.
+    """
+    raw = (os.environ.get("AION_SANDBOX_LIVE_SRC") or "").strip().lower()
+    if raw:
+        return raw not in ("0", "false", "no", "off")
+    if image is None:
+        image = os.environ.get("AION_SANDBOX_CONTAINER_IMAGE") or ""
+    return not is_registry_image(image.strip())
+
+
+def resolve_host_src_mount(image: Optional[str] = None) -> Optional[Path]:
     """Host ``src/`` directory to overlay ``/app/src`` in session sandbox containers."""
+    if not _live_src_overlay_enabled(image):
+        return None
     root = resolve_host_repo_root()
     if root is None:
         return None
     return (root / "src").resolve()
 
 
-def resolve_host_skills_requirements_mount() -> Optional[Path]:
+def resolve_host_skills_requirements_mount(
+    image: Optional[str] = None,
+) -> Optional[Path]:
     """Host ``requirements-sandbox-skills.txt`` for session venv bootstrap in sandboxes."""
+    if not _live_src_overlay_enabled(image):
+        return None
     root = resolve_host_repo_root()
     if root is None:
         return None

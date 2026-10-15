@@ -78,7 +78,7 @@ def chat_base_url(request: Optional[Request] = None) -> str:
         return explicit
 
     public_chat = (os.getenv("AION_PUBLIC_CHAT_URL") or "").strip().rstrip("/")
-    if _is_absolute_http_url(public_chat):
+    if _is_absolute_http_url(public_chat) and not _is_loopback_host_url(public_chat):
         return public_chat
 
     api_base = oauth_redirect_api_base(request)
@@ -87,6 +87,11 @@ def chat_base_url(request: Optional[Request] = None) -> str:
         if low.endswith("/api"):
             return api_base.rstrip("/")[:-4]
         return api_base.rstrip("/")
+
+    # Loopback AION_PUBLIC_CHAT_URL (local dev) only after a real public API base,
+    # so a stale localhost default cannot shadow the customer domain.
+    if _is_absolute_http_url(public_chat):
+        return public_chat
 
     if request is not None:
         fwd_proto = request.headers.get("x-forwarded-proto", "").split(",")[0].strip()

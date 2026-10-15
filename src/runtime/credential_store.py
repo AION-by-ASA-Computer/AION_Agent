@@ -8,6 +8,7 @@ Env:
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import logging
@@ -15,7 +16,7 @@ import os
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import delete, select
 
@@ -28,6 +29,18 @@ logger = logging.getLogger("aion.credential_store")
 OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS = int(
     os.getenv("AION_OAUTH_TOKEN_EXPIRY_BUFFER_SECONDS", "60")
 )
+
+_oauth_refresh_locks: Dict[Tuple[str, str, str], asyncio.Lock] = {}
+
+
+def _oauth_refresh_lock(user_id: str, server_slug: str, tenant_id: str) -> asyncio.Lock:
+    key = (user_id, server_slug, tenant_id)
+    lock = _oauth_refresh_locks.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _oauth_refresh_locks[key] = lock
+    return lock
+
 
 _USER_CREDENTIAL_RE = re.compile(r"^\$\{(AION_USER_[A-Z0-9_]+)__([A-Z0-9_]+)\}$")
 _USER_CREDENTIAL_SIMPLE_RE = re.compile(r"^\$\{(AION_USER_[A-Z0-9_]+)\}$")
@@ -267,6 +280,19 @@ def _credential_lookup_keys(key: str) -> tuple[str, ...]:
     return (k,) + aliases
 
 
+_BEARER_PREFIX_KEYS = frozenset({"OAUTH_TOKEN", "API_KEY"})
+
+
+def normalize_inline_secret(value: str, *, cred_key: str = "") -> str:
+    """Drop a leading ``Bearer`` scheme. Callers add it again in the header."""
+    text = (value or "").strip()
+    if cred_key and cred_key not in _BEARER_PREFIX_KEYS:
+        return text
+    if text.lower().startswith("bearer "):
+        return text[7:].strip()
+    return text
+
+
 def _normalize_expiry(expires_at: Optional[datetime]) -> Optional[datetime]:
     if not expires_at:
         return None
@@ -394,8 +420,18 @@ async def _persist_oauth_tokens(
         )
 
     from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
+    from src.runtime.mcp_health import clear_mcp_load_errors_for_server
 
     await invalidate_mcp_credentials_runtime(user_id, server_slug, tenant_id=tenant_id)
+    clear_mcp_load_errors_for_server(server_slug)
+    try:
+        from src.mcp_manager import mcp_manager
+
+        mcp_manager.clear_oauth_disconnect_state(
+            user_id, server_slug, tenant_id=tenant_id
+        )
+    except Exception:
+        pass
     return access_token
 
 
@@ -418,67 +454,79 @@ async def refresh_oauth_access_token(
     server_slug: str,
     *,
     tenant_id: str = "default",
+    delete_on_failure: bool = True,
 ) -> Optional[str]:
     """Refresh an expired OAuth access token when a refresh token is available."""
-    refresh_token = await get_credential(
-        user_id,
-        server_slug,
-        "OAUTH_REFRESH_TOKEN",
-        tenant_id=tenant_id,
-        auto_refresh_oauth=False,
-    )
-    if not refresh_token:
-        return None
+    async with _oauth_refresh_lock(user_id, server_slug, tenant_id):
+        existing = await _get_credential_row(
+            user_id, server_slug, "OAUTH_TOKEN", tenant_id=tenant_id
+        )
+        if existing and not _credential_is_expired(existing.expires_at):
+            return decrypt_value(existing.value_encrypted)
 
-    oauth_cfg = _enrich_oauth_config_from_discovery(
-        server_slug, await _load_oauth_config_for_server(server_slug)
-    )
-    token_url = oauth_cfg.get("token_url")
-    if not token_url:
-        logger.warning(
-            "OAuth refresh skipped: missing token_url user=%s server=%s",
+        refresh_token = await get_credential(
             user_id,
             server_slug,
+            "OAUTH_REFRESH_TOKEN",
+            tenant_id=tenant_id,
+            auto_refresh_oauth=False,
         )
-        return None
+        if not refresh_token:
+            return None
 
-    from src.runtime.oauth_token_exchange import (
-        OAuthTokenExchangeError,
-        exchange_refresh_token,
-    )
-
-    try:
-        token_data = await exchange_refresh_token(
-            token_url,
-            refresh_token=refresh_token,
-            client_id=oauth_cfg.get("client_id"),
-            client_secret=oauth_cfg.get("client_secret"),
+        oauth_cfg = _enrich_oauth_config_from_discovery(
+            server_slug, await _load_oauth_config_for_server(server_slug)
         )
-    except OAuthTokenExchangeError as exc:
-        logger.warning(
-            "OAuth refresh failed: user=%s server=%s reason=%s",
-            user_id,
-            server_slug,
-            exc,
-        )
-        from src.runtime.mcp_oauth_audit import append_mcp_oauth_audit
+        token_url = oauth_cfg.get("token_url")
+        if not token_url:
+            logger.warning(
+                "OAuth refresh skipped: missing token_url user=%s server=%s",
+                user_id,
+                server_slug,
+            )
+            return None
 
-        append_mcp_oauth_audit(
-            "oauth_refresh_failed",
-            {
-                "user_id": user_id,
-                "server_slug": server_slug,
-                "tenant_id": tenant_id,
-                "reason": str(exc),
-                "status_code": exc.status_code,
-            },
+        from src.runtime.oauth_token_exchange import (
+            OAuthTokenExchangeError,
+            exchange_refresh_token,
         )
-        await _delete_oauth_credentials(user_id, server_slug, tenant_id=tenant_id)
-        return None
 
-    return await _persist_oauth_tokens(
-        user_id, server_slug, token_data, oauth_cfg, tenant_id=tenant_id
-    )
+        try:
+            token_data = await exchange_refresh_token(
+                token_url,
+                refresh_token=refresh_token,
+                client_id=oauth_cfg.get("client_id"),
+                client_secret=oauth_cfg.get("client_secret"),
+            )
+        except OAuthTokenExchangeError as exc:
+            logger.warning(
+                "OAuth refresh failed: user=%s server=%s reason=%s",
+                user_id,
+                server_slug,
+                exc,
+            )
+            from src.runtime.mcp_oauth_audit import append_mcp_oauth_audit
+
+            append_mcp_oauth_audit(
+                "oauth_refresh_failed",
+                {
+                    "user_id": user_id,
+                    "server_slug": server_slug,
+                    "tenant_id": tenant_id,
+                    "reason": str(exc),
+                    "status_code": exc.status_code,
+                    "deleted": bool(delete_on_failure),
+                },
+            )
+            if delete_on_failure:
+                await _delete_oauth_credentials(
+                    user_id, server_slug, tenant_id=tenant_id
+                )
+            return None
+
+        return await _persist_oauth_tokens(
+            user_id, server_slug, token_data, oauth_cfg, tenant_id=tenant_id
+        )
 
 
 def _slug_variants(server_slug: str) -> list[str]:
@@ -704,11 +752,11 @@ async def resolve_user_credential_string(
                 effective_uid, slug, cred_key, tenant_id=tenant_id
             )
             if val is not None:
-                return val
+                return normalize_inline_secret(val, cred_key=cred_key)
         env_name = f"{full_prefix}__{cred_key}"
         val = os.environ.get(env_name)
         if val is not None:
-            return val
+            return normalize_inline_secret(val, cred_key=cred_key)
         return ""
 
     m2 = _USER_CREDENTIAL_SIMPLE_RE.match(obj)
@@ -877,4 +925,50 @@ async def resolve_mcp_env_for_user(
             out[k] = val
         else:
             out[k] = v
+    if not is_probe:
+        await _fill_oauth_alias_env(
+            out, user_id=user_id, tenant_id=tenant_id, server_slug=server_slug
+        )
     return out
+
+
+def _env_slot_filled(val: Any) -> bool:
+    if val is None:
+        return False
+    text = str(val).strip()
+    return bool(text) and not text.startswith("${")
+
+
+async def _fill_oauth_alias_env(
+    env: Dict[str, Any],
+    *,
+    user_id: str,
+    tenant_id: str,
+    server_slug: str,
+) -> None:
+    """Copia OAUTH_TOKEN nella variabile che il processo MCP legge davvero."""
+    from src.mcp_connector_catalog import (
+        _parse_runtime_env_alias_entries,
+        load_mcp_connector_catalog,
+        resolve_connector_row_for_mcp_server,
+    )
+
+    catalog = load_mcp_connector_catalog()
+    row = resolve_connector_row_for_mcp_server(server_slug, {}, catalog)
+    if not row:
+        return
+    for dest, sources in _parse_runtime_env_alias_entries(
+        row.get("runtime_env_aliases")
+    ):
+        if _env_slot_filled(env.get(dest)):
+            continue
+        for src in sources:
+            if _env_slot_filled(env.get(src)):
+                env[dest] = env[src]
+                break
+            val = await get_credential(
+                user_id or "default", server_slug, src, tenant_id=tenant_id
+            )
+            if val:
+                env[dest] = normalize_inline_secret(val, cred_key=src)
+                break

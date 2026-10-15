@@ -288,7 +288,11 @@ export function useHub() {
 
   const featured = useMemo(
     () =>
-      (connectorRows as RemoteCatalogPreset[]).filter((c) => c.featured_remote && c.install_type === "remote" && c.remote_url),
+      (connectorRows as RemoteCatalogPreset[]).filter(
+        (c) =>
+          (c.featured_remote && c.install_type === "remote" && Boolean(c.remote_url)) ||
+          (c.install_type === "stdio" && c.featured_catalog),
+      ),
     [connectorRows],
   );
 

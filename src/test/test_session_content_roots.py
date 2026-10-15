@@ -55,6 +55,28 @@ def test_safe_resolve_rejects_traversal(isolated_data):
         safe_resolve(sid, "uploads/../../secret.txt")
 
 
+def test_session_venv_python_allows_interpreter_symlink(isolated_data):
+    """The venv python symlink targets the system interpreter and must stay usable."""
+    import os
+
+    from src.tools.session_venv import session_venv_exists, session_venv_python
+
+    sid = "test-venv-symlink"
+    root = session_root(sid)
+    bin_dir = root / ".venv" / "bin"
+    bin_dir.mkdir(parents=True)
+    outside = isolated_data / "system-python"
+    outside.write_text("#!/bin/sh\n", encoding="utf-8")
+    py313 = bin_dir / "python3.13"
+    py313.symlink_to(outside)
+    (bin_dir / "python").symlink_to("python3.13")
+
+    resolved = session_venv_python(sid)
+    assert resolved == bin_dir / "python"
+    assert os.path.isfile(resolved)
+    assert session_venv_exists(sid)
+
+
 def test_session_fs_confines_relative_paths(isolated_data):
     from src.session_workspace import session_fs
 

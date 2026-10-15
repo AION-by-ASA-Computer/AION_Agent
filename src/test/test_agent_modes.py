@@ -90,6 +90,8 @@ mcp_servers: []
 
 @pytest.mark.anyio
 async def test_plan_mode_tool_filtering(monkeypatch, tmp_path):
+    monkeypatch.setenv("AION_DEFER_TOOL_GROUPS", "0")
+    monkeypatch.setenv("AION_ARTIFACT_STREAM_LEGACY", "0")
     """Verifica che in Plan Mode i tool mutanti vengano rimossi fisicamente dalla lista."""
     profiles_dir = tmp_path / "config" / "profiles"
     profiles_dir.mkdir(parents=True, exist_ok=True)
@@ -169,9 +171,9 @@ mcp_servers: []
     assert "sandbox_read_text_file" in tool_names
     assert "web_search" in tool_names
 
-    # Normal mode: write tool always removed; run tools stay
+    # Normal mode keeps the resident write tool. Plan mode still strips mutators.
     captured_tools.clear()
     await get_agent(profile_name="generic_assistant", agent_mode="normal")
     normal_tool_names = {t.name for t in captured_tools}
-    assert "sandbox_write_workspace_file" not in normal_tool_names
+    assert "sandbox_write_workspace_file" in normal_tool_names
     assert "sandbox_run_python_file" in normal_tool_names

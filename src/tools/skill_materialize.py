@@ -234,7 +234,10 @@ def format_materialize_footer(result: MaterializeResult, slug: str = "") -> str:
     if result.sentinel_paths:
         lines.append("Example paths (cwd = session root):")
         for p in result.sentinel_paths[:5]:
-            lines.append(f"- `{p}` → `sandbox_exec_allowlisted`")
+            lines.append(
+                f'- `{p}` → `tool_search("sandbox_exec_allowlisted")`, then '
+                "`sandbox_exec_allowlisted`"
+            )
         if slug and slug in OFFICE_SKILL_SLUGS:
             lines.append(
                 "Dopo unpack usa `workspace/unpacked/` come output dir; "

@@ -31,7 +31,7 @@ def test_generic_assistant_has_mnemos_native_tools():
     groups = data.get("native_tool_groups") or []
     assert "mnemos" in groups, "generic_assistant must list native_tool_groups: mnemos"
     assert "memory_protocol" in (data.get("skills") or [])
-    assert "memory_protocol" in (data.get("critical_skills") or [])
+    assert "memory_protocol" not in (data.get("critical_skills") or [])
 
 
 def test_default_assistant_profiles_include_mnemos():

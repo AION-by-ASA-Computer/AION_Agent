@@ -33,6 +33,60 @@ def clear_mcp_load_errors(session_id: str, server_slug: Optional[str] = None) ->
         _last_probe_errors.pop(session_id, None)
 
 
+def clear_mcp_load_errors_for_server(server_slug: str) -> None:
+    """Drop a server from every session cache (after that user connects OAuth)."""
+    slug = (server_slug or "").strip()
+    if not slug:
+        return
+    for errs in _last_probe_errors.values():
+        errs.pop(slug, None)
+
+
+def env_slot_is_oauth_token(env_key: str, template: str) -> bool:
+    """True when this registry env slot is the OAuth access token (or its alias)."""
+    key = (env_key or "").strip().upper()
+    if key in ("OAUTH_TOKEN", "OAUTH_REFRESH_TOKEN") or key.endswith("_OAUTH_TOKEN"):
+        return True
+    import re
+
+    match = re.match(
+        r"^\$\{AION_USER_[A-Z0-9_]+__([A-Z0-9_]+)\}$", (template or "").strip()
+    )
+    cred = match.group(1) if match else ""
+    return cred in ("OAUTH_TOKEN", "OAUTH_REFRESH_TOKEN")
+
+
+async def drop_connected_oauth_errors(
+    session_id: str,
+    user_id: str,
+    *,
+    tenant_id: str = "default",
+) -> None:
+    """A stored OAuth token means the account is connected. Drop the stale banner."""
+    if not session_id or not user_id:
+        return
+    cached = get_last_mcp_load_errors(session_id)
+    if not cached:
+        return
+    from src.runtime.credential_store import get_credential
+
+    tid = (tenant_id or "default").strip() or "default"
+    for slug, err in cached.items():
+        if "credenziali mancanti" not in (err or "").lower():
+            continue
+        try:
+            token = await get_credential(user_id, slug, "OAUTH_TOKEN", tenant_id=tid)
+        except Exception:
+            continue
+        if not token:
+            continue
+        clear_mcp_load_errors(session_id, slug)
+        try:
+            mcp_manager.clear_oauth_disconnect_state(user_id, slug, tenant_id=tid)
+        except Exception:
+            pass
+
+
 async def probe_mcp_server(
     server_slug: str,
     *,
@@ -92,6 +146,62 @@ async def probe_mcp_server(
         }
 
 
+_SECRET_ENV_MARKERS = (
+    "token",
+    "secret",
+    "password",
+    "passwd",
+    "api_key",
+    "apikey",
+    "oauth",
+    "authorization",
+)
+
+
+def env_key_is_secret(key: str) -> bool:
+    k = (key or "").lower()
+    return any(marker in k for marker in _SECRET_ENV_MARKERS)
+
+
+def merge_probe_env(
+    template: Dict[str, Any],
+    resolved: Dict[str, Any],
+) -> tuple[Dict[str, Any], List[str]]:
+    """Build the env for an admin MCP probe.
+
+    Resolved per-user secrets are kept. Unresolved secrets are reported and
+    must not be replaced with a fake bearer token (GitHub rejects that as a
+    badly formatted Authorization header). Other unresolved placeholders still
+    get a typed mock so local servers can boot.
+    """
+    from src.runtime.credential_store import (
+        generate_probe_mock_value,
+        normalize_inline_secret,
+    )
+
+    out: Dict[str, Any] = {}
+    missing: List[str] = []
+    for key, raw in (template or {}).items():
+        if not isinstance(raw, str) or "${" not in raw:
+            out[key] = raw
+            continue
+        val = resolved.get(key)
+        text = str(val).strip() if val is not None else ""
+        unresolved = (not text) or "${" in text or text == raw
+        if not unresolved:
+            out[key] = (
+                normalize_inline_secret(text, cred_key="OAUTH_TOKEN")
+                if env_key_is_secret(key)
+                else text
+            )
+            continue
+        if env_key_is_secret(key):
+            missing.append(key)
+            continue
+        out[key] = generate_probe_mock_value(key)
+    return out, missing
+
+
 def classify_mcp_error(
     error_msg: str, cfg: Optional[Dict[str, Any]] = None
 ) -> Dict[str, str]:
@@ -132,7 +242,16 @@ def classify_mcp_error(
             "hint": f"Ensure '{cmd or 'runtime'}' and required dependencies are installed on the server and available in PATH.",
         }
 
-    # 3. Authentication / Unauthorized
+    # 3. Per-user OAuth not connected yet (stdio catalog servers such as ms365).
+    if "credenziali mancanti" in low:
+        return {
+            "error_type": "auth_failed",
+            "category": "Authentication Required",
+            "error": "Questo utente non ha ancora collegato l'account.",
+            "hint": "Apri Integrazioni in chat e premi Connetti. Il token non va scritto nel MCP Hub.",
+        }
+
+    # 4. Authentication / Unauthorized
     if (
         "401" in low
         or "403" in low
@@ -141,6 +260,8 @@ def classify_mcp_error(
         or "invalid_client" in low
         or "invalid_grant" in low
         or "api key" in low
+        or "badly formatted" in low
+        or "authorization header" in low
     ):
         return {
             "error_type": "auth_failed",
@@ -149,7 +270,7 @@ def classify_mcp_error(
             "hint": "Verify credentials in MCP Hub (Org env) or user profile integrations.",
         }
 
-    # 4. Process crash / Syntax error / Script failure
+    # 5. Process crash / Syntax error / Script failure
     if (
         "exit code" in low
         or "closed" in low
@@ -165,7 +286,7 @@ def classify_mcp_error(
             "hint": "Check server command line arguments, runtime parameters, and server logs.",
         }
 
-    # 5. General error
+    # 6. General error
     return {
         "error_type": "general_error",
         "category": "MCP Connection Error",

@@ -36,8 +36,6 @@ skills:
 - xlsx
 critical_skills:
 - core_protocol
-- artifact_protocol
-- doc_intelligence
 native_tool_groups:
 - web_research
 - deep_research

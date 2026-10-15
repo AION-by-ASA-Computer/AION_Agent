@@ -1,6 +1,6 @@
 ---
 name: memory_protocol
-description: Come e quando l'agente usa memory_note, memory_wake, memory_recall, memory_forget
+description: Come e quando l'agente usa memory_note, memory_recall, memory_forget
 tags: [memory, ltm]
 status: verified
 source: curated
@@ -11,12 +11,10 @@ version: 1
 
 ## Tool disponibili
 
-- **memory_wake** — richiamato automaticamente a inizio sessione dal server; non
-  serve chiamarlo salvo quando vuoi rileggere il contesto per uno scope diverso
-  (es. cambio di progetto attivo).
 - **memory_recall(query, scope?, mode?)** — ricerca testuale su note Mnemos. Default `scope=auto`
   (user + progetto attivo). Usa per fatti/lezioni già memorizzati (es. caratteristiche prodotti).
-  **Non** usare `session_search` per questo — quello cerca solo trascrizioni di chat passate.
+  **Non** usare `session_search` per questo — quello cerca solo trascrizioni di chat passate
+  e sta su `query_memory`. Se non è nella lista tool, prima `tool_search("session_search")`.
 - **memory_note(text, scope?, category?, importance?)** — usalo quando l'utente
   chiede esplicitamente di ricordare qualcosa ORA nello stesso turno.
   Il server assegna automaticamente `seq` (ordine append-only per scope): **non**
