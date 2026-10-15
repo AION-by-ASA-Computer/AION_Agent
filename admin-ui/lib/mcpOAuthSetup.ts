@@ -70,6 +70,7 @@ export function connectorOAuthSetupHints(
 type OAuthConfigLike = {
   client_id?: string;
   client_secret?: string;
+  client_secret_set?: boolean;
   authorization_server?: string;
   token_url?: string;
   client_credentials_required?: boolean;
@@ -95,7 +96,7 @@ export function oauthAdminCredentialsConfigured(
   if (!oauthAdminClientCredentialsRequired(oauthConfig, connector)) return true;
   const clientId = String(oauthConfig?.client_id || "").trim();
   const clientSecret = String(oauthConfig?.client_secret || "").trim();
-  return Boolean(clientId && clientSecret);
+  return Boolean(clientId && (clientSecret || oauthConfig?.client_secret_set));
 }
 
 export function oauthAdminSetupPending(

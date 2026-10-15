@@ -1216,6 +1216,84 @@ class McpIntegrationAdviseBody(BaseModel):
     admin_message: Optional[str] = None
 
 
+_OAUTH_DISCOVERED_ENDPOINT_KEYS = (
+    "authorization_endpoint",
+    "registration_endpoint",
+    "resource",
+)
+
+
+def _oauth_config_for_admin(raw_json: Optional[str]) -> Dict[str, Any]:
+    """oauth_config per la risposta admin: il client_secret non esce mai in chiaro."""
+    try:
+        cfg = json.loads(raw_json or "{}")
+    except Exception:
+        cfg = {}
+    if not isinstance(cfg, dict):
+        cfg = {}
+    secret_set = bool(str(cfg.pop("client_secret", "") or "").strip())
+    cfg["client_secret"] = ""
+    cfg["client_secret_set"] = secret_set
+    return cfg
+
+
+def _merge_admin_oauth_config(
+    stored_json: Optional[str], incoming: Dict[str, Any]
+) -> Dict[str, Any]:
+    """
+    Unisce l'oauth_config inviato dall'admin con quello salvato.
+
+    - ``{}`` azzera la configurazione.
+    - Valori vuoti non sovrascrivono (il form non conosce gli endpoint scoperti a
+      runtime e riceve il client_secret mascherato), tranne ``client_id`` che si può
+      svuotare esplicitamente per tornare alla registrazione dinamica.
+    - Un client_id cambiato o svuotato invalida secret e provenienza precedenti.
+    - Un authorization_server cambiato invalida gli endpoint scoperti e un client
+      ottenuto via registrazione dinamica.
+    """
+    if not incoming:
+        return {}
+    try:
+        stored = json.loads(stored_json or "{}")
+    except Exception:
+        stored = {}
+    if not isinstance(stored, dict):
+        stored = {}
+    merged = dict(stored)
+
+    old_as = str(stored.get("authorization_server") or "").strip()
+    new_as = str(incoming.get("authorization_server") or "").strip()
+    stale_dynamic_id = ""
+    if new_as and old_as and new_as != old_as:
+        for key in _OAUTH_DISCOVERED_ENDPOINT_KEYS:
+            merged.pop(key, None)
+        if stored.get("client_id_source") == "dynamic_registration":
+            stale_dynamic_id = str(stored.get("client_id") or "").strip()
+            for key in ("client_id", "client_secret", "client_id_source"):
+                merged.pop(key, None)
+
+    if "client_id" in incoming:
+        new_id = str(incoming.get("client_id") or "").strip()
+        if new_id and new_id == stale_dynamic_id:
+            # Il form rimanda il client dinamico del vecchio server: non vale più.
+            new_id = ""
+        if new_id != str(merged.get("client_id") or "").strip():
+            merged.pop("client_secret", None)
+            merged.pop("client_id_source", None)
+        if new_id:
+            merged["client_id"] = new_id
+        else:
+            merged.pop("client_id", None)
+
+    for key, value in incoming.items():
+        if key in ("client_id", "client_secret_set", "client_id_source"):
+            continue
+        if value in (None, "", [], {}):
+            continue
+        merged[key] = value
+    return merged
+
+
 def _mcp_integration_to_dict(
     r: McpServerConfig, *, in_registry: bool
 ) -> Dict[str, Any]:
@@ -1242,7 +1320,7 @@ def _mcp_integration_to_dict(
         "aion_connector_id": getattr(r, "aion_connector_id", None),
         "user_may_disable": bool(getattr(r, "user_may_disable", True)),
         "credential_schema": schema,
-        "oauth_config": json.loads(r.oauth_config_json or "{}"),
+        "oauth_config": _oauth_config_for_admin(r.oauth_config_json),
         "is_in_registry": in_registry,
         "suggested_env_yaml": build_suggested_env_yaml_block(
             r.server_slug, schema, credential_mode=mode
@@ -1313,7 +1391,9 @@ async def admin_create_mcp_integration(body: McpIntegrationCreate):
             credential_mode=mode,
             user_may_disable=body.user_may_disable,
             credential_schema_json=json.dumps(body.credential_schema or []),
-            oauth_config_json=json.dumps(body.oauth_config or {}),
+            oauth_config_json=json.dumps(
+                _merge_admin_oauth_config(None, body.oauth_config or {})
+            ),
         )
         session.add(new_cfg)
         await session.commit()
@@ -1377,7 +1457,9 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
             else:
                 row.credential_schema_json = json.dumps(body.credential_schema)
         if body.oauth_config is not None:
-            row.oauth_config_json = json.dumps(body.oauth_config)
+            row.oauth_config_json = json.dumps(
+                _merge_admin_oauth_config(row.oauth_config_json, body.oauth_config)
+            )
         if body.user_may_disable is not None:
             row.user_may_disable = body.user_may_disable
         row.updated_at = datetime.now(timezone.utc)

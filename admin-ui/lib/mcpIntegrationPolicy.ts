@@ -66,6 +66,7 @@ export type IntegrationPolicyRow = {
     client_secret?: string;
     scopes?: string[];
     client_id_source?: string;
+    client_secret_set?: boolean;
   };
   aion_connector_id?: string | null;
   user_may_disable?: boolean;

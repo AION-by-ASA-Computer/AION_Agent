@@ -33,6 +33,8 @@ export type OAuthConfig = {
   client_secret: string;
   scopes: string[];
   client_id_source?: string;
+  /** The backend never returns the secret: this says one is stored. */
+  client_secret_set?: boolean;
 };
 
 /** Order-insensitive fingerprint of the fields that get persisted. */
@@ -349,6 +351,8 @@ export function useHub() {
                   client_id: prev.client_id || "",
                   client_secret: prev.client_secret || "",
                   scopes: prev.scopes?.length ? prev.scopes : [],
+                  client_id_source: prev.client_id_source,
+                  client_secret_set: prev.client_secret_set,
                 },
           );
         }
@@ -390,6 +394,7 @@ export function useHub() {
         client_secret: oauth.client_secret || "",
         scopes: oauth.scopes || [],
         client_id_source: oauth.client_id_source || "",
+        client_secret_set: Boolean(oauth.client_secret_set),
       });
       void loadPolicyPreview(name, policy?.credential_mode);
     },

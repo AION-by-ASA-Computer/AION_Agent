@@ -1832,6 +1832,12 @@ class MCPManager:
                 logger.warning(
                     "MCP worker shutdown slow after credential invalidation; dropped"
                 )
+            except Exception as exc:
+                # Il worker è già fuori dal pool: proseguiamo con gli altri.
+                logger.warning(
+                    "MCP worker shutdown failed after credential invalidation; dropped: %s",
+                    exc,
+                )
             stopped += 1
         return stopped
 

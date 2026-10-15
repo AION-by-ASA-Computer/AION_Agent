@@ -749,7 +749,10 @@
         "client_secret": "Client secret",
         "client_secret_ph": "Laissez vide pour ne pas le modifier à l'enregistrement",
         "scopes": "Scopes",
-        "missing_id": "Les utilisateurs verront une erreur tant qu'un Client ID n'est pas enregistré ici."
+        "missing_id": "Les utilisateurs verront une erreur tant qu'un Client ID n'est pas enregistré ici.",
+        "manual_title": "Client OAuth préenregistré (facultatif)",
+        "manual_body": "Le client est normalement obtenu par enregistrement dynamique. Ne remplissez ces champs que si le fournisseur exige un client déjà enregistré : enregistrez-le avec l'URL de callback ci-dessous, puis collez le Client ID et le Client secret. Videz le Client ID pour revenir à l'enregistrement dynamique.",
+        "client_secret_saved_ph": "Déjà enregistré : laissez vide pour le conserver"
       },
       "suggest": {
         "body_one": "La détection a trouvé {{count}} champ qui n’est pas encore dans le schéma.",
