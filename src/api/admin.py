@@ -905,7 +905,9 @@ async def rename_skill(name: str, body: SkillRename):
     )
     if from_fallback:
         # Shipped skills are read-only: copy into the writable dir; the old name gets hidden below.
-        new_file = skill_registry.curated_dir / f"{new}.md"
+        new_file = (skill_registry.curated_dir / f"{new}.md").resolve()
+        if new_file.parent != skill_registry.curated_dir.resolve():
+            raise HTTPException(status_code=400, detail="Invalid name")
         if new_file.exists():
             raise HTTPException(
                 status_code=409, detail=f"'{new_file.name}' already exists on disk"
@@ -913,7 +915,9 @@ async def rename_skill(name: str, body: SkillRename):
         new_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, new_file)
     elif is_package:
-        dest_dir = path.parent.with_name(new)
+        dest_dir = path.parent.with_name(new).resolve()
+        if dest_dir.parent != path.parent.resolve().parent:
+            raise HTTPException(status_code=400, detail="Invalid name")
         if dest_dir.exists():
             raise HTTPException(
                 status_code=409, detail=f"'{dest_dir.name}' already exists on disk"
@@ -921,7 +925,9 @@ async def rename_skill(name: str, body: SkillRename):
         path.parent.rename(dest_dir)
         new_file = dest_dir / path.name
     else:
-        new_file = path.with_name(f"{new}.md")
+        new_file = path.with_name(f"{new}.md").resolve()
+        if new_file.parent != path.resolve().parent:
+            raise HTTPException(status_code=400, detail="Invalid name")
         if new_file.exists():
             raise HTTPException(
                 status_code=409, detail=f"'{new_file.name}' already exists on disk"

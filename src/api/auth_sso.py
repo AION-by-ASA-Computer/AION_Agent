@@ -8,7 +8,6 @@ Fix 0.6: user_id calcolato lato server, non decodificato dal client.
 """
 
 import hashlib
-import html
 import logging
 import os
 import secrets
@@ -245,9 +244,9 @@ async def sso_callback(
                 user_id=target_user_id,
             )
         except Exception as e:
-            logger.warning("Admin validate error: %s", e)
+            logger.exception("Admin validate error: %s", e)
             return HTMLResponse(
-                f"<h3>Errore durante la validazione</h3><p>{html.escape(str(e))}</p>",
+                "<h3>Errore durante la validazione</h3><p>Riprova o contatta l'amministratore.</p>",
                 status_code=400,
             )
 

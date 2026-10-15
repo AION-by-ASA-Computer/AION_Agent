@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { apiBase } from "@/lib/config";
 import { setStoredAuth } from "@/lib/auth/storage";
+import { sanitizeReturnTo } from "@/lib/auth/safeRedirect";
 import { initLocaleFromStorage } from "@/lib/i18n/i18n-store";
 import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
 
@@ -18,7 +19,7 @@ export default function SsoExchangePage() {
 
       const hashParams = new URLSearchParams(window.location.hash.substring(1));
       const code = hashParams.get("code");
-      const returnTo = hashParams.get("return_to") || "/";
+      const returnTo = sanitizeReturnTo(hashParams.get("return_to"));
 
       if (!code) {
         setError("Codice di handoff mancante.");

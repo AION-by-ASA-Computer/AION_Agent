@@ -7,6 +7,7 @@ import { apiBase } from "@/lib/api";
 import { adminPath } from "@/lib/paths";
 import { setStoredAuth } from "@/lib/auth/storage";
 import { resetAuthStatusCache } from "@/lib/auth/status";
+import { sanitizeReturnTo } from "@/lib/auth/safeRedirect";
 
 // Il codice e' monouso: in dev (StrictMode) l'effect gira due volte e la
 // seconda esecuzione non deve trattarlo come mancante.
@@ -26,9 +27,8 @@ export default function AdminSsoExchangePage() {
     started = true;
     const hash = new URLSearchParams(window.location.hash.substring(1));
     const code = hash.get("code");
-    const rawReturn = hash.get("return_to") || "/";
     // Solo percorsi interni all'admin-ui.
-    const returnTo = rawReturn.startsWith("/") && !rawReturn.startsWith("//") ? rawReturn : "/";
+    const returnTo = sanitizeReturnTo(hash.get("return_to"));
     window.history.replaceState(null, "", window.location.pathname + window.location.search);
 
     if (!code) {

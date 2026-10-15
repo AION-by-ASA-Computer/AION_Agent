@@ -34,10 +34,16 @@ def _get_headers() -> Dict[str, str]:
 
 
 def _is_github_url(url: str) -> bool:
-    """True se l'URL appartiene al dominio github.com."""
+    """True se l'URL appartiene al dominio github.com (controllo sull'host, non substring)."""
     if not url:
         return False
-    return "github.com/" in url.lower()
+    from urllib.parse import urlparse
+
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return host == "github.com" or host == "www.github.com"
 
 
 def has_smithery_proprietary_auth(s: Dict[str, Any], q_name: str = "") -> bool:

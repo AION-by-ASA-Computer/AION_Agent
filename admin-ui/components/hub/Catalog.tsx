@@ -5,6 +5,7 @@ import { cn } from "@/lib/cn";
 import { Select } from "@/components/ui/Select";
 import { inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
 import { MCP_CATEGORIES, type McpCategory } from "@/lib/mcpCategories";
+import { isAllowedGithubUrl } from "@/lib/githubUrl";
 import type { Hub } from "@/components/hub/useHub";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -230,7 +231,7 @@ export function Catalog({ hub }: { hub: Hub }) {
               {hub.communityShown.map((item: any) => {
                 const doc = docUrlFor(item);
                 const thirdPartyOAuth = item.install_type === "remote" && item.source !== "Smithery";
-                const catalogOnly = item.source === "Smithery" && (item.catalog_only || !doc?.includes("github.com"));
+                const catalogOnly = item.source === "Smithery" && (item.catalog_only || !(doc && isAllowedGithubUrl(doc)));
                 const icon = item.icon_url ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={item.icon_url} alt="" className="h-full w-full object-contain p-1.5" onError={(e) => ((e.target as HTMLElement).style.display = "none")} />
