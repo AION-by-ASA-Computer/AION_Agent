@@ -749,7 +749,10 @@
         "client_secret": "Client secret",
         "client_secret_ph": "Leave empty to keep unchanged on save",
         "scopes": "Scopes",
-        "missing_id": "Users will see an error until a Client ID is saved here."
+        "missing_id": "Users will see an error until a Client ID is saved here.",
+        "manual_title": "Pre-registered OAuth client (optional)",
+        "manual_body": "The client is normally obtained through dynamic registration. Fill these in only if the provider requires a pre-registered client: register it with the callback URL below, then paste the Client ID and Client secret. Clear the Client ID to go back to dynamic registration.",
+        "client_secret_saved_ph": "Already saved: leave empty to keep it"
       },
       "suggest": {
         "body_one": "Discovery found {{count}} field that isn't in the schema yet.",

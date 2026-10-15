@@ -432,15 +432,34 @@ async def delete_user_credential(
     _require_identity_for_mutation(auth)
     user_id = _credential_user_id(auth)
     tenant = _tenant_id()
-    deleted = await delete_credential(
-        user_id, server_slug, credential_key, tenant_id=tenant
-    )
+    # Disconnettere OAuth rimuove anche il refresh token: altrimenti resta una
+    # credenziale orfana che il runtime potrebbe usare per rigenerare l'accesso.
+    is_oauth_disconnect = credential_key == "OAUTH_TOKEN"
+    keys = [credential_key] + (["OAUTH_REFRESH_TOKEN"] if is_oauth_disconnect else [])
+    deleted = False
+    for key in keys:
+        if await delete_credential(user_id, server_slug, key, tenant_id=tenant):
+            deleted = True
+    clear_integrations_cache()
     if not deleted:
+        if is_oauth_disconnect:
+            # Idempotente: lo stato richiesto (disconnesso) è già quello attuale.
+            return {"ok": True, "already_disconnected": True}
         raise HTTPException(status_code=404, detail="Credential not found")
+
     from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
 
-    await invalidate_mcp_credentials_runtime(user_id, server_slug, tenant_id=tenant)
-    clear_integrations_cache()
+    try:
+        await invalidate_mcp_credentials_runtime(user_id, server_slug, tenant_id=tenant)
+    except Exception as exc:
+        # Le credenziali sono già cancellate: un worker che non si chiude bene non
+        # deve trasformare il disconnect in un errore (la UI resterebbe "connessa").
+        logger.warning(
+            "delete_credential: runtime invalidation failed slug=%s key=%s: %s",
+            server_slug,
+            credential_key,
+            exc,
+        )
     return {"ok": True}
 
 
@@ -566,6 +585,73 @@ async def _oauth_dynamic_client_register(
     if not reg_endpoint:
         return False
 
+    reg_data = await _oauth_post_client_registration(
+        server_slug=server_slug, reg_endpoint=reg_endpoint, redirect_uri=redirect_uri
+    )
+    if reg_data is None:
+        # Endpoint salvato in DB potenzialmente obsoleto (es. discovery precedente finita
+        # sul registration_endpoint nativo di Keycloak invece che sul proxy del MCP
+        # server): rileggi i metadata dell'authorization server e riprova una volta.
+        auth_server = (oauth_cfg.get("authorization_server") or "").strip()
+        if auth_server:
+            from src.mcp_credential_discovery import fetch_authorization_server_metadata
+
+            as_meta = await asyncio.to_thread(
+                fetch_authorization_server_metadata, auth_server
+            )
+            fresh_reg = str((as_meta or {}).get("registration_endpoint") or "").strip()
+            if fresh_reg and fresh_reg != reg_endpoint:
+                logger.info(
+                    "oauth_start: retry dynamic registration slug=%s with rediscovered "
+                    "registration_endpoint=%s (was %s)",
+                    server_slug,
+                    fresh_reg,
+                    reg_endpoint,
+                )
+                reg_data = await _oauth_post_client_registration(
+                    server_slug=server_slug,
+                    reg_endpoint=fresh_reg,
+                    redirect_uri=redirect_uri,
+                )
+                if reg_data is not None:
+                    # client_id vale solo con gli endpoint dello stesso metadata document.
+                    reg_endpoint = fresh_reg
+                    oauth_cfg["registration_endpoint"] = fresh_reg
+                    if as_meta.get("authorization_endpoint"):
+                        oauth_cfg["authorization_endpoint"] = as_meta[
+                            "authorization_endpoint"
+                        ]
+                    if as_meta.get("token_endpoint"):
+                        oauth_cfg["token_url"] = as_meta["token_endpoint"]
+    if reg_data is None:
+        return False
+
+    new_client_id = str(reg_data.get("client_id") or "").strip()
+    if not new_client_id:
+        return False
+    oauth_cfg["client_id"] = new_client_id
+    oauth_cfg["client_id_source"] = "dynamic_registration"
+    if reg_data.get("client_secret"):
+        oauth_cfg["client_secret"] = reg_data["client_secret"]
+    from src.runtime.mcp_oauth_audit import log_dynamic_client_registration
+
+    log_dynamic_client_registration(
+        server_slug=server_slug,
+        registration_endpoint=reg_endpoint,
+        client_id=new_client_id,
+    )
+    logger.info(
+        "oauth_start: dynamic client registration OK slug=%s client_id=%s",
+        server_slug,
+        new_client_id,
+    )
+    return True
+
+
+async def _oauth_post_client_registration(
+    *, server_slug: str, reg_endpoint: str, redirect_uri: str
+) -> Optional[Dict[str, Any]]:
+    """POST RFC 7591 verso reg_endpoint. Ritorna il JSON di risposta o None."""
     try:
         async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as hclient:
             reg_payload = {
@@ -582,41 +668,25 @@ async def _oauth_dynamic_client_register(
             )
             if reg_resp.status_code not in (200, 201):
                 logger.warning(
-                    "oauth_start: dynamic registration HTTP %s slug=%s redirect_uri=%r body=%s",
+                    "oauth_start: dynamic registration HTTP %s slug=%s endpoint=%s "
+                    "redirect_uri=%r body=%s",
                     reg_resp.status_code,
                     server_slug,
+                    reg_endpoint,
                     redirect_uri,
                     reg_resp.text[:300],
                 )
-                return False
-            reg_data = reg_resp.json()
-            new_client_id = str(reg_data.get("client_id") or "").strip()
-            if not new_client_id:
-                return False
-            oauth_cfg["client_id"] = new_client_id
-            oauth_cfg["client_id_source"] = "dynamic_registration"
-            if reg_data.get("client_secret"):
-                oauth_cfg["client_secret"] = reg_data["client_secret"]
-            from src.runtime.mcp_oauth_audit import log_dynamic_client_registration
-
-            log_dynamic_client_registration(
-                server_slug=server_slug,
-                registration_endpoint=reg_endpoint,
-                client_id=new_client_id,
-            )
-            logger.info(
-                "oauth_start: dynamic client registration OK slug=%s client_id=%s",
-                server_slug,
-                new_client_id,
-            )
-            return True
+                return None
+            data = reg_resp.json()
+            return data if isinstance(data, dict) else None
     except Exception as reg_exc:
         logger.warning(
-            "oauth_start: dynamic client registration failed slug=%s: %s",
+            "oauth_start: dynamic client registration failed slug=%s endpoint=%s: %s",
             server_slug,
+            reg_endpoint,
             reg_exc,
         )
-    return False
+    return None
 
 
 async def _resolve_oauth_config_for_server(
