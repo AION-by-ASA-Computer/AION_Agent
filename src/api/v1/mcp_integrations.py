@@ -1154,6 +1154,9 @@ async def oauth_callback_redirect(code: str, state: str, request: Request):
     )
     await set_user_mcp_preference(user_id, server_slug, True, tenant_id=tenant)
 
+    # Senza questo la chat-ui, tornando dal redirect, rileggerebbe dalla cache
+    # (TTL 30 s) la lista con l'integrazione ancora "da collegare".
+    clear_integrations_cache()
     return RedirectResponse(
         url=f"{chat_base}/integrations?oauth_status=success&server_slug={server_slug}"
     )

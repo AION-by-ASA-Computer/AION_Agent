@@ -271,3 +271,44 @@ def test_delete_missing_non_oauth_credential_still_404(oauth_db: str) -> None:
         assert exc.value.status_code == 404
 
     asyncio.run(scenario())
+
+
+def test_oauth_redirect_callback_clears_integrations_cache(oauth_db: str) -> None:
+    from datetime import datetime, timedelta, timezone
+    from unittest.mock import MagicMock
+
+    from src.test.mcp_oauth_test_helpers import insert_mcp_server_config
+
+    asyncio.run(
+        insert_mcp_server_config(
+            "khub", oauth_config={"token_url": "https://khub.example.com/token"}
+        )
+    )
+    mod._INTEGRATIONS_CACHE["alice:default"] = (0.0, {"integrations": ["stale"]})
+    mod._oauth_pending["st"] = {
+        "server_slug": "khub",
+        "code_verifier": "v",
+        "user_id": "alice",
+        "redirect_uri": "http://localhost:8001/v1/integrations/oauth/callback",
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+    }
+    request = MagicMock()
+    request.url.scheme = "http"
+    request.headers = {"host": "localhost:8001"}
+    with (
+        patch.object(
+            mod,
+            "_resolve_oauth_config_for_server",
+            new=AsyncMock(return_value={"token_url": "https://khub.example.com/token"}),
+        ),
+        patch(
+            "src.runtime.oauth_token_exchange.exchange_authorization_code",
+            new=AsyncMock(return_value={"access_token": "at"}),
+        ),
+        patch.object(mod, "persist_oauth_token_response", new=AsyncMock()),
+        patch.object(mod, "set_user_mcp_preference", new=AsyncMock()),
+    ):
+        resp = asyncio.run(mod.oauth_callback_redirect(code="c", state="st", request=request))
+
+    assert "oauth_status=success" in resp.headers["location"]
+    assert mod._INTEGRATIONS_CACHE == {}
