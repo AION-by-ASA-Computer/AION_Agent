@@ -869,20 +869,6 @@ class SkillRename(BaseModel):
 _SKILL_SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
 
-def _safe_join(base_dir: Path, filename: str) -> Path:
-    """Join ``filename`` under ``base_dir``, rejecting any attempt to escape it.
-
-    Uses the realpath+startswith idiom so static analysis can recognize this
-    as neutralizing path traversal, rather than relying only on the slug
-    regex applied to ``filename`` by the caller.
-    """
-    base = os.path.realpath(str(base_dir))
-    candidate = os.path.realpath(os.path.join(base, filename))
-    if candidate != base and not candidate.startswith(base + os.sep):
-        raise HTTPException(status_code=400, detail="Invalid name")
-    return Path(candidate)
-
-
 @router.post("/skills/{name}/rename")
 async def rename_skill(name: str, body: SkillRename):
     """Rename a skill on disk and rewrite every profile that references it."""
@@ -922,7 +908,10 @@ async def rename_skill(name: str, body: SkillRename):
     )
     if from_fallback:
         # Shipped skills are read-only: copy into the writable dir; the old name gets hidden below.
-        new_file = _safe_join(skill_registry.curated_dir, f"{new}.md")
+        _root = os.path.realpath(str(skill_registry.curated_dir))
+        new_file = Path(os.path.realpath(os.path.join(_root, f"{new}.md")))
+        if str(new_file) != _root and not str(new_file).startswith(_root + os.sep):
+            raise HTTPException(status_code=400, detail="Invalid name")
         if new_file.exists():
             raise HTTPException(
                 status_code=409, detail=f"'{new_file.name}' already exists on disk"
@@ -930,7 +919,10 @@ async def rename_skill(name: str, body: SkillRename):
         new_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, new_file)
     elif is_package:
-        dest_dir = _safe_join(path.parent.resolve().parent, new)
+        _root = os.path.realpath(str(path.parent.resolve().parent))
+        dest_dir = Path(os.path.realpath(os.path.join(_root, new)))
+        if str(dest_dir) != _root and not str(dest_dir).startswith(_root + os.sep):
+            raise HTTPException(status_code=400, detail="Invalid name")
         if dest_dir.exists():
             raise HTTPException(
                 status_code=409, detail=f"'{dest_dir.name}' already exists on disk"
@@ -938,7 +930,10 @@ async def rename_skill(name: str, body: SkillRename):
         path.parent.rename(dest_dir)
         new_file = dest_dir / path.name
     else:
-        new_file = _safe_join(path.resolve().parent, f"{new}.md")
+        _root = os.path.realpath(str(path.resolve().parent))
+        new_file = Path(os.path.realpath(os.path.join(_root, f"{new}.md")))
+        if str(new_file) != _root and not str(new_file).startswith(_root + os.sep):
+            raise HTTPException(status_code=400, detail="Invalid name")
         if new_file.exists():
             raise HTTPException(
                 status_code=409, detail=f"'{new_file.name}' already exists on disk"
