@@ -257,10 +257,7 @@ def test_zero_install_remote_smithery_server(monkeypatch: pytest.MonkeyPatch, tm
 
 
 def test_smithery_proprietary_auth_detection_and_catalog_filtering():
-    from src.marketplaces.smithery_client import (
-        has_smithery_proprietary_auth,
-        search_smithery_servers,
-    )
+    from src.marketplaces.smithery_client import has_smithery_proprietary_auth
 
     # 1. Verifica identificazione autenticazione proprietaria Smithery
     by_smithery_server = {
@@ -358,4 +355,3 @@ def test_smithery_proprietary_auth_detection_and_catalog_filtering():
     assert partner_item["install_type"] == "catalog"
     assert partner_item["verified"] is True
     assert partner_item["catalog_only"] is True
-

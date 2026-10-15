@@ -33,10 +33,16 @@ async def _set_password(identifier: str, password: str | None) -> int:
     plain = password or secrets.token_urlsafe(12)
     async with get_async_session_maker()() as session:
         user = (
-            await session.execute(
-                select(User).where(User.tenant_id == tenant, User.identifier == identifier)
+            (
+                await session.execute(
+                    select(User).where(
+                        User.tenant_id == tenant, User.identifier == identifier
+                    )
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
         if not user:
             print(f"User not found: {identifier}", file=sys.stderr)
             return 1
@@ -55,7 +61,9 @@ async def _set_password(identifier: str, password: str | None) -> int:
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="python -m src.auth.recover")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    sp = sub.add_parser("set-password", help="reimposta la password locale di un utente")
+    sp = sub.add_parser(
+        "set-password", help="reimposta la password locale di un utente"
+    )
     sp.add_argument("identifier")
     sp.add_argument("--password", help="password da impostare (default: generata)")
     args = ap.parse_args(argv[1:])

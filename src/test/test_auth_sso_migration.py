@@ -40,7 +40,11 @@ async def _env(tmp_path: Path, monkeypatch):
 
     async def mkuser(name: str, roles=None) -> str:
         return await create_password_user(
-            tenant_id="default", identifier=name, password=f"pw-{name}", roles=roles, session_maker=sm
+            tenant_id="default",
+            identifier=name,
+            password=f"pw-{name}",
+            roles=roles,
+            session_maker=sm,
         )
 
     async def set_settings(**kw):
@@ -60,7 +64,14 @@ async def _env(tmp_path: Path, monkeypatch):
         async with sm() as s:
             return await s.get(User, uid)
 
-    yield {"sm": sm, "lm": lm, "prov": prov, "mkuser": mkuser, "set": set_settings, "get_user": get_user}
+    yield {
+        "sm": sm,
+        "lm": lm,
+        "prov": prov,
+        "mkuser": mkuser,
+        "set": set_settings,
+        "get_user": get_user,
+    }
     await eng.dispose()
 
 
@@ -78,12 +89,19 @@ def with_env(fn):
 
 @with_env
 async def test_link_clears_password_for_everyone(env, monkeypatch):
-    await env["set"](login_mode="google", sso_origin="migration", clear_password_on_link=True)
+    await env["set"](
+        login_mode="google", sso_origin="migration", clear_password_on_link=True
+    )
     bob = await env["mkuser"]("bob")
     adm = await env["mkuser"]("root", roles=["admin"])
     for uid, sub in ((bob, "s-bob"), (adm, "s-adm")):
         await env["prov"].link_identity_to_user(
-            "default", uid, _claims(sub, f"{sub}@x.io"), {}, PROVIDER, finalize_migration=True
+            "default",
+            uid,
+            _claims(sub, f"{sub}@x.io"),
+            {},
+            PROVIDER,
+            finalize_migration=True,
         )
     assert (await env["get_user"](bob)).password_hash is None
     # Anche l'admin: l'accesso di emergenza passa da src.auth.recover.
@@ -95,7 +113,9 @@ async def test_link_without_finalize_keeps_password(env, monkeypatch):
     # admin_validate: ancora in modalita' password, anche se l'admin e' l'unico utente.
     await env["set"](login_mode="password", clear_password_on_link=True)
     adm = await env["mkuser"]("root", roles=["admin"])
-    await env["prov"].link_identity_to_user("default", adm, _claims("s1", "a@x.io"), {}, PROVIDER)
+    await env["prov"].link_identity_to_user(
+        "default", adm, _claims("s1", "a@x.io"), {}, PROVIDER
+    )
     assert (await env["get_user"](adm)).password_hash is not None
 
 
@@ -117,10 +137,14 @@ async def test_migration_completes_after_last_link(env, monkeypatch):
     a = await env["mkuser"]("a")
     b = await env["mkuser"]("b")
     assert await lm.pending_users_count("default", "google") == 2  # riempie la cache
-    await env["prov"].link_identity_to_user("default", a, _claims("sa", "a@x.io"), {}, PROVIDER, finalize_migration=True)
+    await env["prov"].link_identity_to_user(
+        "default", a, _claims("sa", "a@x.io"), {}, PROVIDER, finalize_migration=True
+    )
     assert await lm.is_migration_active("default")
     assert await lm.password_login_visible("default")
-    await env["prov"].link_identity_to_user("default", b, _claims("sb", "b@x.io"), {}, PROVIDER, finalize_migration=True)
+    await env["prov"].link_identity_to_user(
+        "default", b, _claims("sb", "b@x.io"), {}, PROVIDER, finalize_migration=True
+    )
     lm._invalidate_cache("default")
     assert not await lm.is_migration_active("default")
     assert not await lm.password_login_visible("default")
@@ -132,7 +156,9 @@ async def test_cleared_password_users_not_pending(env, monkeypatch):
     await env["set"](login_mode="google", sso_origin="migration")
     a = await env["mkuser"]("a")
     await env["mkuser"]("b")
-    await env["prov"].link_identity_to_user("default", a, _claims("sa", "a@x.io"), {}, PROVIDER, finalize_migration=True)
+    await env["prov"].link_identity_to_user(
+        "default", a, _claims("sa", "a@x.io"), {}, PROVIDER, finalize_migration=True
+    )
     assert await lm.pending_users_count("default", "google") == 1
     assert not await lm.user_needs_link("default", a)
 
@@ -230,7 +256,12 @@ async def test_second_migration_starts_fresh(env, monkeypatch):
     bob = await env["mkuser"]("bob")
     for uid, sub in ((adm, "sa"), (bob, "sb")):
         await prov.link_identity_to_user(
-            "default", uid, _claims(sub, f"{sub}@x.io"), {}, PROVIDER, finalize_migration=True
+            "default",
+            uid,
+            _claims(sub, f"{sub}@x.io"),
+            {},
+            PROVIDER,
+            finalize_migration=True,
         )
     assert not await lm.is_migration_active("default")
 
@@ -271,22 +302,37 @@ async def test_relink_stale_identity_with_new_subject(env, monkeypatch):
     lm, prov = env["lm"], env["prov"]
     await env["set"](login_mode="google", sso_origin="migration")
     bob = await env["mkuser"]("bob")
-    await prov.link_identity_to_user("default", bob, _claims("old", "old@x.io"), {}, PROVIDER)
+    await prov.link_identity_to_user(
+        "default", bob, _claims("old", "old@x.io"), {}, PROVIDER
+    )
     # Nella stessa migrazione un subject diverso resta vietato.
     with pytest.raises(ValueError, match="sso_user_already_linked"):
-        await prov.link_identity_to_user("default", bob, _claims("new", "new@x.io"), {}, PROVIDER)
+        await prov.link_identity_to_user(
+            "default", bob, _claims("new", "new@x.io"), {}, PROVIDER
+        )
 
     await _new_migration(env)
     await _set_password(env, bob)
     await prov.link_identity_to_user(
-        "default", bob, _claims("new", "new@x.io"), {}, PROVIDER, finalize_migration=True
+        "default",
+        bob,
+        _claims("new", "new@x.io"),
+        {},
+        PROVIDER,
+        finalize_migration=True,
     )
     from src.data.models import UserSsoIdentity
 
     async with env["sm"]() as s:
         rows = (
-            await s.execute(select(UserSsoIdentity).where(UserSsoIdentity.user_id == bob))
-        ).scalars().all()
+            (
+                await s.execute(
+                    select(UserSsoIdentity).where(UserSsoIdentity.user_id == bob)
+                )
+            )
+            .scalars()
+            .all()
+        )
     assert [r.subject for r in rows] == ["new"]
     assert not await lm.user_needs_link("default", bob)
 
@@ -296,12 +342,16 @@ async def test_sso_login_with_stale_identity_confirms(env, monkeypatch):
     lm, prov = env["lm"], env["prov"]
     await env["set"](login_mode="google", sso_origin="migration")
     bob = await env["mkuser"]("bob")
-    await prov.link_identity_to_user("default", bob, _claims("sb", "sb@x.io"), {}, PROVIDER)
+    await prov.link_identity_to_user(
+        "default", bob, _claims("sb", "sb@x.io"), {}, PROVIDER
+    )
 
     await _new_migration(env)
     await _set_password(env, bob)
     assert await lm.user_needs_link("default", bob)
-    user = await prov.resolve_user(_claims("sb", "sb@x.io"), {}, PROVIDER, migration_active=True)
+    user = await prov.resolve_user(
+        _claims("sb", "sb@x.io"), {}, PROVIDER, migration_active=True
+    )
     assert user
     assert not await lm.user_needs_link("default", bob)
     assert (await env["get_user"](bob)).password_hash is None
@@ -332,14 +382,25 @@ async def test_email_follows_new_provider(env, monkeypatch):
     ms = {"provider": "microsoft", "auto_provision": False}
     await env["set"](login_mode="microsoft", sso_origin="migration")
     bob = await env["mkuser"]("bob")
-    ms_claims = {"tid": "t", "oid": "o", "preferred_username": "bob@corp.onmicrosoft.com", "name": "Bob"}
-    await prov.link_identity_to_user("default", bob, ms_claims, {}, ms, finalize_migration=True)
+    ms_claims = {
+        "tid": "t",
+        "oid": "o",
+        "preferred_username": "bob@corp.onmicrosoft.com",
+        "name": "Bob",
+    }
+    await prov.link_identity_to_user(
+        "default", bob, ms_claims, {}, ms, finalize_migration=True
+    )
     assert (await env["get_user"](bob)).email == "bob@corp.onmicrosoft.com"
 
     # admin_validate su Google: email invariata finche' non si passa davvero.
     await _new_migration(env)
-    await prov.link_identity_to_user("default", bob, _claims("g1", "Bob@Gmail.com"), {}, PROVIDER)
+    await prov.link_identity_to_user(
+        "default", bob, _claims("g1", "Bob@Gmail.com"), {}, PROVIDER
+    )
     assert (await env["get_user"](bob)).email == "bob@corp.onmicrosoft.com"
     # Login SSO col nuovo provider: l'email segue Google.
-    await prov.resolve_user(_claims("g1", "Bob@Gmail.com"), {}, PROVIDER, migration_active=True)
+    await prov.resolve_user(
+        _claims("g1", "Bob@Gmail.com"), {}, PROVIDER, migration_active=True
+    )
     assert (await env["get_user"](bob)).email == "bob@gmail.com"

@@ -38,7 +38,11 @@ def _extract_subject_and_email(
             raise ValueError("missing_subject_claims")
         subject = f"{tid}:{oid}"
         # Email è solo informativa per MS, non usata per il collegamento
-        email = (claims.get("preferred_username") or claims.get("email") or "").strip().lower()
+        email = (
+            (claims.get("preferred_username") or claims.get("email") or "")
+            .strip()
+            .lower()
+        )
     elif provider == "google":
         subject = claims.get("sub")
         if not subject:
@@ -76,20 +80,26 @@ async def resolve_user(
     async with get_async_session_maker()() as session:
         # 1. Cerca identità esistente per (tenant, provider, subject)
         identity = (
-            await session.execute(
-                select(UserSsoIdentity).where(
-                    UserSsoIdentity.tenant_id == tenant_id,
-                    UserSsoIdentity.provider == provider,
-                    UserSsoIdentity.subject == subject,
+            (
+                await session.execute(
+                    select(UserSsoIdentity).where(
+                        UserSsoIdentity.tenant_id == tenant_id,
+                        UserSsoIdentity.provider == provider,
+                        UserSsoIdentity.subject == subject,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
         if identity:
             # Login normale con identità già collegata
             user = (
-                await session.execute(select(User).where(User.id == identity.user_id))
-            ).scalars().first()
+                (await session.execute(select(User).where(User.id == identity.user_id)))
+                .scalars()
+                .first()
+            )
             if user:
                 user.last_active_at = now
                 identity.access_token_encrypted = access_token_encrypted
@@ -107,7 +117,10 @@ async def resolve_user(
                 if migration_active:
                     # Login SSO con identita' di una migrazione precedente:
                     # vale come collegamento, l'utente e' migrato.
-                    from src.auth.sso.login_mode import finalize_user, get_login_settings
+                    from src.auth.sso.login_mode import (
+                        finalize_user,
+                        get_login_settings,
+                    )
 
                     settings = await get_login_settings(tenant_id)
                     finalize_user(user, settings.get("clear_password_on_link", True))
@@ -223,14 +236,18 @@ async def link_identity_to_user(
         # Verifica che (tenant, provider, subject) non sia già collegato
         # a un ALTRO utente
         existing_identity = (
-            await session.execute(
-                select(UserSsoIdentity).where(
-                    UserSsoIdentity.tenant_id == tenant_id,
-                    UserSsoIdentity.provider == provider,
-                    UserSsoIdentity.subject == subject,
+            (
+                await session.execute(
+                    select(UserSsoIdentity).where(
+                        UserSsoIdentity.tenant_id == tenant_id,
+                        UserSsoIdentity.provider == provider,
+                        UserSsoIdentity.subject == subject,
+                    )
                 )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
         from src.auth.sso.login_mode import (
             finalize_user,
@@ -256,16 +273,22 @@ async def link_identity_to_user(
             # Verifica che l'utente non abbia già un'identità per questo provider
             # con un subject diverso
             identity = (
-                await session.execute(
-                    select(UserSsoIdentity).where(
-                        UserSsoIdentity.tenant_id == tenant_id,
-                        UserSsoIdentity.user_id == user_id,
-                        UserSsoIdentity.provider == provider,
+                (
+                    await session.execute(
+                        select(UserSsoIdentity).where(
+                            UserSsoIdentity.tenant_id == tenant_id,
+                            UserSsoIdentity.user_id == user_id,
+                            UserSsoIdentity.provider == provider,
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if identity is not None:
-                if is_identity_confirmed(identity, settings.get("migration_started_at")):
+                if is_identity_confirmed(
+                    identity, settings.get("migration_started_at")
+                ):
                     # Subject diverso → solo l'admin può scollegare
                     raise ValueError("sso_user_already_linked")
                 # Identita' di una migrazione precedente: in una nuova
@@ -273,20 +296,22 @@ async def link_identity_to_user(
                 identity.subject = subject
 
         if identity is None:
-            session.add(UserSsoIdentity(
-                id=new_uuid7_str(),
-                tenant_id=tenant_id,
-                user_id=user_id,
-                provider=provider,
-                subject=subject,
-                email=email,
-                display_name=display_name,
-                access_token_encrypted=access_token_encrypted,
-                token_expires_at=token_expires_at,
-                last_login_at=now,
-                created_at=now,
-                updated_at=now,
-            ))
+            session.add(
+                UserSsoIdentity(
+                    id=new_uuid7_str(),
+                    tenant_id=tenant_id,
+                    user_id=user_id,
+                    provider=provider,
+                    subject=subject,
+                    email=email,
+                    display_name=display_name,
+                    access_token_encrypted=access_token_encrypted,
+                    token_expires_at=token_expires_at,
+                    last_login_at=now,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
         else:
             identity.access_token_encrypted = access_token_encrypted
             identity.token_expires_at = token_expires_at
@@ -322,4 +347,5 @@ async def link_identity_to_user(
 
     # Verifica se l'operazione ha completato la migrazione
     from src.auth.sso.login_mode import _check_migration_completion
+
     await _check_migration_completion(tenant_id, provider)

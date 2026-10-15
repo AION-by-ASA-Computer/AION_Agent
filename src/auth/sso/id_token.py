@@ -13,10 +13,14 @@ logger = logging.getLogger("aion.sso.id_token")
 # Maintain a cache of JWK clients per URL
 _JWK_CLIENTS: Dict[str, PyJWKClient] = {}
 
+
 def get_jwks_client(url: str) -> PyJWKClient:
     if url not in _JWK_CLIENTS:
-        _JWK_CLIENTS[url] = PyJWKClient(url, cache_keys=True, cache_jwk_set=True, lifespan=3600)
+        _JWK_CLIENTS[url] = PyJWKClient(
+            url, cache_keys=True, cache_jwk_set=True, lifespan=3600
+        )
     return _JWK_CLIENTS[url]
+
 
 def verify_id_token(
     id_token: str,
@@ -31,7 +35,7 @@ def verify_id_token(
     tid = provider_config.get("directory_tenant_id") or "common"
     jwks_url = descriptor.jwks_url.replace("{tid}", tid)
     issuer = descriptor.issuer_template.replace("{tid}", tid)
-    
+
     jwks_client = get_jwks_client(jwks_url)
     try:
         signing_key = jwks_client.get_signing_key_from_jwt(id_token)
@@ -60,7 +64,7 @@ def verify_id_token(
     if provider == "microsoft":
         if payload.get("tid") != provider_config.get("directory_tenant_id"):
             raise ValueError("tenant_mismatch")
-        
+
         # Check domain if domains are allowed (optional for MS)
         allowed_domains = provider_config.get("allowed_domains", [])
         if allowed_domains:
@@ -75,7 +79,7 @@ def verify_id_token(
             # sometimes boolean, sometimes string
             if payload.get("email_verified") is not True:
                 raise ValueError("email_not_verified")
-            
+
         allowed_domains = provider_config.get("allowed_domains", [])
         if allowed_domains:
             hd = (payload.get("hd") or "").lower()

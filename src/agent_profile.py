@@ -179,7 +179,7 @@ class AgentProfile:
         all_names = skill_registry.get_all_names()
         out: List[str] = []
         seen = set()
-        for item in (self.skills or []):
+        for item in self.skills or []:
             if "*" in item or "?" in item:
                 for match in sorted(fnmatch.filter(all_names, item)):
                     if match not in seen:
@@ -199,7 +199,7 @@ class AgentProfile:
             base = DEFAULT_CRITICAL_SKILL_NAMES
         else:
             base_set = set()
-            for item in (self.critical_skills or []):
+            for item in self.critical_skills or []:
                 if "*" in item or "?" in item:
                     base_set.update(fnmatch.filter(all_names, item))
                 else:

@@ -29,16 +29,23 @@ def _row_to_provider_dict(row: SsoProvider) -> Optional[Dict[str, Any]]:
             "client_id": row.client_id,
             "client_secret": secret,
             "directory_tenant_id": row.directory_tenant_id,
-            "allowed_domains": json.loads(row.allowed_domains) if row.allowed_domains else [],
+            "allowed_domains": json.loads(row.allowed_domains)
+            if row.allowed_domains
+            else [],
             "auto_provision": row.auto_provision,
-            "default_roles": json.loads(row.default_roles) if row.default_roles else ["user"],
+            "default_roles": json.loads(row.default_roles)
+            if row.default_roles
+            else ["user"],
             "enabled": row.enabled,
             "validated_at": row.validated_at,
             "validated_by_user_id": row.validated_by_user_id,
         }
     except CredentialDecryptionError:
-        logger.error("Failed to decrypt SSO client secret for provider %s.", row.provider)
+        logger.error(
+            "Failed to decrypt SSO client secret for provider %s.", row.provider
+        )
         return None
+
 
 # Simple in-memory cache (tenant_id -> (expiry, provider_dict))
 _CACHE: Dict[str, Tuple[float, Optional[Dict[str, Any]]]] = {}
@@ -59,7 +66,8 @@ async def get_active_provider(tenant_id: str = "default") -> Optional[Dict[str, 
             (
                 await session.execute(
                     select(SsoProvider).where(
-                        SsoProvider.tenant_id == tenant_id, SsoProvider.enabled == True
+                        SsoProvider.tenant_id == tenant_id,
+                        SsoProvider.enabled.is_(True),
                     )
                 )
             )
@@ -130,7 +138,7 @@ async def upsert_provider(
         )
 
         now = datetime.now(timezone.utc)
-        
+
         roles_str = json.dumps(default_roles or ["user"])
         domains_str = json.dumps(allowed_domains) if allowed_domains else None
 
@@ -142,7 +150,7 @@ async def upsert_provider(
                 secret_encrypted = encrypt_value(client_secret)
             except Exception as e:
                 raise ValueError(str(e)) from e
-        
+
         # If anything crucial changes, it requires re-validation
         needs_revalidation = False
         if existing:
@@ -172,9 +180,9 @@ async def upsert_provider(
                 try:
                     from src.auth.sso.login_mode import get_login_settings
 
-                    login_active = (
-                        await get_login_settings(tenant_id)
-                    ).get("login_mode") == provider
+                    login_active = (await get_login_settings(tenant_id)).get(
+                        "login_mode"
+                    ) == provider
                 except Exception:  # noqa: BLE001
                     login_active = False
                 if not login_active:
@@ -241,9 +249,9 @@ async def public_view(tenant_id: str) -> Optional[Dict[str, Any]]:
         row = (
             (
                 await session.execute(
-                    select(SsoProvider).where(
-                        SsoProvider.tenant_id == tenant_id
-                    ).order_by(SsoProvider.updated_at.desc())
+                    select(SsoProvider)
+                    .where(SsoProvider.tenant_id == tenant_id)
+                    .order_by(SsoProvider.updated_at.desc())
                 )
             )
             .scalars()
@@ -266,12 +274,17 @@ async def public_view(tenant_id: str) -> Optional[Dict[str, Any]]:
         "client_id": row.client_id,
         "client_secret_hint": secret_hint,
         "directory_tenant_id": row.directory_tenant_id,
-        "allowed_domains": json.loads(row.allowed_domains) if row.allowed_domains else [],
+        "allowed_domains": json.loads(row.allowed_domains)
+        if row.allowed_domains
+        else [],
         "auto_provision": row.auto_provision,
-        "default_roles": json.loads(row.default_roles) if row.default_roles else ["user"],
+        "default_roles": json.loads(row.default_roles)
+        if row.default_roles
+        else ["user"],
         "enabled": row.enabled,
         "validated_at": row.validated_at,
     }
+
 
 async def enable_provider(tenant_id: str, provider: str, enabled: bool) -> bool:
     _CACHE.pop(tenant_id, None)
@@ -290,13 +303,13 @@ async def enable_provider(tenant_id: str, provider: str, enabled: bool) -> bool:
         )
         if not row:
             return False
-        
+
         if enabled and not row.validated_at:
             raise ValueError("Provider not validated")
 
         row.enabled = enabled
         row.updated_at = datetime.now(timezone.utc)
-        
+
         if enabled:
             others = (
                 (
@@ -315,6 +328,7 @@ async def enable_provider(tenant_id: str, provider: str, enabled: bool) -> bool:
 
         await session.commit()
         return True
+
 
 async def delete_provider(tenant_id: str, provider: str) -> None:
     _CACHE.pop(tenant_id, None)
@@ -335,14 +349,15 @@ async def delete_provider(tenant_id: str, provider: str) -> None:
             await session.delete(row)
             await session.commit()
 
+
 async def admin_list_providers(tenant_id: str) -> List[Dict[str, Any]]:
     async with get_async_session_maker()() as session:
         rows = (
             (
                 await session.execute(
-                    select(SsoProvider).where(
-                        SsoProvider.tenant_id == tenant_id
-                    ).order_by(SsoProvider.provider.asc())
+                    select(SsoProvider)
+                    .where(SsoProvider.tenant_id == tenant_id)
+                    .order_by(SsoProvider.provider.asc())
                 )
             )
             .scalars()
@@ -359,16 +374,22 @@ async def admin_list_providers(tenant_id: str) -> List[Dict[str, Any]]:
             except CredentialDecryptionError:
                 secret_hint = "(error: key mismatch)"
 
-        res.append({
-            "provider": row.provider,
-            "client_id": row.client_id,
-            "client_secret_hint": secret_hint,
-            "directory_tenant_id": row.directory_tenant_id,
-            "allowed_domains": json.loads(row.allowed_domains) if row.allowed_domains else [],
-            "auto_provision": row.auto_provision,
-            "default_roles": json.loads(row.default_roles) if row.default_roles else ["user"],
-            "enabled": row.enabled,
-            "validated_at": row.validated_at,
-            "validated_by_user_id": row.validated_by_user_id,
-        })
+        res.append(
+            {
+                "provider": row.provider,
+                "client_id": row.client_id,
+                "client_secret_hint": secret_hint,
+                "directory_tenant_id": row.directory_tenant_id,
+                "allowed_domains": json.loads(row.allowed_domains)
+                if row.allowed_domains
+                else [],
+                "auto_provision": row.auto_provision,
+                "default_roles": json.loads(row.default_roles)
+                if row.default_roles
+                else ["user"],
+                "enabled": row.enabled,
+                "validated_at": row.validated_at,
+                "validated_by_user_id": row.validated_by_user_id,
+            }
+        )
     return res

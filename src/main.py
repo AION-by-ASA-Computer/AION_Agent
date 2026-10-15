@@ -737,7 +737,8 @@ async def build_mcp_tools(
             session_id,
             SessionContext(
                 profile_slug=target_slug,
-                user_id=user_id or (existing_ctx.user_id if existing_ctx else "default"),
+                user_id=user_id
+                or (existing_ctx.user_id if existing_ctx else "default"),
                 tenant_id=(existing_ctx.tenant_id if existing_ctx else "default"),
                 conversation_id=session_id,
             ),
@@ -1019,7 +1020,7 @@ async def build_all_tools(
             server_config,
             session_id,
             user_id=user_id,
-            profile_slug=getattr(profile, "slug", None) or profile_name,
+            profile_slug=getattr(profile, "slug", None),
             timings=timings,
         )
 

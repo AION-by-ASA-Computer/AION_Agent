@@ -68,7 +68,10 @@ async def _login_payload(user_row_id: str, client: str = "chat") -> Dict[str, An
     # collegamento (client="admin" vale solo per chi ha il ruolo admin).
     link_required = False
     is_admin = client == "admin" and "admin" in list(auth.get("roles") or [])
-    if not is_admin and (await get_login_settings(_tenant())).get("login_mode") != "password":
+    if (
+        not is_admin
+        and (await get_login_settings(_tenant())).get("login_mode") != "password"
+    ):
         link_required = await user_needs_link(_tenant(), user_row_id)
     return build_login_response(auth, sso_link_required=link_required)
 

@@ -528,7 +528,9 @@ async def build_turn_context(
     try:
         from src.runtime.turn.side_thread_context import build_side_thread_context
 
-        side_ctx = await build_side_thread_context(pipeline.session_id, pipeline.user_id)
+        side_ctx = await build_side_thread_context(
+            pipeline.session_id, pipeline.user_id
+        )
         if side_ctx:
             augmented_user = _layer_inject(
                 _prompt_inject_layers,

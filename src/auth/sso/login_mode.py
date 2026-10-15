@@ -252,16 +252,22 @@ async def finalize_linked_users(tenant_id: str, provider: str) -> int:
     changed = 0
     async with get_async_session_maker()() as session:
         settings_row = await session.get(AuthSettings, tenant_id)
-        clear_pw = True if settings_row is None else bool(settings_row.clear_password_on_link)
+        clear_pw = (
+            True if settings_row is None else bool(settings_row.clear_password_on_link)
+        )
         since = settings_row.migration_started_at if settings_row else None
         users = (
-            await session.execute(
-                select(User).where(
-                    User.tenant_id == tenant_id,
-                    confirmed_identity_exists(tenant_id, provider, since),
+            (
+                await session.execute(
+                    select(User).where(
+                        User.tenant_id == tenant_id,
+                        confirmed_identity_exists(tenant_id, provider, since),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for u in users:
             changed += 1 if finalize_user(u, clear_pw) else 0
         if changed:
@@ -328,6 +334,7 @@ async def set_login_mode(
         if mode != "password":
             # Verifica che il provider esista e sia validato
             from src.auth.sso.config_service import get_provider as _gp
+
             config = await _gp(tenant_id, mode, require_enabled=False)
             if not config:
                 raise ValueError("provider_not_configured")
@@ -343,14 +350,18 @@ async def set_login_mode(
 
             # Verifica che l'admin che chiama abbia già un'identità per il provider
             actor_identity = (
-                await session.execute(
-                    select(UserSsoIdentity).where(
-                        UserSsoIdentity.tenant_id == tenant_id,
-                        UserSsoIdentity.user_id == actor_user_id,
-                        UserSsoIdentity.provider == mode,
+                (
+                    await session.execute(
+                        select(UserSsoIdentity).where(
+                            UserSsoIdentity.tenant_id == tenant_id,
+                            UserSsoIdentity.user_id == actor_user_id,
+                            UserSsoIdentity.provider == mode,
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if not actor_identity:
                 raise ValueError("sso_admin_not_linked")
 
@@ -411,16 +422,18 @@ async def set_login_mode(
                 actor = await session.get(User, actor_user_id)
                 if actor:
                     sync_user_email(actor, actor_identity.email)
-                session.add(AuthSettings(
-                    tenant_id=tenant_id,
-                    login_mode=mode,
-                    sso_origin=sso_origin,
-                    migration_started_at=migration_started,
-                    migration_completed_at=None,
-                    clear_password_on_link=True,
-                    updated_by_user_id=actor_user_id,
-                    updated_at=now,
-                ))
+                session.add(
+                    AuthSettings(
+                        tenant_id=tenant_id,
+                        login_mode=mode,
+                        sso_origin=sso_origin,
+                        migration_started_at=migration_started,
+                        migration_completed_at=None,
+                        clear_password_on_link=True,
+                        updated_by_user_id=actor_user_id,
+                        updated_at=now,
+                    )
+                )
 
             # Step 4-bis: cambio da SSO a SSO — genera password temporanee
             # per chi non ha password e non ha identità per il nuovo provider
@@ -429,38 +442,46 @@ async def set_login_mode(
                 temp_expires = now + timedelta(days=ttl_days)
 
                 users_without_pw = (
-                    await session.execute(
-                        select(User).where(
-                            User.tenant_id == tenant_id,
-                            User.password_hash.is_(None),
-                            User.sso_migration_exempt == False,  # noqa: E712
-                            User.id != actor_user_id,
-                        ).where(
-                            ~(
-                                select(UserSsoIdentity.id)
-                                .where(
-                                    UserSsoIdentity.user_id == User.id,
-                                    UserSsoIdentity.tenant_id == tenant_id,
-                                    UserSsoIdentity.provider == mode,
+                    (
+                        await session.execute(
+                            select(User)
+                            .where(
+                                User.tenant_id == tenant_id,
+                                User.password_hash.is_(None),
+                                User.sso_migration_exempt == False,  # noqa: E712
+                                User.id != actor_user_id,
+                            )
+                            .where(
+                                ~(
+                                    select(UserSsoIdentity.id)
+                                    .where(
+                                        UserSsoIdentity.user_id == User.id,
+                                        UserSsoIdentity.tenant_id == tenant_id,
+                                        UserSsoIdentity.provider == mode,
+                                    )
+                                    .correlate(User)
+                                    .exists()
                                 )
-                                .correlate(User)
-                                .exists()
                             )
                         )
                     )
-                ).scalars().all()
+                    .scalars()
+                    .all()
+                )
 
                 for u in users_without_pw:
                     plain = secrets.token_urlsafe(12)
                     u.password_hash = hash_password(plain)
                     u.temp_password_expires_at = temp_expires
-                    temp_passwords_out.append({
-                        "user_id": u.id,
-                        "identifier": u.identifier,
-                        "email": u.email,
-                        "password": plain,
-                        "expires_at": temp_expires.isoformat(),
-                    })
+                    temp_passwords_out.append(
+                        {
+                            "user_id": u.id,
+                            "identifier": u.identifier,
+                            "email": u.email,
+                            "password": plain,
+                            "expires_at": temp_expires.isoformat(),
+                        }
+                    )
 
         else:
             # Ritorno a "Normale"
@@ -469,27 +490,33 @@ async def set_login_mode(
             temp_expires = now + timedelta(days=ttl_days)
 
             users_without_pw = (
-                await session.execute(
-                    select(User).where(
-                        User.tenant_id == tenant_id,
-                        User.password_hash.is_(None),
-                        User.sso_migration_exempt == False,  # noqa: E712
+                (
+                    await session.execute(
+                        select(User).where(
+                            User.tenant_id == tenant_id,
+                            User.password_hash.is_(None),
+                            User.sso_migration_exempt == False,  # noqa: E712
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
 
             for u in users_without_pw:
                 plain = secrets.token_urlsafe(12)
                 u.password_hash = hash_password(plain)
                 u.temp_password_expires_at = temp_expires
                 u.must_change_password = True
-                temp_passwords_out.append({
-                    "user_id": u.id,
-                    "identifier": u.identifier,
-                    "email": u.email,
-                    "password": plain,
-                    "expires_at": temp_expires.isoformat(),
-                })
+                temp_passwords_out.append(
+                    {
+                        "user_id": u.id,
+                        "identifier": u.identifier,
+                        "email": u.email,
+                        "password": plain,
+                        "expires_at": temp_expires.isoformat(),
+                    }
+                )
 
             if current_row:
                 current_row.login_mode = "password"
@@ -499,13 +526,15 @@ async def set_login_mode(
                 current_row.updated_by_user_id = actor_user_id
                 current_row.updated_at = now
             else:
-                session.add(AuthSettings(
-                    tenant_id=tenant_id,
-                    login_mode="password",
-                    sso_origin=None,
-                    updated_by_user_id=actor_user_id,
-                    updated_at=now,
-                ))
+                session.add(
+                    AuthSettings(
+                        tenant_id=tenant_id,
+                        login_mode="password",
+                        sso_origin=None,
+                        updated_by_user_id=actor_user_id,
+                        updated_at=now,
+                    )
+                )
 
         await session.commit()
 
@@ -522,7 +551,11 @@ async def set_login_mode(
         await _check_migration_completion(tenant_id, mode)
     else:
         # Disabilita tutti i provider
-        from src.auth.sso.config_service import admin_list_providers, enable_provider as _ep
+        from src.auth.sso.config_service import (
+            admin_list_providers,
+            enable_provider as _ep,
+        )
+
         for p in await admin_list_providers(tenant_id):
             if p.get("enabled"):
                 try:
@@ -563,14 +596,18 @@ async def generate_temp_passwords(
 
             # Non generare per chi è già collegato
             already_linked = (
-                await session.execute(
-                    select(UserSsoIdentity).where(
-                        UserSsoIdentity.user_id == uid,
-                        UserSsoIdentity.tenant_id == tenant_id,
-                        UserSsoIdentity.provider == active_provider,
+                (
+                    await session.execute(
+                        select(UserSsoIdentity).where(
+                            UserSsoIdentity.user_id == uid,
+                            UserSsoIdentity.tenant_id == tenant_id,
+                            UserSsoIdentity.provider == active_provider,
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if already_linked:
                 raise ValueError(f"user_already_linked:{uid}")
 
@@ -578,13 +615,15 @@ async def generate_temp_passwords(
             user.password_hash = hash_password(plain)
             user.temp_password_expires_at = temp_expires
 
-            results.append({
-                "user_id": uid,
-                "identifier": user.identifier,
-                "email": user.email,
-                "password": plain,
-                "expires_at": temp_expires.isoformat(),
-            })
+            results.append(
+                {
+                    "user_id": uid,
+                    "identifier": user.identifier,
+                    "email": user.email,
+                    "password": plain,
+                    "expires_at": temp_expires.isoformat(),
+                }
+            )
 
         await session.commit()
 

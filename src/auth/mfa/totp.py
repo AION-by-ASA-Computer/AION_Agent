@@ -53,7 +53,9 @@ async def two_factor_effective(tenant_id: str) -> bool:
     if force_disabled():
         return False
     settings = await get_login_settings(tenant_id)
-    return bool(settings.get("totp_required")) and settings.get("login_mode") == "password"
+    return (
+        bool(settings.get("totp_required")) and settings.get("login_mode") == "password"
+    )
 
 
 async def login_stage(tenant_id: str, user: Optional[User]) -> Optional[str]:
@@ -77,20 +79,25 @@ async def login_stage(tenant_id: str, user: Optional[User]) -> Optional[str]:
 # Secret / QR
 # ---------------------------------------------------------------------------
 
+
 def new_secret() -> str:
     return pyotp.random_base32()
 
 
 def provisioning_uri(secret: str, identifier: str) -> str:
-    return pyotp.TOTP(secret, digits=TOTP_DIGITS, interval=TOTP_INTERVAL).provisioning_uri(
-        name=identifier, issuer_name=issuer()
-    )
+    return pyotp.TOTP(
+        secret, digits=TOTP_DIGITS, interval=TOTP_INTERVAL
+    ).provisioning_uri(name=identifier, issuer_name=issuer())
 
 
 def qr_svg_data_uri(uri: str) -> str:
     buf = io.BytesIO()
-    segno.make(uri, error="m").save(buf, kind="svg", scale=6, border=2, dark="#000000", light="#ffffff")
-    return "data:image/svg+xml;base64," + base64.b64encode(buf.getvalue()).decode("ascii")
+    segno.make(uri, error="m").save(
+        buf, kind="svg", scale=6, border=2, dark="#000000", light="#ffffff"
+    )
+    return "data:image/svg+xml;base64," + base64.b64encode(buf.getvalue()).decode(
+        "ascii"
+    )
 
 
 def user_secret(user: User) -> Optional[str]:
@@ -110,6 +117,7 @@ def is_enrolled(user: User) -> bool:
 # ---------------------------------------------------------------------------
 # Challenge token (password OK -> codice richiesto)
 # ---------------------------------------------------------------------------
+
 
 def _mfa_key() -> bytes:
     base = chat_auth_secret() or "aion-chat-auth-dev-insecure"
@@ -146,6 +154,7 @@ def verify_mfa_token(token: str) -> Optional[Dict[str, Any]]:
 # Verifica codice
 # ---------------------------------------------------------------------------
 
+
 class MfaLocked(Exception):
     def __init__(self, retry_after: int) -> None:
         super().__init__("mfa_locked")
@@ -168,7 +177,9 @@ async def verify_code(user_row_id: str, code: str) -> bool:
         if not user:
             return False
         if user.totp_locked_until and _aware(user.totp_locked_until) > now:
-            raise MfaLocked(int((_aware(user.totp_locked_until) - now).total_seconds()) + 1)
+            raise MfaLocked(
+                int((_aware(user.totp_locked_until) - now).total_seconds()) + 1
+            )
 
         secret = user_secret(user)
         ok = False

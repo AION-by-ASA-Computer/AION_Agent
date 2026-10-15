@@ -33,7 +33,11 @@ def _clip_around(text: str, needle: str, limit: int) -> str:
     lo = max(0, idx - half)
     hi = min(len(text), lo + limit)
     lo = max(0, hi - limit)
-    return ("… " if lo > 0 else "") + text[lo:hi].strip() + (" …" if hi < len(text) else "")
+    return (
+        ("… " if lo > 0 else "")
+        + text[lo:hi].strip()
+        + (" …" if hi < len(text) else "")
+    )
 
 
 def _clip_tail(text: str, limit: int) -> str:

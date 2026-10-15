@@ -35,6 +35,7 @@ def _tenant_id() -> str:
 # GET /admin/auth/login-mode
 # ---------------------------------------------------------------------------
 
+
 @router.get("/login-mode")
 async def get_login_mode(
     auth: ChatAuthIdentity = Depends(require_admin_role),
@@ -60,18 +61,26 @@ async def get_login_mode(
         async with get_async_session_maker()() as session:
             # Migrati = identita' confermata nella migrazione corrente: quelle
             # rimaste da una migrazione precedente non contano.
-            migrated_q = select(func.count()).select_from(User).where(
-                User.tenant_id == tenant,
-                User.sso_migration_exempt == False,  # noqa: E712
-                confirmed_identity_exists(
-                    tenant, provider, settings.get("migration_started_at")
-                ),
+            migrated_q = (
+                select(func.count())
+                .select_from(User)
+                .where(
+                    User.tenant_id == tenant,
+                    User.sso_migration_exempt.is_(False),  # noqa: E712
+                    confirmed_identity_exists(
+                        tenant, provider, settings.get("migration_started_at")
+                    ),
+                )
             )
             migrated = (await session.execute(migrated_q)).scalar_one()
 
-            exempt_q = select(func.count()).select_from(User).where(
-                User.tenant_id == tenant,
-                User.sso_migration_exempt == True,  # noqa: E712
+            exempt_q = (
+                select(func.count())
+                .select_from(User)
+                .where(
+                    User.tenant_id == tenant,
+                    User.sso_migration_exempt == True,  # noqa: E712
+                )
             )
             exempt = (await session.execute(exempt_q)).scalar_one()
 
@@ -99,6 +108,7 @@ async def get_login_mode(
 # GET /admin/auth/login-mode/simulate
 # ---------------------------------------------------------------------------
 
+
 @router.get("/login-mode/simulate")
 async def simulate_login_mode_change(
     mode: str = Query(..., regex="^(password|microsoft|google)$"),
@@ -112,50 +122,66 @@ async def simulate_login_mode_change(
     users_affected = []
 
     async with get_async_session_maker()() as session:
-        if mode != "password" and current_mode in ("microsoft", "google") and current_mode != mode:
+        if (
+            mode != "password"
+            and current_mode in ("microsoft", "google")
+            and current_mode != mode
+        ):
             # Cambio da SSO a SSO
             users_without_pw = (
-                await session.execute(
-                    select(User).where(
-                        User.tenant_id == tenant,
-                        User.password_hash.is_(None),
-                        User.sso_migration_exempt == False,
-                        User.id != auth.user_row_id,
-                    ).where(
-                        ~(
-                            select(UserSsoIdentity.id)
-                            .where(
-                                UserSsoIdentity.user_id == User.id,
-                                UserSsoIdentity.tenant_id == tenant,
-                                UserSsoIdentity.provider == mode,
+                (
+                    await session.execute(
+                        select(User)
+                        .where(
+                            User.tenant_id == tenant,
+                            User.password_hash.is_(None),
+                            User.sso_migration_exempt.is_(False),
+                            User.id != auth.user_row_id,
+                        )
+                        .where(
+                            ~(
+                                select(UserSsoIdentity.id)
+                                .where(
+                                    UserSsoIdentity.user_id == User.id,
+                                    UserSsoIdentity.tenant_id == tenant,
+                                    UserSsoIdentity.provider == mode,
+                                )
+                                .correlate(User)
+                                .exists()
                             )
-                            .correlate(User)
-                            .exists()
                         )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         elif mode == "password" and current_mode != "password":
             # Cambio da SSO a password
             users_without_pw = (
-                await session.execute(
-                    select(User).where(
-                        User.tenant_id == tenant,
-                        User.password_hash.is_(None),
-                        User.sso_migration_exempt == False,
+                (
+                    await session.execute(
+                        select(User).where(
+                            User.tenant_id == tenant,
+                            User.password_hash.is_(None),
+                            User.sso_migration_exempt.is_(False),
+                        )
                     )
                 )
-            ).scalars().all()
+                .scalars()
+                .all()
+            )
         else:
             users_without_pw = []
 
         for u in users_without_pw:
-            users_affected.append({
-                "id": u.id,
-                "identifier": u.identifier,
-                "email": u.email,
-                "display_name": u.display_name,
-            })
+            users_affected.append(
+                {
+                    "id": u.id,
+                    "identifier": u.identifier,
+                    "email": u.email,
+                    "display_name": u.display_name,
+                }
+            )
 
     return {"affected_users": users_affected}
 
@@ -163,6 +189,7 @@ async def simulate_login_mode_change(
 # ---------------------------------------------------------------------------
 # PUT /admin/auth/login-mode
 # ---------------------------------------------------------------------------
+
 
 class SetLoginModeBody(BaseModel):
     mode: str  # "password" | "microsoft" | "google"
@@ -187,12 +214,17 @@ async def put_login_mode(
         )
     except ValueError as e:
         code = str(e)
-        status = 409 if code in (
-            "sso_revalidation_required",
-            "sso_admin_not_linked",
-            "migration_in_progress",
-            "provider_not_configured",
-        ) else 400
+        status = (
+            409
+            if code
+            in (
+                "sso_revalidation_required",
+                "sso_admin_not_linked",
+                "migration_in_progress",
+                "provider_not_configured",
+            )
+            else 400
+        )
         raise HTTPException(status, detail={"code": code})
 
     return result
@@ -201,6 +233,7 @@ async def put_login_mode(
 # ---------------------------------------------------------------------------
 # GET /admin/auth/sso-migration/users
 # ---------------------------------------------------------------------------
+
 
 @router.get("/sso-migration/users")
 async def list_migration_users(
@@ -225,7 +258,7 @@ async def list_migration_users(
         elif status == "migrated" and provider:
             stmt = select(User).where(
                 User.tenant_id == tenant,
-                User.sso_migration_exempt == False,  # noqa: E712
+                User.sso_migration_exempt.is_(False),  # noqa: E712
                 confirmed_identity_exists(tenant, provider, since),
             )
         elif status == "no_access" and provider:
@@ -237,7 +270,7 @@ async def list_migration_users(
                 .where(
                     User.tenant_id == tenant,
                     User.password_hash.is_(None),
-                    User.sso_migration_exempt == False,  # noqa: E712
+                    User.sso_migration_exempt.is_(False),  # noqa: E712
                 )
                 .where(
                     ~(
@@ -259,7 +292,7 @@ async def list_migration_users(
                     .where(
                         User.tenant_id == tenant,
                         User.password_hash.is_not(None),
-                        User.sso_migration_exempt == False,  # noqa: E712
+                        User.sso_migration_exempt.is_(False),  # noqa: E712
                     )
                     .where(~confirmed_identity_exists(tenant, provider, since))
                 )
@@ -271,14 +304,10 @@ async def list_migration_users(
 
         if q:
             like = f"%{q}%"
-            stmt = stmt.where(
-                (User.identifier.ilike(like)) | (User.email.ilike(like))
-            )
+            stmt = stmt.where((User.identifier.ilike(like)) | (User.email.ilike(like)))
 
         total_count = (
-            await session.execute(
-                select(func.count()).select_from(stmt.subquery())
-            )
+            await session.execute(select(func.count()).select_from(stmt.subquery()))
         ).scalar_one()
 
         stmt = stmt.order_by(User.identifier.asc())
@@ -304,13 +333,17 @@ async def list_migration_users(
 
             if status == "migrated" and provider:
                 identity = (
-                    await session.execute(
-                        select(UserSsoIdentity).where(
-                            UserSsoIdentity.user_id == u.id,
-                            UserSsoIdentity.provider == provider,
+                    (
+                        await session.execute(
+                            select(UserSsoIdentity).where(
+                                UserSsoIdentity.user_id == u.id,
+                                UserSsoIdentity.provider == provider,
+                            )
                         )
                     )
-                ).scalars().first()
+                    .scalars()
+                    .first()
+                )
                 if identity:
                     entry["identity_id"] = identity.id
                     entry["sso_email"] = identity.email
@@ -329,6 +362,7 @@ async def list_migration_users(
 # ---------------------------------------------------------------------------
 # POST /admin/auth/sso-migration/users/{id}/exempt
 # ---------------------------------------------------------------------------
+
 
 class ExemptBody(BaseModel):
     exempt: bool
@@ -364,6 +398,7 @@ async def set_user_exempt(
 # POST /admin/auth/temp-passwords
 # ---------------------------------------------------------------------------
 
+
 class TempPasswordsBody(BaseModel):
     user_ids: List[str]
 
@@ -393,6 +428,7 @@ async def admin_generate_temp_passwords(
 # ---------------------------------------------------------------------------
 # DELETE /admin/users/{id}/sso-identities/{identity_id}
 # ---------------------------------------------------------------------------
+
 
 @router.delete("/users/{user_id}/sso-identities/{identity_id}")
 async def unlink_sso_identity(
@@ -428,6 +464,7 @@ async def unlink_sso_identity(
 # ---------------------------------------------------------------------------
 # 2FA TOTP (solo login con password)
 # ---------------------------------------------------------------------------
+
 
 class SetTwoFactorBody(BaseModel):
     required: bool

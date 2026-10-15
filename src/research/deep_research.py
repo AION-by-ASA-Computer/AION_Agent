@@ -778,7 +778,9 @@ class DeepResearcher:
             self._emit(
                 phase="warning", message="Synthesis failed, keeping previous report"
             )
-            return current_report or findings_text  # keep the old report or seed with findings
+            return (
+                current_report or findings_text
+            )  # keep the old report or seed with findings
 
     # ------------------------------------------------------------------
     # DECIDE
@@ -862,7 +864,9 @@ class DeepResearcher:
             if clean_result and len(clean_result.split()) >= 30:
                 return clean_result
             if report and len(report.split()) > len((clean_result or "").split()):
-                logger.warning("Final report output too brief; falling back to synthesis report")
+                logger.warning(
+                    "Final report output too brief; falling back to synthesis report"
+                )
                 return report
             return clean_result or report
         except Exception as e:

@@ -114,11 +114,11 @@ async def handle_callback(
             raise ValueError("state_invalid")
         if auth_state.consumed_at:
             raise ValueError("state_invalid")
-            
+
         expires_at = auth_state.expires_at
         if expires_at.tzinfo is None:
             expires_at = expires_at.replace(tzinfo=timezone.utc)
-            
+
         if expires_at < now:
             raise ValueError("state_invalid")
 
@@ -129,7 +129,11 @@ async def handle_callback(
         purpose = auth_state.purpose
         return_to = auth_state.return_to
         nonce = auth_state.nonce
-        code_verifier = decrypt_value(auth_state.code_verifier_encrypted) if auth_state.code_verifier_encrypted else None
+        code_verifier = (
+            decrypt_value(auth_state.code_verifier_encrypted)
+            if auth_state.code_verifier_encrypted
+            else None
+        )
         target_user_id = auth_state.user_id
 
     # Per admin_validate il provider potrebbe non essere ancora abilitato (fix 0.1).

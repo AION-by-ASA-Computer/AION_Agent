@@ -423,7 +423,10 @@ async def approve_plan(
     if not res.get("ok"):
         err = str(res.get("error") or "")
         if err == "not_pending":
-            logger.info("approve_plan: plan %s already approved/resolved in DB/registry, proceeding to execution", plan_id)
+            logger.info(
+                "approve_plan: plan %s already approved/resolved in DB/registry, proceeding to execution",
+                plan_id,
+            )
             res = {"ok": True, "state": "approved", "plan": approved_payload}
         else:
             raise _http_from_resolve_result(res)
@@ -590,7 +593,10 @@ async def reject_plan(
     if not res.get("ok"):
         err = str(res.get("error") or "")
         if err == "not_pending":
-            logger.info("reject_plan: plan %s already resolved or not pending, updating DB to rejected directly", plan_id)
+            logger.info(
+                "reject_plan: plan %s already resolved or not pending, updating DB to rejected directly",
+                plan_id,
+            )
             res = {"ok": True, "state": "rejected"}
         else:
             raise _http_from_resolve_result(res)

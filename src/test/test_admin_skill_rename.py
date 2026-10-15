@@ -13,7 +13,8 @@ def _setup(monkeypatch, tmp_path):
     skills = tmp_path / "skills"
     skills.mkdir()
     (skills / "old_name.md").write_text(
-        "---\nname: old_name\ndescription: demo\ntags: [a]\n---\nBody\n", encoding="utf-8"
+        "---\nname: old_name\ndescription: demo\ntags: [a]\n---\nBody\n",
+        encoding="utf-8",
     )
     (skills / "other.md").write_text("---\nname: other\n---\nX\n", encoding="utf-8")
     reg = SkillRegistry(
@@ -21,15 +22,29 @@ def _setup(monkeypatch, tmp_path):
         curated_fallback_dir=str(tmp_path / "none"),
         generated_dir=str(tmp_path / "gen"),
     )
-    reg.curated_dir, reg.curated_fallback_dir, reg.generated_dir = skills, tmp_path / "none", tmp_path / "gen"
+    reg.curated_dir, reg.curated_fallback_dir, reg.generated_dir = (
+        skills,
+        tmp_path / "none",
+        tmp_path / "gen",
+    )
     reg.load_all()
     profiles = tmp_path / "profiles"
     profiles.mkdir()
     (profiles / "p1.yaml").write_text(
-        yaml.dump({"name": "p1", "skills": ["old_name", "other"], "critical_skills": ["old_name"], "mcp_servers": []}),
+        yaml.dump(
+            {
+                "name": "p1",
+                "skills": ["old_name", "other"],
+                "critical_skills": ["old_name"],
+                "mcp_servers": [],
+            }
+        ),
         encoding="utf-8",
     )
-    (profiles / "p2.yaml").write_text(yaml.dump({"name": "p2", "skills": ["other"], "mcp_servers": []}), encoding="utf-8")
+    (profiles / "p2.yaml").write_text(
+        yaml.dump({"name": "p2", "skills": ["other"], "mcp_servers": []}),
+        encoding="utf-8",
+    )
     pm = ProfileManager(profiles_dir=str(profiles))
     monkeypatch.setattr(admin, "skill_registry", reg)
     monkeypatch.setattr(admin, "profile_manager", pm)
@@ -44,7 +59,9 @@ async def test_rename_updates_file_and_profiles(monkeypatch, tmp_path):
     assert not (skills / "old_name.md").exists() and (skills / "new_name.md").exists()
     assert reg.skill_exists("new_name") and not reg.skill_exists("old_name")
     p1 = yaml.safe_load((profiles / "p1.yaml").read_text())
-    assert p1["skills"] == ["new_name", "other"] and p1["critical_skills"] == ["new_name"]
+    assert p1["skills"] == ["new_name", "other"] and p1["critical_skills"] == [
+        "new_name"
+    ]
 
 
 @pytest.mark.anyio
@@ -66,7 +83,9 @@ async def test_rename_does_not_resurrect_shipped_copy(monkeypatch, tmp_path):
     reg, profiles, skills = _setup(monkeypatch, tmp_path)
     std = tmp_path / "std"
     std.mkdir()
-    (std / "old_name.md").write_text("---\nname: old_name\n---\nShipped\n", encoding="utf-8")
+    (std / "old_name.md").write_text(
+        "---\nname: old_name\n---\nShipped\n", encoding="utf-8"
+    )
     reg.curated_fallback_dir = std
     reg.load_all()
     await admin.rename_skill("old_name", admin.SkillRename(new_name="new_name"))

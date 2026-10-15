@@ -337,9 +337,7 @@ async def patch_integration_preference(
     )
     from src.runtime.mcp_credential_invalidate import invalidate_mcp_credentials_runtime
 
-    await invalidate_mcp_credentials_runtime(
-        user_id, server_slug, tenant_id=tenant
-    )
+    await invalidate_mcp_credentials_runtime(user_id, server_slug, tenant_id=tenant)
     clear_integrations_cache()
     return {"ok": True, "server_slug": server_slug, "is_active": body.is_active}
 
@@ -460,9 +458,6 @@ def _oauth_dynamic_registration_enabled() -> bool:
         "true",
         "yes",
     )
-
-
-
 
 
 def _default_oauth_redirect_uri() -> str:

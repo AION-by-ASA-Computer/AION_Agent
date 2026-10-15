@@ -52,7 +52,14 @@ async def _env(tmp_path: Path, monkeypatch):
             await s.commit()
         lm._invalidate_cache("default")
 
-    yield {"sm": sm, "uid": uid, "set_required": set_required, "al": al, "am": am, "totp": totp}
+    yield {
+        "sm": sm,
+        "uid": uid,
+        "set_required": set_required,
+        "al": al,
+        "am": am,
+        "totp": totp,
+    }
     await eng.dispose()
 
 
@@ -97,7 +104,9 @@ async def test_enroll_then_verify_flow(env, monkeypatch):
     secret = start["secret"]
 
     with pytest.raises(HTTPException) as e:
-        await am.enroll_confirm(am.MfaCodeBody(mfa_token=res["mfa_token"], code="000000"))
+        await am.enroll_confirm(
+            am.MfaCodeBody(mfa_token=res["mfa_token"], code="000000")
+        )
     assert e.value.status_code == 401
 
     code = pyotp.TOTP(secret).now()
@@ -129,10 +138,14 @@ async def test_lockout_after_failures(env, monkeypatch):
     await am.enroll_start(am.MfaTokenBody(mfa_token=res["mfa_token"]))
     for _ in range(5):
         with pytest.raises(HTTPException) as e:
-            await am.enroll_confirm(am.MfaCodeBody(mfa_token=res["mfa_token"], code="123456"))
+            await am.enroll_confirm(
+                am.MfaCodeBody(mfa_token=res["mfa_token"], code="123456")
+            )
         assert e.value.status_code == 401
     with pytest.raises(HTTPException) as e:
-        await am.enroll_confirm(am.MfaCodeBody(mfa_token=res["mfa_token"], code="123456"))
+        await am.enroll_confirm(
+            am.MfaCodeBody(mfa_token=res["mfa_token"], code="123456")
+        )
     assert e.value.status_code == 429
 
 
@@ -142,19 +155,29 @@ async def test_old_token_blocked_until_enrolled_and_reset(env, monkeypatch):
     old = (await _login(al))["access_token"]
     await env["set_required"](True)
     with pytest.raises(HTTPException) as e:
-        await al.require_chat_auth(authorization=f"Bearer {old}", x_api_key=None,
-                                   x_chat_ui_secret=None, access_token=None)
+        await al.require_chat_auth(
+            authorization=f"Bearer {old}",
+            x_api_key=None,
+            x_chat_ui_secret=None,
+            access_token=None,
+        )
     assert e.value.status_code == 403
     assert e.value.detail["code"] == "mfa_enrollment_required"
 
     # enroll -> old token riabilitato
     res = await _login(al)
-    secret = (await am.enroll_start(am.MfaTokenBody(mfa_token=res["mfa_token"])))["secret"]
+    secret = (await am.enroll_start(am.MfaTokenBody(mfa_token=res["mfa_token"])))[
+        "secret"
+    ]
     await am.enroll_confirm(
         am.MfaCodeBody(mfa_token=res["mfa_token"], code=pyotp.TOTP(secret).now())
     )
-    ident = await al.require_chat_auth(authorization=f"Bearer {old}", x_api_key=None,
-                                       x_chat_ui_secret=None, access_token=None)
+    ident = await al.require_chat_auth(
+        authorization=f"Bearer {old}",
+        x_api_key=None,
+        x_chat_ui_secret=None,
+        access_token=None,
+    )
     assert ident.via == "chat_token"
 
     # reset admin -> torna in enroll
@@ -216,7 +239,9 @@ async def test_totp_kept_and_required_during_sso_migration(env, monkeypatch):
     al, am = env["al"], env["am"]
     await env["set_required"](True)
     res = await _login(al)
-    secret = (await am.enroll_start(am.MfaTokenBody(mfa_token=res["mfa_token"])))["secret"]
+    secret = (await am.enroll_start(am.MfaTokenBody(mfa_token=res["mfa_token"])))[
+        "secret"
+    ]
     await am.enroll_confirm(
         am.MfaCodeBody(mfa_token=res["mfa_token"], code=pyotp.TOTP(secret).now())
     )

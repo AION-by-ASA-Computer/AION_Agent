@@ -4,6 +4,7 @@ import os
 from typing import Optional
 from fastapi import Request
 
+
 def _is_loopback_host_url(url: str) -> bool:
     from urllib.parse import urlparse
 

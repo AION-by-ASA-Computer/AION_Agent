@@ -99,6 +99,7 @@ async def _create_handoff_code(
 # Public endpoint: solo purpose=login (fix 0.2)
 # ---------------------------------------------------------------------------
 
+
 @router.get("/start")
 async def sso_start(
     request: Request,
@@ -127,13 +128,16 @@ async def sso_start(
         return RedirectResponse(url)
     except Exception as e:
         logger.warning("Error starting SSO login: %s", e)
-        base = (admin_base_url(request) if is_admin else chat_base_url(request)).rstrip("/")
+        base = (admin_base_url(request) if is_admin else chat_base_url(request)).rstrip(
+            "/"
+        )
         return RedirectResponse(f"{base}/login?error=sso_start_failed")
 
 
 # ---------------------------------------------------------------------------
 # Authenticated endpoint per link (fix 0.2)
 # ---------------------------------------------------------------------------
+
 
 class LinkStartBody(BaseModel):
     return_to: Optional[str] = "/"
@@ -156,6 +160,7 @@ async def sso_link_start(
 
     # Recupera il provider attivo
     from src.auth.sso.config_service import get_active_provider
+
     config = await get_active_provider(_tenant_id())
     if not config:
         raise HTTPException(400, detail={"code": "sso_not_configured"})
@@ -179,6 +184,7 @@ async def sso_link_start(
 # ---------------------------------------------------------------------------
 # Callback unificato
 # ---------------------------------------------------------------------------
+
 
 @router.get("/callback")
 async def sso_callback(
@@ -256,7 +262,7 @@ async def sso_callback(
   <p>Puoi chiudere questa finestra e tornare ad AION.</p>
   <script>
     try {{
-      var origin = {repr(admin_origin) if admin_origin else '\"*\"'};
+      var origin = {repr(admin_origin) if admin_origin else '"*"'};
       if (window.opener) {{
         window.opener.postMessage({{type: "aion-sso-validated"}}, origin);
       }}
@@ -347,7 +353,9 @@ async def sso_callback(
         except ValueError as e:
             error_code = str(e)
             logger.warning("SSO admin login error: %s", error_code)
-            return RedirectResponse(f"{admin_base}/login?error={quote(error_code, safe='')}")
+            return RedirectResponse(
+                f"{admin_base}/login?error={quote(error_code, safe='')}"
+            )
         except Exception as e:
             logger.exception("Unexpected SSO admin login error: %s", e)
             return RedirectResponse(f"{admin_base}/login?error=sso_failed")
@@ -365,7 +373,9 @@ async def sso_callback(
             "access_token": tok,
             "user_id": sanitize_user_id(str(user_dict["identifier"])),
             "identifier": str(user_dict["identifier"]),
-            "display_name": str(user_dict.get("display_name") or user_dict["identifier"]),
+            "display_name": str(
+                user_dict.get("display_name") or user_dict["identifier"]
+            ),
             "roles": roles,
             "sso_link_required": False,
             "provider": provider_config["provider"],
@@ -428,6 +438,7 @@ async def sso_callback(
 # Exchange: monouso, TTL 60s, restituisce il token (fix 0.4)
 # ---------------------------------------------------------------------------
 
+
 class ExchangeBody(BaseModel):
     code: str
 
@@ -442,10 +453,14 @@ async def sso_exchange(body: ExchangeBody):
 
     async with get_async_session_maker()() as session:
         state = (
-            await session.execute(
-                select(SsoAuthState).where(SsoAuthState.state_hash == code_hash)
+            (
+                await session.execute(
+                    select(SsoAuthState).where(SsoAuthState.state_hash == code_hash)
+                )
             )
-        ).scalars().first()
+            .scalars()
+            .first()
+        )
 
         if not state or state.kind != "handoff":
             raise HTTPException(400, detail={"code": "invalid_code"})

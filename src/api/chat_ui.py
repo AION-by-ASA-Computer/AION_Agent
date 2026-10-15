@@ -145,7 +145,9 @@ async def list_conversations_chat_ui(
             .limit(limit * 4 if exclude_scheduled else limit)
         )
         rows = (await session.execute(q)).scalars().all()
-        thread_counts = await _thread_counts(session, tenant, user_id, [r.id for r in rows])
+        thread_counts = await _thread_counts(
+            session, tenant, user_id, [r.id for r in rows]
+        )
     data = []
     for r in rows:
         meta = json.loads(r.metadata_json or "{}")
@@ -209,7 +211,9 @@ def _serialize_thread(r: Conversation) -> Dict[str, Any]:
     }
 
 
-async def _thread_counts(session, tenant: str, user_id: str, parent_ids: List[str]) -> Dict[str, int]:
+async def _thread_counts(
+    session, tenant: str, user_id: str, parent_ids: List[str]
+) -> Dict[str, int]:
     if not parent_ids:
         return {}
     q = (
@@ -299,23 +303,33 @@ async def create_side_thread_chat_ui(
             raise HTTPException(404, "Parent message not found")
 
         existing_rows = (
-            await session.execute(
-                select(Conversation).where(
-                    Conversation.tenant_id == tenant,
-                    Conversation.user_id == user_id,
-                    Conversation.archived_at.is_(None),
-                    Conversation.parent_conversation_id == conv_id,
-                    Conversation.parent_message_id == body.parent_message_id,
+            (
+                await session.execute(
+                    select(Conversation).where(
+                        Conversation.tenant_id == tenant,
+                        Conversation.user_id == user_id,
+                        Conversation.archived_at.is_(None),
+                        Conversation.parent_conversation_id == conv_id,
+                        Conversation.parent_message_id == body.parent_message_id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for r in existing_rows:
             if _parse_anchor(r.anchor_json).get("quote") == quote:
                 return {**_serialize_thread(r), "created": False}
 
         parent_meta = json.loads(parent.metadata_json or "{}")
         meta: Dict[str, Any] = {"source": "side_thread"}
-        for key in ("sql_query_project", "agent_mode", "thinking_enabled", "reasoning_effort", "llm_provider_name"):
+        for key in (
+            "sql_query_project",
+            "agent_mode",
+            "thinking_enabled",
+            "reasoning_effort",
+            "llm_provider_name",
+        ):
             if parent_meta.get(key) is not None:
                 meta[key] = parent_meta[key]
         child = Conversation(
@@ -341,7 +355,9 @@ async def create_side_thread_chat_ui(
 
         sync_parent_uploads_to_child(conv_id, out["id"])
     except Exception as e:
-        logger.warning("Side thread %s: upload sync from %s failed: %s", out["id"], conv_id, e)
+        logger.warning(
+            "Side thread %s: upload sync from %s failed: %s", out["id"], conv_id, e
+        )
 
     return {**out, "created": True}
 
@@ -601,7 +617,9 @@ async def get_conversation_chat_ui(
             "parent_conversation_id": r.parent_conversation_id,
             "parent_message_id": r.parent_message_id,
             "parent_title": parent_title,
-            "anchor": _parse_anchor(r.anchor_json) if r.parent_conversation_id else None,
+            "anchor": _parse_anchor(r.anchor_json)
+            if r.parent_conversation_id
+            else None,
         }
 
 
@@ -1008,13 +1026,17 @@ async def delete_conversation_chat_ui(
         r.archived_at = now
         session.add(r)
         children = (
-            await session.execute(
-                select(Conversation).where(
-                    Conversation.parent_conversation_id == conv_id,
-                    Conversation.archived_at.is_(None),
+            (
+                await session.execute(
+                    select(Conversation).where(
+                        Conversation.parent_conversation_id == conv_id,
+                        Conversation.archived_at.is_(None),
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for child in children:
             child.archived_at = now
             session.add(child)

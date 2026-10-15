@@ -887,34 +887,45 @@ async def rename_skill(name: str, body: SkillRename):
     if new == name:
         return {"status": "unchanged", "name": name, "profiles": []}
     if skill_registry.skill_exists(new):
-        raise HTTPException(status_code=409, detail=f"A skill named '{new}' already exists")
+        raise HTTPException(
+            status_code=409, detail=f"A skill named '{new}' already exists"
+        )
     fallback = skill_registry.curated_fallback_dir.resolve()
-    from_fallback = fallback == path.resolve().parent or fallback in path.resolve().parents
+    from_fallback = (
+        fallback == path.resolve().parent or fallback in path.resolve().parents
+    )
 
     roots = {
         skill_registry.curated_dir.resolve(),
         skill_registry.generated_dir.resolve(),
     }
     is_package = (
-        path.name.lower() in ("skill.md", "index.md") and path.parent.resolve() not in roots
+        path.name.lower() in ("skill.md", "index.md")
+        and path.parent.resolve() not in roots
     )
     if from_fallback:
         # Shipped skills are read-only: copy into the writable dir; the old name gets hidden below.
         new_file = skill_registry.curated_dir / f"{new}.md"
         if new_file.exists():
-            raise HTTPException(status_code=409, detail=f"'{new_file.name}' already exists on disk")
+            raise HTTPException(
+                status_code=409, detail=f"'{new_file.name}' already exists on disk"
+            )
         new_file.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(path, new_file)
     elif is_package:
         dest_dir = path.parent.with_name(new)
         if dest_dir.exists():
-            raise HTTPException(status_code=409, detail=f"'{dest_dir.name}' already exists on disk")
+            raise HTTPException(
+                status_code=409, detail=f"'{dest_dir.name}' already exists on disk"
+            )
         path.parent.rename(dest_dir)
         new_file = dest_dir / path.name
     else:
         new_file = path.with_name(f"{new}.md")
         if new_file.exists():
-            raise HTTPException(status_code=409, detail=f"'{new_file.name}' already exists on disk")
+            raise HTTPException(
+                status_code=409, detail=f"'{new_file.name}' already exists on disk"
+            )
         path.rename(new_file)
 
     skill_registry.unhide(new)
@@ -2293,7 +2304,11 @@ async def get_market_config(
     ):
         runtime = connections[0].get("runtime") or "node"
         conn_dep = (connections[0].get("deploymentUrl") or "").strip()
-        if conn_dep and "run.tools" not in conn_dep.lower() and "smithery.ai" not in conn_dep.lower():
+        if (
+            conn_dep
+            and "run.tools" not in conn_dep.lower()
+            and "smithery.ai" not in conn_dep.lower()
+        ):
             deployment_url = conn_dep
         if connections[0].get("type") in ("http", "sse") and deployment_url:
             is_remote = True
@@ -4043,32 +4058,51 @@ async def list_conversations_global(limit: int = 200):
         roots = list(
             (
                 await session.execute(
-                    select(Conversation).where(is_root).order_by(Conversation.updated_at.desc()).limit(limit)
+                    select(Conversation)
+                    .where(is_root)
+                    .order_by(Conversation.updated_at.desc())
+                    .limit(limit)
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
         )
         truncated = len(roots) >= limit
         recent_threads = (
-            await session.execute(
-                select(Conversation)
-                .where(Conversation.parent_conversation_id.is_not(None))
-                .order_by(Conversation.updated_at.desc())
-                .limit(limit)
+            (
+                await session.execute(
+                    select(Conversation)
+                    .where(Conversation.parent_conversation_id.is_not(None))
+                    .order_by(Conversation.updated_at.desc())
+                    .limit(limit)
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         root_ids = {r.id for r in roots}
         missing = {t.parent_conversation_id for t in recent_threads} - root_ids
         if missing:
             roots += (
-                await session.execute(select(Conversation).where(Conversation.id.in_(missing)))
-            ).scalars().all()
+                (
+                    await session.execute(
+                        select(Conversation).where(Conversation.id.in_(missing))
+                    )
+                )
+                .scalars()
+                .all()
+            )
             root_ids = {r.id for r in roots}
         threads = (
             (
                 await session.execute(
-                    select(Conversation).where(Conversation.parent_conversation_id.in_(root_ids))
+                    select(Conversation).where(
+                        Conversation.parent_conversation_id.in_(root_ids)
+                    )
                 )
-            ).scalars().all()
+            )
+            .scalars()
+            .all()
             if root_ids
             else []
         )

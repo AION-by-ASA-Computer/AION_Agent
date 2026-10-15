@@ -33,7 +33,7 @@ async def list_enabled_llm_providers(
                     select(LlmProvider)
                     .where(
                         LlmProvider.tenant_id == tenant_id,
-                        LlmProvider.enabled == True,
+                        LlmProvider.enabled.is_(True),
                     )
                     .order_by(LlmProvider.is_default.desc(), LlmProvider.display_name)
                 )

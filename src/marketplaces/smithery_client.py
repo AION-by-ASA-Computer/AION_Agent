@@ -70,8 +70,16 @@ def has_smithery_proprietary_auth(s: Dict[str, Any], q_name: str = "") -> bool:
         for conn in connections:
             if isinstance(conn, dict):
                 c_url = (conn.get("deploymentUrl") or "").lower()
-                c_props = conn.get("configSchema", {}).get("properties") if isinstance(conn.get("configSchema"), dict) else None
-                if "run.tools" in c_url and not c_props and not _is_github_url(raw_repo):
+                c_props = (
+                    conn.get("configSchema", {}).get("properties")
+                    if isinstance(conn.get("configSchema"), dict)
+                    else None
+                )
+                if (
+                    "run.tools" in c_url
+                    and not c_props
+                    and not _is_github_url(raw_repo)
+                ):
                     return True
 
     return False
@@ -137,7 +145,12 @@ def search_smithery_servers(
             elif _is_github_url(raw_hp):
                 repo_url = raw_hp
                 is_github = True
-            elif not raw_hp and "/" in q_name and not q_name.startswith("@") and not q_name.startswith("smithery/"):
+            elif (
+                not raw_hp
+                and "/" in q_name
+                and not q_name.startswith("@")
+                and not q_name.startswith("smithery/")
+            ):
                 repo_url = f"https://github.com/{q_name}"
                 is_github = True
             elif raw_hp:

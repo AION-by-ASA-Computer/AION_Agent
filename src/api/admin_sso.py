@@ -17,8 +17,10 @@ from src.auth.sso.providers import get_descriptor
 
 router = APIRouter(prefix="/admin/sso/providers", tags=["admin_sso"])
 
+
 def _tenant_id() -> str:
     return (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+
 
 @router.get("")
 async def list_configured_providers(
@@ -76,6 +78,7 @@ async def put_provider(
         raise HTTPException(400, detail=str(e))
     return {"ok": True}
 
+
 @router.post("/{provider}/validate/start")
 async def start_provider_validation(
     request: Request,
@@ -84,6 +87,7 @@ async def start_provider_validation(
 ) -> Dict[str, Any]:
     from src.auth.sso.flow import build_authorize_url
     from src.api.auth_sso import _get_redirect_uri
+
     # Fix 0.1: usa get_provider(require_enabled=False) — la validazione precede l'abilitazione.
     # Fix 0.2: user_id è sempre auth.user_row_id (mai dalla query string).
     try:

@@ -200,6 +200,7 @@ async def login(body: LoginBody):
                 password_login_visible,
                 user_needs_link,
             )
+
             settings = await get_login_settings(tenant)
             login_mode = settings.get("login_mode", "password")
 
@@ -292,6 +293,7 @@ async def me(authorization: Optional[str] = Header(None)):
     sso_provider_name = None
     try:
         from src.auth.sso.login_mode import get_login_settings, user_needs_link
+
         settings = await get_login_settings(tenant)
         sso_provider_name = settings.get("sso_provider")
         if sso_provider_name:
@@ -334,7 +336,8 @@ async def me(authorization: Optional[str] = Header(None)):
             "email": u.email,
             "metadata": meta,
             "roles": get_roles(u),
-            "must_change_password": bool(getattr(u, "must_change_password", False)) and not sso_linked,
+            "must_change_password": bool(getattr(u, "must_change_password", False))
+            and not sso_linked,
             "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
             "sso_link_required": sso_link_required,
             "sso_linked": sso_linked,
@@ -453,12 +456,12 @@ async def auth_status():
             get_login_settings,
             password_login_visible,
         )
+
         settings = await get_login_settings(tenant)
         login_mode = settings["login_mode"]
         sso_origin = settings["sso_origin"]
-        sso_migration_active = (
-            sso_origin == "migration"
-            and not settings.get("migration_completed_at")
+        sso_migration_active = sso_origin == "migration" and not settings.get(
+            "migration_completed_at"
         )
         password_login_vis = await password_login_visible(tenant)
         if login_mode != "password":
@@ -468,6 +471,7 @@ async def auth_status():
         logger.warning("auth_status SSO check failed: %s", _e)
         # Fallback al comportamento precedente
         from src.auth.sso.config_service import public_view
+
         sso_config = await public_view(tenant)
         if sso_config and sso_config.get("enabled") and sso_config.get("validated_at"):
             if password_auth_enabled():
@@ -528,10 +532,16 @@ async def _admin_with_password_exists(tenant: str) -> bool:
 
     async with get_async_session_maker()() as session:
         users = (
-            await session.execute(
-                select(User).where(User.tenant_id == tenant, User.password_hash.is_not(None))
+            (
+                await session.execute(
+                    select(User).where(
+                        User.tenant_id == tenant, User.password_hash.is_not(None)
+                    )
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
     return any(has_role(u, "admin") for u in users)
 
 
@@ -689,6 +699,7 @@ async def _resolve_chat_identity(
     if user_row_id and enforce_user_gates:
         try:
             from src.auth.sso.login_mode import user_needs_link
+
             tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
             needs_link = await user_needs_link(tenant, user_row_id)
             if needs_link:

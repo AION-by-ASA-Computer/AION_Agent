@@ -34,7 +34,9 @@ async def _reset_unified_db(monkeypatch, tmp_path: Path) -> None:
 
 async def _seed_parent() -> None:
     bridge = UnifiedHistoryBridge()
-    await bridge.add_message("parent", "user", "Come funziona Raft?", user_id="u1", message_id="m-user")
+    await bridge.add_message(
+        "parent", "user", "Come funziona Raft?", user_id="u1", message_id="m-user"
+    )
     await bridge.add_message(
         "parent",
         "assistant",
@@ -55,7 +57,11 @@ def _body(quote="quorum", **kw):
 
 async def _list(**kw):
     return await list_conversations_chat_ui(
-        limit=40, exclude_scheduled=True, include_threads=False, x_aion_user_id="u1", **kw
+        limit=40,
+        exclude_scheduled=True,
+        include_threads=False,
+        x_aion_user_id="u1",
+        **kw,
     )
 
 
@@ -119,7 +125,9 @@ def test_delete_parent_archives_threads(monkeypatch, tmp_path):
 
         await delete_conversation_chat_ui("parent", x_aion_user_id="u1")
 
-        assert (await list_side_threads_chat_ui("parent", x_aion_user_id="u1"))["data"] == []
+        assert (await list_side_threads_chat_ui("parent", x_aion_user_id="u1"))[
+            "data"
+        ] == []
         everything = await list_conversations_chat_ui(
             limit=40, exclude_scheduled=True, include_threads=True, x_aion_user_id="u1"
         )
@@ -152,10 +160,15 @@ def test_admin_global_list_links_threads_to_parent(monkeypatch, tmp_path):
         await _reset_unified_db(monkeypatch, tmp_path)
         await _seed_parent()
         bridge = UnifiedHistoryBridge()
-        await bridge.add_message("other", "user", "ciao", user_id="u1", message_id="m-other")
+        await bridge.add_message(
+            "other", "user", "ciao", user_id="u1", message_id="m-other"
+        )
         t1 = await create_side_thread_chat_ui("parent", _body(), x_aion_user_id="u1")
 
-        rows = {c["id"]: c for c in (await list_conversations_global(limit=200))["conversations"]}
+        rows = {
+            c["id"]: c
+            for c in (await list_conversations_global(limit=200))["conversations"]
+        }
         assert rows[t1["id"]]["parent_conversation_id"] == "parent"
         assert rows[t1["id"]]["parent_message_id"] == "m-asst"
         assert rows[t1["id"]]["anchor_quote"] == "quorum"

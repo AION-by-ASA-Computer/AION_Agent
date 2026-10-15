@@ -862,14 +862,20 @@ class SsoProvider(Base):
     client_secret_encrypted: Mapped[Optional[str]] = mapped_column(Text)
     directory_tenant_id: Mapped[Optional[str]] = mapped_column(String(64))
     allowed_domains: Mapped[Optional[str]] = mapped_column(Text)
-    auto_provision: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
-    default_roles: Mapped[str] = mapped_column(Text, default='["user"]', server_default='["user"]')
+    auto_provision: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1"
+    )
+    default_roles: Mapped[str] = mapped_column(
+        Text, default='["user"]', server_default='["user"]'
+    )
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     validated_by_user_id: Mapped[Optional[str]] = mapped_column(
         String(64), ForeignKey("users.id")
     )
-    client_secret_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    client_secret_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -878,7 +884,9 @@ class SsoProvider(Base):
     )
 
     __table_args__ = (
-        UniqueConstraint("tenant_id", "provider", name="uq_sso_providers_tenant_provider"),
+        UniqueConstraint(
+            "tenant_id", "provider", name="uq_sso_providers_tenant_provider"
+        ),
     )
 
 
@@ -890,14 +898,19 @@ class UserSsoIdentity(Base):
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
     user_id: Mapped[str] = mapped_column(
-        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
     provider: Mapped[str] = mapped_column(String(32), nullable=False)
     subject: Mapped[str] = mapped_column(String(256), nullable=False)
     email: Mapped[Optional[str]] = mapped_column(String(256))
     display_name: Mapped[Optional[str]] = mapped_column(String(256))
     access_token_encrypted: Mapped[Optional[str]] = mapped_column(Text)
-    token_expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    token_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
     scope: Mapped[Optional[str]] = mapped_column(Text)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
@@ -909,11 +922,17 @@ class UserSsoIdentity(Base):
 
     __table_args__ = (
         UniqueConstraint(
-            "tenant_id", "provider", "subject", name="uq_user_sso_identities_provider_subject"
+            "tenant_id",
+            "provider",
+            "subject",
+            name="uq_user_sso_identities_provider_subject",
         ),
         # Fix 0.10: impedisce a un utente di avere due identità dello stesso provider.
         UniqueConstraint(
-            "tenant_id", "user_id", "provider", name="uq_user_sso_identities_user_provider"
+            "tenant_id",
+            "user_id",
+            "provider",
+            name="uq_user_sso_identities_user_provider",
         ),
     )
 
@@ -932,7 +951,9 @@ class SsoAuthState(Base):
     user_id: Mapped[Optional[str]] = mapped_column(String(64))
     return_to: Mapped[Optional[str]] = mapped_column(String(2048))
     payload_json: Mapped[Optional[str]] = mapped_column(Text)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
     consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
 
