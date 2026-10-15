@@ -880,6 +880,9 @@ async def rename_skill(name: str, body: SkillRename):
             status_code=400,
             detail="Invalid name: use lowercase letters, digits, '_' or '-'.",
         )
+    # Belt-and-suspenders: strip any path component so `new` can never be
+    # anything but a bare filename, regardless of what the regex above allows.
+    new = os.path.basename(new)
     skill_registry.reload()
     path = skill_registry.get_skill_path(name)
     if not path:
