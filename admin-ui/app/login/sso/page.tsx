@@ -15,7 +15,15 @@ let started = false;
 
 /** Navigazione completa: il gate e la cache di stato ripartono da zero. */
 function go(path: string) {
-  const safe = path.startsWith("/") && !path.startsWith("//") && !path.includes("\\") ? path : "/";
+  let safe = "/";
+  try {
+    const dest = new URL(path, window.location.origin);
+    if (dest.origin === window.location.origin) {
+      safe = dest.pathname + dest.search + dest.hash;
+    }
+  } catch {
+    safe = "/";
+  }
   window.location.replace(adminPath(safe));
 }
 

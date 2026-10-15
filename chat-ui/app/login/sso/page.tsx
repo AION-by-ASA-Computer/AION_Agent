@@ -56,10 +56,16 @@ export default function SsoExchangePage() {
             // L'utente deve fare il link, la dashboard mostrerà il modale
             window.location.href = "/";
           } else {
-            window.location.href =
-              returnTo.startsWith("/") && !returnTo.startsWith("//") && !returnTo.includes("\\")
-                ? returnTo
-                : "/";
+            let safeReturnTo = "/";
+            try {
+              const dest = new URL(returnTo, window.location.origin);
+              if (dest.origin === window.location.origin) {
+                safeReturnTo = dest.pathname + dest.search + dest.hash;
+              }
+            } catch {
+              safeReturnTo = "/";
+            }
+            window.location.href = safeReturnTo;
           }
         } else {
           setError("Risposta non valida dal server.");
