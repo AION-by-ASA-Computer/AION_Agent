@@ -15,7 +15,8 @@ let started = false;
 
 /** Navigazione completa: il gate e la cache di stato ripartono da zero. */
 function go(path: string) {
-  window.location.replace(adminPath(path));
+  const safe = path.startsWith("/") && !path.startsWith("//") && !path.includes("\\") ? path : "/";
+  window.location.replace(adminPath(safe));
 }
 
 /** Riceve il codice di handoff da /auth/sso/callback (purpose=admin_login). */
