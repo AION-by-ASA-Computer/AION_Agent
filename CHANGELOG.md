@@ -5,6 +5,38 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.6.2...v1.7.0) (2026-10-16)
+
+
+### Features
+
+* add admin settings, user management, and security components with internationalization updates ([7bb05d6](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/7bb05d6fed57fa44b812aad040dfdd981340370f))
+* add admin studio components, internationalization, and skill management features ([a63bf5a](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/a63bf5acc88f45707688d4b65b9e8c07145322c8))
+* add admin support for viewing and navigating side threads and p… ([a106359](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/a1063593aa9ba81776b0c334503a1db8f398dca7))
+* add admin support for viewing and navigating side threads and parent conversations ([645ba6f](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/645ba6fa0e99afff7be29abef3516eb83c65910d))
+* add diagnostics and metrics monitoring UI components with internationalization support ([c744d5c](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/c744d5cae103911d85a4ec1ce13244d211d11304))
+* add run history and conversation transcript details to scheduled jobs UI ([908044c](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/908044ca83d5fa5d7023b7cf7babaa095018e483))
+* add side threads support for nested conversations and contextual messaging ([8d775b5](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/8d775b5f772e0152dbb3553ce0a594c2f9e0187f))
+* expose each profile as an OpenAI-compatible model ([88898f6](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/88898f64a52db752aece41374c387eaed6e386fa))
+* implement administration dashboard with live metrics, LLM probes, and system health overview ([0c01feb](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/0c01feb196fb2729efb178a299768b13ccabe570))
+* merge ui-update-pre-main work into main (threads/branches, MCP hub, admin UI) ([1e10c87](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/1e10c8780b8e132e576275733aca9e3ba10cd3ce))
+* refactor diagnostics and metrics pages with new modular components and localized UI strings ([191bb9e](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/191bb9ef1bf38bb77d25ff7d7fb9b8b3665bda56))
+* update memory page layout, remove integrations navigation, and update localizations ([94242ad](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/94242ada75466891c9c19ec13e3e6ac897a2c80a))
+* update tool loading and search protocols for improved functionality ([aa0d7e0](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/aa0d7e0d9ec75d2583e73884408a783d29db2243))
+
+
+### Bug Fixes
+
+* add comprehensive hub state management hook for admin UI components ([5349191](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/5349191d50d5f77ed8ed4a1c529495f76d1144ca))
+* address CodeQL findings on PR [#132](https://github.com/AION-by-ASA-Computer/AION_Agent/issues/132) (open redirect, path traversal, info disclosure) ([e245a0e](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/e245a0ea397de98276cf12bb521988f316dddb6c))
+* inline path-containment guard and bump PyJWT (CI follow-up) ([a1303ac](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/a1303ac6442752073bce7bce3f6a576d7c1b9b8d))
+* inline the return_to guard at the redirect sink (CodeQL follow-up) ([2c90c1e](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/2c90c1e4a3d45cea62d341e24dccf04e04722061))
+* redesign memory project details modal with tabs, edit forms, and updated member management ui ([dc8e340](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/dc8e340328c1d92d2733233079040c17438816fd))
+* resolve ruff lint/format failures from PR [#132](https://github.com/AION-by-ASA-Computer/AION_Agent/issues/132) CI ([e9d08a1](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/e9d08a1befb8b8c298a5d91b03cf2b9eec6951f6))
+* strip path components from skill rename target (CodeQL follow-up) ([f6b4b41](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/f6b4b41e66e3b2eb387096f93285fd2605da1930))
+* use a realpath+startswith containment guard for skill rename paths ([f4271a6](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/f4271a63a644fd79e667ff70e8698f990409fad0))
+* validate return_to with URL/origin comparison instead of string checks ([ef51f5f](https://github.com/AION-by-ASA-Computer/AION_Agent/commit/ef51f5f3c1f029ef7868e31ba65889cff2435f59))
+
 ## [1.6.2](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.6.1...v1.6.2) (2026-10-12)
 
 
