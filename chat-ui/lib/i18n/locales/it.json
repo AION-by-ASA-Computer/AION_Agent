@@ -11,15 +11,16 @@
   },
   "settings": {
     "title": "Impostazioni Utente",
-    "subtitle": "Gestisci profilo, aspetto, sicurezza e istruzioni personalizzate.",
+    "subtitle": "Gestisci profilo, preferenze, sicurezza e istruzioni personalizzate.",
     "back": "Torna indietro",
     "tab": {
       "account": "Profilo & Account",
       "usermd": "Profili",
       "profile": "Profilo",
-      "appearance": "Aspetto",
+      "appearance": "Preferenze",
       "security": "Sicurezza",
       "instructions": "Istruzioni",
+      "tunings": "Tuning e parametri",
       "runtime": "Runtime",
       "presets": "Preset"
     },
@@ -30,13 +31,12 @@
       "upload_photo": "Carica foto",
       "remove_photo": "Rimuovi foto",
       "avatar_too_large": "L'immagine deve essere inferiore a 256 KB.",
-      "appearance_saved": "Aspetto profilo aggiornato.",
+      "appearance_saved": "Preferenze profilo aggiornate.",
       "username_hint": "Identificativo di accesso. Deve essere univoco.",
-      "shortcuts_title": "Collegamenti rapidi",
       "shortcuts_desc": "Accesso veloce alle sezioni principali dell'app."
     },
     "appearance": {
-      "title": "Aspetto",
+      "title": "Preferenze",
       "desc": "Tema dell'interfaccia, dimensione testo e lingua dell'applicazione.",
       "theme_label": "Tema",
       "theme_desc": "Scegli tra modalità chiara o scura.",
@@ -106,6 +106,10 @@
         "saving": "Salvataggio..."
       }
     },
+    "tunings": {
+      "title": "Tuning e parametri",
+      "desc": "Configura i parametri del modello, controlli di generazione, step di esecuzione e preset runtime."
+    },
     "runtime": {
       "loading": "Caricamento impostazioni runtime…",
       "hint": "I valori .env sono i default iniziali. Le modifiche valgono dal turno successivo.",
@@ -174,6 +178,7 @@
     "profile": "Profilo",
     "search_placeholder": "Cerca conversazioni…",
     "favorites": "Preferiti",
+    "recent": "Recenti",
     "add_favorite": "Aggiungi ai preferiti",
     "remove_favorite": "Rimuovi dai preferiti",
     "rename": "Rinomina",
@@ -188,7 +193,7 @@
     "bucket_previous_30_days": "Ultimi 30 giorni",
     "bucket_older": "Più vecchie",
     "profile_menu": {
-      "appearance": "Aspetto",
+      "appearance": "Preferenze",
       "theme_light": "Chiaro",
       "theme_dark": "Scuro",
       "language": "Lingua",
@@ -234,6 +239,12 @@
     "resume": "Riprendi",
     "delete": "Elimina",
     "delete_confirm": "Eliminare questa automazione?",
+    "delete_dialog_title": "Elimina automazione",
+    "delete_dialog_subtitle": "Conferma eliminazione permanente",
+    "delete_dialog_warning": "Attenzione: azione irreversibile",
+    "delete_dialog_desc": "Sei sicuro di voler eliminare l'automazione",
+    "delete_dialog_desc_end": "Tutte le prossime esecuzioni pianificate verranno rimosse definitivamente.",
+    "delete_dialog_btn": "Elimina definitivamente",
     "open_session": "Apri sessione fissa",
     "recent_runs": "Esecuzioni recenti",
     "runs_loading": "Caricamento esecuzioni…",
@@ -283,7 +294,8 @@
         "weekly": "Una volta a settimana",
         "monthly": "Una volta al mese",
         "hourly": "Ogni ora",
-        "every_n_minutes": "Ogni tot minuti"
+        "every_n_minutes": "Ogni tot minuti",
+        "custom": "Personalizzato (espressione cron)"
       },
       "hour_label": "Ora",
       "minute_label": "Minuto",
@@ -310,7 +322,8 @@
         "weekly": "Ogni {{day}} alle {{time}}",
         "monthly": "Il giorno {{dom}} di ogni mese alle {{time}}",
         "hourly": "Ogni ora al minuto {{minute}}",
-        "every_n_minutes": "Ogni {{n}} minuti"
+        "every_n_minutes": "Ogni {{n}} minuti",
+        "custom": "Personalizzato (espressione cron)"
       }
     }
   },
@@ -323,9 +336,21 @@
     "empty_hint": "Le integrazioni collegano i tuoi account ai servizi MCP abilitati dall'amministratore.",
     "section_configured": "Configurate",
     "section_pending": "Da configurare",
+    "section_system": "Attive di sistema",
     "section_disabled": "Disattivate",
     "badge_configured": "configurate",
     "badge_pending": "da configurare",
+    "badge_system": "attiva",
+    "tab_all": "Tutti",
+    "tab_configured": "Configurati",
+    "tab_pending": "Da configurare",
+    "tab_system": "Attivi di sistema",
+    "tab_disabled": "Disattivati",
+    "search_placeholder": "Cerca integrazione per nome o descrizione…",
+    "filter_no_results": "Nessuna integrazione trovata con questo filtro.",
+    "field_saved_encrypted": "Valore salvato protetto",
+    "field_saved_placeholder": "•••••••••••• (valore salvato)",
+    "modify_field_hint": "Lascia invariato per conservare il valore salvato, oppure digita per sostituirlo.",
     "badge_connected": "connessa",
     "badge_disabled": "disattivata",
     "badge_pending_short": "da configurare",
@@ -402,17 +427,27 @@
     "new_conversation": "Nuova conversazione"
   },
   "chat": {
+    "pii": {
+      "review_label": "Revisione PII",
+      "tags_menu": "Tag PII",
+      "tags_label": "Tag da censurare",
+      "select_all": "Seleziona tutti",
+      "deselect_all": "Deseleziona tutti",
+      "tags_none": "Nessun tag selezionato: nessun dato verrà censurato.",
+      "review_auto_off": "Deselezionando tutte le etichette, PII Review viene disattivato."
+    },
     "thinking": {
-      "label": "Thinking",
-      "off": "Thinking: Off",
+      "label": "Ragionamento (Thinking)",
+      "select": "Livello di ragionamento",
+      "off": "Thinking: Spento",
       "min": "Thinking: Minimo",
       "med": "Thinking: Medio",
       "max": "Thinking: Massimo",
       "disable": "Disabilita",
-      "disable_desc": "Nessun ragionamento esteso — risposte più rapide.",
-      "min_desc": "Ragionamento leggero per domande quotidiane.",
+      "disable_desc": "Nessun ragionamento esteso — risposte più veloci.",
+      "min_desc": "Ragionamento rapido per domande ordinarie.",
       "med_desc": "Profondità bilanciata prima di rispondere.",
-      "max_desc": "Massima profondità per problemi complessi; risposte più lente."
+      "max_desc": "Massima profondità di analisi per problemi complessi."
     },
     "stream_recovery": "L'agente sta ancora elaborando questa chat sul server. Aggiornamento automatico…",
     "agent_status": {
@@ -454,15 +489,15 @@
       "script_named": "Generando {{title}}…"
     },
     "tools": {
-      "attach_file": "Allega File",
-      "view_label": "Vista Tools",
-      "select_view": "Seleziona Vista Tools",
+      "attach_file": "Allega file",
+      "view_label": "Vista strumenti",
+      "select_view": "Visualizzazione strumenti",
       "compact": "Compatta",
-      "compact_desc": "Tendina in cima alla risposta",
+      "compact_desc": "Riepilogo espandibile in cima alla risposta",
       "hide": "Nascondi",
       "partial": "Parziale",
       "full": "Completa",
-      "plus_tooltip": "Aggiungi file o cambia vista tools",
+      "plus_tooltip": "Aggiungi file o configura opzioni",
       "drag_drop_title": "Rilascia i file qui",
       "drag_drop_desc": "Trascina e rilascia i documenti per allegarli a questa conversazione"
     },
@@ -476,15 +511,16 @@
       "favorite_active": "Profilo predefinito"
     },
     "agent_mode": {
-      "select": "Modalità agente",
+      "label": "Modalità agente",
+      "select": "Seleziona modalità",
       "soon": "Presto",
       "beta": "Beta",
       "normal": "Normale",
-      "normal_desc": "Chat bilanciata — tool e memoria come configurati.",
-      "plan": "Pianifica",
+      "normal_desc": "Chat standard — tool e memoria come configurati.",
+      "plan": "Piano / Task Plan",
       "plan_desc": "Scompone il lavoro in passi prima di eseguire.",
-      "deep_research": "Ricerca approfondita",
-      "deep_research_desc": "Ricerche più lunghe con il pannello dedicato.",
+      "deep_research": "Deep Research",
+      "deep_research_desc": "Ricerca web autonoma avanzata.",
       "ask": "Chiedi",
       "ask_desc": "Risposte in sola lettura senza effetti collaterali dei tool.",
       "debug": "Debug",
@@ -492,8 +528,10 @@
     },
     "model": {
       "label": "Modello",
-      "select": "Seleziona modello",
+      "select": "Seleziona modello LLM",
       "switch": "Cambia modello",
+      "default": "Predefinito del sistema",
+      "default_desc": "Usa il modello LLM principale configurato",
       "default_hint": "Modello predefinito del server."
     },
     "capabilities": {
@@ -508,9 +546,10 @@
       "skill_pending": "In attesa"
     },
     "empty": {
+      "greeting_user": "Bentornato, {{name}}",
       "title": "Come posso aiutarti?",
-      "subtitle": "Chiedi qualsiasi cosa, allega un file o attiva la ricerca web. Le risposte arrivano in streaming mentre vengono scritte.",
-      "subtitle_profile": "Profilo {{profile}} attivo. Chiedi qualsiasi cosa, allega file o attiva la ricerca web — le risposte arrivano in streaming.",
+      "subtitle": "Chiedi qualsiasi cosa, allega un file o attiva la ricerca web — le risposte arrivano in tempo reale.",
+      "subtitle_profile": "Profilo {{profile}} attivo. Chiedi qualsiasi cosa, allega file o avvia un'attività.",
       "hint_attach": "Trascina file qui o usa + per allegare",
       "suggestions": {
         "explain": "Spiega un concetto difficile in modo semplice",
@@ -618,6 +657,7 @@
     "session_files_new": "Nuovi file sessione",
     "remove_file": "Rimuovi {{name}}",
     "upload": {
+      "button": "Carica allegato",
       "uploading": "Caricamento… {{progress}}%",
       "done": "Caricamento completato",
       "failed": "Caricamento fallito",
@@ -629,12 +669,12 @@
       "restricted": "Controllata · {{count}} host",
       "global": "Ricerca web globale",
       "global_desc": "Connessione Internet attiva per ottenere risposte aggiornate dalle fonti web.",
-      "on_short": "Web on",
-      "off_short": "Web off",
+      "on_short": "Web attivo",
+      "off_short": "Web disattivato",
       "on_desc": "Cerca sul web quando serve informazione aggiornata.",
       "off_desc": "Risposte solo da contesto locale e file allegati.",
       "toggle_aria": "Attiva o disattiva la ricerca web",
-      "advanced": "Ricerca Avanzata (Fonti Specifiche)",
+      "advanced": "Ricerca avanzata (fonti specifiche)",
       "modal_title": "Ricerca Web Avanzata",
       "modal_desc": "Limita i risultati della ricerca a domini specifici.",
       "add_domain": "Aggiungi un dominio",
@@ -653,7 +693,52 @@
   },
   "login": {
     "btn": "Entra",
-    "no_auth": "← Chat senza login (user default)"
+    "no_auth": "← Chat senza login (user default)",
+    "sso_microsoft": "Accedi con Microsoft",
+    "sso_google": "Accedi con Google",
+    "or": "oppure",
+    "mfa": {
+      "title_enroll": "Configura l'autenticazione a due fattori",
+      "title_verify": "Verifica in due passaggi",
+      "enroll_help": "Scansiona il QR code con Google Authenticator, Microsoft Authenticator o un'app equivalente, poi inserisci il codice a 6 cifre.",
+      "verify_help": "Inserisci il codice a 6 cifre mostrato dalla tua app authenticator.",
+      "manual": "Non riesci a scansionare? Inserisci questa chiave manualmente:",
+      "code": "Codice a 6 cifre",
+      "confirm": "Conferma e accedi",
+      "verify": "Verifica",
+      "back": "Torna al login",
+      "loading": "Caricamento…",
+      "error": {
+        "invalid_code": "Codice non valido. Riprova.",
+        "mfa_locked": "Troppi tentativi. Riprova tra {{seconds}} secondi.",
+        "invalid_mfa_token": "Sessione scaduta. Effettua di nuovo il login.",
+        "generic": "Errore durante la verifica."
+      }
+    },
+    "sso_error": {
+      "sso_already_linked": "L'account è già collegato a un altro utente.",
+      "sso_user_already_linked": "Hai già un account collegato.",
+      "generic": "Accesso non riuscito. Riprova.",
+      "sso_not_linked": "Il tuo account non è ancora collegato. Accedi con la password e collega l'account aziendale.",
+      "sso_domain_not_allowed": "Il dominio della tua email non è autorizzato.",
+      "sso_required": "Per questo account è obbligatorio l'accesso SSO.",
+      "password_login_disabled": "L'accesso con password è disabilitato.",
+      "temp_password_expired": "La password temporanea è scaduta. Contatta l'amministratore.",
+      "sso_failed": "Autenticazione SSO non riuscita.",
+      "sso_start_failed": "Impossibile avviare l'accesso SSO.",
+      "sso_token_invalid": "Token SSO non valido.",
+      "sso_provisioning_failed": "Impossibile creare l'account.",
+      "sso_provisioning_conflict": "Account in creazione, riprova.",
+      "email_required_for_provisioning": "Il provider non ha fornito un'email.",
+      "invalid_code": "Codice di accesso non valido.",
+      "code_expired": "Codice di accesso scaduto. Riprova.",
+      "code_already_used": "Codice di accesso già utilizzato.",
+      "exchange_error": "Errore durante il completamento dell'accesso.",
+      "exchange_failed": "Errore durante il completamento dell'accesso.",
+      "link_failed": "Collegamento non riuscito.",
+      "session_invalid": "Sessione scaduta, accedi di nuovo.",
+      "user_not_found": "Utente non trovato."
+    }
   },
   "authgate": {
     "checking": "Verifica accesso…",
@@ -681,6 +766,7 @@
   "artifacts": {
     "title": "File",
     "no_artifacts": "Nessun file o artefatto generato in questa sessione.",
+    "empty_folder": "Nessun file presente.",
     "source": {
       "live": "streaming",
       "history": "storia"
@@ -1069,6 +1155,58 @@
       "tool_calls": "Turno interrotto automaticamente: troppi tool call.",
       "tool_events": "Turno interrotto automaticamente: troppi eventi tool.",
       "plan_invalid_response": "Plan mode: risposta assistente non valida."
+    }
+  },
+  "sso_link": {
+    "title": "Aggiornamento Sicurezza",
+    "desc": "L'amministratore richiede di collegare il tuo account a {{provider}} per continuare ad accedere.",
+    "button": "Collega account {{provider}}",
+    "logout": "Esci",
+    "start_failed": "Impossibile avviare il collegamento SSO.",
+    "bad_response": "Risposta non valida dal server.",
+    "network": "Errore di rete."
+  },
+  "sideThread": {
+    "tab": "Thread",
+    "popover": {
+      "toolbar": "Azioni sulla selezione",
+      "action": "Approfondisci in un thread",
+      "truncated": "Verranno usati i primi {{max}} caratteri della selezione."
+    },
+    "panel": {
+      "aria": "Thread di approfondimento",
+      "new_title": "Nuovo thread",
+      "open_full": "Apri come chat",
+      "reveal": "Mostra il passaggio nella conversazione",
+      "passage_missing": "Il passaggio non è più presente nella risposta originale.",
+      "other_threads": "Altri thread ({{count}})",
+      "loading": "Caricamento del thread…",
+      "empty": "Chiedi qualcosa su questo passaggio. Il thread resta salvato e puoi riprenderlo quando vuoi.",
+      "error": "Impossibile completare la richiesta: {{msg}}",
+      "retry": "Riprova",
+      "dismiss": "Chiudi"
+    },
+    "starters": {
+      "explain": "Spiegamelo in parole semplici",
+      "example": "Fammi un esempio concreto",
+      "relevance": "Perché è rilevante qui?"
+    },
+    "composer": {
+      "placeholder": "Chiedi del passaggio…",
+      "send": "Invia",
+      "stop": "Interrompi"
+    },
+    "chip_open": "Apri i thread di questa risposta",
+    "chip_aria": "Thread aperti da questa risposta: {{count}}",
+    "breadcrumb": {
+      "aria": "Origine del thread",
+      "from": "Thread da «{{title}}»",
+      "untitled": "conversazione senza titolo"
+    },
+    "sidebar": {
+      "expand": "Mostra i thread",
+      "collapse": "Nascondi i thread",
+      "count": "{{count}} thread"
     }
   }
 }

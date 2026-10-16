@@ -1,470 +1,257 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowRight,
-  Zap,
-  Globe,
-  Users,
-  Server,
-  Database,
-  HardDrive,
-  RefreshCw,
-  Activity,
-  FileText,
-  Settings,
-  Plus,
-  Clock,
-  Key,
-  FolderOpen
-} from "lucide-react";
-import { apiFetch } from "@/lib/api/headers";
-import { apiBase } from "@/lib/api";
+import { useState } from "react";
+import { ArrowRight, CheckCircle2, ChevronDown, Loader2, OctagonAlert, RefreshCw, TriangleAlert } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/use-t";
+import { getLocale } from "@/lib/i18n/i18n-store";
+import { getStoredUserId } from "@/lib/auth/storage";
+import { useDashboardData } from "@/components/dashboard/useDashboardData";
+import { deriveDashboard, type Attention } from "@/components/dashboard/derive";
+import { AgentMap } from "@/components/dashboard/AgentMap";
+import { CommandBar } from "@/components/dashboard/CommandBar";
+import { ActivityPanel } from "@/components/dashboard/ActivityPanel";
 
-export default function Home() {
-  const [stats, setStats] = useState<any>(null);
-  const [health, setHealth] = useState<any>(null);
-  const [conversations, setConversations] = useState<any[]>([]);
-  const [recoveryStats, setRecoveryStats] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
+function greetingKey(d: Date): string {
+  const h = d.getHours();
+  if (h < 12) return "admin_dashboard.greeting_morning";
+  if (h < 18) return "admin_dashboard.greeting_afternoon";
+  return "admin_dashboard.greeting_evening";
+}
 
-  const fetchData = async () => {
-    setRefreshing(true);
-    try {
-      const [statsRes, healthRes, convsRes, recoveryRes] = await Promise.all([
-        apiFetch(`${apiBase()}/admin/stats`),
-        apiFetch(`${apiBase()}/admin/system/health`),
-        apiFetch(`${apiBase()}/admin/conversations/global?limit=10`),
-        apiFetch(`${apiBase()}/admin/diagnostics/json-recovery`)
-      ]);
+const ATTENTION_VISIBLE = 4;
 
-      const [statsData, healthData, convsData, recoveryData] = await Promise.all([
-        statsRes.ok ? statsRes.json() : null,
-        healthRes.ok ? healthRes.json() : null,
-        convsRes.ok ? convsRes.json() : null,
-        recoveryRes.ok ? recoveryRes.json() : null
-      ]);
+function AttentionRow({ a, onPoint, t }: { a: Attention; onPoint: (node: string | null) => void; t: ReturnType<typeof useT> }) {
+  const Icon = a.severity === "error" ? OctagonAlert : TriangleAlert;
+  return (
+    <Link
+      href={a.href}
+      onMouseEnter={() => onPoint(a.node ?? null)}
+      onFocus={() => onPoint(a.node ?? null)}
+      onBlur={() => onPoint(null)}
+      className="focus-ring group flex items-center gap-3.5 px-4 py-3 transition-colors hover:bg-secondary/50 focus-visible:bg-secondary/50 sm:px-5"
+    >
+      <Icon className={cn("h-4 w-4 shrink-0", a.severity === "error" ? "text-destructive" : "text-warning")} aria-hidden />
+      <span className="sr-only">{t(`admin_dashboard.attention.severity_${a.severity}`)}</span>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-medium">{a.title}</div>
+        {a.detail && (
+          <div className="truncate text-xs text-muted-foreground" title={a.detail}>
+            {a.detail}
+          </div>
+        )}
+      </div>
+      <span className="inline-flex shrink-0 items-center gap-1 text-xs font-medium text-muted-foreground group-hover:text-foreground">
+        <span className="hidden xl:inline">{a.action}</span>
+        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
+      </span>
+    </Link>
+  );
+}
 
-      if (statsData) setStats(statsData);
-      if (healthData) setHealth(healthData);
-      if (convsData) setConversations(convsData.conversations || []);
-      if (recoveryData) setRecoveryStats(recoveryData);
-    } catch (err) {
-      console.error("Dashboard data fetch failed", err);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
+function AttentionPanel({
+  items,
+  checking,
+  onPoint,
+  t,
+}: {
+  items: Attention[];
+  checking: boolean;
+  onPoint: (node: string | null) => void;
+  t: ReturnType<typeof useT>;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  if (items.length === 0) {
+    return (
+      <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card/40 px-4 py-3.5 text-sm" role="status">
+        {checking ? (
+          <>
+            <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />
+            <span className="text-muted-foreground">{t("admin_dashboard.attention.checking")}</span>
+          </>
+        ) : (
+          <>
+            <CheckCircle2 className="h-4 w-4 text-success" aria-hidden />
+            <span className="font-medium">{t("admin_dashboard.attention.all_clear")}</span>
+            <span className="hidden text-muted-foreground sm:inline">{t("admin_dashboard.attention.all_clear_detail")}</span>
+          </>
+        )}
+      </div>
+    );
+  }
 
-  useEffect(() => {
-    fetchData();
-    const interval = setInterval(fetchData, 30000);
-    return () => clearInterval(interval);
-  }, []);
+  const errors = items.filter((a) => a.severity === "error").length;
+  const warnings = items.length - errors;
+  const rules = new Intl.PluralRules(getLocale());
+  const plural = (key: string, count: number) =>
+    t(`admin_dashboard.attention.${key}_${rules.select(count) === "one" ? "one" : "other"}`, { count });
+  const summary = [errors > 0 && plural("blocking", errors), warnings > 0 && plural("to_check", warnings)]
+    .filter(Boolean)
+    .join(" · ");
 
-  const cronTotal = stats?.cron_jobs?.total !== undefined ? stats.cron_jobs.total : "...";
-  const cronEnabled = stats?.cron_jobs?.enabled !== undefined ? stats.cron_jobs.enabled : "...";
-  const apiKeysTotal = stats?.api_keys?.total !== undefined ? stats.api_keys.total : "...";
-  const projectsTotal = stats?.total_projects !== undefined ? stats.total_projects : "...";
-
-  const statItems = [
-    {
-      name: "Active Profiles",
-      value: stats?.active_profiles !== undefined ? stats.active_profiles : "...",
-      icon: Users,
-      color: "text-blue-400 bg-blue-500/10 border-blue-500/20",
-      hoverColor: "hover:border-blue-500/40 hover:shadow-blue-500/5",
-      href: "/profiles",
-      description: "Configured personas"
-    },
-    {
-      name: "Total Skills",
-      value: stats?.total_skills !== undefined ? stats.total_skills : "...",
-      icon: Zap,
-      color: "text-purple-400 bg-purple-500/10 border-purple-500/20",
-      hoverColor: "hover:border-purple-500/40 hover:shadow-purple-500/5",
-      href: "/skills",
-      description: "Custom capabilities"
-    },
-    {
-      name: "Installed MCPs",
-      value: stats?.installed_mcp !== undefined ? stats.installed_mcp : "...",
-      icon: Globe,
-      color: "text-green-400 bg-green-500/10 border-green-500/20",
-      hoverColor: "hover:border-green-500/40 hover:shadow-green-500/5",
-      href: "/hub",
-      description: "MCP tool servers"
-    },
-    {
-      name: "Memory Projects",
-      value: projectsTotal,
-      icon: FolderOpen,
-      color: "text-indigo-400 bg-indigo-500/10 border-indigo-500/20",
-      hoverColor: "hover:border-indigo-500/40 hover:shadow-indigo-500/5",
-      href: "/memory",
-      description: "Isolated database projects"
-    },
-    {
-      name: "Cron Jobs",
-      value: cronTotal !== "..." ? `${cronEnabled}/${cronTotal}` : "...",
-      icon: Clock,
-      color: "text-amber-400 bg-amber-500/10 border-amber-500/20",
-      hoverColor: "hover:border-amber-500/40 hover:shadow-amber-500/5",
-      href: "/schedules",
-      description: "Active background cron tasks"
-    },
-    {
-      name: "API Keys",
-      value: apiKeysTotal,
-      icon: Key,
-      color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/20",
-      hoverColor: "hover:border-cyan-500/40 hover:shadow-cyan-500/5",
-      href: "/api-keys",
-      description: "Authorized access credentials"
-    }
-  ];
-
-  // Helper formatting for memory size
-  const formatBytes = (bytes: number) => {
-    if (bytes === undefined || bytes === null || bytes <= 0) return "N/A";
-    const mb = bytes / (1024 * 1024);
-    return `${mb.toFixed(2)} MB`;
-  };
-
-  // Helper for conversation time formatting
-  const formatTime = (dateStr: string) => {
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' ' + date.toLocaleDateString([], { month: 'short', day: 'numeric' });
-    } catch {
-      return dateStr;
-    }
-  };
-
-  // Calculate JSON repair rate
-  const repairAttempts = recoveryStats?.attempts || 0;
-  const repairRecovered = recoveryStats?.recovered || 0;
-  const repairRate = repairAttempts > 0 ? ((repairRecovered / repairAttempts) * 100).toFixed(1) : "100.0";
+  // The most urgent problem gets the stage; the rest wait in a compact queue beside it.
+  const [lead, ...rest] = items;
+  const queue = expanded ? rest : rest.slice(0, ATTENTION_VISIBLE);
+  const hidden = rest.length - queue.length;
+  const critical = lead.severity === "error";
+  const LeadIcon = critical ? OctagonAlert : TriangleAlert;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-[10px] font-bold uppercase tracking-[0.2em] text-gray-500">Overview</h2>
-          <h1 className="text-3xl font-black text-white mt-1">Control Center</h1>
-          <p className="text-gray-400 text-sm mt-1">Real-time monitoring and configurations overview for AION Agent.</p>
-        </div>
+    <section aria-labelledby="attention-title">
+      <div className="mb-3 flex items-baseline gap-3 px-1">
+        <h2 id="attention-title" className="text-lg font-semibold tracking-[-0.015em]">
+          {t("admin_dashboard.attention.title")}
+        </h2>
+        <span className="text-sm tabular-nums text-muted-foreground">{summary}</span>
+        {checking && (
+          <Loader2 className="ml-auto h-4 w-4 shrink-0 self-center animate-spin text-muted-foreground" aria-label={t("admin_dashboard.status.checking")} />
+        )}
       </div>
 
-      {/* KPI Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-6">
-        {statItems.map((stat) => (
-          <Link
-            key={stat.name}
-            href={stat.href}
-            className={`glass-card p-6 border border-white/10 bg-[#141414]/40 transition-all group flex flex-col justify-between hover:shadow-lg ${stat.hoverColor}`}
-          >
-            <div>
-              <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-xl border ${stat.color} group-hover:scale-110 transition-transform`}>
-                  <stat.icon className="w-5 h-5" />
-                </div>
-                <span className="text-[9px] text-green-500 font-bold bg-green-500/10 border border-green-500/20 px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                  Active
-                </span>
-              </div>
-              <div className="text-3xl font-black tracking-tight text-white">{stat.value}</div>
-              <div className="text-xs font-bold uppercase text-gray-200 mt-2 tracking-wider">{stat.name}</div>
-            </div>
-            <div className="text-[10px] text-gray-500 mt-2 font-medium">{stat.description}</div>
-          </Link>
-        ))}
-      </div>
-
-      {/* System Health Quick Status Strip */}
-      <div className="glass-card p-4 border border-white/10 bg-[#141414]/40 flex flex-wrap items-center justify-between gap-6">
-        <div className="flex items-center gap-2">
-          <Activity className="w-4 h-4 text-gray-400" />
-          <span className="text-xs font-bold uppercase tracking-wider text-gray-400">System Integrity:</span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-6 flex-1 justify-start md:justify-around">
-          {/* Redis Health */}
-          <div className="flex items-center gap-3">
-            <Server className="w-4 h-4 text-gray-500" />
-            <div className="text-xs">
-              <span className="text-gray-500 font-semibold mr-1.5">Redis:</span>
-              {loading ? (
-                <span className="text-gray-600 font-mono">Checking...</span>
-              ) : health?.redis?.connected ? (
-                <span className="inline-flex items-center gap-1 text-green-400 font-bold">
-                  <span className="w-1.5 h-1.5 bg-green-400 rounded-full animate-pulse"></span>
-                  OPERATIONAL
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1 text-red-400 font-bold">
-                  <span className="w-1.5 h-1.5 bg-red-400 rounded-full"></span>
-                  OFFLINE
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* DB Health */}
-          <div className="flex items-center gap-3">
-            <Database className="w-4 h-4 text-gray-500" />
-            <div className="text-xs">
-              <span className="text-gray-500 font-semibold mr-1.5">Database:</span>
-              {loading ? (
-                <span className="text-gray-600 font-mono">Checking...</span>
-              ) : (
-                <span className="text-gray-200 font-mono font-bold">
-                  SQLite ({formatBytes(health?.database?.size_bytes)})
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Storage Health */}
-          <div className="flex items-center gap-3">
-            <HardDrive className="w-4 h-4 text-gray-500" />
-            <div className="text-xs">
-              <span className="text-gray-500 font-semibold mr-1.5">Storage Backend:</span>
-              {loading ? (
-                <span className="text-gray-600 font-mono">Checking...</span>
-              ) : (
-                <span className="text-purple-400 font-bold uppercase font-mono">
-                  {health?.storage?.backend || "LOCAL"}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
+      <div className={cn("grid gap-3", rest.length > 0 && "lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]")}>
         <Link
-          href="/system"
-          className="text-xs font-bold text-blue-400 hover:text-blue-300 transition-colors flex items-center gap-1"
+          href={lead.href}
+          onMouseEnter={() => onPoint(lead.node ?? null)}
+          onMouseLeave={() => onPoint(null)}
+          onFocus={() => onPoint(lead.node ?? null)}
+          onBlur={() => onPoint(null)}
+          className={cn(
+            "focus-ring group relative flex min-h-[13rem] flex-col overflow-hidden rounded-3xl p-5 transition-colors sm:p-6",
+            critical
+              ? "bg-destructive/[0.09] hover:bg-destructive/[0.13] dark:bg-destructive/[0.12] dark:hover:bg-destructive/[0.17]"
+              : "bg-warning/[0.09] hover:bg-warning/[0.13] dark:bg-warning/[0.1] dark:hover:bg-warning/[0.15]",
+          )}
         >
-          View Health Details <ArrowRight className="w-3 h-3" />
+          <LeadIcon
+            className={cn(
+              "pointer-events-none absolute -right-6 -top-6 h-40 w-40 opacity-[0.07] transition-transform duration-500 group-hover:rotate-6",
+              critical ? "text-destructive" : "text-warning",
+            )}
+            strokeWidth={1.25}
+            aria-hidden
+          />
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold",
+                critical ? "bg-destructive text-destructive-foreground" : "bg-warning text-white dark:text-black",
+              )}
+            >
+              <LeadIcon className="h-3.5 w-3.5" aria-hidden />
+              {t(`admin_dashboard.attention.severity_${lead.severity}`)}
+            </span>
+            {rest.length > 0 && (
+              <span className="text-xs font-medium text-muted-foreground">{t("admin_dashboard.attention.start_here")}</span>
+            )}
+          </div>
+          <h3 className="mt-4 max-w-[32ch] text-balance text-xl font-semibold leading-snug tracking-[-0.015em] sm:text-2xl">
+            {lead.title}
+          </h3>
+          {lead.detail && (
+            <p className="mt-1.5 line-clamp-2 max-w-[60ch] break-words text-sm text-muted-foreground">{lead.detail}</p>
+          )}
+          <span className="mt-auto pt-6">
+            <span
+              className={cn(
+                "inline-flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold shadow-sm transition-transform group-hover:translate-x-0.5",
+                critical ? "bg-destructive text-destructive-foreground" : "bg-foreground text-background",
+              )}
+            >
+              {lead.action}
+              <ArrowRight className="h-4 w-4" aria-hidden />
+            </span>
+          </span>
         </Link>
+
+        {rest.length > 0 && (
+          <div className="flex flex-col overflow-hidden rounded-3xl border border-border/60 bg-card/40">
+            <ul className="flex-1 divide-y divide-border/50" onMouseLeave={() => onPoint(null)}>
+              {queue.map((a) => (
+                <li key={a.id}>
+                  <AttentionRow a={a} onPoint={onPoint} t={t} />
+                </li>
+              ))}
+            </ul>
+            {rest.length > ATTENTION_VISIBLE && (
+              <button
+                type="button"
+                onClick={() => setExpanded((e) => !e)}
+                aria-expanded={expanded}
+                className="focus-ring flex w-full items-center justify-center gap-1.5 border-t border-border/50 px-5 py-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary/50 hover:text-foreground"
+              >
+                {expanded
+                  ? t("admin_dashboard.attention.show_less")
+                  : t("admin_dashboard.attention.show_more", { count: hidden })}
+                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", expanded && "rotate-180")} aria-hidden />
+              </button>
+            )}
+          </div>
+        )}
       </div>
+    </section>
+  );
+}
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Section: Recent Conversations & Secondary Diagnostics */}
-        <div className="lg:col-span-2 space-y-8">
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-blue-400" />
-                <h2 className="text-xs font-bold uppercase text-gray-400 tracking-wider">Recent Activity Sessions</h2>
-              </div>
-              <Link
-                href="/conversations"
-                className="text-xs font-bold text-gray-500 hover:text-white transition-colors"
-              >
-                View All
-              </Link>
-            </div>
+export default function DashboardPage() {
+  const t = useT();
+  const locale = getLocale();
+  const data = useDashboardData();
+  // Rendered client-side only (behind AdminAuthGate), so reading storage here is safe.
+  const [userId] = useState(() => (typeof window !== "undefined" ? getStoredUserId() : null));
+  const [now] = useState(() => new Date());
+  const [pointed, setPointed] = useState<string | null>(null);
 
-            <div className="glass-card overflow-hidden border border-white/10 rounded-2xl bg-gradient-to-b from-[#181818]/90 to-[#121212]/90 shadow-xl">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="bg-black/30 border-b border-white/10 text-xs font-bold text-gray-400 uppercase tracking-wider">
-                      <th className="px-6 py-4">Session Info</th>
-                      <th className="px-6 py-4">Profile</th>
-                      <th className="px-6 py-4">Msgs</th>
-                      <th className="px-6 py-4 text-right">Inspect</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-white/5">
-                    {conversations.slice(0, 6).map((conv) => (
-                      <tr key={conv.id} className="hover:bg-white/[0.02] transition-colors group">
-                        <td className="px-6 py-4">
-                          <div>
-                            <div className="text-sm font-bold text-white max-w-[280px] truncate">
-                              {conv.title || "Untitled Conversation"}
-                            </div>
-                            <div className="text-[10px] text-gray-500 font-mono mt-0.5 flex items-center gap-1.5">
-                              <span>ID: {conv.id.substring(0, 8)}...</span>
-                              <span>•</span>
-                              <span>{formatTime(conv.updated_at)}</span>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 border border-blue-500/20 uppercase tracking-wide">
-                            {conv.profile_slug || "default"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-xs font-mono font-bold text-gray-300">
-                          {conv.message_count || 0}
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <Link
-                            href={`/conversations/${conv.id}`}
-                            className="p-2 bg-white/5 hover:bg-blue-500/20 text-gray-400 hover:text-blue-400 border border-white/10 rounded-xl transition-all hover:border-blue-500/40 inline-flex items-center justify-center cursor-pointer"
-                          >
-                            <ArrowRight className="w-4 h-4" />
-                          </Link>
-                        </td>
-                      </tr>
-                    ))}
-                    {conversations.length === 0 && !loading && (
-                      <tr>
-                        <td colSpan={4} className="p-12 text-center text-gray-500 text-sm font-semibold">
-                          No active conversation sessions found.
-                        </td>
-                      </tr>
-                    )}
-                    {loading && (
-                      <tr>
-                        <td colSpan={4} className="p-12 text-center text-gray-500 text-sm font-bold uppercase tracking-wider animate-pulse">
-                          Fetching active sessions...
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+  const view = deriveDashboard(data, t, locale);
+  const fmt = (v: number | undefined) => (v === undefined ? "—" : new Intl.NumberFormat(locale).format(v));
+  const time = data.lastUpdated
+    ? new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(data.lastUpdated)
+    : null;
 
-          {/* Diagnostics and Key Scope Audit Sub-grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
-
-            {/* API Key Scopes Audit */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                <Key className="w-4 h-4 text-cyan-400" />
-                <h2 className="text-xs font-bold uppercase text-gray-400 tracking-wider">API Key Scope Audit</h2>
-              </div>
-
-              <div className="glass-card p-6 border border-white/10 bg-[#141414]/40 space-y-4 flex flex-col justify-between h-[230px]">
-                <div>
-                  <h3 className="font-bold text-white text-sm">Key Permissions Distribution</h3>
-                  <div className="space-y-2 pt-2 overflow-y-auto max-h-[120px] custom-scrollbar">
-                    {stats?.api_keys?.by_scope && Object.keys(stats.api_keys.by_scope).length > 0 ? (
-                      Object.keys(stats.api_keys.by_scope)
-                        .sort((a, b) => (stats.api_keys.by_scope[b] || 0) - (stats.api_keys.by_scope[a] || 0))
-                        .map((scopeName) => {
-                          const count = stats.api_keys.by_scope[scopeName] || 0;
-                          return (
-                            <div key={scopeName} className="flex justify-between items-center text-xs py-0.5">
-                              <span className="font-mono text-[9px] px-2 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 uppercase tracking-wide truncate max-w-[130px]" title={scopeName}>
-                                {scopeName}
-                              </span>
-                              <span className="text-gray-400 font-semibold font-mono text-[10px]">
-                                {count} key{count !== 1 ? "s" : ""}
-                              </span>
-                            </div>
-                          );
-                        })
-                    ) : (
-                      <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider py-4 text-center">
-                        No active API keys found.
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-[#262626] text-[10px] text-gray-500 leading-tight">
-                  Distribution of authorized access credentials.
-                </div>
-              </div>
-            </div>
-          </div>
+  return (
+    <div className="mx-auto flex max-w-[84rem] flex-col gap-6">
+      <header className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-[28px]">
+            {t(greetingKey(now), { name: userId ?? "" }).replace(/,\s*$/, "")}
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground tabular-nums">
+            {t("admin_dashboard.summary", {
+              profiles: fmt(view.summary.profiles),
+              mcp: fmt(view.summary.mcp),
+              users: fmt(view.summary.users),
+            })}
+          </p>
         </div>
-
-        {/* Right Section: Model Usage & Directives */}
-        <div className="space-y-8">
-          {/* Model Usage Distribution Card */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2">
-              <Server className="w-4 h-4 text-cyan-400" />
-              <h2 className="text-xs font-bold uppercase text-gray-400 tracking-wider">Model Usage</h2>
-            </div>
-
-            <div className="glass-card p-6 border border-white/10 bg-[#141414]/40 space-y-4">
-              <h3 className="font-bold text-white text-sm">Top Active LLM Models</h3>
-              <div className="space-y-4">
-                {stats?.model_usage && Object.keys(stats.model_usage).length > 0 ? (
-                  (() => {
-                    const modelUsage = stats.model_usage;
-                    const totalUsage = Object.values(modelUsage).reduce((acc: number, val: any) => acc + (val || 0), 0) as number;
-                    const modelKeys = Object.keys(modelUsage).sort((a, b) => (modelUsage[b] || 0) - (modelUsage[a] || 0));
-
-                    return modelKeys.map((modelName, index) => {
-                      const count = modelUsage[modelName] || 0;
-                      const percentage = totalUsage > 0 ? ((count / totalUsage) * 100) : 0;
-                      const colors = [
-                        "bg-gradient-to-r from-blue-500 to-indigo-500",
-                        "bg-gradient-to-r from-purple-500 to-pink-500",
-                        "bg-gradient-to-r from-cyan-500 to-emerald-500",
-                      ];
-                      const progressColor = colors[index % colors.length];
-
-                      return (
-                        <div key={modelName} className="space-y-1.5">
-                          <div className="flex justify-between items-center text-xs">
-                            <span className="text-gray-300 font-semibold truncate max-w-[170px]" title={modelName}>
-                              {modelName}
-                            </span>
-                            <span className="text-gray-500 font-mono text-[10px]">
-                              {count} chat{count !== 1 ? "s" : ""} ({percentage.toFixed(0)}%)
-                            </span>
-                          </div>
-                          <div className="w-full bg-[#1b1b1b] rounded-full h-1.5 overflow-hidden">
-                            <div
-                              className={`h-1.5 rounded-full ${progressColor}`}
-                              style={{ width: `${percentage}%` }}
-                            />
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()
-                ) : (
-                  <div className="text-[10px] text-gray-500 font-bold uppercase tracking-wider py-4 text-center">
-                    No LLM usage records detected.
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Operational Directives */}
-          <div className="space-y-4">
-            <h2 className="text-xs font-bold uppercase text-gray-400 tracking-wider">Operational Directives</h2>
-            <div className="space-y-3">
-              <Link
-                href="/profiles"
-                className="w-full flex items-center justify-between px-5 py-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-blue-500/20 text-xs uppercase tracking-wider cursor-pointer"
-              >
-                Create New Profile <Plus className="w-4 h-4" />
-              </Link>
-              <Link
-                href="/hub"
-                className="w-full flex items-center justify-between px-5 py-4 bg-[#0d0d0d] hover:bg-[#141414] border border-[#262626] text-gray-300 rounded-xl font-bold transition-all text-xs uppercase tracking-wider hover:border-gray-500/40 cursor-pointer"
-              >
-                Provision MCP Server <Globe className="w-4 h-4" />
-              </Link>
-              <Link
-                href="/settings"
-                className="w-full flex items-center justify-between px-5 py-4 bg-[#0d0d0d] hover:bg-[#141414] border border-[#262626] text-gray-300 rounded-xl font-bold transition-all text-xs uppercase tracking-wider hover:border-gray-500/40 cursor-pointer"
-              >
-                Governance / Settings <Settings className="w-4 h-4" />
-              </Link>
-            </div>
-          </div>
+        <div className="flex items-center gap-3">
+          {time && (
+            <span className="text-xs text-muted-foreground tabular-nums">{t("admin_dashboard.updated_at", { time })}</span>
+          )}
+          <button
+            type="button"
+            onClick={data.refresh}
+            disabled={data.refreshing}
+            className="focus-ring inline-flex h-9 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary disabled:cursor-progress disabled:opacity-70"
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", data.refreshing && "animate-spin")} aria-hidden />
+            {t("admin_dashboard.refresh")}
+          </button>
         </div>
-      </div>
+      </header>
+
+      <CommandBar />
+
+      <AttentionPanel items={view.attention} checking={view.checking} onPoint={setPointed} t={t} />
+
+      <AgentMap
+        columns={view.columns}
+        title={t("admin_dashboard.map.title")}
+        subtitle={t("admin_dashboard.map.subtitle")}
+        legend={{ uses: t("admin_dashboard.map.legend_uses"), contains: t("admin_dashboard.map.legend_contains") }}
+        highlight={pointed}
+      />
+
+      <ActivityPanel metrics={data.metrics} feedback={view.feedback} locale={locale} t={t} />
     </div>
   );
 }

@@ -151,12 +151,17 @@ export function ContextBudgetGauge({
 
 type DetailsProps = {
   budget: ContextBudgetState;
-  usedTools: UsedTool[];
-  skillStatuses: SkillStatus[];
+  usedTools?: UsedTool[];
+  skillStatuses?: SkillStatus[];
   className?: string;
 };
 
-export function ContextBudgetBar({ budget, usedTools, skillStatuses, className }: DetailsProps) {
+export function ContextBudgetBar({
+  budget,
+  usedTools = [],
+  skillStatuses = [],
+  className,
+}: DetailsProps) {
   const t = useT();
   const pct = Math.min(100, Math.max(0, budget.pct));
   const triggerPct =

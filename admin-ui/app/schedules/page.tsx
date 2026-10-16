@@ -1,22 +1,26 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import {
-  Clock,
-  Play,
-  Trash2,
-  RefreshCw,
-  Pencil,
-  Power,
-  PowerOff,
-  History,
-  X,
-  AlertTriangle,
-  ChevronDown,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ExternalLink, History, Loader2, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
+import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/use-t";
+import { chatUrl } from "@/lib/paths";
+import { getLocale } from "@/lib/i18n/i18n-store";
 import { PageToast, ToastState } from "@/components/PageToast";
+import { Dialog } from "@/components/profiles/Dialog";
+import { DeleteDialog } from "@/components/ui/ConfirmDialogs";
+import { Select } from "@/components/ui/Select";
+import { SearchField } from "@/components/ui/SearchField";
+import { ghostBtn, inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
+import { fullWhen, shortWhen, toMs } from "@/components/conversations/format";
+import { Transcript } from "@/components/conversations/Transcript";
+import type { ThreadMessage } from "@/components/conversations/types";
+
+const k = "admin_schedules";
+const ALL = "__all";
+const GRID = "md:grid-cols-[minmax(0,2fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.1fr)_7.5rem_10.5rem]";
 
 type CronJob = {
   job_id: string;
@@ -31,6 +35,7 @@ type CronJob = {
   enabled: boolean;
   next_run_at?: string | null;
   last_run?: { status?: string; started_at?: string } | null;
+  sql_query_project?: string | null;
 };
 
 type CronRun = {
@@ -40,305 +45,483 @@ type CronRun = {
   finished_at?: string;
   error_message?: string;
   assistant_preview?: string;
+  conversation_id?: string | null;
 };
 
-type SqlProject = {
-  slug: string;
-  display_name: string;
+type Option = { value: string; label: string };
+type Tone = "ok" | "bad" | "live" | "idle";
+type StatusFilter = "all" | "on" | "off";
+
+const toneOf = (status?: string): Tone => {
+  const s = (status || "").toLowerCase();
+  if (/succ|ok|done|complete/.test(s)) return "ok";
+  if (/fail|err|timeout/.test(s)) return "bad";
+  if (/run|pend|start|queue/.test(s)) return "live";
+  return "idle";
 };
+
+const TONE: Record<Tone, string> = {
+  ok: "bg-success/12 text-success",
+  bad: "bg-destructive/12 text-destructive",
+  live: "bg-warning/15 text-warning",
+  idle: "bg-secondary text-muted-foreground",
+};
+
+function StatusPill({ status, t }: { status?: string; t: (k: string) => string }) {
+  if (!status) return <span className="text-muted-foreground">—</span>;
+  const tone = toneOf(status);
+  const known = tone === "ok" ? "success" : tone === "bad" ? "error" : tone === "live" ? "running" : null;
+  return (
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium", TONE[tone])}>
+      <span className={cn("h-1.5 w-1.5 rounded-full bg-current", tone === "live" && "animate-pulse")} aria-hidden />
+      {known ? t(`${k}.status.${known}`) : status}
+    </span>
+  );
+}
+
+/** Upcoming time: "in 12 min" within a day, otherwise a full date. */
+function nextWhen(iso: string, now: number): string {
+  const ms = toMs(iso);
+  const diff = ms - now;
+  if (diff > 0 && diff < 24 * 3600_000) {
+    const rtf = new Intl.RelativeTimeFormat(getLocale(), { numeric: "auto", style: "short" });
+    if (diff < 3600_000) return rtf.format(Math.max(1, Math.round(diff / 60_000)), "minute");
+    return rtf.format(Math.round(diff / 3600_000), "hour");
+  }
+  return fullWhen(ms);
+}
+
+function Switch({ checked, onChange, label, disabled }: { checked: boolean; onChange: (v: boolean) => void; label: string; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "focus-ring relative inline-flex h-6 w-10 shrink-0 items-center rounded-full border transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+        checked ? "border-success/40 bg-success" : "border-border bg-secondary",
+      )}
+    >
+      <span className={cn("inline-block h-4 w-4 rounded-full bg-background shadow-sm transition-transform duration-200 ease-out", checked ? "translate-x-5" : "translate-x-1")} />
+    </button>
+  );
+}
+
+const iconBtn =
+  "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-background hover:text-foreground disabled:opacity-50";
+
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
+  return (
+    <label className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium">{label}</span>
+      {children}
+      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+    </label>
+  );
+}
+
+const duration = (r: CronRun) => {
+  const a = toMs(r.started_at);
+  const b = toMs(r.finished_at);
+  if (!a || !b || b < a) return "";
+  const sec = Math.round((b - a) / 1000);
+  if (sec < 60) return `${sec}s`;
+  const m = Math.floor(sec / 60);
+  return m < 60 ? `${m}m ${sec % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
+};
+
+function RunDetail({ run, t }: { run: CronRun; t: (k: string, v?: Record<string, string | number>) => string }) {
+  const convId = run.conversation_id || null;
+  const [thread, setThread] = useState<{ id: string; state: "ready" | "error"; messages: ThreadMessage[] } | null>(null);
+  const [showTools, setShowTools] = useState(false);
+
+  useEffect(() => {
+    if (!convId) return;
+    let live = true;
+    apiFetch(`${apiBase()}/admin/conversations/${encodeURIComponent(convId)}/messages?include_internal=true`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => live && setThread({ id: convId, state: "ready", messages: data.messages || [] }))
+      .catch(() => live && setThread({ id: convId, state: "error", messages: [] }));
+    return () => {
+      live = false;
+    };
+  }, [convId]);
+
+  const loaded = thread && thread.id === convId ? thread : null;
+  const toolCount = loaded?.messages.filter((m) => m.tool_name).length ?? 0;
+  const href = convId ? chatUrl(`/c/${encodeURIComponent(convId)}`) : null;
+  const chip = "focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors";
+
+  return (
+    <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-background" aria-label={t(`${k}.runs.detail_aria`)}>
+      <header className="flex flex-col gap-3 border-b border-border/60 px-5 py-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusPill status={run.status} t={t} />
+          <div className="ml-auto flex items-center gap-2">
+            {toolCount > 0 && (
+              <button type="button" aria-pressed={showTools} onClick={() => setShowTools((v) => !v)} className={cn(chip, showTools ? "border-foreground/30 bg-secondary" : "border-border hover:bg-secondary")}>
+                {t("admin_conversations.detail.show_tools")}
+                <span className="tabular-nums text-muted-foreground">{toolCount}</span>
+              </button>
+            )}
+            {href ? (
+              <a href={href} target="_blank" rel="noopener" className="focus-ring inline-flex h-9 items-center gap-2 rounded-xl bg-foreground px-3.5 text-sm font-semibold text-background transition-opacity hover:opacity-90">
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+                {t(`${k}.runs.open_chat`)}
+              </a>
+            ) : (
+              <span className="text-xs text-muted-foreground">{t(`${k}.runs.no_chat`)}</span>
+            )}
+          </div>
+        </div>
+        <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
+          {[
+            [t(`${k}.runs.started`), run.started_at ? fullWhen(toMs(run.started_at)) : "—"],
+            [t(`${k}.runs.finished`), run.finished_at ? fullWhen(toMs(run.finished_at)) : "—"],
+            [t(`${k}.runs.duration`), duration(run) || "—"],
+          ].map(([label, value]) => (
+            <div key={label} className="min-w-0">
+              <dt className="text-xs text-muted-foreground">{label}</dt>
+              <dd className="mt-0.5 tabular-nums">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        {run.error_message && <p className="whitespace-pre-wrap break-words rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive">{run.error_message}</p>}
+      </header>
+
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-6 sm:px-6" aria-busy={!!convId && !loaded}>
+        {!convId ? (
+          run.assistant_preview ? (
+            <p className="mx-auto max-w-3xl whitespace-pre-wrap break-words text-sm leading-relaxed">{run.assistant_preview}</p>
+          ) : (
+            <p className="py-16 text-center text-sm text-muted-foreground">{t(`${k}.runs.no_output`)}</p>
+          )
+        ) : !loaded ? (
+          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground" role="status">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            {t("admin_conversations.detail.loading")}
+          </div>
+        ) : loaded.state === "error" ? (
+          <p className="py-16 text-center text-sm text-destructive">{t("admin_conversations.detail.load_error")}</p>
+        ) : loaded.messages.length === 0 ? (
+          <p className="py-16 text-center text-sm text-muted-foreground">{t("admin_conversations.detail.no_messages")}</p>
+        ) : (
+          <Transcript messages={loaded.messages} convId={loaded.id} highlightId={null} showTools={showTools} t={t} />
+        )}
+      </div>
+    </section>
+  );
+}
+
+function RunsDialog({ job, runs, loading, now, t, onClose }: { job: CronJob; runs: CronRun[]; loading: boolean; now: number; t: (k: string, v?: Record<string, string | number>) => string; onClose: () => void }) {
+  const [pick, setPick] = useState<string | null>(null);
+  const current = runs.find((r) => r.run_id === pick) ?? runs[0] ?? null;
+  const ok = runs.filter((r) => toneOf(r.status) === "ok").length;
+  const bad = runs.filter((r) => toneOf(r.status) === "bad").length;
+
+  return (
+    <Dialog title={t(`${k}.runs.title`, { name: job.name })} closeLabel={t(`${k}.runs.close`)} onClose={onClose} className="max-w-6xl">
+      <div className="flex flex-col gap-4">
+        <p className="-mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <code className="font-mono tabular-nums text-foreground/80">{job.cron_expression}</code>
+          <span>{job.timezone}</span>
+          {!loading && runs.length > 0 && <span className="tabular-nums">{t(`${k}.runs.summary`, { n: runs.length, ok, bad })}</span>}
+        </p>
+
+        {loading ? (
+          <div className="flex items-center gap-2 py-10 text-sm text-muted-foreground" role="status">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            {t(`${k}.runs.loading`)}
+          </div>
+        ) : runs.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-border px-6 py-14 text-center">
+            <p className="text-sm font-medium">{t(`${k}.runs.empty`)}</p>
+            <p className="mx-auto mt-1 max-w-[42ch] text-sm text-muted-foreground">{t(`${k}.runs.empty_body`)}</p>
+          </div>
+        ) : (
+          <div className="grid min-h-0 gap-4 md:h-[min(42rem,72vh)] md:grid-cols-[minmax(0,15rem)_minmax(0,1fr)]">
+            <ul className="flex max-h-60 flex-col gap-0.5 overflow-y-auto rounded-2xl border border-border/70 bg-background p-1.5 md:max-h-none" aria-label={t(`${k}.runs.list_aria`)}>
+              {runs.map((r) => {
+                const active = r.run_id === current?.run_id;
+                const ms = toMs(r.started_at);
+                return (
+                  <li key={r.run_id}>
+                    <button
+                      type="button"
+                      aria-current={active ? "true" : undefined}
+                      onClick={() => setPick(r.run_id)}
+                      className={cn("focus-ring flex w-full flex-col items-start gap-1 rounded-xl px-3 py-2 text-left transition-colors", active ? "bg-secondary" : "hover:bg-secondary/60")}
+                    >
+                      <StatusPill status={r.status} t={t} />
+                      <span className="flex w-full items-center justify-between gap-2 text-xs tabular-nums text-muted-foreground">
+                        <span title={fullWhen(ms)}>{ms ? shortWhen(ms, now) : ""}</span>
+                        <span>{duration(r)}</span>
+                      </span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+
+            {current && <RunDetail key={current.run_id} run={current} t={t} />}
+          </div>
+        )}
+      </div>
+    </Dialog>
+  );
+}
 
 export default function SchedulesPage() {
+  const t = useT();
   const [jobs, setJobs] = useState<CronJob[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [filterUser, setFilterUser] = useState("");
-  const [filterEnabled, setFilterEnabled] = useState<string>("");
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
+  const [now, setNow] = useState(() => Date.now());
   const [toast, setToast] = useState<ToastState>(null);
+
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState<StatusFilter>("all");
+  const [userFilter, setUserFilter] = useState(ALL);
+
+  const [profiles, setProfiles] = useState<Record<string, string>>({});
+  const [sqlProjects, setSqlProjects] = useState<Option[]>([]);
+
   const [editing, setEditing] = useState<CronJob | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ name: "", cron: "", prompt: "", profile: "", tz: "", sessionMode: "fixed", enabled: true, sql: "" });
+  const patch = (p: Partial<typeof form>) => setForm((f) => ({ ...f, ...p }));
+
   const [runsJob, setRunsJob] = useState<CronJob | null>(null);
   const [runs, setRuns] = useState<CronRun[]>([]);
   const [runsLoading, setRunsLoading] = useState(false);
 
-  const [formName, setFormName] = useState("");
-  const [formCron, setFormCron] = useState("");
-  const [formPrompt, setFormPrompt] = useState("");
-  const [formProfile, setFormProfile] = useState("generic_assistant");
-  const [formTz, setFormTz] = useState("Europe/Rome");
-  const [formSessionMode, setFormSessionMode] = useState("fixed");
-  const [formEnabled, setFormEnabled] = useState(true);
-  const [formSqlProject, setFormSqlProject] = useState<string>("");
+  const [deleting, setDeleting] = useState<CronJob | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const [sqlProjects, setSqlProjects] = useState<SqlProject[]>([]);
-
-  const [cronEnabledGlobal, setCronEnabledGlobal] = useState<boolean | null>(null);
+  const [schedulerOn, setSchedulerOn] = useState<boolean | null>(null);
   const [updatingGlobal, setUpdatingGlobal] = useState(false);
   const [restarting, setRestarting] = useState(false);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pendingGlobalValue, setPendingGlobalValue] = useState<boolean | null>(null);
+  const [pendingGlobal, setPendingGlobal] = useState<boolean | null>(null);
 
-  const fetchProjects = useCallback(async () => {
+  const fail = useCallback((e: unknown, fallback: string) => setToast({ message: e instanceof Error && e.message ? e.message : fallback, variant: "error" }), []);
+
+  const fetchSetup = useCallback(async () => {
     try {
       const res = await apiFetch(`${apiBase()}/admin/query-memory/projects`);
       if (res.ok) {
         const data = await res.json();
-        setSqlProjects((data.projects || []).map((p: { slug: string; display_name: string }) => ({ slug: p.slug, display_name: p.display_name })));
+        setSqlProjects((data.projects || []).map((p: { slug: string; display_name: string }) => ({ value: p.slug, label: `${p.display_name} (${p.slug})` })));
       }
     } catch {
-      // non-critical: silently ignore
+      // optional: the SQL project picker just stays empty
+    }
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/profiles`);
+      if (res.ok) {
+        const data: { slug: string; name: string }[] = await res.json();
+        setProfiles(Object.fromEntries((data || []).map((p) => [p.slug, p.name || p.slug])));
+      }
+    } catch {
+      // slugs are shown instead of names
     }
   }, []);
 
-  const fetchGlobalCronStatus = useCallback(async () => {
+  const fetchGlobal = useCallback(async () => {
     try {
       const res = await apiFetch(`${apiBase()}/admin/settings`);
       if (res.ok) {
         const data = await res.json();
-        const enabled = data.settings?.AION_CRON_ENABLED === "1";
-        setCronEnabledGlobal(enabled);
+        setSchedulerOn(data.settings?.AION_CRON_ENABLED === "1");
       }
-    } catch (e) {
-      console.error("Failed to load global cron settings", e);
+    } catch {
+      // status stays unknown
     }
   }, []);
 
   const fetchJobs = useCallback(async () => {
-    setLoading(true);
     try {
-      const q = new URLSearchParams();
-      if (filterUser.trim()) q.set("user_id", filterUser.trim());
-      if (filterEnabled === "1") q.set("enabled", "true");
-      if (filterEnabled === "0") q.set("enabled", "false");
-      const res = await apiFetch(`${apiBase()}/admin/cron-jobs?${q.toString()}`);
+      const res = await apiFetch(`${apiBase()}/admin/cron-jobs`);
       if (!res.ok) {
-        if (res.status === 503) {
-          const err = await res.json().catch(() => ({}));
-          if (err.detail && err.detail.includes("AION_CRON_ENABLED=0")) {
-            setCronEnabledGlobal(false);
-            setJobs([]);
-            return;
-          }
-        }
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to load jobs");
+        if (res.status === 503 && String(err.detail || "").includes("AION_CRON_ENABLED=0")) {
+          setSchedulerOn(false);
+          setJobs([]);
+          setState("ready");
+          return;
+        }
+        throw new Error(err.detail || "load");
       }
       const data = await res.json();
       setJobs(data.jobs || []);
-    } catch (e: unknown) {
-      setToast({
-        message: e instanceof Error ? e.message : "Load failed",
-        variant: "error",
-      });
-    } finally {
-      setLoading(false);
+      setNow(Date.now());
+      setState("ready");
+    } catch {
+      setState("error");
     }
-  }, [filterUser, filterEnabled]);
+  }, []);
+
+  const reload = useCallback(() => {
+    setState("loading");
+    fetchGlobal();
+    fetchJobs();
+  }, [fetchGlobal, fetchJobs]);
+
+  useEffect(() => {
+    reload();
+    fetchSetup();
+  }, [reload, fetchSetup]);
 
   const pollHealth = useCallback(async () => {
-    const maxAttempts = 30;
-    let attempt = 0;
-
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    const interval = setInterval(async () => {
-      attempt++;
+    await new Promise((r) => setTimeout(r, 2000));
+    for (let attempt = 0; attempt < 30; attempt++) {
       try {
         const res = await fetch(`${apiBase()}/health`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.status === "ok") {
-            clearInterval(interval);
-            setRestarting(false);
-            setToast({ message: "API Container restarted and configuration applied successfully.", variant: "success" });
-            fetchGlobalCronStatus();
-            fetchJobs();
-          }
+        if (res.ok && (await res.json()).status === "ok") {
+          setRestarting(false);
+          setToast({ message: t(`${k}.restart.done`), variant: "success" });
+          reload();
+          return;
         }
-      } catch (err) {
-        console.log("Waiting for backend to come back online...", err);
+      } catch {
+        // backend still coming back
       }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    setRestarting(false);
+    setToast({ message: t(`${k}.restart.slow`), variant: "error" });
+    reload();
+  }, [reload, t]);
 
-      if (attempt >= maxAttempts) {
-        clearInterval(interval);
-        setRestarting(false);
-        setToast({ message: "API Container took too long to restart. Please verify manually.", variant: "error" });
-        fetchGlobalCronStatus();
-        fetchJobs();
-      }
-    }, 1500);
-  }, [fetchGlobalCronStatus, fetchJobs]);
-
-  const toggleGlobalCron = async (forcedValue?: boolean) => {
+  const applyGlobal = async (next: boolean) => {
     setUpdatingGlobal(true);
     try {
-      const settingsRes = await apiFetch(`${apiBase()}/admin/settings`);
-      if (!settingsRes.ok) throw new Error("Failed to fetch current settings");
-      const currentSettingsData = await settingsRes.json();
-      const currentSettings = currentSettingsData.settings || {};
-
-      const nextVal = forcedValue !== undefined ? forcedValue : !cronEnabledGlobal;
-
+      const cur = await apiFetch(`${apiBase()}/admin/settings`);
+      if (!cur.ok) throw new Error();
+      const settings = (await cur.json()).settings || {};
       const res = await apiFetch(`${apiBase()}/admin/settings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          settings: {
-            ...currentSettings,
-            AION_CRON_ENABLED: nextVal ? "1" : "0",
-          },
-        }),
+        body: JSON.stringify({ settings: { ...settings, AION_CRON_ENABLED: next ? "1" : "0" } }),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Failed to update global cron setting");
+        throw new Error(err.detail);
       }
-
-      const data = await res.json();
-      if (data.restarting) {
+      if ((await res.json()).restarting) {
         setRestarting(true);
         pollHealth();
       } else {
-        setToast({
-          message: `Cron scheduler ${nextVal ? "enabled" : "disabled"} successfully.`,
-          variant: "success",
-        });
-        await fetchGlobalCronStatus();
-        await fetchJobs();
+        setToast({ message: t(`${k}.scheduler.${next ? "toast_on" : "toast_off"}`), variant: "success" });
+        reload();
       }
-    } catch (e: unknown) {
-      setToast({
-        message: e instanceof Error ? e.message : "Failed to toggle global scheduler status",
-        variant: "error",
-      });
+    } catch (e) {
+      fail(e, t(`${k}.scheduler.toggle_failed`));
     } finally {
       setUpdatingGlobal(false);
     }
   };
 
-  const handleToggleClick = (forcedValue?: boolean) => {
-    const nextVal = forcedValue !== undefined ? forcedValue : !cronEnabledGlobal;
-    setPendingGlobalValue(nextVal);
-    setShowConfirmModal(true);
+  const confirmGlobal = () => {
+    if (pendingGlobal === null) return;
+    const next = pendingGlobal;
+    setPendingGlobal(null);
+    applyGlobal(next);
   };
 
-  const confirmToggleGlobalCron = async () => {
-    if (pendingGlobalValue === null) return;
-    setShowConfirmModal(false);
-    const val = pendingGlobalValue;
-    setPendingGlobalValue(null);
-    await toggleGlobalCron(val);
+  const openEdit = (j: CronJob) => {
+    setEditing(j);
+    setForm({ name: j.name, cron: j.cron_expression, prompt: j.prompt, profile: j.profile_slug, tz: j.timezone, sessionMode: j.session_mode, enabled: j.enabled, sql: j.sql_query_project ?? "" });
   };
 
-  useEffect(() => {
-    fetchGlobalCronStatus();
-    fetchJobs();
-    fetchProjects();
-  }, [fetchJobs, fetchGlobalCronStatus, fetchProjects]);
-
-  const openEdit = (job: CronJob) => {
-    setEditing(job);
-    setFormName(job.name);
-    setFormCron(job.cron_expression);
-    setFormPrompt(job.prompt);
-    setFormProfile(job.profile_slug);
-    setFormTz(job.timezone);
-    setFormSessionMode(job.session_mode);
-    setFormEnabled(job.enabled);
-    setFormSqlProject((job as CronJob & { sql_query_project?: string }).sql_query_project ?? "");
-  };
-
-  const saveEdit = async () => {
+  const save = async () => {
     if (!editing) return;
-    setLoading(true);
+    setSaving(true);
     try {
       const res = await apiFetch(`${apiBase()}/admin/cron-jobs/${editing.job_id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: formName,
-          cron_expression: formCron,
-          prompt: formPrompt,
-          profile_slug: formProfile,
-          timezone: formTz,
-          session_mode: formSessionMode,
-          enabled: formEnabled,
-          sql_query_project: formSqlProject || null,
+          name: form.name.trim(),
+          cron_expression: form.cron.trim(),
+          prompt: form.prompt,
+          profile_slug: form.profile,
+          timezone: form.tz.trim(),
+          session_mode: form.sessionMode,
+          enabled: form.enabled,
+          sql_query_project: form.sql || null,
         }),
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Save failed");
+        throw new Error(typeof err.detail === "string" ? err.detail : t(`${k}.toast.save_failed`));
       }
       setEditing(null);
-      setToast({ message: "Job updated", variant: "success" });
+      setToast({ message: t(`${k}.toast.updated`), variant: "success" });
       await fetchJobs();
-    } catch (e: unknown) {
-      setToast({
-        message: e instanceof Error ? e.message : "Save failed",
-        variant: "error",
-      });
+    } catch (e) {
+      fail(e, t(`${k}.toast.save_failed`));
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const runNow = async (jobId: string) => {
+  const runNow = async (j: CronJob) => {
+    setBusyId(j.job_id);
     try {
-      const res = await apiFetch(`${apiBase()}/admin/cron-jobs/${jobId}/run-now`, {
-        method: "POST",
-      });
-      if (!res.ok) throw new Error("Run failed");
-      setToast({ message: "Run started", variant: "success" });
+      const res = await apiFetch(`${apiBase()}/admin/cron-jobs/${j.job_id}/run-now`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      setToast({ message: t(`${k}.toast.run_started`, { name: j.name }), variant: "success" });
       await fetchJobs();
-    } catch (e: unknown) {
-      setToast({
-        message: e instanceof Error ? e.message : "Run failed",
-        variant: "error",
-      });
+    } catch (e) {
+      fail(e, t(`${k}.toast.run_failed`));
+    } finally {
+      setBusyId(null);
     }
   };
 
-  const toggleEnabled = async (job: CronJob) => {
+  const setEnabled = async (j: CronJob, enabled: boolean) => {
+    setJobs((all) => all.map((x) => (x.job_id === j.job_id ? { ...x, enabled } : x)));
     try {
-      const res = await apiFetch(`${apiBase()}/admin/cron-jobs/${job.job_id}`, {
+      const res = await apiFetch(`${apiBase()}/admin/cron-jobs/${j.job_id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: !job.enabled }),
+        body: JSON.stringify({ enabled }),
       });
-      if (!res.ok) throw new Error("Update failed");
+      if (!res.ok) throw new Error();
       await fetchJobs();
-    } catch (e: unknown) {
-      setToast({
-        message: e instanceof Error ? e.message : "Update failed",
-        variant: "error",
-      });
+    } catch (e) {
+      setJobs((all) => all.map((x) => (x.job_id === j.job_id ? { ...x, enabled: j.enabled } : x)));
+      fail(e, t(`${k}.toast.update_failed`));
     }
   };
 
-  const deleteJob = async (jobId: string) => {
-    if (!confirm("Delete this scheduled job?")) return;
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteBusy(true);
     try {
-      const res = await apiFetch(`${apiBase()}/admin/cron-jobs/${jobId}`, {
-        method: "DELETE",
-      });
-      if (!res.ok) throw new Error("Delete failed");
-      setToast({ message: "Job deleted", variant: "success" });
+      const res = await apiFetch(`${apiBase()}/admin/cron-jobs/${deleting.job_id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setDeleting(null);
+      setToast({ message: t(`${k}.toast.deleted`), variant: "success" });
       await fetchJobs();
-    } catch (e: unknown) {
-      setToast({
-        message: e instanceof Error ? e.message : "Delete failed",
-        variant: "error",
-      });
+    } catch (e) {
+      fail(e, t(`${k}.toast.delete_failed`));
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
-  const openRuns = async (job: CronJob) => {
-    setRunsJob(job);
+  const openRuns = async (j: CronJob) => {
+    setRunsJob(j);
+    setRuns([]);
     setRunsLoading(true);
     try {
-      const res = await apiFetch(`${apiBase()}/admin/cron-jobs/${job.job_id}/runs`);
-      if (!res.ok) throw new Error("Failed to load runs");
-      const data = await res.json();
-      setRuns(data.runs || []);
+      const res = await apiFetch(`${apiBase()}/admin/cron-jobs/${j.job_id}/runs`);
+      if (!res.ok) throw new Error();
+      setRuns((await res.json()).runs || []);
     } catch {
       setRuns([]);
     } finally {
@@ -346,377 +529,309 @@ export default function SchedulesPage() {
     }
   };
 
+  const profileName = useCallback((slug: string) => profiles[slug] || slug, [profiles]);
+
+  const userOptions = useMemo<Option[]>(
+    () => [{ value: ALL, label: t(`${k}.list.all_users`) }, ...Array.from(new Set(jobs.map((j) => j.user_id).filter(Boolean))).sort().map((v) => ({ value: v, label: v }))],
+    [jobs, t],
+  );
+  const profileOptions = useMemo<Option[]>(() => {
+    const slugs = new Set(Object.keys(profiles));
+    if (form.profile) slugs.add(form.profile);
+    return Array.from(slugs).map((v) => ({ value: v, label: profileName(v) })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [profiles, form.profile, profileName]);
+
+  const rows = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return jobs
+      .filter((j) => {
+        if (status === "on" && !j.enabled) return false;
+        if (status === "off" && j.enabled) return false;
+        if (userFilter !== ALL && j.user_id !== userFilter) return false;
+        if (!q) return true;
+        return [j.name, j.user_id, j.profile_slug, profileName(j.profile_slug), j.prompt, j.cron_expression].some((v) => (v || "").toLowerCase().includes(q));
+      })
+      .sort((a, b) => Number(b.enabled) - Number(a.enabled) || (toMs(a.next_run_at) || Infinity) - (toMs(b.next_run_at) || Infinity) || a.name.localeCompare(b.name));
+  }, [jobs, query, status, userFilter, profileName]);
+
+  const filtering = !!query.trim() || status !== "all" || userFilter !== ALL;
+  const clearFilters = () => {
+    setQuery("");
+    setStatus("all");
+    setUserFilter(ALL);
+  };
+
+  const valid = form.name.trim() !== "" && form.cron.trim().split(/\s+/).length === 5 && form.tz.trim() !== "" && form.profile !== "";
+  const noneAtAll = state === "ready" && jobs.length === 0;
+  const loading = state === "loading";
+
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="mx-auto flex max-w-[84rem] flex-col gap-6">
       <PageToast toast={toast} onDismiss={() => setToast(null)} />
-      <div className="flex flex-wrap items-center gap-4 mb-6">
-        <div className="flex items-center gap-3">
-          <Clock className="w-8 h-8 text-blue-400" />
-          <div>
-            <h1 className="text-2xl font-bold">Scheduled jobs</h1>
-            <p className="text-sm text-gray-400">Per-user cron jobs (requires AION_CRON_ENABLED=1)</p>
-          </div>
-        </div>
 
-        {/* Global Scheduler Toggle Switch */}
-        <div className="sm:ml-auto flex items-center gap-3 bg-[#171717] border border-[#262626] px-4 py-2 rounded-lg">
-          <span className="text-sm font-medium text-gray-300">Global Scheduler:</span>
-          {cronEnabledGlobal === null ? (
-            <span className="text-xs text-gray-500 animate-pulse">Loading...</span>
-          ) : (
-            <button
-              type="button"
-              disabled={updatingGlobal}
-              onClick={() => handleToggleClick()}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-                cronEnabledGlobal ? "bg-green-600" : "bg-zinc-800"
-              } ${updatingGlobal ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ${
-                  cronEnabledGlobal ? "translate-x-6" : "translate-x-1"
-                }`}
-              />
-            </button>
-          )}
-          <span className={`text-xs font-semibold ${cronEnabledGlobal ? "text-green-400" : "text-gray-500"}`}>
-            {cronEnabledGlobal === null ? "" : cronEnabledGlobal ? "ENABLED" : "DISABLED"}
-          </span>
+      <header className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-[28px]">{t(`${k}.title`)}</h1>
+          <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.subtitle`)}</p>
         </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            fetchGlobalCronStatus();
-            fetchJobs();
-          }}
-          className="flex items-center gap-2 px-3 py-2 rounded bg-[#262626] hover:bg-[#333] text-sm"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
+        <button type="button" className={outlineBtn} onClick={reload} disabled={loading}>
+          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} aria-hidden />
+          {t(`${k}.refresh`)}
         </button>
-      </div>
+      </header>
 
-      {cronEnabledGlobal === false && (
-        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-400 p-4 rounded-xl flex items-center gap-3 mb-6 animate-in fade-in duration-300">
-          <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-          <div className="text-sm text-left">
-            <span className="font-bold">Global Scheduler is Disabled.</span> Active jobs will not fire automatically. You can enable it using the switch above.
+      {schedulerOn !== null && (
+        <section
+          aria-label={t(`${k}.scheduler.title`)}
+          className={cn("flex flex-wrap items-center gap-x-4 gap-y-3 rounded-2xl border px-5 py-4", schedulerOn ? "border-border/70 bg-card" : "border-warning/30 bg-warning/10")}
+        >
+          <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-xl", schedulerOn ? "bg-success/12 text-success" : "bg-warning/15 text-warning")}>
+            {schedulerOn ? <span className="h-2.5 w-2.5 rounded-full bg-current" aria-hidden /> : <AlertTriangle className="h-4 w-4" aria-hidden />}
+          </span>
+          <div className="min-w-[14rem] flex-1">
+            <h2 className="text-sm font-semibold">{t(`${k}.scheduler.${schedulerOn ? "on_title" : "off_title"}`)}</h2>
+            <p className="mt-0.5 max-w-[64ch] text-sm text-muted-foreground">{t(`${k}.scheduler.${schedulerOn ? "on_body" : "off_body"}`)}</p>
           </div>
-        </div>
+          <div className="flex items-center gap-3">
+            {updatingGlobal && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />}
+            <Switch checked={schedulerOn} disabled={updatingGlobal || restarting} onChange={(v) => setPendingGlobal(v)} label={t(`${k}.scheduler.title`)} />
+          </div>
+        </section>
       )}
 
-      <div className="flex flex-wrap gap-3 mb-4">
-        <input
-          className="bg-[#171717] border border-[#333] rounded px-3 py-2 text-sm"
-          placeholder="Filter user_id"
-          value={filterUser}
-          onChange={(e) => setFilterUser(e.target.value)}
-        />
-        <select
-          className="bg-[#171717] border border-[#333] rounded px-3 py-2 text-sm"
-          value={filterEnabled}
-          onChange={(e) => setFilterEnabled(e.target.value)}
-        >
-          <option value="">All</option>
-          <option value="1">Enabled</option>
-          <option value="0">Disabled</option>
-        </select>
-      </div>
-
-      {loading ? (
-        <p className="text-gray-400">Loading…</p>
-      ) : jobs.length === 0 ? (
-        <p className="text-gray-400">No scheduled jobs.</p>
-      ) : (
-        <div className="overflow-x-auto border border-[#262626] rounded-lg">
-          <table className="w-full text-sm">
-            <thead className="bg-[#171717] text-left text-gray-400">
-              <tr>
-                <th className="p-3">User</th>
-                <th className="p-3">Name</th>
-                <th className="p-3">Cron</th>
-                <th className="p-3">TZ</th>
-                <th className="p-3">Profile</th>
-                <th className="p-3">Session</th>
-                <th className="p-3">Next</th>
-                <th className="p-3">Last</th>
-                <th className="p-3">On</th>
-                <th className="p-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {jobs.map((j) => (
-                <tr key={j.job_id} className="border-t border-[#262626]">
-                  <td className="p-3 font-mono text-xs">{j.user_id}</td>
-                  <td className="p-3">{j.name}</td>
-                  <td className="p-3 font-mono text-xs">{j.cron_expression}</td>
-                  <td className="p-3 text-xs">{j.timezone}</td>
-                  <td className="p-3 text-xs">{j.profile_slug}</td>
-                  <td className="p-3 text-xs">{j.session_mode}</td>
-                  <td className="p-3 text-xs text-gray-400">
-                    {j.next_run_at ? new Date(j.next_run_at).toLocaleString() : "—"}
-                  </td>
-                  <td className="p-3 text-xs">
-                    {j.last_run?.status || "—"}
-                  </td>
-                  <td className="p-3">{j.enabled ? "✓" : "—"}</td>
-                  <td className="p-3">
-                    <div className="flex gap-1">
-                      <button
-                        type="button"
-                        title="Edit"
-                        onClick={() => openEdit(j)}
-                        className="p-1.5 rounded hover:bg-[#333]"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Run now"
-                        onClick={() => runNow(j.job_id)}
-                        className="p-1.5 rounded hover:bg-[#333]"
-                      >
-                        <Play className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        title={j.enabled ? "Disable" : "Enable"}
-                        onClick={() => toggleEnabled(j)}
-                        className="p-1.5 rounded hover:bg-[#333]"
-                      >
-                        {j.enabled ? (
-                          <PowerOff className="w-4 h-4" />
-                        ) : (
-                          <Power className="w-4 h-4" />
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        title="History"
-                        onClick={() => openRuns(j)}
-                        className="p-1.5 rounded hover:bg-[#333]"
-                      >
-                        <History className="w-4 h-4" />
-                      </button>
-                      <button
-                        type="button"
-                        title="Delete"
-                        onClick={() => deleteJob(j.job_id)}
-                        className="p-1.5 rounded hover:bg-red-900/40 text-red-400"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {noneAtAll ? (
+        <div className="flex flex-col items-center rounded-3xl border border-dashed border-border px-6 py-20 text-center">
+          <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.list.none_title`)}</h2>
+          <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">{t(`${k}.list.none_body`)}</p>
         </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-[14rem] flex-1 sm:max-w-sm">
+              <SearchField value={query} onChange={setQuery} placeholder={t(`${k}.list.search`)} />
+            </div>
+
+            <div role="group" aria-label={t(`${k}.list.status_aria`)} className="inline-flex shrink-0 rounded-xl border border-border bg-card p-0.5">
+              {(["all", "on", "off"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={status === v}
+                  onClick={() => setStatus(v)}
+                  className={cn("focus-ring h-8 rounded-[10px] px-3 text-sm font-medium transition-colors", status === v ? "bg-secondary text-foreground" : "text-muted-foreground hover:text-foreground")}
+                >
+                  {t(`${k}.list.status_${v}`)}
+                </button>
+              ))}
+            </div>
+
+            {userOptions.length > 2 && (
+              <Select size="sm" value={userFilter} onChange={setUserFilter} options={userOptions} aria-label={t(`${k}.list.col_user`)} className="w-44" />
+            )}
+
+            {state === "ready" && (
+              <span className="ml-auto text-sm tabular-nums text-muted-foreground">
+                {filtering ? t(`${k}.list.count_filtered`, { shown: rows.length, total: jobs.length }) : t(`${k}.list.count`, { n: jobs.length })}
+              </span>
+            )}
+          </div>
+
+          {loading ? (
+            <div className="flex items-center gap-2 px-1 py-10 text-sm text-muted-foreground" role="status">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              {t(`${k}.loading`)}
+            </div>
+          ) : state === "error" ? (
+            <div className="flex flex-col items-start gap-3 px-1 py-10">
+              <p className="text-sm text-destructive">{t(`${k}.error`)}</p>
+              <button type="button" className={outlineBtn} onClick={reload}>
+                {t(`${k}.retry`)}
+              </button>
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="rounded-3xl border border-border/70 bg-card px-6 py-16 text-center">
+              <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.list.empty_title`)}</h2>
+              <p className="mt-1.5 text-sm text-muted-foreground">{t(`${k}.list.empty_body`)}</p>
+              {filtering && (
+                <button type="button" className={cn(ghostBtn, "mt-3")} onClick={clearFilters}>
+                  {t(`${k}.list.clear`)}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="rounded-3xl border border-border/70 bg-card">
+              <div className={cn("hidden items-center gap-4 border-b border-border/60 px-5 py-2.5 text-xs font-medium text-muted-foreground md:grid", GRID)}>
+                <span>{t(`${k}.list.col_job`)}</span>
+                <span>{t(`${k}.list.col_user`)}</span>
+                <span>{t(`${k}.list.col_profile`)}</span>
+                <span>{t(`${k}.list.col_next`)}</span>
+                <span>{t(`${k}.list.col_last`)}</span>
+                <span className="text-right">{t(`${k}.list.col_actions`)}</span>
+              </div>
+              <ul className="overflow-hidden rounded-b-3xl">
+                {rows.map((j) => {
+                  const next = j.enabled && j.next_run_at ? nextWhen(j.next_run_at, now) : "";
+                  const lastMs = toMs(j.last_run?.started_at);
+                  return (
+                    <li key={j.job_id} className={cn("grid items-center gap-x-4 gap-y-2 border-b border-border/40 px-5 py-3.5 last:border-b-0 hover:bg-secondary/40", GRID)}>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={cn("truncate text-sm font-medium", !j.enabled && "text-muted-foreground")}>{j.name}</span>
+                          {!j.enabled && <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs text-muted-foreground">{t(`${k}.list.paused`)}</span>}
+                        </div>
+                        <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                          <code className="font-mono tabular-nums text-foreground/80">{j.cron_expression}</code>
+                          <span className="truncate">
+                            {j.timezone} · {t(`${k}.list.session_${j.session_mode === "new" ? "new" : "fixed"}`)}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="min-w-0 truncate text-sm text-muted-foreground md:text-foreground" title={j.user_id}>
+                        {j.user_id}
+                      </div>
+                      <div className="min-w-0 truncate text-sm text-muted-foreground">{profileName(j.profile_slug) || "—"}</div>
+
+                      <div className="text-sm tabular-nums text-muted-foreground" title={j.next_run_at ? fullWhen(toMs(j.next_run_at)) : undefined}>
+                        {next || "—"}
+                      </div>
+
+                      <div className="flex flex-col items-start gap-0.5">
+                        <StatusPill status={j.last_run?.status} t={t} />
+                        {lastMs > 0 && (
+                          <span className="text-xs tabular-nums text-muted-foreground" title={fullWhen(lastMs)}>
+                            {shortWhen(lastMs, now)}
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-start gap-0.5 md:justify-end">
+                        <Switch checked={j.enabled} onChange={(v) => setEnabled(j, v)} label={t(`${k}.actions.${j.enabled ? "disable" : "enable"}`, { name: j.name })} />
+                        <span className="ml-1 flex items-center">
+                          <button type="button" className={iconBtn} title={t(`${k}.actions.run`)} aria-label={t(`${k}.actions.run`)} disabled={busyId === j.job_id} onClick={() => runNow(j)}>
+                            {busyId === j.job_id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Play className="h-4 w-4" aria-hidden />}
+                          </button>
+                          <button type="button" className={iconBtn} title={t(`${k}.actions.history`)} aria-label={t(`${k}.actions.history`)} onClick={() => openRuns(j)}>
+                            <History className="h-4 w-4" aria-hidden />
+                          </button>
+                          <button type="button" className={iconBtn} title={t(`${k}.actions.edit`)} aria-label={t(`${k}.actions.edit`)} onClick={() => openEdit(j)}>
+                            <Pencil className="h-4 w-4" aria-hidden />
+                          </button>
+                          <button type="button" className={cn(iconBtn, "hover:text-destructive")} title={t(`${k}.actions.delete`)} aria-label={t(`${k}.actions.delete`)} onClick={() => setDeleting(j)}>
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                          </button>
+                        </span>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
+        </>
       )}
 
       {editing && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0a0a0a] border border-[#333] rounded-lg w-full max-w-lg p-6">
-            <div className="flex justify-between mb-4">
-              <h2 className="font-semibold">Edit job</h2>
-              <button type="button" onClick={() => setEditing(null)}>
-                <X className="w-5 h-5" />
-              </button>
+        <Dialog title={t(`${k}.edit.title`)} closeLabel={t(`${k}.edit.cancel`)} onClose={() => !saving && setEditing(null)} className="max-w-2xl">
+          <form
+            className="flex flex-col gap-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (valid && !saving) save();
+            }}
+          >
+            <Field label={t(`${k}.edit.name`)}>
+              <input className={inputCls} value={form.name} onChange={(e) => patch({ name: e.target.value })} autoFocus />
+            </Field>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label={t(`${k}.edit.cron`)} hint={t(`${k}.edit.cron_hint`)}>
+                <input className={cn(inputCls, "font-mono tabular-nums")} value={form.cron} onChange={(e) => patch({ cron: e.target.value })} placeholder="0 9 * * 1-5" spellCheck={false} autoComplete="off" />
+              </Field>
+              <Field label={t(`${k}.edit.timezone`)}>
+                <input className={inputCls} value={form.tz} onChange={(e) => patch({ tz: e.target.value })} placeholder="Europe/Rome" spellCheck={false} autoComplete="off" />
+              </Field>
             </div>
-            <div className="space-y-3 text-sm">
-              <input
-                className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2"
-                value={formName}
-                onChange={(e) => setFormName(e.target.value)}
-                placeholder="Name"
-              />
-              <input
-                className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2 font-mono"
-                value={formCron}
-                onChange={(e) => setFormCron(e.target.value)}
-                placeholder="Cron (5 fields)"
-              />
-              <textarea
-                className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2 min-h-[80px]"
-                value={formPrompt}
-                onChange={(e) => setFormPrompt(e.target.value)}
-                placeholder="Prompt"
-              />
-              <input
-                className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2"
-                value={formProfile}
-                onChange={(e) => setFormProfile(e.target.value)}
-                placeholder="Profile slug"
-              />
-              <input
-                className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2"
-                value={formTz}
-                onChange={(e) => setFormTz(e.target.value)}
-                placeholder="Timezone"
-              />
-              <div className="relative w-full">
-                <select
-                  className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2 text-white appearance-none cursor-pointer pr-8"
-                  style={{ colorScheme: "dark" }}
-                  value={formSessionMode}
-                  onChange={(e) => setFormSessionMode(e.target.value)}
-                >
-                  <option value="fixed">fixed session</option>
-                  <option value="new">new session each run</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              </div>
 
-              {/* SQL Query Project */}
-              <div className="space-y-1">
-                <label className="text-xs text-gray-400 font-medium uppercase tracking-wide">SQL Query Project</label>
-                <div className="relative w-full">
-                  <select
-                    className="w-full bg-[#171717] border border-[#333] rounded px-3 py-2 text-white appearance-none cursor-pointer pr-8"
-                    style={{ colorScheme: "dark" }}
-                    value={formSqlProject}
-                    onChange={(e) => setFormSqlProject(e.target.value)}
-                  >
-                    <option value="">— None —</option>
-                    {sqlProjects.map((p) => (
-                      <option key={p.slug} value={p.slug}>
-                        {p.display_name} ({p.slug})
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                </div>
-                {sqlProjects.length === 0 && (
-                  <p className="text-xs text-gray-500">No SQL projects found. Create one in the Memory page.</p>
-                )}
-              </div>
+            <Field label={t(`${k}.edit.prompt`)}>
+              <textarea className={cn(inputCls, "min-h-28 resize-y leading-relaxed")} value={form.prompt} onChange={(e) => patch({ prompt: e.target.value })} />
+            </Field>
 
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={formEnabled}
-                  onChange={(e) => setFormEnabled(e.target.checked)}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">{t(`${k}.edit.profile`)}</span>
+                <Select value={form.profile} onChange={(v) => patch({ profile: v })} options={profileOptions} aria-label={t(`${k}.edit.profile`)} />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">{t(`${k}.edit.session_mode`)}</span>
+                <Select
+                  value={form.sessionMode}
+                  onChange={(v) => patch({ sessionMode: v })}
+                  aria-label={t(`${k}.edit.session_mode`)}
+                  options={[
+                    { value: "fixed", label: t(`${k}.list.session_fixed`) },
+                    { value: "new", label: t(`${k}.list.session_new`) },
+                  ]}
                 />
-                Enabled
-              </label>
-            </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <button
-                type="button"
-                className="px-4 py-2 rounded bg-[#262626]"
-                onClick={() => setEditing(null)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-500"
-                onClick={saveEdit}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {runsJob && (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#0a0a0a] border border-[#333] rounded-lg w-full max-w-2xl max-h-[80vh] overflow-auto p-6">
-            <div className="flex justify-between mb-4">
-              <h2 className="font-semibold">Runs — {runsJob.name}</h2>
-              <button type="button" onClick={() => setRunsJob(null)}>
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            {runsLoading ? (
-              <p className="text-gray-400">Loading…</p>
-            ) : runs.length === 0 ? (
-              <p className="text-gray-400">No runs yet.</p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {runs.map((r) => (
-                  <li key={r.run_id} className="border border-[#333] rounded p-3">
-                    <div className="flex justify-between">
-                      <span className="font-mono text-xs">{r.status}</span>
-                      <span className="text-gray-500 text-xs">
-                        {r.started_at ? new Date(r.started_at).toLocaleString() : ""}
-                      </span>
-                    </div>
-                    {r.error_message && (
-                      <p className="text-red-400 mt-1 text-xs">{r.error_message}</p>
-                    )}
-                    {r.assistant_preview && (
-                      <p className="text-gray-400 mt-1 text-xs line-clamp-3">
-                        {r.assistant_preview}
-                      </p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </div>
-      )}
-
-      {showConfirmModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-          <div className="bg-[#0a0a0a] border border-[#333] rounded-2xl w-full max-w-md p-6 shadow-2xl shadow-amber-500/5 space-y-6">
-            <div className="flex items-center gap-4">
-              <div className="p-3 bg-amber-500/15 text-amber-500 rounded-xl">
-                <AlertTriangle className="w-6 h-6 animate-pulse" />
               </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">{t(`${k}.edit.sql_project`)}</span>
+              <Select value={form.sql} onChange={(v) => patch({ sql: v })} options={[{ value: "", label: t(`${k}.edit.sql_none`) }, ...sqlProjects]} aria-label={t(`${k}.edit.sql_project`)} />
+              {sqlProjects.length === 0 && <span className="text-xs text-muted-foreground">{t(`${k}.edit.sql_empty`)}</span>}
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-2xl border border-border/70 px-4 py-3">
               <div>
-                <h3 className="text-lg font-bold text-white">Restart Kernel Required</h3>
-                <p className="text-xs text-gray-400">Action: {pendingGlobalValue ? "Enable" : "Disable"} Global Scheduler</p>
+                <p className="text-sm font-medium">{t(`${k}.edit.enabled`)}</p>
+                <p className="text-xs text-muted-foreground">{t(`${k}.edit.enabled_hint`)}</p>
               </div>
+              <Switch checked={form.enabled} onChange={(v) => patch({ enabled: v })} label={t(`${k}.edit.enabled`)} />
             </div>
 
-            <p className="text-sm text-gray-300 leading-relaxed text-left">
-              Toggling the global scheduler requires restarting the <strong className="text-white">AI Kernel (API container)</strong> to apply the changes. 
-              This will temporarily interrupt active background operations.
-            </p>
-
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                type="button"
-                className="px-4 py-2 text-sm font-medium text-gray-400 bg-zinc-900 border border-[#262626] rounded-xl hover:bg-zinc-800 transition-colors"
-                onClick={() => {
-                  setShowConfirmModal(false);
-                  setPendingGlobalValue(null);
-                }}
-              >
-                Cancel
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" className={ghostBtn} onClick={() => setEditing(null)} disabled={saving}>
+                {t(`${k}.edit.cancel`)}
               </button>
-              <button
-                type="button"
-                className="px-5 py-2 text-sm font-semibold text-white bg-amber-600 hover:bg-amber-500 rounded-xl transition-all shadow-lg shadow-amber-600/25 active:scale-95"
-                onClick={confirmToggleGlobalCron}
-              >
-                Proceed & Restart
+              <button type="submit" className={solidBtn} disabled={!valid || saving}>
+                {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+                {saving ? t(`${k}.edit.saving`) : t(`${k}.edit.save`)}
+              </button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+
+      {runsJob && <RunsDialog job={runsJob} runs={runs} loading={runsLoading} now={now} t={t} onClose={() => setRunsJob(null)} />}
+
+      {deleting && <DeleteDialog name={deleting.name} busy={deleteBusy} ns={`${k}.delete`} t={t} onConfirm={confirmDelete} onClose={() => !deleteBusy && setDeleting(null)} />}
+
+      {pendingGlobal !== null && (
+        <Dialog title={t(`${k}.restart.title`)} closeLabel={t(`${k}.restart.cancel`)} onClose={() => setPendingGlobal(null)}>
+          <div className="flex flex-col gap-5">
+            <p className="text-sm text-muted-foreground">{t(`${k}.restart.body_${pendingGlobal ? "on" : "off"}`)}</p>
+            <div className="flex justify-end gap-2">
+              <button type="button" className={ghostBtn} autoFocus onClick={() => setPendingGlobal(null)}>
+                {t(`${k}.restart.cancel`)}
+              </button>
+              <button type="button" className={solidBtn} onClick={confirmGlobal}>
+                {t(`${k}.restart.confirm`)}
               </button>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {restarting && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center z-50 animate-in fade-in duration-300">
-          <div className="bg-[#0d0d0d] border border-[#262626] rounded-3xl p-8 max-w-md w-full text-center space-y-6 shadow-2xl shadow-blue-500/10">
-            <div className="relative w-20 h-20 mx-auto">
-              <div className="absolute inset-0 border-4 border-blue-500/20 rounded-full" />
-              <div className="absolute inset-0 border-4 border-t-blue-500 rounded-full animate-spin" />
-            </div>
-            <div className="space-y-2">
-              <h3 className="text-xl font-bold text-white">Reinitializing AI Kernel</h3>
-              <p className="text-sm text-gray-500">
-                The API container is restarting to apply the new scheduler settings. This usually takes about 5 to 10 seconds.
-              </p>
-            </div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-blue-500 bg-blue-500/10 px-3 py-1.5 rounded-full inline-block animate-pulse">
-              Waiting for health check...
+        <div role="alertdialog" aria-live="polite" aria-labelledby="restart-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
+          <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl border border-border bg-card px-6 py-8 text-center shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)]">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden />
+            <div>
+              <h2 id="restart-title" className="text-lg font-semibold tracking-[-0.015em]">
+                {t(`${k}.restart.working_title`)}
+              </h2>
+              <p className="mt-1.5 text-sm text-muted-foreground">{t(`${k}.restart.working_body`)}</p>
             </div>
           </div>
         </div>

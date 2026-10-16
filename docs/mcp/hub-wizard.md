@@ -97,7 +97,10 @@ L'admin clicca **"Completa installazione"** per confermare. Il sistema esegue at
 ### Per gli utenti
 - Se `credential_mode = per_user`: il server appare in **chat-ui → Le mie integrazioni** con un form per inserire le credenziali personali
 - Se `credential_mode = org_shared`: appare con messaggio "Gestito dall'organizzazione — nessuna configurazione personale richiesta"
-- Se `user_may_disable = true`: gli utenti possono disabilitare il server individualmente dal toggle nella card
+- La **Disponibilità per gli utenti** (tab Runtime del modal) combina `is_enabled_for_users` e `user_may_disable` in tre stati:
+  - **Nascosto** (`is_enabled_for_users = false`): non compare in *Le mie integrazioni*; gli agenti mantengono i tool
+  - **Attivo, disattivabile** (`true` / `user_may_disable = true`): visibile, con toggle nella card
+  - **Sempre attivo** (`true` / `user_may_disable = false`): visibile, senza toggle (la disattivazione via API risponde 403)
 - Un'icona **⚠ gialla** appare nell'area di input chat se ci sono integrazioni con credenziali mancanti
 
 ### Per i profili agente

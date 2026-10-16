@@ -70,8 +70,6 @@ alembic upgrade head
 ./.venv/bin/python scripts/sync_mcp_integration_from_catalog.py
 ```
 
-La pagina `/integrations` in admin-ui reindirizza a `/hub?focus=integrations`.
-
 Profilo consulente: `mcp_integration_advisor` (chat-ui `?profile=mcp_integration_advisor&context=<slug>`).
 
 ## Modello dati

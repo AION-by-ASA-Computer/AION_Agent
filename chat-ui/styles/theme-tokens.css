@@ -12,42 +12,42 @@
   --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-/* Dark — Premium Neutral Dark Mode (ChatGPT/OpenWebUI style layout) */
+/* Dark — Cohesive Elevation Scale & Brand Consistency */
 html[data-theme="dark"],
 :root:not([data-theme]) {
   color-scheme: dark;
-  --background: 240 5.9% 10%; /* Zinc-900 (#212121) - main background */
+  --background: 240 6% 9%; /* Deep Canvas (#161618) */
   --foreground: 0 0% 98%;
-  --card: 240 5.9% 10%;
+  --card: 240 5% 12.5%; /* Raised panels, Dock, Chat cards (#1f1f23) */
   --card-foreground: 0 0% 98%;
-  --popover: 240 5.9% 10%;
+  --popover: 240 5% 15%; /* Floating modals, dropdowns, popovers (#25252a) */
   --popover-foreground: 0 0% 98%;
-  --primary: 0 0% 98%;
-  --primary-foreground: 240 5.9% 10%;
-  --secondary: 240 3.7% 15.9%; /* Zinc-800 (#2f2f2f) */
+  --primary: 0 72% 50%; /* Identical AION brand red/rose as light theme, tuned for dark contrast */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 4% 17%; /* Secondary buttons, subtle pills (#2a2a30) */
   --secondary-foreground: 0 0% 98%;
-  --muted: 240 3.7% 15.9%;
-  --muted-foreground: 240 5% 64.9%;
-  --accent: 240 3.7% 15.9%;
+  --muted: 240 4% 16%;
+  --muted-foreground: 240 5% 65%;
+  --accent: 240 4% 18%;
   --accent-foreground: 0 0% 98%;
-  --destructive: 0 62.8% 30.6%;
+  --destructive: 0 65% 48%;
   --destructive-foreground: 0 0% 98%;
-  --border: 240 3.7% 15.9%;
-  --input: 240 3.7% 15.9%;
-  --ring: 240 4.9% 83.9%;
-  --chart-1: 220 70% 50%;
+  --border: 240 4% 20%; /* Distinct, crisp borders matching light theme outline clarity */
+  --input: 240 4% 20%;
+  --ring: 0 72% 50%; /* Ring matches brand primary */
+  --chart-1: 0 72% 52%;
   --chart-2: 160 60% 45%;
   --chart-3: 30 80% 55%;
   --chart-4: 280 65% 60%;
   --chart-5: 340 75% 55%;
-  --sidebar-background: 240 10% 3.9%; /* Zinc-950 (#171717) - sidebar is darker */
+  --sidebar-background: 240 8% 6.5%; /* Darker recessed sidebar (#111113) */
   --sidebar-foreground: 240 4.8% 95.9%;
-  --sidebar-primary: 224.3 76.3% 48%;
+  --sidebar-primary: 0 72% 50%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 240 3.7% 15.9%;
+  --sidebar-accent: 240 4% 15%;
   --sidebar-accent-foreground: 240 4.8% 95.9%;
-  --sidebar-border: 240 3.7% 12%; /* Subtle border inside dark sidebar */
-  --sidebar-ring: 240 4.9% 83.9%;
+  --sidebar-border: 240 4% 16%; /* Subtle, visible divider */
+  --sidebar-ring: 0 72% 50%;
 }
 
 html[data-theme="light"] {

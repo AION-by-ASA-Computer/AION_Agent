@@ -6,6 +6,10 @@ export type AuthStatus = {
   login_endpoint: string;
   token_ttl_seconds: number;
   first_setup_complete: boolean;
+  sso_enabled: boolean;
+  sso_provider: string | null;
+  /** In SSO: almeno un admin ha ancora una password (form di login necessario). */
+  admin_password_login: boolean;
 };
 
 const DEFAULT_STATUS: AuthStatus = {
@@ -15,6 +19,9 @@ const DEFAULT_STATUS: AuthStatus = {
   login_endpoint: "/auth/login",
   token_ttl_seconds: 0,
   first_setup_complete: false,
+  sso_enabled: false,
+  sso_provider: null,
+  admin_password_login: true,
 };
 
 let cachedStatus: Promise<AuthStatus> | null = null;
@@ -35,6 +42,10 @@ export function fetchAuthStatus(force = false): Promise<AuthStatus> {
         login_endpoint: j.login_endpoint || "/auth/login",
         token_ttl_seconds: Number(j.token_ttl_seconds || 0),
         first_setup_complete: Boolean(j.first_setup_complete),
+        sso_enabled: Boolean(j.sso_enabled),
+        sso_provider: j.sso_provider || null,
+        admin_password_login:
+          j.admin_password_login === undefined ? true : Boolean(j.admin_password_login),
       };
     } catch {
       return DEFAULT_STATUS;

@@ -1,4 +1,5 @@
 import type { TurnSegment } from "./types";
+import { isPiiReviewArtifact } from "@/lib/artifacts";
 
 /**
  * Compact-mode mapping: the process trail is whatever already happened
@@ -40,6 +41,11 @@ export function partitionCompactSegments(segments: TurnSegment[]): {
     const seg = segments[i];
     if (isProcessWorkSegment(seg)) {
       process.push(seg);
+      continue;
+    }
+    if (isPiiReviewArtifact(seg)) {
+      // Needs user action (confirm/reject): always surface it as final output.
+      output.push(seg);
       continue;
     }
     if (seg.kind === "text" || seg.kind === "artifact") {

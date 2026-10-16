@@ -25,6 +25,13 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-sidebar: hsl(var(--sidebar-background));
+  --color-sidebar-foreground: hsl(var(--sidebar-foreground));
+  --color-sidebar-accent: hsl(var(--sidebar-accent));
+  --color-sidebar-border: hsl(var(--sidebar-border));
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
 @layer base {
@@ -34,7 +41,18 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: var(--font-sans);
+    font-feature-settings: "cv11", "ss01";
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.28);
+    color: hsl(var(--foreground));
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
   }
 }
 
@@ -62,6 +80,25 @@
 
   .no-scrollbar::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* Dashboard map: an edge into a failing node keeps flowing until the problem is fixed. */
+.aion-edge-alert {
+  stroke-dasharray: 6 6;
+  animation: aion-edge-flow 1.2s linear infinite;
+}
+
+@keyframes aion-edge-flow {
+  to {
+    stroke-dashoffset: -12;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aion-edge-alert {
+    animation: none;
+    stroke-dasharray: none;
   }
 }
 
@@ -103,4 +140,65 @@
 .slash-menu-icon.active {
   background-color: hsl(var(--primary) / 0.15);
   color: hsl(var(--primary));
+}
+
+/* Markdown surface shared with chat-ui so the transcript reads identically. */
+@layer components {
+  .chat-font {
+    line-height: var(--aion-chat-line-height, 1.625);
+  }
+  .prose-chat {
+    @apply text-foreground;
+    font-size: 1em;
+    line-height: var(--aion-chat-line-height, 1.625);
+  }
+  .prose-chat :where(p) {
+    @apply mb-2 last:mb-0;
+  }
+  .prose-chat :where(a) {
+    @apply text-primary underline-offset-2 hover:underline;
+  }
+  .prose-chat :where(code) {
+    @apply rounded-md bg-muted/80 px-1.5 py-0.5 font-mono text-[0.88em] text-foreground ring-1 ring-border/50;
+  }
+  .prose-chat :where(pre) {
+    @apply my-0;
+  }
+  .prose-chat :where(pre code) {
+    @apply bg-transparent p-0 ring-0;
+  }
+  .prose-chat :where(ul, ol) {
+    @apply my-2 ml-4 list-outside;
+  }
+  .prose-chat :where(ul) {
+    @apply list-disc;
+  }
+  .prose-chat :where(ol) {
+    @apply list-decimal;
+  }
+  .prose-chat :where(li) {
+    @apply mb-1;
+  }
+  .prose-chat :where(h1, h2, h3) {
+    @apply mb-1 mt-3 font-semibold text-foreground first:mt-0;
+  }
+  .table-wrapper {
+    @apply my-4 w-full max-w-full overflow-x-auto rounded-xl border border-border bg-card/40 shadow-sm;
+  }
+  .prose-chat :where(table) {
+    @apply w-full border-collapse;
+    font-size: 0.93em;
+  }
+  .prose-chat :where(thead) {
+    @apply bg-muted/70 text-muted-foreground;
+  }
+  .prose-chat :where(th) {
+    @apply border-b border-border px-4 py-3 text-left font-semibold;
+  }
+  .prose-chat :where(td) {
+    @apply border-b border-border/50 px-4 py-2.5 align-top;
+  }
+  .prose-chat :where(tbody tr:last-child td) {
+    @apply border-b-0;
+  }
 }

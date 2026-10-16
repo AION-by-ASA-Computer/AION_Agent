@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 import { AlertTriangle, BookOpen, Check, Copy, ExternalLink, KeyRound, Users } from "lucide-react";
-
-import {
-  connectorOAuthSetupHints,
-  defaultOAuthRedirectUri,
-} from "@/lib/mcpOAuthSetup";
+import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/use-t";
+import { ghostBtn, inputCls } from "@/components/ui/classes";
+import { connectorOAuthSetupHints, defaultOAuthRedirectUri } from "@/lib/mcpOAuthSetup";
 
 export type McpOauthConfigState = {
   provider: string;
@@ -25,19 +24,16 @@ type Props = {
   showUserManagedNote?: boolean;
 };
 
-export function McpOAuthAdminSetupPanel({
-  connector,
-  oauthConfig,
-  onChange,
-  showUserManagedNote = true,
-}: Props) {
+const linkCls = "focus-ring inline-flex items-center gap-1.5 rounded-md text-sm font-medium underline-offset-2 hover:underline";
+
+export function McpOAuthAdminSetupPanel({ connector, oauthConfig, onChange, showUserManagedNote = true }: Props) {
+  const t = useT();
+  const k = "admin_hub.editors.oauth";
   const hints = connectorOAuthSetupHints(connector);
   const redirectUri = defaultOAuthRedirectUri();
   const [copied, setCopied] = useState(false);
 
-  if (!hints.usesOAuth && !oauthConfig.authorization_server && !oauthConfig.client_id) {
-    return null;
-  }
+  if (!hints.usesOAuth && !oauthConfig.authorization_server && !oauthConfig.client_id) return null;
 
   async function copyRedirectUri() {
     try {
@@ -49,83 +45,49 @@ export function McpOAuthAdminSetupPanel({
     }
   }
 
-  const scopeList =
-    oauthConfig.scopes.length > 0 ? oauthConfig.scopes : hints.scopes;
+  const scopeList = oauthConfig.scopes.length > 0 ? oauthConfig.scopes : hints.scopes;
 
   return (
-    <div className="mt-3 space-y-3">
+    <div className="flex flex-col gap-3">
       {hints.needsAdminCredentials ? (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/[0.08] p-4">
-          <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-amber-300" />
-          <div className="min-w-0 space-y-2">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-amber-200/90">
-              OAuth app required — admin setup
-            </div>
-            <p className="text-[11px] leading-relaxed text-gray-300">
-              <span className="font-semibold text-white">{hints.title}</span> does not support
-              automatic client registration. Register an OAuth application with the provider,
-              then paste <span className="font-semibold text-white">Client ID</span> and{" "}
-              <span className="font-semibold text-white">Client secret</span> below before users
-              can connect in chat-ui → My Integrations.
-            </p>
-            {hints.adminHint ? (
-              <p className="mt-2 text-[11px] leading-relaxed text-amber-100/85">{hints.adminHint}</p>
-            ) : null}
-            <div className="mt-3 rounded-lg border border-white/10 bg-black/35 p-2.5">
-              <div className="text-[9px] font-bold uppercase tracking-wider text-gray-500">
-                Authorization callback URL (redirect URI)
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <code className="break-all text-[10px] text-emerald-300">{redirectUri}</code>
-                <button
-                  type="button"
-                  onClick={() => void copyRedirectUri()}
-                  className="inline-flex shrink-0 items-center gap-1 rounded-md border border-white/15 bg-white/5 px-2 py-1 text-[10px] font-semibold text-gray-200 hover:bg-white/10"
-                >
-                  {copied ? <Check className="h-3 w-3 text-emerald-400" /> : <Copy className="h-3 w-3" />}
-                  {copied ? "Copied" : "Copy"}
+        <div className="flex items-start gap-3 rounded-2xl bg-warning/12 p-4">
+          <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+          <div className="min-w-0 flex-1">
+            <h3 className="text-sm font-semibold">{t(`${k}.required_title`)}</h3>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{t(`${k}.required_body`, { name: hints.title })}</p>
+            {hints.adminHint ? <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{hints.adminHint}</p> : null}
+            <div className="mt-3 rounded-xl bg-background/70 p-3">
+              <div className="text-xs font-medium text-muted-foreground">{t(`${k}.callback`)}</div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                <code className="min-w-0 break-all font-mono text-xs">{redirectUri}</code>
+                <button type="button" onClick={() => void copyRedirectUri()} className={cn(ghostBtn, "h-8 shrink-0 px-2.5 text-xs")}>
+                  {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
+                  <span role="status">{copied ? t(`${k}.copied`) : t(`${k}.copy`)}</span>
                 </button>
               </div>
             </div>
             {hints.docUrl ? (
-              <a
-                href={hints.docUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-3 inline-flex items-center gap-1.5 text-[11px] font-semibold text-amber-200 hover:text-white"
-              >
-                <BookOpen className="h-3.5 w-3.5" />
-                Provider setup guide
-                <ExternalLink className="h-3 w-3 opacity-70" />
+              <a href={hints.docUrl} target="_blank" rel="noopener noreferrer" className={cn(linkCls, "mt-3")}>
+                <BookOpen className="h-3.5 w-3.5" aria-hidden />
+                {t(`${k}.guide`)}
+                <ExternalLink className="h-3 w-3 opacity-70" aria-hidden />
               </a>
             ) : null}
           </div>
         </div>
       ) : showUserManagedNote ? (
-        <div className="flex items-start gap-3 rounded-xl border border-blue-500/20 bg-blue-500/[0.06] p-4">
-          <Users className="mt-0.5 h-4 w-4 shrink-0 text-blue-300" />
-          <div>
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-blue-300">
-              OAuth — user-managed
-            </div>
-            <p className="text-[11px] leading-relaxed text-gray-400">
-              This remote MCP server supports standard OAuth discovery (often with dynamic client
-              registration). Users authenticate in chat-ui →{" "}
-              <span className="font-semibold text-white">My Integrations</span>.
-            </p>
+        <div className="flex items-start gap-3 rounded-2xl bg-secondary/60 p-4">
+          <Users className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+          <div className="min-w-0">
+            <h3 className="text-sm font-semibold">{t(`${k}.managed_title`)}</h3>
+            <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{t(`${k}.managed_body`)}</p>
             {oauthConfig.client_id_source === "dynamic_registration" && oauthConfig.client_id ? (
-              <p className="mt-2 text-[10px] font-medium text-amber-300/90">
-                Client ID obtained via dynamic registration (RFC 7591).
-              </p>
+              <p className="mt-2 text-xs text-muted-foreground">{t(`${k}.dynamic_note`)}</p>
             ) : null}
             {hints.docUrl ? (
-              <a
-                href={hints.docUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-[10px] text-blue-300 hover:text-white"
-              >
-                Documentation <ExternalLink className="h-3 w-3" />
+              <a href={hints.docUrl} target="_blank" rel="noopener noreferrer" className={cn(linkCls, "mt-2")}>
+                {t(`${k}.docs`)}
+                <ExternalLink className="h-3 w-3 opacity-70" aria-hidden />
               </a>
             ) : null}
           </div>
@@ -133,47 +95,43 @@ export function McpOAuthAdminSetupPanel({
       ) : null}
 
       {hints.needsAdminCredentials ? (
-        <div className="space-y-3 rounded-xl border border-white/10 bg-black/25 p-4">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-            OAuth credentials (organization)
-          </div>
-          <label className="block space-y-1">
-            <span className="text-xs font-semibold text-gray-300">Client ID</span>
+        <section className="flex flex-col gap-3 rounded-2xl border border-border/70 p-4">
+          <h3 className="text-sm font-semibold">{t(`${k}.creds_title`)}</h3>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t(`${k}.client_id`)}</span>
             <input
               type="text"
               autoComplete="off"
               value={oauthConfig.client_id}
               onChange={(e) => onChange({ client_id: e.target.value })}
-              placeholder="From provider developer console"
-              className="w-full rounded-xl border border-white/10 bg-black/50 p-3 text-sm text-white outline-none focus:border-amber-500/70"
+              placeholder={t(`${k}.client_id_ph`)}
+              className={inputCls}
             />
           </label>
-          <label className="block space-y-1">
-            <span className="text-xs font-semibold text-gray-300">Client secret</span>
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t(`${k}.client_secret`)}</span>
             <input
               type="password"
               autoComplete="new-password"
               value={oauthConfig.client_secret}
               onChange={(e) => onChange({ client_secret: e.target.value })}
-              placeholder="Keep empty to leave unchanged on save"
-              className="w-full rounded-xl border border-white/10 bg-black/50 p-3 text-sm text-white outline-none focus:border-amber-500/70"
+              placeholder={t(`${k}.client_secret_ph`)}
+              className={inputCls}
             />
           </label>
           {scopeList.length > 0 ? (
-            <div className="text-[10px] text-gray-500">
-              <span className="font-bold uppercase tracking-wider text-gray-400">Scopes</span>
-              <p className="mt-1 font-mono text-[10px] leading-relaxed text-gray-400">
-                {scopeList.join(" ")}
-              </p>
+            <div>
+              <div className="text-xs font-medium text-muted-foreground">{t(`${k}.scopes`)}</div>
+              <p className="mt-1 break-words font-mono text-xs leading-relaxed">{scopeList.join(" ")}</p>
             </div>
           ) : null}
           {!oauthConfig.client_id ? (
-            <p className="flex items-start gap-1.5 text-[10px] text-amber-300/90">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              Users will see an error until Client ID is saved here.
+            <p className="flex items-start gap-2 text-sm text-warning">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              {t(`${k}.missing_id`)}
             </p>
           ) : null}
-        </div>
+        </section>
       ) : null}
     </div>
   );

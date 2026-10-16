@@ -113,9 +113,9 @@ async def fetch_webpage_content(url: str, *, timeout: float = 25.0) -> Dict[str,
     og_image = ""
     title = ""
 
-    # httpx fetch for OG meta when we only got plain text from scrapling
+    # Fast, non-blocking httpx fetch for OG meta / title (max 3s)
     try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=timeout) as client:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=3.0) as client:
             r = await client.get(
                 url,
                 headers={"User-Agent": "AION-Agent/1.0 (+deep_research)"},
@@ -125,7 +125,7 @@ async def fetch_webpage_content(url: str, *, timeout: float = 25.0) -> Dict[str,
                 og_image = _extract_og_image(html, url)
                 title = _extract_title(html)
     except Exception as e:
-        logger.debug("OG fetch failed for %s: %s", url, e)
+        logger.debug("OG fetch skipped for %s: %s", url, e)
 
     if not title:
         try:

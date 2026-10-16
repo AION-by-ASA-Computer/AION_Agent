@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, Loader2, Square } from "lucide-react";
+import { useMemo } from "react";
+import { ArrowLeft, CheckCircle2, Loader2, PauseCircle, Square } from "lucide-react";
 import type { PlanExecutionProgressState } from "@/hooks/use-plan-execution-progress";
 import type { PlanExecutionTask } from "@/lib/api/plan-execution";
 import {
@@ -19,20 +19,6 @@ export type TaskChatViewMessage = {
   role: string;
   metadata?: { plan_id?: string; plan_task_id?: string };
 };
-
-function taskStatusLabel(task: PlanExecutionTask, running: boolean): string {
-  if (task.status === "done") return "Completata";
-  if (task.status === "error") return "Errore";
-  if (running || task.status === "running") return "In esecuzione";
-  return "In attesa";
-}
-
-function formatElapsed(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}m ${s}s`;
-}
 
 export function TaskChatView({
   task,
@@ -59,14 +45,6 @@ export function TaskChatView({
     progress.status,
     progress.done,
   );
-  const [startedAt] = useState(() => Date.now());
-  const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    if (!isRunning) return undefined;
-    const t = setInterval(() => setElapsed(Math.floor((Date.now() - startedAt) / 1000)), 1000);
-    return () => clearInterval(t);
-  }, [isRunning, startedAt]);
 
   const turns = planTaskTurns(task);
   const hasConversation = taskHasConversation(task, messages);
@@ -114,66 +92,85 @@ export function TaskChatView({
   const showActivityFeed = isRunning || (!showTranscript && taskActivities.length > 0);
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <div className="sticky top-0 z-10 border-b border-border/60 bg-background/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-        <div className="mx-auto flex w-full max-w-[min(92%,48rem)] items-center gap-3">
+    <div className="flex min-h-0 flex-1 flex-col bg-background/50">
+      {/* Sleek Top Header Bar */}
+      <div className="sticky top-0 z-20 border-b border-black/[0.06] dark:border-white/[0.08] bg-background/85 px-4 py-3 backdrop-blur-xl">
+        <div className="mx-auto flex w-full max-w-[min(92%,52rem)] items-center justify-between gap-3">
+          {/* Back Button */}
           <button
             type="button"
             onClick={onBack}
-            className="inline-flex items-center gap-1 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            className="inline-flex items-center gap-1.5 rounded-full border border-black/[0.08] dark:border-white/[0.09] bg-card/80 px-3 py-1.5 text-xs font-semibold text-foreground shadow-2xs hover:bg-card hover:border-primary/40 transition-all active:scale-[0.98]"
           >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Torna alla chat
+            <ArrowLeft className="size-3.5 text-muted-foreground" />
+            <span>Torna alla chat</span>
           </button>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-semibold text-foreground">
-              <code className="font-mono text-xs text-muted-foreground">{task.task_id}</code>
-              {task.title ? <span className="text-foreground"> — {task.title}</span> : null}
-            </div>
-            <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[0.786em] text-muted-foreground">
-              <span
-                className={cn(
-                  "rounded-full px-2 py-0.5 font-medium",
-                  task.status === "done" && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                  task.status === "error" && "bg-destructive/10 text-destructive",
-                  isRunning && "bg-primary/10 text-primary",
-                  !isRunning && task.status !== "done" && task.status !== "error" && "bg-muted text-muted-foreground",
-                )}
-              >
-                {taskStatusLabel(task, !!isRunning)}
-              </span>
-              {isRunning ? <span>{formatElapsed(elapsed)}</span> : null}
-              {isRunning ? (
-                <span className="inline-flex items-center gap-1 text-primary">
-                  <Loader2 className="h-3 w-3 animate-spin" />
-                  operazioni in corso
-                </span>
-              ) : null}
-            </div>
+
+          {/* Center/Right Task Information */}
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="rounded-md bg-orange-500/10 text-orange-600 dark:text-orange-400 font-mono text-xs font-bold px-2 py-0.5 shrink-0">
+              {task.task_id}
+            </span>
+            <span className="truncate text-xs sm:text-sm font-semibold text-foreground">
+              {task.title || "Task operativa"}
+            </span>
+
+            {/* Status Badge */}
+            <span
+              className={cn(
+                "ml-1 inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider shrink-0",
+                task.status === "done"
+                  ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                  : task.status === "error"
+                  ? "bg-destructive/15 text-destructive border border-destructive/30"
+                  : isRunning
+                  ? "bg-orange-500/15 text-orange-600 dark:text-orange-400 border border-orange-500/30 animate-pulse"
+                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+              )}
+            >
+              {task.status === "done" ? (
+                <>
+                  <CheckCircle2 size={12} className="text-emerald-500" />
+                  Completata
+                </>
+              ) : task.status === "error" ? (
+                "Errore"
+              ) : isRunning ? (
+                <>
+                  <Loader2 size={12} className="animate-spin text-orange-500" />
+                  In esecuzione
+                </>
+              ) : (
+                <>
+                  <PauseCircle size={12} className="text-amber-500" />
+                  In pausa
+                </>
+              )}
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-2 py-4">
-        <div className="mx-auto w-full max-w-[min(92%,48rem)]">
+      {/* Main Content Area */}
+      <div className="flex-1 overflow-y-auto px-3 py-4 sm:px-6 custom-scrollbar">
+        <div className="mx-auto w-full max-w-[min(92%,52rem)] space-y-4">
           {isRunning ? (
-            <div className="mb-4">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Operazioni
+            <div>
+              <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <span>Operazioni e Tool in Corso</span>
               </h3>
               <TaskActivityFeed activities={taskActivities} running={isRunning} />
             </div>
           ) : null}
 
           {!isRunning && !hasConversation ? (
-            <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-              Conversazione non disponibile per questa task.
-              <div className="mt-1 text-xs">I piani eseguiti prima dell&apos;aggiornamento non registrano gli id messaggio.</div>
+            <div className="rounded-2xl border border-dashed border-border/70 bg-card/30 p-8 text-center text-sm text-muted-foreground">
+              <span>Conversazione non disponibile per questa task.</span>
             </div>
           ) : null}
 
           {showTranscript ? (
-            <>
+            <div className="space-y-4">
               {flatMessages.map((item, i) => {
                 if (item.kind === "retry") {
                   return (
@@ -191,16 +188,15 @@ export function TaskChatView({
                   <div key={`${item.message.id}-${i}`}>{renderMessage(item.message, item.idx)}</div>
                 );
               })}
-            </>
+            </div>
           ) : null}
 
           {!isRunning && !showTranscript && showActivityFeed ? (
-            <TaskActivityFeed activities={taskActivities} running={false} />
-          ) : null}
-
-          {!isRunning && hasConversation && flatMessages.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-border/70 bg-muted/20 px-4 py-8 text-center text-sm text-muted-foreground">
-              Nessun messaggio ancora per questa task.
+            <div>
+              <h3 className="mb-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Riepilogo Operazioni Eseguite
+              </h3>
+              <TaskActivityFeed activities={taskActivities} running={false} />
             </div>
           ) : null}
 
@@ -208,30 +204,38 @@ export function TaskChatView({
             <button
               type="button"
               onClick={() => onOpenTask(nextTask.task_id)}
-              className="mt-6 w-full rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 text-left text-sm hover:bg-primary/10"
+              className="mt-6 w-full flex items-center justify-between rounded-2xl border border-orange-500/30 bg-orange-500/5 hover:bg-orange-500/10 p-4 text-left transition-all shadow-2xs group"
             >
-              <span className="font-medium text-foreground">Task completata</span>
-              <span className="mt-1 block text-muted-foreground">
-                Apri <code className="font-mono text-xs">{nextTask.task_id}</code>
-                {nextTask.title ? ` — ${nextTask.title}` : ""}
+              <div>
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 block mb-0.5">
+                  ✓ Task completata
+                </span>
+                <span className="text-sm font-semibold text-foreground">
+                  Prosegui con <code className="font-mono text-xs bg-muted/60 px-1.5 py-0.5 rounded">{nextTask.task_id}</code>
+                  {nextTask.title ? ` — ${nextTask.title}` : ""}
+                </span>
+              </div>
+              <span className="text-xs font-semibold text-orange-600 dark:text-orange-400 group-hover:translate-x-1 transition-transform">
+                Apri task →
               </span>
             </button>
           ) : null}
         </div>
       </div>
 
+      {/* Footer Cancel Action (Running Mode) */}
       {isRunning && typeof onCancel === "function" ? (
-        <div className="border-t border-border/60 bg-background/95 px-4 py-2.5">
-          <div className="mx-auto flex w-full max-w-[min(92%,48rem)] items-center justify-between gap-3 text-xs text-muted-foreground">
-            <span>
-              Task in esecuzione… {doneCount}/{tasks.length || "?"}
+        <div className="border-t border-black/[0.06] dark:border-white/[0.08] bg-background/85 px-4 py-2.5 backdrop-blur-md">
+          <div className="mx-auto flex w-full max-w-[min(92%,52rem)] items-center justify-between gap-3 text-xs text-muted-foreground">
+            <span className="font-medium">
+              Task in esecuzione… ({doneCount}/{tasks.length || "?"} completate)
             </span>
             <button
               type="button"
               onClick={onCancel}
-              className="inline-flex items-center gap-1 rounded-lg border border-destructive/40 px-2.5 py-1 font-medium text-destructive hover:bg-destructive/10"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-destructive/30 px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
             >
-              <Square className="h-3 w-3" />
+              <Square className="size-3.5 fill-current" />
               Annulla esecuzione
             </button>
           </div>

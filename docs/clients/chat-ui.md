@@ -56,6 +56,7 @@ Backend (`.env`): `AION_CORS_ORIGINS` can list `http://localhost:8003`; default 
 - `GET /profiles`
 - `POST /auth/login`, `GET /auth/me` — password login (requires `AION_CHAT_PASSWORD_AUTH=1`)
 - `GET|POST /chat-ui/conversations` — list/create conversations on the unified DB
+- `GET|POST /chat-ui/conversations/{id}/threads` — side threads of a conversation ([Side threads](./side-threads.md))
 - `GET /chat-ui/conversations/{id}/stream-status` — `/chat` turn still executing (reconnection after navigation)
 - `POST /v1/chat/stream` — extended with `user_message_id`, `assistant_message_id`, `message_source` (API key)
 - `GET /v1/integrations/status`, `GET /v1/integrations`, `POST /v1/integrations/credentials` — state and MCP credentials per user (Bearer chat; see [MCP Integrations (API)](../api-and-runtime/mcp-integrations-api.md))
@@ -105,6 +106,7 @@ Path: `/integrations`. Panel for personal credentials on servers with `credentia
 | Stream recovery after exit/re-entry of chat | Yes (Redis `stream_active` + history poll every 2s) |
 | Plan recovery on network error / artifact fallback | Partial (not duplicated client-side) |
 | CoT messages auto-collapse | Partial |
+| Side threads (select a passage → child conversation in the dock) | Yes — see [Side threads](./side-threads.md) |
 
 ## Tool and thinking visualization
 

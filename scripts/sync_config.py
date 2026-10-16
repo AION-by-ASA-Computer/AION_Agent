@@ -33,6 +33,10 @@ _NEVER_FORCE_OVERWRITE = frozenset(
         "mcp_registry.json",
         "mcp_registry.local.json",
         "mcp_connector_catalog.local.yaml",
+        "skills/monge_mssql_gateway.md",
+        "skills/monge_automa_monge_knowledge.md",
+        "skills/monge_storicofatturati_knowledge.md",
+        "skills/monge_cross_db_knowledge.md",
     }
 )
 

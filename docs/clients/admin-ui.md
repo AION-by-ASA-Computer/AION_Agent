@@ -232,7 +232,7 @@ flowchart TD
 
 ### 5. MCP Hub (unified)
 
-**Path:** `/hub` — the "MCP Policy (Hub)" menu item points to `/hub?focus=integrations`. `/integrations` redirects here.
+**Path:** `/hub`.
 
 **Features:**
 - Install servers from the marketplace and connector catalog.

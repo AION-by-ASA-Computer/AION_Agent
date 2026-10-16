@@ -2,7 +2,7 @@
 
 import { AlertTriangle, HelpCircle, Save } from "lucide-react";
 
-import { ProfileOptionGrid } from "@/components/chat/ProfileOptionGrid";
+import { ProfileSelectorDropdown } from "@/components/chat/ProfileSelectorDropdown";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 import { SettingsCard } from "./SettingsCard";
@@ -50,18 +50,15 @@ export function UserMdSection({
         </span>
       </div>
 
-      <div className="space-y-2 pb-4">
-        <label className="text-[0.714em] font-bold tracking-wider uppercase text-muted-foreground/80">
-          {t("settings.usermd.profile_label")}
-        </label>
+      <div className="pb-4">
         {loadingProfiles ? (
           <p className="text-xs italic text-muted-foreground">{t("settings.usermd.profile_loading")}</p>
         ) : (
-          <ProfileOptionGrid
+          <ProfileSelectorDropdown
             profiles={profiles}
             value={selectedProfile}
             onChange={onProfileChange}
-            emptyLabel={t("settings.usermd.profile_none")}
+            label={t("settings.usermd.profile_label")}
           />
         )}
       </div>
@@ -119,10 +116,10 @@ export function UserMdSection({
           type="button"
           onClick={onSave}
           disabled={isOverLimit || loadingUserMd || savingUserMd || !selectedProfile}
-          className="focus-ring inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-xs font-bold text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
+          className="focus-ring inline-flex items-center gap-1.5 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-rose-500/25 border border-rose-400/30 backdrop-blur-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 cursor-pointer"
         >
           {savingUserMd ? (
-            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+            <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
           ) : (
             <Save size={14} aria-hidden />
           )}

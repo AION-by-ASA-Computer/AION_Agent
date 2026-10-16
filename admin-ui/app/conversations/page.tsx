@@ -1,518 +1,349 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { AlertTriangle, Loader2, RefreshCw } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
-import { getStoredToken } from "@/lib/auth/storage";
-import { MessageSquare, User, Clock, ChevronRight, Search, X, Terminal, Bot, RefreshCw, Paperclip, FileCode, Layers, Download, ThumbsUp, ThumbsDown } from "lucide-react";
-import { CustomDatePicker } from "@/components/CustomDatePicker";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/use-t";
+import { ghostBtn, outlineBtn } from "@/components/ui/classes";
+import { SearchField } from "@/components/ui/SearchField";
+import { ConversationList, DateFilter, FEEDBACK_VALUES, flagTotal, matchesFeedback, type DateRange, type FamilyRow, type FilterCol, type Filters, type Sort, type SortKey } from "@/components/conversations/ConversationList";
+import { Reader } from "@/components/conversations/Reader";
+import { toMs } from "@/components/conversations/format";
+import { needsAttention, type Conversation, type ConversationFamily, type ThreadMessage } from "@/components/conversations/types";
 
-import { Suspense } from "react";
+const k = "admin_conversations";
+const FETCH_LIMIT = 500;
+const PAGE = 60;
+const NO_FILTERS: Filters = { conversation: "", user: "", profile: "", feedback: "" };
+const NO_MESSAGES: ThreadMessage[] = [];
+type Thread = { id: string; state: "ready" | "error"; messages: ThreadMessage[] };
 
 function ConversationsContent() {
-  const [convs, setConvs] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [selectedConv, setSelectedConv] = useState<any | null>(null);
-  const [messages, setMessages] = useState<any[]>([]);
-  const [loadingMessages, setLoadingMessages] = useState(false);
+  const t = useT();
+  const router = useRouter();
+  const params = useSearchParams();
+  const selectedId = params.get("id");
+  const messageParam = params.get("message");
 
-  const searchParams = useSearchParams();
-  const preselectedId = searchParams.get("id");
-  const preselectedMessageId = searchParams.get("message");
+  const [convs, setConvs] = useState<Conversation[]>([]);
+  const [truncated, setTruncated] = useState(false);
+  const [listState, setListState] = useState<"loading" | "ready" | "error">("loading");
+  const [now, setNow] = useState(() => Date.now());
+  const [query, setQuery] = useState("");
+  const [dateRange, setDateRange] = useState<DateRange>({ from: "", to: "" });
+  const [filters, setFilters] = useState<Filters>(() => {
+    const f = params.get("feedback") ?? "";
+    return { ...NO_FILTERS, feedback: (FEEDBACK_VALUES as readonly string[]).includes(f) ? f : "" };
+  });
+  const [profileNames, setProfileNames] = useState<Record<string, string>>({});
+  const [attention, setAttention] = useState(false);
+  const [sort, setSort] = useState<Sort>({ key: "updated", dir: "desc" });
+  const [limit, setLimit] = useState(PAGE);
+  const [thread, setThread] = useState<Thread | null>(null);
+  // Explicit expand/collapse choices per parent; unset parents follow the automatic rule.
+  const [expandChoice, setExpandChoice] = useState<Record<string, boolean>>({});
 
-  useEffect(() => {
-    if (preselectedId && convs.length > 0) {
-      const found = convs.find(c => c.id === preselectedId);
-      if (found) {
-        handleSelectConv(found);
-      }
-    }
-  }, [preselectedId, convs]);
-
-  useEffect(() => {
-    if (preselectedMessageId && messages.length > 0) {
-      setTimeout(() => {
-        const el = document.getElementById(`message-${preselectedMessageId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: "smooth", block: "center" });
-        }
-      }, 100);
-    }
-  }, [preselectedMessageId, messages]);
-
-  const fetchConvs = () => {
-    setLoading(true);
-    apiFetch(`${apiBase()}/admin/conversations/global`)
-      .then(res => res.ok ? res.json() : Promise.reject(res))
-      .then(data => {
-        setConvs(data.conversations || []);
-        setLoading(false);
+  const loadList = useCallback(() => {
+    apiFetch(`${apiBase()}/admin/conversations/global?limit=${FETCH_LIMIT}`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        const list: Conversation[] = data.conversations || [];
+        setConvs(list);
+        setTruncated(data.truncated ?? list.length >= FETCH_LIMIT);
+        setNow(Date.now());
+        setListState("ready");
       })
-      .catch(err => {
-        console.error("Conversations fetch failed", err);
-        setConvs([]);
-        setLoading(false);
-      });
-  };
-
-  useEffect(() => {
-    fetchConvs();
+      .catch(() => setListState("error"));
   }, []);
 
-  const handleStartDateChange = (val: string) => {
-    setStartDate(val);
-    if (endDate && val > endDate) {
-      setEndDate(val);
-    }
+  useEffect(() => {
+    loadList();
+  }, [loadList]);
+
+  // Profiles are shown by their name, not the slug the conversation stores.
+  useEffect(() => {
+    apiFetch(`${apiBase()}/admin/profiles`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data: { slug: string; name: string }[]) => setProfileNames(Object.fromEntries((data || []).map((p) => [p.slug, p.name || p.slug]))))
+      .catch(() => {});
+  }, []);
+  const profileName = useCallback((slug: string) => profileNames[slug] || slug, [profileNames]);
+
+  const refresh = () => {
+    setListState("loading");
+    loadList();
   };
 
-  const handleEndDateChange = (val: string) => {
-    setEndDate(val);
-    if (startDate && val < startDate) {
-      setStartDate(val);
-    }
-  };
+  // The open thread lives in the URL, so deep links from Feedback, reloads and back/forward all work.
+  useEffect(() => {
+    if (!selectedId) return;
+    let live = true;
+    apiFetch(`${apiBase()}/admin/conversations/${encodeURIComponent(selectedId)}/messages?include_internal=true`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => live && setThread({ id: selectedId, state: "ready", messages: data.messages || [] }))
+      .catch(() => live && setThread({ id: selectedId, state: "error", messages: [] }));
+    return () => {
+      live = false;
+    };
+  }, [selectedId]);
 
-  const handleSelectConv = (conv: any) => {
-    setSelectedConv(conv);
-    setLoadingMessages(true);
-    apiFetch(`${apiBase()}/admin/conversations/${conv.id}/messages?include_internal=true`)
-      .then(res => res.json())
-      .then(data => {
-        setMessages(data.messages || []);
-        setLoadingMessages(false);
-      })
-      .catch(err => {
-        console.error("Failed to fetch messages", err);
-        setMessages([]);
-        setLoadingMessages(false);
+  const current = thread && thread.id === selectedId ? thread : null; // null while the next thread loads
+
+  useEffect(() => {
+    if (!messageParam || !current || current.state !== "ready") return;
+    const id = window.setTimeout(() => {
+      document.getElementById(`message-${messageParam}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 160);
+    return () => window.clearTimeout(id);
+  }, [messageParam, current]);
+
+  const open = useCallback(
+    (id: string, messageId?: string | null) =>
+      router.replace(`/conversations?id=${encodeURIComponent(id)}${messageId ? `&message=${encodeURIComponent(messageId)}` : ""}`, { scroll: false }),
+    [router],
+  );
+  const close = useCallback(() => {
+    const id = selectedId;
+    router.replace("/conversations", { scroll: false });
+    if (id) window.setTimeout(() => document.querySelector<HTMLElement>(`[data-conv-id="${CSS.escape(id)}"]`)?.focus(), 60);
+  }, [router, selectedId]);
+
+  const userOptions = useMemo(() => Array.from(new Set(convs.map((c) => c.user_id).filter(Boolean))).sort().map((v) => ({ value: v, label: v })), [convs]);
+  const profileOptions = useMemo(
+    () => Array.from(new Set(convs.map((c) => c.profile_slug).filter(Boolean))).map((v) => ({ value: v, label: profileName(v) })).sort((a, b) => a.label.localeCompare(b.label)),
+    [convs, profileName],
+  );
+  const setFilter = (col: FilterCol, value: string) => setFilters((f) => ({ ...f, [col]: value }));
+
+  // Side threads are child conversations: group them under their parent.
+  const byId = useMemo(() => new Map(convs.map((c) => [c.id, c])), [convs]);
+  const families = useMemo<ConversationFamily[]>(() => {
+    const kids = new Map<string, Conversation[]>();
+    const out: ConversationFamily[] = [];
+    for (const c of convs) {
+      const pid = c.parent_conversation_id;
+      if (pid && byId.has(pid)) kids.set(pid, [...(kids.get(pid) ?? []), c]);
+    }
+    for (const c of convs) {
+      const pid = c.parent_conversation_id;
+      if (pid && byId.has(pid)) continue;
+      const threads = (kids.get(c.id) ?? []).sort((x, y) => toMs(y.updated_at) - toMs(x.updated_at));
+      out.push({ root: c, threads, orphan: !!pid });
+    }
+    return out;
+  }, [convs, byId]);
+
+  const filtering = !!query || !!(dateRange.from || dateRange.to) || Object.values(filters).some(Boolean) || attention;
+
+  const rows = useMemo<FamilyRow[]>(() => {
+    const q = query.trim().toLowerCase();
+    const lo = dateRange.from ? new Date(`${dateRange.from}T00:00:00`).getTime() : 0;
+    const hi = dateRange.to ? new Date(`${dateRange.to}T23:59:59.999`).getTime() : Infinity;
+    const matches = (c: Conversation) => {
+      const at = toMs(c.updated_at);
+      if (at < lo || at > hi) return false;
+      if (filters.user && !c.user_id.toLowerCase().includes(filters.user.trim().toLowerCase())) return false;
+      if (filters.feedback && !matchesFeedback(c, filters.feedback)) return false;
+      if (filters.profile && c.profile_slug !== filters.profile) return false;
+      const ct = filters.conversation.trim().toLowerCase();
+      if (ct && !`${c.title || ""} ${c.anchor_quote || ""} ${c.id}`.toLowerCase().includes(ct)) return false;
+      if (attention && !needsAttention(c)) return false;
+      if (!q) return true;
+      return [c.title, c.anchor_quote, c.id, c.user_id, c.tenant_id, c.profile_slug, profileName(c.profile_slug)].some((v) => (v || "").toLowerCase().includes(q));
+    };
+    const out: FamilyRow[] = [];
+    for (const f of families) {
+      const rootHit = matches(f.root);
+      const hits = f.threads.filter(matches);
+      if (!rootHit && hits.length === 0) continue;
+      // A family shown only because of a thread keeps its parent as context, dimmed.
+      const shownThreads = rootHit ? f.threads : hits;
+      const auto = (!rootHit && hits.length > 0) || f.threads.some((th) => th.id === selectedId);
+      const members = [f.root, ...f.threads];
+      out.push({
+        ...f,
+        shownThreads,
+        expanded: shownThreads.length > 0 && (expandChoice[f.root.id] ?? auto),
+        dimmed: !rootHit,
+        latest: Math.max(...members.map((c) => toMs(c.updated_at))),
+        flagSum: members.reduce((n, c) => n + flagTotal(c), 0),
+        threadAttention: f.threads.some(needsAttention),
       });
+    }
+    const val = (r: FamilyRow) => (sort.key === "messages" ? r.root.message_count : sort.key === "flags" ? r.flagSum : r.latest);
+    const sign = sort.dir === "asc" ? 1 : -1;
+    return out.sort((a, b) => (val(a) - val(b)) * sign || b.latest - a.latest);
+  }, [families, query, dateRange, filters, attention, sort, profileName, expandChoice, selectedId]);
+
+  const toggleFamily = useCallback(
+    (id: string) => setExpandChoice((m) => ({ ...m, [id]: !(rows.find((r) => r.root.id === id)?.expanded ?? false) })),
+    [rows],
+  );
+
+  const attentionTotal = useMemo(() => families.filter((f) => needsAttention(f.root) || f.threads.some(needsAttention)).length, [families]);
+  const clearFilters = () => {
+    setQuery("");
+    setDateRange({ from: "", to: "" });
+    setFilters(NO_FILTERS);
+    setAttention(false);
   };
 
-  const filteredConvs = convs.filter(c => {
-    const query = searchQuery.toLowerCase();
-    const titleMatch = (c.title || "").toLowerCase().includes(query);
-    const idMatch = c.id.toLowerCase().includes(query);
-    const userMatch = (c.user_id || "").toLowerCase().includes(query);
-    const tenantMatch = (c.tenant_id || "").toLowerCase().includes(query);
-    const profileMatch = (c.profile_slug || "").toLowerCase().includes(query);
-    const textMatch = titleMatch || idMatch || userMatch || tenantMatch || profileMatch;
+  const shown = rows.slice(0, limit);
+  // J/K walk what the list shows: each parent, then its threads when expanded.
+  const order = useMemo(() => rows.flatMap((r) => [r.root.id, ...(r.expanded ? r.shownThreads.map((th) => th.id) : [])]), [rows]);
+  const index = selectedId ? order.indexOf(selectedId) : -1;
+  const position = index >= 0 ? { index, total: order.length } : null;
+  const step = useCallback(
+    (dir: 1 | -1) => {
+      const next = order[index + dir];
+      if (next) open(next);
+    },
+    [order, index, open],
+  );
 
-    let dateMatch = true;
-    if (startDate || endDate) {
-      const convDate = new Date(c.updated_at);
-      if (startDate) {
-        const start = new Date(startDate);
-        start.setHours(0, 0, 0, 0);
-        if (convDate < start) dateMatch = false;
-      }
-      if (endDate) {
-        const end = new Date(endDate);
-        end.setHours(23, 59, 59, 999);
-        if (convDate > end) dateMatch = false;
-      }
-    }
+  // Keyboard: Esc closes the reader, J/K walk the list while it is open.
+  useEffect(() => {
+    if (!selectedId) return;
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "Escape") close();
+      else if (e.key === "j") step(1);
+      else if (e.key === "k") step(-1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [selectedId, close, step]);
 
-    return textMatch && dateMatch;
-  });
+  const onSort = (key: SortKey) => setSort((s) => (s.key === key ? { key, dir: s.dir === "desc" ? "asc" : "desc" } : { key, dir: "desc" }));
+
+  const noneAtAll = listState === "ready" && convs.length === 0;
+  const summary = (selectedId && byId.get(selectedId)) || null;
+  const parentConv = summary?.parent_conversation_id ? (byId.get(summary.parent_conversation_id) ?? null) : null;
+  const childThreads = useMemo(() => (selectedId ? families.find((f) => f.root.id === selectedId)?.threads ?? [] : []), [families, selectedId]);
 
   return (
-    <div className="space-y-8 pb-12">
-      {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-6">
-        <div className="space-y-1">
-          <h2 className="text-3xl font-extrabold tracking-tight text-white">Interaction Ledger</h2>
-          <p className="text-md text-gray-400 max-w-xl mt-2">
-            Cross-tenant monitoring of all AION Agent conversations.
-          </p>
+    <div className="mx-auto flex max-w-[84rem] flex-col gap-6">
+      <header className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-[28px]">{t(`${k}.title`)}</h1>
+          <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.subtitle`)}</p>
         </div>
-        <button
-          onClick={fetchConvs}
-          disabled={loading}
-          className="flex items-center gap-2 px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-blue-500/20 transition-all transform active:scale-95 cursor-pointer disabled:opacity-50"
-        >
-          <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} /> REFRESH LEDGER
+        <button type="button" className={outlineBtn} onClick={refresh} disabled={listState === "loading"}>
+          <RefreshCw className={cn("h-3.5 w-3.5", listState === "loading" && "animate-spin")} aria-hidden />
+          {t(`${k}.refresh`)}
         </button>
       </header>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Conversations List (Left Column) */}
-        <div className="lg:col-span-5 xl:col-span-4 flex flex-col h-[78vh] space-y-4">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400">
-              Active Sessions ({filteredConvs.length})
-            </h3>
-          </div>
-
-          {/* Filters */}
-          <div className="space-y-2">
-            <div className="relative group">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 group-focus-within:text-blue-400 transition-colors" />
-              <input
-                type="text"
-                placeholder="Search by title, user, tenant..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-black/40 backdrop-blur-sm border border-white/10 rounded-xl pl-10 pr-10 py-3 text-sm text-white placeholder:text-gray-600 focus:border-blue-500/80 focus:ring-4 focus:ring-blue-500/10 outline-none transition-all shadow-inner"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery("")}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors p-1 cursor-pointer"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
-            </div>
-
-            <div className="grid grid-cols-2 gap-2">
-              <CustomDatePicker
-                label="Da data"
-                value={startDate}
-                maxDate={endDate || undefined}
-                onChange={handleStartDateChange}
-                placeholder="Inizio"
-              />
-              <CustomDatePicker
-                label="A data"
-                value={endDate}
-                minDate={startDate || undefined}
-                onChange={handleEndDateChange}
-                placeholder="Fine"
-              />
-            </div>
-            {(startDate || endDate) && (
-              <div className="flex justify-end">
-                <button
-                  onClick={() => { setStartDate(""); setEndDate(""); }}
-                  className="text-[10px] text-blue-400 hover:text-blue-300 font-semibold transition-colors flex items-center gap-1 cursor-pointer"
-                >
-                  <X className="w-3 h-3" /> Resetta filtro date
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Sessions Cards */}
-          <div className="space-y-3 overflow-y-auto flex-1 min-h-0 pr-1 custom-scrollbar">
-            {loading && convs.length === 0 ? (
-              <div className="py-12 text-center text-gray-500 animate-pulse text-sm">
-                Loading interaction records...
-              </div>
-            ) : filteredConvs.map((c) => {
-              const isSelected = selectedConv?.id === c.id;
-
-              return (
-                <div
-                  key={c.id}
-                  onClick={() => handleSelectConv(c)}
-                  className={`group relative p-4 rounded-2xl border backdrop-blur-sm cursor-pointer transition-all duration-200 flex items-center justify-between ${isSelected
-                    ? "bg-gradient-to-r from-blue-600/15 to-indigo-600/5 border-blue-500/50 shadow-lg shadow-blue-500/10 translate-x-1"
-                    : "bg-[#121212]/80 border-white/5 hover:border-white/15 hover:bg-[#181818]"
-                    }`}
-                >
-                  {isSelected && (
-                    <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-blue-500 rounded-r-full shadow-[0_0_8px_#3b82f6]" />
-                  )}
-
-                  <div className="flex items-center gap-4 min-w-0 pr-4 flex-1">
-                    <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400 shrink-0">
-                      <MessageSquare className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-bold text-base text-white truncate flex items-center gap-2">
-                        {c.title || 'Untitled Session'}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-gray-400 truncate mt-1">
-                        <span className="flex items-center gap-1"><User className="w-3 h-3 text-gray-500 shrink-0" /> <span className="truncate">{c.user_id}</span></span>
-                        <span>•</span>
-                        <span className="uppercase text-[10px] font-bold text-gray-500 shrink-0">{c.tenant_id}</span>
-                      </div>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#141414] text-gray-400 border border-[#262626] uppercase shrink-0">
-                          {c.profile_slug}
-                        </span>
-                        <span className="text-[10px] text-gray-500 ml-auto flex items-center gap-1 shrink-0">
-                          <Clock className="w-3 h-3" /> {new Date(c.updated_at).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2 shrink-0 ml-2">
-                    <span className="text-xs font-bold text-blue-400 bg-blue-500/10 px-2 py-1 rounded-lg border border-blue-500/20">
-                      {c.message_count}
-                    </span>
-                    <ChevronRight
-                      className={`w-4 h-4 transition-transform ${isSelected
-                        ? "text-blue-400 translate-x-0.5"
-                        : "text-gray-600 group-hover:text-gray-400"
-                        }`}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-
-            {filteredConvs.length === 0 && !loading && (
-              <div className="flex flex-col items-center justify-center text-center py-12 px-4 bg-[#121212]/50 border border-white/5 rounded-2xl">
-                <Search className="w-8 h-8 text-gray-600 mb-2" />
-                <p className="text-sm font-semibold text-gray-400">No sessions found</p>
-                <p className="text-xs text-gray-600 mt-1 max-w-xs">
-                  Try adjusting your search query or refresh the ledger.
-                </p>
-              </div>
-            )}
-          </div>
+      {noneAtAll ? (
+        <div className="flex flex-col items-center rounded-3xl border border-dashed border-border px-6 py-20 text-center">
+          <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.list.none_title`)}</h2>
+          <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">{t(`${k}.list.none_body`)}</p>
         </div>
+      ) : (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="min-w-[14rem] flex-1 sm:max-w-sm">
+              <SearchField value={query} onChange={setQuery} placeholder={t(`${k}.list.search`)} />
+            </div>
 
-        {/* Audit Log / Detail Area (Right Column) */}
-        <div className="lg:col-span-7 xl:col-span-8 flex flex-col h-[78vh]">
-          {selectedConv ? (
-            <div className="glass-card flex-1 flex flex-col p-6 sm:p-8 border border-white/10 rounded-3xl bg-gradient-to-b from-[#181818]/90 to-[#121212]/90 shadow-2xl relative overflow-hidden">
-              <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/5 rounded-full blur-3xl pointer-events-none" />
+            <DateFilter value={dateRange} onChange={setDateRange} now={now} t={t} />
 
-              {/* Header */}
-              <div className="flex justify-between items-center pb-5 border-b border-white/10 shrink-0 mb-6">
-                <div className="flex items-center gap-4 min-w-0 pr-4">
-                  <div className="p-2.5 bg-blue-500/10 border border-blue-500/20 rounded-xl text-blue-400 shrink-0">
-                    <MessageSquare className="w-6 h-6" />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="text-xl font-bold text-white truncate font-mono">
-                      {selectedConv.title || 'Untitled Session'}
-                    </h3>
-                    <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
-                      <span className="font-mono text-[10px] bg-black/40 px-2 py-0.5 rounded border border-white/5 truncate max-w-[200px]">{selectedConv.id}</span>
-                      <span>•</span>
-                      <span className="text-blue-400 font-semibold uppercase tracking-wider text-[10px] shrink-0">{selectedConv.profile_slug}</span>
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedConv(null)}
-                  className="p-2 text-gray-500 hover:text-white hover:bg-white/5 rounded-xl transition-colors cursor-pointer shrink-0"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-
-              {/* Metadata row */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-black/30 p-4 rounded-2xl border border-white/5 shrink-0 mb-6">
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Identity</div>
-                  <div className="text-sm font-semibold text-gray-200 mt-1 flex items-center gap-1.5 truncate">
-                    <User className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-                    <span className="truncate">{selectedConv.user_id}</span>
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Tenant</div>
-                  <div className="text-sm font-semibold text-gray-200 mt-1 uppercase font-mono truncate">{selectedConv.tenant_id}</div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Last Activity</div>
-                  <div className="text-sm font-semibold text-gray-200 mt-1 flex items-center gap-1.5 truncate">
-                    <Clock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
-                    <span className="truncate">{new Date(selectedConv.updated_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Messages</div>
-                  <div className="text-sm font-semibold text-blue-400 mt-1">{selectedConv.message_count} messages</div>
-                </div>
-              </div>
-
-              {/* Messages Audit Log */}
-              <div className="flex-1 min-h-0 overflow-y-auto pr-2 custom-scrollbar space-y-4 pb-4">
-                {loadingMessages ? (
-                  <div className="py-20 text-center text-gray-500 flex flex-col items-center gap-3">
-                    <RefreshCw className="w-6 h-6 animate-spin text-blue-500" />
-                    <span className="text-xs font-semibold">Loading audit trail...</span>
-                  </div>
-                ) : messages.length === 0 ? (
-                  <div className="py-20 text-center text-gray-600 italic text-sm">No messages recorded in this session.</div>
-                ) : (
-                  messages.map((m) => {
-                    const isHighlighted = m.id === preselectedMessageId;
-                    return (
-                      <div
-                        key={m.id}
-                        id={`message-${m.id}`}
-                        className={`flex gap-4 p-4 rounded-2xl transition-all duration-300 ${
-                          isHighlighted
-                            ? "bg-blue-500/10 border-2 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)] ring-2 ring-blue-500/20"
-                            : m.role === "user"
-                              ? "bg-white/[0.02] border border-white/5"
-                              : m.tool_name
-                                ? "bg-amber-500/[0.02] border border-amber-500/10"
-                                : "bg-blue-500/[0.04] border border-blue-500/10"
-                        }`}
-                      >
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center border shrink-0 ${m.role === 'user'
-                        ? 'bg-gray-500/10 border-gray-500/20 text-gray-400'
-                        : m.tool_name
-                          ? 'bg-amber-500/10 border-amber-500/20 text-amber-500'
-                          : 'bg-blue-500/10 border-blue-500/20 text-blue-400'
-                        }`}>
-                        {m.role === 'user' ? <User className="w-4 h-4" /> : m.tool_name ? <Terminal className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                      </div>
-                      <div className="space-y-1.5 flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className={`text-[10px] font-bold uppercase tracking-widest ${m.role === 'user' ? 'text-gray-400' : m.tool_name ? 'text-amber-500' : 'text-blue-400'
-                            } flex items-center gap-1.5`}>
-                            {m.role === 'user' ? 'Human' : m.tool_name ? `Tool: ${m.tool_name}` : 'AION Agent'}
-                            {m.rating === 1 && (
-                              <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full lowercase tracking-normal normal-case">
-                                <ThumbsUp className="w-3 h-3 text-emerald-400 shrink-0" /> liked
-                              </span>
-                            )}
-                            {m.rating === -1 && (
-                              <span className="flex items-center gap-1 text-[10px] font-bold text-rose-400 bg-rose-500/10 border border-rose-500/20 px-2 py-0.5 rounded-full lowercase tracking-normal normal-case">
-                                <ThumbsDown className="w-3 h-3 text-rose-400 shrink-0" /> disliked
-                              </span>
-                            )}
-                          </span>
-                          <span className="text-[9px] font-mono text-gray-600">#{m.seq}</span>
-                        </div>
-                        <div className={`text-sm leading-relaxed break-words prose prose-invert max-w-none prose-sm prose-p:leading-relaxed prose-pre:bg-black/50 prose-pre:border prose-pre:border-white/5 prose-table:border prose-table:border-white/10 prose-th:bg-white/5 prose-th:p-2 prose-td:p-2 prose-td:border-b prose-td:border-white/5 ${m.role === 'user' ? 'text-gray-300' : 'text-white font-medium'}`}>
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {m.content?.trim() || ""}
-                          </ReactMarkdown>
-                        </div>
-
-                        {/* Steps (Tool Calls) */}
-                        {m.steps && m.steps.length > 0 && (
-                          <div className="mt-3 space-y-1.5 pt-2 border-t border-white/5">
-                            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 flex items-center gap-1">
-                              <Terminal className="w-3 h-3 text-amber-500" /> Tool Execution Steps ({m.steps.length})
-                            </div>
-                            <div className="grid grid-cols-1 gap-1.5">
-                              {m.steps.map((s: any) => (
-                                <div key={s.id} className="bg-black/30 border border-white/5 rounded-xl p-2.5 text-xs font-mono space-y-1">
-                                  <div className="flex items-center justify-between text-amber-400 font-bold">
-                                    <span>{s.name}</span>
-                                    {s.is_error ? <span className="text-red-400 font-sans text-[10px] bg-red-500/10 px-1.5 py-0.5 rounded border border-red-500/20">ERROR</span> : <span className="text-green-400 font-sans text-[10px] bg-green-500/10 px-1.5 py-0.5 rounded border border-green-500/20">SUCCESS</span>}
-                                  </div>
-                                  {s.input && (
-                                    <div className="text-gray-400 text-[11px] truncate">Input: {s.input}</div>
-                                  )}
-                                  {s.output && (
-                                    <div className="text-gray-300 text-[11px] bg-black/40 p-1.5 rounded border border-white/5 max-h-32 overflow-y-auto custom-scrollbar whitespace-pre-wrap font-mono">
-                                      {s.output}
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Plan Artifact */}
-                        {(() => {
-                          const planArt = m.artifacts?.find((a: any) => a.kind === 'plan' || (a.original_name || '').toLowerCase().includes('execution_plan'));
-                          if (!planArt) return null;
-                          const token = getStoredToken();
-                          const downloadUrl = planArt.storage_key ? `${apiBase()}/sessions/${encodeURIComponent(selectedConv.id)}/download?relative_path=${encodeURIComponent(planArt.storage_key)}${token ? `&access_token=${encodeURIComponent(token)}` : ''}` : undefined;
-                          return (
-                            <div className="mt-3 pt-2 border-t border-white/5">
-                              <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-3 space-y-2">
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2 text-blue-400 font-bold text-xs">
-                                    <Layers className="w-4 h-4" /> AION Execution Plan
-                                  </div>
-                                  {downloadUrl && (
-                                    <a
-                                      href={downloadUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-white rounded-lg text-xs font-semibold transition-colors border border-blue-500/30 shadow-sm"
-                                    >
-                                      <Download className="w-3.5 h-3.5" /> Download
-                                    </a>
-                                  )}
-                                </div>
-                                <div className="text-xs text-gray-300 font-mono bg-black/40 p-2.5 rounded-xl border border-white/5 max-h-48 overflow-y-auto custom-scrollbar whitespace-pre-wrap">
-                                  {planArt.content || `[Plan File: ${planArt.original_name || planArt.storage_key}]`}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })()}
-
-                        {/* General Artifacts & Attachments */}
-                        {(() => {
-                          const genArts = m.artifacts?.filter((a: any) => a.kind !== 'plan' && !(a.original_name || '').toLowerCase().includes('execution_plan'));
-                          if (!genArts || genArts.length === 0) return null;
-                          const token = getStoredToken();
-                          return (
-                            <div className="mt-3 pt-2 border-t border-white/5">
-                              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-2 flex items-center gap-1">
-                                <Paperclip className="w-3 h-3 text-blue-400" /> {m.role === 'user' ? 'Allegati Utente' : 'Artefatti Generati'} ({genArts.length})
-                              </div>
-                              <div className="flex flex-wrap gap-2">
-                                {genArts.map((a: any) => {
-                                  const downloadUrl = a.storage_key ? `${apiBase()}/sessions/${encodeURIComponent(selectedConv.id)}/download?relative_path=${encodeURIComponent(a.storage_key)}${token ? `&access_token=${encodeURIComponent(token)}` : ''}` : undefined;
-                                  return (
-                                    <div key={a.id} className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl pl-3 pr-1.5 py-1.5 text-xs text-gray-200 shadow-sm">
-                                      <FileCode className="w-3.5 h-3.5 text-blue-400" />
-                                      <span className="font-mono font-semibold truncate max-w-[200px]">{a.original_name || a.storage_key || a.id}</span>
-                                      {a.size_bytes && <span className="text-[10px] text-gray-500">({Math.round(a.size_bytes / 1024)}KB)</span>}
-                                      {downloadUrl && (
-                                        <a
-                                          href={downloadUrl}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="p-1 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors ml-1"
-                                          title="Download file"
-                                        >
-                                          <Download className="w-3.5 h-3.5" />
-                                        </a>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </div>
-                  );
-                })
+            {attentionTotal > 0 && (
+              <button
+                type="button"
+                aria-pressed={attention}
+                onClick={() => setAttention((v) => !v)}
+                className={cn(
+                  "focus-ring inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-sm font-medium transition-colors",
+                  attention ? "border-destructive/40 bg-destructive/10 text-destructive" : "border-border bg-card hover:bg-secondary",
                 )}
-              </div>
+              >
+                <AlertTriangle className="h-3.5 w-3.5" aria-hidden />
+                {t(`${k}.list.attention`)}
+                <span className="tabular-nums opacity-70">{attentionTotal}</span>
+              </button>
+            )}
+
+            {listState === "ready" && (
+              <span className="ml-auto text-sm tabular-nums text-muted-foreground">
+                {filtering ? t(`${k}.list.count_filtered`, { shown: rows.length, total: families.length }) : t(`${k}.list.count`, { n: families.length })}
+              </span>
+            )}
+          </div>
+
+          {listState === "loading" ? (
+            <div className="flex items-center gap-2 px-1 py-10 text-sm text-muted-foreground" role="status">
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              {t(`${k}.loading`)}
+            </div>
+          ) : listState === "error" ? (
+            <div className="flex flex-col items-start gap-3 px-1 py-10">
+              <p className="text-sm text-destructive">{t(`${k}.error`)}</p>
+              <button type="button" className={outlineBtn} onClick={refresh}>
+                {t(`${k}.retry`)}
+              </button>
             </div>
           ) : (
-            <div className="glass-card flex-1 flex flex-col items-center justify-center text-center p-12 space-y-6 border border-white/5 rounded-3xl min-h-[450px]">
-              <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-blue-500/10 to-indigo-500/10 border border-blue-500/20 flex items-center justify-center text-blue-400 shadow-xl shadow-blue-500/5">
-                <MessageSquare className="w-10 h-10" />
+            <>
+              <ConversationList rows={shown} selectedId={selectedId} sort={sort} onSort={onSort} onOpen={open} onToggle={toggleFamily} filters={filters} onFilter={setFilter} userOptions={userOptions} profileOptions={profileOptions} profileName={profileName}
+                now={now}
+                t={t}
+                empty={
+                  rows.length === 0 ? (
+                    <div className="px-6 py-16 text-center">
+                      <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.list.empty_title`)}</h2>
+                      <p className="mt-1.5 text-sm text-muted-foreground">{t(`${k}.list.empty_body`)}</p>
+                      {filtering && (
+                        <button type="button" className={cn(ghostBtn, "mt-3")} onClick={clearFilters}>
+                          {t(`${k}.list.clear`)}
+                        </button>
+                      )}
+                    </div>
+                  ) : null
+                }
+              />
+              <div className="flex flex-col items-center gap-2 pb-6">
+                {rows.length > shown.length && (
+                  <button type="button" className={outlineBtn} onClick={() => setLimit((n) => n + PAGE)}>
+                    {t(`${k}.list.show_more`, { n: Math.min(PAGE, rows.length - shown.length) })}
+                  </button>
+                )}
+                {truncated && !filtering && <p className="text-xs text-muted-foreground">{t(`${k}.list.truncated`, { n: FETCH_LIMIT })}</p>}
               </div>
-              <div className="space-y-2 max-w-sm">
-                <h3 className="text-xl font-bold text-white">Select an Audit Session</h3>
-                <p className="text-sm text-gray-400 leading-relaxed">
-                  Choose a conversation session from the list on the left to inspect real-time interaction logs, human prompts, tool calls, and agent responses.
-                </p>
-              </div>
-            </div>
+            </>
           )}
-        </div>
-      </div>
+        </>
+      )}
+
+      {selectedId && (
+        <Reader
+          id={selectedId}
+          summary={summary}
+          parent={parentConv}
+          threads={childThreads}
+          onOpen={open}
+          state={current ? current.state : "loading"}
+          messages={current?.messages ?? NO_MESSAGES}
+          highlightId={messageParam}
+          position={position}
+          onClose={close}
+          onStep={step}
+          t={t}
+        />
+      )}
     </div>
   );
 }
 
-export default function GlobalConversations() {
+export default function ConversationsPage() {
   return (
-    <Suspense fallback={<div className="py-20 text-center text-gray-500 animate-pulse">Loading conversations ledger...</div>}>
+    <Suspense fallback={null}>
       <ConversationsContent />
     </Suspense>
   );
 }
-

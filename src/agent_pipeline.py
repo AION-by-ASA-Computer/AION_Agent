@@ -1784,6 +1784,15 @@ class AgentPipeline:
                 eb = dict(gen_kw.get("extra_body") or {})
                 eb["aion_pii_review_token"] = metadata["aion_pii_review_token"]
                 gen_kw["extra_body"] = eb
+            if (
+                metadata
+                and metadata.get("aion_privacy_filter_exclude_tags") is not None
+            ):
+                eb = dict(gen_kw.get("extra_body") or {})
+                eb["aion_privacy_filter_exclude_tags"] = list(
+                    metadata["aion_privacy_filter_exclude_tags"]
+                )
+                gen_kw["extra_body"] = eb
 
             # Always refresh system prompt so cached agents get the current date
             # and any profile changes.  The harness_v2_injections flag used to
@@ -2650,6 +2659,21 @@ class AgentPipeline:
                                             )
                                             if pending:
                                                 yield _track_sse(pending)
+                                        elif (
+                                            pe.artifact_type or ""
+                                        ).strip().lower() == "pii_review":
+                                            # Not persisted to workspace/attachments.
+                                            yield _track_sse(
+                                                {
+                                                    "type": "artifact_end",
+                                                    "artifact": {
+                                                        "identifier": pe.artifact_id,
+                                                        "type": pe.artifact_type,
+                                                        "title": pe.artifact_title,
+                                                        "saved": False,
+                                                    },
+                                                }
+                                            )
                                         else:
                                             path, version = artifact_manager.save(
                                                 pe.artifact_id,

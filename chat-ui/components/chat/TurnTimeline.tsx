@@ -19,7 +19,10 @@ import { PiiReviewArtifactBlock } from "@/components/chat/PiiReviewArtifactBlock
 import { ReasoningDisclosure } from "@/components/chat/ReasoningDisclosure";
 import { ShimmerText, AgentWorkingShimmer } from "@/components/chat/ShimmerText";
 import { StatusProgressCard } from "@/components/chat/StatusProgressCard";
-import { artifactLanguage } from "@/lib/artifacts";
+import { CodeGenerationLoader } from "@/components/chat/CodeGenerationLoader";
+import { GeneratedFileCard } from "@/components/chat/GeneratedFileCard";
+import { isUserFacingGeneratedFile } from "@/lib/session-file-paths";
+import { artifactLanguage, isPiiReviewArtifact } from "@/lib/artifacts";
 import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 import { sessionDownloadUrl } from "@/lib/api/aion";
 import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
@@ -85,6 +88,16 @@ export function TurnTimeline({
         {outputSegments.map((seg, idx) => {
           const isLast = idx === outputSegments.length - 1;
           if (seg.kind === "artifact") {
+            if (isPiiReviewArtifact(seg)) {
+              return (
+                <PiiReviewArtifactBlock
+                  key={seg.id}
+                  content={seg.buffer}
+                  onAction={onPiiAction}
+                  assistantMessageId={messageId}
+                />
+              );
+            }
             const planCheck = isPlanArtifact
               ? isPlanArtifact(
                 { identifier: seg.id, type: seg.artType, title: seg.title },
@@ -92,6 +105,20 @@ export function TurnTimeline({
               )
               : false;
             if (planCheck) return null;
+            if (isUserFacingGeneratedFile(seg.savedPath || seg.title)) {
+              return (
+                <div key={seg.id} className="mt-2.5 max-w-xl">
+                  <GeneratedFileCard
+                    filename={seg.title || seg.savedPath || "document"}
+                    downloadUrl={
+                      seg.savedPath && conversationId && token
+                        ? sessionDownloadUrl(conversationId, seg.savedPath, token)
+                        : undefined
+                    }
+                  />
+                </div>
+              );
+            }
             const artifactStreaming = streaming && isLast && !seg.savedPath;
             return (
               <CodeArtifactBlock
@@ -142,24 +169,22 @@ export function TurnTimeline({
       {displaySegments.map((seg, idx) => {
         const isLast = idx === displaySegments.length - 1;
         if (seg.kind === "generating") {
-          const Icon = seg.target === "plan" ? ListTodo : FileText;
           const scriptLike = isScriptLikeTitle(seg.title);
-          const label =
-            seg.target === "plan"
-              ? t("chat.generating.plan")
-              : scriptLike && seg.title?.trim()
-                ? t("chat.generating.script_named", { title: seg.title })
-                : scriptLike
-                  ? t("chat.generating.script")
-                  : seg.title?.trim()
-                    ? t("chat.generating.document_named", { title: seg.title })
-                    : t("chat.generating.document");
+          if (seg.target === "plan") {
+            return (
+              <StatusProgressCard
+                key={seg.id}
+                icon={ListTodo}
+                title={t("chat.generating.plan")}
+                subtitle={t("chat.tool.waiting")}
+              />
+            );
+          }
           return (
-            <StatusProgressCard
+            <CodeGenerationLoader
               key={seg.id}
-              icon={Icon}
-              title={label}
-              subtitle={t("chat.tool.waiting")}
+              title={seg.title}
+              isScript={scriptLike}
             />
           );
         }
@@ -258,7 +283,7 @@ export function TurnTimeline({
           );
         }
         if (seg.kind === "artifact") {
-          if (seg.artType === "pii_review") {
+          if (isPiiReviewArtifact(seg)) {
             return (
               <PiiReviewArtifactBlock
                 key={seg.id}
@@ -275,6 +300,20 @@ export function TurnTimeline({
             )
             : false;
           if (planCheck) return null;
+          if (isUserFacingGeneratedFile(seg.savedPath || seg.title)) {
+            return (
+              <div key={seg.id} className="mt-2.5 max-w-xl">
+                <GeneratedFileCard
+                  filename={seg.title || seg.savedPath || "document"}
+                  downloadUrl={
+                    seg.savedPath && conversationId && token
+                      ? sessionDownloadUrl(conversationId, seg.savedPath, token)
+                      : undefined
+                  }
+                />
+              </div>
+            );
+          }
           const artifactStreaming =
             streaming && isLast && !seg.savedPath;
           return (

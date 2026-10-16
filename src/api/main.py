@@ -209,6 +209,14 @@ async def _lifespan(app: FastAPI):
         logger.error(f"Logging recovery failed at lifespan: {e}", exc_info=True)
 
     logger.info("Starting application lifespan...")
+    global _GLOBAL_LOOP
+    _GLOBAL_LOOP = asyncio.get_running_loop()
+    try:
+        import src.main
+
+        src.main._GLOBAL_LOOP = _GLOBAL_LOOP
+    except Exception:
+        pass
     _cleanup_orphaned_mcp_remotes()
     try:
         validate_settings_at_startup()
@@ -511,9 +519,17 @@ app.include_router(research_router)
 app.include_router(plan_execution_router)
 
 from .auth_login import router as auth_login_router
+from .auth_mfa import router as auth_mfa_router
+from .auth_sso import router as auth_sso_router
+from .admin_sso import router as admin_sso_router
+from .admin_auth_mode import router as admin_auth_mode_router
 from .chat_ui import router as chat_ui_router
 
 app.include_router(auth_login_router)
+app.include_router(auth_mfa_router)
+app.include_router(auth_sso_router)
+app.include_router(admin_sso_router)
+app.include_router(admin_auth_mode_router)
 app.include_router(chat_ui_router)
 
 

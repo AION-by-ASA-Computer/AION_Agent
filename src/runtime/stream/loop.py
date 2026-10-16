@@ -1180,6 +1180,20 @@ class StreamLoop:
                     "Failed to parse pii_replacements artifact: %s", e
                 )
             return  # Skip saving to disk and yielding artifact_end
+        elif (pe.artifact_type or "").strip().lower() == "pii_review":
+            # Review payload lives only in the chat card (segment buffer): never
+            # write it to the session workspace or register it as an attachment.
+            yield self._track_sse(
+                {
+                    "type": "artifact_end",
+                    "artifact": {
+                        "identifier": pe.artifact_id,
+                        "type": pe.artifact_type,
+                        "title": pe.artifact_title,
+                        "saved": False,
+                    },
+                }
+            )
         else:
             path, version = self.artifact_manager.save(
                 pe.artifact_id,

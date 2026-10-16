@@ -25,9 +25,9 @@ export function SchedulesEmptyState({
 
   return (
     <div className="relative overflow-hidden rounded-3xl border border-dashed border-border/80 bg-gradient-to-b from-card/60 to-card/20 px-6 py-14 text-center shadow-sm backdrop-blur-sm">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,hsl(var(--primary)/0.08),transparent_55%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(120,120,120,0.06),transparent_55%)]" />
       <div className="relative mx-auto max-w-lg">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-border/80 dark:border-white/10 bg-muted/60 dark:bg-zinc-800 text-foreground dark:text-zinc-200 shadow-sm">
           <CalendarClock className="h-7 w-7" aria-hidden />
         </div>
         <h2 className="text-lg font-semibold tracking-tight text-foreground">
@@ -51,12 +51,12 @@ export function SchedulesEmptyState({
                   )
                 }
                 className={cn(
-                  "group rounded-2xl border border-border/70 bg-background/50 px-4 py-3 text-left transition",
-                  "hover:border-primary/30 hover:bg-primary/5 hover:shadow-sm",
+                  "group rounded-2xl border border-border/70 dark:border-white/10 bg-background/50 dark:bg-zinc-900/50 px-4 py-3 text-left transition",
+                  "hover:border-border dark:hover:border-white/20 hover:bg-muted/40 dark:hover:bg-zinc-800/50 hover:shadow-xs cursor-pointer",
                 )}
               >
                 <div className="flex items-start gap-3">
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted/80 text-muted-foreground transition group-hover:bg-primary/10 group-hover:text-primary">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-muted/80 dark:bg-zinc-800 text-muted-foreground transition group-hover:bg-muted dark:group-hover:bg-zinc-700 group-hover:text-foreground">
                     <Icon className="h-4 w-4" aria-hidden />
                   </span>
                   <div className="min-w-0">
@@ -76,7 +76,7 @@ export function SchedulesEmptyState({
         <button
           type="button"
           onClick={onCreate}
-          className="focus-ring mt-8 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90"
+          className="focus-ring mt-8 rounded-xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 px-5 py-2.5 text-sm font-semibold shadow-sm transition hover:bg-zinc-800 dark:hover:bg-white cursor-pointer"
         >
           {t("schedulesPage.new")}
         </button>

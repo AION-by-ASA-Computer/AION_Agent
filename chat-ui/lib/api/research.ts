@@ -143,6 +143,18 @@ export function rememberWatchedResearch(
   );
 }
 
+export function forgetWatchedResearch(
+  id: string,
+  chatSessionId: string
+): void {
+  if (typeof window === "undefined") return;
+  const list = loadWatchedResearch(chatSessionId).filter((x) => x.id !== id);
+  localStorage.setItem(
+    watchedStorageKey(chatSessionId),
+    JSON.stringify(list)
+  );
+}
+
 export async function fetchActiveResearch(
   userId: string,
   token?: string | null,

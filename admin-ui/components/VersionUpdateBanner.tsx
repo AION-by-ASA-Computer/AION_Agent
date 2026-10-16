@@ -67,7 +67,7 @@ export function VersionUpdateBanner({ className }: Props) {
   return (
     <div
       className={cn(
-        "flex items-center justify-between gap-3 rounded-2xl border border-indigo-500/30 bg-indigo-500/10 px-4 py-3 text-sm shadow-sm backdrop-blur-sm",
+        "flex items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-sm shadow-sm",
         className,
       )}
       role="status"
@@ -75,14 +75,14 @@ export function VersionUpdateBanner({ className }: Props) {
     >
       <div className="flex items-center gap-2.5">
         <ArrowUpCircle
-          className="h-4 w-4 shrink-0 text-indigo-400"
+          className="h-4 w-4 shrink-0 text-indigo-600 dark:text-indigo-400"
           aria-hidden
         />
-        <span className="text-indigo-200">
+        <span className="text-foreground">
           <span className="font-semibold">
             Nuova versione {data.latest} disponibile
           </span>{" "}
-          <span className="text-indigo-300/70">(installata: {data.current})</span>
+          <span className="text-muted-foreground">(installata: {data.current})</span>
         </span>
       </div>
 
@@ -91,7 +91,7 @@ export function VersionUpdateBanner({ className }: Props) {
           href={releaseUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs font-medium text-indigo-300 underline underline-offset-2 hover:text-indigo-100 transition-colors"
+          className="text-xs font-medium text-indigo-700 underline underline-offset-2 hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-100 transition-colors"
           id="version-banner-changelog-link"
         >
           Changelog
@@ -100,7 +100,7 @@ export function VersionUpdateBanner({ className }: Props) {
           href={upgradeDocsUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-xs font-medium text-indigo-300 underline underline-offset-2 hover:text-indigo-100 transition-colors"
+          className="text-xs font-medium text-indigo-700 underline underline-offset-2 hover:text-indigo-900 dark:text-indigo-300 dark:hover:text-indigo-100 transition-colors"
           id="version-banner-upgrade-link"
         >
           Come aggiornare
@@ -113,7 +113,7 @@ export function VersionUpdateBanner({ className }: Props) {
             dismiss();
             setHidden(true);
           }}
-          className="ml-1 rounded-lg p-1 text-indigo-400 hover:bg-indigo-500/20 hover:text-indigo-100 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          className="ml-1 rounded-lg p-1 text-muted-foreground hover:bg-secondary hover:text-foreground transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500"
         >
           <X className="h-3.5 w-3.5" aria-hidden />
         </button>

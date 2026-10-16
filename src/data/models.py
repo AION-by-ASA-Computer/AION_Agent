@@ -56,10 +56,32 @@ class User(Base):
     must_change_password: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="0", nullable=False
     )
+    # SSO migration: esonero dal conteggio utenti in attesa (§1.2).
+    sso_migration_exempt: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    # Password temporanea generata dall'admin per la migrazione SSO (§1.2).
+    # Valorizzata solo quando password_hash contiene una temp password.
+    temp_password_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
     last_active_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # 2FA TOTP (migration v4w5x6y024). Secret cifrato AES-GCM (credential_store).
+    # ``totp_enabled_at`` NULL = enrollment non confermato (secret pending).
+    totp_secret_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    totp_enabled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    totp_last_used_step: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    totp_failed_count: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0", nullable=False
+    )
+    totp_locked_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "identifier", name="uq_users_tenant_identifier"),
@@ -106,6 +128,13 @@ class Conversation(Base):
     )
     metadata_json: Mapped[str] = mapped_column("metadata", Text, default="{}")
     tags_json: Mapped[str] = mapped_column("tags", Text, default="[]")
+    # Side thread: conversazione figlia aperta da un passaggio di un messaggio
+    # assistant della conversazione madre (un solo livello di annidamento).
+    parent_conversation_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    parent_message_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    anchor_json: Mapped[str] = mapped_column(Text, default="{}")
 
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan"
@@ -816,4 +845,156 @@ class UserProfileAccess(Base):
             "profile_slug",
             name="uq_user_profile_access",
         ),
+    )
+
+
+class SsoProvider(Base):
+    """Configurazione provider SSO (Microsoft/Google) per tenant."""
+
+    __tablename__ = "sso_providers"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tenants.id"), nullable=False
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    client_id: Mapped[str] = mapped_column(String(256), nullable=False)
+    client_secret_encrypted: Mapped[Optional[str]] = mapped_column(Text)
+    directory_tenant_id: Mapped[Optional[str]] = mapped_column(String(64))
+    allowed_domains: Mapped[Optional[str]] = mapped_column(Text)
+    auto_provision: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1"
+    )
+    default_roles: Mapped[str] = mapped_column(
+        Text, default='["user"]', server_default='["user"]'
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    validated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id")
+    )
+    client_secret_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "provider", name="uq_sso_providers_tenant_provider"
+        ),
+    )
+
+
+class UserSsoIdentity(Base):
+    """Collegamento tra utente AION e identità esterna SSO."""
+
+    __tablename__ = "user_sso_identities"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    subject: Mapped[str] = mapped_column(String(256), nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(256))
+    display_name: Mapped[Optional[str]] = mapped_column(String(256))
+    access_token_encrypted: Mapped[Optional[str]] = mapped_column(Text)
+    token_expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
+    scope: Mapped[Optional[str]] = mapped_column(Text)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "provider",
+            "subject",
+            name="uq_user_sso_identities_provider_subject",
+        ),
+        # Fix 0.10: impedisce a un utente di avere due identità dello stesso provider.
+        UniqueConstraint(
+            "tenant_id",
+            "user_id",
+            "provider",
+            name="uq_user_sso_identities_user_provider",
+        ),
+    )
+
+
+class SsoAuthState(Base):
+    """Stati di autorizzazione OAuth per l'uso durante il login."""
+
+    __tablename__ = "sso_auth_states"
+
+    state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    purpose: Mapped[str] = mapped_column(String(32), nullable=False)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    nonce: Mapped[Optional[str]] = mapped_column(String(64))
+    code_verifier_encrypted: Mapped[Optional[str]] = mapped_column(Text)
+    user_id: Mapped[Optional[str]] = mapped_column(String(64))
+    return_to: Mapped[Optional[str]] = mapped_column(String(2048))
+    payload_json: Mapped[Optional[str]] = mapped_column(Text)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+
+class AuthSettings(Base):
+    """Impostazioni di autenticazione per tenant (§1.1).
+
+    Una riga per tenant. Fonte di verità per login_mode.
+    """
+
+    __tablename__ = "auth_settings"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tenants.id"), primary_key=True
+    )
+    # Valori: 'password', 'microsoft', 'google'
+    login_mode: Mapped[str] = mapped_column(
+        String(16), default="password", server_default="password", nullable=False
+    )
+    # Valori: 'first_setup', 'migration', oppure NULL
+    sso_origin: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    migration_started_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Solo informativo; la visibilità è calcolata in tempo reale
+    migration_completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Se True, cancella password_hash al link (solo per non-admin)
+    clear_password_on_link: Mapped[bool] = mapped_column(
+        Boolean, default=True, server_default="1", nullable=False
+    )
+    # 2FA TOTP obbligatorio per il login con password (migration v4w5x6y024)
+    totp_required: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    totp_required_changed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )

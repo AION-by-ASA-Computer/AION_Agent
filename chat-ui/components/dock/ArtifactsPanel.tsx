@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 import { useT } from "@/lib/i18n/use-t";
 import { StreamingContentPreview } from "@/components/dock/StreamingContentPreview";
-import { ToolResultsPanel } from "@/components/dock/ToolResultsPanel";
 import { filterUserVisibleSessionFiles } from "@/lib/session-file-paths";
 import {
   sessionDownloadUrl,
@@ -218,16 +217,11 @@ export function ArtifactsPanel({
 }) {
   const t = useT();
 
-  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({
-    root: true,
-    uploads: true,
-    derived: true,
-    workspace: true,
-  });
-  const toggleFolder = (folder: string) => {
+  const [expandedFolders, setExpandedFolders] = useState<Record<string, boolean>>({});
+  const toggleFolder = (folder: string, currentExpanded: boolean) => {
     setExpandedFolders((prev) => ({
       ...prev,
-      [folder]: !prev[folder],
+      [folder]: !currentExpanded,
     }));
   };
 
@@ -243,8 +237,10 @@ export function ArtifactsPanel({
       savedPath.includes("execution_plan") ||
       typeLabel === "plan" ||
       lang === "plan";
+    const isPiiReview =
+      typeLabel === "pii_review" || /(^|\/)pii_review\b/.test(savedPath);
 
-    return !isExecutionPlan;
+    return !isExecutionPlan && !isPiiReview;
   });
 
   const handleItemClick = (itemId: string) => {
@@ -269,17 +265,6 @@ export function ArtifactsPanel({
 
   const visibleSessionFiles = filterUserVisibleSessionFiles(sessionFiles);
 
-  if (!filteredItems.length && !visibleSessionFiles.length && !toolLedgerEntries.length) {
-    return (
-      <div className="p-4 flex flex-col items-center justify-center gap-2 text-center text-muted-foreground select-none">
-        <File size={24} className="opacity-40" />
-        <p className="text-xs">
-          {t("artifacts.no_artifacts")}
-        </p>
-      </div>
-    );
-  }
-
   const rootFiles = visibleSessionFiles.filter((f) => {
     const rel = f.relative_path || "";
     return !rel.includes("/");
@@ -292,44 +277,51 @@ export function ArtifactsPanel({
     folderKey: "root" | "uploads" | "derived" | "workspace",
     files: SessionFileRow[],
   ) => {
-    const isExpanded = expandedFolders[folderKey];
+    const isExpanded =
+      expandedFolders[folderKey] !== undefined
+        ? expandedFolders[folderKey]
+        : files.length > 0;
     const folderTitle = t(`artifacts.${folderKey}`);
     
     // Custom theme colors for folders
     const themeColors = {
       root: {
         bg: "bg-emerald-500/10 hover:bg-emerald-500/15 border-emerald-500/20",
-        text: "text-emerald-400",
-        folderBg: "bg-emerald-500/10",
+        text: "text-emerald-500 dark:text-emerald-400",
+        folderBg: "bg-emerald-500/10 dark:bg-emerald-500/20",
+        border: "border-emerald-500/30",
       },
       uploads: {
         bg: "bg-amber-500/10 hover:bg-amber-500/15 border-amber-500/20",
-        text: "text-amber-400",
-        folderBg: "bg-amber-500/10",
+        text: "text-amber-500 dark:text-amber-400",
+        folderBg: "bg-amber-500/10 dark:bg-amber-500/20",
+        border: "border-amber-500/30",
       },
       derived: {
         bg: "bg-cyan-500/10 hover:bg-cyan-500/15 border-cyan-500/20",
-        text: "text-cyan-400",
-        folderBg: "bg-cyan-500/10",
+        text: "text-cyan-500 dark:text-cyan-400",
+        folderBg: "bg-cyan-500/10 dark:bg-cyan-500/20",
+        border: "border-cyan-500/30",
       },
       workspace: {
         bg: "bg-violet-500/10 hover:bg-violet-500/15 border-violet-500/20",
-        text: "text-violet-400",
-        folderBg: "bg-violet-500/10",
+        text: "text-violet-500 dark:text-violet-400",
+        folderBg: "bg-violet-500/10 dark:bg-violet-500/20",
+        border: "border-violet-500/30",
       },
     }[folderKey];
 
     return (
-      <div className="border border-border/40 rounded-lg bg-card/25 overflow-hidden transition-all duration-200">
+      <div className="border border-border/50 dark:border-white/10 rounded-xl bg-card/40 dark:bg-zinc-900/40 overflow-hidden transition-all duration-200 shadow-2xs">
         {/* Folder Header Row */}
         <button
           type="button"
-          onClick={() => toggleFolder(folderKey)}
-          className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted/40 transition-colors select-none"
+          onClick={() => toggleFolder(folderKey, isExpanded)}
+          className="w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-foreground hover:bg-muted/40 transition-colors select-none cursor-pointer"
         >
           <div className="flex items-center gap-2">
             {isExpanded ? <ChevronDown size={14} className="text-muted-foreground/75" /> : <ChevronRight size={14} className="text-muted-foreground/75" />}
-            <div className={cn("p-1 rounded flex items-center justify-center", themeColors.folderBg)}>
+            <div className={cn("p-1 rounded flex items-center justify-center border", themeColors.folderBg, themeColors.border)}>
               {isExpanded ? (
                 <FolderOpen size={13} className={themeColors.text} />
               ) : (
@@ -348,7 +340,7 @@ export function ArtifactsPanel({
           <div className="border-t border-border/35 bg-card/10 p-2 space-y-1 animate-in fade-in-50 duration-150">
             {files.length === 0 ? (
               <p className="text-[0.786em] text-muted-foreground/50 italic py-2 px-3 pl-8 select-none">
-                Nessun file presente.
+                {t("artifacts.empty_folder") || "Nessun file presente."}
               </p>
             ) : (
               files.map((file, idx) => {
@@ -406,14 +398,6 @@ export function ArtifactsPanel({
 
   return (
     <div className="space-y-4 p-3">
-      {toolLedgerEntries.length > 0 ? (
-        <ToolResultsPanel
-          entries={toolLedgerEntries}
-          conversationId={conversationId}
-          token={token}
-        />
-      ) : null}
-
       {/* Session Files Section */}
       <div className="space-y-2">
         <div className="flex items-center justify-between px-1 py-1 border-b border-border/15 pb-2 mb-3">
@@ -434,16 +418,12 @@ export function ArtifactsPanel({
           )}
         </div>
         
-        {loadingFiles && visibleSessionFiles.length === 0 ? (
-          <p className="text-[0.786em] text-muted-foreground/50 text-center py-4 animate-pulse select-none">Caricamento...</p>
-        ) : (
-          <div className="space-y-2.5">
-            {rootFiles.length > 0 && renderFolder("root", rootFiles)}
-            {renderFolder("uploads", uploadsFiles)}
-            {renderFolder("derived", derivedFiles)}
-            {renderFolder("workspace", workspaceFiles)}
-          </div>
-        )}
+        <div className="space-y-2.5">
+          {rootFiles.length > 0 && renderFolder("root", rootFiles)}
+          {renderFolder("uploads", uploadsFiles)}
+          {renderFolder("derived", derivedFiles)}
+          {renderFolder("workspace", workspaceFiles)}
+        </div>
       </div>
 
       {/* Generated Artifacts Section */}

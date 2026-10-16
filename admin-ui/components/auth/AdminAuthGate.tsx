@@ -12,6 +12,11 @@ import {
   isChangePwSkipped,
 } from "@/lib/auth/storage";
 import { fetchAuthStatus, resetAuthStatusCache } from "@/lib/auth/status";
+import {
+  initLocaleFromStorage,
+  setLocale,
+  isValidLocale,
+} from "@/lib/i18n/i18n-store";
 
 type GateState =
   | "checking"
@@ -44,6 +49,7 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
     pathname?.startsWith("/change-password/");
 
   useEffect(() => {
+    initLocaleFromStorage();
     if (skip) {
       setState("ok");
       return;
@@ -85,7 +91,11 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
         const me = (await r.json()) as {
           roles?: string[];
           must_change_password?: boolean;
+          metadata?: { language?: string };
         };
+        if (me.metadata?.language && isValidLocale(me.metadata.language)) {
+          setLocale(me.metadata.language);
+        }
         const roles = Array.isArray(me.roles) ? me.roles : [];
         if (!roles.includes("admin")) {
           setState("no_admin_role");

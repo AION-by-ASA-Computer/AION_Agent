@@ -257,9 +257,9 @@ export function UserAccountSettings({ tab }: { tab: SettingsTab }) {
               window.dispatchEvent(new Event("storage"));
               router.push("/login");
             }}
-            className="inline-flex items-center gap-2 rounded-lg border border-destructive/20 px-3 py-2 text-xs font-semibold text-destructive"
+            className="inline-flex items-center gap-2 rounded-xl border border-red-500/30 bg-red-500/10 dark:bg-red-500/15 px-3 py-2 text-xs font-semibold text-red-600 dark:text-red-400 hover:bg-red-500/20 dark:hover:bg-red-500/25 transition-colors cursor-pointer"
           >
-            <LogOut className="h-4 w-4" />
+            <LogOut className="h-4 w-4 text-red-600 dark:text-red-400" />
             {t("settings.btn.logout")}
           </button>
         </>

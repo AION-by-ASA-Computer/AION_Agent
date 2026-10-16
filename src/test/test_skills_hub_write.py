@@ -35,12 +35,9 @@ def test_skills_hub_save_and_delete_flow():
     assert "saved successfully" in res
     assert test_name in res
 
-    # 2. Verify files exist in both locations
+    # 2. Verify file exists in curated location (and not in config_std fallback)
     path_curated = skill_registry.curated_dir / f"{test_name}.md"
-    path_fallback = skill_registry.curated_fallback_dir / f"{test_name}.md"
-
     assert path_curated.exists(), f"File should be written to {path_curated}"
-    assert path_fallback.exists(), f"File should be written to {path_fallback}"
 
     # 3. Verify SkillRegistry has loaded it and metadata matches
     skill_registry.reload()
@@ -81,9 +78,8 @@ def test_skills_hub_save_and_delete_flow():
     assert "deleted successfully" in res_del
     assert test_name in res_del
 
-    # 7. Verify files are unlinked
+    # 7. Verify file is unlinked
     assert not path_curated.exists(), "File should be deleted"
-    assert not path_fallback.exists(), "File should be deleted"
 
     # 8. Verify registry no longer lists it
     skill_registry.reload()

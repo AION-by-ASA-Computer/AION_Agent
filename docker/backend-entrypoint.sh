@@ -14,6 +14,11 @@ if [ "${AION_SYNC_ON_BOOT:-1}" = "1" ]; then
   fi
   echo "[aion-entrypoint] Reconciling .env <-> data/runtime.env ..."
   python scripts/sync_runtime_env.py
+  if [ -f scripts/seed_mcp_integration_configs.py ]; then
+    echo "[aion-entrypoint] Syncing MCP connector integration catalog & registry ..."
+    python scripts/seed_mcp_integration_configs.py
+    python scripts/sync_mcp_integration_from_catalog.py
+  fi
 else
   echo "[aion-entrypoint] AION_SYNC_ON_BOOT=0 — skipping config/MCP sync"
 fi

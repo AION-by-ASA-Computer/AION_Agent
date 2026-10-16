@@ -96,6 +96,32 @@ plane:
     PLANE_BASE_URL: ${PLANE_BASE_URL}
     PLANE_USE_LEGACY_ISSUES_ENDPOINT: ${PLANE_USE_LEGACY_ISSUES_ENDPOINT}
 
+mssql:
+  command: npx
+  args:
+  - --quiet
+  - -y
+  - '@piyapat/mssql-mcp-server'
+  description: "Server MCP MSSQL (Model Context Protocol) per interrogazione e introspezione SQL Server"
+  aion_connector_id: mssql
+  env:
+    MSSQL_SERVER: "${AION_USER_MSSQL__MSSQL_SERVER}"
+    MSSQL_PORT: "${AION_USER_MSSQL__MSSQL_PORT}"
+    MSSQL_DATABASE: "${AION_USER_MSSQL__MSSQL_DATABASE}"
+    MSSQL_USER: "${AION_USER_MSSQL__MSSQL_USER}"
+    MSSQL_PASSWORD: "${AION_USER_MSSQL__MSSQL_PASSWORD}"
+    MSSQL_ENCRYPT: "false"
+    MSSQL_TRUST_SERVER_CERTIFICATE: "true"
+    NODE_TLS_REJECT_UNAUTHORIZED: "0"
+
+monge_gateway:
+  command: "python"
+  args: ["-u", "monge_gateway/server.py"]
+  description: "Gateway DMZ per interrogazione database MS SQL (automa_monge / Storicofatturati)"
+  env:
+    DMZ_GATEWAY_URL: "${DMZ_GATEWAY_URL:-http://IP_MACCHINA_DMZ:8000}"
+    DMZ_GATEWAY_API_KEY: "${DMZ_GATEWAY_API_KEY}"
+
 # --- Per-user MCP credentials (Approccio A + HOME isolation Approccio B) ---
 # Con AION_MCP_USER_CREDENTIALS=1, i valori sotto possono usare placeholder risolti dal DB
 # (salvati dalla chat UI) invece che da os.environ. Convenzione slug nel nome variabile:

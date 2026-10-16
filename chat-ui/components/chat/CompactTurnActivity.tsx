@@ -29,9 +29,11 @@ import {
 } from "@/lib/sse/webToolParse";
 import { formatToolInput, toolInputPreview } from "@/lib/sse/formatToolInput";
 import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
-import { artifactLanguage } from "@/lib/artifacts";
+import { artifactLanguage, isPiiReviewArtifact } from "@/lib/artifacts";
 import { sessionDownloadUrl } from "@/lib/api/aion";
 import { SafeErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { CodeGenerationLoader } from "@/components/chat/CodeGenerationLoader";
+import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 
 function webHostLabel(url?: string | null): string {
   if (!url || typeof url !== "string") return "";
@@ -265,6 +267,7 @@ function CompactTurnActivityInner({
         continue;
       }
       if (seg.kind === "artifact") {
+        if (isPiiReviewArtifact(seg)) continue;
         const planCheck = isPlanArtifact
           ? isPlanArtifact(
               { identifier: seg.id, type: seg.artType, title: seg.title },
@@ -562,14 +565,10 @@ function CompactTurnActivityInner({
               }
               if (seg.kind === "generating") {
                 return (
-                  <div key={seg.id}>
-                    <CurrentStepRow
-                      icon="write"
-                      label={
-                        seg.title?.trim()
-                          ? t("chat.compact_activity.writing_file", { title: seg.title })
-                          : t("chat.agent_status.thinking")
-                      }
+                  <div key={seg.id} className="py-1">
+                    <CodeGenerationLoader
+                      title={seg.title}
+                      isScript={isScriptLikeTitle(seg.title)}
                     />
                   </div>
                 );

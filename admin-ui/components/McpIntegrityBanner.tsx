@@ -1,10 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, Loader2, Wrench } from "lucide-react";
+import { AlertTriangle, Loader2, Wrench } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/use-t";
+import { getLocale } from "@/lib/i18n/i18n-store";
 
 export type McpIntegrityIssue = {
   code: string;
@@ -28,6 +30,7 @@ type Props = {
 };
 
 export function McpIntegrityBanner({ onRepaired, className }: Props) {
+  const t = useT();
   const [report, setReport] = useState<IntegrityReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [repairing, setRepairing] = useState(false);
@@ -65,83 +68,54 @@ export function McpIntegrityBanner({ onRepaired, className }: Props) {
     }
   };
 
-  if (loading) {
-    return (
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-2xl border border-border/70 bg-card/40 px-4 py-3 text-sm text-muted-foreground shadow-sm backdrop-blur-sm",
-          className,
-        )}
-      >
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-        Checking MCP integrity…
-      </div>
-    );
-  }
+  // Healthy is the default state: say nothing until there is something to fix.
+  if (loading || !report || report.issue_count === 0) return null;
 
-  if (!report || report.issue_count === 0) {
-    return (
-      <div
-        className={cn(
-          "flex items-center gap-2 rounded-2xl border border-emerald-500/25 bg-emerald-500/8 px-4 py-3 text-sm text-emerald-700 shadow-sm backdrop-blur-sm dark:text-emerald-300",
-          className,
-        )}
-      >
-        <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
-        MCP Integrity: no issues detected
-      </div>
-    );
-  }
-
+  const rules = new Intl.PluralRules(getLocale());
+  const plural = (key: string, count: number) =>
+    t(`admin_hub.integrity.${key}_${rules.select(count) === "one" ? "one" : "other"}`, { count });
   const errors = report.issues.filter((i) => i.severity === "error").length;
   const warnings = report.issues.filter((i) => i.severity === "warning").length;
+  const summary = [errors > 0 && plural("errors", errors), warnings > 0 && plural("warnings", warnings)]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
-    <div
-      className={cn(
-        "space-y-3 rounded-2xl border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm shadow-sm backdrop-blur-sm",
-        className,
-      )}
+    <section
+      aria-labelledby="mcp-integrity-title"
+      className={cn("flex flex-col gap-3 rounded-3xl bg-warning/[0.09] p-4 sm:p-5 dark:bg-warning/[0.1]", className)}
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-2.5">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700 dark:text-amber-300" aria-hidden />
-          <div>
-            <p className="font-semibold text-amber-900 dark:text-amber-200">
-              MCP Integrity — {report.issue_count} issue{report.issue_count === 1 ? "" : "s"}
-              {errors > 0 ? ` (${errors} error${errors === 1 ? "" : "s"}` : ""}
-              {warnings > 0 ? `${errors > 0 ? ", " : " ("}${warnings} warning${warnings === 1 ? "" : "s"}` : ""}
-              {errors > 0 || warnings > 0 ? ")" : ""}
-            </p>
-            <p className="mt-0.5 text-xs text-amber-900/80 dark:text-amber-200/80">
-              Orphan credentials, misaligned policies, or environment variables inconsistent with schema.
-            </p>
-          </div>
+      <div className="flex flex-wrap items-start gap-3">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <h2 id="mcp-integrity-title" className="text-sm font-semibold">
+            {t("admin_hub.integrity.title")}
+            {summary && <span className="ml-2 font-normal tabular-nums text-muted-foreground">{summary}</span>}
+          </h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">{t("admin_hub.integrity.body")}</p>
         </div>
         <button
           type="button"
           onClick={() => void repairAll()}
           disabled={repairing}
-          className="focus-ring inline-flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-background/60 px-3 py-2 text-xs font-semibold text-amber-900 transition hover:bg-muted disabled:opacity-50 dark:text-amber-200"
+          className="focus-ring inline-flex h-9 items-center gap-2 rounded-xl border border-border bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-60"
         >
-          {repairing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wrench className="h-3.5 w-3.5" />}
-          Auto-repair
+          {repairing ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Wrench className="h-3.5 w-3.5" aria-hidden />}
+          {t("admin_hub.integrity.repair")}
         </button>
       </div>
-      <ul className="max-h-36 space-y-1.5 overflow-y-auto text-xs text-amber-900/90 dark:text-amber-100/90">
+      <ul className="flex max-h-36 flex-col gap-1.5 overflow-y-auto pl-7 text-sm">
         {report.issues.slice(0, 8).map((issue, idx) => (
-          <li key={`${issue.code}-${issue.server_slug}-${idx}`} className="flex gap-2">
-            <span className="shrink-0 font-mono text-[0.714em] uppercase text-amber-700/80 dark:text-amber-400/80">
-              {issue.severity}
-            </span>
-            <span>{issue.message}</span>
+          <li key={`${issue.code}-${issue.server_slug}-${idx}`}>
+            {issue.server_slug && <span className="mr-2 font-mono text-[13px] font-medium">{issue.server_slug}</span>}
+            <span className="text-muted-foreground">{issue.message}</span>
           </li>
         ))}
-        {report.issues.length > 8 ? (
-          <li className="text-amber-800/70 dark:text-amber-300/60">…and {report.issues.length - 8} more</li>
-        ) : null}
+        {report.issues.length > 8 && (
+          <li className="text-muted-foreground">{t("admin_hub.integrity.more", { count: report.issues.length - 8 })}</li>
+        )}
       </ul>
-    </div>
+    </section>
   );
 }
 

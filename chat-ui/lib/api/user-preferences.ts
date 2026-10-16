@@ -5,6 +5,7 @@ const LOCAL_STORAGE_KEY = "aion_default_profile_slug";
 
 export type CurrentUser = {
   identifier?: string;
+  display_name?: string;
   metadata?: Record<string, unknown>;
 };
 

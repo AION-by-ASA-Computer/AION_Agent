@@ -33,11 +33,72 @@ def _get_headers() -> Dict[str, str]:
     return headers
 
 
+def _is_github_url(url: str) -> bool:
+    """True se l'URL appartiene al dominio github.com (controllo sull'host, non substring)."""
+    if not url:
+        return False
+    from urllib.parse import urlparse
+
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return host == "github.com" or host == "www.github.com"
+
+
+def has_smithery_proprietary_auth(s: Dict[str, Any], q_name: str = "") -> bool:
+    """
+    Rileva se un server MCP usa l'autenticazione proprietaria di Smithery
+    (es. bySmithery con OAuth hosted su *.run.tools, endpoint proxy proprietario).
+    """
+    # 1. Server ufficiali creati/ospitati da Smithery con OAuth proprietario
+    if bool(s.get("bySmithery")):
+        return True
+
+    raw_hp = (s.get("homepage") or "").lower()
+    raw_repo = (
+        s.get("repository")
+        or s.get("repositoryUrl")
+        or s.get("githubUrl")
+        or s.get("repoUrl")
+        or ""
+    ).lower()
+    dep_url = (s.get("deploymentUrl") or "").lower()
+
+    # 2. Homepage o deployment su smithery.ai / run.tools senza repository sorgente pubblico
+    if not _is_github_url(raw_repo) and not _is_github_url(raw_hp):
+        if "smithery.ai" in raw_hp or "run.tools" in dep_url:
+            return True
+
+    # 3. Connessioni che puntano a proxy OAuth run.tools senza schema API key
+    connections = s.get("connections") or []
+    if isinstance(connections, list):
+        for conn in connections:
+            if isinstance(conn, dict):
+                c_url = (conn.get("deploymentUrl") or "").lower()
+                c_props = (
+                    conn.get("configSchema", {}).get("properties")
+                    if isinstance(conn.get("configSchema"), dict)
+                    else None
+                )
+                if (
+                    "run.tools" in c_url
+                    and not c_props
+                    and not _is_github_url(raw_repo)
+                ):
+                    return True
+
+    return False
+
+
 def search_smithery_servers(
     query: str = "", *, page: int = 1, page_size: int = 24
 ) -> List[Dict[str, Any]]:
     """
     Search or list MCP servers from Smithery registry.
+    Smithery viene utilizzato come catalogo per la visualizzazione/scoperta:
+    - I server con autenticazione proprietaria di Smithery (OAuth run.tools) vengono esclusi.
+    - Vengono mantenuti unicamente i server standard di GitHub e quelli verificati.
     """
     url = f"{SMITHERY_API_BASE}/servers"
     params: Dict[str, Any] = {
@@ -70,27 +131,48 @@ def search_smithery_servers(
             if not q_name:
                 continue
 
-            repo_url = (
-                s.get("homepage")
-                or s.get("repository")
+            # 1. Escludi server con autenticazione proprietaria di Smithery
+            if has_smithery_proprietary_auth(s, q_name):
+                continue
+
+            # Determina URL del repository sorgente o homepage
+            raw_repo = (
+                s.get("repository")
                 or s.get("repositoryUrl")
                 or s.get("githubUrl")
                 or s.get("repoUrl")
                 or ""
             ).strip()
+            raw_hp = (s.get("homepage") or "").strip()
 
-            if not repo_url:
-                if "/" in q_name and not q_name.startswith("@"):
-                    repo_url = f"https://github.com/{q_name}"
-                else:
-                    repo_url = f"https://smithery.ai/server/{q_name}"
+            if _is_github_url(raw_repo):
+                repo_url = raw_repo
+                is_github = True
+            elif _is_github_url(raw_hp):
+                repo_url = raw_hp
+                is_github = True
+            elif (
+                not raw_hp
+                and "/" in q_name
+                and not q_name.startswith("@")
+                and not q_name.startswith("smithery/")
+            ):
+                repo_url = f"https://github.com/{q_name}"
+                is_github = True
+            elif raw_hp:
+                repo_url = raw_hp
+                is_github = False
+            else:
+                repo_url = f"https://smithery.ai/server/{q_name}"
+                is_github = False
 
-            is_remote = bool(s.get("remote")) or bool(s.get("deploymentUrl"))
-            deployment_url = (s.get("deploymentUrl") or "").strip()
-            if not deployment_url and is_remote:
-                clean_host_slug = q_name.replace("/", "--").replace("@", "")
-                deployment_url = f"https://{clean_host_slug}.run.tools"
+            is_verified = bool(s.get("verified"))
 
+            # 2. Mantieni solo quelli standard di GitHub e quelli verificati
+            if not (is_github or is_verified):
+                continue
+
+            # Smithery funge da catalogo di visualizzazione (nessun proxy oauth remoto)
             results.append(
                 {
                     "id": f"smithery:{q_name}",
@@ -101,17 +183,17 @@ def search_smithery_servers(
                     "description": s.get("description") or "",
                     "icon_url": s.get("iconUrl") or "",
                     "source": "Smithery",
-                    "verified": bool(s.get("verified")),
+                    "verified": is_verified,
                     "use_count": s.get("useCount") or 0,
-                    "remote": is_remote,
-                    "deployment_url": deployment_url,
+                    "remote": False,
+                    "deployment_url": "",
                     "homepage": repo_url,
-                    "url": deployment_url
-                    if (is_remote and deployment_url)
-                    else repo_url,
-                    "install_type": "remote" if is_remote else "zero-install",
+                    "url": repo_url,
+                    "install_type": "git" if is_github else "catalog",
                     "has_smithery_schema": True,
                     "schema_source": "smithery",
+                    "is_github": is_github,
+                    "catalog_only": not is_github,
                 }
             )
         return results

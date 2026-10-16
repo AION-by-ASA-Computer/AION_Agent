@@ -376,6 +376,10 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
       if (!next.toolOrder.includes(id)) next.toolOrder.push(id);
       delete next.activeToolKeyByName[name];
       if (typeof ev.id === "string") delete next.activeToolKeyById[ev.id];
+      next.segments = removeGeneratingSegment(
+        next.segments,
+        `live_generating_tool_${name}`,
+      );
 
       if (name === "web_search") {
         const rows = webSearchSourceRows(output);
@@ -434,6 +438,10 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
       if (!next.toolOrder.includes(id)) next.toolOrder.push(id);
       delete next.activeToolKeyByName[name];
       if (typeof ev.id === "string") delete next.activeToolKeyById[ev.id];
+      next.segments = removeGeneratingSegment(
+        next.segments,
+        `live_generating_tool_${name}`,
+      );
     }
     return next;
   }

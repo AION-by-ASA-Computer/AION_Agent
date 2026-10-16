@@ -20,6 +20,7 @@
       "appearance": "Appearance",
       "security": "Security",
       "instructions": "Instructions",
+      "tunings": "Tuning & Parameters",
       "runtime": "Runtime",
       "presets": "Presets"
     },
@@ -32,7 +33,6 @@
       "avatar_too_large": "Image must be smaller than 256 KB.",
       "appearance_saved": "Profile appearance updated.",
       "username_hint": "Login identifier. Must be unique.",
-      "shortcuts_title": "Quick links",
       "shortcuts_desc": "Fast access to main app sections."
     },
     "appearance": {
@@ -106,14 +106,18 @@
         "saving": "Saving..."
       }
     },
+    "tunings": {
+      "title": "Tuning & Parameters",
+      "desc": "Configure model parameters, generation controls, execution steps, and runtime presets."
+    },
     "runtime": {
-        "loading": "Loading runtime settings…",
-        "hint": "Env values are the starting defaults. Changes apply to the next turn.",
-        "reset_all": "Reset all",
-        "reset_field": "Reset field",
-        "server_default": "Server default: {{value}}",
-        "profile_cap": "This profile limits agent steps to {{value}}.",
-        "composer_thinking_hint": "Turn Thinking on/off and choose min/med/max from the + menu in the chat box.",
+      "loading": "Loading runtime settings…",
+      "hint": "Env values are the starting defaults. Changes apply to the next turn.",
+      "reset_all": "Reset all",
+      "reset_field": "Reset field",
+      "server_default": "Server default: {{value}}",
+      "profile_cap": "This profile limits agent steps to {{value}}.",
+      "composer_thinking_hint": "Turn Thinking on/off and choose min/med/max from the + menu in the chat box.",
       "group": {
         "loop": "Agent loop",
         "generation": "Generation",
@@ -174,6 +178,7 @@
     "profile": "Profile",
     "search_placeholder": "Search conversations…",
     "favorites": "Favorites",
+    "recent": "Recent",
     "add_favorite": "Add to favorites",
     "remove_favorite": "Remove from favorites",
     "rename": "Rename",
@@ -234,6 +239,12 @@
     "resume": "Resume",
     "delete": "Delete",
     "delete_confirm": "Delete this automation?",
+    "delete_dialog_title": "Delete automation",
+    "delete_dialog_subtitle": "Confirm permanent deletion",
+    "delete_dialog_warning": "Warning: irreversible action",
+    "delete_dialog_desc": "Are you sure you want to delete the automation",
+    "delete_dialog_desc_end": "All future scheduled executions will be permanently removed.",
+    "delete_dialog_btn": "Delete permanently",
     "open_session": "Open fixed session",
     "recent_runs": "Recent runs",
     "runs_loading": "Loading runs…",
@@ -283,7 +294,8 @@
         "weekly": "Once a week",
         "monthly": "Once a month",
         "hourly": "Every hour",
-        "every_n_minutes": "Every few minutes"
+        "every_n_minutes": "Every few minutes",
+        "custom": "Custom (cron expression)"
       },
       "hour_label": "Hour",
       "minute_label": "Minute",
@@ -310,7 +322,8 @@
         "weekly": "Every {{day}} at {{time}}",
         "monthly": "Day {{dom}} of each month at {{time}}",
         "hourly": "Every hour at minute {{minute}}",
-        "every_n_minutes": "Every {{n}} minutes"
+        "every_n_minutes": "Every {{n}} minutes",
+        "custom": "Custom (cron: {{expr}})"
       }
     }
   },
@@ -323,9 +336,21 @@
     "empty_hint": "Integrations connect your accounts to organization-enabled MCP services.",
     "section_configured": "Connected",
     "section_pending": "Needs setup",
+    "section_system": "System Active",
     "section_disabled": "Disabled",
     "badge_configured": "connected",
     "badge_pending": "to set up",
+    "badge_system": "active",
+    "tab_all": "All",
+    "tab_configured": "Connected",
+    "tab_pending": "Needs setup",
+    "tab_system": "System Active",
+    "tab_disabled": "Disabled",
+    "search_placeholder": "Search integrations by name or description…",
+    "filter_no_results": "No integrations found with this filter.",
+    "field_saved_encrypted": "Saved & secured value",
+    "field_saved_placeholder": "•••••••••••• (secured value)",
+    "modify_field_hint": "Leave unchanged to keep saved value, or type to replace it.",
     "badge_connected": "connected",
     "badge_disabled": "disabled",
     "badge_pending_short": "needs setup",
@@ -402,6 +427,15 @@
     "new_conversation": "New conversation"
   },
   "chat": {
+    "pii": {
+      "review_label": "PII Review",
+      "tags_menu": "PII Tags",
+      "tags_label": "Tags to redact",
+      "select_all": "Select all",
+      "deselect_all": "Deselect all",
+      "tags_none": "No tags selected: nothing will be redacted.",
+      "review_auto_off": "Deselecting all tags turns PII Review off."
+    },
     "thinking": {
       "label": "Thinking",
       "off": "Thinking: Off",
@@ -412,7 +446,8 @@
       "disable_desc": "Skip extended reasoning for the fastest replies.",
       "min_desc": "Light reasoning — good for everyday questions.",
       "med_desc": "Balanced depth before answering.",
-      "max_desc": "Deepest reasoning for hard problems; slower replies."
+      "max_desc": "Deepest reasoning for hard problems; slower replies.",
+      "select": "Select thinking budget"
     },
     "stream_recovery": "The agent is still working on this chat on the server. Refreshing automatically…",
     "agent_status": {
@@ -476,15 +511,16 @@
       "favorite_active": "Default profile"
     },
     "agent_mode": {
-      "select": "Agent mode",
+      "label": "Agent mode",
+      "select": "Select agent mode",
       "soon": "Soon",
       "beta": "Beta",
       "normal": "Normal",
-      "normal_desc": "Balanced chat — tools and memory as configured.",
-      "plan": "Plan",
+      "normal_desc": "Standard chat — tools and memory as configured.",
+      "plan": "Plan / Task Plan",
       "plan_desc": "Break work into steps before executing.",
-      "deep_research": "Deep research",
-      "deep_research_desc": "Longer research runs with the research panel.",
+      "deep_research": "Deep Research",
+      "deep_research_desc": "Autonomous web research with dedicated panel.",
       "ask": "Ask",
       "ask_desc": "Read-only answers without tool side effects.",
       "debug": "Debug",
@@ -492,8 +528,10 @@
     },
     "model": {
       "label": "Model",
-      "select": "Select Model",
+      "select": "Select LLM Model",
       "switch": "Switch Model",
+      "default": "System default",
+      "default_desc": "Use primary configured LLM model",
       "default_hint": "Default model for this server."
     },
     "capabilities": {
@@ -508,9 +546,10 @@
       "skill_pending": "Pending"
     },
     "empty": {
+      "greeting_user": "What's on your mind, {{name}}?",
       "title": "What can I help you with?",
-      "subtitle": "Ask anything, attach a file, or turn on web search. Answers stream in as they're written.",
-      "subtitle_profile": "You're on the {{profile}} profile. Ask anything, attach files, or enable web search — replies stream live.",
+      "subtitle": "Ask anything, attach a file, or turn on web search — answers stream in real time.",
+      "subtitle_profile": "Active profile: {{profile}}. Ask anything, attach files, or kick off a task.",
       "hint_attach": "Drag files here or use + to attach",
       "suggestions": {
         "explain": "Explain a hard concept simply",
@@ -618,6 +657,7 @@
     "session_files_new": "New session files",
     "remove_file": "Remove {{name}}",
     "upload": {
+      "button": "Upload attachment",
       "uploading": "Uploading… {{progress}}%",
       "done": "Upload complete",
       "failed": "Upload failed",
@@ -653,7 +693,52 @@
   },
   "login": {
     "btn": "Sign in",
-    "no_auth": "← Chat without login (default user)"
+    "no_auth": "← Chat without login (default user)",
+    "sso_microsoft": "Sign in with Microsoft",
+    "sso_google": "Sign in with Google",
+    "or": "or",
+    "mfa": {
+      "title_enroll": "Set up two-factor authentication",
+      "title_verify": "Two-step verification",
+      "enroll_help": "Scan the QR code with Google Authenticator, Microsoft Authenticator or a similar app, then enter the 6-digit code.",
+      "verify_help": "Enter the 6-digit code shown by your authenticator app.",
+      "manual": "Can't scan? Enter this key manually:",
+      "code": "6-digit code",
+      "confirm": "Confirm and sign in",
+      "verify": "Verify",
+      "back": "Back to login",
+      "loading": "Loading…",
+      "error": {
+        "invalid_code": "Invalid code. Please try again.",
+        "mfa_locked": "Too many attempts. Try again in {{seconds}} seconds.",
+        "invalid_mfa_token": "Session expired. Please sign in again.",
+        "generic": "Verification failed."
+      }
+    },
+    "sso_error": {
+      "sso_already_linked": "Account is already linked to another user.",
+      "sso_user_already_linked": "You already have an account linked.",
+      "generic": "Sign-in failed. Please try again.",
+      "sso_not_linked": "Your account is not linked yet. Sign in with your password and link your company account.",
+      "sso_domain_not_allowed": "Your email domain is not allowed.",
+      "sso_required": "SSO sign-in is required for this account.",
+      "password_login_disabled": "Password sign-in is disabled.",
+      "temp_password_expired": "Your temporary password has expired. Contact your administrator.",
+      "sso_failed": "SSO authentication failed.",
+      "sso_start_failed": "Unable to start SSO sign-in.",
+      "sso_token_invalid": "Invalid SSO token.",
+      "sso_provisioning_failed": "Unable to create the account.",
+      "sso_provisioning_conflict": "Account is being created, please retry.",
+      "email_required_for_provisioning": "The provider did not return an email.",
+      "invalid_code": "Invalid sign-in code.",
+      "code_expired": "Sign-in code expired. Please retry.",
+      "code_already_used": "Sign-in code already used.",
+      "exchange_error": "Error completing sign-in.",
+      "exchange_failed": "Error completing sign-in.",
+      "link_failed": "Linking failed.",
+      "session_invalid": "Session expired, please sign in again.",
+      "user_not_found": "User not found."
+    }
   },
   "authgate": {
     "checking": "Checking access…",
@@ -681,6 +766,7 @@
   "artifacts": {
     "title": "Files",
     "no_artifacts": "No files or artifacts generated in this session.",
+    "empty_folder": "No files in this folder.",
     "source": {
       "live": "streaming",
       "history": "history"
@@ -1069,6 +1155,58 @@
       "tool_calls": "Turn stopped automatically: too many tool calls.",
       "tool_events": "Turn stopped automatically: too many tool events.",
       "plan_invalid_response": "Plan mode: invalid assistant response."
+    }
+  },
+  "sso_link": {
+    "title": "Security update",
+    "desc": "Your administrator requires you to link your account to {{provider}} to keep signing in.",
+    "button": "Link {{provider}} account",
+    "logout": "Sign out",
+    "start_failed": "Unable to start SSO linking.",
+    "bad_response": "Invalid response from the server.",
+    "network": "Network error."
+  },
+  "sideThread": {
+    "tab": "Thread",
+    "popover": {
+      "toolbar": "Selection actions",
+      "action": "Dig deeper in a thread",
+      "truncated": "Only the first {{max}} characters of the selection will be used."
+    },
+    "panel": {
+      "aria": "Side thread",
+      "new_title": "New thread",
+      "open_full": "Open as chat",
+      "reveal": "Show the passage in the conversation",
+      "passage_missing": "This passage is no longer in the original answer.",
+      "other_threads": "Other threads ({{count}})",
+      "loading": "Loading thread…",
+      "empty": "Ask anything about this passage. The thread is saved, so you can pick it up later.",
+      "error": "Couldn't complete the request: {{msg}}",
+      "retry": "Retry",
+      "dismiss": "Dismiss"
+    },
+    "starters": {
+      "explain": "Explain it in simple terms",
+      "example": "Give me a concrete example",
+      "relevance": "Why does it matter here?"
+    },
+    "composer": {
+      "placeholder": "Ask about this passage…",
+      "send": "Send",
+      "stop": "Stop"
+    },
+    "chip_open": "Open threads from this answer",
+    "chip_aria": "Threads opened from this answer: {{count}}",
+    "breadcrumb": {
+      "aria": "Thread origin",
+      "from": "Thread from “{{title}}”",
+      "untitled": "untitled conversation"
+    },
+    "sidebar": {
+      "expand": "Show threads",
+      "collapse": "Hide threads",
+      "count": "{{count}} threads"
     }
   }
 }

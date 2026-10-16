@@ -12,6 +12,7 @@ export function ComposerOptionRow({
   badge,
   badgeTone = "muted",
   icon,
+  showRadio,
   trailing,
   onClick,
 }: {
@@ -22,6 +23,7 @@ export function ComposerOptionRow({
   badge?: string;
   badgeTone?: "muted" | "beta";
   icon?: React.ReactNode;
+  showRadio?: boolean;
   trailing?: React.ReactNode;
   onClick?: () => void;
 }) {
@@ -40,20 +42,25 @@ export function ComposerOptionRow({
 
   if (disabled) {
     return (
-      <div className="flex w-full items-start justify-between gap-2 rounded-lg px-2.5 py-2 text-left opacity-55">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            {icon}
-            <span className="text-xs font-semibold text-muted-foreground">{label}</span>
-            {badgeEl}
+      <div className="flex w-full items-start justify-between gap-3 rounded-2xl border border-border/40 p-3 text-left opacity-40 select-none">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
+          {icon}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold text-muted-foreground">{label}</span>
+              {badgeEl}
+            </div>
+            {description ? (
+              <p className="mt-0.5 text-[0.714em] leading-snug text-muted-foreground/70">{description}</p>
+            ) : null}
           </div>
-          {description ? (
-            <p className="mt-0.5 pl-0 text-[0.714em] leading-snug text-muted-foreground/80">{description}</p>
-          ) : null}
         </div>
       </div>
     );
   }
+
+  // Se non c'è un'icona esplicita o se showRadio è true, mostra il radio indicator
+  const displayRadio = showRadio ?? !icon;
 
   return (
     <div
@@ -67,32 +74,62 @@ export function ComposerOptionRow({
         }
       }}
       className={cn(
-        "flex w-full items-start justify-between gap-2 rounded-lg px-2.5 py-2 text-left transition-colors cursor-pointer",
+        "flex w-full items-start justify-between gap-3 rounded-2xl p-3 text-left transition-all duration-150 cursor-pointer select-none",
         selected
-          ? "bg-primary/10 text-primary"
-          : "text-foreground hover:bg-muted/55",
+          ? "border-2 border-zinc-900 dark:border-white bg-zinc-900/[0.05] dark:bg-white/[0.08] text-foreground shadow-xs"
+          : "border border-border/70 dark:border-white/10 bg-background/50 dark:bg-zinc-900/30 text-muted-foreground opacity-75 hover:opacity-100 hover:border-border hover:bg-muted/30",
       )}
     >
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-1.5">
-          {icon}
-          <span className="text-xs font-semibold">{label}</span>
-          {badgeEl}
-        </div>
-        {description ? (
-          <p
+      <div className="flex items-start gap-3 min-w-0 flex-1">
+        {displayRadio ? (
+          <div
             className={cn(
-              "mt-0.5 text-[0.714em] leading-snug",
-              selected ? "text-primary/80" : "text-muted-foreground",
+              "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full transition-all",
+              selected
+                ? "border-2 border-zinc-900 dark:border-white bg-background"
+                : "border border-zinc-400 dark:border-zinc-600 bg-transparent",
             )}
           >
-            {description}
-          </p>
-        ) : null}
+            {selected ? (
+              <div className="h-2 w-2 rounded-full bg-zinc-900 dark:bg-white" />
+            ) : null}
+          </div>
+        ) : (
+          icon
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <span
+              className={cn(
+                "text-xs leading-snug",
+                selected ? "font-bold text-foreground" : "font-medium text-muted-foreground",
+              )}
+            >
+              {label}
+            </span>
+            {badgeEl}
+          </div>
+          {description ? (
+            <p
+              className={cn(
+                "mt-0.5 text-[0.714em] leading-snug",
+                selected
+                  ? "text-foreground/85 dark:text-zinc-200 font-medium"
+                  : "text-muted-foreground/75",
+              )}
+            >
+              {description}
+            </p>
+          ) : null}
+        </div>
       </div>
       <div className="mt-0.5 flex shrink-0 items-center gap-1">
         {trailing}
-        {selected ? <Check size={12} aria-hidden /> : null}
+        {selected ? (
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-2xs">
+            <Check size={11} strokeWidth={2.5} aria-hidden />
+          </span>
+        ) : null}
       </div>
     </div>
   );

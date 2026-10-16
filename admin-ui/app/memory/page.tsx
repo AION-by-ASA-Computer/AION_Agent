@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api/headers";
+import { useT } from "@/lib/i18n/use-t";
 import {
   Folder,
   FolderPlus,
@@ -10,21 +11,22 @@ import {
   UserMinus,
   Trash2,
   Edit2,
-  RefreshCw,
   Loader2,
-  Info,
   CheckCircle,
   Shield,
   Calendar,
   User,
-  X,
   Plus,
-  AlertTriangle,
   Eye,
   Save,
 } from "lucide-react";
+import { cn } from "@/lib/cn";
 import { apiBase } from "@/lib/api";
 import { PageToast, type ToastState } from "@/components/PageToast";
+import { Dialog } from "@/components/profiles/Dialog";
+import { Select } from "@/components/ui/Select";
+import { DeleteDialog, nameSlot } from "@/components/ui/ConfirmDialogs";
+import { ghostBtn, inputCls, outlineBtn, solidBtn, dangerBtn } from "@/components/ui/classes";
 
 interface ProjectMember {
   user_identifier: string;
@@ -47,12 +49,45 @@ interface Project {
   members: ProjectMember[];
 }
 
+const ROLE_OPTIONS = [
+  { value: "member", label: "Member", description: "Can use the project's memory" },
+  { value: "owner", label: "Owner", description: "Can also manage the project" },
+];
+
+const SCOPE_OPTIONS = [
+  { value: "inherit", label: "Inherit", description: "Use the tenant default" },
+  { value: "shared", label: "Shared", description: "Everyone shares the same results" },
+  { value: "per_user", label: "Per user", description: "Results are isolated per user" },
+];
+
+const SCOPE_LABELS: Record<string, string> = Object.fromEntries(SCOPE_OPTIONS.map((o) => [o.value, o.label]));
+
+const DELETE_TEXT: Record<string, string> = {
+  "delete.title": "Delete this memory project?",
+  "delete.body": `${nameSlot} will be permanently deleted, with all its members and cached queries. This cannot be undone.`,
+  "delete.confirm_label": `Type ${nameSlot} to confirm`,
+  "delete.cancel": "Cancel",
+  "delete.confirm": "Delete",
+  "delete.deleting": "Deleting…",
+};
+
+/** Page strings are plain English; adapts them to the shared dialog's translator signature. */
+const deleteText = (key: string, vars?: Record<string, string | number>) =>
+  (DELETE_TEXT[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_, n) => String(vars?.[n] ?? ""));
+
+function hueOf(key: string): number {
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 360;
+  return h;
+}
+
 interface ProfileRow {
   name: string;
   slug?: string;
 }
 
 export default function MemoryPage() {
+  const t = useT();
   const [toast, setToast] = useState<ToastState>(null);
   const show = useCallback((message: string, variant: "success" | "error" = "success") => {
     setToast({ message, variant });
@@ -62,19 +97,17 @@ export default function MemoryPage() {
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // Modals state
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [projectDetails, setProjectDetails] = useState<Project | null>(null);
   const [isEditingDetails, setIsEditingDetails] = useState(false);
+  const [detailsTab, setDetailsTab] = useState<"overview" | "members">("overview");
 
-  // Delete confirmations
   const [isDeleteProjOpen, setIsDeleteProjOpen] = useState(false);
   const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
   const [isDeleteMemberOpen, setIsDeleteMemberOpen] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState<{ projectSlug: string; userIdentifier: string } | null>(null);
 
-  // Form inputs state
   const [createSlug, setCreateSlug] = useState("");
   const [createDisplayName, setCreateDisplayName] = useState("");
   const [createDescription, setCreateDescription] = useState("");
@@ -84,12 +117,10 @@ export default function MemoryPage() {
   const [editDisplayName, setEditDisplayName] = useState("");
   const [editDescription, setEditDescription] = useState("");
   const [editProfileSlug, setEditProfileSlug] = useState("");
-  const [editScopeMode, setEditScopeMode] = useState("inherit");
 
   const [memberUserIdentifier, setMemberUserIdentifier] = useState("");
   const [memberRole, setMemberRole] = useState("member");
 
-  // Fetch functions
   const fetchProfiles = useCallback(async () => {
     try {
       const res = await apiFetch(`${apiBase()}/admin/profiles`);
@@ -114,14 +145,11 @@ export default function MemoryPage() {
       const data = await res.json();
       const projectList = Array.isArray(data) ? data : [];
       setProjects(projectList);
-
-      // Keep detail modal updated if open
       setProjectDetails((prevDetails) => {
         if (!prevDetails) return null;
-        const updated = projectList.find((p) => p.slug === prevDetails.slug);
+        const updated = projectList.find((p: Project) => p.slug === prevDetails.slug);
         return updated || null;
       });
-
       if (notify) show("Project list updated.");
     } catch (e) {
       show("Unable to load projects: " + String(e), "error");
@@ -139,7 +167,6 @@ export default function MemoryPage() {
     loadAllData();
   }, [loadAllData]);
 
-  // Operations
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createSlug.trim() || !createDisplayName.trim()) {
@@ -191,7 +218,6 @@ export default function MemoryPage() {
           display_name: editDisplayName.trim(),
           description: editDescription.trim() || null,
           profile_slug: editProfileSlug || null,
-          scope_mode: editScopeMode,
         }),
       });
       if (!res.ok) {
@@ -217,7 +243,7 @@ export default function MemoryPage() {
         method: "DELETE",
       });
       if (!res.ok) {
-        show(` deletion failed: HTTP error ${res.status}`, "error");
+        show(`Deletion failed: HTTP error ${res.status}`, "error");
       } else {
         show(`Project "${projectToDelete.display_name}" permanently deleted.`);
         setIsDeleteProjOpen(false);
@@ -295,12 +321,17 @@ export default function MemoryPage() {
     setEditDisplayName(p.display_name);
     setEditDescription(p.description || "");
     setEditProfileSlug(p.profile_slug || "");
-    setEditScopeMode(p.scope_mode);
     setIsEditingDetails(false);
+    setDetailsTab("overview");
     setIsDetailsOpen(true);
   };
 
-  // Formatter utilities
+  const closeDetails = () => {
+    setIsDetailsOpen(false);
+    setProjectDetails(null);
+    setIsEditingDetails(false);
+  };
+
   const formatDate = (isoString: string) => {
     try {
       return new Date(isoString).toLocaleDateString("en-US", {
@@ -315,631 +346,470 @@ export default function MemoryPage() {
     }
   };
 
+  const profileOptions = [
+    { value: "", label: "No profile" },
+    ...profiles.map((p) => ({ value: p.slug || p.name.replace(/\s+/g, "_").toLowerCase(), label: p.name })),
+  ];
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-8 pb-12">
+    <div className="mx-auto flex max-w-[84rem] flex-col gap-6">
       <PageToast toast={toast} onDismiss={() => setToast(null)} />
 
-      {/* Header section with Stats */}
-      <header className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-violet-950/20 via-[#0d0d0d] to-[#0a0a0a] p-6 sm:p-8">
-        <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-violet-600/10 blur-3xl" />
-        <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between relative">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 rounded-full border border-violet-500/30 bg-violet-500/10 px-3 py-1 text-xs font-bold uppercase tracking-wider text-violet-300">
-              <Shield className="h-3.5 w-3.5" /> Security Administration
-            </div>
-            <h1 className="text-3xl font-extrabold tracking-tight text-white md:text-4xl">
-              Memory Projects & Members
-            </h1>
-            <p className="max-w-2xl text-sm leading-relaxed text-gray-400">
-              Manage the isolation of memory query contexts (projects).
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => void fetchProjects({ notify: true })}
-              disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-[#161616] px-4 py-3 text-sm font-bold text-gray-300 hover:bg-[#202020] hover:text-white transition cursor-pointer disabled:opacity-50"
-            >
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
-              Refresh
-            </button>
-            <button
-              onClick={() => setIsCreateOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-violet-500/25 transition transform active:scale-95 cursor-pointer"
-            >
-              <FolderPlus className="h-4 w-4" /> New Project
-            </button>
-          </div>
+      {/* Page header */}
+      <header className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-end">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-[28px]">
+            Memory Projects
+          </h1>
+          <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
+            Manage query memory contexts and control per-project member access for isolated SQL results.
+          </p>
         </div>
-
-        {/* Stats Grid */}
-        <div className="mt-8 grid gap-4 grid-cols-2 border-t border-white/5 pt-6">
-          <div className="space-y-1">
-            <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Projects Created</span>
-            <div className="text-2xl font-black text-white">{projects.length}</div>
-          </div>
-          <div className="space-y-1">
-            <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Total Members</span>
-            <div className="text-2xl font-black text-violet-400">
-              {projects.reduce((acc, p) => acc + (p.members?.length || 0), 0)}
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className={solidBtn}
+            onClick={() => setIsCreateOpen(true)}
+          >
+            <FolderPlus className="h-4 w-4" aria-hidden />
+            {t("admin_memory.new_project")}
+          </button>
         </div>
       </header>
 
-      {/* Projects Table List */}
-      <section className="space-y-6">
-        <h2 className="text-xl font-bold text-white flex items-center gap-2">
-          <Folder className="h-5 w-5 text-violet-400" /> Active Projects
-        </h2>
-
-        {projects.length === 0 && !loading ? (
-          <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center flex flex-col items-center justify-center space-y-4">
-            <Folder className="h-12 w-12 text-gray-600" />
-            <div>
-              <p className="text-base font-semibold text-gray-300">No projects found</p>
-              <p className="text-xs text-gray-500 mt-1">Create a new SQL Query project to get started.</p>
+      {/* Projects list */}
+      <section className="flex flex-col gap-4" aria-label="Active projects">
+        {!loading && projects.length === 0 ? (
+          <div className="flex flex-col items-center rounded-3xl border border-dashed border-border px-6 py-20 text-center">
+            <Folder className="mb-4 h-8 w-8 text-muted-foreground" strokeWidth={1.5} aria-hidden />
+            <h2 className="text-lg font-semibold tracking-[-0.015em]">No projects yet</h2>
+            <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">
+              Create a Memory Project to start isolating SQL query contexts per team or workflow.
+            </p>
+            <div className="mt-6 flex flex-wrap justify-center gap-2">
+              <button type="button" className={solidBtn} onClick={() => setIsCreateOpen(true)}>
+                <Plus className="h-4 w-4" aria-hidden />
+                {t("admin_memory.new_project")}
+              </button>
             </div>
-            <button
-              onClick={() => setIsCreateOpen(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-violet-600/20 border border-violet-500/30 px-4 py-2 text-xs font-bold text-violet-300 hover:bg-violet-600/30 transition cursor-pointer"
-            >
-              <Plus className="h-3.5 w-3.5" /> New Project
-            </button>
           </div>
         ) : (
-          <div className="glass-card overflow-hidden border border-white/10 rounded-3xl bg-gradient-to-b from-[#181818]/90 to-[#121212]/90 shadow-2xl relative">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-black/40 border-b border-white/10 text-xs font-bold uppercase text-gray-400 tracking-wider">
-                  <th className="px-6 py-4">Project</th>
-                  <th className="px-6 py-4">Profile</th>
-                  <th className="px-6 py-4">Scope Mode</th>
-                  <th className="px-6 py-4">Members</th>
-                  <th className="px-6 py-4">Created On</th>
-                  <th className="px-6 py-4 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5 text-sm text-gray-300">
-                {projects.map((project) => (
-                  <tr
-                    key={project.id}
-                    className="hover:bg-white/[0.02] transition-colors group cursor-pointer"
-                    onClick={() => openDetailsModal(project)}
-                  >
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-white">{project.display_name}</div>
-                      <div className="text-xs text-gray-500 font-mono mt-0.5">{project.slug}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      {project.profile_slug ? (
-                        <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                          {project.profile_slug}
-                        </span>
-                      ) : (
-                        <span className="text-gray-600 italic font-mono">-</span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-violet-500/10 border border-violet-500/20 text-violet-300 uppercase tracking-wide">
-                        {project.scope_mode}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1b1b1b] border border-white/10 px-2.5 py-1 text-xs font-bold text-white shadow-inner">
-                        <Users className="h-3.5 w-3.5 text-violet-400" />
-                        {project.members?.length || 0}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-xs text-gray-400">
-                      {formatDate(project.created_at)}
-                    </td>
-                    <td className="px-6 py-4 text-right space-x-2" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => openDetailsModal(project)}
-                        title="Details & Members"
-                        className="p-2.5 bg-violet-500/10 hover:bg-violet-500/20 text-violet-400 border border-violet-500/20 rounded-xl transition cursor-pointer inline-flex items-center justify-center mr-1"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => {
-                          setProjectToDelete(project);
-                          setIsDeleteProjOpen(true);
-                        }}
-                        title="Delete project"
-                        className="p-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl transition cursor-pointer inline-flex items-center justify-center"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </td>
+          <div className="overflow-hidden rounded-3xl border border-border/70 bg-card">
+            {loading && projects.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground" role="status">
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                Loading projects…
+              </div>
+            ) : (
+              <table className="w-full text-left" role="grid">
+                <thead>
+                  <tr className="border-b border-border/60 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+                    <th className="px-5 py-3.5" scope="col">Project</th>
+                    <th className="px-5 py-3.5" scope="col">Profile</th>
+                    <th className="px-5 py-3.5" scope="col">Scope</th>
+                    <th className="px-5 py-3.5" scope="col">Members</th>
+                    <th className="px-5 py-3.5" scope="col">Created</th>
+                    <th className="px-5 py-3.5 text-right" scope="col">Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border/40 text-sm">
+                  {projects.map((project) => (
+                    <tr
+                      key={project.id}
+                      className="cursor-pointer transition-colors hover:bg-secondary/40"
+                      onClick={() => openDetailsModal(project)}
+                    >
+                      <td className="px-5 py-4">
+                        <div className="font-medium text-foreground">{project.display_name}</div>
+                        <div className="mt-0.5 font-mono text-xs text-muted-foreground">{project.slug}</div>
+                      </td>
+                      <td className="px-5 py-4">
+                        {project.profile_slug ? (
+                          <span className="rounded-lg border border-border bg-secondary px-2 py-0.5 font-mono text-xs font-medium">
+                            {project.profile_slug}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="rounded-lg border border-border bg-secondary px-2 py-0.5 font-mono text-xs font-medium uppercase tracking-wide">
+                          {project.scope_mode}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4">
+                        <span className="inline-flex items-center gap-1.5 text-sm tabular-nums">
+                          <Users className="h-3.5 w-3.5 text-muted-foreground" aria-hidden />
+                          {project.members?.length || 0}
+                        </span>
+                      </td>
+                      <td className="px-5 py-4 text-xs text-muted-foreground tabular-nums">
+                        {formatDate(project.created_at)}
+                      </td>
+                      <td
+                        className="px-5 py-4 text-right"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="inline-flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openDetailsModal(project)}
+                            title="View details & members"
+                            className={ghostBtn}
+                          >
+                            <Eye className="h-4 w-4" aria-hidden />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProjectToDelete(project);
+                              setIsDeleteProjOpen(true);
+                            }}
+                            title="Delete project"
+                            className={cn(ghostBtn, "hover:text-destructive")}
+                          >
+                            <Trash2 className="h-4 w-4" aria-hidden />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         )}
       </section>
 
-      {/* MODAL: Project Details & Members */}
+      {/* MODAL: Project details & members */}
       {isDetailsOpen && projectDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#181818] border border-white/10 rounded-3xl w-full max-w-2xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/5 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-violet-600/10 border border-violet-500/20 rounded-xl text-violet-400">
-                  <Folder className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-white">
-                    {isEditingDetails ? "Edit Configuration" : projectDetails.display_name}
-                  </h3>
-                  <p className="text-xs text-gray-400 font-mono">slug: {projectDetails.slug}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
-                  setIsDetailsOpen(false);
-                  setProjectDetails(null);
-                  setIsEditingDetails(false);
-                }}
-                className="p-1.5 text-gray-500 hover:text-white hover:bg-white/5 rounded-lg transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <Dialog
+          title={isEditingDetails ? "Edit project" : projectDetails.display_name}
+          closeLabel="Close"
+          onClose={closeDetails}
+          className="max-w-2xl"
+        >
+          <div className="flex flex-col gap-5">
+            <p className="-mt-1 font-mono text-xs text-muted-foreground">{projectDetails.slug}</p>
+
+            <div role="tablist" aria-label="Project sections" className="flex gap-1 border-b border-border">
+              {(["overview", "members"] as const).map((id) => {
+                const active = detailsTab === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setDetailsTab(id)}
+                    className={cn(
+                      "focus-ring -mb-px flex items-center gap-2 border-b-2 px-3 pb-2.5 pt-1 text-sm font-medium transition-colors",
+                      active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {id === "overview" ? "Overview" : "Members"}
+                    {id === "members" && (
+                      <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
+                        {projectDetails.members?.length || 0}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Modal Scrollable Content */}
-            <div className="p-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
-              {isEditingDetails ? (
-                /* EDIT DETAILS FORM */
-                <form onSubmit={handleEditProject} className="space-y-4">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Display Name</label>
-                    <input
-                      required
-                      value={editDisplayName}
-                      onChange={(e) => setEditDisplayName(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none transition font-semibold"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Description</label>
-                    <textarea
-                      value={editDescription}
-                      onChange={(e) => setEditDescription(e.target.value)}
-                      className="w-full min-h-[80px] bg-black/40 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none transition"
-                    />
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Linked Profile</label>
-                      <select
-                        value={editProfileSlug}
-                        onChange={(e) => setEditProfileSlug(e.target.value)}
-                        className="w-full bg-black border border-white/10 rounded-xl p-3 text-sm text-white focus:border-violet-500 outline-none transition"
-                      >
-                        <option value="">— — No Profile — —</option>
-                        {profiles.map((p) => {
-                          const s = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
-                          return (
-                            <option key={p.name} value={s}>
-                              {p.name}
-                            </option>
-                          );
-                        })}
-                      </select>
+            <div className="max-h-[56vh] overflow-y-auto pr-1" role="tabpanel">
+              {detailsTab === "overview" &&
+                (isEditingDetails ? (
+                  <form onSubmit={handleEditProject} className="flex flex-col gap-4">
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium">Display name</span>
+                      <input required autoFocus value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} className={inputCls} />
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium">Description</span>
+                      <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} className={cn(inputCls, "resize-none")} />
+                    </label>
+                    <label className="flex flex-col gap-1.5">
+                      <span className="text-sm font-medium">Linked profile</span>
+                      <Select value={editProfileSlug} onChange={setEditProfileSlug} options={profileOptions} />
+                    </label>
+                    <div className="flex justify-end gap-2 pt-1">
+                      <button type="button" onClick={() => setIsEditingDetails(false)} className={ghostBtn}>
+                        Cancel
+                      </button>
+                      <button type="submit" disabled={loading} className={solidBtn}>
+                        {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Save className="h-3.5 w-3.5" aria-hidden />}
+                        Save changes
+                      </button>
                     </div>
+                  </form>
+                ) : (
+                  <div className="flex flex-col gap-5">
+                    <p className={cn("text-sm leading-relaxed", projectDetails.description ? "text-foreground" : "text-muted-foreground")}>
+                      {projectDetails.description || "No description."}
+                    </p>
 
-                  </div>
+                    <dl className="grid gap-x-6 gap-y-3 rounded-2xl border border-border/70 p-4 text-sm sm:grid-cols-2">
+                      {[
+                        {
+                          icon: Shield,
+                          label: "Source database",
+                          value: projectDetails.datasource_key.startsWith("default:") ? "Not configured" : projectDetails.datasource_key,
+                          mono: !projectDetails.datasource_key.startsWith("default:"),
+                          hint: projectDetails.datasource_key.startsWith("default:")
+                            ? "No Postgres connection was found when this project was created."
+                            : "Queries learned here are kept separate from other databases.",
+                        },
+                        { icon: Users, label: "Scope", value: SCOPE_LABELS[projectDetails.scope_mode] ?? projectDetails.scope_mode },
+                        { icon: CheckCircle, label: "Linked profile", value: projectDetails.profile_slug || "None", mono: Boolean(projectDetails.profile_slug) },
+                        { icon: User, label: "Created by", value: projectDetails.created_by || "system" },
+                        { icon: Calendar, label: "Created", value: formatDate(projectDetails.created_at) },
+                      ].map(({ icon: Icon, label, value, mono, hint }) => (
+                        <div key={label} className="flex min-w-0 flex-col gap-0.5">
+                          <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Icon className="h-3.5 w-3.5" aria-hidden />
+                            {label}
+                          </dt>
+                          <dd className={cn("truncate", mono && "font-mono text-[13px]")} title={hint ?? value}>
+                            {value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
 
-                  <div className="flex justify-end gap-2 pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingDetails(false)}
-                      className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 rounded-xl text-xs font-semibold transition cursor-pointer"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="submit"
-                      disabled={loading}
-                      className="px-5 py-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl font-bold text-xs transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
-                      Save Details
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setProjectToDelete(projectDetails);
+                          setIsDeleteProjOpen(true);
+                        }}
+                        className={cn(ghostBtn, "hover:text-destructive")}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                        Delete project
+                      </button>
+                      <button type="button" onClick={() => setIsEditingDetails(true)} className={cn(outlineBtn, "ml-auto")}>
+                        <Edit2 className="h-3.5 w-3.5" aria-hidden />
+                        Edit details
+                      </button>
+                    </div>
                   </div>
-                </form>
-              ) : (
-                /* VIEW DETAILS METADATA */
-                <>
-                  {/* Description */}
-                  {projectDetails.description && (
-                    <div className="space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Description</span>
-                        <button
-                          onClick={() => setIsEditingDetails(true)}
-                          className="text-xs font-bold text-violet-400 hover:text-violet-300 transition flex items-center gap-1 cursor-pointer"
-                        >
-                          <Edit2 className="h-3 w-3" /> Edit Details
-                        </button>
-                      </div>
-                      <p className="text-xs text-gray-400 leading-relaxed bg-black/25 rounded-2xl p-4 border border-white/5">
-                        {projectDetails.description}
+                ))}
+
+              {detailsTab === "members" && (
+                <div className="flex flex-col gap-4">
+                  <form onSubmit={(e) => handleAddMember(e, projectDetails.slug)} className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                    <label className="flex min-w-0 flex-1 flex-col gap-1.5">
+                      <span className="text-sm font-medium">Add a member</span>
+                      <input
+                        required
+                        placeholder="User ID or email"
+                        value={memberUserIdentifier}
+                        onChange={(e) => setMemberUserIdentifier(e.target.value)}
+                        className={inputCls}
+                      />
+                    </label>
+                    <div className="sm:w-40">
+                      <Select value={memberRole} onChange={setMemberRole} aria-label="Role" options={ROLE_OPTIONS} />
+                    </div>
+                    <button type="submit" disabled={loading || !memberUserIdentifier.trim()} className={cn(solidBtn, "h-[2.625rem] justify-center")}>
+                      {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <UserPlus className="h-3.5 w-3.5" aria-hidden />}
+                      Add
+                    </button>
+                  </form>
+
+                  {!projectDetails.members || projectDetails.members.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center">
+                      <p className="text-sm font-medium">No members yet</p>
+                      <p className="mx-auto mt-1 max-w-[40ch] text-sm text-muted-foreground">
+                        Only the people you add here can use this project&apos;s memory.
                       </p>
                     </div>
-                  )}
-
-                  {/* Specs Info Grid */}
-                  <div className="space-y-2">
-                    {!projectDetails.description && (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Project Metadata</span>
-                        <button
-                          onClick={() => setIsEditingDetails(true)}
-                          className="text-xs font-bold text-violet-400 hover:text-violet-300 transition flex items-center gap-1 cursor-pointer"
-                        >
-                          <Edit2 className="h-3 w-3" /> Edit Details
-                        </button>
-                      </div>
-                    )}
-                    {projectDetails.description && (
-                      <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Project Metadata</span>
-                    )}
-                    <div className="grid gap-3 sm:grid-cols-2 text-xs text-gray-400 bg-white/[0.01] rounded-2xl p-4 border border-white/5">
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-gray-600 shrink-0" />
-                        <span>Datasource: <strong className="text-white font-mono">{projectDetails.datasource_key}</strong></span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-600 shrink-0" />
-                        <span>Creator: <strong className="text-white">{projectDetails.created_by || "system"}</strong></span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Shield className="h-4 w-4 text-gray-600 shrink-0" />
-                        <span>Scope Mode: <strong className="text-white uppercase font-mono">{projectDetails.scope_mode}</strong></span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-600 shrink-0" />
-                        <span>Created: <strong className="text-white">{formatDate(projectDetails.created_at)}</strong></span>
-                      </div>
-                      {projectDetails.profile_slug && (
-                        <div className="flex items-center gap-2 sm:col-span-2">
-                          <CheckCircle className="h-4 w-4 text-emerald-600 shrink-0" />
-                          <span>Linked Profile: <strong className="text-emerald-400 font-mono">{projectDetails.profile_slug}</strong></span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </>
-              )}
-
-              {/* Members Section (always visible in view mode, optional/visible during edit as well, let's keep it visible) */}
-              <div className="space-y-4 pt-4 border-t border-white/5">
-                <div className="flex items-center justify-between border-b border-white/5 pb-2">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-gray-400 flex items-center gap-1.5">
-                    <Users className="h-3.5 w-3.5 text-violet-400" /> Authorized Members ({projectDetails.members?.length || 0})
-                  </h4>
-                </div>
-
-                {/* Add member form inline */}
-                <form
-                  onSubmit={(e) => handleAddMember(e, projectDetails.slug)}
-                  className="flex flex-col sm:flex-row items-end gap-3 bg-white/[0.01] rounded-2xl p-4 border border-white/5"
-                >
-                  <div className="w-full sm:flex-1 space-y-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">ID User (Username / E-mail)</label>
-                    <input
-                      required
-                      placeholder="e.g. mario.rossi, user@example.com"
-                      value={memberUserIdentifier}
-                      onChange={(e) => setMemberUserIdentifier(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-violet-500 outline-none transition font-semibold"
-                    />
-                  </div>
-                  <div className="w-full sm:w-36 space-y-1.5">
-                    <label className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Role</label>
-                    <select
-                      value={memberRole}
-                      onChange={(e) => setMemberRole(e.target.value)}
-                      className="w-full bg-black border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white focus:border-violet-500 outline-none transition"
-                    >
-                      <option value="member">Member</option>
-                      <option value="owner">Owner</option>
-                    </select>
-                  </div>
-                  <button
-                    type="submit"
-                    disabled={loading}
-                    className="w-full sm:w-auto px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 h-10 shrink-0 cursor-pointer shadow-lg shadow-violet-600/20"
-                  >
-                    {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <UserPlus className="h-3.5 w-3.5" />}
-                    Add
-                  </button>
-                </form>
-
-                {/* Members list */}
-                {(!projectDetails.members || projectDetails.members.length === 0) ? (
-                  <div className="text-center py-6 text-xs text-gray-600 italic">No users enrolled.</div>
-                ) : (
-                  <div className="overflow-hidden rounded-2xl border border-white/5 bg-black/25">
-                    <table className="w-full text-left text-xs">
-                      <thead>
-                        <tr className="bg-white/5 border-b border-white/5 text-gray-500 font-bold uppercase tracking-wider text-[10px]">
-                          <th className="px-4 py-3">User</th>
-                          <th className="px-4 py-3">Role</th>
-                          <th className="px-4 py-3">Added By</th>
-                          <th className="px-4 py-3 text-right">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5 font-medium text-gray-300">
-                        {projectDetails.members.map((member) => (
-                          <tr key={member.user_identifier} className="hover:bg-white/[0.01] transition-colors">
-                            <td className="px-4 py-3 font-mono text-[11px] max-w-[200px] truncate" title={member.user_identifier}>
+                  ) : (
+                    <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/70">
+                      {projectDetails.members.map((member) => (
+                        <li key={member.user_identifier} className="flex items-center gap-3 px-4 py-3">
+                          <span
+                            aria-hidden
+                            style={{ "--h": hueOf(member.user_identifier) } as React.CSSProperties}
+                            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[oklch(0.93_0.06_var(--h))] text-sm font-semibold uppercase text-[oklch(0.4_0.12_var(--h))] dark:bg-[oklch(0.32_0.07_var(--h))] dark:text-[oklch(0.88_0.08_var(--h))]"
+                          >
+                            {member.user_identifier.charAt(0)}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-medium" title={member.user_identifier}>
                               {member.user_identifier}
-                            </td>
-                            <td className="px-4 py-3">
-                              <span
-                                className={`text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${member.role === "owner"
-                                  ? "bg-amber-500/10 border border-amber-500/20 text-amber-400"
-                                  : "bg-blue-500/10 border border-blue-500/20 text-blue-400"
-                                  }`}
-                              >
-                                {member.role}
-                              </span>
-                            </td>
-                            <td className="px-4 py-3 text-gray-500">{member.invited_by || "system"}</td>
-                            <td className="px-4 py-3 text-right">
-                              <button
-                                onClick={() => {
-                                  setMemberToDelete({ projectSlug: projectDetails.slug, userIdentifier: member.user_identifier });
-                                  setIsDeleteMemberOpen(true);
-                                }}
-                                title="Revoke access"
-                                className="p-2 rounded-lg bg-red-500/10 border border-red-500/10 text-red-400 hover:text-white hover:bg-red-600 hover:border-red-600 transition cursor-pointer"
-                              >
-                                <UserMinus className="h-3.5 w-3.5" />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="p-6 border-t border-white/5 flex justify-end gap-3 bg-black/20 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setProjectToDelete(projectDetails);
-                  setIsDeleteProjOpen(true);
-                }}
-                className="px-5 py-2.5 bg-red-600/10 hover:bg-red-600 text-red-400 hover:text-white border border-red-500/20 rounded-xl text-sm font-semibold transition cursor-pointer mr-auto"
-              >
-                Delete Project
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsDetailsOpen(false);
-                  setProjectDetails(null);
-                  setIsEditingDetails(false);
-                }}
-                className="px-6 py-2.5 bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 rounded-xl text-sm font-semibold transition cursor-pointer"
-              >
-                Close
-              </button>
+                            </div>
+                            <div className="truncate text-xs text-muted-foreground">
+                              Added by {member.invited_by || "system"} · {formatDate(member.created_at)}
+                            </div>
+                          </div>
+                          <span
+                            className={cn(
+                              "shrink-0 rounded-md px-2 py-0.5 text-xs font-medium",
+                              member.role === "owner" ? "bg-foreground text-background" : "bg-secondary text-muted-foreground",
+                            )}
+                          >
+                            {member.role === "owner" ? "Owner" : "Member"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setMemberToDelete({ projectSlug: projectDetails.slug, userIdentifier: member.user_identifier });
+                              setIsDeleteMemberOpen(true);
+                            }}
+                            aria-label={`Revoke access for ${member.user_identifier}`}
+                            title="Revoke access"
+                            className={cn(ghostBtn, "h-8 w-8 shrink-0 justify-center px-0 hover:text-destructive")}
+                          >
+                            <UserMinus className="h-3.5 w-3.5" aria-hidden />
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
 
       {/* MODAL: Create Project */}
       {isCreateOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#181818] border border-white/10 rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
-            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-white/5 bg-gradient-to-r from-white/[0.01] to-white/[0.03] shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-violet-600/10 border border-violet-500/20 rounded-xl text-violet-400">
-                  <FolderPlus className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">New Project</h3>
-                  <p className="text-xs text-gray-400">Create a new Memory Project</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setIsCreateOpen(false)}
-                className="p-1.5 text-gray-500 hover:text-white hover:bg-white/5 rounded-lg transition cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
+        <Dialog
+          title="New Memory Project"
+          closeLabel="Cancel"
+          onClose={() => setIsCreateOpen(false)}
+          className="max-w-lg"
+        >
+          <form onSubmit={handleCreateProject} className="flex flex-col gap-4">
+            <p className="text-sm text-muted-foreground">
+              Create a project to isolate SQL query memory for a specific team or context.
+            </p>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">Project Slug</span>
+              <input
+                required
+                placeholder="e.g. asset_manager, internal_chatbot"
+                value={createSlug}
+                onChange={(e) => setCreateSlug(e.target.value)}
+                className={cn(inputCls, "font-mono")}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">Display Name</span>
+              <input
+                required
+                placeholder="e.g. Asset Manager"
+                value={createDisplayName}
+                onChange={(e) => setCreateDisplayName(e.target.value)}
+                className={inputCls}
+              />
+            </label>
+
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">
+                Description{" "}
+                <span className="font-normal text-muted-foreground">· optional</span>
+              </span>
+              <textarea
+                placeholder="Describe this project's purpose"
+                value={createDescription}
+                onChange={(e) => setCreateDescription(e.target.value)}
+                rows={3}
+                className={cn(inputCls, "resize-none")}
+              />
+            </label>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">Linked Profile</span>
+                <Select value={createProfileSlug} onChange={setCreateProfileSlug} options={profileOptions} />
+              </label>
+
+              <label className="flex flex-col gap-1.5">
+                <span className="text-sm font-medium">Scope Mode</span>
+                <Select value={createScopeMode} onChange={setCreateScopeMode} options={SCOPE_OPTIONS} />
+              </label>
             </div>
 
-            <form onSubmit={handleCreateProject} className="flex flex-col flex-1 overflow-hidden">
-              <div className="p-6 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Project Slug</label>
-                  <input
-                    required
-                    placeholder="e.g. asset_manager, internal_chatbot"
-                    value={createSlug}
-                    onChange={(e) => setCreateSlug(e.target.value)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none transition font-semibold"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Display Name</label>
-                  <input
-                    required
-                    placeholder="e.g. Asset Manager"
-                    value={createDisplayName}
-                    onChange={(e) => setCreateDisplayName(e.target.value)}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none transition font-semibold"
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Description</label>
-                  <textarea
-                    placeholder="Optional description of this project's purpose"
-                    value={createDescription}
-                    onChange={(e) => setCreateDescription(e.target.value)}
-                    className="w-full min-h-[80px] bg-black/40 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-violet-500 focus:ring-1 focus:ring-violet-500 outline-none transition"
-                  />
-                </div>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Linked Profile</label>
-                    <select
-                      value={createProfileSlug}
-                      onChange={(e) => setCreateProfileSlug(e.target.value)}
-                      className="w-full bg-black border border-white/10 rounded-xl p-3 text-sm text-white focus:border-violet-500 outline-none transition"
-                    >
-                      <option value="">— — No Profile — —</option>
-                      {profiles.map((p) => {
-                        const s = p.slug || p.name.replace(/\s+/g, "_").toLowerCase();
-                        return (
-                          <option key={p.name} value={s}>
-                            {p.name}
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="text-xs font-bold uppercase tracking-wider text-gray-400">Scope Mode</label>
-                    <select
-                      value={createScopeMode}
-                      onChange={(e) => setCreateScopeMode(e.target.value)}
-                      className="w-full bg-black border border-white/10 rounded-xl p-3 text-sm text-white focus:border-violet-500 outline-none transition"
-                    >
-                      <option value="inherit">Inherit (Use tenant default)</option>
-                      <option value="shared">Shared (Everyone shares)</option>
-                      <option value="per_user">Per User (Isolated queries)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div className="p-6 border-t border-white/5 flex justify-end gap-3 bg-black/20 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateOpen(false)}
-                  className="px-5 py-2.5 bg-white/5 hover:bg-white/10 text-gray-300 border border-white/10 rounded-xl text-sm font-semibold transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl font-bold text-sm transition shadow-lg shadow-violet-500/20 cursor-pointer disabled:opacity-50"
-                >
-                  {loading ? "Creating..." : "Create Project"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* CONFIRMATION: Delete Project */}
-      {isDeleteProjOpen && projectToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="p-6 border-b border-white/5 bg-white/5 flex items-center gap-3">
-              <div className="p-2 bg-red-600/10 border border-red-500/20 rounded-xl text-red-400">
-                <Trash2 className="w-5 h-5" />
-              </div>
-              <h3 className="text-lg font-bold text-white">Delete Project</h3>
-            </div>
-            <div className="p-6 space-y-4">
-              <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-200 text-xs leading-relaxed flex gap-2">
-                <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
-                <div>
-                  <strong className="text-white">WARNING: Irreversible Operation</strong>
-                  <p className="mt-1">
-                    You are about to permanently delete the project{" "}
-                    <b className="text-white font-bold">"{projectToDelete.display_name}"</b> ({projectToDelete.slug}).
-                  </p>
-                  <p className="mt-2 text-red-300">
-                    All associated members and cached SQL queries in this project will be permanently deleted
-                    from the database.
-                  </p>
-                </div>
-              </div>
-              <p className="text-xs text-gray-400">Confirm deletion?</p>
-            </div>
-            <div className="p-6 border-t border-white/5 flex justify-end gap-3 bg-black/20">
-              <button
-                onClick={() => {
-                  setIsDeleteProjOpen(false);
-                  setProjectToDelete(null);
-                }}
-                className="px-5 py-2.5 text-sm font-semibold text-gray-400 hover:text-white transition cursor-pointer"
-              >
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" onClick={() => setIsCreateOpen(false)} className={ghostBtn}>
                 Cancel
               </button>
-              <button
-                onClick={() => void handleDeleteProject()}
-                disabled={loading}
-                className="bg-red-600 hover:bg-red-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition shadow-lg shadow-red-600/20 cursor-pointer disabled:opacity-50"
-              >
-                {loading ? "Deleting..." : "Delete Project"}
+              <button type="submit" disabled={loading} className={solidBtn}>
+                {loading ? "Creating…" : "Create Project"}
               </button>
             </div>
-          </div>
-        </div>
+          </form>
+        </Dialog>
       )}
 
-      {/* CONFIRMATION: Revoke Access (Delete Member) */}
+      {/* CONFIRM: Delete Project (type the name to confirm) */}
+      {isDeleteProjOpen && projectToDelete && (
+        <DeleteDialog
+          name={projectToDelete.display_name}
+          busy={loading}
+          ns="delete"
+          t={deleteText}
+          onConfirm={() => void handleDeleteProject()}
+          onClose={() => {
+            setIsDeleteProjOpen(false);
+            setProjectToDelete(null);
+          }}
+        />
+      )}
+
+      {/* CONFIRM: Revoke Member Access */}
       {isDeleteMemberOpen && memberToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="p-6 border-b border-white/5 bg-white/5 flex items-center gap-3">
-              <div className="p-2 bg-red-600/10 border border-red-500/20 rounded-xl text-red-400">
-                <UserMinus className="w-5 h-5" />
-              </div>
-              <h3 className="text-lg font-bold text-white">Revoke Access User</h3>
-            </div>
-            <div className="p-6 space-y-3">
-              <p className="text-sm text-gray-300 leading-relaxed">
-                You are about to remove user <strong className="text-white font-mono">{memberToDelete.userIdentifier}</strong> from the project <strong className="text-white">"{memberToDelete.projectSlug}"</strong>.
-              </p>
-              <p className="text-xs text-gray-500">The user will lose access to this SQL query memory isolation.</p>
-            </div>
-            <div className="p-6 border-t border-white/5 flex justify-end gap-3 bg-black/20">
+        <Dialog
+          title="Revoke Access"
+          closeLabel="Cancel"
+          onClose={() => {
+            setIsDeleteMemberOpen(false);
+            setMemberToDelete(null);
+          }}
+        >
+          <div className="flex flex-col gap-4">
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              Remove{" "}
+              <strong className="font-mono text-foreground">{memberToDelete.userIdentifier}</strong>{" "}
+              from project{" "}
+              <strong className="text-foreground">&quot;{memberToDelete.projectSlug}&quot;</strong>.
+              They will lose access to this project&apos;s SQL query memory.
+            </p>
+            <div className="flex justify-end gap-2">
               <button
+                type="button"
+                className={ghostBtn}
                 onClick={() => {
                   setIsDeleteMemberOpen(false);
                   setMemberToDelete(null);
                 }}
-                className="px-5 py-2.5 text-sm font-semibold text-gray-400 hover:text-white transition cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() => void handleRemoveMember()}
                 disabled={loading}
-                className="bg-red-600 hover:bg-red-500 text-white px-6 py-2.5 rounded-xl text-sm font-bold transition shadow-lg shadow-red-600/20 cursor-pointer disabled:opacity-50"
+                className={dangerBtn}
               >
-                {loading ? "Revoking..." : "Revoke Access"}
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                ) : (
+                  <UserMinus className="h-3.5 w-3.5" aria-hidden />
+                )}
+                {loading ? "Revoking…" : "Revoke Access"}
               </button>
             </div>
           </div>
-        </div>
+        </Dialog>
       )}
     </div>
   );

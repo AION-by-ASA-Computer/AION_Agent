@@ -79,26 +79,31 @@ async def authenticate_user_password(
         if not ok:
             return None
 
-        meta_out: Dict[str, Any] = {}
-        if u.metadata_json:
-            try:
-                meta_out = json.loads(u.metadata_json)
-            except json.JSONDecodeError:
-                pass
-        meta_out["username"] = u.identifier
-        if u.email:
-            meta_out["email"] = u.email
+        return _user_to_auth_dict(u)
 
-        from src.data.user_password import get_roles
 
-        return {
-            "id": u.id,
-            "identifier": u.identifier,
-            "display_name": u.display_name or u.identifier,
-            "metadata": meta_out,
-            "roles": get_roles(u),
-            "must_change_password": bool(getattr(u, "must_change_password", False)),
-        }
+def _user_to_auth_dict(u: User) -> Dict[str, Any]:
+    meta_out: Dict[str, Any] = {}
+    if u.metadata_json:
+        try:
+            meta_out = json.loads(u.metadata_json)
+        except json.JSONDecodeError:
+            pass
+    meta_out["username"] = u.identifier
+    if u.email:
+        meta_out["email"] = u.email
+
+    from src.data.user_password import get_roles
+
+    return {
+        "id": u.id,
+        "identifier": u.identifier,
+        "display_name": u.display_name or u.identifier,
+        "metadata": meta_out,
+        "roles": get_roles(u),
+        "must_change_password": bool(getattr(u, "must_change_password", False)),
+        "has_password": bool(u.password_hash),
+    }
 
 
 def warn_if_auth_misconfigured() -> None:

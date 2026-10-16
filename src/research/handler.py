@@ -322,9 +322,22 @@ class ResearchHandler:
         except RuntimeError:
             pass
 
-        from src.main import _GLOBAL_LOOP
+        main_loop = None
+        try:
+            from src.main import _GLOBAL_LOOP
 
-        main_loop = _GLOBAL_LOOP
+            main_loop = _GLOBAL_LOOP
+        except Exception:
+            pass
+
+        if main_loop is None or not main_loop.is_running():
+            try:
+                from src.api.main import _GLOBAL_LOOP as _API_LOOP
+
+                main_loop = _API_LOOP
+            except Exception:
+                pass
+
         if main_loop is None or not main_loop.is_running():
             raise RuntimeError(
                 "Deep research event loop unavailable; use the Research panel or POST /research/start"

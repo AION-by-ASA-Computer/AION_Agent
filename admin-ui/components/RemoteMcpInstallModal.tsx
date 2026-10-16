@@ -1,17 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  Download,
-  Globe,
-  Loader2,
-  ShieldCheck,
-  X,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { AlertTriangle, CheckCircle2, Download, Loader2, ShieldCheck } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
+import { cn } from "@/lib/cn";
+import { useT } from "@/lib/i18n/use-t";
+import { Dialog } from "@/components/profiles/Dialog";
+import { Select } from "@/components/ui/Select";
+import { ghostBtn, inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
 
 export type RemoteCatalogPreset = {
   id: string;
@@ -50,16 +47,30 @@ type RemoteMcpInstallModalProps = {
   onInstallEnd?: () => void;
 };
 
-const AUTH_TYPES = [
-  { value: "auto", label: "Auto (probe)" },
-  { value: "oauth2", label: "OAuth 2.0" },
-  { value: "api-key", label: "API key / Bearer" },
-  { value: "basic", label: "Basic auth" },
-  { value: "none", label: "None" },
-] as const;
+const AUTH_TYPES = ["auto", "oauth2", "api-key", "basic", "none"] as const;
+const KNOWN_AUTH = ["none", "oauth2", "api-key", "basic"];
+const MODES = ["none", "org_shared", "per_user"];
 
-export function RemoteMcpInstallModal({
-  open,
+const labelCls = "text-sm font-medium";
+
+async function errorDetail(res: Response): Promise<string> {
+  let detail = `HTTP ${res.status}`;
+  try {
+    const body = await res.json();
+    if (body?.detail != null) detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
+  } catch {
+    /* body is not JSON */
+  }
+  return detail;
+}
+
+/** Mounted only while open, so every opening starts from the seed props with fresh state. */
+export function RemoteMcpInstallModal(props: RemoteMcpInstallModalProps) {
+  if (!props.open) return null;
+  return <RemoteForm {...props} />;
+}
+
+function RemoteForm({
   onClose,
   onInstalled,
   presets = [],
@@ -70,52 +81,46 @@ export function RemoteMcpInstallModal({
   onInstallStart,
   onInstallEnd,
 }: RemoteMcpInstallModalProps) {
+  const t = useT();
+  const k = "admin_hub.remote";
   const [url, setUrl] = useState(initialUrl);
   const [displayName, setDisplayName] = useState(initialDisplayName);
   const [connectorId, setConnectorId] = useState(initialConnectorId);
   const [authType, setAuthType] = useState<string>("auto");
   const [probing, setProbing] = useState(false);
   const [probe, setProbe] = useState<RemoteProbe | null>(null);
-  const [probeError, setProbeError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [localInstalling, setLocalInstalling] = useState(false);
 
   const busy = installing || localInstalling;
+  const trimmed = url.trim();
+  const hasPlaceholder = trimmed.includes("{") || trimmed.includes("}");
+  const featuredPresets = useMemo(() => presets.filter((p) => p.remote_url), [presets]);
 
-  useEffect(() => {
-    if (!open) return;
-    setUrl(initialUrl);
-    setDisplayName(initialDisplayName);
-    setConnectorId(initialConnectorId);
-    setProbe(null);
-    setProbeError(null);
-    setAuthType("auto");
-  }, [open, initialUrl, initialDisplayName, initialConnectorId]);
-
-  const featuredPresets = useMemo(
-    () => presets.filter((p) => p.remote_url),
-    [presets],
-  );
-
-  const applyPreset = useCallback((preset: RemoteCatalogPreset) => {
+  const applyPreset = (preset: RemoteCatalogPreset) => {
     if (preset.remote_url) setUrl(preset.remote_url);
     if (preset.title) setDisplayName(preset.title);
     setConnectorId(preset.id);
     setProbe(null);
-    setProbeError(null);
-  }, []);
+    setError(null);
+  };
+
+  const validate = (): boolean => {
+    if (!trimmed) {
+      setError(t(`${k}.err_empty`));
+      return false;
+    }
+    if (hasPlaceholder) {
+      setError(t(`${k}.err_placeholder`));
+      return false;
+    }
+    return true;
+  };
 
   const handleProbe = async () => {
-    const trimmed = url.trim();
-    if (!trimmed) {
-      setProbeError("Enter a remote MCP URL.");
-      return;
-    }
-    if (trimmed.includes("{") || trimmed.includes("}")) {
-      setProbeError("Replace URL placeholders (e.g. {tenant_id}) before validating.");
-      return;
-    }
+    if (!validate()) return;
     setProbing(true);
-    setProbeError(null);
+    setError(null);
     setProbe(null);
     try {
       const res = await apiFetch(`${apiBase()}/admin/mcp/probe-remote`, {
@@ -123,257 +128,193 @@ export function RemoteMcpInstallModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: trimmed }),
       });
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const body = await res.json();
-          if (body?.detail != null) {
-            detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
-          }
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail);
-      }
+      if (!res.ok) throw new Error(await errorDetail(res));
       const data = await res.json();
       setProbe((data.probe as RemoteProbe) || null);
-      if (authType === "auto" && data.probe?.type) {
-        const t = String(data.probe.type);
-        if (["none", "oauth2", "api-key", "basic"].includes(t)) {
-          setAuthType(t);
-        }
-      }
+      const found = data.probe?.type ? String(data.probe.type) : "";
+      if (authType === "auto" && KNOWN_AUTH.includes(found)) setAuthType(found);
     } catch (e: unknown) {
-      setProbeError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setProbing(false);
     }
   };
 
   const handleInstall = async () => {
-    const trimmed = url.trim();
-    if (!trimmed) {
-      setProbeError("Enter a remote MCP URL.");
-      return;
-    }
-    if (trimmed.includes("{") || trimmed.includes("}")) {
-      setProbeError("Replace URL placeholders before installing.");
-      return;
-    }
+    if (!validate()) return;
     setLocalInstalling(true);
     onInstallStart?.();
-    setProbeError(null);
+    setError(null);
     try {
       const payload: Record<string, string> = { url: trimmed };
       if (displayName.trim()) payload.display_name = displayName.trim();
       if (connectorId.trim()) payload.connector_id = connectorId.trim();
       if (authType !== "auto") payload.auth_type = authType;
-
       const res = await apiFetch(`${apiBase()}/admin/market/install-remote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) {
-        let detail = `HTTP ${res.status}`;
-        try {
-          const body = await res.json();
-          if (body?.detail != null) {
-            detail = typeof body.detail === "string" ? body.detail : JSON.stringify(body.detail);
-          }
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail);
-      }
+      if (!res.ok) throw new Error(await errorDetail(res));
       const data = await res.json();
       onInstalled(String(data.name || data.server_slug || ""));
       onClose();
     } catch (e: unknown) {
-      setProbeError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLocalInstalling(false);
       onInstallEnd?.();
     }
   };
 
-  if (!open) return null;
+  const probeRows: { label: string; value: string }[] = probe
+    ? [
+        probe.oauth_provider && { label: t(`${k}.probe_provider`), value: probe.oauth_provider },
+        probe.oauth_server && { label: t(`${k}.probe_server`), value: probe.oauth_server },
+        probe.oauth_token_url && { label: t(`${k}.probe_token`), value: probe.oauth_token_url },
+        probe.credential_mode && {
+          label: t(`${k}.probe_mode`),
+          value: MODES.includes(probe.credential_mode) ? t(`admin_hub.scope.${probe.credential_mode}`) : probe.credential_mode,
+        },
+      ].filter((r): r is { label: string; value: string } => Boolean(r))
+    : [];
 
   return (
-    <div className="fixed inset-0 z-[65] bg-black/75 flex items-center justify-center p-4">
-      <div className="bg-[#1a1a1a] border border-white/10 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-5 shadow-2xl">
-        <div className="flex justify-between items-start gap-4">
-          <div>
-            <h3 className="text-lg font-bold text-white flex items-center gap-2">
-              <Globe className="w-5 h-5 text-indigo-400" />
-              Remote MCP Server
-            </h3>
-            <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-              Connect to a hosted MCP endpoint from the catalog or enter a custom URL.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-500 hover:text-white p-1 cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+    <Dialog title={t(`${k}.title`)} closeLabel={t(`${k}.cancel`)} onClose={onClose} className="max-w-2xl">
+      <form
+        className="flex flex-col gap-5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          void handleInstall();
+        }}
+      >
+        <p className="-mt-1 text-sm text-muted-foreground">{t(`${k}.subtitle`)}</p>
 
-        {featuredPresets.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-              Curated presets
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {featuredPresets.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => applyPreset(p)}
-                  className="text-xs font-semibold px-3 py-1.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-200 hover:bg-indigo-500/20 cursor-pointer"
-                  title={p.description || p.remote_url}
-                >
-                  {p.title || p.id}
-                  {p.remote_url_template ? " *" : ""}
-                </button>
-              ))}
+        <div className="flex max-h-[56vh] flex-col gap-5 overflow-y-auto pr-1">
+          {featuredPresets.length > 0 && (
+            <fieldset className="flex flex-col gap-2">
+              <legend className={cn(labelCls, "mb-2")}>{t(`${k}.presets`)}</legend>
+              <div className="flex flex-wrap gap-1.5">
+                {featuredPresets.map((p) => {
+                  const active = connectorId === p.id;
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => applyPreset(p)}
+                      title={p.description || p.remote_url}
+                      className={cn(
+                        "focus-ring rounded-full border px-3 py-1.5 text-[13px] font-medium transition-colors",
+                        active
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border bg-card text-muted-foreground hover:border-foreground/30 hover:text-foreground",
+                      )}
+                    >
+                      {p.title || p.id}
+                      {p.remote_url_template ? <span aria-hidden> *</span> : null}
+                    </button>
+                  );
+                })}
+              </div>
+              {featuredPresets.some((p) => p.remote_url_template) && (
+                <p className="text-xs text-muted-foreground">{t(`${k}.template_hint`)}</p>
+              )}
+            </fieldset>
+          )}
+
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="remote-url" className={labelCls}>
+              {t(`${k}.url`)}
+            </label>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                id="remote-url"
+                type="url"
+                value={url}
+                autoFocus
+                onChange={(e) => {
+                  setUrl(e.target.value);
+                  setProbe(null);
+                }}
+                placeholder="https://mcp.example.com/mcp"
+                aria-invalid={hasPlaceholder || undefined}
+                className={cn(inputCls, "min-w-0 flex-1 font-mono", hasPlaceholder && "border-warning/60")}
+              />
+              <button type="button" className={cn(outlineBtn, "h-[2.625rem] justify-center")} disabled={busy || probing || !trimmed} onClick={() => void handleProbe()}>
+                {probing ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <ShieldCheck className="h-3.5 w-3.5" aria-hidden />}
+                {probing ? t(`${k}.probing`) : t(`${k}.probe`)}
+              </button>
             </div>
-            <p className="text-[10px] text-gray-600">* URL template — edit placeholders before validate/install</p>
+            {hasPlaceholder && <p className="text-xs text-warning">{t(`${k}.err_placeholder`)}</p>}
           </div>
-        )}
 
-        <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
-          Remote endpoint URL
-          <input
-            type="url"
-            value={url}
-            onChange={(e) => {
-              setUrl(e.target.value);
-              setProbe(null);
-            }}
-            placeholder="https://mcp.example.com/mcp"
-            className="mt-1.5 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-gray-600 focus:border-indigo-500/80 outline-none font-mono"
-          />
-        </label>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
-            Display name (optional)
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="my_remote_mcp"
-              className="mt-1.5 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white placeholder:text-gray-600 focus:border-indigo-500/80 outline-none"
-            />
-          </label>
-          <label className="block text-xs font-bold text-gray-400 uppercase tracking-wider">
-            Auth type
-            <select
-              value={authType}
-              onChange={(e) => setAuthType(e.target.value)}
-              className="mt-1.5 w-full bg-black/40 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white focus:border-indigo-500/80 outline-none cursor-pointer"
-            >
-              {AUTH_TYPES.map((a) => (
-                <option key={a.value} value={a.value} className="bg-[#1a1a1a]">
-                  {a.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            onClick={() => void handleProbe()}
-            disabled={busy || probing || !url.trim()}
-            className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-emerald-300 bg-emerald-500/10 border border-emerald-500/25 rounded-xl hover:bg-emerald-500/20 disabled:opacity-50 cursor-pointer"
-          >
-            {probing ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <ShieldCheck className="w-4 h-4" />
-            )}
-            {probing ? "Probing endpoint..." : "Validate endpoint"}
-          </button>
-        </div>
-
-        {probing && (
-          <div className="flex items-center gap-2.5 rounded-xl border border-sky-500/25 bg-sky-500/10 px-4 py-3 text-xs text-sky-200 animate-pulse">
-            <Loader2 className="w-4 h-4 text-sky-400 animate-spin shrink-0" />
-            <span>Connecting to remote endpoint and discovering auth &amp; capabilities...</span>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="flex flex-col gap-1.5">
+              <span className={labelCls}>
+                {t(`${k}.name`)} <span className="font-normal text-muted-foreground">· {t(`${k}.optional`)}</span>
+              </span>
+              <input type="text" value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="my_remote_mcp" className={inputCls} />
+            </label>
+            <label className="flex flex-col gap-1.5">
+              <span className={labelCls}>{t(`${k}.auth`)}</span>
+              <Select
+                value={authType}
+                onChange={setAuthType}
+                options={AUTH_TYPES.map((a) => ({ value: a, label: t(`${k}.auth_${a.replace("-", "_")}`) }))}
+              />
+            </label>
           </div>
-        )}
 
-        {probeError && (
-          <p className="text-sm text-red-400 flex items-start gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
-            {probeError}
-          </p>
-        )}
+          <div aria-live="polite" className="flex flex-col gap-3">
+            {probing && (
+              <p className="flex items-center gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3 text-sm text-muted-foreground" role="status">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" aria-hidden />
+                {t(`${k}.probing_body`)}
+              </p>
+            )}
 
-        {probe && (
-          <div className="rounded-xl border border-white/10 bg-black/30 p-4 space-y-2 text-sm">
-            <p className="flex items-center gap-2 text-emerald-400 font-semibold">
-              <CheckCircle2 className="w-4 h-4" />
-              Probe OK — {probe.type || "unknown"}
-            </p>
-            {probe.oauth_provider && (
-              <p className="text-gray-400">
-                Provider: <span className="text-white font-mono">{probe.oauth_provider}</span>
+            {error && (
+              <p className="flex gap-2 rounded-2xl bg-destructive/10 px-3.5 py-2.5 text-sm text-destructive" role="alert">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <span className="break-words">{error}</span>
               </p>
             )}
-            {probe.oauth_server && (
-              <p className="text-gray-400 text-xs break-all">
-                Auth server: <span className="text-gray-300">{probe.oauth_server}</span>
-              </p>
-            )}
-            {probe.oauth_token_url && (
-              <p className="text-gray-400 text-xs break-all">
-                Token URL: <span className="text-gray-300">{probe.oauth_token_url}</span>
-              </p>
-            )}
-            {probe.credential_mode && (
-              <p className="text-gray-400">
-                Suggested mode:{" "}
-                <span className="text-indigo-300 font-mono">{probe.credential_mode}</span>
-              </p>
-            )}
-            {probe.hint && (
-              <p className="text-[11px] text-gray-500 font-mono break-all">{probe.hint}</p>
+
+            {probe && (
+              <div className="flex flex-col gap-3 rounded-2xl border border-border/70 p-4">
+                <p className="flex items-center gap-2 text-sm font-semibold text-success">
+                  <CheckCircle2 className="h-4 w-4" aria-hidden />
+                  {t(`${k}.probe_ok`, {
+                    type: KNOWN_AUTH.includes(probe.type ?? "") ? t(`${k}.auth_${String(probe.type).replace("-", "_")}`) : probe.type || t(`${k}.probe_unknown`),
+                  })}
+                </p>
+                {probeRows.length > 0 && (
+                  <dl className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-[auto_1fr]">
+                    {probeRows.map((r) => (
+                      <div key={r.label} className="contents">
+                        <dt className="text-muted-foreground">{r.label}</dt>
+                        <dd className="break-all font-mono text-[13px]">{r.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+                {probe.hint && <p className="break-all font-mono text-xs text-muted-foreground">{probe.hint}</p>}
+              </div>
             )}
           </div>
-        )}
+        </div>
 
-        <div className="flex gap-3 justify-end pt-2 border-t border-white/5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 text-sm text-gray-400 hover:text-white cursor-pointer"
-          >
-            Cancel
+        <div className="flex justify-end gap-2 border-t border-border pt-4">
+          <button type="button" className={ghostBtn} onClick={onClose}>
+            {t(`${k}.cancel`)}
           </button>
-          <button
-            type="button"
-            onClick={() => void handleInstall()}
-            disabled={busy || !url.trim()}
-            className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold disabled:opacity-50 cursor-pointer flex items-center gap-2"
-          >
-            {busy ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Installing…
-              </>
-            ) : (
-              <>
-                <Download className="w-4 h-4" /> Install remote MCP
-              </>
-            )}
+          <button type="submit" className={solidBtn} disabled={busy || !trimmed}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Download className="h-3.5 w-3.5" aria-hidden />}
+            {busy ? t(`${k}.installing`) : t(`${k}.install`)}
           </button>
         </div>
-      </div>
-    </div>
+      </form>
+    </Dialog>
   );
 }

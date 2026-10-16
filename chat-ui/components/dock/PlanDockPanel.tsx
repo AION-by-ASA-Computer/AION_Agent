@@ -42,6 +42,7 @@ export function PlanDockPanel({
   executionProgress,
   selectedTaskId,
   onPlanApproved,
+  onPlanRejected,
   onFinalSummary,
   onExecutionAdoptHandled,
   onTaskSelect,
@@ -57,6 +58,7 @@ export function PlanDockPanel({
   executionProgress?: PlanExecutionProgressState | null;
   selectedTaskId?: string | null;
   onPlanApproved?: (runId: string, planId: string) => void;
+  onPlanRejected?: (planId?: string) => void;
   onFinalSummary?: (summary: string, planId: string, runId?: string) => void;
   onExecutionAdoptHandled?: () => void;
   onTaskSelect?: (taskId: string | null) => void;
@@ -74,6 +76,7 @@ export function PlanDockPanel({
       executionProgress={executionProgress || undefined}
       selectedTaskId={selectedTaskId || undefined}
       onPlanApproved={onPlanApproved}
+      onPlanRejected={onPlanRejected}
       onFinalSummary={onFinalSummary}
       onExecutionAdoptHandled={onExecutionAdoptHandled}
       onTaskSelect={onTaskSelect}

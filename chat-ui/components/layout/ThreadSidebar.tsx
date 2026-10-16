@@ -5,40 +5,34 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Check,
+  ChevronRight,
   Clock,
   Edit3,
   MessageSquare,
   MessageSquarePlus,
+  MessageSquareQuote,
   MoreHorizontal,
   PanelLeftClose,
   PanelLeftOpen,
   Plug,
   Search,
-  SlidersHorizontal,
   Star,
   Trash2,
   X,
 } from "lucide-react";
 
-import { type ConversationSummary } from "@/lib/api/aion";
+import { fetchConversationDetails, listSideThreads, type ConversationSummary, type SideThreadSummary } from "@/lib/api/aion";
 import { apiBase } from "@/lib/config";
-import { BUCKET_ORDER, groupByBucket, type DateBucket } from "@/lib/date-groups";
 import type { ShellSection } from "@/lib/shell/use-conversation-threads";
-import { useShellActions } from "@/lib/shell/shell-context";
 import { cn } from "@/lib/cn";
 import { ChatBrand } from "../brand/ChatBrand";
 import { SidebarProfileMenu } from "./SidebarProfileMenu";
-import { SidebarTuningsPanel } from "@/components/settings/SidebarTuningsPanel";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { useT } from "@/lib/i18n/use-t";
 import { usePathname } from "next/navigation";
 
 function isFavorite(c: ConversationSummary) {
   return c.metadata?.favorite === true || c.metadata?.favorite === "true";
-}
-
-function bucketLabelKey(bucket: DateBucket) {
-  return `sidebar.bucket_${bucket}` as const;
 }
 
 export function ThreadSidebar({
@@ -73,16 +67,31 @@ export function ThreadSidebar({
   const token = useStoredToken();
   const isLoggedIn = Boolean(token);
   const t = useT();
-  const {
-    sidebarPanel,
-    tuningsTab,
-    openTunings,
-    closeTunings,
-    setTuningsTab,
-  } = useShellActions();
-  const tuningsOpen = sidebarPanel === "tunings";
+
 
   const [searchQuery, setSearchQuery] = useState("");
+  /** Parent of the open conversation when it is a side thread (to expand it in the list). */
+  const [parentLookup, setParentLookup] = useState<{ id: string; parentId: string | null } | null>(null);
+  const hasThreads = items.some((c) => (c.thread_count ?? 0) > 0);
+  const currentIsTopLevel = items.some((c) => c.id === currentId);
+
+  useEffect(() => {
+    if (!currentId || currentIsTopLevel || !hasThreads || !token) return;
+    let cancelled = false;
+    fetchConversationDetails(currentId, userId, token)
+      .then((d) => {
+        if (cancelled) return;
+        setParentLookup({
+          id: currentId,
+          parentId: d?.parent_conversation_id ? String(d.parent_conversation_id) : null,
+        });
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [currentId, currentIsTopLevel, hasThreads, userId, token]);
+  const activeParentId = parentLookup?.id === currentId ? parentLookup.parentId : null;
   const [profileLabel, setProfileLabel] = useState(userId);
   const [profileSubtitle, setProfileSubtitle] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -143,7 +152,6 @@ export function ThreadSidebar({
     () => filteredItems.filter((c) => !isFavorite(c)),
     [filteredItems],
   );
-  const dateGroups = useMemo(() => groupByBucket(normalItems), [normalItems]);
 
   const startNewChat = () => {
     const id = crypto.randomUUID();
@@ -155,24 +163,15 @@ export function ThreadSidebar({
   };
 
   const navItems: Array<{
-    section: ShellSection | "tunings";
+    section: ShellSection;
     href: string;
     icon: typeof MessageSquare;
     label: string;
   }> = [
-    { section: "chat", href: chatHomeHref, icon: MessageSquare, label: t("sidebar.chat") },
-    { section: "integrations", href: "/integrations", icon: Plug, label: t("sidebar.integrations") },
-    { section: "schedules", href: "/schedules", icon: Clock, label: t("sidebar.schedules") },
-    { section: "tunings", href: "#tunings", icon: SlidersHorizontal, label: t("sidebar.tunings") },
-  ];
-
-  const openTuningsPanel = () => {
-    if (isCollapsed) onToggleCollapse?.();
-    openTunings("runtime");
-    if (pathname.startsWith("/integrations") || pathname.startsWith("/schedules")) {
-      router.push(`${chatHomeHref}?tunings=runtime`);
-    }
-  };
+      { section: "chat", href: chatHomeHref, icon: MessageSquare, label: t("sidebar.chat") },
+      { section: "integrations", href: "/integrations", icon: Plug, label: t("sidebar.integrations") },
+      { section: "schedules", href: "/schedules", icon: Clock, label: t("sidebar.schedules") },
+    ];
 
   const conversationList = (
     <>
@@ -193,18 +192,18 @@ export function ThreadSidebar({
               onRenameConversation={onRenameConversation}
               onToggleFavorite={onToggleFavorite}
               onRefresh={onRefresh}
+              userId={userId}
+              autoExpand={c.id === activeParentId}
             />
           ))}
         </>
       ) : null}
 
-      {BUCKET_ORDER.map((bucket) => {
-        const bucketItems = dateGroups.get(bucket);
-        if (!bucketItems?.length) return null;
-        return (
-          <div key={bucket} className="mt-2">
-            <SectionHeader>{t(bucketLabelKey(bucket))}</SectionHeader>
-            {bucketItems.map((c) => (
+      {normalItems.length > 0 ? (
+        <div className="mt-1">
+          <SectionHeader>{t("sidebar.recent")}</SectionHeader>
+          <div className="space-y-0.5">
+            {normalItems.map((c) => (
               <ConversationRow
                 key={c.id}
                 conv={c}
@@ -215,11 +214,13 @@ export function ThreadSidebar({
                 onRenameConversation={onRenameConversation}
                 onToggleFavorite={onToggleFavorite}
                 onRefresh={onRefresh}
+                userId={userId}
+                autoExpand={c.id === activeParentId}
               />
             ))}
           </div>
-        );
-      })}
+        </div>
+      ) : null}
 
       {filteredItems.length === 0 ? (
         <p className="mt-4 px-2 text-xs text-muted-foreground">{t("sidebar.no_conversations")}</p>
@@ -246,7 +247,7 @@ export function ThreadSidebar({
         <button
           type="button"
           onClick={onToggleCollapse}
-          className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted/60"
+          className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
           aria-label={t("sidebar.expand")}
           title={t("sidebar.expand")}
         >
@@ -256,48 +257,27 @@ export function ThreadSidebar({
         <button
           type="button"
           onClick={startNewChat}
-          className="mb-3 inline-flex h-9 w-9 items-center justify-center rounded-full bg-primary text-primary-foreground transition hover:bg-primary/90"
+          className="mb-3 inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 text-white shadow-lg shadow-rose-500/25 border border-rose-400/30 backdrop-blur-xl transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
           aria-label={t("sidebar.new_conversation")}
           title={t("sidebar.new_conversation")}
         >
           <MessageSquarePlus className="h-4 w-4" aria-hidden />
         </button>
 
-        <nav className="flex flex-col items-center gap-1">
+        <nav className="flex flex-col items-center gap-1.5">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active =
-              item.section === "tunings" ? tuningsOpen : !tuningsOpen && activeSection === item.section;
-            if (item.section === "tunings") {
-              return (
-                <button
-                  key={item.section}
-                  type="button"
-                  title={item.label}
-                  aria-label={item.label}
-                  onClick={openTuningsPanel}
-                  className={cn(
-                    "inline-flex h-9 w-9 items-center justify-center rounded-md transition",
-                    active
-                      ? "bg-primary/10 text-foreground"
-                      : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                  )}
-                >
-                  <Icon className="h-4 w-4" aria-hidden />
-                </button>
-              );
-            }
+            const active = activeSection === item.section;
             return (
               <Link
                 key={item.section}
                 href={item.href}
                 title={item.label}
                 aria-label={item.label}
-                onClick={() => closeTunings()}
                 className={cn(
-                  "inline-flex h-9 w-9 items-center justify-center rounded-md transition",
+                  "inline-flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-200",
                   active
-                    ? "bg-primary/10 text-foreground"
+                    ? "bg-primary/10 text-primary dark:bg-white/10 dark:text-foreground border border-primary/15 dark:border-white/10"
                     : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                 )}
               >
@@ -307,7 +287,7 @@ export function ThreadSidebar({
           })}
         </nav>
 
-        <div className="mt-auto flex flex-col items-center gap-2 border-t border-sidebar-border/60 pt-3">
+        <div className="mt-auto flex flex-col items-center gap-2 border-t border-sidebar-border/45 pt-3">
           <SidebarProfileMenu
             profileLabel={profileLabel}
             profileSubtitle={profileSubtitle}
@@ -324,14 +304,14 @@ export function ThreadSidebar({
   return (
     <aside className="flex h-full min-h-0 w-full flex-col overflow-hidden">
       <div className="shrink-0">
-        <div className="flex items-center justify-between px-4 pb-3 pt-4">
+        <div className="flex items-center justify-between px-4 pb-3 pt-3.5">
           <div className="min-w-0 flex-1">
             <ChatBrand className="max-w-[120px]" />
           </div>
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="rounded-md p-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
+            className="rounded-xl p-1.5 text-muted-foreground transition hover:bg-muted/60 hover:text-foreground"
             aria-label={t("sidebar.collapse")}
             title={t("sidebar.collapse")}
           >
@@ -339,44 +319,38 @@ export function ThreadSidebar({
           </button>
         </div>
 
-        <div className="px-3">
+        <div className="px-3 pt-1">
           <button
             type="button"
             onClick={startNewChat}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+            className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 py-2.5 px-3.5 text-sm font-bold text-white shadow-lg shadow-rose-500/25 border border-rose-400/30 backdrop-blur-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.98] cursor-pointer"
           >
-            <MessageSquarePlus className="h-4 w-4" aria-hidden />
-            {t("sidebar.new_conversation")}
+            <div
+              className="pointer-events-none absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/25 to-transparent transition-transform duration-700 ease-out group-hover:translate-x-full"
+              aria-hidden
+            />
+            <MessageSquarePlus className="h-4 w-4 transition-transform duration-300 group-hover:scale-110 shrink-0" aria-hidden />
+            <span>{t("sidebar.new_conversation")}</span>
           </button>
         </div>
 
-        <nav className="mt-4 flex flex-col gap-0.5 px-2">
+        <nav className="mt-3.5 flex flex-col gap-1 px-2.5">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const active =
-              item.section === "tunings" ? tuningsOpen : !tuningsOpen && activeSection === item.section;
+            const active = activeSection === item.section;
             const className = cn(
-              "flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm transition",
+              "group flex items-center gap-2.5 rounded-xl px-3 py-2 text-sm font-medium transition-all duration-300 ease-out",
               active
-                ? "bg-primary/10 font-medium text-foreground"
-                : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                ? "bg-primary/10 text-primary dark:bg-white/10 dark:text-foreground border border-primary/15 dark:border-white/10 shadow-2xs font-semibold"
+                : "text-muted-foreground hover:translate-x-1 hover:bg-muted/50 hover:text-foreground dark:hover:bg-white/[0.06]",
             );
-            if (item.section === "tunings") {
-              return (
-                <button key={item.section} type="button" onClick={openTuningsPanel} className={className}>
-                  <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                  <span className="truncate">{item.label}</span>
-                </button>
-              );
-            }
             return (
               <Link
                 key={item.section}
                 href={item.href}
-                onClick={() => closeTunings()}
                 className={className}
               >
-                <Icon className="h-4 w-4 shrink-0" aria-hidden />
+                <Icon className="h-4 w-4 shrink-0 transition-transform duration-300 group-hover:scale-110" aria-hidden />
                 <span className="truncate">{item.label}</span>
               </Link>
             );
@@ -384,21 +358,15 @@ export function ThreadSidebar({
         </nav>
       </div>
 
-      {tuningsOpen ? (
-        <div className="mt-5 flex min-h-0 flex-1 flex-col overflow-hidden border-t border-sidebar-border/70 pt-4">
-          <SidebarTuningsPanel tab={tuningsTab} onTabChange={setTuningsTab} />
-        </div>
-      ) : (
-        <>
       <div className="mt-3 shrink-0 px-3 pb-2">
-        <div className="flex items-center gap-2 rounded-lg border border-sidebar-border bg-background/40 px-2 py-1.5 focus-within:border-primary/50">
+        <div className="flex items-center gap-2 rounded-xl border border-black/[0.08] dark:border-white/[0.08] bg-background/50 dark:bg-card/40 px-2.5 py-1.5 backdrop-blur-md transition-all duration-200 focus-within:border-primary/50 focus-within:shadow-[0_0_12px_rgba(var(--primary-rgb),0.12)]">
           <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t("sidebar.search_placeholder")}
-            className="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+            className="min-w-0 flex-1 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
             aria-label={t("sidebar.search_placeholder")}
           />
           {searchQuery ? (
@@ -414,9 +382,7 @@ export function ThreadSidebar({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">{conversationList}</div>
-        </>
-      )}
+      <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2 [scrollbar-width:thin]">{conversationList}</div>
 
       <div className="shrink-0">{profileFooter}</div>
     </aside>
@@ -425,22 +391,13 @@ export function ThreadSidebar({
 
 function SectionHeader({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mb-1 mt-3 flex items-center gap-1.5 px-2 text-[0.786em] font-semibold uppercase tracking-wider text-primary">
+    <div className="mb-1.5 mt-3 flex items-center gap-1.5 px-3 text-[10.5px] font-bold uppercase tracking-widest text-muted-foreground/60 select-none">
       {children}
     </div>
   );
 }
 
-function ConversationRow({
-  conv,
-  currentId,
-  isFavorite: favorite,
-  onSelectConversation,
-  onDeleteConversation,
-  onRenameConversation,
-  onToggleFavorite,
-  onRefresh,
-}: {
+type ConversationRowProps = {
   conv: ConversationSummary;
   currentId: string;
   isFavorite: boolean;
@@ -449,7 +406,108 @@ function ConversationRow({
   onRenameConversation?: (id: string, newTitle: string) => void;
   onToggleFavorite?: (id: string, isFav: boolean) => void;
   onRefresh: () => void;
-}) {
+};
+
+/** A conversation row plus its side threads, lazily loaded and nested under a hairline guide. */
+function ConversationRow({
+  userId,
+  autoExpand = false,
+  ...props
+}: ConversationRowProps & { userId: string; autoExpand?: boolean }) {
+  const t = useT();
+  const token = useStoredToken();
+  const { conv, currentId, onSelectConversation } = props;
+  const count = conv.thread_count ?? 0;
+  // null = follow `autoExpand` (parent of the open thread); a click pins the user's choice.
+  const [expandedChoice, setExpanded] = useState<boolean | null>(null);
+  const expanded = expandedChoice ?? autoExpand;
+  const [children, setChildren] = useState<SideThreadSummary[] | null>(null);
+
+  // (Re)load when opened and whenever the parent's thread count or activity changes.
+  useEffect(() => {
+    if (!expanded || count === 0) return;
+    const ac = new AbortController();
+    void listSideThreads(conv.id, userId, token, ac.signal).then((rows) => {
+      if (!ac.signal.aborted) setChildren(rows);
+    });
+    return () => ac.abort();
+  }, [expanded, count, conv.id, conv.updated_at, userId, token]);
+
+  const toggle =
+    count > 0 ? (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setExpanded(!expanded);
+        }}
+        aria-expanded={expanded}
+        aria-label={expanded ? t("sideThread.sidebar.collapse") : t("sideThread.sidebar.expand")}
+        title={t("sideThread.sidebar.count", { count })}
+        className="flex shrink-0 items-center gap-0.5 rounded-md px-1 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground transition-colors hover:bg-muted/80 hover:text-foreground"
+      >
+        {count}
+        <ChevronRight
+          className={cn("h-3 w-3 transition-transform duration-200", expanded && "rotate-90")}
+          aria-hidden
+        />
+      </button>
+    ) : null;
+
+  return (
+    <div>
+      <ConversationRowInner {...props} threadToggle={toggle} />
+      {expanded && count > 0 ? (
+        <ul className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l border-sidebar-border pl-2">
+          {children === null ? (
+            <li className="px-2 py-1 text-[11px] text-muted-foreground">…</li>
+          ) : (
+            children.map((th) => {
+              const active = th.id === currentId;
+              const label = th.title?.trim() || th.anchor.quote;
+              return (
+                <li key={th.id}>
+                  <Link
+                    href={`/c/${th.id}`}
+                    onClick={(e) => {
+                      if (onSelectConversation) {
+                        e.preventDefault();
+                        onSelectConversation(th.id);
+                      }
+                    }}
+                    title={label}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs transition-colors",
+                      active
+                        ? "bg-primary/10 font-semibold text-primary dark:bg-primary/15"
+                        : "text-foreground/70 hover:bg-muted/60 hover:text-foreground dark:hover:bg-white/[0.06]",
+                    )}
+                  >
+                    <MessageSquareQuote className="h-3 w-3 shrink-0 opacity-70" aria-hidden />
+                    <span className="truncate">{label}</span>
+                  </Link>
+                </li>
+              );
+            })
+          )}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function ConversationRowInner({
+  conv,
+  currentId,
+  isFavorite: favorite,
+  onSelectConversation,
+  onDeleteConversation,
+  onRenameConversation,
+  onToggleFavorite,
+  onRefresh,
+  threadToggle,
+}: ConversationRowProps & { threadToggle?: React.ReactNode }) {
   const t = useT();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -463,7 +521,7 @@ function ConversationRow({
 
   if (isEditing) {
     return (
-      <div className="flex items-center gap-1.5 rounded-lg border border-primary/30 bg-muted/40 px-2 py-1.5 shadow-[0_0_12px_rgba(var(--primary-rgb),0.08)]">
+      <div className="flex items-center gap-1.5 rounded-xl border border-primary/30 bg-muted/40 px-2.5 py-1.5 shadow-[0_0_12px_rgba(var(--primary-rgb),0.08)]">
         <input
           type="text"
           value={editTitle}
@@ -512,7 +570,7 @@ function ConversationRow({
 
   if (isConfirmingDelete) {
     return (
-      <div className="flex items-center justify-between rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-rose-200 animate-in fade-in zoom-in-95 duration-150">
+      <div className="flex items-center justify-between rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-rose-200 animate-in fade-in zoom-in-95 duration-150">
         <span className="truncate pr-1 text-xs font-medium text-rose-400/90">
           {t("sidebar.delete_confirm")}
         </span>
@@ -524,14 +582,14 @@ function ConversationRow({
               setConfirmDeleteId(null);
               void onRefresh();
             }}
-            className="rounded bg-rose-500 px-2 py-0.5 text-[0.714em] font-semibold uppercase tracking-wider text-white shadow-sm transition-all duration-150 hover:bg-rose-600"
+            className="rounded-lg bg-rose-500 px-2 py-0.5 text-[0.714em] font-semibold uppercase tracking-wider text-white shadow-sm transition-all duration-150 hover:bg-rose-600"
           >
             {t("btn.yes")}
           </button>
           <button
             type="button"
             onClick={() => setConfirmDeleteId(null)}
-            className="rounded bg-muted px-1.5 py-0.5 text-[0.714em] font-semibold uppercase tracking-wider text-foreground transition-all duration-150 hover:bg-muted/80"
+            className="rounded-lg bg-muted px-1.5 py-0.5 text-[0.714em] font-semibold uppercase tracking-wider text-foreground transition-all duration-150 hover:bg-muted/80"
           >
             {t("btn.no")}
           </button>
@@ -543,10 +601,10 @@ function ConversationRow({
   return (
     <div
       className={cn(
-        "group relative flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition",
-        isActive
-          ? "bg-sidebar-accent text-sidebar-foreground"
-          : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
+        "group relative flex items-center gap-2 rounded-xl px-2.5 py-1.5 text-xs sm:text-[13px] transition-all duration-200 ease-out",
+        isActive || menuOpen
+          ? "bg-primary/10 text-primary dark:bg-primary/15 dark:text-primary border border-primary/25 shadow-2xs font-semibold"
+          : "text-foreground/80 hover:text-foreground hover:bg-muted/60 dark:hover:bg-white/[0.06]",
       )}
     >
       <Link
@@ -561,19 +619,21 @@ function ConversationRow({
         title={displayTitle}
       >
         {favorite ? (
-          <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-400" aria-hidden />
+          <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-hidden />
         ) : null}
-        <span className="truncate">{displayTitle}</span>
+        <span className="truncate transition-transform duration-200 group-hover:translate-x-0.5">{displayTitle}</span>
       </Link>
+      {threadToggle}
 
-      <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+      <div className={cn("flex items-center gap-0.5 transition-opacity duration-200", menuOpen ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
         <button
           type="button"
-          onClick={() => {
+          onClick={(e) => {
+            e.stopPropagation();
             onToggleFavorite?.(conv.id, favorite);
             void onRefresh();
           }}
-          className="rounded p-1 hover:bg-muted/80"
+          className="rounded-lg p-1 hover:bg-muted/80 transition-colors"
           title={favorite ? t("sidebar.remove_favorite") : t("sidebar.add_favorite")}
           aria-label={favorite ? t("sidebar.remove_favorite") : t("sidebar.add_favorite")}
         >
@@ -586,8 +646,14 @@ function ConversationRow({
         </button>
         <button
           type="button"
-          onClick={() => setMenuOpen((v) => !v)}
-          className="rounded p-1 text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMenuOpen((v) => !v);
+          }}
+          className={cn(
+            "rounded-lg p-1 transition-colors",
+            menuOpen ? "bg-muted/80 text-foreground" : "text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          )}
           title={t("sidebar.chat_options")}
           aria-label={t("sidebar.chat_options")}
         >
@@ -597,35 +663,39 @@ function ConversationRow({
 
       {menuOpen ? (
         <>
-          <button
-            type="button"
+          <div
             className="fixed inset-0 z-40"
-            aria-label={t("btn.cancel")}
-            onClick={() => setMenuOpen(false)}
+            aria-hidden
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpen(false);
+            }}
           />
-          <div className="absolute right-0 top-full z-50 mt-1 w-40 rounded-xl border border-border bg-popover/95 p-1.5 text-popover-foreground shadow-xl backdrop-blur-md">
+          <div className="absolute right-0 top-full z-50 mt-1 w-44 rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground shadow-2xl animate-in fade-in-0 zoom-in-95 duration-150">
             <button
               type="button"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 setEditingId(conv.id);
                 setEditTitle(conv.title || "");
                 setMenuOpen(false);
               }}
-              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-medium text-muted-foreground hover:bg-primary/10 hover:text-foreground dark:hover:bg-white/10 transition-colors"
             >
-              <Edit3 size={12} />
-              {t("sidebar.rename")}
+              <Edit3 size={13} className="shrink-0 opacity-80" />
+              <span>{t("sidebar.rename")}</span>
             </button>
             <button
               type="button"
-              onClick={() => {
+              onClick={(e) => {
+                e.stopPropagation();
                 setConfirmDeleteId(conv.id);
                 setMenuOpen(false);
               }}
-              className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-xs text-rose-500 hover:bg-rose-500/10 hover:text-rose-400"
+              className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-xs font-medium text-rose-500 hover:bg-rose-500/10 hover:text-rose-400 transition-colors"
             >
-              <Trash2 size={12} />
-              {t("sidebar.delete")}
+              <Trash2 size={13} className="shrink-0" />
+              <span>{t("sidebar.delete")}</span>
             </button>
           </div>
         </>

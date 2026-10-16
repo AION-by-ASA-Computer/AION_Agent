@@ -49,7 +49,7 @@ services:
       AION_DATA_DIR: /app/data
       AION_REDIS_URL: redis://redis:6379/0
       AION_SYNC_ON_BOOT: ${AION_SYNC_ON_BOOT:-1}
-      AION_MCP_REGISTRY_LOCAL_PATH: ${AION_MCP_REGISTRY_LOCAL_PATH:-/app/data/mcp_registry.local.yaml}
+      AION_MCP_REGISTRY_LOCAL_PATH: ${AION_MCP_REGISTRY_LOCAL_PATH:-/app/config/mcp_registry.local.yaml}
       AION_PUBLIC_API_URL: ${AION_PUBLIC_API_URL:-http://localhost:8001}
       AION_CORS_ORIGINS: ${AION_CORS_ORIGINS:-*}
       AION_SANDBOX_BACKEND: ${AION_SANDBOX_BACKEND:-subprocess}

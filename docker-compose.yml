@@ -69,7 +69,7 @@ services:
       # Sync config_std/ + mcp_servers_std/ -> runtime dirs at container start
       AION_SYNC_ON_BOOT: ${AION_SYNC_ON_BOOT:-1}
       # Writable MCP registry overlay (mcp_registry.yaml in config/ stays from sync)
-      AION_MCP_REGISTRY_LOCAL_PATH: ${AION_MCP_REGISTRY_LOCAL_PATH:-/app/data/mcp_registry.local.yaml}
+      AION_MCP_REGISTRY_LOCAL_PATH: ${AION_MCP_REGISTRY_LOCAL_PATH:-/app/config/mcp_registry.local.yaml}
       AION_REDIS_URL: ${AION_REDIS_URL:-redis://redis:6379/0}
       AION_DB_URL: ${AION_DB_URL:-sqlite+aiosqlite:///data/aion.db}
       # Local default (DOMAIN non valorizzato): http://localhost via Caddy su :80.

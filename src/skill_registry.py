@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 import os
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -33,6 +34,9 @@ class SkillRegistry:
         self.generated_dir = self._root / gen
         self._skills: Dict[str, Dict[str, Any]] = {}
         self._dir_mtime: float = 0.0
+        # Names hidden after a rename/delete: shipped copies (config_std) can't be removed.
+        self.hidden_path = self.generated_dir.parent / "hidden_skills.json"
+        self._hidden: set[str] = set()
         self.load_all()
 
     def _compute_dirs_mtime(self) -> float:
@@ -57,7 +61,32 @@ class SkillRegistry:
             self.load_all()
             self._dir_mtime = current
 
+    def _read_hidden(self) -> set[str]:
+        try:
+            data = json.loads(self.hidden_path.read_text(encoding="utf-8"))
+            return {str(x) for x in data} if isinstance(data, list) else set()
+        except (OSError, ValueError):
+            return set()
+
+    def _write_hidden(self, names: set[str]) -> None:
+        self.hidden_path.parent.mkdir(parents=True, exist_ok=True)
+        self.hidden_path.write_text(json.dumps(sorted(names)), encoding="utf-8")
+
+    def hide(self, name: str) -> None:
+        """Keep ``name`` out of the registry even if a copy is still on disk."""
+        names = self._read_hidden()
+        if name not in names:
+            self._write_hidden(names | {name})
+        self.load_all()
+
+    def unhide(self, name: str) -> None:
+        names = self._read_hidden()
+        if name in names:
+            self._write_hidden(names - {name})
+            self.load_all()
+
     def load_all(self) -> None:
+        self._hidden = self._read_hidden()
         self._skills.clear()
         # Load curated fallback first, then local curated overrides.
         self._load_dir(self.curated_fallback_dir, source="curated")
@@ -99,6 +128,8 @@ class SkillRegistry:
                 meta_raw = dict(post.metadata) if post.metadata else {}
                 body = post.content or ""
                 slug = meta_raw.get("name") or f.stem
+                if slug in self._hidden:
+                    continue
                 version = int(meta_raw.get("version", 1))
                 base = self._default_meta(slug)
                 base.update(
@@ -218,10 +249,17 @@ class SkillRegistry:
         s = self._skills.get(name)
         if not s:
             return False
-        path = Path(s["path"])
+        path = Path(s["path"]).resolve()
+        fallback = self.curated_fallback_dir.resolve()
+        if fallback in path.parents:
+            # Shipped skills stay on disk (config_std is synced from the repo); just hide them.
+            self.hide(name)
+            return True
         if path.exists():
             path.unlink()
         self.load_all()
+        if name in self._skills:  # a shipped copy is still on disk
+            self.hide(name)
         return True
 
     def search(

@@ -18,7 +18,7 @@ import {
 import { useT } from "@/lib/i18n/use-t";
 
 const inputClass =
-  "focus-ring w-full rounded-lg border border-input bg-background px-3 py-2 text-sm";
+  "focus-ring w-full rounded-xl border border-border/80 dark:border-white/15 bg-background dark:bg-black/50 px-3.5 py-2 text-sm text-foreground";
 
 type Props = {
   /** Initial cron when the dialog opens; reset parent `key` to re-mount. */
@@ -114,19 +114,16 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
         <button
           type="button"
           onClick={() => {
-            // If coming back from Advanced mode, reset state.frequency to "daily"
-            // so the simple-mode controls are visible immediately without needing
-            // to interact with the frequency dropdown first.
             if (state.frequency === "custom") {
               setState((prev) => ({ ...prev, frequency: "daily" }));
             }
             setMode("simple");
           }}
           className={cn(
-            "focus-ring rounded-full px-3 py-1 text-xs font-medium transition-colors",
+            "focus-ring rounded-full px-3 py-1 text-xs font-semibold transition cursor-pointer shadow-2xs",
             mode === "simple"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:text-foreground",
+              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs"
+              : "bg-muted/70 dark:bg-zinc-800 text-muted-foreground hover:text-foreground border border-border/60 dark:border-white/10",
           )}
         >
           {t("schedulesPage.cron.mode_simple")}
@@ -143,10 +140,10 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
             onChangeRef.current(expression);
           }}
           className={cn(
-            "focus-ring rounded-full px-3 py-1 text-xs font-medium transition-colors",
+            "focus-ring rounded-full px-3 py-1 text-xs font-semibold transition cursor-pointer shadow-2xs",
             mode === "advanced"
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground hover:text-foreground",
+              ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 shadow-xs"
+              : "bg-muted/70 dark:bg-zinc-800 text-muted-foreground hover:text-foreground border border-border/60 dark:border-white/10",
           )}
         >
           {t("schedulesPage.cron.mode_advanced")}
@@ -154,16 +151,16 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
       </div>
 
       {mode === "simple" ? (
-        <div className="space-y-4 rounded-lg border border-border bg-muted/20 p-4">
+        <div className="space-y-4 rounded-2xl border border-border/70 dark:border-white/10 bg-muted/20 dark:bg-zinc-950/40 p-4">
           <div>
-            <label className="mb-1 block text-sm font-medium">
+            <label className="mb-1 block text-sm font-medium text-foreground">
               {t("schedulesPage.cron.freq_label")}
             </label>
             <AppSelect
               value={effectiveFrequency}
               onValueChange={(v) => setFrequency(v as ScheduleFrequency)}
               items={frequencyItems}
-              triggerClassName="w-full max-w-none"
+              triggerClassName="w-full max-w-none border-border/80 dark:border-white/15 bg-background dark:bg-black/50"
               aria-label={t("schedulesPage.cron.freq_label")}
             />
           </div>
@@ -174,25 +171,25 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
             effectiveFrequency === "monthly") && (
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-sm font-medium">
+                <label className="mb-1 block text-sm font-medium text-foreground">
                   {t("schedulesPage.cron.hour_label")}
                 </label>
                 <AppSelect
                   value={String(clampHour(state.hour))}
                   onValueChange={(v) => patch({ hour: clampHour(Number(v)) })}
                   items={hourItems}
-                  triggerClassName="w-full max-w-none"
+                  triggerClassName="w-full max-w-none border-border/80 dark:border-white/15 bg-background dark:bg-black/50"
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium">
+                <label className="mb-1 block text-sm font-medium text-foreground">
                   {t("schedulesPage.cron.minute_label")}
                 </label>
                 <AppSelect
                   value={String(clampMinute(state.minute))}
                   onValueChange={(v) => patch({ minute: clampMinute(Number(v)) })}
                   items={minuteItems}
-                  triggerClassName="w-full max-w-none"
+                  triggerClassName="w-full max-w-none border-border/80 dark:border-white/15 bg-background dark:bg-black/50"
                 />
               </div>
             </div>
@@ -200,63 +197,63 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
 
           {effectiveFrequency === "weekly" && (
             <div>
-              <label className="mb-1 block text-sm font-medium">
+              <label className="mb-1 block text-sm font-medium text-foreground">
                 {t("schedulesPage.cron.weekday_label")}
               </label>
               <AppSelect
                 value={String(state.dayOfWeek)}
                 onValueChange={(v) => patch({ dayOfWeek: Number(v) })}
                 items={weekdayItems}
-                triggerClassName="w-full max-w-none"
+                triggerClassName="w-full max-w-none border-border/80 dark:border-white/15 bg-background dark:bg-black/50"
               />
             </div>
           )}
 
           {effectiveFrequency === "monthly" && (
             <div>
-              <label className="mb-1 block text-sm font-medium">
+              <label className="mb-1 block text-sm font-medium text-foreground">
                 {t("schedulesPage.cron.dom_label")}
               </label>
               <AppSelect
                 value={String(clampDayOfMonth(state.dayOfMonth))}
                 onValueChange={(v) => patch({ dayOfMonth: clampDayOfMonth(Number(v)) })}
                 items={domItems}
-                triggerClassName="w-full max-w-none"
+                triggerClassName="w-full max-w-none border-border/80 dark:border-white/15 bg-background dark:bg-black/50"
               />
             </div>
           )}
 
           {effectiveFrequency === "hourly" && (
             <div>
-              <label className="mb-1 block text-sm font-medium">
+              <label className="mb-1 block text-sm font-medium text-foreground">
                 {t("schedulesPage.cron.minute_label")}
               </label>
               <AppSelect
                 value={String(clampMinute(state.minute))}
                 onValueChange={(v) => patch({ minute: clampMinute(Number(v)) })}
                 items={minuteItems}
-                triggerClassName="w-full max-w-none"
+                triggerClassName="w-full max-w-none border-border/80 dark:border-white/15 bg-background dark:bg-black/50"
               />
             </div>
           )}
 
           {effectiveFrequency === "every_n_minutes" && (
             <div>
-              <label className="mb-1 block text-sm font-medium">
+              <label className="mb-1 block text-sm font-medium text-foreground">
                 {t("schedulesPage.cron.interval_label")}
               </label>
               <AppSelect
                 value={String(clampEveryNMinutes(state.everyNMinutes))}
                 onValueChange={(v) => patch({ everyNMinutes: clampEveryNMinutes(Number(v)) })}
                 items={everyNItems}
-                triggerClassName="w-full max-w-none"
+                triggerClassName="w-full max-w-none border-border/80 dark:border-white/15 bg-background dark:bg-black/50"
               />
             </div>
           )}
         </div>
       ) : (
         <div className="space-y-2">
-          <label className="block text-sm font-medium">{t("schedulesPage.cron.advanced_label")}</label>
+          <label className="block text-sm font-medium text-foreground">{t("schedulesPage.cron.advanced_label")}</label>
           <input
             className={cn(inputClass, "font-mono")}
             value={state.customExpression}
@@ -274,11 +271,13 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
 
       <div
         className={cn(
-          "rounded-lg border px-3 py-2 text-sm",
-          valid ? "border-border bg-muted/30" : "border-destructive/40 bg-destructive/10",
+          "rounded-xl border px-3.5 py-2.5 text-sm",
+          valid
+            ? "border-border/80 dark:border-white/10 bg-background/90 dark:bg-black/40"
+            : "border-destructive/40 bg-destructive/10",
         )}
       >
-        <p className="font-medium text-foreground">
+        <p className="font-semibold text-foreground">
           {valid ? summary : t("schedulesPage.cron.invalid")}
         </p>
         {timezone && (
@@ -286,7 +285,7 @@ export function CronScheduleBuilder({ initialValue, onChange, timezone, classNam
             {t("schedulesPage.cron.timezone_note", { tz: timezone } as Record<string, string>)}
           </p>
         )}
-        <p className="mt-1 font-mono text-xs text-muted-foreground">{expression}</p>
+        <p className="mt-1 font-mono text-xs text-muted-foreground dark:text-zinc-300 font-medium">{expression}</p>
       </div>
     </div>
   );
