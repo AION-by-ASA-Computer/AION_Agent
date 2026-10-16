@@ -2,10 +2,19 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { KeyRound, Loader2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { KeyRound, Loader2 } from "lucide-react";
 
 import { apiBase } from "@/lib/config";
 import { getStoredToken, setChangePwSkipUntil } from "@/lib/auth/storage";
+import { cn } from "@/lib/cn";
+import {
+  AuthAlert,
+  AuthHeading,
+  AuthShell,
+  authInputCls,
+  authPrimaryBtnCls,
+  authQuietBtnCls,
+} from "@/components/auth/AuthShell";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -62,23 +71,23 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-4 text-foreground">
-      <div className="flex flex-col items-center gap-2">
-        <div className="w-14 h-14 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
-          <KeyRound className="text-amber-400" size={28} aria-hidden />
-        </div>
-        <h1 className="text-xl font-semibold tracking-tight">Change password</h1>
-        <p className="text-sm text-muted-foreground text-center max-w-sm">
-          You are using a temporary password. Update it now or
-          remind me tomorrow (skippable for 24h).
-        </p>
-      </div>
-
-      <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-3">
+    <AuthShell>
+      <AuthHeading
+        icon={<KeyRound className="h-5 w-5" aria-hidden />}
+        title="Change password"
+        description={
+          <>
+            You are using a temporary password. Update it now or
+            remind me tomorrow (skippable for 24h).
+          </>
+        }
+      />
+      <form onSubmit={submit} className="flex flex-col gap-3">
         <input
           type="password"
-          className="focus-ring rounded-aion border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+          className={authInputCls}
           placeholder="Current password"
+          aria-label="Current password"
           value={oldPw}
           onChange={(e) => setOldPw(e.target.value)}
           autoComplete="current-password"
@@ -86,54 +95,32 @@ export default function ChangePasswordPage() {
         />
         <input
           type="password"
-          className="focus-ring rounded-aion border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+          className={authInputCls}
           placeholder="New password (min. 6 characters)"
+          aria-label="New password (min. 6 characters)"
           value={newPw}
           onChange={(e) => setNewPw(e.target.value)}
           autoComplete="new-password"
         />
         <input
           type="password"
-          className="focus-ring rounded-aion border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
+          className={authInputCls}
           placeholder="Confirm new password"
+          aria-label="Confirm new password"
           value={confirmPw}
           onChange={(e) => setConfirmPw(e.target.value)}
           autoComplete="new-password"
         />
-        {err && (
-          <div
-            className="flex items-start gap-2 rounded-aion border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive"
-            role="alert"
-          >
-            <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
-            <span>{err}</span>
-          </div>
-        )}
-        {ok && (
-          <div
-            className="flex items-center gap-2 rounded-aion border border-primary/40 bg-primary/10 p-3 text-sm text-primary"
-            role="status"
-          >
-            <CheckCircle2 size={16} aria-hidden />
-            Password updated. Redirecting…
-          </div>
-        )}
-        <button
-          type="submit"
-          disabled={loading || ok}
-          className="focus-ring rounded-aion flex items-center justify-center gap-2 bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
-        >
-          {loading ? <Loader2 className="animate-spin" size={16} aria-hidden /> : null}
+        {err && <AuthAlert>{err}</AuthAlert>}
+        {ok && <AuthAlert tone="success">Password updated. Redirecting…</AuthAlert>}
+        <button type="submit" disabled={loading || ok} className={cn(authPrimaryBtnCls, "mt-1")}>
+          {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           Update password
         </button>
-        <button
-          type="button"
-          onClick={skip}
-          className="focus-ring rounded-aion px-4 py-2 text-xs text-muted-foreground hover:text-foreground"
-        >
+        <button type="button" onClick={skip} className={cn(authQuietBtnCls, "self-center")}>
           Remind me tomorrow
         </button>
       </form>
-    </div>
+    </AuthShell>
   );
 }

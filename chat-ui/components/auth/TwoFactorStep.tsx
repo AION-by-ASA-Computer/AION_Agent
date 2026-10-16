@@ -3,6 +3,9 @@
 import { useEffect, useState } from "react";
 import { apiBase } from "@/lib/config";
 import { useT } from "@/lib/i18n/use-t";
+import { Loader2, ShieldCheck } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { AuthAlert, AuthHeading, authInputCls, authPrimaryBtnCls, authQuietBtnCls } from "@/components/auth/AuthShell";
 
 export type MfaChallenge = {
   stage: "enroll" | "verify";
@@ -98,35 +101,42 @@ export function TwoFactorStep({
   const enroll = challenge.stage === "enroll";
 
   return (
-    <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-3">
-      <h2 className="text-lg font-semibold text-foreground">
-        {enroll ? t("login.mfa.title_enroll") : t("login.mfa.title_verify")}
-      </h2>
-      <p className="text-sm text-muted-foreground">
-        {enroll ? t("login.mfa.enroll_help") : t("login.mfa.verify_help")}
-      </p>
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <AuthHeading
+        as="h2"
+        icon={<ShieldCheck className="h-5 w-5" aria-hidden />}
+        title={enroll ? t("login.mfa.title_enroll") : t("login.mfa.title_verify")}
+        description={enroll ? t("login.mfa.enroll_help") : t("login.mfa.verify_help")}
+      />
       {enroll && enrollment && (
-        <div className="flex flex-col items-center gap-2">
+        <div className="-mt-2 flex flex-col items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={enrollment.qr_svg}
             alt="QR code"
-            width={192}
-            height={192}
-            className="rounded-aion border border-input bg-white p-1"
+            width={176}
+            height={176}
+            className="rounded-xl border border-border/70 bg-white p-2 shadow-sm"
           />
-          <p className="text-xs text-muted-foreground">{t("login.mfa.manual")}</p>
-          <code className="select-all break-all rounded bg-muted px-2 py-1 text-xs">
+          <p className="text-center text-xs text-muted-foreground">{t("login.mfa.manual")}</p>
+          <code className="w-full select-all break-all rounded-lg bg-muted/80 px-2.5 py-1.5 text-center font-mono text-xs text-foreground ring-1 ring-border/50">
             {enrollment.secret}
           </code>
         </div>
       )}
       {enroll && !enrollment && !err && (
-        <p className="text-sm text-muted-foreground">{t("login.mfa.loading")}</p>
+        <p className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" aria-hidden />
+          {t("login.mfa.loading")}
+        </p>
       )}
       <input
-        className="focus-ring rounded-aion border border-input bg-background px-3 py-2 text-center text-lg tracking-[0.4em] text-foreground placeholder:text-muted-foreground"
+        className={cn(
+          authInputCls,
+          "py-3 text-center font-mono text-xl tabular-nums tracking-[0.5em] placeholder:font-sans placeholder:text-sm placeholder:tracking-normal",
+        )}
         placeholder={t("login.mfa.code")}
+        aria-label={t("login.mfa.code")}
         value={code}
         onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
         inputMode="numeric"
@@ -134,23 +144,16 @@ export function TwoFactorStep({
         maxLength={6}
         autoFocus
       />
-      {err && (
-        <p className="text-sm text-destructive" role="alert">
-          {err}
-        </p>
-      )}
+      {err && <AuthAlert>{err}</AuthAlert>}
       <button
         type="submit"
         disabled={busy || code.length !== 6 || (enroll && !enrollment)}
-        className="focus-ring rounded-aion bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+        className={authPrimaryBtnCls}
       >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
         {enroll ? t("login.mfa.confirm") : t("login.mfa.verify")}
       </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="focus-ring text-xs text-primary underline-offset-2 hover:underline"
-      >
+      <button type="button" onClick={onCancel} className={cn(authQuietBtnCls, "self-center")}>
         {t("login.mfa.back")}
       </button>
     </form>

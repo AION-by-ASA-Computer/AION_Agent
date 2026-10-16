@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Loader2, AlertCircle } from "lucide-react";
+import { AuthShell, authPrimaryBtnCls } from "@/components/auth/AuthShell";
 
 import { apiBase } from "@/lib/api";
 import { adminPath } from "@/lib/paths";
@@ -77,26 +78,26 @@ export default function AdminSsoExchangePage() {
     })();
   }, []);
 
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[#0a0a0a] px-4 text-gray-200">
-      {error ? (
-        <div className="flex max-w-sm flex-col items-center gap-4 rounded-xl border border-red-500/30 bg-red-500/10 p-6 text-center">
-          <AlertCircle className="text-red-400" aria-hidden />
-          <p className="text-sm text-red-300">{error}</p>
-          <button
-            type="button"
-            onClick={() => go("/login")}
-            className="rounded-xl bg-emerald-500/20 px-4 py-2 text-sm text-emerald-300 hover:bg-emerald-500/30"
-          >
+  if (error) {
+    return (
+      <AuthShell>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex size-10 items-center justify-center rounded-xl bg-destructive/10 text-destructive">
+            <AlertCircle className="h-5 w-5" aria-hidden />
+          </div>
+          <p className="text-sm text-foreground" role="alert">{error}</p>
+          <button type="button" onClick={() => go("/login")} className={authPrimaryBtnCls}>
             Torna al login
           </button>
         </div>
-      ) : (
-        <div className="flex items-center gap-3 text-sm text-gray-400">
-          <Loader2 className="animate-spin" size={18} aria-hidden />
-          Completamento accesso SSO…
-        </div>
-      )}
+      </AuthShell>
+    );
+  }
+
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center gap-3 bg-background px-4 text-sm text-muted-foreground">
+      <Loader2 className="animate-spin text-primary" size={18} aria-hidden />
+      <span role="status">Completamento accesso SSO…</span>
     </div>
   );
 }

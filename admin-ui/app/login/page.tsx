@@ -2,12 +2,25 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ShieldCheck, Loader2, AlertCircle } from "lucide-react";
+import { ShieldCheck, Loader2 } from "lucide-react";
 
 import { apiBase } from "@/lib/api";
 import { setStoredAuth } from "@/lib/auth/storage";
 import { fetchAuthStatus, resetAuthStatusCache } from "@/lib/auth/status";
 import { TwoFactorStep, type MfaChallenge, type MfaLoginResult } from "@/components/auth/TwoFactorStep";
+import { cn } from "@/lib/cn";
+import {
+  AuthAlert,
+  AuthDivider,
+  AuthHeading,
+  AuthShell,
+  SsoProviderIcon,
+  authInputCls,
+  authOutlineBtnCls,
+  authPrimaryBtnCls,
+} from "@/components/auth/AuthShell";
+
+const codeCls = "rounded-md border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-[0.95em] text-foreground";
 
 const LOGIN_ERRORS: Record<string, string> = {
   temp_password_expired: "La password temporanea è scaduta. Chiedi a un amministratore di rigenerarla.",
@@ -145,102 +158,77 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#0a0a0a] px-4 py-12 text-white">
-      <div className="w-full max-w-sm flex flex-col items-center gap-6">
-        <div className="flex flex-col items-center gap-3">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
-            <ShieldCheck className="text-emerald-400" size={28} aria-hidden />
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight">AION Admin</h1>
-          <p className="text-sm text-gray-400 text-center">Accesso riservato agli amministratori</p>
-        </div>
-
-        {showPasswordForm === null ? (
-          <Loader2 className="animate-spin text-emerald-400" size={22} aria-hidden />
-        ) : mfa ? (
-          <TwoFactorStep
-            challenge={mfa}
-            onSuccess={completeLogin}
-            onCancel={() => setMfa(null)}
-          />
-        ) : (
-        <div className="flex w-full flex-col gap-4">
-        {ssoProvider && (
-          <button
-            type="button"
-            onClick={startSso}
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500/20 px-4 py-2.5 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition"
-          >
-            Accedi con {SSO_LABELS[ssoProvider] ?? ssoProvider}
-          </button>
-        )}
-        {ssoProvider && showPasswordForm && (
-          <div className="flex items-center gap-3 text-xs text-gray-500">
-            <span className="h-px flex-1 bg-[#262626]" />
-            oppure con password
-            <span className="h-px flex-1 bg-[#262626]" />
-          </div>
-        )}
-        {!showPasswordForm && err && (
-          <div
-            className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
-            role="alert"
-          >
-            <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
-            <span>{err}</span>
-          </div>
-        )}
-        {showPasswordForm && (
-        <form onSubmit={submit} className="flex w-full flex-col gap-3">
-          <input
-            className="w-full rounded-xl border border-[#262626] bg-[#141414] px-4 py-2.5 text-sm text-white placeholder:text-gray-500 outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition"
-            placeholder="Username"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
-            autoFocus
-          />
-          <input
-            type="password"
-            className="w-full rounded-xl border border-[#262626] bg-[#141414] px-4 py-2.5 text-sm text-white placeholder:text-gray-500 outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition"
-            placeholder="Password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-          />
-          {err && (
-            <div
-              className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
-              role="alert"
-            >
-              <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
-              <span>{err}</span>
-            </div>
-          )}
-          <button
-            type="submit"
-            disabled={loading}
-            className="mt-1 flex items-center justify-center gap-2 rounded-xl bg-emerald-500/20 px-4 py-2.5 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 disabled:opacity-60 transition"
-          >
-            {loading ? <Loader2 className="animate-spin" size={16} aria-hidden /> : null}
-            Entra
-          </button>
-        </form>
-        )}
-        </div>
-        )}
-
-        {showDefaultHint && !mfa && (
-          <p className="text-xs text-gray-500 max-w-sm text-center">
+    <AuthShell
+      footer={
+        showDefaultHint && !mfa ? (
+          <p className="max-w-sm text-center text-xs leading-relaxed text-muted-foreground">
             Setup iniziale? Le credenziali di default sono
             {" "}
-            <code className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300">admin</code>
+            <code className={codeCls}>admin</code>
             {" / "}
-            <code className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300">admin</code>
+            <code className={codeCls}>admin</code>
             . Cambia la password al primo accesso.
           </p>
-        )}
-      </div>
-    </div>
+        ) : null
+      }
+    >
+      {mfa ? (
+        <>
+          <AuthHeading title="AION Admin" srOnly />
+          <TwoFactorStep challenge={mfa} onSuccess={completeLogin} onCancel={() => setMfa(null)} />
+        </>
+      ) : (
+        <>
+          <AuthHeading
+            icon={<ShieldCheck className="h-5 w-5" aria-hidden />}
+            title="AION Admin"
+            description="Accesso riservato agli amministratori"
+          />
+          {showPasswordForm === null ? (
+            <div className="flex justify-center py-4">
+              <Loader2 className="animate-spin text-primary" size={22} aria-hidden />
+            </div>
+          ) : (
+            <div className="flex flex-col gap-5">
+              {ssoProvider && (
+                <button type="button" onClick={startSso} className={authOutlineBtnCls}>
+                  <SsoProviderIcon provider={ssoProvider} />
+                  Accedi con {SSO_LABELS[ssoProvider] ?? ssoProvider}
+                </button>
+              )}
+              {ssoProvider && showPasswordForm && <AuthDivider label="oppure con password" />}
+              {!showPasswordForm && err && <AuthAlert>{err}</AuthAlert>}
+              {showPasswordForm && (
+                <form onSubmit={submit} className="flex flex-col gap-3">
+                  <input
+                    className={authInputCls}
+                    placeholder="Username"
+                    aria-label="Username"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    autoComplete="username"
+                    autoFocus
+                  />
+                  <input
+                    type="password"
+                    className={authInputCls}
+                    placeholder="Password"
+                    aria-label="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                  />
+                  {err && <AuthAlert>{err}</AuthAlert>}
+                  <button type="submit" disabled={loading} className={cn(authPrimaryBtnCls, "mt-1")}>
+                    {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                    Entra
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </AuthShell>
   );
 }
