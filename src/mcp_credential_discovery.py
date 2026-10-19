@@ -571,44 +571,46 @@ def get_url_origin(url: str) -> str:
 
 
 def authorization_server_metadata_urls(issuer: str) -> List[str]:
-    """URL RFC 8414 / OIDC da provare per un authorization server (issuer può avere path)."""
+    """URL RFC 8414 / OIDC da provare per un authorization server (issuer può avere path).
+
+    Ordine come da spec MCP (authorization server metadata discovery): per issuer con
+    path prima la forma RFC 8414 con il well-known inserito tra host e path, poi OIDC
+    con path inserito, poi OIDC appeso al path. Un MCP server può pubblicare in
+    ``/.well-known/oauth-authorization-server/<path>`` un proxy (es. davanti a
+    Keycloak) con registration_endpoint diverso da quello nativo dell'issuer.
+    """
     from urllib.parse import urlparse, urlunparse
 
     issuer = (issuer or "").strip().rstrip("/")
     if not issuer:
         return []
     parsed = urlparse(issuer)
-    urls = [
-        f"{issuer}/.well-known/oauth-authorization-server",
-        f"{issuer}/.well-known/openid-configuration",
-    ]
-    if parsed.path and parsed.path != "/":
-        urls.extend(
-            [
-                urlunparse(
-                    (
-                        parsed.scheme,
-                        parsed.netloc,
-                        "/.well-known/oauth-authorization-server"
-                        + parsed.path.rstrip("/"),
-                        "",
-                        "",
-                        "",
-                    )
-                ),
-                urlunparse(
-                    (
-                        parsed.scheme,
-                        parsed.netloc,
-                        "/.well-known/openid-configuration",
-                        "",
-                        "",
-                        "",
-                    )
-                ),
-            ]
+    path = (parsed.path or "").rstrip("/")
+    if not path:
+        return [
+            f"{issuer}/.well-known/oauth-authorization-server",
+            f"{issuer}/.well-known/openid-configuration",
+        ]
+
+    def _inserted(well_known: str) -> str:
+        return urlunparse(
+            (
+                parsed.scheme,
+                parsed.netloc,
+                f"/.well-known/{well_known}{path}",
+                "",
+                "",
+                "",
+            )
         )
-    return urls
+
+    return [
+        _inserted("oauth-authorization-server"),
+        _inserted("openid-configuration"),
+        f"{issuer}/.well-known/openid-configuration",
+        # Non standard ma diffuso (es. Keycloak): RFC 8414 appeso al path.
+        f"{issuer}/.well-known/oauth-authorization-server",
+    ]
 
 
 def fetch_authorization_server_metadata(

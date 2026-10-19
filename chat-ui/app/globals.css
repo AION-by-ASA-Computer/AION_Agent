@@ -328,3 +328,17 @@ html[data-theme="light"] .agent-shimmer-text {
     animation: side-thread-pop 160ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 }
+
+/* Auth screens (login, 2FA, change-password, SSO): one entrance, from an already-visible state. */
+@keyframes auth-enter {
+  from {
+    opacity: 0.001;
+    transform: translateY(8px);
+    filter: blur(4px);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .auth-enter {
+    animation: auth-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  }
+}

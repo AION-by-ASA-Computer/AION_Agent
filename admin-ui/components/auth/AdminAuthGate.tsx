@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { Loader2, ShieldOff } from "lucide-react";
+import { AuthHeading, AuthShell, authPrimaryBtnCls } from "@/components/auth/AuthShell";
 
 import { apiBase } from "@/lib/api";
 import { adminPath } from "@/lib/paths";
@@ -136,16 +137,22 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
 
   if (state === "no_admin_role") {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center gap-4 bg-[#0a0a0a] text-white p-8 text-center">
-        <ShieldOff className="text-red-400" size={48} aria-hidden />
-        <h1 className="text-2xl font-bold">Accesso negato</h1>
-        <p className="text-sm text-gray-400 max-w-md">
-          Il tuo account non ha il ruolo <code className="px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-gray-300">admin</code>.
-          Chiedi a un amministratore di assegnarti il ruolo, oppure effettua
-          login con un altro utente.
-        </p>
+      <div className="h-[100dvh] overflow-y-auto">
+      <AuthShell>
+        <AuthHeading
+          icon={<ShieldOff className="h-5 w-5" aria-hidden />}
+          title="Accesso negato"
+          description={
+            <>
+              Il tuo account non ha il ruolo{" "}
+              <code className="rounded-md border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-[0.95em] text-foreground">admin</code>.
+              Chiedi a un amministratore di assegnarti il ruolo, oppure effettua
+              login con un altro utente.
+            </>
+          }
+        />
         <button
-          className="mt-2 px-4 py-2 rounded-xl bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition"
+          className={authPrimaryBtnCls}
           onClick={() => {
             setStoredAuth(null, null);
             resetAuthStatusCache();
@@ -154,13 +161,14 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
         >
           Logout e cambia utente
         </button>
+      </AuthShell>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen w-full flex flex-col items-center justify-center gap-3 bg-[#0a0a0a] text-gray-400">
-      <Loader2 className="animate-spin text-emerald-400" size={22} aria-hidden />
+    <div className="flex min-h-[100dvh] w-full flex-col items-center justify-center gap-3 bg-background text-muted-foreground">
+      <Loader2 className="animate-spin text-primary" size={22} aria-hidden />
       <span className="text-sm">
         {state === "redirecting"
           ? "Reindirizzamento al login…"

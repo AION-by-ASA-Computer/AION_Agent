@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useLayoutEffect, useRef, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 type Options = {
   minHeight?: number;
@@ -18,6 +18,10 @@ export function useAutoResizeTextarea(
   { minHeight = 28, maxHeight = 220, onMultiLineChange }: Options = {}
 ) {
   const isMultiRef = useRef(false);
+  // Mirrors isMultiRef as state so a mode flip re-runs the layout effect: the
+  // parent swaps classes (e.g. drops whitespace-nowrap, widens the textarea),
+  // and the height measured under the old layout is stale.
+  const [isMulti, setIsMulti] = useState(false);
 
   const sync = useCallback(() => {
     const el = ref.current;
@@ -50,21 +54,38 @@ export function useAutoResizeTextarea(
 
     if (nextIsMulti !== isMultiRef.current) {
       isMultiRef.current = nextIsMulti;
+      setIsMulti(nextIsMulti);
       onMultiLineChange?.(nextIsMulti);
     }
 
     const baseMin = nextIsMulti ? minHeight : 24;
     const nextH = Math.min(maxHeight, Math.max(baseMin, scrollH));
     el.style.height = `${nextH}px`;
+    // Inline cap so a user-enlarged maxHeight isn't clipped by a CSS max-h class;
+    // single-line mode keeps the caller's class-based cap.
+    el.style.maxHeight = nextIsMulti ? `${maxHeight}px` : "";
     el.style.overflowY = scrollH > maxHeight ? "auto" : "hidden";
   }, [ref, value, minHeight, maxHeight, onMultiLineChange]);
 
   useLayoutEffect(() => {
     sync();
-  }, [value, sync]);
+  }, [value, sync, isMulti]);
+
+  // Re-measure when the textarea width changes (window resize, sidebar toggle):
+  // line wrapping, and therefore scrollHeight, depends on it.
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    let lastWidth = el.clientWidth;
+    const ro = new ResizeObserver(() => {
+      const w = el.clientWidth;
+      if (w === lastWidth) return;
+      lastWidth = w;
+      sync();
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref, sync]);
 
   return sync;
 }
-
-
-

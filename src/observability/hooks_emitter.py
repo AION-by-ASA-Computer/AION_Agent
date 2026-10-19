@@ -1,4 +1,4 @@
-from PIL.Image import logger
+import logging
 from typing import Optional
 from src.observability.metrics import get_instance_id
 import time
@@ -7,6 +7,7 @@ from opentelemetry import trace
 from src.runtime.hooks import hook_registry
 from . import metrics
 
+logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
 _tool_start_times = {}

@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Loader2, ShieldCheck } from "lucide-react";
+import { cn } from "@/lib/cn";
+import { AuthAlert, AuthHeading, authInputCls, authPrimaryBtnCls, authQuietBtnCls } from "@/components/auth/AuthShell";
 import { apiBase } from "@/lib/api";
 
 export type MfaChallenge = { stage: "enroll" | "verify"; token: string };
@@ -95,34 +97,40 @@ export function TwoFactorStep({
   }
 
   return (
-    <form onSubmit={submit} className="flex w-full flex-col gap-3">
-      <h2 className="text-lg font-semibold">
-        {enroll ? "Configura l'autenticazione a due fattori" : "Verifica in due passaggi"}
-      </h2>
-      <p className="text-sm text-gray-400">
-        {enroll
-          ? "Scansiona il QR code con Google Authenticator, Microsoft Authenticator o un'app equivalente, poi inserisci il codice a 6 cifre."
-          : "Inserisci il codice a 6 cifre mostrato dalla tua app authenticator."}
-      </p>
+    <form onSubmit={submit} className="flex flex-col gap-4">
+      <AuthHeading
+        as="h2"
+        icon={<ShieldCheck className="h-5 w-5" aria-hidden />}
+        title={enroll ? "Configura l'autenticazione a due fattori" : "Verifica in due passaggi"}
+        description={
+          enroll
+            ? "Scansiona il QR code con Google Authenticator, Microsoft Authenticator o un'app equivalente, poi inserisci il codice a 6 cifre."
+            : "Inserisci il codice a 6 cifre mostrato dalla tua app authenticator."
+        }
+      />
       {enroll && enrollment && (
-        <div className="flex flex-col items-center gap-2">
+        <div className="-mt-2 flex flex-col items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={enrollment.qr_svg}
             alt="QR code"
-            width={192}
-            height={192}
-            className="rounded-xl bg-white p-1"
+            width={176}
+            height={176}
+            className="rounded-xl border border-border/70 bg-white p-2 shadow-sm"
           />
-          <p className="text-xs text-gray-500">Non riesci a scansionare? Inserisci questa chiave manualmente:</p>
-          <code className="select-all break-all rounded bg-white/5 border border-white/10 px-2 py-1 text-xs text-gray-300">
+          <p className="text-center text-xs text-muted-foreground">Non riesci a scansionare? Inserisci questa chiave manualmente:</p>
+          <code className="w-full select-all break-all rounded-lg border border-border/60 bg-muted px-2.5 py-1.5 text-center font-mono text-xs text-foreground">
             {enrollment.secret}
           </code>
         </div>
       )}
       <input
-        className="w-full rounded-xl border border-[#262626] bg-[#141414] px-4 py-2.5 text-center text-lg tracking-[0.4em] text-white placeholder:text-gray-500 placeholder:tracking-normal outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/20 transition"
+        className={cn(
+          authInputCls,
+          "py-3 text-center font-mono text-xl tabular-nums tracking-[0.5em] placeholder:font-sans placeholder:text-sm placeholder:tracking-normal",
+        )}
         placeholder="Codice a 6 cifre"
+        aria-label="Codice a 6 cifre"
         value={code}
         onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
         inputMode="numeric"
@@ -130,29 +138,18 @@ export function TwoFactorStep({
         maxLength={6}
         autoFocus
       />
-      {err && (
-        <div
-          className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
-          role="alert"
-        >
-          <AlertCircle size={16} className="mt-0.5 shrink-0" aria-hidden />
-          <span>{err}</span>
-        </div>
-      )}
+      {err && <AuthAlert>{err}</AuthAlert>}
       <button
         type="submit"
         disabled={busy || code.length !== 6 || (enroll && !enrollment)}
-        className="mt-1 flex items-center justify-center gap-2 rounded-xl bg-emerald-500/20 px-4 py-2.5 text-sm font-medium text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 disabled:opacity-60 transition"
+        className={authPrimaryBtnCls}
       >
-        {busy ? <Loader2 className="animate-spin" size={16} aria-hidden /> : null}
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
         {enroll ? "Conferma e accedi" : "Verifica"}
       </button>
-      <button
-        type="button"
-        onClick={onCancel}
-        className="text-xs text-emerald-400 hover:underline"
-      >
-        ← Torna al login
+      <button type="button" onClick={onCancel} className={cn(authQuietBtnCls, "self-center")}>
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+        Torna al login
       </button>
     </form>
   );
