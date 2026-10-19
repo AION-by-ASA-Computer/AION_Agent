@@ -112,16 +112,20 @@ export function IntegrationsPanel() {
   }
 
   async function disconnectOAuth(slug: string) {
+    let error: string | null = null;
     try {
       const res = await fetch(
         `${apiBase()}/v1/integrations/credentials/${encodeURIComponent(slug)}/OAUTH_TOKEN`,
         { method: "DELETE", headers: jsonHeaders(userId, token) },
       );
-      if (!res.ok) throw new Error(await res.text());
-      await load();
+      // 404: token già rimosso, quindi lo stato voluto è già quello.
+      if (!res.ok && res.status !== 404) throw new Error(await res.text());
     } catch (e: unknown) {
-      setFetchError(e instanceof Error ? e.message : t("integrationsPage.disconnect_error"));
+      error = e instanceof Error ? e.message : t("integrationsPage.disconnect_error");
     }
+    // Ricarica sempre: anche dopo un errore il backend può aver già cancellato il token.
+    await load();
+    if (error) setFetchError(error);
   }
 
   useEffect(() => {

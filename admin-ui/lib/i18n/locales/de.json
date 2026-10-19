@@ -749,7 +749,10 @@
         "client_secret": "Client-Secret",
         "client_secret_ph": "Leer lassen, um beim Speichern unverändert zu bleiben",
         "scopes": "Scopes",
-        "missing_id": "Nutzer sehen einen Fehler, bis hier eine Client-ID gespeichert ist."
+        "missing_id": "Nutzer sehen einen Fehler, bis hier eine Client-ID gespeichert ist.",
+        "manual_title": "Vorregistrierter OAuth-Client (optional)",
+        "manual_body": "Der Client wird normalerweise per dynamischer Registrierung bezogen. Füllen Sie diese Felder nur aus, wenn der Anbieter einen vorregistrierten Client verlangt: Registrieren Sie ihn mit der Callback-URL unten und fügen Sie Client-ID und Client-Secret ein. Leeren Sie die Client-ID, um zur dynamischen Registrierung zurückzukehren.",
+        "client_secret_saved_ph": "Bereits gespeichert: leer lassen, um es beizubehalten"
       },
       "suggest": {
         "body_one": "Die Erkennung hat {{count}} Feld gefunden, das noch nicht im Schema steht.",

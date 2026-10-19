@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import { setStoredAuth } from "@/lib/auth/storage";
 import { DesktopHandoffError, completeDesktopHandoff, getPendingDesktop } from "@/lib/auth/desktop";
@@ -8,6 +9,7 @@ import { DesktopHandoffStatus, type DesktopHandoffState } from "@/components/aut
 import { sanitizeReturnTo } from "@/lib/auth/safeRedirect";
 import { initLocaleFromStorage } from "@/lib/i18n/i18n-store";
 import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
+import { AuthAlert, AuthHeading, AuthShell, authPrimaryBtnCls } from "@/components/auth/AuthShell";
 
 export default function SsoExchangePage() {
   const [error, setError] = useState<string | null>(null);
@@ -119,27 +121,28 @@ export default function SsoExchangePage() {
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-4 text-foreground">
-        <div className="max-w-md rounded-aion border border-destructive bg-destructive/10 p-6 text-center">
-          <h2 className="mb-4 text-lg font-semibold text-destructive">Errore SSO</h2>
-          <p className="mb-6 text-sm text-foreground">{error}</p>
+      <AuthShell>
+        <AuthHeading
+          icon={<AlertCircle className="h-5 w-5" aria-hidden />}
+          title="Errore SSO"
+        />
+        <div className="flex flex-col gap-4">
+          <AuthAlert>{error}</AuthAlert>
           <button
             onClick={() => window.location.href = "/login"}
-            className="focus-ring rounded-aion bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+            className={authPrimaryBtnCls}
           >
             Torna al login
           </button>
         </div>
-      </div>
+      </AuthShell>
     );
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 text-foreground">
-      <div className="flex flex-col items-center gap-4">
-        <div className="h-8 w-8 animate-spin rounded-full border-4 border-muted border-t-primary" />
-        <p className="text-sm text-muted-foreground animate-pulse">Completamento accesso SSO in corso...</p>
-      </div>
+    <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-3 bg-background px-4 text-muted-foreground">
+      <Loader2 className="animate-spin text-primary" size={22} aria-hidden />
+      <p className="text-sm" role="status">Completamento accesso SSO in corso...</p>
     </div>
   );
 }

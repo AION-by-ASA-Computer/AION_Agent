@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import {
   Server,
@@ -14,16 +14,18 @@ import {
   Sparkles,
   Check,
   Loader2,
-  AlertTriangle,
-  Info,
-  Lock,
-  Cloud,
-  ScanLine,
+  KeyRound,
 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { fetchAuthStatus } from "@/lib/auth/status";
+import { cn } from "@/lib/cn";
 import { SsoConfigPanel } from "@/components/sso/SsoConfigPanel";
+import { AdminBrand } from "@/components/brand/AdminBrand";
+import { AuthAlert, AuthHeading, AuthShell, SsoProviderIcon } from "@/components/auth/AuthShell";
+import { inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
+import { Select } from "@/components/ui/Select";
+import { ChoiceList, Field, Group, ModelField, Mono, Note, ProbeBar, Switch } from "@/components/settings/ui";
 import {
   embeddingProviderToProbeProvider,
   embeddingServiceUrlFromProbeBase,
@@ -45,6 +47,9 @@ import {
 type OcrMode = "remote" | "local";
 
 type Step = "llm" | "embeddings" | "ocr" | "search" | "policy" | "sso" | "review";
+
+const monoInputCls = cn(inputCls, "font-mono text-[13px]");
+const fieldGridCls = "grid grid-cols-1 gap-x-5 gap-y-5 md:grid-cols-2";
 
 export default function FirstSetupPage() {
   const router = useRouter();
@@ -698,1103 +703,942 @@ export default function FirstSetupPage() {
   };
 
   // --- Render Steps ---
-  return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-[#060606] text-white px-4 py-12">
-      {/* Background radial glow */}
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(59,130,246,0.05)_0%,transparent_70%)] pointer-events-none" />
-
-      {restarting ? (
-        <div className="w-full max-w-lg glass-card p-10 flex flex-col items-center justify-center text-center gap-6 border-blue-500/30 shadow-[0_0_50px_rgba(59,130,246,0.1)]">
-          <div className="w-16 h-16 rounded-full border-4 border-blue-500/20 border-t-blue-500 animate-spin flex items-center justify-center" />
-          <h2 className="text-2xl font-black tracking-tight">Restarting AION Kernel</h2>
-          <p className="text-sm text-gray-400 max-w-sm">
-            Applying your environment configurations and booting up the agent ecosystem. This will take a few seconds...
-          </p>
+  if (restarting) {
+    return (
+      <AuthShell>
+        <div role="status">
+          <AuthHeading
+            icon={<Loader2 className="h-5 w-5 animate-spin" aria-hidden />}
+            title="Restarting AION Kernel"
+            description="Applying your environment configurations and booting up the agent ecosystem. This will take a few seconds..."
+          />
         </div>
-      ) : (
-        <div className="w-full max-w-4xl flex flex-col gap-8 relative z-10">
-          {/* Header */}
-          <div className="flex flex-col items-center text-center gap-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 text-xs font-bold uppercase tracking-wider">
-              <Sparkles className="w-3.5 h-3.5" /> First Setup Wizard
-            </div>
-            <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-white via-gray-200 to-gray-400 bg-clip-text text-transparent">
-              Configure AION System
-            </h1>
-            <p className="text-sm text-gray-400 max-w-md">
+      </AuthShell>
+    );
+  }
+
+  const currIdx = stepsOrder.indexOf(currentStep);
+
+  return (
+    <div className="relative min-h-[100dvh] w-full overflow-x-hidden bg-background px-4 py-10 text-foreground sm:py-14">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-x-0 top-0 h-[26rem] bg-[radial-gradient(55%_100%_at_50%_0%,hsl(var(--primary)/0.09),transparent)]"
+      />
+
+      <div className="auth-enter relative mx-auto flex w-full max-w-3xl flex-col gap-8">
+        {/* Header */}
+        <header className="flex flex-col items-center gap-5 text-center">
+          <AdminBrand className="h-11 max-w-[150px] sm:h-12 sm:max-w-[160px]" />
+          <div className="space-y-2">
+            <h1 className="text-2xl font-semibold tracking-[-0.02em] text-balance sm:text-3xl">Configure AION System</h1>
+            <p className="mx-auto max-w-md text-sm leading-relaxed text-pretty text-muted-foreground">
               Initialize your local environment parameters to activate your autonomous coding agent.
             </p>
           </div>
+        </header>
 
-          {/* Stepper Progress */}
-          <div className="flex justify-between items-center max-w-lg mx-auto w-full px-4">
+        {/* Stepper Progress */}
+        <nav aria-label="First Setup Wizard" className="mx-auto flex w-full max-w-lg flex-col items-center gap-3">
+          <p className="aion-section-label">First Setup Wizard</p>
+          <ol className="flex w-full items-center">
             {stepsOrder.map((step, idx) => {
-              const currIdx = stepsOrder.indexOf(currentStep);
               const isActive = step === currentStep;
               const isCompleted = idx < currIdx;
-
               return (
-                <div key={step} className="flex items-center flex-1 last:flex-none">
-                  <button
-                    disabled
-                    className={`w-8 h-8 rounded-full flex items-center justify-center border text-xs font-bold transition-all ${isActive
-                      ? "border-blue-500 bg-blue-500/20 text-blue-400 shadow-[0_0_15px_rgba(59,130,246,0.3)]"
-                      : isCompleted
-                        ? "border-emerald-500 bg-emerald-500/20 text-emerald-400"
-                        : "border-neutral-800 bg-neutral-900 text-neutral-500"
-                      }`}
+                <li
+                  key={step}
+                  aria-current={isActive ? "step" : undefined}
+                  className="flex flex-1 items-center last:flex-none"
+                >
+                  <span
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-full border text-xs font-semibold tabular-nums transition-colors duration-200",
+                      isActive
+                        ? "border-primary bg-primary text-primary-foreground shadow-sm shadow-primary/25"
+                        : isCompleted
+                          ? "border-success/40 bg-success/10 text-success"
+                          : "border-border bg-card text-muted-foreground",
+                    )}
                   >
-                    {isCompleted ? <Check className="w-4 h-4" /> : idx + 1}
-                  </button>
+                    {isCompleted ? (
+                      <>
+                        <Check className="h-4 w-4" aria-hidden />
+                        <span className="sr-only">{idx + 1}</span>
+                      </>
+                    ) : (
+                      idx + 1
+                    )}
+                  </span>
                   {idx < stepsOrder.length - 1 && (
-                    <div
-                      className={`h-0.5 flex-1 mx-2 transition-all ${idx < currIdx ? "bg-emerald-500/50" : "bg-neutral-800"
-                        }`}
+                    <span
+                      aria-hidden
+                      className={cn(
+                        "mx-1.5 h-px flex-1 transition-colors duration-200 sm:mx-2",
+                        idx < currIdx ? "bg-success/50" : "bg-border",
+                      )}
                     />
                   )}
-                </div>
+                </li>
               );
             })}
-          </div>
+          </ol>
+        </nav>
 
-          {/* Error Message */}
-          {error && (
-            <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 flex items-start gap-3 text-sm">
-              <AlertTriangle className="w-5 h-5 shrink-0 mt-0.5" />
-              <div>{error}</div>
-            </div>
-          )}
+        {/* Error / Success Messages */}
+        {error && <AuthAlert>{error}</AuthAlert>}
+        {successMsg && <AuthAlert tone="success">{successMsg}</AuthAlert>}
 
-          {/* Success Message */}
-          {successMsg && (
-            <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-green-400 flex items-start gap-3 text-sm">
-              <Check className="w-5 h-5 shrink-0 mt-0.5" />
-              <div>{successMsg}</div>
-            </div>
-          )}
+        {/* Main Card */}
+        <section className="rounded-2xl border border-border/70 bg-card/80 p-5 shadow-[0_10px_32px_-16px_hsl(var(--foreground)/0.22)] backdrop-blur-sm sm:p-7">
+          {/* Step 1: LLM Provider */}
+          {currentStep === "llm" && (
+            <div className="flex flex-col gap-6">
+              <StepHeader
+                icon={<Server className="h-5 w-5" aria-hidden />}
+                title="1. Default LLM Provider"
+                description="Enter the endpoint and credentials, test the connection, then pick a model from the discovered list."
+              />
 
-          {/* Main Card */}
-          <div className="glass-card p-8 border-[#1f1f1f] bg-[#0d0d0d]/80 shadow-2xl">
-            {/* Step 1: LLM Provider */}
-            {currentStep === "llm" && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
-                    <Server className="w-5 h-5 text-blue-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold">1. Default LLM Provider</h2>
-                    <p className="text-xs text-gray-400">
-                      Enter the endpoint and credentials, test the connection, then pick a model from the discovered list.
-                    </p>
-                  </div>
-                </div>
+              <div className={fieldGridCls}>
+                <Field label="LLM Provider" wide>
+                  <Select
+                    value={llmForm.provider}
+                    onChange={handleLlmProviderChange}
+                    options={[
+                      { value: "openai", label: "OpenAI" },
+                      { value: "anthropic", label: "Anthropic (Claude)" },
+                      { value: "gemini", label: "Google Gemini" },
+                      { value: "ollama", label: "Ollama (Local)" },
+                      { value: "vllm", label: "vLLM (Self-hosted)" },
+                    ]}
+                  />
+                </Field>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">LLM Provider</label>
-                    <select
-                      value={llmForm.provider}
-                      onChange={(e) => handleLlmProviderChange(e.target.value)}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all cursor-pointer"
-                    >
-                      <option value="openai">OpenAI</option>
-                      <option value="anthropic">Anthropic (Claude)</option>
-                      <option value="gemini">Google Gemini</option>
-                      <option value="ollama">Ollama (Local)</option>
-                      <option value="vllm">vLLM (Self-hosted)</option>
-                    </select>
-                  </div>
-
-                  {llmForm.provider !== "ollama" && (
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">API Key</label>
-                      <div className="relative">
-                        <input
-                          type={showLlmKey ? "text" : "password"}
-                          value={llmForm.api_key}
-                          onChange={(e) => {
-                            setLlmForm((prev) => ({ ...prev, api_key: e.target.value }));
-                            resetLlmProbeState();
-                          }}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                          placeholder="Enter API key"
-                          autoComplete="new-password"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowLlmKey(!showLlmKey)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
-                        >
-                          {showLlmKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
-                      API Base URL {providerNeedsBaseUrl(llmForm.provider) ? "" : "(optional — defaults to vendor API)"}
-                    </label>
-                    <input
-                      type="text"
-                      value={llmForm.api_base_url}
-                      onChange={(e) => {
-                        setLlmForm((prev) => ({ ...prev, api_base_url: e.target.value }));
+                {llmForm.provider !== "ollama" && (
+                  <Field label="API Key" wide>
+                    <SecretField
+                      shown={showLlmKey}
+                      onToggle={() => setShowLlmKey(!showLlmKey)}
+                      value={llmForm.api_key}
+                      onChange={(v) => {
+                        setLlmForm((prev) => ({ ...prev, api_key: v }));
                         resetLlmProbeState();
                       }}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder={
-                        llmForm.provider === "ollama"
-                          ? "http://localhost:11434/v1"
-                          : llmForm.provider === "vllm"
-                            ? "http://localhost:8000/v1"
-                            : llmForm.provider === "anthropic"
-                              ? "https://api.anthropic.com"
-                              : llmForm.provider === "gemini"
-                                ? "https://generativelanguage.googleapis.com/v1beta"
-                                : "https://api.openai.com/v1"
-                      }
+                      placeholder="Enter API key"
                     />
-                  </div>
+                  </Field>
+                )}
 
-                  {providerSupportsProbe(llmForm.provider) && (
-                    <div className="md:col-span-2 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={probeLlmConnection}
-                        disabled={llmProbing}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 text-blue-300 text-sm font-semibold hover:bg-blue-500/20 transition-all disabled:opacity-50"
-                      >
-                        {llmProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                        Test connection & discover models
-                      </button>
-                      {llmConnectionTested && llmProbeLatencyMs != null && (
-                        <span className="text-xs text-emerald-400 font-mono">
-                          Connection OK · {llmProbeLatencyMs}ms
-                          {llmDiscoveredModelIds.length > 0
-                            ? ` · ${llmDiscoveredModelIds.length} models`
-                            : " · enter model manually"}
-                        </span>
-                      )}
-                    </div>
-                  )}
+                <Field
+                  label={`API Base URL ${providerNeedsBaseUrl(llmForm.provider) ? "" : "(optional — defaults to vendor API)"}`}
+                  wide
+                >
+                  <input
+                    type="text"
+                    value={llmForm.api_base_url}
+                    onChange={(e) => {
+                      setLlmForm((prev) => ({ ...prev, api_base_url: e.target.value }));
+                      resetLlmProbeState();
+                    }}
+                    className={monoInputCls}
+                    placeholder={
+                      llmForm.provider === "ollama"
+                        ? "http://localhost:11434/v1"
+                        : llmForm.provider === "vllm"
+                          ? "http://localhost:8000/v1"
+                          : llmForm.provider === "anthropic"
+                            ? "https://api.anthropic.com"
+                            : llmForm.provider === "gemini"
+                              ? "https://generativelanguage.googleapis.com/v1beta"
+                              : "https://api.openai.com/v1"
+                    }
+                  />
+                </Field>
 
-                  {!llmConnectionTested ? (
-                    <div className="md:col-span-2 p-4 rounded-xl border border-dashed border-[#262626] bg-[#0a0a0a]/60 text-sm text-gray-500 flex items-start gap-3">
-                      <Info className="w-5 h-5 shrink-0 mt-0.5 text-gray-600" />
-                      <span>
-                        Test the endpoint to discover available models. The model will be selected automatically from the list.
+                {providerSupportsProbe(llmForm.provider) && (
+                  <ProbeBar
+                    probing={llmProbing}
+                    onProbe={() => void probeLlmConnection()}
+                    label="Test connection & discover models"
+                    ok={llmConnectionTested && llmProbeLatencyMs != null}
+                    okText={`Connection OK · ${llmProbeLatencyMs}ms${
+                      llmDiscoveredModelIds.length > 0 ? ` · ${llmDiscoveredModelIds.length} models` : " · enter model manually"
+                    }`}
+                  />
+                )}
+
+                <ModelField
+                  label="Model (auto-discovered)"
+                  manualLabel="Model name (manual)"
+                  tested={llmConnectionTested}
+                  manual={llmManualModelEntry}
+                  ids={llmDiscoveredModelIds}
+                  value={llmForm.model_name}
+                  onChange={(modelId) => {
+                    if (!llmManualModelEntry) {
+                      applyLlmModelSelection(modelId, llmProbeResult);
+                      return;
+                    }
+                    setLlmForm((prev) => ({
+                      ...prev,
+                      model_name: modelId,
+                      display_name: modelId ? formatModelDisplayName(modelId) : prev.display_name,
+                      slug: modelId
+                        ? slugFromModelId(modelId, llmForm.provider === "vllm" ? "local" : "default")
+                        : prev.slug,
+                    }));
+                  }}
+                  hintBefore="Test the endpoint to discover available models. The model will be selected automatically from the list."
+                  manualPlaceholder="Enter the exact model id served by your endpoint"
+                  hint={
+                    llmManualModelEntry ? (
+                      <span className="text-warning">No models were returned by GET /v1/models — enter the model id manually.</span>
+                    ) : hintForModel(llmProbeResult, llmForm.model_name) ? (
+                      <span className="font-mono">
+                        Context window:{" "}
+                        {hintForModel(llmProbeResult, llmForm.model_name)?.context_window.toLocaleString()} tokens
                       </span>
-                    </div>
-                  ) : llmManualModelEntry ? (
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Model name (manual)</label>
+                    ) : undefined
+                  }
+                />
+
+                {llmConnectionTested && llmForm.model_name && (
+                  <>
+                    <Field label="Display Name">
                       <input
                         type="text"
-                        value={llmForm.model_name}
-                        onChange={(e) => {
-                          const modelId = e.target.value;
-                          setLlmForm((prev) => ({
-                            ...prev,
-                            model_name: modelId,
-                            display_name: modelId ? formatModelDisplayName(modelId) : prev.display_name,
-                            slug: modelId
-                              ? slugFromModelId(modelId, llmForm.provider === "vllm" ? "local" : "default")
-                              : prev.slug,
-                          }));
-                        }}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        placeholder="Enter the exact model id served by your endpoint"
+                        value={llmForm.display_name}
+                        onChange={(e) => setLlmForm((prev) => ({ ...prev, display_name: e.target.value }))}
+                        className={inputCls}
                       />
-                      <p className="text-[11px] text-amber-400/90">
-                        No models were returned by GET /v1/models — enter the model id manually.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Model (auto-discovered)</label>
-                      <select
-                        value={llmForm.model_name}
-                        onChange={(e) => applyLlmModelSelection(e.target.value, llmProbeResult)}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono cursor-pointer"
-                      >
-                        {llmDiscoveredModelIds.map((id) => (
-                          <option key={id} value={id}>
-                            {id}
-                          </option>
-                        ))}
-                      </select>
-                      {hintForModel(llmProbeResult, llmForm.model_name) && (
-                        <p className="text-[11px] text-gray-500 font-mono">
-                          Context window:{" "}
-                          {hintForModel(llmProbeResult, llmForm.model_name)?.context_window.toLocaleString()} tokens
-                        </p>
-                      )}
-                    </div>
-                  )}
+                    </Field>
 
-                  {llmConnectionTested && llmForm.model_name && (
+                    <Field label="Slug (Unique ID)">
+                      <input
+                        type="text"
+                        value={llmForm.slug}
+                        onChange={(e) => setLlmForm((prev) => ({ ...prev, slug: e.target.value }))}
+                        className={monoInputCls}
+                      />
+                    </Field>
+
+                    <Field label="Max Chat Tokens (AION_CHAT_MAX_TOKENS)">
+                      <input
+                        type="number"
+                        value={llmForm.max_chat_tokens}
+                        onChange={(e) => setLlmForm((prev) => ({ ...prev, max_chat_tokens: parseInt(e.target.value) || 0 }))}
+                        className={monoInputCls}
+                        placeholder="e.g. 8192"
+                      />
+                    </Field>
+
+                    <Field label="Thinking Token Budget (AION_THINKING_TOKEN_BUDGET)">
+                      <input
+                        type="number"
+                        min={0}
+                        value={llmForm.thinking_token_budget ?? ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val === "") {
+                            setLlmForm((prev) => ({ ...prev, thinking_token_budget: "" as any }));
+                            return;
+                          }
+                          const parsed = parseInt(val, 10);
+                          if (!isNaN(parsed)) {
+                            setLlmForm((prev) => ({ ...prev, thinking_token_budget: Math.max(0, parsed) }));
+                          }
+                        }}
+                        className={monoInputCls}
+                        placeholder="e.g. 12000 (0 to disable)"
+                      />
+                    </Field>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Step 2: Embeddings */}
+          {currentStep === "embeddings" && (
+            <div className="flex flex-col gap-6">
+              <StepHeader
+                icon={<Zap className="h-5 w-5" aria-hidden />}
+                title="2. Autonomous Memory (Embeddings)"
+                description="Enter the embedding service URL and credentials, test the connection, then pick a model from the discovered list."
+              />
+
+              <div className={fieldGridCls}>
+                <Field label="Embedding Provider" wide>
+                  <Select
+                    value={embForm.provider}
+                    onChange={handleEmbProviderChange}
+                    options={[
+                      { value: "openai", label: "OpenAI-Compatible" },
+                      { value: "vllm", label: "vLLM (Self-hosted)" },
+                      { value: "ollama", label: "Ollama" },
+                      { value: "google", label: "Google (Gemini)" },
+                    ]}
+                  />
+                </Field>
+
+                <Field
+                  label="Embedding Service URL"
+                  wide
+                  hint={
                     <>
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Display Name</label>
-                        <input
-                          type="text"
-                          value={llmForm.display_name}
-                          onChange={(e) => setLlmForm((prev) => ({ ...prev, display_name: e.target.value }))}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all"
-                        />
-                      </div>
+                      Base URL or full <Mono>/v1/embeddings</Mono> path — used for POST; probe uses GET /v1/models on the base.
+                    </>
+                  }
+                >
+                  <input
+                    type="text"
+                    value={embForm.url}
+                    onChange={(e) => {
+                      setEmbForm((prev) => ({ ...prev, url: e.target.value }));
+                      resetEmbProbeState();
+                    }}
+                    className={monoInputCls}
+                    placeholder={
+                      embForm.provider === "google"
+                        ? "https://generativelanguage.googleapis.com/v1beta/models"
+                        : embForm.provider === "ollama"
+                          ? "http://host.docker.internal:11434/v1/embeddings or http://localhost:11434/v1/embeddings"
+                          : embForm.provider === "vllm"
+                            ? "http://host.docker.internal:8000/v1/embeddings or http://localhost:8000/v1/embeddings"
+                            : "http://host.docker.internal:8000/v1/embeddings or https://api.openai.com/v1/embeddings"
+                    }
+                  />
+                </Field>
 
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Slug (Unique ID)</label>
-                        <input
-                          type="text"
-                          value={llmForm.slug}
-                          onChange={(e) => setLlmForm((prev) => ({ ...prev, slug: e.target.value }))}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                        />
-                      </div>
+                {embForm.provider !== "google" && (
+                  <Field label="Embedding API Key" wide>
+                    <SecretField
+                      shown={showEmbKey}
+                      onToggle={() => setShowEmbKey(!showEmbKey)}
+                      value={embForm.api_key}
+                      onChange={(v) => {
+                        setEmbForm((prev) => ({ ...prev, api_key: v }));
+                        resetEmbProbeState();
+                      }}
+                      placeholder={
+                        ["vllm", "ollama"].includes(embForm.provider) ? "Optional for local / vLLM / Ollama" : "Enter API key"
+                      }
+                    />
+                  </Field>
+                )}
 
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Max Chat Tokens (AION_CHAT_MAX_TOKENS)</label>
+                <ProbeBar
+                  probing={embProbing}
+                  onProbe={() => void probeEmbConnection()}
+                  label="Test connection & discover models"
+                  ok={embConnectionTested && embProbeLatencyMs != null}
+                  okText={`Connection OK · ${embProbeLatencyMs}ms${
+                    embDiscoveredModelIds.length > 0
+                      ? ` · ${embDiscoveredModelIds.length} embedding models`
+                      : " · enter model manually"
+                  }`}
+                />
+
+                <ModelField
+                  label="Embedding model (auto-discovered)"
+                  manualLabel="Embedding model (manual)"
+                  tested={embConnectionTested}
+                  manual={embManualModelEntry}
+                  ids={embDiscoveredModelIds}
+                  value={embForm.model}
+                  onChange={(v) => setEmbForm((prev) => ({ ...prev, model: v }))}
+                  hintBefore="Test the embedding endpoint to discover available models. Embedding models are preferred when detected in the list."
+                  manualPlaceholder="e.g. text-embedding-3-small, qwen3-embedding"
+                  hint={
+                    embManualModelEntry ? (
+                      <span className="text-warning">
+                        No models were returned by GET /v1/models — enter the embedding model id manually.
+                      </span>
+                    ) : undefined
+                  }
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Step 3: OCR */}
+          {currentStep === "ocr" && (
+            <div className="flex flex-col gap-6">
+              <StepHeader
+                icon={<Eye className="h-5 w-5" aria-hidden />}
+                title="3. OCR Document Processing"
+                description="OCR is always available via the MCP tool. Choose how text is extracted from images and scanned PDFs."
+              />
+
+              <Group>
+                <ChoiceList<OcrMode>
+                  value={ocrMode}
+                  onChange={handleOcrModeChange}
+                  label="3. OCR Document Processing"
+                  options={[
+                    {
+                      value: "remote",
+                      title: "Remote vision OCR (recommended)",
+                      description:
+                        "OpenAI-compatible vLLM vision server (e.g. GLM-OCR). Highest accuracy on images and scanned PDF pages.",
+                    },
+                    {
+                      value: "local",
+                      title: "Local Python OCR (basic)",
+                      description: (
+                        <>
+                          PDF via <Mono>pymupdf4llm</Mono>, images via <Mono>pytesseract</Mono>. No remote server — lower
+                          accuracy, requires Tesseract on the host.
+                        </>
+                      ),
+                    },
+                  ]}
+                />
+              </Group>
+
+              {ocrMode === "remote" ? (
+                <div className={fieldGridCls}>
+                  <Field
+                    label="OCR Service Base URL (OpenAI-compatible)"
+                    wide
+                    hint={
+                      <>
+                        Base URL for <Mono>POST /v1/chat/completions</Mono> — probe uses <Mono>GET /v1/models</Mono>.
+                      </>
+                    }
+                  >
+                    <input
+                      type="text"
+                      value={ocrForm.base_url}
+                      onChange={(e) => {
+                        setOcrForm((prev) => ({ ...prev, base_url: e.target.value }));
+                        resetOcrProbeState();
+                      }}
+                      className={monoInputCls}
+                      placeholder="e.g. http://localhost:8002/v1"
+                    />
+                  </Field>
+
+                  <Field label="OCR API Token" wide>
+                    <SecretField
+                      shown={showOcrKey}
+                      onToggle={() => setShowOcrKey(!showOcrKey)}
+                      value={ocrForm.api_key}
+                      onChange={(v) => {
+                        setOcrForm((prev) => ({ ...prev, api_key: v }));
+                        resetOcrProbeState();
+                      }}
+                      placeholder="Bearer token (any non-empty value if auth is disabled)"
+                    />
+                  </Field>
+
+                  <ProbeBar
+                    probing={ocrProbing}
+                    onProbe={() => void probeOcrConnection()}
+                    label="Test connection & discover models"
+                    ok={ocrConnectionTested && ocrProbeLatencyMs != null}
+                    okText={`Connection OK · ${ocrProbeLatencyMs}ms${
+                      ocrDiscoveredModelIds.length > 0
+                        ? ` · ${ocrDiscoveredModelIds.length} vision/OCR models`
+                        : " · enter model manually"
+                    }`}
+                  />
+
+                  <ModelField
+                    label="OCR model (auto-discovered)"
+                    manualLabel="OCR model (manual)"
+                    tested={ocrConnectionTested}
+                    manual={ocrManualModelEntry}
+                    ids={ocrDiscoveredModelIds}
+                    value={ocrForm.model}
+                    onChange={(v) => setOcrForm((prev) => ({ ...prev, model: v }))}
+                    hintBefore="Test the vision OCR endpoint to discover models. Vision/OCR models are preferred when detected."
+                    manualPlaceholder="e.g. zai-org/GLM-OCR"
+                    hint={
+                      ocrManualModelEntry ? (
+                        <span className="text-warning">
+                          No models were returned by GET /v1/models — enter the vision model id manually.
+                        </span>
+                      ) : undefined
+                    }
+                  />
+
+                  {ocrConnectionTested && ocrForm.model && (
+                    <>
+                      <Field label="OCR Max Tokens">
                         <input
                           type="number"
-                          value={llmForm.max_chat_tokens}
-                          onChange={(e) => setLlmForm((prev) => ({ ...prev, max_chat_tokens: parseInt(e.target.value) || 0 }))}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                          placeholder="e.g. 8192"
+                          value={ocrForm.max_tokens}
+                          onChange={(e) => setOcrForm((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 0 }))}
+                          className={monoInputCls}
                         />
-                      </div>
+                      </Field>
 
-                      <div className="space-y-2">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Thinking Token Budget (AION_THINKING_TOKEN_BUDGET)</label>
+                      <Field label="OCR Timeout (seconds)">
                         <input
                           type="number"
-                          min={0}
-                          value={llmForm.thinking_token_budget ?? ""}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (val === "") {
-                              setLlmForm((prev) => ({ ...prev, thinking_token_budget: "" as any }));
-                              return;
-                            }
-                            const parsed = parseInt(val, 10);
-                            if (!isNaN(parsed)) {
-                              setLlmForm((prev) => ({ ...prev, thinking_token_budget: Math.max(0, parsed) }));
-                            }
-                          }}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                          placeholder="e.g. 12000 (0 to disable)"
+                          value={ocrForm.timeout}
+                          onChange={(e) => setOcrForm((prev) => ({ ...prev, timeout: parseInt(e.target.value) || 0 }))}
+                          className={monoInputCls}
                         />
-                      </div>
+                      </Field>
+
+                      <Field label="OCR Max Image Bytes" wide>
+                        <input
+                          type="number"
+                          value={ocrForm.max_image_bytes}
+                          onChange={(e) =>
+                            setOcrForm((prev) => ({ ...prev, max_image_bytes: parseInt(e.target.value) || 0 }))
+                          }
+                          className={monoInputCls}
+                        />
+                      </Field>
                     </>
                   )}
                 </div>
-              </div>
-            )}
-
-            {/* Step 2: Embeddings */}
-            {currentStep === "embeddings" && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
-                    <Zap className="w-5 h-5 text-purple-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold">2. Autonomous Memory (Embeddings)</h2>
-                    <p className="text-xs text-gray-400">
-                      Enter the embedding service URL and credentials, test the connection, then pick a model from the discovered list.
+              ) : (
+                <Note>
+                  <div className="space-y-2">
+                    <p>The OCR MCP tool stays active. Without a remote vision server it falls back to local extractors:</p>
+                    <ul className="list-inside list-disc space-y-1 text-xs">
+                      <li>
+                        PDF → <Mono>pymupdf4llm</Mono> (text layer / markdown)
+                      </li>
+                      <li>
+                        Images → <Mono>pytesseract</Mono> (requires Tesseract binary on the host)
+                      </li>
+                    </ul>
+                    <p className="text-xs text-warning">
+                      No <span className="font-mono">AION_OCR_*</span> variables will be written — switch to remote mode
+                      anytime in Admin Settings.
                     </p>
                   </div>
-                </div>
+                </Note>
+              )}
+            </div>
+          )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding Provider</label>
-                    <select
-                      value={embForm.provider}
-                      onChange={(e) => handleEmbProviderChange(e.target.value)}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all cursor-pointer"
-                    >
-                      <option value="openai">OpenAI-Compatible</option>
-                      <option value="vllm">vLLM (Self-hosted)</option>
-                      <option value="ollama">Ollama</option>
-                      <option value="google">Google (Gemini)</option>
-                    </select>
-                  </div>
+          {/* Step 4: Web Search */}
+          {currentStep === "search" && (
+            <div className="flex flex-col gap-6">
+              <StepHeader
+                icon={<Search className="h-5 w-5" aria-hidden />}
+                title="4. Web Integration & Search"
+                description="Configure search engines and page fetching protocols for web operations."
+              />
 
-                  <div className="space-y-2 md:col-span-2">
-                    <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding Service URL</label>
-                    <input
-                      type="text"
-                      value={embForm.url}
-                      onChange={(e) => {
-                        setEmbForm((prev) => ({ ...prev, url: e.target.value }));
-                        resetEmbProbeState();
-                      }}
-                      className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                      placeholder={
-                        embForm.provider === "google"
-                          ? "https://generativelanguage.googleapis.com/v1beta/models"
-                          : embForm.provider === "ollama"
-                            ? "http://host.docker.internal:11434/v1/embeddings or http://localhost:11434/v1/embeddings"
-                            : embForm.provider === "vllm"
-                              ? "http://host.docker.internal:8000/v1/embeddings or http://localhost:8000/v1/embeddings"
-                              : "http://host.docker.internal:8000/v1/embeddings or https://api.openai.com/v1/embeddings"
-                      }
+              <Group>
+                <ul className="divide-y divide-border/40">
+                  <EngineRow
+                    name="Tavily Search"
+                    description="Fast AI search engine optimized for LLM agents."
+                    checked={searchForm.tavily_enabled}
+                    onChange={(v) => setSearchForm((prev) => ({ ...prev, tavily_enabled: v }))}
+                  >
+                    <Field label="Tavily API Key">
+                      <SecretField
+                        shown={showTavilyKey}
+                        onToggle={() => setShowTavilyKey(!showTavilyKey)}
+                        value={searchForm.tavily_key}
+                        onChange={(v) => setSearchForm((prev) => ({ ...prev, tavily_key: v }))}
+                        placeholder="tvly-..."
+                      />
+                    </Field>
+                  </EngineRow>
+
+                  <EngineRow
+                    name="Brave Search"
+                    description="Global, private search engine with rich results."
+                    checked={searchForm.brave_enabled}
+                    onChange={(v) => setSearchForm((prev) => ({ ...prev, brave_enabled: v }))}
+                  >
+                    <Field label="Brave API Key">
+                      <SecretField
+                        shown={showBraveKey}
+                        onToggle={() => setShowBraveKey(!showBraveKey)}
+                        value={searchForm.brave_key}
+                        onChange={(v) => setSearchForm((prev) => ({ ...prev, brave_key: v }))}
+                        placeholder="BS..."
+                      />
+                    </Field>
+                  </EngineRow>
+
+                  <EngineRow
+                    name="SearXNG"
+                    description="Self-hosted metasearch engine (no API key required)."
+                    checked={searchForm.searxng_enabled}
+                    onChange={(v) => setSearchForm((prev) => ({ ...prev, searxng_enabled: v }))}
+                  >
+                    <Field label="SearXNG Base URL">
+                      <input
+                        type="text"
+                        value={searchForm.searxng_url}
+                        onChange={(e) => setSearchForm((prev) => ({ ...prev, searxng_url: e.target.value }))}
+                        className={monoInputCls}
+                        placeholder="e.g. https://searxng.mydomain.org"
+                      />
+                    </Field>
+                  </EngineRow>
+                </ul>
+              </Group>
+
+              <div className={fieldGridCls}>
+                <Field label="Default Search Provider">
+                  <Select
+                    value={searchForm.default_provider}
+                    onChange={(v) => setSearchForm((prev) => ({ ...prev, default_provider: v }))}
+                    options={[
+                      { value: "tavily", label: "Tavily" },
+                      { value: "brave", label: "Brave" },
+                      { value: "searxng", label: "SearXNG" },
+                    ]}
+                  />
+                </Field>
+
+                <Field label="Search Fallback Order (CSV)">
+                  <input
+                    type="text"
+                    value={searchForm.fallback_order}
+                    onChange={(e) => setSearchForm((prev) => ({ ...prev, fallback_order: e.target.value }))}
+                    className={monoInputCls}
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
+
+          {/* Step 5: Filesystem Policy */}
+          {currentStep === "policy" && (
+            <div className="flex flex-col gap-6">
+              <StepHeader
+                icon={<ShieldAlert className="h-5 w-5" aria-hidden />}
+                title="5. Sandbox Security & Exec Policy"
+                description="Restrict or allow terminal commands and filesystem access within the workspace."
+                action={
+                  <Switch checked={policyEnabled} onChange={setPolicyEnabled} label="5. Sandbox Security & Exec Policy" />
+                }
+              />
+
+              {policyEnabled ? (
+                <div className="flex flex-col gap-5">
+                  <Group>
+                    <ChoiceList<"dev" | "example">
+                      value={policyTemplate}
+                      onChange={handleTemplateChange}
+                      label="Policy Blueprint (YAML)"
+                      options={[
+                        {
+                          value: "dev",
+                          title: "Development Policy",
+                          description: (
+                            <>
+                              Enables a minimal allowlist of commands (<Mono>grep</Mono>, <Mono>wc</Mono>, <Mono>sort</Mono>,{" "}
+                              <Mono>python3</Mono>) for local agent operations.
+                            </>
+                          ),
+                        },
+                        {
+                          value: "example",
+                          title: "Production Policy",
+                          description:
+                            "Advanced template with detailed descriptions, strict path boundaries, and hardened execute constraints.",
+                        },
+                      ]}
                     />
-                    <p className="text-[11px] text-gray-500">
-                      Base URL or full <span className="font-mono">/v1/embeddings</span> path — used for POST; probe uses GET /v1/models on the base.
-                    </p>
-                  </div>
+                  </Group>
 
-                  {embForm.provider !== "google" && (
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding API Key</label>
-                      <div className="relative">
-                        <input
-                          type={showEmbKey ? "text" : "password"}
-                          value={embForm.api_key}
-                          onChange={(e) => {
-                            setEmbForm((prev) => ({ ...prev, api_key: e.target.value }));
-                            resetEmbProbeState();
-                          }}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-blue-500/50 outline-none transition-all font-mono"
-                          placeholder={
-                            ["vllm", "ollama"].includes(embForm.provider)
-                              ? "Optional for local / vLLM / Ollama"
-                              : "Enter API key"
-                          }
-                          autoComplete="new-password"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowEmbKey(!showEmbKey)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
-                        >
-                          {showEmbKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="md:col-span-2 flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
-                      onClick={probeEmbConnection}
-                      disabled={embProbing}
-                      className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-purple-500/30 bg-purple-500/10 text-purple-300 text-sm font-semibold hover:bg-purple-500/20 transition-all disabled:opacity-50"
-                    >
-                      {embProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                      Test connection & discover models
-                    </button>
-                    {embConnectionTested && embProbeLatencyMs != null && (
-                      <span className="text-xs text-emerald-400 font-mono">
-                        Connection OK · {embProbeLatencyMs}ms
-                        {embDiscoveredModelIds.length > 0
-                          ? ` · ${embDiscoveredModelIds.length} embedding models`
-                          : " · enter model manually"}
-                      </span>
-                    )}
-                  </div>
-
-                  {!embConnectionTested ? (
-                    <div className="md:col-span-2 p-4 rounded-xl border border-dashed border-[#262626] bg-[#0a0a0a]/60 text-sm text-gray-500 flex items-start gap-3">
-                      <Info className="w-5 h-5 shrink-0 mt-0.5 text-gray-600" />
-                      <span>
-                        Test the embedding endpoint to discover available models. Embedding models are preferred when detected in the list.
-                      </span>
-                    </div>
-                  ) : embManualModelEntry ? (
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding model (manual)</label>
-                      <input
-                        type="text"
-                        value={embForm.model}
-                        onChange={(e) => setEmbForm((prev) => ({ ...prev, model: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-purple-500/50 outline-none transition-all font-mono"
-                        placeholder="e.g. text-embedding-3-small, qwen3-embedding"
-                      />
-                      <p className="text-[11px] text-amber-400/90">
-                        No models were returned by GET /v1/models — enter the embedding model id manually.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Embedding model (auto-discovered)</label>
-                      <select
-                        value={embForm.model}
-                        onChange={(e) => setEmbForm((prev) => ({ ...prev, model: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-purple-500/50 outline-none transition-all font-mono cursor-pointer"
-                      >
-                        {embDiscoveredModelIds.map((id) => (
-                          <option key={id} value={id}>
-                            {id}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Step 3: OCR */}
-            {currentStep === "ocr" && (
-              <div className="space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                    <Eye className="w-5 h-5 text-amber-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold">3. OCR Document Processing</h2>
-                    <p className="text-xs text-gray-400">
-                      OCR is always available via the MCP tool. Choose how text is extracted from images and scanned PDFs.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <button
-                    type="button"
-                    onClick={() => handleOcrModeChange("remote")}
-                    className={`p-4 rounded-xl border text-left flex flex-col gap-2 transition-all ${ocrMode === "remote"
-                      ? "bg-amber-500/5 border-amber-500/40 text-amber-200"
-                      : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
-                      }`}
-                  >
-                    <div className="flex items-center gap-2 font-bold text-sm">
-                      <Cloud className="w-4 h-4" /> Remote vision OCR (recommended)
-                    </div>
-                    <span className="text-xs opacity-90 leading-relaxed">
-                      OpenAI-compatible vLLM vision server (e.g. GLM-OCR). Highest accuracy on images and scanned PDF pages.
+                  <label className="flex flex-col gap-1.5">
+                    <span className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium">Policy Blueprint (YAML)</span>
+                      <span className="font-mono text-[11.5px] text-muted-foreground">config/fs_policy.yaml</span>
                     </span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => handleOcrModeChange("local")}
-                    className={`p-4 rounded-xl border text-left flex flex-col gap-2 transition-all ${ocrMode === "local"
-                      ? "bg-amber-500/5 border-amber-500/40 text-amber-200"
-                      : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
-                      }`}
-                  >
-                    <div className="flex items-center gap-2 font-bold text-sm">
-                      <ScanLine className="w-4 h-4" /> Local Python OCR (basic)
-                    </div>
-                    <span className="text-xs opacity-90 leading-relaxed">
-                      PDF via <span className="font-mono">pymupdf4llm</span>, images via <span className="font-mono">pytesseract</span>. No remote server — lower accuracy, requires Tesseract on the host.
-                    </span>
-                  </button>
-                </div>
-
-                {ocrMode === "remote" ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-2">
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
-                        OCR Service Base URL (OpenAI-compatible)
-                      </label>
-                      <input
-                        type="text"
-                        value={ocrForm.base_url}
-                        onChange={(e) => {
-                          setOcrForm((prev) => ({ ...prev, base_url: e.target.value }));
-                          resetOcrProbeState();
-                        }}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
-                        placeholder="e.g. http://localhost:8002/v1"
-                      />
-                      <p className="text-[11px] text-gray-500">
-                        Base URL for <span className="font-mono">POST /v1/chat/completions</span> — probe uses <span className="font-mono">GET /v1/models</span>.
-                      </p>
-                    </div>
-
-                    <div className="space-y-2 md:col-span-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR API Token</label>
-                      <div className="relative">
-                        <input
-                          type={showOcrKey ? "text" : "password"}
-                          value={ocrForm.api_key}
-                          onChange={(e) => {
-                            setOcrForm((prev) => ({ ...prev, api_key: e.target.value }));
-                            resetOcrProbeState();
-                          }}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
-                          placeholder="Bearer token (any non-empty value if auth is disabled)"
-                          autoComplete="new-password"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowOcrKey(!showOcrKey)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
-                        >
-                          {showOcrKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="md:col-span-2 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={probeOcrConnection}
-                        disabled={ocrProbing}
-                        className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 text-amber-300 text-sm font-semibold hover:bg-amber-500/20 transition-all disabled:opacity-50"
-                      >
-                        {ocrProbing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
-                        Test connection & discover models
-                      </button>
-                      {ocrConnectionTested && ocrProbeLatencyMs != null && (
-                        <span className="text-xs text-emerald-400 font-mono">
-                          Connection OK · {ocrProbeLatencyMs}ms
-                          {ocrDiscoveredModelIds.length > 0
-                            ? ` · ${ocrDiscoveredModelIds.length} vision/OCR models`
-                            : " · enter model manually"}
-                        </span>
-                      )}
-                    </div>
-
-                    {!ocrConnectionTested ? (
-                      <div className="md:col-span-2 p-4 rounded-xl border border-dashed border-[#262626] bg-[#0a0a0a]/60 text-sm text-gray-500 flex items-start gap-3">
-                        <Info className="w-5 h-5 shrink-0 mt-0.5 text-gray-600" />
-                        <span>
-                          Test the vision OCR endpoint to discover models. Vision/OCR models are preferred when detected.
-                        </span>
-                      </div>
-                    ) : ocrManualModelEntry ? (
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR model (manual)</label>
-                        <input
-                          type="text"
-                          value={ocrForm.model}
-                          onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
-                          placeholder="e.g. zai-org/GLM-OCR"
-                        />
-                        <p className="text-[11px] text-amber-400/90">
-                          No models were returned by GET /v1/models — enter the vision model id manually.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-2 md:col-span-2">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR model (auto-discovered)</label>
-                        <select
-                          value={ocrForm.model}
-                          onChange={(e) => setOcrForm((prev) => ({ ...prev, model: e.target.value }))}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono cursor-pointer"
-                        >
-                          {ocrDiscoveredModelIds.map((id) => (
-                            <option key={id} value={id}>
-                              {id}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    {ocrConnectionTested && ocrForm.model && (
-                      <>
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Tokens</label>
-                          <input
-                            type="number"
-                            value={ocrForm.max_tokens}
-                            onChange={(e) => setOcrForm((prev) => ({ ...prev, max_tokens: parseInt(e.target.value) || 0 }))}
-                            className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
-                          />
-                        </div>
-
-                        <div className="space-y-2">
-                          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Timeout (seconds)</label>
-                          <input
-                            type="number"
-                            value={ocrForm.timeout}
-                            onChange={(e) => setOcrForm((prev) => ({ ...prev, timeout: parseInt(e.target.value) || 0 }))}
-                            className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
-                          />
-                        </div>
-
-                        <div className="space-y-2 md:col-span-2">
-                          <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">OCR Max Image Bytes</label>
-                          <input
-                            type="number"
-                            value={ocrForm.max_image_bytes}
-                            onChange={(e) => setOcrForm((prev) => ({ ...prev, max_image_bytes: parseInt(e.target.value) || 0 }))}
-                            className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-amber-500/50 outline-none transition-all font-mono"
-                          />
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ) : (
-                  <div className="p-5 rounded-2xl border border-dashed border-[#262626] bg-[#0d0d0d]/30 text-sm text-gray-400 flex items-start gap-3">
-                    <Info className="w-8 h-8 shrink-0 text-gray-600" />
-                    <div className="space-y-2">
-                      <p>
-                        The OCR MCP tool stays active. Without a remote vision server it falls back to local extractors:
-                      </p>
-                      <ul className="list-disc list-inside text-xs text-gray-500 space-y-1">
-                        <li>PDF → <span className="font-mono">pymupdf4llm</span> (text layer / markdown)</li>
-                        <li>Images → <span className="font-mono">pytesseract</span> (requires Tesseract binary on the host)</li>
-                      </ul>
-                      <p className="text-xs text-amber-400/80">
-                        No <span className="font-mono">AION_OCR_*</span> variables will be written — switch to remote mode anytime in Admin Settings.
-                      </p>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Step 4: Web Search */}
-            {currentStep === "search" && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-cyan-500/10 flex items-center justify-center border border-cyan-500/20">
-                    <Search className="w-5 h-5 text-cyan-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold">4. Web Integration & Search</h2>
-                    <p className="text-xs text-gray-400">Configure search engines and page fetching protocols for web operations.</p>
-                  </div>
-                </div>
-
-                <div className="space-y-5">
-                  {/* Tavily */}
-                  <div className="p-4 rounded-xl border border-[#222] bg-[#070707]/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold">Tavily Search</span>
-                        <span className="text-xs text-gray-500">Fast AI search engine optimized for LLM agents.</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSearchForm((prev) => ({ ...prev, tavily_enabled: !prev.tavily_enabled }))}
-                        className={`w-10 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${searchForm.tavily_enabled ? "bg-cyan-500" : "bg-neutral-800"
-                          }`}
-                      >
-                        <div
-                          className={`w-4 h-4 rounded-full bg-white transition-all ${searchForm.tavily_enabled ? "translate-x-4" : "translate-x-0"
-                            }`}
-                        />
-                      </button>
-                    </div>
-
-                    {searchForm.tavily_enabled && (
-                      <div className="space-y-1.5 pt-2">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Tavily API Key</label>
-                        <div className="relative">
-                          <input
-                            type={showTavilyKey ? "text" : "password"}
-                            value={searchForm.tavily_key}
-                            onChange={(e) => setSearchForm((prev) => ({ ...prev, tavily_key: e.target.value }))}
-                            className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-2.5 text-sm text-gray-200 focus:border-cyan-500/50 outline-none transition-all font-mono"
-                            placeholder="tvly-..."
-                            autoComplete="new-password"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowTavilyKey(!showTavilyKey)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
-                          >
-                            {showTavilyKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Brave Search */}
-                  <div className="p-4 rounded-xl border border-[#222] bg-[#070707]/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold">Brave Search</span>
-                        <span className="text-xs text-gray-500">Global, private search engine with rich results.</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSearchForm((prev) => ({ ...prev, brave_enabled: !prev.brave_enabled }))}
-                        className={`w-10 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${searchForm.brave_enabled ? "bg-cyan-500" : "bg-neutral-800"
-                          }`}
-                      >
-                        <div
-                          className={`w-4 h-4 rounded-full bg-white transition-all ${searchForm.brave_enabled ? "translate-x-4" : "translate-x-0"
-                            }`}
-                        />
-                      </button>
-                    </div>
-
-                    {searchForm.brave_enabled && (
-                      <div className="space-y-1.5 pt-2">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Brave API Key</label>
-                        <div className="relative">
-                          <input
-                            type={showBraveKey ? "text" : "password"}
-                            value={searchForm.brave_key}
-                            onChange={(e) => setSearchForm((prev) => ({ ...prev, brave_key: e.target.value }))}
-                            className="w-full bg-[#070707] border border-[#222] rounded-xl pl-4 pr-12 py-2.5 text-sm text-gray-200 focus:border-cyan-500/50 outline-none transition-all font-mono"
-                            placeholder="BS..."
-                            autoComplete="new-password"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => setShowBraveKey(!showBraveKey)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
-                          >
-                            {showBraveKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* SearXNG */}
-                  <div className="p-4 rounded-xl border border-[#222] bg-[#070707]/50 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex flex-col">
-                        <span className="text-sm font-bold">SearXNG</span>
-                        <span className="text-xs text-gray-500">Self-hosted metasearch engine (no API key required).</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setSearchForm((prev) => ({ ...prev, searxng_enabled: !prev.searxng_enabled }))}
-                        className={`w-10 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${searchForm.searxng_enabled ? "bg-cyan-500" : "bg-neutral-800"
-                          }`}
-                      >
-                        <div
-                          className={`w-4 h-4 rounded-full bg-white transition-all ${searchForm.searxng_enabled ? "translate-x-4" : "translate-x-0"
-                            }`}
-                        />
-                      </button>
-                    </div>
-
-                    {searchForm.searxng_enabled && (
-                      <div className="space-y-1.5 pt-2">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">SearXNG Base URL</label>
-                        <input
-                          type="text"
-                          value={searchForm.searxng_url}
-                          onChange={(e) => setSearchForm((prev) => ({ ...prev, searxng_url: e.target.value }))}
-                          className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-2.5 text-sm text-gray-200 focus:border-cyan-500/50 outline-none transition-all font-mono"
-                          placeholder="e.g. https://searxng.mydomain.org"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-3">
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Default Search Provider</label>
-                      <select
-                        value={searchForm.default_provider}
-                        onChange={(e) => setSearchForm((prev) => ({ ...prev, default_provider: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-cyan-500/50 outline-none transition-all cursor-pointer"
-                      >
-                        <option value="tavily">Tavily</option>
-                        <option value="brave">Brave</option>
-                        <option value="searxng">SearXNG</option>
-                      </select>
-                    </div>
-
-                    <div className="space-y-2">
-                      <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">Search Fallback Order (CSV)</label>
-                      <input
-                        type="text"
-                        value={searchForm.fallback_order}
-                        onChange={(e) => setSearchForm((prev) => ({ ...prev, fallback_order: e.target.value }))}
-                        className="w-full bg-[#070707] border border-[#222] rounded-xl px-4 py-3 text-sm text-gray-200 focus:border-cyan-500/50 outline-none transition-all font-mono"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Step 5: Filesystem Policy */}
-            {currentStep === "policy" && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
-                      <ShieldAlert className="w-5 h-5 text-amber-500" />
-                    </div>
-                    <div>
-                      <h2 className="text-xl font-bold">5. Sandbox Security & Exec Policy</h2>
-                      <p className="text-xs text-gray-400">Restrict or allow terminal commands and filesystem access within the workspace.</p>
-                    </div>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => setPolicyEnabled(!policyEnabled)}
-                    className={`w-12 h-6 rounded-full transition-all flex items-center px-1 cursor-pointer ${policyEnabled ? "bg-amber-500" : "bg-neutral-800"
-                      }`}
-                  >
-                    <div
-                      className={`w-4 h-4 rounded-full bg-white transition-all ${policyEnabled ? "translate-x-6" : "translate-x-0"
-                        }`}
+                    <textarea
+                      value={policyYaml}
+                      onChange={(e) => setPolicyYaml(e.target.value)}
+                      rows={20}
+                      readOnly
+                      spellCheck={false}
+                      className="focus-ring w-full resize-y rounded-xl border border-border bg-secondary/40 p-4 font-mono text-xs leading-relaxed text-foreground/85"
                     />
-                  </button>
+                  </label>
                 </div>
-
-                {policyEnabled ? (
-                  <div className="space-y-5 pt-2">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* Dev Template Card */}
-                      <button
-                        type="button"
-                        onClick={() => handleTemplateChange("dev")}
-                        className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all ${policyTemplate === "dev"
-                          ? "bg-amber-500/5 border-amber-500/30 text-amber-300"
-                          : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
-                          }`}
-                      >
-                        <div className="flex items-center gap-2 font-bold text-sm">
-                          <Sparkles className="w-4 h-4" /> Development Policy
-                        </div>
-                        <span className="text-xs opacity-85">
-                          Enables a minimal allowlist of commands (`grep`, `wc`, `sort`, `python3`) for local agent operations.
-                        </span>
-                      </button>
-
-                      {/* Example Template Card */}
-                      <button
-                        type="button"
-                        onClick={() => handleTemplateChange("example")}
-                        className={`p-4 rounded-xl border text-left flex flex-col gap-1.5 transition-all ${policyTemplate === "example"
-                          ? "bg-amber-500/5 border-amber-500/30 text-amber-300"
-                          : "bg-[#070707] border-[#222] text-gray-400 hover:text-white"
-                          }`}
-                      >
-                        <div className="flex items-center gap-2 font-bold text-sm">
-                          <Lock className="w-4 h-4" /> Production Policy
-                        </div>
-                        <span className="text-xs opacity-85">
-                          Advanced template with detailed descriptions, strict path boundaries, and hardened execute constraints.
-                        </span>
-                      </button>
-                    </div>
-
-                    <div className="space-y-2">
-                      <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-bold uppercase text-gray-400 tracking-wider">
-                          Policy Blueprint (YAML)
-                        </label>
-                        <span className="text-[10px] text-gray-500 font-mono">config/fs_policy.yaml</span>
-                      </div>
-                      <textarea
-                        value={policyYaml}
-                        onChange={(e) => setPolicyYaml(e.target.value)}
-                        rows={20}
-                        readOnly
-                        className="w-full bg-[#030303] border border-[#222] rounded-xl p-4 text-xs font-mono text-amber-400/90 focus:border-amber-500/40 outline-none transition-all leading-relaxed"
-                      />
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-5 rounded-xl border border-dashed border-[#222] bg-[#070707]/30 text-center text-gray-500 text-sm">
-                    <Info className="w-8 h-8 mx-auto mb-2 text-gray-600" />
-                    Filesystem security policy is disabled. The agent will run with in-code default settings (`exec.enabled=false`).
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Step 6: SSO Configuration */}
-            {currentStep === "sso" && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
-                    <ShieldAlert className="w-5 h-5 text-blue-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold">6. Single Sign-On (SSO)</h2>
-                    <p className="text-xs text-gray-400">Opzionale: configura l'accesso tramite Google Workspace o Microsoft Entra ID.</p>
-                  </div>
+              ) : (
+                <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-secondary/30 p-5 text-center text-sm text-muted-foreground">
+                  <ShieldAlert className="h-6 w-6 text-muted-foreground/70" aria-hidden />
+                  <p>
+                    Filesystem security policy is disabled. The agent will run with in-code default settings (
+                    <Mono>exec.enabled=false</Mono>).
+                  </p>
                 </div>
-                
-                <div className="grid grid-cols-3 gap-3">
-                  {([
-                    ["none", "Nessuno (password)"],
-                    ["microsoft", "Microsoft Entra ID"],
-                    ["google", "Google Workspace"],
-                  ] as const).map(([value, label]) => (
+              )}
+            </div>
+          )}
+
+          {/* Step 6: SSO Configuration */}
+          {currentStep === "sso" && (
+            <div className="flex flex-col gap-6">
+              <StepHeader
+                icon={<ShieldAlert className="h-5 w-5" aria-hidden />}
+                title="6. Single Sign-On (SSO)"
+                description="Opzionale: configura l'accesso tramite Google Workspace o Microsoft Entra ID."
+              />
+
+              <div role="radiogroup" aria-label="6. Single Sign-On (SSO)" className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {([
+                  ["none", "Nessuno (password)"],
+                  ["microsoft", "Microsoft Entra ID"],
+                  ["google", "Google Workspace"],
+                ] as const).map(([value, label]) => {
+                  const on = ssoProvider === value;
+                  return (
                     <button
                       key={value}
                       type="button"
-                      onClick={() => { setSsoProvider(value); setSsoValidated(false); }}
-                      className={`p-3 rounded-xl border text-sm font-semibold transition-all ${
-                        ssoProvider === value
-                          ? "bg-blue-500/10 border-blue-500 text-white"
-                          : "bg-[#070707] border-[#222] text-gray-400 hover:border-gray-500"
-                      }`}
+                      role="radio"
+                      aria-checked={on}
+                      onClick={() => {
+                        setSsoProvider(value);
+                        setSsoValidated(false);
+                      }}
+                      className={cn(
+                        "focus-ring flex items-center gap-2.5 rounded-xl border px-3.5 py-3 text-left text-sm font-medium transition-colors duration-200",
+                        on
+                          ? "border-foreground/50 bg-secondary text-foreground"
+                          : "border-border bg-background text-muted-foreground hover:border-foreground/25 hover:text-foreground",
+                      )}
                     >
+                      {value === "none" ? (
+                        <KeyRound className="h-4 w-4 shrink-0" aria-hidden />
+                      ) : (
+                        <SsoProviderIcon provider={value} className="h-4 w-4" />
+                      )}
                       {label}
                     </button>
-                  ))}
-                </div>
-
-                {ssoProvider !== "none" && (
-                  <SsoConfigPanel
-                    key={ssoProvider}
-                    forcedProvider={ssoProvider}
-                    isActive
-                    onValidatedChange={setSsoValidated}
-                  />
-                )}
+                  );
+                })}
               </div>
-            )}
 
-            {/* Step 7: Review */}
-            {currentStep === "review" && (
-              <div className="space-y-6 animate-in fade-in duration-300">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
-                    <Sparkles className="w-5 h-5 text-emerald-500" />
-                  </div>
-                  <div>
-                    <h2 className="text-xl font-bold">6. Review & Initialize</h2>
-                    <p className="text-xs text-gray-400">Review your configurations. Once confirmed, the system will apply them.</p>
-                  </div>
-                </div>
+              {ssoProvider !== "none" && (
+                <SsoConfigPanel
+                  key={ssoProvider}
+                  forcedProvider={ssoProvider}
+                  isActive
+                  onValidatedChange={setSsoValidated}
+                />
+              )}
+            </div>
+          )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                  {/* LLM Card */}
-                  <div className="p-4 rounded-xl border border-[#222] bg-[#070707] space-y-2">
-                    <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">LLM Provider</span>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-white">{llmForm.display_name}</span>
-                      <span className="text-xs text-gray-400 font-mono">
-                        {llmForm.provider} / {llmForm.model_name}
-                      </span>
-                      <span className="text-xs text-gray-500 font-mono mt-1">
-                        Max Chat Tokens: {llmForm.max_chat_tokens} | Thinking Budget: {llmForm.thinking_token_budget}
-                      </span>
-                    </div>
-                  </div>
+          {/* Step 7: Review */}
+          {currentStep === "review" && (
+            <div className="flex flex-col gap-6">
+              <StepHeader
+                icon={<Sparkles className="h-5 w-5" aria-hidden />}
+                title="6. Review & Initialize"
+                description="Review your configurations. Once confirmed, the system will apply them."
+              />
 
-                  {/* Embeddings Card */}
-                  <div className="p-4 rounded-xl border border-[#222] bg-[#070707] space-y-2">
-                    <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Memory & Embeddings</span>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-white">Provider: {embForm.provider}</span>
-                      <span className="text-xs text-gray-400 font-mono">Model: {embForm.model}</span>
-                    </div>
-                  </div>
+              <div className="grid grid-cols-1 gap-3 text-sm md:grid-cols-2">
+                <ReviewItem label="LLM Provider">
+                  <span className="font-semibold">{llmForm.display_name}</span>
+                  <span className="break-all font-mono text-xs text-muted-foreground">
+                    {llmForm.provider} / {llmForm.model_name}
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    Max Chat Tokens: {llmForm.max_chat_tokens} | Thinking Budget: {llmForm.thinking_token_budget}
+                  </span>
+                </ReviewItem>
 
-                  {/* OCR Card */}
-                  <div className="p-4 rounded-xl border border-[#222] bg-[#070707] space-y-2">
-                    <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">OCR Processing</span>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-white">
-                        {ocrMode === "remote" ? "Remote vision OCR" : "Local Python OCR"}
-                      </span>
-                      <span className="text-xs text-gray-400 font-mono">
-                        {ocrMode === "remote"
-                          ? `${ocrForm.base_url || "—"} · model: ${ocrForm.model || "—"}`
-                          : "pymupdf4llm + pytesseract (no AION_OCR_* env vars)"}
-                      </span>
-                    </div>
-                  </div>
+                <ReviewItem label="Memory & Embeddings">
+                  <span className="font-semibold">Provider: {embForm.provider}</span>
+                  <span className="break-all font-mono text-xs text-muted-foreground">Model: {embForm.model}</span>
+                </ReviewItem>
 
-                  {/* Web Search Card */}
-                  <div className="p-4 rounded-xl border border-[#222] bg-[#070707] space-y-2">
-                    <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Web Integration</span>
-                    <div className="flex flex-wrap gap-1.5 pt-1">
-                      {searchForm.tavily_enabled && (
-                        <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold">
-                          Tavily
-                        </span>
-                      )}
-                      {searchForm.brave_enabled && (
-                        <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold">
-                          Brave
-                        </span>
-                      )}
-                      {searchForm.searxng_enabled && (
-                        <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-400 text-xs font-bold">
-                          SearXNG
-                        </span>
-                      )}
-                      {!searchForm.tavily_enabled && !searchForm.brave_enabled && !searchForm.searxng_enabled && (
-                        <span className="text-xs text-gray-500">No Web Search enabled</span>
-                      )}
-                    </div>
-                  </div>
+                <ReviewItem label="OCR Processing">
+                  <span className="font-semibold">{ocrMode === "remote" ? "Remote vision OCR" : "Local Python OCR"}</span>
+                  <span className="break-all font-mono text-xs text-muted-foreground">
+                    {ocrMode === "remote"
+                      ? `${ocrForm.base_url || "—"} · model: ${ocrForm.model || "—"}`
+                      : "pymupdf4llm + pytesseract (no AION_OCR_* env vars)"}
+                  </span>
+                </ReviewItem>
 
-                  {/* Policy Card */}
-                  <div className="p-4 rounded-xl border border-[#222] bg-[#070707] space-y-2">
-                    <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Sandbox Security</span>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-white">
-                        {policyEnabled ? `Enabled (${policyTemplate} template)` : "Disabled"}
-                      </span>
-                      <span className="text-xs text-gray-400 font-mono">config/fs_policy.yaml</span>
-                    </div>
+                <ReviewItem label="Web Integration">
+                  <div className="flex flex-wrap gap-1.5">
+                    {searchForm.tavily_enabled && <Chip>Tavily</Chip>}
+                    {searchForm.brave_enabled && <Chip>Brave</Chip>}
+                    {searchForm.searxng_enabled && <Chip>SearXNG</Chip>}
+                    {!searchForm.tavily_enabled && !searchForm.brave_enabled && !searchForm.searxng_enabled && (
+                      <span className="text-xs text-muted-foreground">No Web Search enabled</span>
+                    )}
                   </div>
+                </ReviewItem>
 
-                  {/* SSO Card */}
-                  <div className="p-4 rounded-xl border border-[#222] bg-[#070707] space-y-2">
-                    <span className="text-xs text-gray-500 font-bold uppercase tracking-wider">Single Sign-On</span>
-                    <div className="flex flex-col">
-                      <span className="font-bold text-white">
-                        {ssoStatus.enabled ? (ssoStatus.validated ? "Enabled & Validated" : "Enabled (Error: Not Validated)") : "Disabled"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+                <ReviewItem label="Sandbox Security">
+                  <span className="font-semibold">
+                    {policyEnabled ? `Enabled (${policyTemplate} template)` : "Disabled"}
+                  </span>
+                  <span className="font-mono text-xs text-muted-foreground">config/fs_policy.yaml</span>
+                </ReviewItem>
 
-                <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-300 flex items-start gap-3 text-xs leading-relaxed">
-                  <Info className="w-5 h-5 shrink-0 mt-0.5" />
-                  <div>
-                    Clicking the initialization button will save these variables to your `.env` file and write the sandbox policy YAML.
-                    If you are running in Docker, the container will restart automatically. If you are in local dev, you will need to restart the Python process manually.
-                  </div>
-                </div>
+                <ReviewItem label="Single Sign-On">
+                  <span className="font-semibold">
+                    {ssoStatus.enabled
+                      ? ssoStatus.validated
+                        ? "Enabled & Validated"
+                        : "Enabled (Error: Not Validated)"
+                      : "Disabled"}
+                  </span>
+                </ReviewItem>
               </div>
-            )}
-          </div>
 
-          {/* Footer Controls */}
-          <div className="flex justify-between items-center">
-            {currentStep !== "llm" ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setError(null);
-                  const idx = stepsOrder.indexOf(currentStep);
-                  setCurrentStep(stepsOrder[idx - 1]);
-                }}
-                className="flex items-center gap-2 px-5 py-2.5 rounded-xl border border-[#222] bg-[#0d0d0d] text-gray-400 hover:text-white transition-all active:scale-95 cursor-pointer"
-              >
-                <ChevronLeft className="w-4 h-4" /> Back
-              </button>
-            ) : (
-              <div />
-            )}
+              <Note>
+                Clicking the initialization button will save these variables to your <Mono>.env</Mono> file and write the
+                sandbox policy YAML. If you are running in Docker, the container will restart automatically. If you are in
+                local dev, you will need to restart the Python process manually.
+              </Note>
+            </div>
+          )}
+        </section>
 
-            {currentStep !== "review" ? (
-              <button
-                type="button"
-                onClick={handleNext}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold transition-all shadow-lg shadow-blue-500/20 active:scale-95 cursor-pointer"
-              >
-                Next <ChevronRight className="w-4 h-4" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={loading}
-                className="flex items-center gap-2 px-8 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold transition-all shadow-lg shadow-emerald-500/20 active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                {loading ? <Loader2 className="animate-spin w-4 h-4" /> : <Check className="w-4 h-4" />}
-                Initialize AION Kernel
-              </button>
-            )}
-          </div>
+        {/* Footer Controls */}
+        <div className="flex items-center justify-between gap-3">
+          {currentStep !== "llm" ? (
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                const idx = stepsOrder.indexOf(currentStep);
+                setCurrentStep(stepsOrder[idx - 1]);
+              }}
+              className={cn(outlineBtn, "h-10 px-4")}
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden /> Back
+            </button>
+          ) : (
+            <div />
+          )}
+
+          {currentStep !== "review" ? (
+            <button type="button" onClick={handleNext} className={cn(solidBtn, "h-10 px-5")}>
+              Next <ChevronRight className="h-4 w-4" aria-hidden />
+            </button>
+          ) : (
+            <button type="button" onClick={handleSave} disabled={loading} className={cn(solidBtn, "h-10 px-5")}>
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
+              Initialize AION Kernel
+            </button>
+          )}
         </div>
-      )}
+      </div>
     </div>
+  );
+}
+
+/** Icon, numbered title and one-line description at the top of each wizard step. */
+function StepHeader({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: ReactNode;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="flex items-start gap-3.5">
+      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">{icon}</div>
+      <div className="min-w-0 flex-1">
+        <h2 className="text-lg font-semibold tracking-tight text-balance">{title}</h2>
+        <p className="mt-1 text-sm leading-relaxed text-pretty text-muted-foreground">{description}</p>
+      </div>
+      {action ? <div className="shrink-0 pt-2">{action}</div> : null}
+    </div>
+  );
+}
+
+/** Masked key input with a show/hide toggle; visibility state lives in the page. */
+function SecretField({
+  shown,
+  onToggle,
+  value,
+  onChange,
+  placeholder,
+}: {
+  shown: boolean;
+  onToggle: () => void;
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <span className="relative block">
+      <input
+        type={shown ? "text" : "password"}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={cn(monoInputCls, "pr-11")}
+        placeholder={placeholder}
+        autoComplete="new-password"
+        spellCheck={false}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={shown ? "Hide" : "Show"}
+        aria-pressed={shown}
+        className="focus-ring absolute right-1.5 top-1/2 inline-flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+      >
+        {shown ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+      </button>
+    </span>
+  );
+}
+
+/** One search engine: name, description and switch, with its credential field when enabled. */
+function EngineRow({
+  name,
+  description,
+  checked,
+  onChange,
+  children,
+}: {
+  name: string;
+  description: string;
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  children: ReactNode;
+}) {
+  return (
+    <li className="flex flex-col gap-3.5 px-5 py-4">
+      <div className="flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">{name}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        </div>
+        <Switch checked={checked} onChange={onChange} label={name} />
+      </div>
+      {checked && children}
+    </li>
+  );
+}
+
+function ReviewItem({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 rounded-xl border border-border/70 bg-secondary/30 p-4">
+      <span className="aion-section-label">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function Chip({ children }: { children: ReactNode }) {
+  return (
+    <span className="rounded-md border border-border bg-secondary px-2 py-0.5 text-xs font-medium text-foreground">
+      {children}
+    </span>
   );
 }

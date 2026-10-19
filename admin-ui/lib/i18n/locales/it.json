@@ -749,7 +749,10 @@
         "client_secret": "Client secret",
         "client_secret_ph": "Lascia vuoto per non modificarlo al salvataggio",
         "scopes": "Scope",
-        "missing_id": "Gli utenti vedranno un errore finché non salvi un Client ID qui."
+        "missing_id": "Gli utenti vedranno un errore finché non salvi un Client ID qui.",
+        "manual_title": "Client OAuth pre-registrato (facoltativo)",
+        "manual_body": "Di norma il client si ottiene con la registrazione dinamica. Compila questi campi solo se il provider richiede un client già registrato: registralo con l'URL di callback qui sotto e incolla Client ID e Client secret. Svuota il Client ID per tornare alla registrazione dinamica.",
+        "client_secret_saved_ph": "Già salvato: lascia vuoto per non modificarlo"
       },
       "suggest": {
         "body_one": "Il rilevamento ha trovato {{count}} campo che non è ancora nello schema.",

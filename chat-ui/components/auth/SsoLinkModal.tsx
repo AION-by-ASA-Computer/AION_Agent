@@ -6,7 +6,14 @@ import { apiBase } from "@/lib/config";
 import { getStoredToken, setStoredAuth } from "@/lib/auth/storage";
 import { resetAuthStatusCache } from "@/lib/auth/status";
 import { useT } from "@/lib/i18n/use-t";
-import { ChatBrand } from "@/components/brand/ChatBrand";
+import { cn } from "@/lib/cn";
+import {
+  AuthAlert,
+  AuthShell,
+  SsoProviderIcon,
+  authPrimaryBtnCls,
+  authQuietBtnCls,
+} from "@/components/auth/AuthShell";
 
 export function SsoLinkModal({ provider }: { provider: string }) {
   const [loading, setLoading] = useState(false);
@@ -80,42 +87,46 @@ export function SsoLinkModal({ provider }: { provider: string }) {
   };
 
   return (
-    <div role="dialog" aria-modal="true" className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-aion border border-border bg-card p-6 text-card-foreground shadow-lg">
-        <div className="mb-6 flex justify-center">
-          <ChatBrand className="h-12" />
-        </div>
-        <h2 className="mb-2 text-center text-xl font-semibold">{t("sso_link.title")}</h2>
-        <p className="mb-6 text-center text-sm text-muted-foreground">
-          {t("sso_link.desc", { provider: providerName })}
-        </p>
-
-        {error && (
-          <div className="mb-4 rounded bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sso-link-title"
+      className="fixed inset-0 z-50 overflow-y-auto bg-background"
+    >
+      <AuthShell>
+        <div className="mb-6 flex flex-col items-center gap-3 text-center">
+          <div className="flex size-12 items-center justify-center rounded-full border border-border/70 bg-background/60">
+            <SsoProviderIcon provider={provider} className="h-6 w-6" />
           </div>
-        )}
+          <div className="space-y-1.5">
+            <h2 id="sso-link-title" className="text-lg font-semibold tracking-tight text-balance">
+              {t("sso_link.title")}
+            </h2>
+            <p className="text-sm leading-relaxed text-pretty text-muted-foreground">
+              {t("sso_link.desc", { provider: providerName })}
+            </p>
+          </div>
+        </div>
 
-        <button
-          onClick={handleLink}
-          disabled={loading}
-          className="focus-ring flex w-full items-center justify-center gap-2 rounded-aion bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {loading ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            t("sso_link.button", { provider: providerName })
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={loading}
-          className="focus-ring mt-3 w-full rounded-aion py-2 text-sm text-muted-foreground hover:text-foreground"
-        >
-          {t("sso_link.logout")}
-        </button>
-      </div>
+        <div className="flex flex-col gap-3">
+          {error && <AuthAlert>{error}</AuthAlert>}
+          <button onClick={handleLink} disabled={loading} className={authPrimaryBtnCls}>
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              t("sso_link.button", { provider: providerName })
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loading}
+            className={cn(authQuietBtnCls, "self-center")}
+          >
+            {t("sso_link.logout")}
+          </button>
+        </div>
+      </AuthShell>
     </div>
   );
 }

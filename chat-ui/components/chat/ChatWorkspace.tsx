@@ -5054,7 +5054,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 className={cn(
                   "chat-font box-border w-full resize-none break-words border-0 bg-transparent text-[0.95rem] sm:text-[1.025rem] text-foreground [overflow-wrap:anywhere] placeholder:text-muted-foreground/60 outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0",
                   isMultiLine
-                    ? "min-h-[34px] max-h-[220px] px-1 py-1 leading-[24px] overflow-y-auto custom-scrollbar"
+                    ? "min-h-[34px] px-1 py-1 leading-[24px] overflow-y-auto custom-scrollbar"
                     : "h-[32px] min-h-[32px] max-h-[32px] px-2 py-0.5 leading-[24px] overflow-hidden whitespace-nowrap"
                 )}
                 rows={1}
