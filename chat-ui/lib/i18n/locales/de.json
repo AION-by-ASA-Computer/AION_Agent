@@ -738,6 +738,23 @@
       "link_failed": "Verknüpfung fehlgeschlagen.",
       "session_invalid": "Sitzung abgelaufen, bitte erneut anmelden.",
       "user_not_found": "Benutzer nicht gefunden."
+    },
+    "desktop": {
+      "banner": "Sie melden sich bei AION Cowork an",
+      "continue_as": "Weiter als {{user}}",
+      "other_account": "Anderes Konto verwenden",
+      "working": "Verbindung zu AION Cowork wird hergestellt...",
+      "done": "Anmeldung abgeschlossen. Sie können zu AION Cowork zurückkehren und diesen Tab schließen.",
+      "retry": "Erneut versuchen",
+      "close_hint": "Besteht das Problem weiter, schließen Sie diesen Tab und starten Sie die Anmeldung in AION Cowork neu.",
+      "error": {
+        "redirect_not_allowed": "Rücksprungadresse vom Server nicht erlaubt. Starten Sie die Anmeldung in AION Cowork neu.",
+        "invalid_challenge": "Ungültige Anmeldeanfrage. Starten Sie die Anmeldung in AION Cowork neu.",
+        "unauthorized": "Ungültige Sitzung. Bitte erneut anmelden.",
+        "network": "Server nicht erreichbar. Prüfen Sie die Verbindung und versuchen Sie es erneut.",
+        "invalid_response": "Ungültige Antwort des Servers.",
+        "generic": "Anmeldung bei AION Cowork konnte nicht abgeschlossen werden."
+      }
     }
   },
   "authgate": {

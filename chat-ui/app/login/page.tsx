@@ -1,9 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiBase } from "@/lib/config";
-import { setStoredAuth } from "@/lib/auth/storage";
+import { getStoredToken, setStoredAuth } from "@/lib/auth/storage";
+import {
+  DesktopHandoffError,
+  completeDesktopHandoff,
+  getPendingDesktop,
+  readDesktopParams,
+  type DesktopRequest,
+} from "@/lib/auth/desktop";
+import { fetchCurrentUser } from "@/lib/api/user-preferences";
+import { DesktopHandoffStatus, type DesktopHandoffState } from "@/components/auth/DesktopHandoffStatus";
 import { fetchAuthStatus } from "@/lib/auth/status";
 import { cn } from "@/lib/cn";
 import {
@@ -32,6 +41,10 @@ export default function LoginPage() {
   const [ssoProvider, setSsoProvider] = useState<"microsoft" | "google" | null>(null);
   const [passwordVisible, setPasswordVisible] = useState<boolean>(true);
   const [mfa, setMfa] = useState<MfaChallenge | null>(null);
+  const [desktop, setDesktop] = useState<DesktopRequest | null>(null);
+  const [handoff, setHandoff] = useState<DesktopHandoffState | null>(null);
+  const [existing, setExisting] = useState<{ token: string; label: string } | null>(null);
+  const handoffToken = useRef<string | null>(null);
 
   const ssoErrorMessage = useCallback(
     (code: string) => {
@@ -59,10 +72,48 @@ export default function LoginPage() {
       setErr(ssoErrorMessage(ssoError));
     }
 
+    const req = readDesktopParams();
+    if (req) {
+      setDesktop(req);
+      const stored = getStoredToken();
+      if (stored) {
+        void fetchCurrentUser(stored).then((u) => {
+          if (cancelled || !u) return;
+          const label = u.display_name || u.identifier || "";
+          if (label) setExisting({ token: stored, label });
+        });
+      }
+    }
+
     return () => {
       cancelled = true;
     };
   }, [ssoErrorMessage]);
+
+  async function runHandoff(token: string) {
+    handoffToken.current = token;
+    setHandoff({ phase: "working" });
+    try {
+      const target = await completeDesktopHandoff(token);
+      setHandoff({ phase: "done" });
+      window.location.assign(target);
+    } catch (e) {
+      setHandoff({ phase: "error", code: e instanceof DesktopHandoffError ? e.code : "generic" });
+    }
+  }
+
+  function retryHandoff() {
+    if (handoff?.phase === "error" && handoff.code === "unauthorized") {
+      handoffToken.current = null;
+      setHandoff(null);
+      return;
+    }
+    if (handoffToken.current) void runHandoff(handoffToken.current);
+  }
+
+  function useAnotherAccount() {
+    setExisting(null);
+  }
 
   function handleSSOLogin() {
     window.location.href = `${apiBase()}/auth/sso/start?provider=${ssoProvider}&return_to=/`;
@@ -118,6 +169,11 @@ export default function LoginPage() {
   }
 
   async function completeLogin(j: { access_token?: string; user_id?: string }) {
+    // Login per l'app desktop: il token non viene salvato nel browser, serve solo per l'handoff.
+    if (j.access_token && getPendingDesktop()) {
+      await runHandoff(j.access_token);
+      return;
+    }
     if (j.access_token && j.user_id) {
       setStoredAuth(j.access_token, j.user_id);
       initLocaleFromStorage();
@@ -133,7 +189,7 @@ export default function LoginPage() {
     <AuthShell
       footer={
         /* Il bypass "chat senza login" e' permesso solo se AION_CHAT_PASSWORD_AUTH e' disattivato lato server. */
-        authRequired === false ? (
+        authRequired === false && !desktop ? (
           <Link href="/" className={authQuietBtnCls}>
             {t("login.no_auth")}
           </Link>
@@ -141,7 +197,23 @@ export default function LoginPage() {
       }
     >
       <AuthHeading title="AION Chat — login" srOnly />
-      {mfa ? (
+      {desktop && (
+        <p className="mb-4 rounded-aion border border-input bg-muted px-3 py-2 text-center text-sm text-foreground">
+          {t("login.desktop.banner")}
+        </p>
+      )}
+      {handoff ? (
+        <DesktopHandoffStatus state={handoff} onRetry={retryHandoff} />
+      ) : desktop && existing ? (
+        <div className="flex flex-col gap-3">
+          <button type="button" onClick={() => void runHandoff(existing.token)} className={authPrimaryBtnCls}>
+            {t("login.desktop.continue_as", { user: existing.label })}
+          </button>
+          <button type="button" onClick={useAnotherAccount} className={authQuietBtnCls}>
+            {t("login.desktop.other_account")}
+          </button>
+        </div>
+      ) : mfa ? (
         <TwoFactorStep challenge={mfa} onSuccess={completeLogin} onCancel={() => setMfa(null)} />
       ) : (
         <div className="flex flex-col gap-5">

@@ -64,8 +64,13 @@ def _validate_return_to(return_to: Optional[str]) -> str:
 async def _create_handoff_code(
     payload: dict,
     tenant_id: str,
+    kind: str = "handoff",
 ) -> str:
-    """Crea un handoff code monouso con TTL 60s cifrato in sso_auth_states."""
+    """Crea un handoff code monouso con TTL 60s cifrato in sso_auth_states.
+
+    ``kind`` separa gli spazi dei codici: /auth/sso/exchange riscatta solo
+    ``handoff`` (il login desktop usa ``desktop_handoff``).
+    """
     import json
 
     code_raw = secrets.token_urlsafe(32)
@@ -78,7 +83,7 @@ async def _create_handoff_code(
         session.add(
             SsoAuthState(
                 state_hash=code_hash,
-                kind="handoff",
+                kind=kind,
                 purpose="exchange",
                 provider=payload.get("provider", ""),
                 nonce=None,

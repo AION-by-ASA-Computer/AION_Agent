@@ -19,6 +19,7 @@ import hmac
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -67,6 +68,23 @@ def _decode_roles(raw: str) -> List[str]:
     return [s for s in raw.split(",") if s]
 
 
+def issue_chat_token_with_exp(
+    *,
+    user_row_id: str,
+    user_identifier: str,
+    roles: Optional[List[str]] = None,
+) -> tuple[str, int]:
+    """Come ``issue_chat_token`` ma restituisce anche ``exp`` (epoch secondi)."""
+    exp = int(time.time()) + max(300, _TOKEN_TTL_SEC)
+    roles_csv = _encode_roles(roles)
+    payload = f"{user_row_id}:{user_identifier}:{roles_csv}:{exp}"
+    sig = hmac.new(
+        _secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    raw = f"{payload}:{sig}".encode("utf-8")
+    return base64.urlsafe_b64encode(raw).decode("ascii"), exp
+
+
 def issue_chat_token(
     *,
     user_row_id: str,
@@ -78,14 +96,9 @@ def issue_chat_token(
     I ruoli sono inclusi nel payload e firmati HMAC: nessun DB lookup per
     request. TTL = ``AION_CHAT_AUTH_TOKEN_TTL_SEC`` (default 7gg).
     """
-    exp = int(time.time()) + max(300, _TOKEN_TTL_SEC)
-    roles_csv = _encode_roles(roles)
-    payload = f"{user_row_id}:{user_identifier}:{roles_csv}:{exp}"
-    sig = hmac.new(
-        _secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
-    raw = f"{payload}:{sig}".encode("utf-8")
-    return base64.urlsafe_b64encode(raw).decode("ascii")
+    return issue_chat_token_with_exp(
+        user_row_id=user_row_id, user_identifier=user_identifier, roles=roles
+    )[0]
 
 
 def verify_chat_token(token: str) -> Optional[Dict[str, Any]]:
@@ -251,7 +264,7 @@ def build_login_response(
     uid = sanitize_user_id(str(row["identifier"]))
     roles = list(row.get("roles") or [])
     must_change = bool(row.get("must_change_password", False))
-    tok = issue_chat_token(
+    tok, exp = issue_chat_token_with_exp(
         user_row_id=user_id_raw,
         user_identifier=str(row["identifier"]),
         roles=roles,
@@ -265,7 +278,71 @@ def build_login_response(
         "roles": roles,
         "must_change_password": must_change,
         "sso_link_required": sso_link_required,
+        "expires_at": datetime.fromtimestamp(exp, tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        ),
+        "expires_in": max(0, exp - int(time.time())),
     }
+
+
+def _bearer_chat_token(authorization: Optional[str]) -> Dict[str, Any]:
+    """Valida un Bearer token chat (no API key) o solleva 401."""
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(401, detail="Missing bearer token")
+    parsed = verify_chat_token(authorization.split(" ", 1)[1].strip())
+    if not parsed:
+        raise HTTPException(401, detail="Invalid or expired token")
+    return parsed
+
+
+@router.post("/refresh")
+async def refresh_token(authorization: Optional[str] = Header(None)):
+    """Rinnova il token di sessione (Bearer valido e non scaduto).
+
+    Non applica i gate sso_link/mfa: i flag restano nel payload, cosi' un
+    utente bloccato puo' comunque mantenere la sessione per completarli.
+    """
+    parsed = _bearer_chat_token(authorization)
+
+    from src.data.engine import get_async_session_maker
+    from src.data.models import User
+    from src.data.user_password import get_roles
+
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
+    async with get_async_session_maker()() as session:
+        u = await session.get(User, parsed["user_row_id"])
+        if not u:
+            raise HTTPException(401, detail="Invalid or expired token")
+        row = {
+            "id": u.id,
+            "identifier": u.identifier,
+            "display_name": u.display_name,
+            "roles": get_roles(u),
+            "must_change_password": bool(getattr(u, "must_change_password", False)),
+        }
+
+    sso_link_required = False
+    sso_linked = False
+    try:
+        from src.auth.sso.login_mode import get_login_settings, user_needs_link
+
+        settings = await get_login_settings(tenant)
+        if settings.get("sso_provider"):
+            sso_link_required = await user_needs_link(tenant, parsed["user_row_id"])
+            sso_linked = not sso_link_required
+    except Exception as _e:
+        logger.warning("SSO refresh check failed: %s", _e)
+    # Come /auth/me: la password temporanea non conta per chi e' gia' su SSO.
+    row["must_change_password"] = row["must_change_password"] and not sso_linked
+    return build_login_response(row, sso_link_required=sso_link_required)
+
+
+@router.post("/logout")
+async def logout(authorization: Optional[str] = Header(None)):
+    """Logout stateless: nessuna revoca, il client scarta il token."""
+    parsed = _bearer_chat_token(authorization)
+    logger.info("auth logout user=%s", parsed["identifier"])
+    return {"ok": True}
 
 
 @router.get("/me")

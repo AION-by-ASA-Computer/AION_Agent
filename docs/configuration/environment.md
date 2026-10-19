@@ -145,6 +145,7 @@ Hard limits on the single turn to avoid LLM runaway loops:
 | Variable | Default | Description |
 |-----------|---------|-------------|
 | `AION_CHAT_AUTH_TOKEN_TTL_SEC` | `604800` | chat-ui JWT token TTL (7 days) |
+| `AION_DESKTOP_REDIRECT_ALLOWLIST` |  | Comma-separated exact redirect URLs allowed for desktop browser login (`/auth/desktop/handoff`). Empty = loopback only (`http://127.0.0.1\|localhost\|[::1]:<port>/callback`) |
 | `AION_FS_POLICY_PATH` |  | Filesystem policy YAML path (empty = default in-code) |
 | `AION_PROMO_CAPTURE_ENABLED` | `1` | Enables PNG export via MCP `promo_render` |
 | `AION_PROMO_CAPTURE_TIMEOUT_MS` | (optional) | Playwright capture timeout (ms) |

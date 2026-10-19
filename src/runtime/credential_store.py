@@ -578,10 +578,17 @@ async def get_credential(
     *,
     tenant_id: str = "default",
     auto_refresh_oauth: bool = True,
+    user_only: bool = False,
 ) -> Optional[str]:
+    """``user_only=True``: solo credenziali dell'utente, mai default/org_shared
+    (per endpoint che restituiscono il valore in chiaro a un client)."""
     mode = await _get_server_credential_mode(server_slug)
 
-    if mode == "per_user":
+    if user_only:
+        lookup_user_ids = (
+            [user_id] if user_id and user_id not in ("default", "org_shared") else []
+        )
+    elif mode == "per_user":
         # Per server MCP strettamente personali (es. email personale):
         # cerca ESCLUSIVAMENTE le credenziali configurate dall'utente corrente
         lookup_user_ids = (

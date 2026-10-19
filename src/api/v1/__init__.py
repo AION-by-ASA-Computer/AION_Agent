@@ -12,6 +12,7 @@ from . import (
     steps,
     user_memory,
     llm_providers,
+    llm_proxy,
 )
 from src.api.cron_user import router as cron_user_router
 
@@ -27,4 +28,5 @@ api_v1_router.include_router(steps.router, tags=["v1-steps"])
 api_v1_router.include_router(mcp_integrations.router, tags=["v1-mcp-integrations"])
 api_v1_router.include_router(runtime_settings.router)
 api_v1_router.include_router(llm_providers.router)
+api_v1_router.include_router(llm_proxy.router)
 api_v1_router.include_router(cron_user_router, tags=["v1-cron-jobs"])
