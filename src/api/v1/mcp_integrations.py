@@ -416,7 +416,10 @@ async def get_user_credential_value(
     tenant = _tenant_id()
     from src.runtime.credential_store import get_credential
 
-    val = await get_credential(user_id, server_slug, credential_key, tenant_id=tenant)
+    # Mai valori org_shared/default in chiaro a un client: solo i propri.
+    val = await get_credential(
+        user_id, server_slug, credential_key, tenant_id=tenant, user_only=True
+    )
     if val is None:
         raise HTTPException(status_code=404, detail="Credential not found")
     return {"key": credential_key, "value": val}

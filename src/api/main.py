@@ -514,6 +514,10 @@ app.include_router(admin_router)
 app.include_router(a2a_router)
 app.include_router(session_uploads_router)
 app.include_router(api_v1_router)
+
+from .v1.client_info import router as client_info_router
+
+app.include_router(client_info_router, prefix="/v1")
 app.include_router(orchestration_router)
 app.include_router(research_router)
 app.include_router(plan_execution_router)
