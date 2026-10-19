@@ -1,14 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiBase } from "@/lib/config";
 import { setStoredAuth } from "@/lib/auth/storage";
+import { DesktopHandoffError, completeDesktopHandoff, getPendingDesktop } from "@/lib/auth/desktop";
+import { DesktopHandoffStatus, type DesktopHandoffState } from "@/components/auth/DesktopHandoffStatus";
 import { sanitizeReturnTo } from "@/lib/auth/safeRedirect";
 import { initLocaleFromStorage } from "@/lib/i18n/i18n-store";
 import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
 
 export default function SsoExchangePage() {
   const [error, setError] = useState<string | null>(null);
+  const [handoff, setHandoff] = useState<DesktopHandoffState | null>(null);
+  const handoffToken = useRef<string | null>(null);
+
+  const runHandoff = useCallback(async (token: string) => {
+    handoffToken.current = token;
+    setHandoff({ phase: "working" });
+    try {
+      const target = await completeDesktopHandoff(token);
+      setHandoff({ phase: "done" });
+      window.location.assign(target);
+    } catch (e) {
+      setHandoff({ phase: "error", code: e instanceof DesktopHandoffError ? e.code : "generic" });
+    }
+  }, []);
 
   useEffect(() => {
     async function exchangeCode() {
@@ -47,6 +63,11 @@ export default function SsoExchangePage() {
         }
 
         const data = await res.json();
+        if (data.access_token && getPendingDesktop()) {
+          // Login per l'app desktop: nessun token nel browser; sso_link_required lo gestisce l'app.
+          await runHandoff(data.access_token);
+          return;
+        }
         if (data.access_token && data.user_id) {
           setStoredAuth(data.access_token, data.user_id);
           initLocaleFromStorage();
@@ -77,7 +98,24 @@ export default function SsoExchangePage() {
     }
 
     void exchangeCode();
-  }, []);
+  }, [runHandoff]);
+
+  if (handoff) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4 text-foreground">
+        <DesktopHandoffStatus
+          state={handoff}
+          onRetry={() => {
+            if (handoff.phase === "error" && handoff.code === "unauthorized") {
+              window.location.href = "/login";
+            } else if (handoffToken.current) {
+              void runHandoff(handoffToken.current);
+            }
+          }}
+        />
+      </div>
+    );
+  }
 
   if (error) {
     return (

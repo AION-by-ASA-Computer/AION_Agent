@@ -738,6 +738,23 @@
       "link_failed": "Collegamento non riuscito.",
       "session_invalid": "Sessione scaduta, accedi di nuovo.",
       "user_not_found": "Utente non trovato."
+    },
+    "desktop": {
+      "banner": "Stai accedendo ad AION Cowork",
+      "continue_as": "Continua come {{user}}",
+      "other_account": "Usa un altro account",
+      "working": "Collegamento ad AION Cowork in corso...",
+      "done": "Accesso completato. Puoi tornare ad AION Cowork e chiudere questa scheda.",
+      "retry": "Riprova",
+      "close_hint": "Se il problema persiste, chiudi questa scheda e riavvia l'accesso da AION Cowork.",
+      "error": {
+        "redirect_not_allowed": "Indirizzo di ritorno non consentito dal server. Riavvia l'accesso da AION Cowork.",
+        "invalid_challenge": "Richiesta di accesso non valida. Riavvia l'accesso da AION Cowork.",
+        "unauthorized": "Sessione non valida. Effettua di nuovo l'accesso.",
+        "network": "Impossibile contattare il server. Controlla la connessione e riprova.",
+        "invalid_response": "Risposta non valida dal server.",
+        "generic": "Impossibile completare l'accesso ad AION Cowork."
+      }
     }
   },
   "authgate": {

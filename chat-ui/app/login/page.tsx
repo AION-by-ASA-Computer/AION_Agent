@@ -1,9 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { apiBase } from "@/lib/config";
-import { setStoredAuth } from "@/lib/auth/storage";
+import { getStoredToken, setStoredAuth } from "@/lib/auth/storage";
+import {
+  DesktopHandoffError,
+  completeDesktopHandoff,
+  getPendingDesktop,
+  readDesktopParams,
+  type DesktopRequest,
+} from "@/lib/auth/desktop";
+import { fetchCurrentUser } from "@/lib/api/user-preferences";
+import { DesktopHandoffStatus, type DesktopHandoffState } from "@/components/auth/DesktopHandoffStatus";
 import { fetchAuthStatus } from "@/lib/auth/status";
 import { ChatBrand } from "@/components/brand/ChatBrand";
 import { TwoFactorStep, type MfaChallenge } from "@/components/auth/TwoFactorStep";
@@ -21,6 +30,10 @@ export default function LoginPage() {
   const [ssoProvider, setSsoProvider] = useState<"microsoft" | "google" | null>(null);
   const [passwordVisible, setPasswordVisible] = useState<boolean>(true);
   const [mfa, setMfa] = useState<MfaChallenge | null>(null);
+  const [desktop, setDesktop] = useState<DesktopRequest | null>(null);
+  const [handoff, setHandoff] = useState<DesktopHandoffState | null>(null);
+  const [existing, setExisting] = useState<{ token: string; label: string } | null>(null);
+  const handoffToken = useRef<string | null>(null);
 
   const ssoErrorMessage = useCallback(
     (code: string) => {
@@ -48,10 +61,48 @@ export default function LoginPage() {
       setErr(ssoErrorMessage(ssoError));
     }
 
+    const req = readDesktopParams();
+    if (req) {
+      setDesktop(req);
+      const stored = getStoredToken();
+      if (stored) {
+        void fetchCurrentUser(stored).then((u) => {
+          if (cancelled || !u) return;
+          const label = u.display_name || u.identifier || "";
+          if (label) setExisting({ token: stored, label });
+        });
+      }
+    }
+
     return () => {
       cancelled = true;
     };
   }, [ssoErrorMessage]);
+
+  async function runHandoff(token: string) {
+    handoffToken.current = token;
+    setHandoff({ phase: "working" });
+    try {
+      const target = await completeDesktopHandoff(token);
+      setHandoff({ phase: "done" });
+      window.location.assign(target);
+    } catch (e) {
+      setHandoff({ phase: "error", code: e instanceof DesktopHandoffError ? e.code : "generic" });
+    }
+  }
+
+  function retryHandoff() {
+    if (handoff?.phase === "error" && handoff.code === "unauthorized") {
+      handoffToken.current = null;
+      setHandoff(null);
+      return;
+    }
+    if (handoffToken.current) void runHandoff(handoffToken.current);
+  }
+
+  function useAnotherAccount() {
+    setExisting(null);
+  }
 
   function handleSSOLogin() {
     window.location.href = `${apiBase()}/auth/sso/start?provider=${ssoProvider}&return_to=/`;
@@ -107,6 +158,11 @@ export default function LoginPage() {
   }
 
   async function completeLogin(j: { access_token?: string; user_id?: string }) {
+    // Login per l'app desktop: il token non viene salvato nel browser, serve solo per l'handoff.
+    if (j.access_token && getPendingDesktop()) {
+      await runHandoff(j.access_token);
+      return;
+    }
     if (j.access_token && j.user_id) {
       setStoredAuth(j.access_token, j.user_id);
       initLocaleFromStorage();
@@ -119,7 +175,31 @@ export default function LoginPage() {
     <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-background px-4 text-foreground">
       <ChatBrand className="mb-2 h-20" />
       <h1 className="text-xl font-semibold tracking-tight text-foreground sr-only">AION Chat — login</h1>
-      {ssoEnabled && ssoProvider && !mfa && (
+      {desktop && (
+        <p className="w-full max-w-sm rounded-aion border border-input bg-muted px-3 py-2 text-center text-sm text-foreground">
+          {t("login.desktop.banner")}
+        </p>
+      )}
+      {handoff && <DesktopHandoffStatus state={handoff} onRetry={retryHandoff} />}
+      {desktop && !handoff && existing && (
+        <div className="flex w-full max-w-sm flex-col gap-3">
+          <button
+            type="button"
+            onClick={() => void runHandoff(existing.token)}
+            className="focus-ring rounded-aion bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+          >
+            {t("login.desktop.continue_as", { user: existing.label })}
+          </button>
+          <button
+            type="button"
+            onClick={useAnotherAccount}
+            className="focus-ring text-xs text-primary underline-offset-2 hover:underline"
+          >
+            {t("login.desktop.other_account")}
+          </button>
+        </div>
+      )}
+      {!handoff && !(desktop && existing) && ssoEnabled && ssoProvider && !mfa && (
         <div className="flex w-full max-w-sm flex-col gap-4 mb-2">
           <button
             onClick={handleSSOLogin}
@@ -155,14 +235,14 @@ export default function LoginPage() {
           )}
         </div>
       )}
-      {mfa && (
+      {!handoff && !(desktop && existing) && mfa && (
         <TwoFactorStep
           challenge={mfa}
           onSuccess={completeLogin}
           onCancel={() => setMfa(null)}
         />
       )}
-      {passwordVisible && !mfa && (
+      {!handoff && !(desktop && existing) && passwordVisible && !mfa && (
         <form onSubmit={submit} className="flex w-full max-w-sm flex-col gap-3">
           <input
             className="focus-ring rounded-aion border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground"
@@ -193,7 +273,7 @@ export default function LoginPage() {
         </form>
       )}
       {/* Il bypass "chat senza login" e' permesso solo se AION_CHAT_PASSWORD_AUTH e' disattivato lato server. */}
-      {authRequired === false && (
+      {authRequired === false && !desktop && (
         <Link href="/" className="focus-ring text-xs text-primary underline-offset-2 hover:underline">
           {t("login.no_auth")}
         </Link>

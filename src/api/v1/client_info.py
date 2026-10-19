@@ -11,6 +11,7 @@ from typing import Any, Dict
 from fastapi import APIRouter
 
 from src.api.auth_login import auth_status
+from src.api.public_urls import chat_base_url
 from src.version import __version__
 
 router = APIRouter(tags=["v1-client"])
@@ -22,6 +23,10 @@ MIN_CLIENT_VERSION = "1.0.0"
 @router.get("/client/info")
 async def client_info() -> Dict[str, Any]:
     st = await auth_status()
+    try:
+        base = (chat_base_url() or "").strip().rstrip("/")
+    except Exception:
+        base = ""
     return {
         "product": "aion-agent",
         "api_version": API_VERSION,
@@ -32,5 +37,10 @@ async def client_info() -> Dict[str, Any]:
         "sso_enabled": st["sso_enabled"],
         "two_factor_required": st["two_factor_required"],
         "token_ttl_seconds": st["token_ttl_seconds"],
-        "features": {"llm_proxy": True, "client_bootstrap": False},
+        "login_url": f"{base}/login" if base else None,
+        "features": {
+            "llm_proxy": True,
+            "client_bootstrap": False,
+            "desktop_login": True,
+        },
     }

@@ -738,6 +738,23 @@
       "link_failed": "Échec de la liaison.",
       "session_invalid": "Session expirée, reconnectez-vous.",
       "user_not_found": "Utilisateur introuvable."
+    },
+    "desktop": {
+      "banner": "Vous vous connectez à AION Cowork",
+      "continue_as": "Continuer en tant que {{user}}",
+      "other_account": "Utiliser un autre compte",
+      "working": "Connexion à AION Cowork en cours...",
+      "done": "Connexion terminée. Vous pouvez revenir à AION Cowork et fermer cet onglet.",
+      "retry": "Réessayer",
+      "close_hint": "Si le problème persiste, fermez cet onglet et relancez la connexion depuis AION Cowork.",
+      "error": {
+        "redirect_not_allowed": "Adresse de retour non autorisée par le serveur. Relancez la connexion depuis AION Cowork.",
+        "invalid_challenge": "Demande de connexion invalide. Relancez la connexion depuis AION Cowork.",
+        "unauthorized": "Session invalide. Veuillez vous reconnecter.",
+        "network": "Impossible de joindre le serveur. Vérifiez la connexion et réessayez.",
+        "invalid_response": "Réponse invalide du serveur.",
+        "generic": "Impossible de terminer la connexion à AION Cowork."
+      }
     }
   },
   "authgate": {

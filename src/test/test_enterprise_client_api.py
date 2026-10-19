@@ -112,7 +112,13 @@ async def test_client_info(al):
     assert info["api_version"] == 1
     assert info["version"] == __version__
     assert info["min_client_version"] == "1.0.0"
-    assert info["features"] == {"llm_proxy": True, "client_bootstrap": False}
+    assert info["features"] == {
+        "llm_proxy": True,
+        "client_bootstrap": False,
+        "desktop_login": True,
+    }
+    assert info["login_url"] is None or info["login_url"].endswith("/login")
+    assert info["login_url"] is None or "//login" not in info["login_url"]
     st = await al.auth_status()
     for k in (
         "login_mode",

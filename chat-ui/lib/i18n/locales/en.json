@@ -738,6 +738,23 @@
       "link_failed": "Linking failed.",
       "session_invalid": "Session expired, please sign in again.",
       "user_not_found": "User not found."
+    },
+    "desktop": {
+      "banner": "You are signing in to AION Cowork",
+      "continue_as": "Continue as {{user}}",
+      "other_account": "Use another account",
+      "working": "Connecting to AION Cowork...",
+      "done": "Sign-in complete. You can go back to AION Cowork and close this tab.",
+      "retry": "Retry",
+      "close_hint": "If the problem persists, close this tab and restart sign-in from AION Cowork.",
+      "error": {
+        "redirect_not_allowed": "Return address not allowed by the server. Restart sign-in from AION Cowork.",
+        "invalid_challenge": "Invalid sign-in request. Restart sign-in from AION Cowork.",
+        "unauthorized": "Invalid session. Please sign in again.",
+        "network": "Cannot reach the server. Check your connection and retry.",
+        "invalid_response": "Invalid response from the server.",
+        "generic": "Could not complete sign-in to AION Cowork."
+      }
     }
   },
   "authgate": {
