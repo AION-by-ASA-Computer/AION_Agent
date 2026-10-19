@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from . import (
     chat,
+    client_bootstrap,
     conversations,
     files,
     mcp_integrations,
@@ -29,4 +30,5 @@ api_v1_router.include_router(mcp_integrations.router, tags=["v1-mcp-integrations
 api_v1_router.include_router(runtime_settings.router)
 api_v1_router.include_router(llm_providers.router)
 api_v1_router.include_router(llm_proxy.router)
+api_v1_router.include_router(client_bootstrap.router)
 api_v1_router.include_router(cron_user_router, tags=["v1-cron-jobs"])

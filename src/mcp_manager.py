@@ -1157,6 +1157,18 @@ class MCPManager:
             return None
         return resolve_env_placeholders(copy.deepcopy(raw))
 
+    def get_client_block(self, name: str) -> Optional[Dict[str, Any]]:
+        """Blocco opzionale ``client:`` del record di registro (raw, senza risolvere ``${VAR}``).
+
+        Tollerante: ``None`` se il server o il blocco mancano o il blocco non e' un dict.
+        La validazione e' in ``src.api.v1.client_bootstrap``.
+        """
+        raw = self._registry.get(name)
+        if not isinstance(raw, dict):
+            return None
+        block = raw.get("client")
+        return copy.deepcopy(block) if isinstance(block, dict) else None
+
     def server_exists(self, name: str) -> bool:
         return bool(name) and name in self._registry
 

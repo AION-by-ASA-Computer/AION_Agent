@@ -469,3 +469,39 @@ custom_server:
 - [Office e Word legacy](../configuration/office-and-legacy-word.md) - Conversione `.doc` e merge registry MCP
 - [Profili agente](../configuration/profiles.md) - Come i profili usano MCP servers
 - [Orchestrazione e HITL](./orchestration.md) — `mark_task_completed` built-in su tutti i profili; server `orchestration` (`type: in_process`), approve API, UI TaskPlanManager
+
+## Blocco opzionale `client:` (client Enterprise)
+
+`GET /v1/client/bootstrap` espone ai client Enterprise (AION Cowork) i server MCP visibili
+all'utente (`is_enabled_for_users` + presenti nel registro) e referenziati da un suo profilo.
+Per default ogni server e' `server_only`: il client ne vede solo slug e nome, **mai**
+`command`, `args`, `env` o `url` del registro. Un server diventa eseguibile dal client solo se
+l'admin aggiunge un blocco esplicito `client:` (il loader del registro ignora la chiave per
+l'esecuzione lato server):
+
+```yaml
+khub_rag:
+  type: sse
+  url: ${KHUB_MCP_ENDPOINT}          # resta lato server, non viene mai esposto
+  description: Ricerca semantica nella documentazione aziendale
+  client:
+    execution: client_remote          # client_remote | client_local
+    auth: aion_token                  # none | aion_token (Bearer = token AION dell'utente)
+    transport:
+      type: sse                       # sse | streamable-http (remote) | stdio (local)
+      url: https://mcp.example.com/mcp/sse
+```
+
+Regole (validazione rigorosa, in caso di violazione il server resta `server_only`, senza `transport`):
+
+- `execution` in `client_remote`/`client_local`; `client_remote` richiede transport `sse` o
+  `streamable-http` con `url` http(s) senza credenziali nell'URL; `client_local` richiede `stdio`
+  con `command`, `args` (lista di stringhe) ed `env` opzionale.
+- `auth` in `none`/`aion_token`.
+- Nessun placeholder `${...}` in nessun valore del blocco: il blocco e' scritto dall'admin e non
+  puo' contenere segreti ne' derivarli da variabili d'ambiente.
+- Chiavi `env` il cui nome contiene `key`, `token`, `secret` o `password` sono rifiutate.
+- Server con `credential_mode` `per_user` o `org_shared` (DB `mcp_server_configs`) sono sempre
+  `server_only`: il client non supporta ancora questi modi.
+
+Intervallo di sync suggerito ai client: env `AION_CLIENT_SYNC_INTERVAL_SEC` (default 900, minimo 60).
