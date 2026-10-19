@@ -641,9 +641,8 @@ async def _oauth_dynamic_client_register(
         client_id=new_client_id,
     )
     logger.info(
-        "oauth_start: dynamic client registration OK slug=%s client_id=%s",
+        "oauth_start: dynamic client registration OK slug=%s client_id=[REDACTED]",
         server_slug,
-        new_client_id,
     )
     return True
 
