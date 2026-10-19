@@ -594,7 +594,14 @@ def authorization_server_metadata_urls(issuer: str) -> List[str]:
 
     def _inserted(well_known: str) -> str:
         return urlunparse(
-            (parsed.scheme, parsed.netloc, f"/.well-known/{well_known}{path}", "", "", "")
+            (
+                parsed.scheme,
+                parsed.netloc,
+                f"/.well-known/{well_known}{path}",
+                "",
+                "",
+                "",
+            )
         )
 
     return [

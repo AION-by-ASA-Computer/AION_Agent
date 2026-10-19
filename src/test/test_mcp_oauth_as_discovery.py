@@ -162,20 +162,24 @@ def test_admin_merge_new_client_id_drops_old_secret_and_source() -> None:
         }
     )
     merged = admin_mod._merge_admin_oauth_config(
-        stored, {"authorization_server": ISSUER, "client_id": "manual", "client_secret": ""}
+        stored,
+        {"authorization_server": ISSUER, "client_id": "manual", "client_secret": ""},
     )
     assert merged["client_id"] == "manual"
     assert "client_secret" not in merged
     assert "client_id_source" not in merged
 
     merged = admin_mod._merge_admin_oauth_config(
-        stored, {"authorization_server": ISSUER, "client_id": "manual", "client_secret": "new"}
+        stored,
+        {"authorization_server": ISSUER, "client_id": "manual", "client_secret": "new"},
     )
     assert merged["client_secret"] == "new"
 
 
 def test_admin_merge_cleared_client_id_reverts_to_dynamic() -> None:
-    stored = json.dumps({"authorization_server": ISSUER, "client_id": "m", "client_secret": "s"})
+    stored = json.dumps(
+        {"authorization_server": ISSUER, "client_id": "m", "client_secret": "s"}
+    )
     merged = admin_mod._merge_admin_oauth_config(
         stored, {"authorization_server": ISSUER, "client_id": "", "client_secret": ""}
     )
@@ -210,7 +214,6 @@ def test_admin_merge_empty_payload_resets() -> None:
 # --- OAuth disconnect ---------------------------------------------------------
 
 from src.api.auth_login import ChatAuthIdentity  # noqa: E402
-from src.test.mcp_oauth_test_helpers import oauth_db  # noqa: E402,F401
 
 
 def _alice() -> ChatAuthIdentity:
@@ -223,7 +226,9 @@ async def _stored_keys(user_id: str, slug: str) -> List[str]:
     return sorted(h["key"] for h in await list_credentials_hints(user_id, slug))
 
 
-def test_oauth_disconnect_removes_refresh_token_and_is_idempotent(oauth_db: str) -> None:
+def test_oauth_disconnect_removes_refresh_token_and_is_idempotent(
+    oauth_db: str,
+) -> None:
     from src.runtime.credential_store import set_credential
 
     user_id = mod._credential_user_id(_alice())
@@ -235,10 +240,14 @@ def test_oauth_disconnect_removes_refresh_token_and_is_idempotent(oauth_db: str)
             "src.runtime.mcp_credential_invalidate.invalidate_mcp_credentials_runtime",
             new=AsyncMock(return_value=1),
         ):
-            first = await mod.delete_user_credential("khub", "OAUTH_TOKEN", auth=_alice())
+            first = await mod.delete_user_credential(
+                "khub", "OAUTH_TOKEN", auth=_alice()
+            )
             assert first == {"ok": True}
             assert await _stored_keys(user_id, "khub") == []
-            second = await mod.delete_user_credential("khub", "OAUTH_TOKEN", auth=_alice())
+            second = await mod.delete_user_credential(
+                "khub", "OAUTH_TOKEN", auth=_alice()
+            )
             assert second["ok"] is True and second["already_disconnected"] is True
 
     asyncio.run(scenario())
@@ -308,7 +317,9 @@ def test_oauth_redirect_callback_clears_integrations_cache(oauth_db: str) -> Non
         patch.object(mod, "persist_oauth_token_response", new=AsyncMock()),
         patch.object(mod, "set_user_mcp_preference", new=AsyncMock()),
     ):
-        resp = asyncio.run(mod.oauth_callback_redirect(code="c", state="st", request=request))
+        resp = asyncio.run(
+            mod.oauth_callback_redirect(code="c", state="st", request=request)
+        )
 
     assert "oauth_status=success" in resp.headers["location"]
     assert mod._INTEGRATIONS_CACHE == {}
