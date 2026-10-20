@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { KeyRound, Loader2, Pencil, Plus, ShieldCheck, Trash2, TriangleAlert, UserCog } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, KeyRound, Loader2, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, TriangleAlert, UserCog, UserRound, X } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, checkPassword, generatePassword, isPasswordValid } from "@/lib/passwordPolicy";
 import { getLocale } from "@/lib/i18n/i18n-store";
 import { PageToast, type ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
@@ -66,7 +67,7 @@ interface ProfileRow {
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 
-type FormValues = { identifier: string; password: string; displayName: string; email: string; admin: boolean };
+type FormValues = { identifier: string; password: string; displayName: string; email: string; admin: boolean; mustChange: boolean };
 
 const nameOf = (u: UserRow) => u.display_name || u.identifier;
 
@@ -107,6 +108,203 @@ function IconAction({ label, onClick, danger, children }: { label: string; onCli
   );
 }
 
+/** Suggested username from the display name (or the email's local part): "Mario Rossi" -> "mario.rossi". */
+function suggestIdentifier(displayName: string, email: string): string {
+  const source = displayName.trim() || email.split("@")[0] || "";
+  return source
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, ".")
+    .replace(/[^a-z0-9._-]/g, "")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^[._-]+|[._-]+$/g, "");
+}
+
+function Field({ label, htmlFor, optional, hint, children, t }: { label: string; htmlFor: string; optional?: boolean; hint?: string; children: React.ReactNode; t: T }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={htmlFor} className="flex items-baseline justify-between gap-2 text-sm font-medium">
+        {label}
+        {optional && <span className="text-xs font-normal text-muted-foreground">{t(`${k}.form.optional`)}</span>}
+      </label>
+      {children}
+      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+    </div>
+  );
+}
+
+function useCopy() {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const id = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(id);
+  }, [copied]);
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch {
+      /* clipboard unavailable (insecure context): the text stays visible to copy by hand */
+    }
+  };
+  return { copied, copy, reset: () => setCopied(false) };
+}
+
+/** Password input with a generated default, show/copy/regenerate and a compact policy readout. */
+function PasswordField({
+  value,
+  onChange,
+  identifier,
+  mustChange,
+  onMustChange,
+  t,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  identifier: string;
+  mustChange: boolean;
+  onMustChange: (v: boolean) => void;
+  t: T;
+}) {
+  const [visible, setVisible] = useState(true);
+  const { copied, copy, reset } = useCopy();
+  const rules = checkPassword(value, identifier);
+  const failing = rules.filter((r) => !r.ok);
+  const iconBtn =
+    "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50";
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <label htmlFor="user-form-password" className="text-sm font-medium">
+          {t(`${k}.form.password`)}
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            onChange(generatePassword());
+            reset();
+          }}
+          className="focus-ring -my-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+          {t(`${k}.form.password_regenerate`)}
+        </button>
+      </div>
+      <div className="relative">
+        <input
+          id="user-form-password"
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          required
+          maxLength={PASSWORD_MAX_LENGTH}
+          autoComplete="new-password"
+          spellCheck={false}
+          aria-invalid={failing.length > 0}
+          aria-describedby="user-form-password-status"
+          className={cn(inputCls, "pr-[4.75rem] font-mono tracking-[0.02em]", failing.length > 0 && value && "border-destructive/60 hover:border-destructive/70 focus:border-destructive")}
+        />
+        <div className="absolute inset-y-0 right-1 flex items-center">
+          <button type="button" className={iconBtn} onClick={() => setVisible((v) => !v)} title={t(`${k}.form.${visible ? "password_hide" : "password_show"}`)} aria-label={t(`${k}.form.${visible ? "password_hide" : "password_show"}`)}>
+            {visible ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+          </button>
+          <button type="button" className={iconBtn} onClick={() => void copy(value)} disabled={!value} title={t(`${k}.form.${copied ? "password_copied" : "password_copy"}`)} aria-label={t(`${k}.form.${copied ? "password_copied" : "password_copy"}`)}>
+            {copied ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
+          </button>
+        </div>
+      </div>
+
+      <div id="user-form-password-status" aria-live="polite" className="text-xs">
+        {failing.length === 0 ? (
+          <p className="flex items-center gap-1.5 text-success">
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {t(`${k}.form.password_ok`)}
+          </p>
+        ) : (
+          <ul className="flex flex-wrap gap-x-3 gap-y-1">
+            {failing.map((r) => (
+              <li key={r.code} className="flex items-center gap-1 text-destructive">
+                <X className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                {t(`${k}.form.password_rules.${r.code}`, { min: PASSWORD_MIN_LENGTH })}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <label className="mt-1 flex cursor-pointer items-center gap-2.5 text-sm">
+        <input type="checkbox" checked={mustChange} onChange={(e) => onMustChange(e.target.checked)} className="focus-ring h-4 w-4 shrink-0 accent-foreground" />
+        {t(`${k}.form.must_change`)}
+      </label>
+    </div>
+  );
+}
+
+function RolePicker({ admin, onChange, t }: { admin: boolean; onChange: (v: boolean) => void; t: T }) {
+  const options = [
+    { value: false, label: t(`${k}.form.role_user`), hint: t(`${k}.form.role_user_hint`), Icon: UserRound },
+    { value: true, label: t(`${k}.form.admin`), hint: t(`${k}.form.admin_hint`), Icon: ShieldCheck },
+  ];
+  return (
+    <fieldset className="flex flex-col gap-1.5">
+      <legend className="mb-1.5 text-sm font-medium">{t(`${k}.form.role`)}</legend>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map(({ value, label, hint, Icon }) => {
+          const on = admin === value;
+          return (
+            <label
+              key={label}
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/50 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
+                on ? "border-foreground/50 bg-secondary/70" : "border-border hover:border-foreground/25 hover:bg-secondary/40",
+              )}
+            >
+              <input type="radio" name="user-form-role" checked={on} onChange={() => onChange(value)} className="sr-only" />
+              <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", on ? "text-foreground" : "text-muted-foreground")} aria-hidden />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{label}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">{hint}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
+type Credentials = { identifier: string; password: string; name: string; mustChange: boolean; created: boolean };
+
+/** Last step after a password is set: the only moment the admin can still read it. */
+function CredentialsStep({ creds, t, onClose }: { creds: Credentials; t: T; onClose: () => void }) {
+  const { copied, copy } = useCopy();
+  const text = `${t(`${k}.form.username`)}: ${creds.identifier}\n${t(`${k}.form.password`)}: ${creds.password}`;
+  return (
+    <div className="flex flex-col gap-5">
+      <p className="text-sm text-muted-foreground">{t(`${k}.form.done_body`, { name: creds.name })}</p>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-6 gap-y-3 rounded-2xl bg-secondary/60 px-4 py-3.5 text-sm">
+        <dt className="text-muted-foreground">{t(`${k}.form.username`)}</dt>
+        <dd className="select-all break-all font-mono">{creds.identifier}</dd>
+        <dt className="text-muted-foreground">{t(`${k}.form.password`)}</dt>
+        <dd className="select-all break-all font-mono">{creds.password}</dd>
+      </dl>
+      {creds.mustChange && <p className="-mt-2 text-xs text-muted-foreground">{t(`${k}.form.done_must_change`)}</p>}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button type="button" className={cn(outlineBtn, "justify-center")} onClick={() => void copy(text)}>
+          {copied ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
+          {t(`${k}.form.${copied ? "password_copied" : "copy_credentials"}`)}
+        </button>
+        <button type="button" className={cn(solidBtn, "justify-center")} onClick={onClose} autoFocus>
+          {t(`${k}.form.done`)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function UserFormDialog({
   user,
   busy,
@@ -117,43 +315,116 @@ function UserFormDialog({
   user: UserRow | null;
   busy: boolean;
   t: T;
-  onSubmit: (v: FormValues) => void;
+  onSubmit: (v: FormValues) => Promise<boolean>;
   onClose: () => void;
 }) {
   const editing = !!user;
   const sso = !!user && isSsoUser(user);
-  const [identifier, setIdentifier] = useState(user?.identifier ?? "");
-  const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState(user?.display_name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
+  const [identifier, setIdentifier] = useState(user?.identifier ?? "");
+  // Until the admin types a username, keep suggesting one from the name.
+  const [identifierTouched, setIdentifierTouched] = useState(editing);
+  // New users get a strong generated password; existing ones keep theirs unless the admin opts in.
+  const [settingPassword, setSettingPassword] = useState(!editing);
+  const [password, setPassword] = useState(() => (editing ? "" : generatePassword()));
+  const [mustChange, setMustChange] = useState(true);
   const [admin, setAdmin] = useState(!!user && isAdmin(user));
+  const [creds, setCreds] = useState<Credentials | null>(null);
+
+  const ident = identifierTouched ? identifier : suggestIdentifier(displayName, email);
+  const passwordOk = !settingPassword || isPasswordValid(password, ident);
+  const canSubmit = !busy && !!ident.trim() && passwordOk;
+
+  const startPassword = () => {
+    setPassword(generatePassword());
+    setSettingPassword(true);
+  };
+
+  if (creds) {
+    return (
+      <Dialog title={t(`${k}.form.${creds.created ? "done_title_new" : "done_title_password"}`)} closeLabel={t(`${k}.form.done`)} onClose={onClose} className="max-w-lg">
+        <CredentialsStep creds={creds} t={t} onClose={onClose} />
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog title={t(`${k}.form.${editing ? "title_edit" : "title_new"}`)} closeLabel={t(`${k}.form.cancel`)} onClose={onClose} className="max-w-xl">
       <form
-        className="flex flex-col gap-4"
-        onSubmit={(e) => {
+        className="flex flex-col"
+        onSubmit={async (e) => {
           e.preventDefault();
-          onSubmit({ identifier: identifier.trim(), password: sso ? "" : password, displayName: displayName.trim(), email: email.trim(), admin });
+          if (!canSubmit) return;
+          const v: FormValues = {
+            identifier: ident.trim(),
+            password: settingPassword ? password : "",
+            displayName: displayName.trim(),
+            email: email.trim(),
+            admin,
+            mustChange: settingPassword && mustChange,
+          };
+          const ok = await onSubmit(v);
+          if (ok && v.password) setCreds({ identifier: v.identifier, password: v.password, name: v.displayName || v.identifier, mustChange: v.mustChange, created: !editing });
         }}
       >
+        {editing && (
+          <div className="mb-5 flex items-center gap-3">
+            <Avatar user={user} />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{nameOf(user)}</p>
+              <p className="truncate font-mono text-xs text-muted-foreground">{user.identifier}</p>
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">{t(`${k}.form.username`)}</span>
+          <Field label={t(`${k}.form.display_name`)} htmlFor="user-form-name" optional t={t}>
             <input
-              autoFocus={!editing}
+              id="user-form-name"
+              autoFocus
               type="text"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              disabled={editing}
-              required={!editing}
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={t(`${k}.form.display_name_placeholder`)}
               autoComplete="off"
-              spellCheck={false}
-              placeholder="mario.rossi"
-              className={cn(inputCls, "font-mono disabled:cursor-not-allowed disabled:opacity-60")}
+              className={inputCls}
             />
-            {!editing && <span className="text-xs text-muted-foreground">{t(`${k}.form.username_hint`)}</span>}
-          </label>
+          </Field>
+          <Field label={t(`${k}.form.email`)} htmlFor="user-form-email" optional t={t}>
+            <input
+              id="user-form-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder={t(`${k}.form.email_placeholder`)}
+              autoComplete="off"
+              className={inputCls}
+            />
+          </Field>
+        </div>
+
+        <div className="mt-6 flex flex-col gap-4 border-t border-border/60 pt-5">
+          {!editing && (
+            <Field label={t(`${k}.form.username`)} htmlFor="user-form-username" hint={t(`${k}.form.username_hint`)} t={t}>
+              <input
+                id="user-form-username"
+                type="text"
+                value={ident}
+                onChange={(e) => {
+                  setIdentifierTouched(true);
+                  setIdentifier(e.target.value);
+                }}
+                required
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="mario.rossi"
+                className={cn(inputCls, "font-mono")}
+              />
+            </Field>
+          )}
+
           {sso ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
@@ -161,61 +432,38 @@ function UserFormDialog({
                 {t(`${k}.form.password_sso`, { provider: t(`${k}.access.${user.login_method}`) })}
               </p>
             </div>
+          ) : settingPassword ? (
+            <div className="flex flex-col gap-2">
+              <PasswordField value={password} onChange={setPassword} identifier={ident} mustChange={mustChange} onMustChange={setMustChange} t={t} />
+              {editing && (
+                <button type="button" onClick={() => setSettingPassword(false)} className="focus-ring self-start rounded-md text-xs font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground">
+                  {t(`${k}.form.password_keep_current`)}
+                </button>
+              )}
+            </div>
           ) : (
-            <label className="flex flex-col gap-1.5">
+            <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
-              <input
-                autoFocus={editing}
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required={!editing}
-                autoComplete="new-password"
-                placeholder="••••••••"
-                className={inputCls}
-              />
-              {editing && <span className="text-xs text-muted-foreground">{t(`${k}.form.password_keep`)}</span>}
-            </label>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border px-3.5 py-2.5">
+                <span className="text-sm text-muted-foreground">{t(`${k}.form.password_unchanged`)}</span>
+                <button type="button" className={outlineBtn} onClick={startPassword}>
+                  <KeyRound className="h-4 w-4" aria-hidden />
+                  {t(`${k}.form.password_change`)}
+                </button>
+              </div>
+            </div>
           )}
-          <label className="flex flex-col gap-1.5">
-            <span className="flex items-baseline justify-between text-sm font-medium">
-              {t(`${k}.form.display_name`)}
-              <span className="text-xs font-normal text-muted-foreground">{t(`${k}.form.optional`)}</span>
-            </span>
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setDisplayName(e.target.value)}
-              placeholder={t(`${k}.form.display_name_placeholder`)}
-              className={inputCls}
-            />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="flex items-baseline justify-between text-sm font-medium">
-              {t(`${k}.form.email`)}
-              <span className="text-xs font-normal text-muted-foreground">{t(`${k}.form.optional`)}</span>
-            </span>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder={t(`${k}.form.email_placeholder`)}
-              className={inputCls}
-            />
-          </label>
-          <label className={cn("flex cursor-pointer items-start gap-3 rounded-xl px-3 py-2.5 transition-colors sm:col-span-2", admin ? "bg-secondary" : "hover:bg-secondary/60")}>
-            <input type="checkbox" checked={admin} onChange={(e) => setAdmin(e.target.checked)} className="focus-ring mt-1 h-4 w-4 shrink-0 accent-foreground" />
-            <span className="min-w-0">
-              <span className="block text-sm font-medium">{t(`${k}.form.admin`)}</span>
-              <span className="mt-0.5 block text-xs text-muted-foreground">{t(`${k}.form.admin_hint`)}</span>
-            </span>
-          </label>
         </div>
-        <div className="mt-2 flex justify-end gap-2">
-          <button type="button" className={ghostBtn} onClick={onClose}>
+
+        <div className="mt-6 border-t border-border/60 pt-5">
+          <RolePicker admin={admin} onChange={setAdmin} t={t} />
+        </div>
+
+        <div className="mt-7 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" className={cn(ghostBtn, "justify-center")} onClick={onClose}>
             {t(`${k}.form.cancel`)}
           </button>
-          <button type="submit" className={solidBtn} disabled={busy}>
+          <button type="submit" className={cn(solidBtn, "justify-center")} disabled={!canSubmit}>
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             {busy ? t(`${k}.form.saving`) : t(`${k}.form.${editing ? "save" : "create"}`)}
           </button>
@@ -396,12 +644,18 @@ export default function UsersPage() {
     { value: "off", label: t(`${k}.badge.twofa_off`) },
   ];
 
-  const saveUser = async (v: FormValues) => {
+  /** Resolves true on success; when a password was set the dialog stays open to show the credentials. */
+  const saveUser = async (v: FormValues): Promise<boolean> => {
     const editing = formUser !== null && formUser !== "new";
     const current = editing ? (formUser as UserRow) : null;
     if (!editing && (!v.identifier || !v.password)) {
       setToast({ message: t(`${k}.form.required`), variant: "error" });
-      return;
+      return false;
+    }
+    const withPassword = !!v.password && !(current && isSsoUser(current));
+    if (withPassword && !isPasswordValid(v.password, current?.identifier ?? v.identifier)) {
+      setToast({ message: t(`${k}.form.password_weak`), variant: "error" });
+      return false;
     }
     setSaving(true);
     try {
@@ -409,18 +663,25 @@ export default function UsersPage() {
       const roles = [...(current?.roles ?? []).filter((r) => r !== "admin"), ...(v.admin ? ["admin"] : [])];
       const payload: Record<string, unknown> = { display_name: v.displayName, email: v.email, roles };
       if (!editing) payload.identifier = v.identifier;
-      if (v.password && !(current && isSsoUser(current))) payload.password = v.password;
+      if (withPassword) {
+        payload.password = v.password;
+        payload.must_change_password = v.mustChange;
+      }
       const res = await apiFetch(editing ? `${apiBase()}/admin/users/${(formUser as UserRow).id}` : `${apiBase()}/admin/users`, {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(await errorDetail(res, String(res.status)));
-      setFormUser(null);
-      setToast({ message: t(`${k}.toast.${editing ? "updated" : "created"}`), variant: "success" });
+      if (!withPassword) {
+        setFormUser(null);
+        setToast({ message: t(`${k}.toast.updated`), variant: "success" });
+      }
       void loadUsers();
+      return true;
     } catch (err) {
       fail("save_failed", err);
+      return false;
     } finally {
       setSaving(false);
     }

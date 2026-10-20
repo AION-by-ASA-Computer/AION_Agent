@@ -6,6 +6,9 @@ import { apiFetch } from "@/lib/api/headers";
 import { Shield, Copy, Check, AlertTriangle, Loader2, Info, Save } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
+import { useT } from "@/lib/i18n/use-t";
+import { EntraLink, MicrosoftGuideDialog, rich } from "./MicrosoftSsoGuide";
+import { GoogleGuideDialog, GoogleLink } from "./GoogleSsoGuide";
 
 /** Il provider accetta l'attivazione solo se la verifica ha meno di 30 minuti. */
 const VALIDATION_TTL_MS = 30 * 60 * 1000;
@@ -41,6 +44,8 @@ export function SsoConfigPanel({
   const [verifying, setVerifying] = useState(false);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const t = useT();
   const [redirectUri, setRedirectUri] = useState<string>("");
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -178,6 +183,8 @@ export function SsoConfigPanel({
             const active = data.find((d: any) => d.provider === forcedProvider);
             if (active && active.validated_at && active.validated_at !== baseline) {
               setValidatedAt(active.validated_at);
+              // Il backend precompila il dominio dell'account che ha validato (se vuoto).
+              setAllowedDomains((prev) => prev.trim() || (active.allowed_domains || []).join(", "));
               stop();
               popup?.close();
               return;
@@ -219,28 +226,37 @@ export function SsoConfigPanel({
 
   return (
     <div className="flex w-full flex-col gap-5 rounded-2xl border border-border/70 bg-card p-5 text-left sm:p-6">
-      <div className="rounded-xl bg-secondary/60 px-4 py-3.5 text-sm">
+      <div className="rounded-xl bg-secondary/60 px-5 py-4 text-[15px]">
         {forcedProvider === "microsoft" && (
-          <div className="flex flex-col gap-2">
-            <h4 className="flex items-center gap-2 font-semibold"><Info className="h-4 w-4 text-muted-foreground" aria-hidden /> Come configurare Microsoft Entra ID</h4>
-            <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
-              <li>Vai su <a href="https://entra.microsoft.com/" target="_blank" rel="noreferrer" className={linkCls}>Microsoft Entra admin center</a> &gt; <strong>App registrations</strong> &gt; <strong>New registration</strong>.</li>
-              <li>Scegli <strong>Web</strong> come Redirect URI e incolla l'URI fornito qui sotto. Clicca <strong>Register</strong>.</li>
-              <li>Dalla pagina <strong>Overview</strong>, copia <em>Application (client) ID</em> e <em>Directory (tenant) ID</em> e incollali qui sotto.</li>
-              <li>Vai su <strong>Certificates & secrets</strong>, crea un nuovo <strong>Client secret</strong> e copia il <em>Value</em>.</li>
+          <div className="flex flex-col gap-3">
+            <h4 className="flex items-center gap-2 text-base font-semibold"><Info className="h-4 w-4 text-muted-foreground" aria-hidden /> {t("admin_users.sso_guide.title")}</h4>
+            <ol className="list-decimal space-y-1.5 pl-5 leading-relaxed text-muted-foreground marker:font-medium marker:text-foreground">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <li key={n}>{rich(t(`admin_users.sso_guide.s${n}`))}</li>
+              ))}
             </ol>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button type="button" onClick={() => setGuideOpen(true)} className={solidBtn}>
+                {t("admin_users.sso_guide.open")}
+              </button>
+              <EntraLink />
+            </div>
           </div>
         )}
         {forcedProvider === "google" && (
-          <div className="flex flex-col gap-2">
-            <h4 className="flex items-center gap-2 font-semibold"><Info className="h-4 w-4 text-muted-foreground" aria-hidden /> Come configurare Google Workspace</h4>
-            <ol className="list-decimal space-y-1 pl-5 text-xs text-muted-foreground">
-              <li>Vai su <a href="https://console.cloud.google.com/" target="_blank" rel="noreferrer" className={linkCls}>Google Cloud Console</a> e seleziona il tuo progetto.</li>
-              <li>Se non l'hai fatto, configura prima la <strong>OAuth consent screen</strong> da <em>APIs & Services</em>.</li>
-              <li>Vai su <strong>Credentials</strong> &gt; <strong>+ Create Credentials</strong> &gt; <strong>OAuth client ID</strong> (tipo: Web application).</li>
-              <li>In <strong>Authorized redirect URIs</strong> incolla l'URI fornito qui sotto e clicca <strong>Create</strong>.</li>
-              <li>Copia <em>Client ID</em> e <em>Client secret</em> mostrati a schermo e incollali qui sotto.</li>
+          <div className="flex flex-col gap-3">
+            <h4 className="flex items-center gap-2 text-base font-semibold"><Info className="h-4 w-4 text-muted-foreground" aria-hidden /> {t("admin_users.sso_guide_google.title")}</h4>
+            <ol className="list-decimal space-y-1.5 pl-5 leading-relaxed text-muted-foreground marker:font-medium marker:text-foreground">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <li key={n}>{rich(t(`admin_users.sso_guide_google.s${n}`))}</li>
+              ))}
             </ol>
+            <div className="flex flex-wrap gap-2 pt-1">
+              <button type="button" onClick={() => setGuideOpen(true)} className={solidBtn}>
+                {t("admin_users.sso_guide_google.open")}
+              </button>
+              <GoogleLink />
+            </div>
           </div>
         )}
       </div>
@@ -266,7 +282,7 @@ export function SsoConfigPanel({
         <label className="flex flex-col gap-1.5 md:col-span-2">
           <span className={labelCls}>
             {forcedProvider === "google" ? "Dominio Google Workspace" : "Dominio Microsoft Entra ID"}
-            <span className="font-normal text-muted-foreground"> · opzionale, es. azienda.it</span>
+            <span className="font-normal text-muted-foreground"> · compilato in automatico con il dominio dell'account che valida, modificabile</span>
           </span>
           <input type="text" value={allowedDomains} onChange={(e) => setAllowedDomains(e.target.value)} className={inputCls} placeholder="Restringi il login a questo dominio (separa più domini con una virgola)" />
         </label>
@@ -274,16 +290,19 @@ export function SsoConfigPanel({
 
       <div className="flex flex-col gap-2">
         <h4 className={labelCls}>Redirect URI autorizzato</h4>
-        <p className="text-xs text-muted-foreground">
+        <p className="text-sm text-muted-foreground">
           Copia questo link e incollalo nella configurazione della tua app {forcedProvider === "microsoft" ? "su Azure Portal" : "sulla Google Cloud Console"}.
         </p>
         <div className="flex items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded-xl border border-border bg-background px-3.5 py-2.5 font-mono text-xs">{redirectUri || "…"}</code>
+          <code className="min-w-0 flex-1 truncate rounded-xl border border-border bg-background px-3.5 py-2.5 font-mono text-sm">{redirectUri || "…"}</code>
           <button type="button" onClick={handleCopy} className={cn(outlineBtn, "w-9 shrink-0 justify-center px-0")} aria-label={copied ? "Copiato" : "Copia redirect URI"}>
             {copied ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
           </button>
         </div>
       </div>
+
+      {guideOpen && forcedProvider === "google" && <GoogleGuideDialog redirectUri={redirectUri} copied={copied} onCopy={handleCopy} onClose={() => setGuideOpen(false)} />}
+      {guideOpen && forcedProvider === "microsoft" && <MicrosoftGuideDialog redirectUri={redirectUri} copied={copied} onCopy={handleCopy} onClose={() => setGuideOpen(false)} />}
 
       {error && (
         <div className="flex items-start gap-3 rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
@@ -338,7 +357,7 @@ export function SsoConfigPanel({
             </button>
             {!isActive && fresh && (
               <button type="button" onClick={() => onActivate?.()} className={solidBtn}>
-                Imposta come predefinito
+                {t("admin_users.sso_guide.btn_default")}
               </button>
             )}
           </div>
@@ -356,7 +375,7 @@ export function SsoConfigPanel({
             </>
           ) : (
             <>
-              <Shield className="h-3.5 w-3.5" aria-hidden /> Salva e verifica con il mio account
+              <Shield className="h-3.5 w-3.5" aria-hidden /> {t("admin_users.sso_guide.btn_save_verify")}
             </>
           )}
         </button>

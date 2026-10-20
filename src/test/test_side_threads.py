@@ -151,34 +151,3 @@ def test_side_thread_context_block(monkeypatch, tmp_path):
         assert await build_side_thread_context("parent", "u1") == ""
 
     asyncio.run(run())
-
-
-def test_admin_global_list_links_threads_to_parent(monkeypatch, tmp_path):
-    from src.api.admin import list_conversations_global
-
-    async def run():
-        await _reset_unified_db(monkeypatch, tmp_path)
-        await _seed_parent()
-        bridge = UnifiedHistoryBridge()
-        await bridge.add_message(
-            "other", "user", "ciao", user_id="u1", message_id="m-other"
-        )
-        t1 = await create_side_thread_chat_ui("parent", _body(), x_aion_user_id="u1")
-
-        rows = {
-            c["id"]: c
-            for c in (await list_conversations_global(limit=200))["conversations"]
-        }
-        assert rows[t1["id"]]["parent_conversation_id"] == "parent"
-        assert rows[t1["id"]]["parent_message_id"] == "m-asst"
-        assert rows[t1["id"]]["anchor_quote"] == "quorum"
-        assert rows["parent"]["parent_conversation_id"] is None
-        assert rows["parent"]["anchor_quote"] is None
-
-        # The limit counts top-level conversations; a thread brings its parent along.
-        capped = await list_conversations_global(limit=1)
-        ids = {c["id"] for c in capped["conversations"]}
-        assert capped["truncated"] is True
-        assert {"parent", t1["id"]} <= ids
-
-    asyncio.run(run())

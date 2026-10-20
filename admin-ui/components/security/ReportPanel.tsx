@@ -3,7 +3,7 @@
 import { Check, Download, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { outlineBtn } from "@/components/ui/classes";
-import { Markdown } from "@/components/conversations/Transcript";
+import { Markdown } from "@/components/Markdown";
 import { baseName, stripJson, verdictTone, type Investigation } from "./report";
 
 type T = (key: string, vars?: Record<string, string | number>) => string;

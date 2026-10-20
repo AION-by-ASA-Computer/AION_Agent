@@ -10,7 +10,7 @@ import { PageToast, type ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
 import { DeleteDialog } from "@/components/ui/ConfirmDialogs";
 import { SearchField } from "@/components/ui/SearchField";
-import { fullWhen, shortWhen, toMs } from "@/components/conversations/format";
+import { fullWhen, shortWhen, toMs } from "@/lib/datetime";
 import { ghostBtn, inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
 
 type ApiKey = {

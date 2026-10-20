@@ -148,8 +148,8 @@ async def resolve_user(
         # ma ri-verifichiamo qui per sicurezza.
         allowed_domains = provider_config.get("allowed_domains", [])
         if allowed_domains:
-            domain = email.split("@")[-1] if "@" in email else ""
-            if domain not in allowed_domains:
+            domain = email.split("@")[-1].lower() if "@" in email else ""
+            if domain not in [d.lower() for d in allowed_domains]:
                 raise ValueError("sso_domain_not_allowed")
 
         user_id = new_uuid7_str()

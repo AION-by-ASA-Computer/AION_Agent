@@ -720,7 +720,7 @@
       "sso_user_already_linked": "You already have an account linked.",
       "generic": "Sign-in failed. Please try again.",
       "sso_not_linked": "Your account is not linked yet. Sign in with your password and link your company account.",
-      "sso_domain_not_allowed": "Your email domain is not allowed.",
+      "sso_domain_not_allowed": "This account isn't enabled for access. You may be signed in with the wrong account — use your work account instead.",
       "sso_required": "SSO sign-in is required for this account.",
       "password_login_disabled": "Password sign-in is disabled.",
       "temp_password_expired": "Your temporary password has expired. Contact your administrator.",

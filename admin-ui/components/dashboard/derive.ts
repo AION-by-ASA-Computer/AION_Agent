@@ -256,18 +256,16 @@ export function deriveDashboard(d: DashboardData, t: T, locale: string) {
   }
 
   // ── Feedback ───────────────────────────────────────────
-  const week = 7 * DAY;
-  const recentFeedback = (d.feedback ?? []).filter((f) => within(f.created_at, week));
-  const negatives = recentFeedback.filter((f) => f.rating === -1);
-  const positives = recentFeedback.filter((f) => f.rating === 1);
-  if (negatives.length > 0) {
-    const latest = negatives.find((f) => f.feedback_comment?.trim());
+  const positives = d.feedback?.totals.positive ?? 0;
+  const negatives = d.feedback?.totals.negative ?? 0;
+  if (negatives > 0) {
+    const worst = [...(d.feedback?.by_profile ?? [])].sort((a, b) => b.negative - a.negative)[0];
     attention.push({
       id: "feedback",
       severity: "warn",
-      title: t(`${k}.attention.feedback_negative`, { count: negatives.length }),
-      detail: latest ? `“${latest.feedback_comment!.trim().slice(0, 90)}”` : undefined,
-      href: "/conversations?feedback=disliked",
+      title: t(`${k}.attention.feedback_negative`, { count: negatives }),
+      detail: worst?.negative ? t(`${k}.attention.feedback_top_profile`, { profile: worst.profile, count: worst.negative }) : undefined,
+      href: "/feedback",
       action: t(`${k}.attention.action_feedback`),
     });
   }
@@ -474,7 +472,12 @@ export function deriveDashboard(d: DashboardData, t: T, locale: string) {
     attention,
     columns,
     checking,
-    feedback: { positives: positives.length, negatives: negatives.length },
+    feedback: {
+      positives,
+      negatives,
+      byProfile: (d.feedback?.by_profile ?? []).slice(0, 3).map((r) => ({ name: r.profile, positive: r.positive, negative: r.negative })),
+      byModel: (d.feedback?.by_model ?? []).slice(0, 3).map((r) => ({ name: r.model, positive: r.positive, negative: r.negative })),
+    },
     summary: {
       profiles: s?.active_profiles,
       mcp: s?.installed_mcp,

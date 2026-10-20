@@ -720,7 +720,7 @@
       "sso_user_already_linked": "Ya tienes una cuenta vinculada.",
       "generic": "Error al iniciar sesión. Inténtalo de nuevo.",
       "sso_not_linked": "Tu cuenta aún no está vinculada. Inicia sesión con tu contraseña y vincula tu cuenta corporativa.",
-      "sso_domain_not_allowed": "El dominio de tu correo no está permitido.",
+      "sso_domain_not_allowed": "Esta cuenta no está habilitada para acceder. Es posible que estés usando la cuenta equivocada: inicia sesión con tu cuenta de trabajo.",
       "sso_required": "Esta cuenta requiere inicio de sesión SSO.",
       "password_login_disabled": "El inicio de sesión con contraseña está deshabilitado.",
       "temp_password_expired": "La contraseña temporal ha caducado. Contacta con el administrador.",

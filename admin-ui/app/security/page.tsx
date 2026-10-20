@@ -11,7 +11,7 @@ import { PageToast, type ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
 import { Select } from "@/components/ui/Select";
 import { ghostBtn, inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
-import { fullWhen, shortWhen, toMs } from "@/components/conversations/format";
+import { fullWhen, shortWhen, toMs } from "@/lib/datetime";
 import { FindingsList } from "@/components/security/FindingsList";
 import { ReportPanel } from "@/components/security/ReportPanel";
 import {

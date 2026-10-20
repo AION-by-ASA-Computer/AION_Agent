@@ -720,7 +720,7 @@
       "sso_user_already_linked": "Sie haben bereits ein verknüpftes Konto.",
       "generic": "Anmeldung fehlgeschlagen. Bitte erneut versuchen.",
       "sso_not_linked": "Ihr Konto ist noch nicht verknüpft. Melden Sie sich mit Passwort an und verknüpfen Sie Ihr Firmenkonto.",
-      "sso_domain_not_allowed": "Ihre E-Mail-Domain ist nicht zugelassen.",
+      "sso_domain_not_allowed": "Dieses Konto ist nicht für den Zugang freigeschaltet. Sie verwenden vermutlich das falsche Konto – melden Sie sich mit Ihrem Firmenkonto an.",
       "sso_required": "Für dieses Konto ist SSO-Anmeldung erforderlich.",
       "password_login_disabled": "Die Passwort-Anmeldung ist deaktiviert.",
       "temp_password_expired": "Das temporäre Passwort ist abgelaufen. Kontaktieren Sie den Administrator.",
