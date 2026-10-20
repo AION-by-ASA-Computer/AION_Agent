@@ -1387,7 +1387,8 @@
     },
     "badge": {
       "twofa": "2FA aktiv",
-      "twofa_off": "2FA aus"
+      "twofa_off": "2FA aus",
+      "admin": "Admin"
     },
     "row": {
       "profiles": "Profilzugriff für {{name}}",
@@ -1412,7 +1413,10 @@
       "create": "Benutzer anlegen",
       "save": "Änderungen speichern",
       "saving": "Wird gespeichert…",
-      "required": "Benutzername und Passwort sind erforderlich."
+      "required": "Benutzername und Passwort sind erforderlich.",
+      "admin": "Administrator",
+      "admin_hint": "Hat Zugriff auf das Admin-Panel.",
+      "password_sso": "Meldet sich mit {{provider}} an: Das Passwort wird vom Identitätsanbieter verwaltet."
     },
     "profiles": {
       "title": "Profilzugriff",

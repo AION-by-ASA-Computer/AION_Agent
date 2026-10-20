@@ -44,7 +44,12 @@ interface UserRow {
   sso_providers?: string[];
   sso_migration_exempt?: boolean;
   migration_pending?: boolean;
+  roles?: string[];
 }
+
+const isAdmin = (u: UserRow) => !!u.roles?.includes("admin");
+/** Migrated to SSO: signs in through the identity provider, no local password. */
+const isSsoUser = (u: UserRow) => !!u.login_method && u.login_method !== "password";
 
 /** The single method the account signs in with right now (computed by the backend; stale identities from previous providers are ignored). */
 const methodsOf = (u: UserRow) => (u.login_method ? [u.login_method] : []);
@@ -60,6 +65,8 @@ interface ProfileRow {
 }
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
+
+type FormValues = { identifier: string; password: string; displayName: string; email: string; admin: boolean };
 
 const nameOf = (u: UserRow) => u.display_name || u.identifier;
 
@@ -110,14 +117,16 @@ function UserFormDialog({
   user: UserRow | null;
   busy: boolean;
   t: T;
-  onSubmit: (v: { identifier: string; password: string; displayName: string; email: string }) => void;
+  onSubmit: (v: FormValues) => void;
   onClose: () => void;
 }) {
   const editing = !!user;
+  const sso = !!user && isSsoUser(user);
   const [identifier, setIdentifier] = useState(user?.identifier ?? "");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState(user?.display_name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
+  const [admin, setAdmin] = useState(!!user && isAdmin(user));
 
   return (
     <Dialog title={t(`${k}.form.${editing ? "title_edit" : "title_new"}`)} closeLabel={t(`${k}.form.cancel`)} onClose={onClose} className="max-w-xl">
@@ -125,7 +134,7 @@ function UserFormDialog({
         className="flex flex-col gap-4"
         onSubmit={(e) => {
           e.preventDefault();
-          onSubmit({ identifier: identifier.trim(), password, displayName: displayName.trim(), email: email.trim() });
+          onSubmit({ identifier: identifier.trim(), password: sso ? "" : password, displayName: displayName.trim(), email: email.trim(), admin });
         }}
       >
         <div className="grid gap-4 sm:grid-cols-2">
@@ -145,20 +154,29 @@ function UserFormDialog({
             />
             {!editing && <span className="text-xs text-muted-foreground">{t(`${k}.form.username_hint`)}</span>}
           </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
-            <input
-              autoFocus={editing}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required={!editing}
-              autoComplete="new-password"
-              placeholder="••••••••"
-              className={inputCls}
-            />
-            {editing && <span className="text-xs text-muted-foreground">{t(`${k}.form.password_keep`)}</span>}
-          </label>
+          {sso ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
+              <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
+                {t(`${k}.form.password_sso`, { provider: t(`${k}.access.${user.login_method}`) })}
+              </p>
+            </div>
+          ) : (
+            <label className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
+              <input
+                autoFocus={editing}
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required={!editing}
+                autoComplete="new-password"
+                placeholder="••••••••"
+                className={inputCls}
+              />
+              {editing && <span className="text-xs text-muted-foreground">{t(`${k}.form.password_keep`)}</span>}
+            </label>
+          )}
           <label className="flex flex-col gap-1.5">
             <span className="flex items-baseline justify-between text-sm font-medium">
               {t(`${k}.form.display_name`)}
@@ -184,6 +202,13 @@ function UserFormDialog({
               placeholder={t(`${k}.form.email_placeholder`)}
               className={inputCls}
             />
+          </label>
+          <label className={cn("flex cursor-pointer items-start gap-3 rounded-xl px-3 py-2.5 transition-colors sm:col-span-2", admin ? "bg-secondary" : "hover:bg-secondary/60")}>
+            <input type="checkbox" checked={admin} onChange={(e) => setAdmin(e.target.checked)} className="focus-ring mt-1 h-4 w-4 shrink-0 accent-foreground" />
+            <span className="min-w-0">
+              <span className="block text-sm font-medium">{t(`${k}.form.admin`)}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{t(`${k}.form.admin_hint`)}</span>
+            </span>
           </label>
         </div>
         <div className="mt-2 flex justify-end gap-2">
@@ -371,17 +396,20 @@ export default function UsersPage() {
     { value: "off", label: t(`${k}.badge.twofa_off`) },
   ];
 
-  const saveUser = async (v: { identifier: string; password: string; displayName: string; email: string }) => {
+  const saveUser = async (v: FormValues) => {
     const editing = formUser !== null && formUser !== "new";
+    const current = editing ? (formUser as UserRow) : null;
     if (!editing && (!v.identifier || !v.password)) {
       setToast({ message: t(`${k}.form.required`), variant: "error" });
       return;
     }
     setSaving(true);
     try {
-      const payload: Record<string, string> = { display_name: v.displayName, email: v.email };
+      // Keep any non-admin roles the user already has; only toggle "admin".
+      const roles = [...(current?.roles ?? []).filter((r) => r !== "admin"), ...(v.admin ? ["admin"] : [])];
+      const payload: Record<string, unknown> = { display_name: v.displayName, email: v.email, roles };
       if (!editing) payload.identifier = v.identifier;
-      if (v.password) payload.password = v.password;
+      if (v.password && !(current && isSsoUser(current))) payload.password = v.password;
       const res = await apiFetch(editing ? `${apiBase()}/admin/users/${(formUser as UserRow).id}` : `${apiBase()}/admin/users`, {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -586,7 +614,10 @@ export default function UsersPage() {
                               <div className="flex min-w-0 items-center gap-3">
                                 <Avatar user={u} />
                                 <div className="min-w-0">
-                                  <div className="truncate text-sm font-medium">{name}</div>
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <span className="truncate text-sm font-medium">{name}</span>
+                                    {isAdmin(u) && <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground">{t(`${k}.badge.admin`)}</span>}
+                                  </div>
                                   {u.display_name && <div className="truncate font-mono text-xs text-muted-foreground">{u.identifier}</div>}
                                 </div>
                               </div>

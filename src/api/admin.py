@@ -3812,12 +3812,24 @@ class UserProfilesUpdate(BaseModel):
     allowed_profiles: List[str]
 
 
+def _confirmed_on(idents, provider: Optional[str], since) -> bool:
+    """True se una delle identita' SSO e' confermata sul provider attivo."""
+    from ..auth.sso.login_mode import is_identity_confirmed
+
+    return bool(
+        provider
+        and any(
+            i.provider == provider and is_identity_confirmed(i, since) for i in idents
+        )
+    )
+
+
 @router.get("/users")
 async def list_users():
     """List all users in the unified database."""
     from ..data.models import User, UserSsoIdentity
     from ..data.user_password import get_roles
-    from ..auth.sso.login_mode import get_login_settings, is_identity_confirmed
+    from ..auth.sso.login_mode import get_login_settings
 
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
     settings = await get_login_settings(tenant)
@@ -3836,13 +3848,7 @@ async def list_users():
             idents = identities.get(r.id, [])
             has_password = r.password_hash is not None
             exempt = bool(getattr(r, "sso_migration_exempt", False))
-            confirmed = bool(
-                provider
-                and any(
-                    i.provider == provider and is_identity_confirmed(i, since)
-                    for i in idents
-                )
-            )
+            confirmed = _confirmed_on(idents, provider, since)
             # Metodo di accesso corrente: in modalita' SSO conta solo il provider
             # attivo se confermato; altrimenti (migrazione non fatta) la password.
             # Le identita' di provider precedenti non sono piu' valide.
@@ -3910,15 +3916,65 @@ async def create_user(body: UserCreate):
 
 
 @router.put("/users/{user_id}")
-async def update_user(user_id: str, body: UserUpdate):
+async def update_user(
+    user_id: str,
+    body: UserUpdate,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+):
     """Update an existing user."""
-    from ..data.models import User
-    from ..data.user_password import hash_password, set_roles
+    from ..data.models import User, UserSsoIdentity
+    from ..data.user_password import get_roles, hash_password, set_roles
+    from ..auth.sso.login_mode import get_login_settings
 
     async with get_async_session_maker()() as session:
         u = await session.get(User, user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+
+        if (
+            body.roles is not None
+            and "admin" in get_roles(u)
+            and "admin" not in body.roles
+        ):
+            if auth.user_row_id == user_id:
+                raise HTTPException(
+                    status_code=400, detail="You cannot remove your own admin role"
+                )
+            others = (
+                (await session.execute(select(User).where(User.id != user_id)))
+                .scalars()
+                .all()
+            )
+            if not any("admin" in get_roles(o) for o in others):
+                raise HTTPException(
+                    status_code=409, detail="Cannot remove the last administrator"
+                )
+
+        if body.password:
+            # Un utente migrato a SSO accede solo tramite il provider: impostare
+            # una password locale riaprirebbe l'accesso classico.
+            settings = await get_login_settings(u.tenant_id or "default")
+            if (settings.get("login_mode") or "password") != "password":
+                idents = (
+                    (
+                        await session.execute(
+                            select(UserSsoIdentity).where(
+                                UserSsoIdentity.user_id == user_id
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                if _confirmed_on(
+                    idents,
+                    settings.get("sso_provider"),
+                    settings.get("migration_started_at"),
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="User signs in via SSO; password cannot be set",
+                    )
 
         if body.display_name is not None:
             u.display_name = body.display_name
