@@ -29,7 +29,12 @@ from .research import router as research_router
 from .plan_execution import router as plan_execution_router
 from .v1 import api_v1_router
 from .auth_login import ChatAuthIdentity, require_chat_auth
-from .ownership import assert_conversation_access, chat_user_id, effective_user_id
+from .ownership import (
+    assert_conversation_access,
+    chat_user_id,
+    claim_conversation_for_write,
+    effective_user_id,
+)
 from .web_search_params import normalize_web_search_restrict_hosts
 from src.version import __version__
 
@@ -722,6 +727,7 @@ async def chat(
     except Exception as e:
         logger.warning("Failed to set trace attributes in chat endpoint: %s", e)
 
+    await claim_conversation_for_write(request.session_id, user_id)
     conversation_owner_mismatch = False
     if os.getenv("AION_UNIFIED_DB", "1").lower() in ("1", "true", "yes"):
         try:

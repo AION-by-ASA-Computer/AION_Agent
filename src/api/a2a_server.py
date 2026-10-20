@@ -7,7 +7,7 @@ from ..agent_pipeline import AgentPipeline
 from ..identity import sanitize_user_id
 from ..session_workspace import normalize_session_id
 from .auth_login import ChatAuthIdentity, require_chat_auth
-from .ownership import assert_conversation_access, effective_user_id
+from .ownership import claim_conversation_for_write, effective_user_id
 import uuid
 
 router = APIRouter(prefix="/a2a", tags=["agent-to-agent"])
@@ -59,7 +59,7 @@ async def invoke_agent(
         user_id = sanitize_user_id(f"a2a_{x_aion_origin or 'external'}")
     else:
         user_id = effective_user_id(auth)
-    await assert_conversation_access(session_id, user_id, allow_missing=True)
+    await claim_conversation_for_write(session_id, user_id)
 
     try:
         # 1. Get the agent instance

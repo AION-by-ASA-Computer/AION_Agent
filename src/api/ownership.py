@@ -155,12 +155,16 @@ async def assert_conversation_access(
     """
     uid = sanitize_user_id(user_id)
     owner = await conversation_owner(conversation_id)
+    marker = read_session_owner_marker(conversation_id)
     if owner is not None:
         tenant_id, owner_uid = owner
         if tenant_id != _tenant() or sanitize_user_id(owner_uid) != uid:
             raise _not_found()
+        # Riga e marker discordi (file caricati da A, riga creata da B): la
+        # sessione e' contesa e non viene servita a nessuno.
+        if marker is not None and sanitize_user_id(marker) != uid:
+            raise _not_found()
         return True
-    marker = read_session_owner_marker(conversation_id)
     if marker is not None:
         if sanitize_user_id(marker) != uid:
             raise _not_found()
@@ -168,10 +172,27 @@ async def assert_conversation_access(
     if allow_missing:
         if claim_if_missing:
             claim_session_owner_marker(conversation_id, uid)
+            # Due prime scritture concorrenti: vince chi crea il marker.
+            claimed = read_session_owner_marker(conversation_id)
+            if claimed is not None and sanitize_user_id(claimed) != uid:
+                raise _not_found()
         return False
     if not password_auth_enabled():
         return False
     raise _not_found()
+
+
+async def claim_conversation_for_write(conversation_id: str, user_id: str) -> bool:
+    """Da chiamare prima di creare/aggiornare una riga ``conversations``.
+
+    L'id della conversazione lo sceglie il client: senza questo controllo un
+    utente potrebbe creare la riga su una sessione in cui un altro ha gia'
+    caricato file (marker ``.aion_owner``) e appropriarsene. Rivendica la
+    sessione se libera, 404 se appartiene ad altri.
+    """
+    return await assert_conversation_access(
+        conversation_id, user_id, allow_missing=True, claim_if_missing=True
+    )
 
 
 def api_key_context_principal(ctx) -> str:
