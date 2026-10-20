@@ -1253,6 +1253,7 @@ def _oauth_config_for_admin(raw_json: Optional[str]) -> Dict[str, Any]:
     if not isinstance(cfg, dict):
         cfg = {}
     secret_set = bool(str(cfg.pop("client_secret", "") or "").strip())
+    cfg.pop("client_secret_encrypted", None)
     cfg["client_secret"] = ""
     cfg["client_secret_set"] = secret_set
     return cfg

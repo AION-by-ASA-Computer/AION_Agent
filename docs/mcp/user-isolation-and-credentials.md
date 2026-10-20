@@ -109,6 +109,8 @@ Il flusso OAuth 2.0 (Authorization Code + PKCE S256) è implementato in `src/api
 
 I token (`OAUTH_TOKEN`, `OAUTH_REFRESH_TOKEN`) sono salvati cifrati in `user_mcp_credentials`. Il refresh automatico avviene in `src/runtime/credential_store.py` quando il token di accesso scade ma il refresh token è ancora valido. Lo scambio HTTP è centralizzato in `src/runtime/oauth_token_exchange.py`.
 
+Anche il `client_secret` OAuth del server (configurato dall'admin o ottenuto via registrazione dinamica) è cifrato a riposo: in `mcp_server_configs.oauth_config` compare solo `client_secret_encrypted` (stessa chiave `AION_CREDENTIAL_ENCRYPTION_KEY`, tipo colonna `EncryptedOAuthConfigJSON` in `src/data/encrypted_types.py`). I valori legacy in chiaro restano leggibili e vengono cifrati alla prima scrittura o dalla migrazione `x6y7z8a026`, che viene saltata se la chiave non è impostata nell'ambiente in cui gira.
+
 **Vincolo architetturale**: lo stato PKCE (`_oauth_pending`) è in memoria di processo — il backend deve restare a `--workers 1`.
 
 ## Backup
