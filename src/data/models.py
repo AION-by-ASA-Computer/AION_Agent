@@ -20,6 +20,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from .encrypted_types import EncryptedOAuthConfigJSON
+
 
 class Base(DeclarativeBase):
     pass
@@ -644,7 +646,10 @@ class McpServerConfig(Base):
     credential_schema_json: Mapped[Optional[str]] = mapped_column(
         "credential_schema", Text
     )
-    oauth_config_json: Mapped[Optional[str]] = mapped_column("oauth_config", Text)
+    # client_secret cifrato a riposo (AION_CREDENTIAL_ENCRYPTION_KEY)
+    oauth_config_json: Mapped[Optional[str]] = mapped_column(
+        "oauth_config", EncryptedOAuthConfigJSON
+    )
     category: Mapped[Optional[str]] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

@@ -288,6 +288,57 @@ def _merge_mcp_registries(
     return out
 
 
+def _is_remote_bridge(config: Dict[str, Any]) -> bool:
+    from .mcp_remote_install import is_mcp_remote_proxy_arg
+
+    if (config.get("type") or "").lower() == "remote-bridge":
+        return True
+    return any(is_mcp_remote_proxy_arg(a) for a in config.get("args") or [])
+
+
+def _server_needs_user_credentials(config: Optional[Dict[str, Any]]) -> bool:
+    """True se il server usa credenziali per utente (placeholder ${AION_USER_*})."""
+    if not config:
+        return False
+    env_block = config.get("env")
+    if isinstance(env_block, dict) and any(
+        isinstance(v, str) and "${AION_USER_" in v for v in env_block.values()
+    ):
+        return True
+    return _is_remote_bridge(config) and bool(
+        (config.get("auth_env_var") or "").strip()
+    )
+
+
+def _remote_bridge_auth_missing(
+    server_name: str, config: Dict[str, Any], env: Dict[str, Any]
+) -> Optional[str]:
+    """
+    Messaggio di errore se un remote-bridge partirebbe senza token.
+
+    Senza Bearer valido mcp-remote riceve 401 e avvia il proprio flusso OAuth
+    (registrazione dinamica + browser sul callback localhost): va evitato.
+    """
+    if not _is_remote_bridge(config):
+        return None
+    from .mcp_credential_discovery import resolve_remote_bridge_auth_env_var
+
+    var = resolve_remote_bridge_auth_env_var(config)
+    if not var or str(env.get(var) or "").strip():
+        return None
+    return (
+        f"OAuth non connesso per {server_name}: collega l'integrazione da chat-ui "
+        f"(credenziali mancanti)"
+    )
+
+
+def _missing_user_context_error(server_name: str) -> RuntimeError:
+    return RuntimeError(
+        f"contesto utente mancante per {server_name}: avvio annullato "
+        "(credenziali mancanti)"
+    )
+
+
 def _apply_mcp_home_isolation(env: Dict[str, Any], uid: str) -> None:
     """Isola HOME/XDG per processo MCP (per user_id)."""
     if os.getenv("AION_MCP_USER_HOME_ISOLATION", "1").lower() not in (
