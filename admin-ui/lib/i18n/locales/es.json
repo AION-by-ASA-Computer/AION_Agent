@@ -1387,7 +1387,8 @@
     },
     "badge": {
       "twofa": "2FA activa",
-      "twofa_off": "2FA off"
+      "twofa_off": "2FA off",
+      "admin": "Admin"
     },
     "row": {
       "profiles": "Acceso a perfiles de {{name}}",
@@ -1412,7 +1413,10 @@
       "create": "Crear usuario",
       "save": "Guardar cambios",
       "saving": "Guardando…",
-      "required": "El nombre de usuario y la contraseña son obligatorios."
+      "required": "El nombre de usuario y la contraseña son obligatorios.",
+      "admin": "Administrador",
+      "admin_hint": "Puede acceder al panel de administración.",
+      "password_sso": "Inicia sesión con {{provider}}: la contraseña la gestiona el proveedor de identidad."
     },
     "profiles": {
       "title": "Acceso a perfiles",
