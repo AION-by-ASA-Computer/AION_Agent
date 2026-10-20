@@ -73,7 +73,7 @@ A side thread is a `Conversation` with three extra columns (migration
 
 ## API
 
-All endpoints use the usual chat-ui headers (`X-AION-User-Id`, `X-AION-Chat-Ui-Secret`).
+All endpoints use the usual chat-ui auth (`Authorization: Bearer <chat token>`; `X-AION-User-Id` only counts in open mode). Threads of a conversation owned by another user answer 404.
 
 - `GET /chat-ui/conversations` — excludes threads by default (`include_threads=1` to
   include them); every summary carries `thread_count`.

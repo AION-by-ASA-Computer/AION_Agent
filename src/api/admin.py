@@ -3016,10 +3016,21 @@ async def get_ltm_facts(
     scope_type: str = "user",
     scope_key: str = "default",
     tenant_id: str = "default",
+    auth: ChatAuthIdentity = Depends(require_admin_role),
 ):
-    """Retrieve semantic facts from Mnemos LTM."""
+    """Retrieve semantic facts from Mnemos LTM.
+
+    La memoria ``user`` e' leggibile solo dal proprietario (admin inclusi).
+    """
+    from src.api.ownership import effective_user_id
+    from src.identity import sanitize_user_id
     from src.memory.mnemos.scope import global_scope, project_scope, user_scope
     from src.memory.mnemos import store
+
+    if scope_type not in ("project", "global") and sanitize_user_id(
+        scope_key
+    ) != effective_user_id(auth):
+        raise HTTPException(status_code=404, detail="Scope not found")
 
     try:
         if scope_type == "project":

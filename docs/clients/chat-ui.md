@@ -28,7 +28,7 @@ Start the FastAPI API as usual (`uvicorn src.api.main:app`).
 |-----------|--------|
 | `NEXT_PUBLIC_AION_API_URL` | FastAPI base URL (browser) |
 | `NEXT_PUBLIC_AION_ADMIN_UI_URL` | admin-ui base for Agent DB iframe |
-| `NEXT_PUBLIC_AION_CHAT_UI_SECRET` | Optional: same value as `AION_CHAT_UI_INTERNAL_SECRET` on the backend |
+| _(removed)_ `NEXT_PUBLIC_AION_CHAT_UI_SECRET` | Never expose `AION_CHAT_UI_INTERNAL_SECRET` in the browser bundle: chat-ui authenticates with the chat token (`Authorization: Bearer`) |
 | _(removed)_ | Orchestration approve uses the **chat JWT** (`Authorization: Bearer`); do not expose orchestration secrets in the browser bundle |
 | `NEXT_PUBLIC_AION_CHAT_UI_DEBUG` | **[hardcoded in `dev-flags.ts:7`]** — console log stream chunk counters (token / reasoning) |
 | `NEXT_PUBLIC_AION_PROMPT_DEBUG` | **[hardcoded in `dev-flags.ts:8`]** — Prompt dock tab (requires `AION_PROMPT_DEBUG=1` on the backend) |
@@ -195,7 +195,7 @@ Update this section with dark/light captures from the active chat-ui (header + s
   "  - Stream ancora attivo su un’altra conversazione che bloccava il merge (mitigato: abort + `chatStop` al cambio thread, merge solo per la conversazione in stream)."
   So "mitigato: abort + `chatStop` al cambio thread" translates to "mitigated: abort + `chatStop` on thread change"]
   - Messages in the DB but filtered as technical (role `internal`, orchestrator content, empty assistant without steps/timeline).
-- **Debug**: `NEXT_PUBLIC_AION_CHAT_UI_DEBUG=1` logs in the console `[aion-chat-ui] history fetch` with `count`, `streamingRef`, `source`. Verify alignment of `AION_CHAT_UI_INTERNAL_SECRET` (backend) and `NEXT_PUBLIC_AION_CHAT_UI_SECRET` (chat-ui).
+- **Debug**: `NEXT_PUBLIC_AION_CHAT_UI_DEBUG=1` logs in the console `[aion-chat-ui] history fetch` with `count`, `streamingRef`, `source`. With password auth on, verify the chat token is present: `X-AION-User-Id` alone does not select the user.
 - **Implementation**: local/server merge in `chat-ui/lib/merge-chat-history.ts`, orchestration in `chat-ui/lib/use-conversation-transcript.ts`.
 
 ### Streaming / reasoning QA checklist

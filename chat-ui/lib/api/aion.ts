@@ -13,10 +13,13 @@ export type ProfileRow = {
   critical_skills?: string[];
 };
 
+/**
+ * Header comuni verso il backend. Con login attivo l'identita' viene SOLO dal
+ * Bearer token (il backend ignora X-AION-User-Id); l'header vale in modalita'
+ * aperta. Nessun secret server-to-server qui: questo codice gira nel browser.
+ */
 export function baseUserHeaders(userId: string, token?: string | null): Record<string, string> {
   const h: Record<string, string> = { "X-AION-User-Id": userId };
-  const secret = process.env.NEXT_PUBLIC_AION_CHAT_UI_SECRET?.trim();
-  if (secret) h["X-AION-Chat-Ui-Secret"] = secret;
   if (token) h.Authorization = `Bearer ${token}`;
   return h;
 }
@@ -54,10 +57,7 @@ export async function uploadSessionFiles(sessionId: string, userId: string, file
   if (!files.length) return [];
   const fd = new FormData();
   for (const f of files) fd.append("files", f);
-  const h: Record<string, string> = { "X-AION-User-Id": userId };
-  const secret = process.env.NEXT_PUBLIC_AION_CHAT_UI_SECRET?.trim();
-  if (secret) h["X-AION-Chat-Ui-Secret"] = secret;
-  if (token) h.Authorization = `Bearer ${token}`;
+  const h = baseUserHeaders(userId, token);
   const r = await fetch(`${apiBase()}/sessions/${encodeURIComponent(sessionId)}/upload`, {
     method: "POST",
     headers: h,

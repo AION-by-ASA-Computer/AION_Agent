@@ -16,7 +16,11 @@ from sse_starlette.sse import EventSourceResponse
 from src.agent_pipeline import AgentPipeline
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.api.v1.runtime_settings import RuntimeSettingsPayload
-from src.identity import sanitize_user_id
+from src.api.ownership import (
+    assert_conversation_access,
+    chat_user_id,
+    effective_user_id,
+)
 from src.main import get_agent, set_event_loop
 from src.runtime.reasoning_effort import resolve_turn_reasoning
 from src.session_workspace import normalize_session_id
@@ -248,14 +252,6 @@ def _prepare_dedupe_key(conversation_id: str, profile: str, user_id: str) -> str
     return f"{conversation_id}\0{profile}\0{user_id}"
 
 
-def _credential_user_id(auth: ChatAuthIdentity) -> str:
-    if auth.identifier:
-        return sanitize_user_id(auth.identifier)
-    if auth.user_row_id:
-        return sanitize_user_id(auth.user_row_id)
-    return "default"
-
-
 ReasoningEffort = Literal["min", "medium", "max"]
 
 
@@ -419,7 +415,10 @@ async def chat_prepare(
     Pre-avvia MCP stdio e popola la cache agente per una conversazione.
     Chiamare all'apertura della chat (prima del primo messaggio) per evitare cold-start.
     """
-    uid = sanitize_user_id(body.user_id or x_aion_user_id or _credential_user_id(auth))
+    uid = _resolve_chat_user_id(
+        auth, body_user_id=body.user_id, x_aion_user_id=x_aion_user_id
+    )
+    await assert_conversation_access(body.conversation_id, uid, allow_missing=True)
     dedupe_key = _prepare_dedupe_key(body.conversation_id, body.profile, uid)
 
     existing = _prepare_tasks.get(dedupe_key)
@@ -537,7 +536,10 @@ async def chat_prepare_status(
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """Stato warm MCP/agente per polling dalla chat-ui."""
-    uid = sanitize_user_id(user_id or x_aion_user_id or _credential_user_id(auth))
+    uid = _resolve_chat_user_id(
+        auth, body_user_id=user_id, x_aion_user_id=x_aion_user_id
+    )
+    await assert_conversation_access(conversation_id, uid, allow_missing=True)
     dedupe_key = _prepare_dedupe_key(conversation_id, profile, uid)
     task = _prepare_tasks.get(dedupe_key)
     if task is not None and not task.done():
@@ -570,10 +572,10 @@ def _resolve_chat_user_id(
     body_user_id: Optional[str],
     x_aion_user_id: Optional[str],
 ) -> str:
-    """Match legacy POST /chat: JWT identity wins over X-AION-User-Id."""
-    if auth.via == "chat_token" and auth.identifier:
-        return sanitize_user_id(auth.identifier)
-    return sanitize_user_id(body_user_id or x_aion_user_id or _credential_user_id(auth))
+    """Token identity when auth is on; header/body only in open mode or BFF."""
+    return effective_user_id(
+        auth, header_user_id=x_aion_user_id, body_user_id=body_user_id
+    )
 
 
 @router.post("/chat/stop")
@@ -584,11 +586,12 @@ async def chat_stop(
     session_id: Optional[str] = Query(
         None, description="Legacy alias for conversation_id"
     ),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    uid: str = Depends(chat_user_id),
 ):
     cid = (conversation_id or session_id or "").strip()
     if not cid:
         raise HTTPException(400, detail="conversation_id or session_id required")
+    await assert_conversation_access(cid, uid)
     await redis_set_stream_cancel(cid)
     await _stop_background_run(cid, timeout=15.0)
     return {"ok": True, "conversation_id": cid, "session_id": cid}
@@ -831,6 +834,8 @@ async def chat_stream_reconnect(
     auth: ChatAuthIdentity = Depends(require_chat_auth),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
+    uid = _resolve_chat_user_id(auth, body_user_id=None, x_aion_user_id=x_aion_user_id)
+    await assert_conversation_access(conversation_id, uid)
     run = _background_runs.get(conversation_id)
     if not run:
 
@@ -902,6 +907,7 @@ async def chat_sync(
     )
 
     conversation_project: str | None = None
+    conversation_owner_mismatch = False
     if os.getenv("AION_UNIFIED_DB", "1").lower() in ("1", "true", "yes"):
         try:
             from datetime import datetime, timezone
@@ -935,6 +941,8 @@ async def chat_sync(
                         )
                     )
                     await session.commit()
+                elif (r.user_id or "") != (uid or ""):
+                    conversation_owner_mismatch = True
                 else:
                     meta = json.loads(r.metadata_json or "{}")
                     conversation_project = (
@@ -947,6 +955,8 @@ async def chat_sync(
                         await session.commit()
         except Exception as e:
             logger.error("Error ensuring conversation for sync chat: %s", e)
+    if conversation_owner_mismatch:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     from src.runtime.sql_query_project_resolve import resolve_sql_query_project
 

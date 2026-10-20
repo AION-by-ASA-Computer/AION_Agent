@@ -31,11 +31,16 @@ Accepts one of the following authorization methods:
   Authorization: Bearer <token_hmac>
   ```
   *(for SSE endpoints like `EventSource`, which do not support custom headers, it is possible to pass the token in the query string: `?access_token=<token_hmac>`)*
-- **BFF Internal Secret**: Server-to-server header to bypass login in trusted scenarios.
+- **BFF Internal Secret**: Server-to-server header for a trusted backend-for-frontend (never a browser). It is the only authenticated mode in which `X-AION-User-Id` selects the user, and it grants **no** admin role.
   ```http
   X-AION-Chat-Ui-Secret: <shared_secret>
+  X-AION-User-Id: <user>
   ```
-- **API Key**: An API Key with `chat` or `admin` scope.
+- **API Key**: An API Key with `chat` or `admin` scope. The key is its own principal (`apikey_<id>`): `user`/`user_id` in the body and `X-AION-User-Id` are ignored.
+
+#### Conversation ownership
+
+Every endpoint that reads or writes a conversation, session, step or file checks that its owner is the caller's effective identity (`src/api/ownership.py`). This applies to admins too. A conversation owned by someone else answers **404** (`Conversation not found`), so its existence is not revealed. Sessions without a DB row yet (e.g. files uploaded before the first message) are bound to their first writer via a `.aion_owner` marker.
 - **Open Mode**: If `AION_CHAT_PASSWORD_AUTH=0` in the backend, read-only operations are no-op (anonymous identity allowed). Write operations will still require a verified identity.
 
 ---

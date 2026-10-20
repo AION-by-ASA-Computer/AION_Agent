@@ -62,6 +62,12 @@ async def _ensure_conversation(
 
     async with get_async_session_maker()() as session:
         existing = await session.get(Conversation, conversation_id)
+        if existing and (
+            sanitize_user_id(existing.user_id) != sanitize_user_id(user_id)
+            or (existing.tenant_id or "default") != tenant_id
+        ):
+            # Mai scrivere nella conversazione di un altro utente.
+            raise PermissionError("session_not_owned")
         if existing:
             try:
                 current = json.loads(existing.metadata_json or "{}")
@@ -131,13 +137,19 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
         profile = (job.get("profile_slug") or "generic_assistant").strip()
         conversation_id = await resolve_session_for_run(job)
 
-        await _ensure_conversation(
-            conversation_id=conversation_id,
-            user_id=user_id,
-            tenant_id=tenant_id,
-            profile_slug=profile,
-            job=job,
-        )
+        try:
+            await _ensure_conversation(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                tenant_id=tenant_id,
+                profile_slug=profile,
+                job=job,
+            )
+        except PermissionError:
+            logger.warning(
+                "cron job_id=%s refused: session belongs to another user", job_id[:8]
+            )
+            return {"ok": False, "error": "session_not_owned", "job_id": job_id}
 
         run_id = await cron_db.insert_run_start(
             job_id,

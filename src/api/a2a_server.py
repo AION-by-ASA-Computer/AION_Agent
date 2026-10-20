@@ -1,10 +1,13 @@
-from fastapi import APIRouter, HTTPException, Header, Request
+from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from pydantic import BaseModel
 from typing import Dict, Any, Optional
 from ..a2a.agent_card import get_agent_card
 from ..main import get_agent
 from ..agent_pipeline import AgentPipeline
+from ..identity import sanitize_user_id
 from ..session_workspace import normalize_session_id
+from .auth_login import ChatAuthIdentity, require_chat_auth
+from .ownership import assert_conversation_access, effective_user_id
 import uuid
 
 router = APIRouter(prefix="/a2a", tags=["agent-to-agent"])
@@ -24,10 +27,17 @@ async def read_agent_card(profile_name: str, request: Request):
 
 
 @router.post("/invoke")
-async def invoke_agent(msg: A2AMessage, x_aion_origin: str = Header(None)):
+async def invoke_agent(
+    msg: A2AMessage,
+    x_aion_origin: str = Header(None),
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
+):
     """
     JSON-RPC entry point per chiamate Agent-to-Agent.
     Permette a un agente esterno di inviare un prompt e ricevere una risposta.
+
+    Con password auth attiva richiede token/API key; il chiamante puo' usare
+    solo le proprie sessioni (``session_id`` di altri utenti -> 404).
     """
     if msg.method != "agent.ask":
         raise HTTPException(
@@ -45,17 +55,26 @@ async def invoke_agent(msg: A2AMessage, x_aion_origin: str = Header(None)):
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    if auth.via == "anonymous":
+        user_id = sanitize_user_id(f"a2a_{x_aion_origin or 'external'}")
+    else:
+        user_id = effective_user_id(auth)
+    await assert_conversation_access(session_id, user_id, allow_missing=True)
+
     try:
         # 1. Get the agent instance
         agent_instance, p_name = await get_agent(
             profile_name,
             session_id=session_id,
-            user_id=f"a2a_{x_aion_origin or 'external'}",
+            user_id=user_id,
         )
 
         # 2. Setup pipeline
         pipeline = AgentPipeline(
-            agent_instance, session_id=session_id, profile_name=p_name, user_id="a2a"
+            agent_instance,
+            session_id=session_id,
+            profile_name=p_name,
+            user_id=user_id,
         )
 
         # 3. Run (A2A è tipicamente sincrono/bloccante via JSON-RPC)
