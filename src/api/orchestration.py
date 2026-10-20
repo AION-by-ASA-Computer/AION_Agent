@@ -145,9 +145,7 @@ async def _assert_session_owner(
         raise HTTPException(status_code=404, detail="Conversation not found")
     owner = sanitize_user_id(str(row[0] or ""))
     if owner != expected:
-        raise HTTPException(
-            status_code=403, detail="Session does not belong to this user"
-        )
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
 
 class PlanSessionBody(BaseModel):

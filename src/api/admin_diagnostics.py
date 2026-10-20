@@ -172,6 +172,19 @@ def _finalize_allowed_file(
     return None
 
 
+def _is_diagnostic_session_file(resolved: Path, sessions_dir: Path) -> bool:
+    """File fuori da ``sessions/`` o dentro una sessione smoke test.
+
+    Le sessioni degli utenti reali non sono mai servite da questo endpoint:
+    nessuno, admin inclusi, puo' leggere i file di chat di un altro utente.
+    """
+    try:
+        rel = resolved.relative_to(sessions_dir)
+    except ValueError:
+        return True
+    return bool(rel.parts) and rel.parts[0].startswith("smoke")
+
+
 def resolve_diagnostic_file(
     raw_path: str, session_id: Optional[str] = None
 ) -> Optional[Path]:
@@ -208,7 +221,12 @@ def resolve_diagnostic_file(
         for base in allowed_bases:
             res = _resolve_file_within(base, candidate)
             if res is not None:
-                return _finalize_allowed_file(res, allowed_bases)
+                found = _finalize_allowed_file(res, allowed_bases)
+                if found is not None and not _is_diagnostic_session_file(
+                    found, sessions_dir
+                ):
+                    return None
+                return found
         return None
 
     # 1. Path strutturato con prefisso sessions/ o data/sessions/

@@ -27,11 +27,12 @@ import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, Header
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
+from src.api.ownership import assert_conversation_access
 from src.api.v1.chat import _resolve_chat_user_id
 from src.session_workspace import normalize_session_id
 
@@ -556,6 +557,16 @@ async def chat_completions(
             "invalid_request_error",
             param="X-AION-Conversation-Id",
             code="invalid_conversation_id",
+        )
+    try:
+        await assert_conversation_access(conversation_id, uid, allow_missing=True)
+    except HTTPException:
+        return _error(
+            404,
+            "Conversation not found",
+            "invalid_request_error",
+            param="X-AION-Conversation-Id",
+            code="conversation_not_found",
         )
 
     has_history = await _session_has_history(conversation_id, profile_slug)

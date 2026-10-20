@@ -13,7 +13,7 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
-from src.identity import sanitize_user_id
+from src.api.ownership import effective_user_id
 from src.research.handler import (
     deep_research_enabled,
     get_research_handler,
@@ -40,10 +40,8 @@ def resolve_research_owner(
     auth: ChatAuthIdentity,
     x_aion_user_id: Optional[str] = None,
 ) -> str:
-    """Match /chat user resolution: JWT wins; else X-AION-User-Id (open chat)."""
-    if auth.via == "chat_token" and auth.identifier:
-        return sanitize_user_id(auth.identifier)
-    return sanitize_user_id(x_aion_user_id or auth.identifier or "default")
+    """Match /chat user resolution (see ``src.api.ownership.effective_user_id``)."""
+    return effective_user_id(auth, header_user_id=x_aion_user_id)
 
 
 async def research_owner(

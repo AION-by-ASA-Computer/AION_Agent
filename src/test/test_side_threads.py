@@ -60,7 +60,7 @@ async def _list(**kw):
         limit=40,
         exclude_scheduled=True,
         include_threads=False,
-        x_aion_user_id="u1",
+        user_id="u1",
         **kw,
     )
 
@@ -70,23 +70,23 @@ def test_create_dedup_list_and_details(monkeypatch, tmp_path):
         await _reset_unified_db(monkeypatch, tmp_path)
         await _seed_parent()
 
-        t1 = await create_side_thread_chat_ui("parent", _body(), x_aion_user_id="u1")
+        t1 = await create_side_thread_chat_ui("parent", _body(), user_id="u1")
         assert t1["created"] is True
         assert t1["parent_conversation_id"] == "parent"
         assert t1["anchor"]["quote"] == "quorum"
         assert t1["title"] == "quorum"
 
-        again = await create_side_thread_chat_ui("parent", _body(), x_aion_user_id="u1")
+        again = await create_side_thread_chat_ui("parent", _body(), user_id="u1")
         assert again["created"] is False and again["id"] == t1["id"]
 
-        threads = await list_side_threads_chat_ui("parent", x_aion_user_id="u1")
+        threads = await list_side_threads_chat_ui("parent", user_id="u1")
         assert [t["id"] for t in threads["data"]] == [t1["id"]]
 
         listed = (await _list())["data"]
         assert [c["id"] for c in listed] == ["parent"]
         assert listed[0]["thread_count"] == 1
 
-        details = await get_conversation_chat_ui(t1["id"], x_aion_user_id="u1")
+        details = await get_conversation_chat_ui(t1["id"], user_id="u1")
         assert details["parent_conversation_id"] == "parent"
         assert details["parent_message_id"] == "m-asst"
         assert details["anchor"]["quote"] == "quorum"
@@ -100,18 +100,18 @@ def test_ownership_nesting_and_missing_message(monkeypatch, tmp_path):
         await _seed_parent()
 
         with pytest.raises(HTTPException) as other_user:
-            await create_side_thread_chat_ui("parent", _body(), x_aion_user_id="u2")
+            await create_side_thread_chat_ui("parent", _body(), user_id="u2")
         assert other_user.value.status_code == 404
 
         with pytest.raises(HTTPException) as bad_msg:
             await create_side_thread_chat_ui(
-                "parent", _body(parent_message_id="nope"), x_aion_user_id="u1"
+                "parent", _body(parent_message_id="nope"), user_id="u1"
             )
         assert bad_msg.value.status_code == 404
 
-        t1 = await create_side_thread_chat_ui("parent", _body(), x_aion_user_id="u1")
+        t1 = await create_side_thread_chat_ui("parent", _body(), user_id="u1")
         with pytest.raises(HTTPException) as nested:
-            await create_side_thread_chat_ui(t1["id"], _body(), x_aion_user_id="u1")
+            await create_side_thread_chat_ui(t1["id"], _body(), user_id="u1")
         assert nested.value.status_code == 409
 
     asyncio.run(run())
@@ -121,15 +121,15 @@ def test_delete_parent_archives_threads(monkeypatch, tmp_path):
     async def run():
         await _reset_unified_db(monkeypatch, tmp_path)
         await _seed_parent()
-        t1 = await create_side_thread_chat_ui("parent", _body(), x_aion_user_id="u1")
+        t1 = await create_side_thread_chat_ui("parent", _body(), user_id="u1")
 
-        await delete_conversation_chat_ui("parent", x_aion_user_id="u1")
+        await delete_conversation_chat_ui("parent", user_id="u1")
 
-        assert (await list_side_threads_chat_ui("parent", x_aion_user_id="u1"))[
+        assert (await list_side_threads_chat_ui("parent", user_id="u1"))[
             "data"
         ] == []
         everything = await list_conversations_chat_ui(
-            limit=40, exclude_scheduled=True, include_threads=True, x_aion_user_id="u1"
+            limit=40, exclude_scheduled=True, include_threads=True, user_id="u1"
         )
         assert t1["id"] not in [c["id"] for c in everything["data"]]
 
@@ -140,7 +140,7 @@ def test_side_thread_context_block(monkeypatch, tmp_path):
     async def run():
         await _reset_unified_db(monkeypatch, tmp_path)
         await _seed_parent()
-        t1 = await create_side_thread_chat_ui("parent", _body(), x_aion_user_id="u1")
+        t1 = await create_side_thread_chat_ui("parent", _body(), user_id="u1")
 
         ctx = await build_side_thread_context(t1["id"], "u1")
         assert "<side-thread-context>" in ctx
@@ -163,7 +163,7 @@ def test_admin_global_list_links_threads_to_parent(monkeypatch, tmp_path):
         await bridge.add_message(
             "other", "user", "ciao", user_id="u1", message_id="m-other"
         )
-        t1 = await create_side_thread_chat_ui("parent", _body(), x_aion_user_id="u1")
+        t1 = await create_side_thread_chat_ui("parent", _body(), user_id="u1")
 
         rows = {
             c["id"]: c
