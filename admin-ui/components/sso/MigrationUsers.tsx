@@ -10,7 +10,7 @@ import { PageToast, type ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
 import { SearchField } from "@/components/ui/SearchField";
 import { dangerBtn, ghostBtn, outlineBtn, solidBtn } from "@/components/ui/classes";
-import { fullWhen, toMs } from "@/components/conversations/format";
+import { fullWhen, toMs } from "@/lib/datetime";
 import { TempPasswordsDialog } from "./TempPasswordsDialog";
 
 const k = "admin_users.migration";

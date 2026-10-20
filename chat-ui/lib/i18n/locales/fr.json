@@ -720,7 +720,7 @@
       "sso_user_already_linked": "Vous avez déjà un compte lié.",
       "generic": "Échec de la connexion. Réessayez.",
       "sso_not_linked": "Votre compte n'est pas encore lié. Connectez-vous avec votre mot de passe et liez votre compte professionnel.",
-      "sso_domain_not_allowed": "Le domaine de votre e-mail n'est pas autorisé.",
+      "sso_domain_not_allowed": "Ce compte n'est pas autorisé à se connecter. Vous utilisez peut-être le mauvais compte : connectez-vous avec votre compte professionnel.",
       "sso_required": "La connexion SSO est obligatoire pour ce compte.",
       "password_login_disabled": "La connexion par mot de passe est désactivée.",
       "temp_password_expired": "Le mot de passe temporaire a expiré. Contactez l'administrateur.",

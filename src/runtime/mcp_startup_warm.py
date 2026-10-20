@@ -133,11 +133,35 @@ async def _preload_shared_tool_catalog(user_ids: List[str]) -> None:
             servers.append(name)
     if not servers:
         return
+    from src.runtime.session_context import SessionContext
+
     logger.info("tool catalog preload servers=%s", ",".join(servers))
+    tenant_id = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     for user_id in user_ids:
+        existing = mcp_manager.get_session_context(BOOTSTRAP_SESSION_ID)
+        mcp_manager.set_session_context(
+            BOOTSTRAP_SESSION_ID,
+            SessionContext(
+                profile_slug=existing.profile_slug if existing else "generic_assistant",
+                user_id=user_id,
+                tenant_id=tenant_id,
+                conversation_id=BOOTSTRAP_SESSION_ID,
+            ),
+        )
         for name in servers:
             cfg = mcp_manager.get_server_config(name)
             if not cfg:
+                continue
+            missing = await mcp_manager._warm_credentials_missing(
+                BOOTSTRAP_SESSION_ID, name
+            )
+            if missing:
+                logger.info(
+                    "tool catalog preload skip server=%s user=%s: %s",
+                    name,
+                    user_id,
+                    missing,
+                )
                 continue
             try:
                 await build_mcp_tools(name, cfg, BOOTSTRAP_SESSION_ID, user_id=user_id)

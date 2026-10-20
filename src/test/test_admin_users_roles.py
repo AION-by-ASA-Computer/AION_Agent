@@ -89,7 +89,7 @@ async def test_password_rejected_for_sso_user(monkeypatch, tmp_path):
     monkeypatch.setattr(login_mode, "get_login_settings", fake_settings)
 
     # Senza identita' confermata la password si puo' ancora impostare.
-    await update_user("u1", UserUpdate(password="secret123"), auth=_auth())
+    await update_user("u1", UserUpdate(password="Secret-123"), auth=_auth())
 
     async with db() as session:
         session.add(
@@ -105,5 +105,22 @@ async def test_password_rejected_for_sso_user(monkeypatch, tmp_path):
         await session.commit()
 
     with pytest.raises(HTTPException) as e:
-        await update_user("u1", UserUpdate(password="secret123"), auth=_auth())
+        await update_user("u1", UserUpdate(password="Secret-123"), auth=_auth())
     assert e.value.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_weak_password_rejected(monkeypatch, tmp_path):
+    await _setup(monkeypatch, tmp_path)
+    from src.api.admin import UserCreate, UserUpdate, create_user, update_user
+
+    with pytest.raises(HTTPException) as e:
+        await create_user(UserCreate(identifier="mario", password="secret123"))
+    assert e.value.status_code == 422
+
+    with pytest.raises(HTTPException) as e:
+        await update_user("u1", UserUpdate(password="short"), auth=_auth())
+    assert e.value.status_code == 422
+
+    res = await create_user(UserCreate(identifier="mario", password="Str0ng!pw"))
+    assert res["status"] == "success"

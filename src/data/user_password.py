@@ -34,6 +34,37 @@ def hash_password(plain: str) -> str:
     )
 
 
+# --- Password policy -------------------------------------------------------
+# Regole duplicate in admin-ui/lib/passwordPolicy.ts: tenerle allineate.
+
+PASSWORD_MIN_LENGTH = 8
+PASSWORD_MAX_LENGTH = 512
+
+
+def password_policy_violations(
+    password: str, identifier: Optional[str] = None
+) -> List[str]:
+    """Codici delle regole non rispettate (lista vuota = password valida)."""
+    pw = password or ""
+    out: List[str] = []
+    if len(pw) < PASSWORD_MIN_LENGTH:
+        out.append("too_short")
+    if len(pw) > PASSWORD_MAX_LENGTH:
+        out.append("too_long")
+    if not any(c.islower() for c in pw):
+        out.append("lowercase")
+    if not any(c.isupper() for c in pw):
+        out.append("uppercase")
+    if not any(c.isdigit() for c in pw):
+        out.append("digit")
+    if not any(not c.isalnum() and not c.isspace() for c in pw):
+        out.append("symbol")
+    ident = (identifier or "").strip().lower()
+    if len(ident) >= 3 and ident in pw.lower():
+        out.append("contains_username")
+    return out
+
+
 def verify_password(plain: str, hashed: Optional[str]) -> bool:
     if not plain or not hashed:
         return False

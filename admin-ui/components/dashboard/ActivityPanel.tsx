@@ -28,6 +28,30 @@ function Trend({ points, label }: { points: SeriesPoint[] | undefined; label: st
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 
+type FeedbackRow = { name: string; positive: number; negative: number };
+
+export type FeedbackView = { positives: number; negatives: number; byProfile: FeedbackRow[]; byModel: FeedbackRow[] };
+
+function Breakdown({ title, rows, n }: { title: string; rows: FeedbackRow[]; n: Intl.NumberFormat }) {
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className="text-[11px] font-medium text-muted-foreground">{title}</div>
+      <ul className="flex flex-col gap-0.5 text-[11.5px]">
+        {rows.map((r) => (
+          <li key={r.name} className="flex items-center gap-2">
+            <span className="min-w-0 flex-1 truncate" title={r.name}>
+              {r.name}
+            </span>
+            <span className="tabular-nums text-success">+{n.format(r.positive)}</span>
+            <span className={"tabular-nums " + (r.negative ? "text-warning" : "text-muted-foreground")}>−{n.format(r.negative)}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function ActivityPanel({
   metrics,
   feedback,
@@ -35,7 +59,7 @@ export function ActivityPanel({
   t,
 }: {
   metrics: MetricsOverview | null;
-  feedback: { positives: number; negatives: number };
+  feedback: FeedbackView;
   locale: string;
   t: T;
 }) {
@@ -111,11 +135,17 @@ export function ActivityPanel({
             {c.series !== undefined && <Trend points={c.series} label={t(`${k}.trend_label`, { metric: c.label })} />}
           </div>
         ))}
-        <Link
-          href="/conversations?feedback=disliked"
-          className="focus-ring col-span-2 flex flex-col gap-1 border-t border-border/50 px-5 py-4 transition-colors hover:bg-secondary/40 lg:col-span-1 lg:border-l lg:border-t-0"
-        >
-          <div className="text-xs text-muted-foreground">{t(`${k}.feedback`)}</div>
+        <div className="col-span-2 flex flex-col gap-1 border-t border-border/50 px-5 py-4 lg:col-span-1 lg:border-l lg:border-t-0">
+          <div className="flex items-center gap-2">
+            <div className="text-xs text-muted-foreground">{t(`${k}.feedback`)}</div>
+            <Link
+              href="/feedback"
+              className="focus-ring ml-auto inline-flex items-center gap-1 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground"
+            >
+              {t(`${k}.open_feedback`)}
+              <ArrowRight className="h-3 w-3" aria-hidden />
+            </Link>
+          </div>
           <div className="flex items-center gap-4 text-xl font-semibold tabular-nums">
             <span className="inline-flex items-center gap-1.5">
               <ThumbsUp className="h-4 w-4 text-success" aria-hidden />
@@ -129,7 +159,11 @@ export function ActivityPanel({
             </span>
           </div>
           <div className="text-[11.5px] text-muted-foreground">{t(`${k}.feedback_detail`)}</div>
-        </Link>
+          <div className="mt-1 flex flex-col gap-2">
+            <Breakdown title={t(`${k}.feedback_by_profile`)} rows={feedback.byProfile} n={n} />
+            <Breakdown title={t(`${k}.feedback_by_model`)} rows={feedback.byModel} n={n} />
+          </div>
+        </div>
       </div>
     </section>
   );

@@ -7,11 +7,11 @@ import {
   HeartPulse,
   KeyRound,
   LayoutDashboard,
-  MessagesSquare,
   Server,
   Settings,
   ShieldCheck,
   Sparkles,
+  ThumbsUp,
   Users,
   type LucideIcon,
 } from "lucide-react";
@@ -52,7 +52,6 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     id: "operations",
     labelKey: "admin_nav.groups.operations",
     items: [
-      { id: "conversations", href: "/conversations", icon: MessagesSquare, labelKey: "admin_nav.conversations" },
       { id: "schedules", href: "/schedules", icon: Clock, labelKey: "admin_nav.schedules" },
     ],
   },
@@ -61,6 +60,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     labelKey: "admin_nav.groups.observability",
     items: [
       { id: "metrics", href: "/metrics", icon: BarChart3, labelKey: "admin_nav.metrics" },
+      { id: "feedback", href: "/feedback", icon: ThumbsUp, labelKey: "admin_nav.feedback" },
       { id: "diagnostics", href: "/diagnostics", icon: FlaskConical, labelKey: "admin_nav.diagnostics" },
       { id: "system", href: "/system", icon: HeartPulse, labelKey: "admin_nav.system" },
     ],

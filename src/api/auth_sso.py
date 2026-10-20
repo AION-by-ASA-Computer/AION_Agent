@@ -205,17 +205,32 @@ async def sso_callback(
         return RedirectResponse(f"{chat_base}/login?error=sso_failed")
 
     provider_config = data["provider_config"]
+    purpose = data.get("purpose", "login")
     try:
         claims = verify_id_token(
             id_token=data["id_token"],
             provider_config=provider_config,
             expected_nonce=data["nonce"],
         )
+    except ValueError as e:
+        if str(e) == "domain_not_allowed":
+            # Codice unico, senza mai citare i domini consentiti.
+            logger.warning("SSO login rejected: account outside allowed domains")
+            if purpose == "admin_login":
+                admin_base = admin_base_url(request).rstrip("/")
+                return RedirectResponse(
+                    f"{admin_base}/login?error=sso_domain_not_allowed"
+                )
+            if purpose == "link":
+                return RedirectResponse(
+                    f"{chat_base}/?sso_link_error=sso_domain_not_allowed"
+                )
+            return RedirectResponse(f"{chat_base}/login?error=sso_domain_not_allowed")
+        logger.warning("SSO ID Token error: %s", e)
+        return RedirectResponse(f"{chat_base}/login?error=sso_token_invalid")
     except Exception as e:
         logger.warning("SSO ID Token error: %s", e)
         return RedirectResponse(f"{chat_base}/login?error=sso_token_invalid")
-
-    purpose = data.get("purpose", "login")
 
     # -----------------------------------------------------------------------
     # admin_validate: collega identità all'admin e segna il provider validato
@@ -242,6 +257,7 @@ async def sso_callback(
                 tenant_id=_tenant_id(),
                 provider=provider_config["provider"],
                 user_id=target_user_id,
+                claims=claims,
             )
         except Exception as e:
             logger.exception("Admin validate error: %s", e)

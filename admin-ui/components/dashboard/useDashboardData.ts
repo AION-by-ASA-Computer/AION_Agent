@@ -67,12 +67,15 @@ export type CronJob = {
   last_run?: { status?: string; started_at?: string; error_message?: string | null } | null;
 };
 
-export type FeedbackItem = {
-  message_id: string;
-  rating: number | null;
-  feedback_comment?: string | null;
-  created_at?: string;
-  profile_name?: string;
+export type FeedbackCounts = { positive: number; negative: number };
+
+/** Aggregated ratings only: admins never see message content or who rated (privacy). */
+export type FeedbackSummary = {
+  window_days: number;
+  totals: FeedbackCounts;
+  /** `profile` is the display name; `slug` identifies it. */
+  by_profile: (FeedbackCounts & { profile: string; slug?: string })[];
+  by_model: (FeedbackCounts & { model: string })[];
 };
 
 export type McpRegistry = Record<string, { is_base?: boolean; disabled?: boolean; enabled?: boolean }>;
@@ -87,7 +90,7 @@ export type DashboardData = {
   probes: Record<string, ProbeResult>;
   metrics: MetricsOverview | null;
   jobs: CronJob[] | null;
-  feedback: FeedbackItem[] | null;
+  feedback: FeedbackSummary | null;
   users: AdminUser[] | null;
   registry: McpRegistry | null;
   loading: boolean;
@@ -134,7 +137,7 @@ export function useDashboardData(): DashboardData {
   const [probes, setProbes] = useState<Record<string, ProbeResult>>({});
   const [metrics, setMetrics] = useState<MetricsOverview | null>(null);
   const [jobs, setJobs] = useState<CronJob[] | null>(null);
-  const [feedback, setFeedback] = useState<FeedbackItem[] | null>(null);
+  const [feedback, setFeedback] = useState<FeedbackSummary | null>(null);
   const [users, setUsers] = useState<AdminUser[] | null>(null);
   const [registry, setRegistry] = useState<McpRegistry | null>(null);
   const [loading, setLoading] = useState(true);
@@ -182,7 +185,7 @@ export function useDashboardData(): DashboardData {
       getJson<{ settings?: Record<string, string> }>("/admin/settings"),
       getJson<MetricsOverview>("/admin/metrics/overview?time_range=24h"),
       getJson<{ jobs: CronJob[] }>("/admin/cron-jobs?limit=200"),
-      getJson<{ feedback: FeedbackItem[] }>("/admin/feedback"),
+      getJson<FeedbackSummary>("/admin/feedback?days=7"),
       getJson<{ users: AdminUser[] }>("/admin/users"),
       getJson<McpRegistry>("/admin/registry"),
     ]);
@@ -194,7 +197,7 @@ export function useDashboardData(): DashboardData {
     setSettings(s);
     setMetrics(me);
     setJobs(jo?.jobs ?? null);
-    setFeedback(fb?.feedback ?? null);
+    setFeedback(fb);
     setUsers(us?.users ?? null);
     setRegistry(rg);
     setFailed(!st && !he && !pr);

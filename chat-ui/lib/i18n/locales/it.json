@@ -720,7 +720,7 @@
       "sso_user_already_linked": "Hai già un account collegato.",
       "generic": "Accesso non riuscito. Riprova.",
       "sso_not_linked": "Il tuo account non è ancora collegato. Accedi con la password e collega l'account aziendale.",
-      "sso_domain_not_allowed": "Il dominio della tua email non è autorizzato.",
+      "sso_domain_not_allowed": "Questo account non è abilitato all'accesso. Stai usando l'account sbagliato: accedi con quello aziendale.",
       "sso_required": "Per questo account è obbligatorio l'accesso SSO.",
       "password_login_disabled": "L'accesso con password è disabilitato.",
       "temp_password_expired": "La password temporanea è scaduta. Contatta l'amministratore.",
