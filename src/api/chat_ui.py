@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import AliasChoices, BaseModel, Field
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
-from src.api.ownership import chat_user_id
+from src.api.ownership import chat_user_id, claim_conversation_for_write
 from src.data.engine import get_async_session_maker
 from src.data.history_bridge import (
     fetch_message_by_id,
@@ -605,6 +605,8 @@ async def update_conversation_metadata_chat_ui(
     user_id: str = Depends(chat_user_id),
 ):
     _require_unified()
+    # Upsert con id scelto dal client: la sessione puo' gia' essere di altri.
+    await claim_conversation_for_write(conv_id, user_id)
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
         r = await session.get(Conversation, conv_id)
