@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager
 
 import src.aion_env  # noqa: F401 — carica `.env` prima delle altre importazioni
 from typing import Any, Dict, List, Literal, Optional
-from fastapi import Depends, FastAPI, Header, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, AliasChoices
@@ -14,7 +14,6 @@ from sse_starlette.sse import EventSourceResponse
 
 from src.agent_pipeline import AgentPipeline
 from src.main import get_agent
-from src.identity import sanitize_user_id
 from src.runtime.reasoning_effort import resolve_turn_reasoning
 from src.runtime.runtime_settings import (
     profile_step_cap,
@@ -30,6 +29,7 @@ from .research import router as research_router
 from .plan_execution import router as plan_execution_router
 from .v1 import api_v1_router
 from .auth_login import ChatAuthIdentity, require_chat_auth
+from .ownership import assert_conversation_access, chat_user_id, effective_user_id
 from .web_search_params import normalize_web_search_restrict_hosts
 from src.version import __version__
 
@@ -547,9 +547,10 @@ async def _deprecation_headers(request: Request, call_next):
 @app.post("/chat/stop")
 async def chat_stop_compat(
     session_id: str = Query(..., description="conversation / session id"),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    user_id: str = Depends(chat_user_id),
 ):
     """Interrompe lo stream agent per sessione (stesso meccanismo di /v1/chat/stop)."""
+    await assert_conversation_access(session_id.strip(), user_id)
     await redis_set_stream_cancel(session_id.strip())
     return {"ok": True, "session_id": session_id.strip()}
 
@@ -588,10 +589,16 @@ async def profiles_list_compat(
 @app.get("/debug/prompt/{profile_name}")
 async def debug_prompt(
     profile_name: str,
-    user_id: str = "default",
+    user_id: Optional[str] = None,
     _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     from src.agent_profile import profile_manager
+
+    # Il prompt include MEMORY/USER dell'utente: solo il proprio.
+    user_id = effective_user_id(
+        _auth, header_user_id=x_aion_user_id, body_user_id=user_id
+    )
 
     profile = profile_manager.get_profile(profile_name)
     if not profile:
@@ -602,14 +609,15 @@ async def debug_prompt(
 @app.get("/debug/prompt-snapshots")
 async def debug_prompt_snapshots(
     session_id: str = Query(..., description="conversation / session id"),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    user_id: str = Depends(chat_user_id),
 ):
     """Full agent prompts captured per turn when AION_PROMPT_DEBUG=1."""
     from src.runtime.prompt_snapshot import list_prompt_snapshots, prompt_debug_enabled
 
+    sid = session_id.strip()
+    await assert_conversation_access(sid, user_id)
     if not prompt_debug_enabled():
         return {"enabled": False, "snapshots": []}
-    sid = session_id.strip()
     return {"enabled": True, "session_id": sid, "snapshots": list_prompt_snapshots(sid)}
 
 
@@ -683,12 +691,11 @@ async def chat(
     global _GLOBAL_LOOP
     _GLOBAL_LOOP = asyncio.get_running_loop()
 
-    # Quando la password auth e' attiva, l'identita' canonica viene
-    # dall'authenticated user (override del X-AION-User-Id arbitrario).
-    if auth.via == "chat_token" and auth.identifier:
-        user_id = sanitize_user_id(auth.identifier)
-    else:
-        user_id = sanitize_user_id(x_aion_user_id or request.user_id)
+    # Con password auth attiva l'identita' viene dal token; header/body
+    # user_id valgono solo in modalita' aperta o dal BFF interno.
+    user_id = effective_user_id(
+        auth, header_user_id=x_aion_user_id, body_user_id=request.user_id
+    )
 
     from src.runtime.agent_mode_resolve import resolve_agent_mode
 
@@ -715,6 +722,7 @@ async def chat(
     except Exception as e:
         logger.warning("Failed to set trace attributes in chat endpoint: %s", e)
 
+    conversation_owner_mismatch = False
     if os.getenv("AION_UNIFIED_DB", "1").lower() in ("1", "true", "yes"):
         try:
             from datetime import datetime, timezone
@@ -751,6 +759,8 @@ async def chat(
                     )
                     session.add(r)
                     await session.commit()
+                elif (r.user_id or "") != (user_id or ""):
+                    conversation_owner_mismatch = True
                 else:
                     meta = json.loads(r.metadata_json or "{}")
                     updated = False
@@ -794,6 +804,8 @@ async def chat(
                     ).strip() or None
         except Exception as e:
             logger.error("Error ensuring/updating conversation metadata in chat: %s", e)
+    if conversation_owner_mismatch:
+        raise HTTPException(status_code=404, detail="Conversation not found")
 
     from src.runtime.sql_query_project_resolve import resolve_sql_query_project
 
@@ -926,12 +938,13 @@ async def chat(
 @app.get("/sessions/{session_id}/charts")
 async def get_session_charts(
     session_id: str,
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    user_id: str = Depends(chat_user_id),
 ):
     """
     Chart accumulati nel turno (stesso processo) per la sessione chat-ui.
     Consuma la coda: una GET restituisce e svuota i grafici pendenti.
     """
+    await assert_conversation_access(session_id, user_id)
     charts = chart_queue.get_serialized(session_id)
     return {"charts": charts}
 
