@@ -19,6 +19,7 @@ from src.api.v1.runtime_settings import RuntimeSettingsPayload
 from src.api.ownership import (
     assert_conversation_access,
     chat_user_id,
+    claim_conversation_for_write,
     effective_user_id,
 )
 from src.main import get_agent, set_event_loop
@@ -635,6 +636,10 @@ async def chat_stream(
     except Exception as e:
         logger.warning("Failed to set trace attributes in chat_stream endpoint: %s", e)
 
+    # Prima di creare/aggiornare la riga: la sessione puo' gia' appartenere ad
+    # altri (es. file caricati da un altro utente con lo stesso id) => 404.
+    await claim_conversation_for_write(body.conversation_id, uid)
+
     conversation_owner_mismatch = False
     if os.getenv("AION_UNIFIED_DB", "1").lower() in ("1", "true", "yes"):
         try:
@@ -907,6 +912,7 @@ async def chat_sync(
     )
 
     conversation_project: str | None = None
+    await claim_conversation_for_write(conversation_id, uid)
     conversation_owner_mismatch = False
     if os.getenv("AION_UNIFIED_DB", "1").lower() in ("1", "true", "yes"):
         try:

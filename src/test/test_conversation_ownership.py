@@ -15,6 +15,8 @@ from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.api.ownership import (
     assert_conversation_access,
     chat_user_id,
+    claim_conversation_for_write,
+    claim_session_owner_marker,
     effective_user_id,
     owned_by,
     read_session_owner_marker,
@@ -135,6 +137,48 @@ def test_missing_session_needs_owner_marker(monkeypatch, tmp_path):
                 "conv-new", "bob", allow_missing=True, claim_if_missing=True
             )
         _assert_404(exc)
+
+    _run(run())
+
+
+def test_upload_by_a_blocks_first_message_by_b(monkeypatch, tmp_path):
+    """Scenario reale: A carica un file su un id nuovo, B invia il primo
+    messaggio con lo stesso id. B non deve poter creare la conversazione."""
+    from src.api.session_uploads import list_session_files
+
+    async def run():
+        await _reset(monkeypatch, tmp_path)
+        alice = _token("alice")
+        bob = _token("bob")
+        # Upload di A: rivendica la sessione.
+        await claim_conversation_for_write("conv-shared", "alice")
+
+        # Primo messaggio di B (stream/sync/metadata chiamano questa funzione
+        # prima di creare la riga conversations).
+        with pytest.raises(HTTPException) as exc:
+            await claim_conversation_for_write("conv-shared", "bob")
+        _assert_404(exc)
+        with pytest.raises(HTTPException) as exc:
+            await list_session_files("conv-shared", _auth=bob, x_aion_user_id=None)
+        _assert_404(exc)
+
+        # A continua a usare la propria sessione.
+        assert await claim_conversation_for_write("conv-shared", "alice") is False
+        await list_session_files("conv-shared", _auth=alice, x_aion_user_id=None)
+
+    _run(run())
+
+
+def test_contested_session_is_served_to_nobody(monkeypatch, tmp_path):
+    """Sessioni gia' inquinate prima del fix: file di A, riga DB di B."""
+
+    async def run():
+        await _reset(monkeypatch, tmp_path)
+        claim_session_owner_marker("conv-bob", "alice")
+        for user in ("alice", "bob"):
+            with pytest.raises(HTTPException) as exc:
+                await assert_conversation_access("conv-bob", user)
+            _assert_404(exc)
 
     _run(run())
 

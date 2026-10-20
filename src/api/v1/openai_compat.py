@@ -32,7 +32,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
-from src.api.ownership import assert_conversation_access
+from src.api.ownership import claim_conversation_for_write
 from src.api.v1.chat import _resolve_chat_user_id
 from src.session_workspace import normalize_session_id
 
@@ -559,7 +559,7 @@ async def chat_completions(
             code="invalid_conversation_id",
         )
     try:
-        await assert_conversation_access(conversation_id, uid, allow_missing=True)
+        await claim_conversation_for_write(conversation_id, uid)
     except HTTPException:
         return _error(
             404,

@@ -68,6 +68,17 @@ async def _ensure_conversation(
         ):
             # Mai scrivere nella conversazione di un altro utente.
             raise PermissionError("session_not_owned")
+        from src.api.ownership import (
+            claim_session_owner_marker,
+            read_session_owner_marker,
+        )
+
+        marker = read_session_owner_marker(conversation_id)
+        if marker is not None and sanitize_user_id(marker) != sanitize_user_id(user_id):
+            # Sessione (file) di un altro utente, anche senza riga DB.
+            raise PermissionError("session_not_owned")
+        if existing is None:
+            claim_session_owner_marker(conversation_id, sanitize_user_id(user_id))
         if existing:
             try:
                 current = json.loads(existing.metadata_json or "{}")
