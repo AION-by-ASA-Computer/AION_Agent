@@ -553,7 +553,7 @@ class ChatAuthIdentity(BaseModel):
 
     user_row_id: Optional[str] = None
     identifier: Optional[str] = None
-    via: str = "anonymous"  # "anonymous" | "chat_token" | "api_key"
+    via: str = "anonymous"  # "anonymous" | "chat_token" | "api_key" | "internal"
     roles: List[str] = Field(default_factory=list)
 
 
@@ -623,21 +623,21 @@ async def _resolve_chat_identity(
            ``Authorization`` header **oppure** query string ``?access_token=...``
            (necessario per gli endpoint SSE invocati via ``EventSource``).
         2. API key (header ``X-Api-Key`` o ``Authorization: Bearer aion_...``).
-        3. ``X-AION-Chat-Ui-Secret`` valido (server-to-server, per il
-           Next.js BFF del chat-ui).
+        3. ``X-AION-Chat-Ui-Secret`` valido (solo server-to-server; identita'
+           da ``X-AION-User-Id``, nessun ruolo admin).
     """
     # 1. Auth NON richiesta -> identita' anonima (modalita' default user).
     if not password_auth_enabled():
         return ChatAuthIdentity(via="anonymous")
 
-    # 2. Secret interno chat-ui (BFF) -> bypass legittimo (trusted server-to-server).
+    # 2. Secret interno (BFF server-to-server): l'utente arriva da
+    #    X-AION-User-Id (vedi src/api/ownership.py). Nessun ruolo: il secret
+    #    non concede mai l'accesso admin. Non va mai esposto al browser.
     expected_internal = (os.getenv("AION_CHAT_UI_INTERNAL_SECRET") or "").strip()
-    if expected_internal and (x_chat_ui_secret or "").strip() == expected_internal:
-        return ChatAuthIdentity(
-            via="api_key",
-            identifier="chat-ui-internal",
-            roles=["admin"],
-        )
+    if expected_internal and hmac.compare_digest(
+        (x_chat_ui_secret or "").strip().encode(), expected_internal.encode()
+    ):
+        return ChatAuthIdentity(via="internal", identifier=None, roles=[])
 
     # 3. Token Bearer (header), API key (header) o query token (SSE).
     token_raw = (x_api_key or "").strip()

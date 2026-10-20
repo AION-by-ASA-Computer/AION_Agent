@@ -134,7 +134,7 @@ native_tool_groups:
 
 ## REST API Reference
 
-All endpoints are authenticated using chat token identity or the `X-AION-User-Id` header:
+All endpoints are authenticated using chat token identity (the `X-AION-User-Id` header only counts in open mode or from the trusted BFF):
 
 ### 1. Start & Cancel Jobs
 - **`POST /research/start`**

@@ -8,6 +8,7 @@ from typing import List
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 
 from src.api.auth import AuthContext, Scope, require_scope
+from src.api.ownership import api_key_context_principal, assert_conversation_access
 from src.session_workspace import normalize_session_id, save_upload
 from src.storage import get_storage_backend
 from src.tools.doc_auto_ingest import schedule_auto_ingest
@@ -28,6 +29,12 @@ async def upload_files(
         raise HTTPException(400, str(e)) from e
     if not files:
         raise HTTPException(400, "No files")
+    await assert_conversation_access(
+        conversation_id,
+        api_key_context_principal(ctx),
+        allow_missing=True,
+        claim_if_missing=True,
+    )
     out = []
     tenant = ctx.tenant_id
     backend = get_storage_backend()
@@ -55,6 +62,10 @@ async def list_files(
 
     try:
         conversation_id = normalize_session_id(conversation_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    await assert_conversation_access(conversation_id, api_key_context_principal(ctx))
+    try:
         rows = list_dir(conversation_id, subdir="uploads")
     except ValueError as e:
         raise HTTPException(400, str(e)) from e

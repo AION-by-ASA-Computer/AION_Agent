@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
-from src.identity import sanitize_user_id
+from src.api.ownership import effective_user_id
 from src.memory.sql_query_memory import sql_query_memory, sql_query_memory_enabled
 from src.memory.sql_query_memory.models import SqlProjectMemberOut, SqlProjectOut
 
@@ -47,11 +47,9 @@ def _chat_user_id(
     x_aion_user_id: Optional[str] = None,
     body_user_id: Optional[str] = None,
 ) -> str:
-    if auth.via == "chat_token" and auth.identifier:
-        return sanitize_user_id(auth.identifier)
-    if body_user_id:
-        return sanitize_user_id(body_user_id)
-    return sanitize_user_id(x_aion_user_id or "default")
+    return effective_user_id(
+        auth, header_user_id=x_aion_user_id, body_user_id=body_user_id
+    )
 
 
 def _resolve_profile_slug(profile: Optional[str]) -> Optional[str]:
