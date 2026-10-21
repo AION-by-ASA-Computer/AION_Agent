@@ -165,6 +165,7 @@ import { SessionCharts } from "@/components/chat/SessionCharts";
 import { formatMessageTime, formatTurnDuration } from "@/lib/format-turn-time";
 
 import type { DockTab } from "@/lib/layout/dock-tab";
+import { randomUUID } from "@/lib/uuid";
 
 type PlanPendingChunk = ChatChunk & { type: "orchestration_plan_pending" };
 type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research";
@@ -1746,7 +1747,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         if (planFinalSummaryHandledRef.current.has(rid)) return;
         planFinalSummaryHandledRef.current.add(rid);
       }
-      const aid = crypto.randomUUID();
+      const aid = randomUUID();
       setMessages((m) => [...m, { id: aid, role: "assistant", content: text }]);
       // Documented exception: plan final summary is not persisted by the standard turn pipeline.
       void saveAssistantMessage(conversationId, aid, text, undefined, userId, token).catch((err) =>
@@ -2076,8 +2077,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         return;
       }
 
-      let uidMsg: string = opts?.userMessageIdOverride ?? crypto.randomUUID();
-      let aid: string = crypto.randomUUID();
+      let uidMsg: string = opts?.userMessageIdOverride ?? randomUUID();
+      let aid: string = randomUUID();
       setActiveMessageId(aid);
 
       const uploads = [...pendingUploadedAttachments];
@@ -2529,7 +2530,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           return;
         }
         const msg = e instanceof Error ? e.message : String(e);
-        setMessages((m) => [...m, { id: crypto.randomUUID(), role: "assistant", content: `❌ ${msg}` }]);
+        setMessages((m) => [...m, { id: randomUUID(), role: "assistant", content: `❌ ${msg}` }]);
       } finally {
         if (streamGen !== clientStreamGenRef.current) return;
         streamingRef.current = false;
@@ -3349,10 +3350,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       setDbTableHint(hint);
       setDockTab("agentdb");
       setInput("");
-      setMessages((m) => [...m, { id: crypto.randomUUID(), role: "user", content: t }]);
+      setMessages((m) => [...m, { id: randomUUID(), role: "user", content: t }]);
       setMessages((m) => [
         ...m,
-        { id: crypto.randomUUID(), role: "assistant", content: "Pannello Agent DB aperto sulla destra." },
+        { id: randomUUID(), role: "assistant", content: "Pannello Agent DB aperto sulla destra." },
       ]);
       return;
     }

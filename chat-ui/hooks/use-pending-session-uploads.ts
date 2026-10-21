@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AttachmentRef } from "@/lib/attachments";
 import { uploadSessionFileWithProgress } from "@/lib/api/aion";
+import { randomUUID } from "@/lib/uuid";
 
 export type PendingUploadStatus = "queued" | "uploading" | "done" | "error";
 
@@ -105,7 +106,7 @@ export function usePendingSessionUploads(
         if (existing.has(key)) continue;
         existing.add(key);
         toAdd.push({
-          id: crypto.randomUUID(),
+          id: randomUUID(),
           file,
           status: "queued",
           progress: 0,
