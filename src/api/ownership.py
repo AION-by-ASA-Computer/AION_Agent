@@ -11,8 +11,8 @@ Identita' effettiva (``effective_user_id``):
   caso con auth attiva in cui ``X-AION-User-Id`` e' attendibile.
 - ``anonymous`` (password auth disattivata, modalita' aperta): header/body,
   fallback ``default``. Non c'e' autenticazione da far valere.
-- ``api_key``: la chiave e' il proprio principal (``apikey_<id>``); non puo'
-  impersonare utenti via header/body.
+- ``api_key``: la chiave agisce come il suo proprietario (stesso principal del
+  chat token); non puo' impersonare altri utenti via header/body.
 
 Ownership (``assert_conversation_access``): la riga ``conversations`` e' la
 fonte di verita'. Per sessioni senza riga (es. upload prima del primo
@@ -29,7 +29,7 @@ from typing import Optional
 
 from fastapi import Depends, Header, HTTPException
 
-from src.api.auth_login import ChatAuthIdentity, require_chat_auth
+from src.api.auth_login import ChatAuthIdentity, require_chat_auth, require_chat_scope
 from src.chat_auth import password_auth_enabled
 from src.identity import sanitize_user_id
 
@@ -59,7 +59,8 @@ def effective_user_id(
     if header_identity_trusted(auth):
         return sanitize_user_id(body_user_id or header_user_id)
     if auth.via == "api_key":
-        return api_key_principal(auth.identifier)
+        # La chiave agisce come il proprietario: stesso principal del chat token.
+        return sanitize_user_id(auth.identifier or auth.user_row_id)
     # Vie non previste (es. orch_secret): mai fidarsi dell'header.
     return sanitize_user_id(auth.identifier or auth.user_row_id)
 
@@ -70,6 +71,19 @@ async def chat_user_id(
 ) -> str:
     """Dependency: utente effettivo per gli endpoint chat user-facing."""
     return effective_user_id(auth, header_user_id=x_aion_user_id)
+
+
+def chat_user_id_scope(*accepted: str):
+    """Come ``chat_user_id`` ma accetta anche API key con uno degli scope."""
+    scoped_auth = require_chat_scope(*accepted)
+
+    async def _dep(
+        auth: ChatAuthIdentity = Depends(scoped_auth),
+        x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
+    ) -> str:
+        return effective_user_id(auth, header_user_id=x_aion_user_id)
+
+    return _dep
 
 
 def _tenant() -> str:

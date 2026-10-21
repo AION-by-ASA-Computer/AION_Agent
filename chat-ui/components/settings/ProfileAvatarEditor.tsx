@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { Camera, Trash2 } from "lucide-react";
+import { Camera, Check, Trash2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import {
@@ -10,6 +10,7 @@ import {
   type UserAppearanceMetadata,
 } from "@/lib/profile/user-appearance";
 import { useT } from "@/lib/i18n/use-t";
+import { ghostBtn, outlineBtn } from "./ui";
 
 const MAX_AVATAR_BYTES = 256 * 1024;
 
@@ -22,6 +23,7 @@ export function ProfileAvatarEditor({
   onColorChange,
   onAvatarChange,
   onAvatarRemove,
+  onError,
 }: {
   label: string;
   metadata?: UserAppearanceMetadata;
@@ -31,6 +33,7 @@ export function ProfileAvatarEditor({
   onColorChange: (colorId: string) => void;
   onAvatarChange: (dataUrl: string) => void;
   onAvatarRemove: () => void;
+  onError?: (message: string) => void;
 }) {
   const t = useT();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -40,10 +43,12 @@ export function ProfileAvatarEditor({
     metadata?.profile_color ||
     PROFILE_ACCENT_COLORS[0].value;
 
-  async function handleFile(file: File) {
+  function handleFile(file: File) {
     if (!file.type.startsWith("image/")) return;
     if (file.size > MAX_AVATAR_BYTES) {
-      alert(t("settings.profile.avatar_too_large"));
+      const message = t("settings.profile.avatar_too_large");
+      if (onError) onError(message);
+      else alert(message);
       return;
     }
     const reader = new FileReader();
@@ -54,26 +59,21 @@ export function ProfileAvatarEditor({
   }
 
   return (
-    <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+    <div className="flex flex-col gap-6 px-5 py-5 md:flex-row md:items-center md:gap-10">
       <div className="flex items-center gap-4">
         <div
-          className="relative flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-border/60 text-lg font-semibold text-white shadow-sm"
+          className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-full text-lg font-semibold text-white"
           style={{ backgroundColor: avatarUrl ? undefined : activeColor }}
         >
           {avatarUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
           ) : (
-            initials
+            <span aria-hidden>{initials}</span>
           )}
         </div>
-        <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            disabled={saving}
-            onClick={() => fileRef.current?.click()}
-            className="focus-ring inline-flex items-center gap-2 rounded-lg border border-border bg-background/60 px-3 py-2 text-xs font-semibold text-foreground transition hover:bg-muted/60 disabled:opacity-50"
-          >
+        <div className="flex flex-wrap items-center gap-2">
+          <button type="button" disabled={saving} onClick={() => fileRef.current?.click()} className={outlineBtn}>
             <Camera className="h-3.5 w-3.5" aria-hidden />
             {t("settings.profile.upload_photo")}
           </button>
@@ -82,7 +82,7 @@ export function ProfileAvatarEditor({
               type="button"
               disabled={saving}
               onClick={onAvatarRemove}
-              className="focus-ring inline-flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium text-destructive transition hover:bg-destructive/10 disabled:opacity-50"
+              className={cn(ghostBtn, "hover:bg-destructive/10 hover:text-destructive")}
             >
               <Trash2 className="h-3.5 w-3.5" aria-hidden />
               {t("settings.profile.remove_photo")}
@@ -95,16 +95,16 @@ export function ProfileAvatarEditor({
             className="hidden"
             onChange={(e) => {
               const file = e.target.files?.[0];
-              if (file) void handleFile(file);
+              if (file) handleFile(file);
               e.target.value = "";
             }}
           />
         </div>
       </div>
 
-      <div className="min-w-0 flex-1">
-        <div className="mb-2 text-xs font-semibold text-foreground">{t("settings.profile.color_label")}</div>
-        <div className="flex flex-wrap gap-2">
+      <fieldset className="min-w-0 md:border-l md:border-border/60 md:pl-10">
+        <legend className="mb-2.5 text-sm font-medium">{t("settings.profile.color_label")}</legend>
+        <div className="flex flex-wrap gap-2.5">
           {PROFILE_ACCENT_COLORS.map((color) => {
             const selected = profileColor === color.id;
             return (
@@ -114,17 +114,19 @@ export function ProfileAvatarEditor({
                 disabled={saving}
                 onClick={() => onColorChange(color.id)}
                 className={cn(
-                  "focus-ring h-8 w-8 rounded-full border-2 transition",
+                  "focus-ring flex h-7 w-7 items-center justify-center rounded-full text-white transition-[box-shadow,transform] hover:scale-105 disabled:opacity-60",
                   color.className,
-                  selected ? "border-foreground ring-2 ring-primary/40" : "border-transparent opacity-90 hover:opacity-100",
+                  selected && "ring-2 ring-foreground ring-offset-2 ring-offset-card",
                 )}
                 aria-label={color.id}
                 aria-pressed={selected}
-              />
+              >
+                {selected ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
+              </button>
             );
           })}
         </div>
-      </div>
+      </fieldset>
     </div>
   );
 }

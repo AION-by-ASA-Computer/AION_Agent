@@ -30,8 +30,9 @@ until a `final` result (or timeout).
 ## Prerequisites (AION)
 
 1. AION API reachable from the n8n host (same Docker network, or public URL via Caddy).
-2. An **API key** from Admin → API Keys:
-   - Ask: chat access (key accepted by `require_chat_auth`)
+2. An **API key** created by the user the workflow acts as, from chat-ui → Settings → API keys
+   (the admin must first enable API keys for that user in admin-ui → Users). See [API keys](../security/api-keys.md):
+   - Ask and profile dropdown: scope `chat`
    - Create conversation: also `conversations:write`
 3. At least one profile under `config/profiles` (e.g. `aion_std`).
 
@@ -47,7 +48,7 @@ Do **not** add a trailing slash.
 
 ## Sync chat API
 
-`POST /v1/chat` (Requires Chat Auth / API key)
+`POST /v1/chat` (Requires Chat Auth / API key with scope `chat`)
 
 **Request:**
 
@@ -56,7 +57,6 @@ Do **not** add a trailing slash.
   "message": "Summarize yesterday's incidents",
   "profile": "aion_std",
   "conversation_id": null,
-  "user_id": "n8n",
   "message_source": "internal_trigger",
   "timeout_seconds": 300
 }
@@ -85,8 +85,9 @@ Do **not** add a trailing slash.
 
 ### Profiles for the dropdown
 
-`GET /profiles` (Requires Chat Auth) — returns the profiles allowed for the
-caller (same list used by chat-ui).
+`GET /profiles` (Requires Chat Auth / API key with scope `chat`) — returns the
+profiles allowed for the caller (same list used by chat-ui; for a key, the
+profiles allowed for its owner).
 
 ## Install the community node
 
@@ -114,9 +115,10 @@ Multi-turn: **Conversation → Create**, then Ask with
 ## Security notes
 
 - Do not use unauthenticated `POST /a2a/invoke` from n8n in production.
-- Prefer a dedicated API key with least privilege for automation.
-- Use a stable `user_id` (default `n8n`) if you want isolated LTM/STM for bots;
-  use a real user id when the workflow acts on behalf of a person.
+- Prefer a dedicated API key with least privilege (only the scopes you need) and a short expiration.
+- The key acts **as its owner**: conversations, LTM/STM and allowed profiles are the
+  owner's, and `user_id` in the body is ignored. For isolated bot memory, create the key
+  from a dedicated user (e.g. `n8n`); use a person's own key when the workflow acts on their behalf.
 
 ## Related
 

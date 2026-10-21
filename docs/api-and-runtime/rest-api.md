@@ -21,7 +21,9 @@ Required for managing conversations (`/v1/conversations/*`) and their related fi
   X-API-Key: aion_..._...
   ```
   *(or via `Authorization: Bearer aion_..._...`)*
-- API Keys have granular scopes (e.g. `conversations:read`, `conversations:write`, `files:read`, `files:write`). In case of insufficient scope, the API will return a `403 Forbidden` error.
+- Each key belongs to a user, who creates it from chat-ui → Settings → API keys (see [User API keys](#user-api-keys) and [API keys](../security/api-keys.md)). The key acts **as its owner**: same conversations, same allowed profiles, never the `admin` role.
+- Keys have scopes: `chat`, `conversations:read`, `conversations:write`, `files:read`, `files:write`. Access is **deny by default**: an endpoint that does not explicitly accept API keys answers `403 api_key_not_allowed`; a key without the endpoint's scope gets `403 missing_scope`. The endpoint-to-scope map is in [API keys → Scopes](../security/api-keys.md#scopes).
+- Keys are validated even when `AION_CHAT_PASSWORD_AUTH=0`.
 
 ### 2. Chat Authentication (User and BFF)
 Required for chat/streaming interactions (`/v1/chat/*`), the OpenAI-compatible facade (`/v1/models`, `/v1/chat/completions`), MCP integrations (`/v1/integrations/*`), Query Memory (`/v1/query-memory/*`) and Navigation Memory (`/v1/navigation-memory/*`). 
@@ -36,7 +38,7 @@ Accepts one of the following authorization methods:
   X-AION-Chat-Ui-Secret: <shared_secret>
   X-AION-User-Id: <user>
   ```
-- **API Key**: An API Key with `chat` or `admin` scope. The key is its own principal (`apikey_<id>`): `user`/`user_id` in the body and `X-AION-User-Id` are ignored.
+- **API Key**: An API Key with the `chat` scope (chat, streaming, `/v1/models`, `/v1/chat/completions`). The key acts as its owner: `user`/`user_id` in the body and `X-AION-User-Id` are ignored, and the owner's identifier is used. MCP integrations, Query Memory and Navigation Memory do **not** accept API keys (`403 api_key_not_allowed`).
 
 #### Conversation ownership
 
@@ -153,12 +155,13 @@ The turn budget is `AION_OPENAI_COMPAT_TIMEOUT_SEC` (default 300). A timeout is 
 ```json
 {
   "profile": "aion_std",
-  "user_id": "jane.doe",
   "title": "Infrastructure Analysis Q2",
   "metadata": {"source": "web-portal"},
   "tags": ["audit", "q2"]
 }
 ```
+
+`user_id` in the body is ignored: the conversation is always owned by the key's owner. The profile must be allowed for the owner (`403 profile_not_allowed` otherwise).
 
 **Response (201 Created):**
 ```json
@@ -202,7 +205,7 @@ The turn budget is `AION_OPENAI_COMPAT_TIMEOUT_SEC` (default 300). A timeout is 
 `GET /v1/conversations/{conversation_id}` (Requires `conversations:read`)
 
 **Response (200 OK):**
-Identical to the structure of the creation response. Returns `404 Not Found` if the conversation does not belong to the API key's tenant or does not exist.
+Identical to the structure of the creation response. Returns `404 Not Found` if the conversation does not belong to the key's owner or does not exist.
 
 ### Modify Conversation
 `PATCH /v1/conversations/{conversation_id}` (Requires `conversations:write`)
@@ -458,9 +461,25 @@ Downloads of files associated with the session do **not** go through the `/v1/co
 
 ---
 
+## User API keys
+
+Personal keys are managed by the user with a chat token (`Authorization: Bearer <chat token>`). API keys calling these endpoints get `403` (a key cannot create keys). Full design in [API keys](../security/api-keys.md).
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /v1/me/api-keys` | `{policy: {enabled, max_keys, active_count, max_ttl_days, allowed_scopes}, keys: [...]}`; each key has `status` `active`, `expired` or `revoked` |
+| `POST /v1/me/api-keys` | Body `{name, scopes, expires_in_days}` (expiration mandatory, ≤ the user's max). `201` with the key object plus `key` (shown only once). Errors: `403 api_keys_disabled`, `409 api_key_quota_exceeded`, `422 invalid_scopes`, `422 invalid_expiration` |
+| `DELETE /v1/me/api-keys/{id}` | Soft revoke (`revoked_at`); `404` if the key is not the caller's |
+
+The per-user policy (`can_create_api_keys`, `max_api_keys`, `api_key_max_ttl_days`) is set by the admin via `POST /admin/users` / `PUT /admin/users/{id}`. There are no `/admin/api-keys` endpoints.
+
+`POST /admin/users` creates password accounts only: with an SSO login mode active it returns `409 {"code": "sso_active_user_creation_disabled"}`. Who can get an account at first SSO sign-in is set with `GET`/`PUT /admin/auth/signup-policy` (see [SSO migration](../security/sso-migration.md#3-new-accounts-in-sso-mode)).
+
+---
+
 ## Admin API (selected)
 
-Admin routes live under `/admin/*` and require Bearer token with `admin` role. Full surface is used by [admin-ui](../clients/admin-ui.md). Selected endpoints relevant to this release:
+Admin routes live under `/admin/*` and require Bearer token with `admin` role (API keys are always rejected). Full surface is used by [admin-ui](../clients/admin-ui.md). Selected endpoints relevant to this release:
 
 ### Probe LLM provider
 
@@ -507,8 +526,8 @@ The endpoints are protected by rate limiting. In case the set thresholds are exc
 
 | Code | Meaning | Typical Cause / Resolution |
 |---|---|---|
-| `401` | Unauthorized | API Key or Bearer Token missing, expired or invalid. |
-| `403` | Forbidden | Correct API Key but lacking the necessary scopes (e.g. writing on read-only endpoint), or user not associated with the SQL project. |
+| `401` | Unauthorized | API Key or Bearer Token missing, expired or invalid. For keys, `detail` is one of `api_key_invalid_format`, `api_key_invalid`, `api_key_revoked`, `api_key_expired`, `api_key_owner_disabled`. |
+| `403` | Forbidden | API Key used on an endpoint that does not accept keys (`api_key_not_allowed`), key lacking the endpoint's scope (`missing_scope`), profile not allowed for the key's owner (`profile_not_allowed`), or user not associated with the SQL project. |
 | `404` | Not Found | Conversation, file or project does not exist or does not belong to the tenant. |
 | `429` | Too Many Requests | Exceeded the limit of allowed calls per minute. |
 | `503` | Service Unavailable | The unified SQLite database or Redis are offline. If the error indicates `Unified DB disabled`, you need to remove `AION_UNIFIED_DB=0` from the configurations to enable the v1 APIs. |

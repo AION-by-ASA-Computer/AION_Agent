@@ -1,14 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
-  AlertTriangle,
-  Check,
-  CheckCircle,
   FileText,
-  LogOut,
+  KeyRound,
+  Loader2,
   Palette,
   Settings,
   ShieldCheck,
@@ -16,16 +13,26 @@ import {
   User,
 } from "lucide-react";
 
+import { ApiKeysSection } from "@/components/settings/ApiKeysSection";
 import { AppearanceSection } from "@/components/settings/AppearanceSection";
 import { ChangePasswordSection } from "@/components/settings/ChangePasswordSection";
 import { ProfileAvatarEditor } from "@/components/settings/ProfileAvatarEditor";
-import { SettingsCard, SettingsFieldRow } from "@/components/settings/SettingsCard";
 import { SettingsNav, type SettingsTab } from "@/components/settings/SettingsNav";
 import { TuningsSettingsSection } from "@/components/settings/TuningsSettingsSection";
 import { UserMdSection } from "@/components/settings/UserMdSection";
+import {
+  Field,
+  FieldGrid,
+  Group,
+  Note,
+  SaveBar,
+  SectionHead,
+  Toast,
+  inputCls,
+  type ToastState,
+} from "@/components/settings/ui";
 import { ShellSectionHeader } from "@/components/layout/ShellSectionHeader";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
-import { setStoredAuth } from "@/lib/auth/storage";
 import { apiBase } from "@/lib/config";
 import { cn } from "@/lib/cn";
 import { detectBrowserLocale, setLocale, type Locale } from "@/lib/i18n/i18n-store";
@@ -35,6 +42,11 @@ import {
 } from "@/lib/profile/user-appearance";
 import { useShellActions } from "@/lib/shell/shell-context";
 import { useT } from "@/lib/i18n/use-t";
+
+const USER_MD_LIMIT = 1400;
+
+type AccountFields = { display_name: string; identifier: string; email: string };
+const EMPTY_ACCOUNT: AccountFields = { display_name: "", identifier: "", email: "" };
 
 const DEFAULT_USER_MD_BY_LANG: Record<string, string> = {
   it: `# Le mie preferenze ed istruzioni
@@ -73,6 +85,7 @@ function tabFromSearchParam(tab: string | null): SettingsTab {
   if (tab === "user-md" || tab === "instructions") return "instructions";
   if (tab === "appearance") return "appearance";
   if (tab === "security") return "security";
+  if (tab === "api-keys" || tab === "api_keys" || tab === "apikeys") return "api-keys";
   if (tab === "tunings" || tab === "tuning" || tab === "runtime" || tab === "presets") return "tunings";
   return "profile";
 }
@@ -87,13 +100,11 @@ export default function SettingsPage() {
 
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<SettingsTab>("profile");
-
-  const [userMdContent, setUserMdContent] = useState("");
   const [selectedLanguage, setSelectedLanguage] = useState<Locale | string>("en");
 
-  const [backendIdentifier, setBackendIdentifier] = useState("");
-  const [backendDisplayName, setBackendDisplayName] = useState("");
-  const [backendEmail, setBackendEmail] = useState("");
+  // Account fields are drafts until the save bar commits them; `accountBase` is the server copy.
+  const [accountBase, setAccountBase] = useState<AccountFields>(EMPTY_ACCOUNT);
+  const [account, setAccount] = useState<AccountFields>(EMPTY_ACCOUNT);
   const [mustChangePassword, setMustChangePassword] = useState(false);
   const [profileColor, setProfileColor] = useState("violet");
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -102,43 +113,57 @@ export default function SettingsPage() {
   const [profiles, setProfiles] = useState<Array<{ name: string; slug: string; description?: string }>>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
   const [loadingProfiles, setLoadingProfiles] = useState(false);
+  const [userMdContent, setUserMdContent] = useState("");
+  // null until the server copy for the selected profile has loaded.
+  const [userMdBase, setUserMdBase] = useState<string | null>(null);
   const [loadingUserMd, setLoadingUserMd] = useState(false);
-  const [savingUserMd, setSavingUserMd] = useState(false);
 
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [toastType, setToastType] = useState<"success" | "error">("success");
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
 
   const navItems = useMemo(
     () => [
       { id: "profile" as const, label: t("settings.tab.profile"), icon: User },
       { id: "appearance" as const, label: t("settings.tab.appearance"), icon: Palette },
       { id: "security" as const, label: t("settings.tab.security"), icon: ShieldCheck },
+      ...(currentToken
+        ? [{ id: "api-keys" as const, label: t("settings.tab.api_keys"), icon: KeyRound }]
+        : []),
       { id: "instructions" as const, label: t("settings.tab.instructions"), icon: FileText },
-      { id: "tunings" as const, label: t("settings.tab.tunings") || t("sidebar.tunings"), icon: SlidersHorizontal },
+      { id: "tunings" as const, label: t("settings.tab.tunings"), icon: SlidersHorizontal },
     ],
-    [t],
+    [t, currentToken],
   );
 
-  const showToast = useCallback((msg: string, type: "success" | "error" = "success") => {
-    setToastMessage(msg);
-    setToastType(type);
-    window.setTimeout(() => setToastMessage(null), 3000);
+  const showToast = useCallback((message: string, variant: "success" | "error" = "success") => {
+    setToast({ message, variant });
   }, []);
+  const dismissToast = useCallback(() => setToast(null), []);
 
-  const applyUserData = useCallback((data: {
-    identifier?: string;
-    display_name?: string;
-    email?: string;
-    metadata?: UserAppearanceMetadata;
-    must_change_password?: boolean;
-  }) => {
-    setBackendIdentifier(data.identifier || "");
-    setBackendDisplayName(data.display_name || "");
-    setBackendEmail(data.email || "");
-    setMustChangePassword(Boolean(data.must_change_password));
-    setProfileColor(data.metadata?.profile_color || "violet");
-    setAvatarUrl(data.metadata?.avatar_url || "");
-  }, []);
+  const applyUserData = useCallback(
+    (
+      data: {
+        identifier?: string;
+        display_name?: string;
+        email?: string;
+        metadata?: UserAppearanceMetadata;
+        must_change_password?: boolean;
+      },
+      resetDraft: boolean,
+    ) => {
+      const fields = {
+        display_name: data.display_name || "",
+        identifier: data.identifier || "",
+        email: data.email || "",
+      };
+      setAccountBase(fields);
+      if (resetDraft) setAccount(fields);
+      setMustChangePassword(Boolean(data.must_change_password));
+      setProfileColor(data.metadata?.profile_color || "violet");
+      setAvatarUrl(data.metadata?.avatar_url || "");
+    },
+    [],
+  );
 
   const reloadUser = useCallback(async () => {
     if (!currentToken) return;
@@ -147,7 +172,7 @@ export default function SettingsPage() {
     });
     if (!res.ok) return;
     const data = await res.json();
-    applyUserData(data);
+    applyUserData(data, true);
     if (data.metadata?.language) {
       const lang = data.metadata.language;
       if (["it", "en", "es", "fr", "de"].includes(lang)) {
@@ -174,16 +199,10 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!mounted) return;
-
     const storedLang = localStorage.getItem("aion_chat_language") || detectBrowserLocale();
     if (["it", "en", "es", "fr", "de"].includes(storedLang)) {
       setSelectedLanguage(storedLang);
     }
-
-    const storedUserMd = localStorage.getItem("aion_chat_user_instructions");
-    const defaultText = DEFAULT_USER_MD_BY_LANG[storedLang] || DEFAULT_USER_MD_BY_LANG.en;
-    setUserMdContent(storedUserMd || defaultText);
-
     void reloadUser();
   }, [mounted, reloadUser]);
 
@@ -217,6 +236,8 @@ export default function SettingsPage() {
     if (!mounted || !selectedProfile || !currentUserId) return;
     const fetchUserMd = async () => {
       setLoadingUserMd(true);
+      setUserMdBase(null);
+      let content = "";
       try {
         const res = await fetch(
           `${apiBase()}/admin/profile-memory/${encodeURIComponent(selectedProfile)}/users/${encodeURIComponent(currentUserId)}`,
@@ -224,13 +245,13 @@ export default function SettingsPage() {
         );
         if (res.ok) {
           const data = await res.json();
-          setUserMdContent(data.content || "");
-        } else {
-          setUserMdContent("");
+          content = data.content || "";
         }
       } catch {
-        setUserMdContent("");
+        // An unreachable profile reads as empty instructions.
       } finally {
+        setUserMdContent(content);
+        setUserMdBase(content);
         setLoadingUserMd(false);
       }
     };
@@ -238,85 +259,51 @@ export default function SettingsPage() {
     localStorage.setItem("aion_chat_selected_profile_user_md", selectedProfile);
   }, [selectedProfile, currentUserId, currentToken, mounted]);
 
-  const handleUpdateProfileField = async (
-    field: "identifier" | "display_name" | "email",
-    value: string,
-  ) => {
-    const trimmed = value.trim();
-    if (field === "identifier" && !trimmed) {
-      showToast(t("toast.username_empty"), "error");
-      return;
-    }
+  const accountDirty =
+    account.display_name !== accountBase.display_name ||
+    account.identifier !== accountBase.identifier ||
+    account.email !== accountBase.email;
+  const userMdDirty = userMdBase !== null && userMdContent !== userMdBase;
+  const dirty = accountDirty || userMdDirty;
+
+  const usernameMissing = accountDirty && !account.identifier.trim();
+  const isOverLimit = userMdContent.length > USER_MD_LIMIT;
+  const canSave = dirty && !saving && !usernameMissing && !(userMdDirty && isOverLimit);
+
+  const saveAccount = useCallback(async (): Promise<boolean> => {
     if (!currentToken) {
       showToast(t("toast.no_token"), "error");
-      return;
+      return false;
+    }
+    const changed: Partial<Record<keyof AccountFields, string | null>> = {};
+    for (const key of Object.keys(account) as (keyof AccountFields)[]) {
+      if (account[key] !== accountBase[key]) changed[key] = account[key].trim() || null;
     }
     try {
       const res = await fetch(`${apiBase()}/auth/me`, {
         method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ [field]: trimmed || null }),
+        headers: { Authorization: `Bearer ${currentToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(changed),
       });
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         showToast((errData as { detail?: string }).detail || t("toast.server_error"), "error");
-        return;
+        return false;
       }
-      const data = await res.json();
-      applyUserData(data);
+      applyUserData(await res.json(), true);
       notifyProfileAppearanceUpdated();
-      const fieldLabel =
-        field === "identifier"
-          ? t("field.username")
-          : field === "display_name"
-            ? t("field.displayname")
-            : t("field.email");
-      showToast(t("toast.field_updated", { field: fieldLabel }));
+      return true;
     } catch {
       showToast(t("toast.conn_error"), "error");
+      return false;
     }
-  };
+  }, [account, accountBase, applyUserData, currentToken, showToast, t]);
 
-  const saveAppearanceMetadata = async (partial: UserAppearanceMetadata) => {
-    if (!currentToken) return;
-    setSavingAppearance(true);
-    try {
-      const res = await fetch(`${apiBase()}/auth/me`, {
-        method: "PATCH",
-        headers: {
-          Authorization: `Bearer ${currentToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ metadata: partial }),
-      });
-      if (!res.ok) {
-        showToast(t("toast.server_error"), "error");
-        return;
-      }
-      const data = await res.json();
-      applyUserData(data);
-      notifyProfileAppearanceUpdated();
-      showToast(t("settings.profile.appearance_saved"));
-    } catch {
-      showToast(t("toast.conn_error"), "error");
-    } finally {
-      setSavingAppearance(false);
-    }
-  };
-
-  const handleSaveUserMd = async () => {
-    if (userMdContent.length > 1400) {
-      showToast(t("toast.usermd_overlimit"), "error");
-      return;
-    }
+  const saveUserMd = useCallback(async (): Promise<boolean> => {
     if (!selectedProfile) {
       showToast(t("toast.usermd_no_profile"), "error");
-      return;
+      return false;
     }
-    setSavingUserMd(true);
     try {
       const res = await fetch(
         `${apiBase()}/admin/profile-memory/${encodeURIComponent(selectedProfile)}/users/${encodeURIComponent(currentUserId)}`,
@@ -329,32 +316,81 @@ export default function SettingsPage() {
           body: JSON.stringify({ content: userMdContent }),
         },
       );
-      if (res.ok) {
-        localStorage.setItem("aion_chat_user_instructions", userMdContent);
-        showToast(t("toast.usermd_saved"));
-      } else {
+      if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
         showToast((errData as { detail?: string }).detail || t("toast.server_error"), "error");
+        return false;
       }
+      localStorage.setItem("aion_chat_user_instructions", userMdContent);
+      setUserMdBase(userMdContent);
+      return true;
+    } catch {
+      showToast(t("toast.conn_error"), "error");
+      return false;
+    }
+  }, [currentToken, currentUserId, selectedProfile, showToast, t, userMdContent]);
+
+  const save = useCallback(async () => {
+    if (!canSave) return;
+    setSaving(true);
+    let ok = true;
+    if (accountDirty) ok = await saveAccount();
+    if (ok && userMdDirty) ok = await saveUserMd();
+    setSaving(false);
+    if (ok) showToast(t("settings.ui.saved"));
+  }, [accountDirty, canSave, saveAccount, saveUserMd, showToast, t, userMdDirty]);
+
+  const discard = useCallback(() => {
+    setAccount(accountBase);
+    if (userMdBase !== null) setUserMdContent(userMdBase);
+  }, [accountBase, userMdBase]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s" && dirty) {
+        e.preventDefault();
+        void save();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dirty, save]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const saveAppearanceMetadata = async (partial: UserAppearanceMetadata) => {
+    if (!currentToken) return;
+    setSavingAppearance(true);
+    try {
+      const res = await fetch(`${apiBase()}/auth/me`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${currentToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ metadata: partial }),
+      });
+      if (!res.ok) {
+        showToast(t("toast.server_error"), "error");
+        return;
+      }
+      // Photo and colour save on their own; keep any account edits that are still drafts.
+      applyUserData(await res.json(), false);
+      notifyProfileAppearanceUpdated();
+      showToast(t("settings.profile.appearance_saved"));
     } catch {
       showToast(t("toast.conn_error"), "error");
     } finally {
-      setSavingUserMd(false);
+      setSavingAppearance(false);
     }
   };
 
-  const handleLogout = () => {
-    setStoredAuth(null, "default");
-    window.dispatchEvent(new Event("storage"));
-    showToast(t("toast.logout"));
-    router.push("/login");
-  };
+  const setField = (key: keyof AccountFields) => (e: React.ChangeEvent<HTMLInputElement>) =>
+    setAccount((a) => ({ ...a, [key]: e.target.value }));
 
-  const charCount = userMdContent.length;
-  const isOverLimit = charCount > 1400;
-  const profileLabel = backendDisplayName || backendIdentifier || currentUserId;
-  const inputClass =
-    "focus-ring w-full rounded-xl border border-border/50 bg-background/50 px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary";
+  const profileLabel = accountBase.display_name || accountBase.identifier || currentUserId;
 
   useLayoutEffect(() => {
     setHeader(
@@ -371,22 +407,24 @@ export default function SettingsPage() {
 
   if (!mounted) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-background text-foreground">
-        <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <div className="settings-scope flex min-h-0 flex-1 items-center justify-center gap-2 bg-background text-sm text-muted-foreground" role="status">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        {t("settings.ui.loading")}
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col overflow-y-auto bg-background text-foreground">
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8 md:py-10">
-        <div className="mb-6">
-          <h1 className="text-lg font-semibold tracking-tight">{t("settings.title")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("settings.subtitle")}</p>
-        </div>
+    <div className="settings-scope flex min-h-0 w-full flex-1 flex-col overflow-y-auto bg-background text-sm text-foreground">
+      <div className="mx-auto w-full max-w-[calc(72rem*var(--settings-k))] flex-1 px-4 pb-16 pt-6 sm:px-6 sm:pt-8 lg:px-8">
+        <header className="pb-6">
+          <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-3xl">{t("settings.title")}</h1>
+          <p className="mt-1 max-w-[62ch] text-sm text-muted-foreground">{t("settings.subtitle")}</p>
+        </header>
 
-        <div className="grid gap-8 md:grid-cols-[220px_1fr]">
+        <div className="grid gap-6 lg:grid-cols-[13rem_minmax(0,1fr)] lg:gap-10">
           <SettingsNav
+            label={t("settings.ui.nav")}
             activeTab={activeTab}
             onChange={(tab) => {
               setActiveTab(tab);
@@ -395,19 +433,17 @@ export default function SettingsPage() {
             items={navItems}
           />
 
-          <div className="min-h-[400px] space-y-6">
+          <div className="flex min-w-0 flex-col gap-5">
             {activeTab === "profile" && currentToken ? (
               <>
-                <SettingsCard
-                  title={t("settings.profile.title")}
-                  description={t("settings.profile.desc")}
-                  icon={<User className="h-4.5 w-4.5" aria-hidden />}
-                >
+                <SectionHead title={t("settings.profile.title")} description={t("settings.profile.desc")} />
+                <Group title={t("settings.profile.photo_title")} description={t("settings.profile.photo_hint")}>
                   <ProfileAvatarEditor
                     label={profileLabel}
                     profileColor={profileColor}
                     avatarUrl={avatarUrl}
                     saving={savingAppearance}
+                    onError={(msg) => showToast(msg, "error")}
                     onColorChange={(colorId) => {
                       setProfileColor(colorId);
                       void saveAppearanceMetadata({ profile_color: colorId, avatar_url: avatarUrl || undefined });
@@ -421,108 +457,77 @@ export default function SettingsPage() {
                       void saveAppearanceMetadata({ profile_color: profileColor, avatar_url: "" });
                     }}
                   />
-
-                  <div className="mt-6 space-y-1">
-                    <SettingsFieldRow label={t("settings.field.displayname")}>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={backendDisplayName}
-                          onChange={(e) => setBackendDisplayName(e.target.value)}
-                          placeholder={t("settings.placeholder.displayname")}
-                          className={inputClass}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void handleUpdateProfileField("display_name", backendDisplayName)}
-                          className="focus-ring shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-                        >
-                          <Check className="h-4 w-4" aria-hidden />
-                        </button>
-                      </div>
-                    </SettingsFieldRow>
-
-                    <SettingsFieldRow
+                </Group>
+                <Group title={t("settings.profile.details_title")} description={t("settings.profile.details_desc")}>
+                  <FieldGrid>
+                    <Field label={t("settings.field.displayname")}>
+                      <input
+                        type="text"
+                        value={account.display_name}
+                        onChange={setField("display_name")}
+                        placeholder={t("settings.placeholder.displayname")}
+                        autoComplete="name"
+                        className={inputCls}
+                      />
+                    </Field>
+                    <Field
                       label={t("settings.field.username")}
-                      hint={t("settings.profile.username_hint")}
+                      hint={
+                        usernameMissing ? (
+                          <span className="text-destructive">{t("toast.username_empty")}</span>
+                        ) : (
+                          t("settings.profile.username_hint")
+                        )
+                      }
                     >
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={backendIdentifier}
-                          onChange={(e) => setBackendIdentifier(e.target.value)}
-                          placeholder={t("settings.placeholder.username")}
-                          className={inputClass}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void handleUpdateProfileField("identifier", backendIdentifier)}
-                          className="focus-ring shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-                        >
-                          <Check className="h-4 w-4" aria-hidden />
-                        </button>
-                      </div>
-                    </SettingsFieldRow>
-
-                    <SettingsFieldRow label={t("settings.field.email")}>
-                      <div className="flex gap-2">
-                        <input
-                          type="email"
-                          value={backendEmail}
-                          onChange={(e) => setBackendEmail(e.target.value)}
-                          placeholder={t("settings.placeholder.email")}
-                          className={inputClass}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => void handleUpdateProfileField("email", backendEmail)}
-                          className="focus-ring shrink-0 rounded-xl bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90"
-                        >
-                          <Check className="h-4 w-4" aria-hidden />
-                        </button>
-                      </div>
-                    </SettingsFieldRow>
-                  </div>
-                </SettingsCard>
+                      <input
+                        type="text"
+                        value={account.identifier}
+                        onChange={setField("identifier")}
+                        placeholder={t("settings.placeholder.username")}
+                        autoComplete="username"
+                        spellCheck={false}
+                        aria-invalid={usernameMissing || undefined}
+                        className={cn(inputCls, usernameMissing && "border-destructive/60")}
+                      />
+                    </Field>
+                    <Field label={t("settings.field.email")}>
+                      <input
+                        type="email"
+                        value={account.email}
+                        onChange={setField("email")}
+                        placeholder={t("settings.placeholder.email")}
+                        autoComplete="email"
+                        spellCheck={false}
+                        className={inputCls}
+                      />
+                    </Field>
+                  </FieldGrid>
+                </Group>
               </>
             ) : null}
 
-            {activeTab === "appearance" ? (
-              <SettingsCard
-                title={t("settings.appearance.title")}
-                description={t("settings.appearance.desc")}
-                icon={<Palette className="h-4.5 w-4.5" aria-hidden />}
-              >
-                <AppearanceSection onLanguageSaved={(msg) => showToast(msg)} />
-              </SettingsCard>
-            ) : null}
+            {activeTab === "appearance" ? <AppearanceSection onLanguageSaved={(msg) => showToast(msg)} /> : null}
 
             {activeTab === "security" && currentToken ? (
               <>
+                <SectionHead title={t("settings.tab.security")} description={t("settings.security.desc")} />
                 {mustChangePassword ? (
-                  <div className="flex items-start gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900 dark:text-amber-100">
-                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                    <div>
-                      <p className="font-semibold">{t("settings.security.must_change_title")}</p>
-                      <p className="mt-1 text-xs opacity-90">{t("settings.security.must_change_desc")}</p>
-                    </div>
-                  </div>
+                  <Note tone="warn">
+                    <p className="font-medium text-foreground">{t("settings.security.must_change_title")}</p>
+                    <p className="mt-0.5">{t("settings.security.must_change_desc")}</p>
+                  </Note>
                 ) : null}
-
-                <SettingsCard
-                  title={t("settings.security.password_title")}
-                  description={t("settings.security.password_desc")}
-                  icon={<ShieldCheck className="h-4.5 w-4.5" aria-hidden />}
-                >
-                  <ChangePasswordSection
-                    onSuccess={(msg) => {
-                      setMustChangePassword(false);
-                      showToast(msg);
-                    }}
-                  />
-                </SettingsCard>
+                <ChangePasswordSection
+                  onSuccess={(msg) => {
+                    setMustChangePassword(false);
+                    showToast(msg);
+                  }}
+                />
               </>
             ) : null}
+
+            {activeTab === "api-keys" && currentToken ? <ApiKeysSection onToast={showToast} /> : null}
 
             {activeTab === "instructions" ? (
               <UserMdSection
@@ -534,15 +539,13 @@ export default function SettingsPage() {
                 userMdContent={userMdContent}
                 onUserMdChange={setUserMdContent}
                 loadingUserMd={loadingUserMd}
-                savingUserMd={savingUserMd}
-                isOverLimit={isOverLimit}
-                charCount={charCount}
+                limit={USER_MD_LIMIT}
+                profileLocked={userMdDirty}
                 onRestoreDefault={() =>
                   setUserMdContent(
                     DEFAULT_USER_MD_BY_LANG[selectedLanguage as string] || DEFAULT_USER_MD_BY_LANG.en,
                   )
                 }
-                onSave={() => void handleSaveUserMd()}
               />
             ) : null}
 
@@ -557,25 +560,22 @@ export default function SettingsPage() {
             ) : null}
           </div>
         </div>
-      </main>
+      </div>
 
-      {toastMessage ? (
-        <div
-          className={cn(
-            "fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-xl border px-4 py-3.5 text-xs font-semibold shadow-lg backdrop-blur-md",
-            toastType === "success"
-              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              : "border-destructive/30 bg-destructive/10 text-destructive",
-          )}
-        >
-          {toastType === "success" ? (
-            <CheckCircle className="h-4 w-4" aria-hidden />
-          ) : (
-            <AlertTriangle className="h-4 w-4" aria-hidden />
-          )}
-          <span>{toastMessage}</span>
-        </div>
+      {dirty ? (
+        <SaveBar
+          label={t("settings.ui.unsaved")}
+          discardLabel={t("settings.ui.discard")}
+          saveLabel={t("settings.ui.save")}
+          savingLabel={t("settings.ui.saving")}
+          saving={saving}
+          canSave={canSave}
+          onDiscard={discard}
+          onSave={() => void save()}
+        />
       ) : null}
+
+      <Toast toast={toast} onDismiss={dismissToast} dismissLabel={t("settings.ui.dismiss")} />
     </div>
   );
 }

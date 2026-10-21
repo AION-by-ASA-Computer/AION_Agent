@@ -14,14 +14,16 @@ from pydantic import AliasChoices, BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from src.agent_pipeline import AgentPipeline
-from src.api.auth_login import ChatAuthIdentity, require_chat_auth
+from src.api.auth.scopes import Scope
+from src.api.auth_login import ChatAuthIdentity, require_chat_scope
 from src.api.v1.runtime_settings import RuntimeSettingsPayload
 from src.api.ownership import (
     assert_conversation_access,
-    chat_user_id,
+    chat_user_id_scope,
     claim_conversation_for_write,
     effective_user_id,
 )
+from src.api.profile_access import enforce_profile_access
 from src.main import get_agent, set_event_loop
 from src.runtime.reasoning_effort import resolve_turn_reasoning
 from src.session_workspace import normalize_session_id
@@ -409,7 +411,7 @@ class ChatPrepareBody(BaseModel):
 @router.post("/chat/prepare")
 async def chat_prepare(
     body: ChatPrepareBody,
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """
@@ -419,6 +421,7 @@ async def chat_prepare(
     uid = _resolve_chat_user_id(
         auth, body_user_id=body.user_id, x_aion_user_id=x_aion_user_id
     )
+    body.profile = await enforce_profile_access(auth.user_row_id, body.profile)
     await assert_conversation_access(body.conversation_id, uid, allow_missing=True)
     dedupe_key = _prepare_dedupe_key(body.conversation_id, body.profile, uid)
 
@@ -533,7 +536,7 @@ async def chat_prepare_status(
     conversation_id: str = Query(...),
     profile: str = Query(...),
     user_id: Optional[str] = Query(None),
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """Stato warm MCP/agente per polling dalla chat-ui."""
@@ -587,7 +590,7 @@ async def chat_stop(
     session_id: Optional[str] = Query(
         None, description="Legacy alias for conversation_id"
     ),
-    uid: str = Depends(chat_user_id),
+    uid: str = Depends(chat_user_id_scope(Scope.CHAT)),
 ):
     cid = (conversation_id or session_id or "").strip()
     if not cid:
@@ -601,7 +604,7 @@ async def chat_stop(
 @router.post("/chat/stream")
 async def chat_stream(
     body: ChatStreamBody,
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     set_event_loop(asyncio.get_running_loop())
@@ -610,6 +613,7 @@ async def chat_stream(
         body_user_id=body.user_id,
         x_aion_user_id=x_aion_user_id,
     )
+    body.profile = await enforce_profile_access(auth.user_row_id, body.profile)
 
     from src.runtime.agent_mode_resolve import resolve_agent_mode
 
@@ -836,7 +840,7 @@ async def chat_stream(
 @router.get("/chat/stream/reconnect/{conversation_id}")
 async def chat_stream_reconnect(
     conversation_id: str,
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     uid = _resolve_chat_user_id(auth, body_user_id=None, x_aion_user_id=x_aion_user_id)
@@ -879,7 +883,7 @@ async def chat_stream_reconnect(
 @router.post("/chat", response_model=ChatSyncResponse)
 async def chat_sync(
     body: ChatSyncBody,
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """
@@ -894,6 +898,7 @@ async def chat_sync(
         body_user_id=body.user_id,
         x_aion_user_id=x_aion_user_id,
     )
+    body.profile = await enforce_profile_access(auth.user_row_id, body.profile)
     if (body.conversation_id or "").strip():
         try:
             conversation_id = normalize_session_id(body.conversation_id)

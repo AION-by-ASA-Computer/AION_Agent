@@ -11,7 +11,6 @@
     "diagnostics": "Smoke-Tests",
     "system": "Systemzustand",
     "users": "Benutzer",
-    "api_keys": "API-Schlüssel",
     "security": "Sicherheit",
     "settings": "Einstellungen",
     "logout": "Abmelden",
@@ -58,7 +57,6 @@
       "quick_mcp": "MCP-Server installieren",
       "quick_profiles": "Agentenprofile bearbeiten",
       "quick_users": "Benutzer verwalten",
-      "quick_api_keys": "API-Schlüssel erstellen",
       "keywords": {
         "profiles": "agent persona prompt soul profil",
         "skills": "skill fähigkeit markdown",
@@ -70,7 +68,6 @@
         "diagnostics": "smoke test diagnose prüfung",
         "system": "zustand redis datenbank speicher status",
         "users": "benutzer konto rolle admin 2fa totp passwort sso",
-        "api_keys": "api schlüssel token scope",
         "security": "sicherheit audit pii schwärzung",
         "settings": "modell llm anbieter embedding ocr anmeldung sso 2fa sprache"
       }
@@ -122,8 +119,6 @@
     "nodes": {
       "users": "Benutzer",
       "users_active": "{{count}} aktiv in 24 h",
-      "api_keys": "API-Schlüssel",
-      "api_keys_detail": "Programmatischer Zugriff",
       "jobs": "Geplante Jobs",
       "jobs_enabled": "{{count}} aktiv",
       "jobs_failed": "{{count}} fehlgeschlagen",
@@ -1285,7 +1280,8 @@
       "body": "Legen Sie das erste Konto an, damit sich jemand im Chat anmelden kann.",
       "search": "Kein Benutzer entspricht Ihrer Suche.",
       "clear": "Suche zurücksetzen",
-      "clear_filters": "Filter zurücksetzen"
+      "clear_filters": "Filter zurücksetzen",
+      "sso_body": "Mit Single Sign-on erscheinen Personen hier nach ihrer ersten Anmeldung."
     },
     "badge": {
       "twofa": "2FA aktiv",
@@ -1344,7 +1340,21 @@
       "done_body": "Gib diese Zugangsdaten an {{name}} weiter. Nach dem Schließen dieses Fensters wird das Passwort nicht mehr angezeigt.",
       "done_must_change": "Bei der ersten Anmeldung wird ein neues Passwort verlangt.",
       "copy_credentials": "Zugangsdaten kopieren",
-      "done": "Fertig"
+      "done": "Fertig",
+      "api_keys": {
+        "title": "API-Schlüssel",
+        "description": "Benutzer erstellen und widerrufen ihre eigenen Schlüssel in den Chat-Einstellungen.",
+        "enable": "Darf API-Schlüssel erstellen",
+        "enable_description": "Erlaubt diesem Benutzer, persönliche Schlüssel für API-Aufrufe zu erzeugen.",
+        "max_keys": "Maximale Anzahl aktiver Schlüssel",
+        "max_days": "Maximale Gültigkeit (Tage)",
+        "range_hint": "Von {{min}} bis {{max}}",
+        "range_error": "Gib eine ganze Zahl von {{min}} bis {{max}} ein",
+        "revoke_warning": "Beim Speichern werden die aktiven API-Schlüssel dieses Benutzers ({{count}}) sofort widerrufen.",
+        "revoke_warning_none": "Beim Speichern verliert der Benutzer das Recht, API-Schlüssel zu erstellen; vorhandene Schlüssel werden sofort widerrufen.",
+        "badge": "API-Schlüssel {{active}}/{{max}}",
+        "badge_title": "{{active}} von {{max}} erlaubten API-Schlüsseln aktiv"
+      }
     },
     "profiles": {
       "title": "Profilzugriff",
@@ -1377,7 +1387,9 @@
       "sso_title": "Single Sign-on",
       "sso_body": "Legen Sie fest, wie sich Personen anmelden, und migrieren Sie bestehende Konten zu Ihrem Identity Provider.",
       "tfa_title": "Zwei-Faktor-Authentifizierung",
-      "tfa_body": "Verlangt bei jeder Passwort-Anmeldung einen Authenticator-Code, im Chat und in diesem Panel. Gilt nicht für Single Sign-on."
+      "tfa_body": "Verlangt bei jeder Passwort-Anmeldung einen Authenticator-Code, im Chat und in diesem Panel. Gilt nicht für Single Sign-on.",
+      "signup_title": "Neue Konten",
+      "signup_body": "Legen Sie fest, wer bei der ersten Anmeldung per Single Sign-on ein Konto erhält. Bestehende Konten sind nicht betroffen."
     },
     "toast": {
       "updated": "Benutzer aktualisiert.",
@@ -1388,7 +1400,8 @@
       "profiles_load_failed": "Profile des Benutzers konnten nicht geladen werden: {{error}}",
       "save_failed": "Benutzer konnte nicht gespeichert werden: {{error}}",
       "delete_failed": "Benutzer konnte nicht gelöscht werden: {{error}}",
-      "reset_failed": "2FA konnte nicht zurückgesetzt werden: {{error}}"
+      "reset_failed": "2FA konnte nicht zurückgesetzt werden: {{error}}",
+      "sso_user_creation_disabled": "Single Sign-on ist aktiv: Konten werden bei der ersten Anmeldung erstellt."
     },
     "filter": {
       "aria": "Nach {{col}} filtern",
@@ -1529,67 +1542,37 @@
       "c9": "OAuth-Client erstellt: beide Werte kopieren (hier ausgeblendet).",
       "shots_note": "Die Screenshots stammen aus dem italienischen Portal; die Bezeichnungen folgen der Sprache Ihres Google-Kontos. Zugangsdaten und E-Mail-Adressen in den Bildern sind ausgeblendet.",
       "close": "Schließen"
-    }
-  },
-  "admin_api_keys": {
-    "title": "API-Schlüssel",
-    "subtitle": "Zugangsdaten für den programmatischen Zugriff auf die Plattform, jeweils auf die nötigen Berechtigungen beschränkt.",
-    "new": "Neuer Schlüssel",
-    "search": "Nach Name, Präfix oder Berechtigung suchen",
-    "loading": "Schlüssel werden geladen…",
-    "col_key": "Schlüssel",
-    "col_scopes": "Berechtigungen",
-    "col_used": "Zuletzt verwendet",
-    "col_actions": "Aktionen",
-    "never": "Nie verwendet",
-    "used_at": "{{when}}",
-    "revoke": "Schlüssel widerrufen",
-    "revoke_aria": "Schlüssel {{name}} widerrufen",
-    "empty_search": "Kein Schlüssel entspricht der Suche.",
-    "empty": {
-      "title": "Noch keine API-Schlüssel",
-      "body": "Erstelle einen Schlüssel, damit Apps und externe Dienste mit genau den nötigen Berechtigungen auf die Plattform zugreifen können."
     },
-    "secret": {
-      "title": "Schlüssel erstellt: jetzt kopieren",
-      "body": "Der vollständige Wert wird nicht erneut angezeigt. Bewahre ihn sicher auf.",
-      "copy": "Kopieren",
-      "copied": "Kopiert",
-      "done": "Schließen"
-    },
-    "create": {
-      "title": "Neuer API-Schlüssel",
-      "name": "Name",
-      "name_placeholder": "z. B. Backend der Mobile-App",
-      "scopes": "Berechtigungen",
-      "scopes_hint": "Wähle mindestens eine aus. Vergib nur, was nötig ist.",
-      "admin_warning": "Die Berechtigung admin gewährt vollen Zugriff auf die Plattformverwaltung.",
-      "cancel": "Abbrechen",
-      "submit": "Schlüssel erstellen",
-      "submitting": "Wird erstellt…"
-    },
-    "scope_desc": {
-      "conversations_read": "Unterhaltungen lesen",
-      "conversations_write": "Unterhaltungen erstellen und bearbeiten",
-      "chat": "Mit jedem Profil chatten",
-      "chat_scoped": "Nur mit erlaubten Profilen chatten",
-      "files_read": "Dateien lesen",
-      "files_write": "Dateien hochladen und bearbeiten",
-      "admin": "Voller Administrationszugriff"
-    },
-    "revoke_dialog": {
-      "title": "Diesen Schlüssel widerrufen?",
-      "body": "Der Schlüssel {{name}} wird sofort widerrufen: Jede App oder jeder Dienst, die ihn nutzt, verliert den Zugriff. Das lässt sich nicht rückgängig machen.",
-      "confirm_label": "Gib {{name}} zur Bestätigung ein",
-      "cancel": "Abbrechen",
-      "confirm": "Widerrufen",
-      "deleting": "Wird widerrufen…"
-    },
-    "toast": {
-      "load_error": "API-Schlüssel konnten nicht geladen werden.",
-      "create_error": "Schlüssel konnte nicht erstellt werden.",
-      "revoked": "Schlüssel widerrufen.",
-      "revoke_error": "Schlüssel konnte nicht widerrufen werden."
+    "sso_add_hint": "Mit Single Sign-on werden Konten bei der ersten Anmeldung jeder Person erstellt.",
+    "sso_add_manage": "Festlegen, wer sich anmelden darf",
+    "signup_policy": {
+      "label": "Richtlinie für neue Konten",
+      "open": {
+        "title": "Alle in der Organisation",
+        "description": "Jedes Konto, das Ihr Identitätsanbieter akzeptiert, erhält bei der ersten Anmeldung Zugriff."
+      },
+      "allowlist": {
+        "title": "Nur aufgeführte Adressen",
+        "description": "Nur die unten aufgeführten E-Mails und Domains können ein Konto erstellen. Nützlich für eine schrittweise Einführung."
+      },
+      "closed": {
+        "title": "Keine neuen Konten",
+        "description": "Nur Personen, die bereits ein Konto haben, können sich anmelden."
+      },
+      "list_label": "Zugelassene E-Mails und Domains",
+      "list_hint": "Eine pro Zeile: eine vollständige E-Mail (name@firma.de) oder eine ganze Domain (@firma.de).",
+      "count_one": "{{count}} Eintrag",
+      "count_other": "{{count}} Einträge",
+      "empty_warning": "Die Liste ist leer: Niemand Neues kann sich anmelden, bis Sie eine Adresse hinzufügen.",
+      "save": "Richtlinie speichern",
+      "saving": "Wird gespeichert…",
+      "saved": "Richtlinie für neue Konten gespeichert.",
+      "error": {
+        "invalid_entry": "„{{entry}}“ ist keine gültige E-Mail oder Domain (verwenden Sie name@firma.de oder @firma.de).",
+        "too_long": "Zu viele Einträge: Das Maximum ist {{max}}.",
+        "generic": "Die Richtlinie konnte nicht gespeichert werden.",
+        "load": "Die Richtlinie für neue Konten konnte nicht geladen werden."
+      }
     }
   },
   "admin_security": {

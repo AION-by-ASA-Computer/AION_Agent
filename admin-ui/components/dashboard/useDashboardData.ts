@@ -51,7 +51,6 @@ export type Stats = {
   installed_mcp?: number;
   total_projects?: number;
   cron_jobs?: { total: number; enabled: number };
-  api_keys?: { total: number };
 };
 
 export type Health = {

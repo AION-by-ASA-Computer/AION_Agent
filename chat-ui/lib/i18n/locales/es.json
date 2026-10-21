@@ -18,6 +18,7 @@
       "profile": "Perfil",
       "appearance": "Apariencia",
       "security": "Seguridad",
+      "api_keys": "Claves API",
       "instructions": "Instrucciones",
       "tunings": "Ajustes y Parámetros",
       "runtime": "Runtime",
@@ -73,7 +74,14 @@
       "name_placeholder": "Nombre del preset",
       "save_as": "Guardar como",
       "save_active": "Guardar cambios del preset activo",
-      "empty": "Aún no hay presets."
+      "empty": "Aún no hay presets.",
+      "new_title": "Nuevo preajuste",
+      "list_title": "Preajustes guardados",
+      "active": "Activo",
+      "unsaved": "Sin guardar",
+      "activate": "Activar",
+      "none": "Ninguno",
+      "save_to": "Actualizar «{{name}}» con los valores actuales"
     },
     "section": {
       "profile": {
@@ -120,7 +128,9 @@
         "restore": "Restaurar por Defecto",
         "save": "Guardar Instrucciones",
         "saving": "Guardando..."
-      }
+      },
+      "profile_locked": "Guarda o descarta los cambios antes de cambiar de perfil.",
+      "user_id": "ID de usuario"
     },
     "appearance": {
       "desc": "Tema de la interfaz, tamaño de texto e idioma de la aplicación.",
@@ -140,7 +150,11 @@
       "shortcuts_desc": "Acceso rápido a las secciones principales de la aplicación.",
       "title": "Perfil",
       "upload_photo": "Subir foto",
-      "username_hint": "Identificador de inicio de sesión. Debe ser único."
+      "username_hint": "Identificador de inicio de sesión. Debe ser único.",
+      "photo_title": "Foto",
+      "photo_hint": "Se muestra junto a tus mensajes y en la barra lateral.",
+      "details_title": "Datos de la cuenta",
+      "details_desc": "Cómo te ven el asistente y los administradores."
     },
     "security": {
       "confirm_password": "Confirmar contraseña",
@@ -155,12 +169,119 @@
       "password_mismatch": "La confirmación no coincide con la nueva contraseña.",
       "password_title": "Contraseña",
       "password_updated": "Contraseña actualizada con éxito.",
-      "update_password": "Actualizar contraseña"
+      "update_password": "Actualizar contraseña",
+      "desc": "Mantén tu cuenta protegida."
+    },
+    "api_keys": {
+      "title": "Claves API",
+      "desc": "Crea claves personales para usar AION desde scripts e integraciones (p. ej. n8n). Una clave actúa como tú, limitada a los permisos que le concedas.",
+      "loading": "Cargando claves API…",
+      "retry": "Reintentar",
+      "disabled": "La creación de claves API no está habilitada para tu cuenta. Contacta con tu administrador.",
+      "counter": "{{active}} de {{max}} claves activas",
+      "new_key": "Nueva clave",
+      "quota_hint": "Has alcanzado el número máximo de claves activas. Revoca una para crear una nueva.",
+      "empty": "Todavía no tienes ninguna clave API.",
+      "created": "Creada",
+      "expires": "Caduca",
+      "revoked_on": "Revocada",
+      "no_expiry": "Sin caducidad",
+      "last_used": "Último uso",
+      "never": "Nunca",
+      "revoke": "Revocar",
+      "usage_title": "Cómo usar una clave",
+      "usage_desc": "Envía la clave en una de estas cabeceras HTTP. Las solicitudes actúan en tu nombre, limitadas a los permisos de la clave.",
+      "status": {
+        "active": "Activa",
+        "expired": "Caducada",
+        "revoked": "Revocada"
+      },
+      "scope": {
+        "chat": {
+          "label": "Chat",
+          "desc": "Enviar mensajes a los agentes y recibir sus respuestas."
+        },
+        "conversations_read": {
+          "label": "Leer conversaciones",
+          "desc": "Listar tus conversaciones y leer sus mensajes."
+        },
+        "conversations_write": {
+          "label": "Gestionar conversaciones",
+          "desc": "Crear, renombrar y eliminar tus conversaciones."
+        },
+        "files_read": {
+          "label": "Leer archivos",
+          "desc": "Listar y descargar los archivos de tus sesiones."
+        },
+        "files_write": {
+          "label": "Subir archivos",
+          "desc": "Subir archivos a tus sesiones."
+        }
+      },
+      "create": {
+        "title": "Nueva clave API",
+        "subtitle": "La clave se mostrará una sola vez, justo después de crearla.",
+        "name_label": "Nombre",
+        "name_placeholder": "p. ej. automatización n8n",
+        "name_hint": "Una etiqueta para recordar dónde se usa la clave.",
+        "scopes_label": "Permisos",
+        "scopes_hint": "Concede solo lo que la integración realmente necesita.",
+        "expiry_label": "Caducidad",
+        "expiry_days": "{{days}} días",
+        "expiry_one_day": "1 día",
+        "expiry_hint": "Máximo permitido: {{max}} días.",
+        "submit": "Crear clave",
+        "creating": "Creando…",
+        "cancel": "Cancelar"
+      },
+      "secret": {
+        "title": "Copia tu nueva clave \"{{name}}\"",
+        "warning": "Esta es la única vez que se muestra la clave completa. Guárdala en un lugar seguro: no podrás volver a verla.",
+        "key_label": "Clave API",
+        "copy": "Copiar",
+        "copied": "Copiada",
+        "copy_failed": "No se pudo copiar automáticamente. Selecciona la clave y cópiala manualmente.",
+        "dismiss": "Ya la he guardado"
+      },
+      "revoke_dialog": {
+        "title": "Revocar clave API",
+        "subtitle": "Esta acción no se puede deshacer.",
+        "warning": "Las integraciones que usan esta clave dejarán de funcionar de inmediato.",
+        "desc": "¿Quieres revocar la clave",
+        "key": "Clave",
+        "confirm": "Revocar clave",
+        "revoking": "Revocando…"
+      },
+      "toast": {
+        "created": "Clave API creada.",
+        "revoked": "Clave API revocada."
+      },
+      "err": {
+        "disabled": "La creación de claves API no está habilitada para tu cuenta. Contacta con tu administrador.",
+        "quota": "Has alcanzado el límite de {{max}} claves activas. Revoca una antes de crear una nueva.",
+        "quota_generic": "Has alcanzado el número máximo de claves activas. Revoca una antes de crear una nueva.",
+        "invalid_scopes": "Uno o más permisos seleccionados no están permitidos para tu cuenta.",
+        "invalid_expiration": "La caducidad seleccionada no está permitida.",
+        "user_token_required": "Inicia sesión con tu cuenta para gestionar las claves API.",
+        "not_found": "Clave API no encontrada.",
+        "generic": "Se ha producido un error. Inténtalo de nuevo."
+      },
+      "list_title": "Tus claves"
     },
     "subtitle": "Gestiona tu perfil, apariencia, seguridad e instrucciones personalizadas.",
     "tunings": {
       "desc": "Configura los parámetros del modelo, controles de generación, pasos de ejecución y preajustes de runtime.",
       "title": "Ajustes y Parámetros"
+    },
+    "ui": {
+      "nav": "Secciones de ajustes",
+      "unsaved": "Tienes cambios sin guardar",
+      "discard": "Descartar",
+      "save": "Guardar cambios",
+      "saving": "Guardando…",
+      "saved": "Cambios guardados",
+      "loading": "Cargando ajustes…",
+      "dismiss": "Cerrar"
     }
   },
   "sidebar": {
@@ -737,7 +858,9 @@
       "exchange_failed": "Error al completar el acceso.",
       "link_failed": "Error al vincular.",
       "session_invalid": "Sesión caducada, inicia sesión de nuevo.",
-      "user_not_found": "Usuario no encontrado."
+      "user_not_found": "Usuario no encontrado.",
+      "sso_signup_closed": "Ahora mismo no se aceptan cuentas nuevas. Contacta con tu administrador para solicitar acceso.",
+      "sso_signup_not_allowed": "Tu cuenta aún no está habilitada para esta plataforma. Contacta con tu administrador para solicitar acceso."
     }
   },
   "authgate": {

@@ -3,7 +3,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from src.api.auth_login import ChatAuthIdentity, require_chat_auth
+from src.api.auth.scopes import Scope
+from src.api.auth_login import ChatAuthIdentity, require_chat_scope
 from src.data.engine import get_async_session_maker
 from src.data.models import LlmProvider
 
@@ -22,7 +23,7 @@ class LlmProviderChatPublic(BaseModel):
 
 @router.get("", response_model=List[LlmProviderChatPublic])
 async def list_enabled_llm_providers(
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
     tenant_id: str = "default",
 ):
     """Restituisce i provider LLM abilitati (lettura sicura per utenti chat)."""

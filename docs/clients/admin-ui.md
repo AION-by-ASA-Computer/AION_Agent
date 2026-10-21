@@ -27,7 +27,7 @@ router = APIRouter(
 
 `require_admin_role` (in `src/api/auth_login.py`):
 
-1. Resolves identity by calling `require_chat_auth` (Bearer / API key / internal BFF secret).
+1. Resolves identity by calling `require_chat_auth` (Bearer / internal BFF secret). API keys never carry the `admin` role and are rejected on every `/admin/*` endpoint (`403`); see [API keys](../security/api-keys.md).
 2. Verifies that the token payload contains the `admin` role.
 3. Responds with `401` if the token is missing, `403` if the `admin` role is not present.
 
@@ -169,7 +169,7 @@ flowchart TD
 | Interface | Who uses it | What they can do |
 |-------------|------------|---------------|
 | **Chat UI** | End users | Messaging, file upload, management of personal sessions and personal credentials |
-| **Admin UI** | Administrators | Management of users, profiles, skills, cron jobs, API keys, global monitoring and security |
+| **Admin UI** | Administrators | Management of users (including the per-user API key policy), profiles, skills, cron jobs, global monitoring and security |
 
 ---
 
@@ -190,10 +190,13 @@ flowchart TD
 **Path:** `/users`
 
 **Features:**
-- Create new user accounts.
+- Create new user accounts (password mode only: with SSO active, accounts are
+  created at first SSO sign-in and the "Add user" button is replaced by a link
+  to the new-account policy).
 - Modify user details (display name and email).
 - Update or reset user passwords.
-- Delete existing accounts.
+- Delete existing accounts (the user's API keys are deleted too).
+- Set the per-user **API key policy** (see below).
 
 **Password policy:** passwords set by an admin (`POST /admin/users`,
 `PUT /admin/users/{id}`) must have at least 8 characters, a lowercase and an
@@ -203,6 +206,26 @@ The backend rejects weak passwords with `422`
 same rules (`admin-ui/lib/passwordPolicy.ts`) with a live checklist. The
 "New user" form is prefilled with a cryptographically random 16-character
 password that the admin can show, copy, regenerate or overwrite.
+
+**New accounts (SSO):** in the *Sign-in* tab, with an SSO mode active, the
+*New accounts* section sets who can get an account at first SSO sign-in:
+anyone in the organization, only listed emails/domains (one per line,
+`name@company.com` or `@company.com`) or nobody. Existing accounts are not
+affected. See [SSO migration](../security/sso-migration.md#3-new-accounts-in-sso-mode).
+
+**API key policy:** admins do not create API keys; each user creates their own
+from chat-ui → Settings → API keys. On the user form the admin sets:
+
+| Field | Default | Range |
+|-------|---------|-------|
+| `can_create_api_keys` | `false` | Enables the feature for the user |
+| `max_api_keys` | `5` | 1–100 active keys |
+| `api_key_max_ttl_days` | `90` | 1–3650 days (maximum lifetime of a new key) |
+
+The users list shows an "API key active/max" badge (`api_keys_active` from
+`GET /admin/users`). Disabling `can_create_api_keys` immediately revokes all the
+user's active keys; lowering the limits only affects new keys. See
+[API keys](../security/api-keys.md).
 
 ### 3. Profile Management
 
@@ -239,7 +262,7 @@ password that the admin can show, copy, regenerate or overwrite.
 - Promote skills generated from drafts ("draft") to verified ("verified").
 - Remove skills (preventing the deletion of those currently in use by active profiles).
 
-### 5. MCP Hub (unified)
+### 6. MCP Hub (unified)
 
 **Path:** `/hub`.
 
@@ -259,7 +282,7 @@ password that the admin can show, copy, regenerate or overwrite.
 4. Agent profile: `mcp_servers` includes the slug + MCP skill (e.g. `email_imap_mcp` in `config/profiles/`).
 5. Chat-ui: user credentials if `per_user`.
 
-### 6. Chat privacy (no conversation access)
+### 7. Chat privacy (no conversation access)
 
 Admins cannot read users' chats. There is no conversation viewer in the admin UI, and the backend exposes no `/admin/*` endpoint that returns conversation content.
 
@@ -268,7 +291,7 @@ Admins cannot read users' chats. There is no conversation viewer in the admin UI
 - **Scheduled jobs:** see the section below. Run outputs and prompts of user-created jobs are never returned.
 - **Security investigation** (`/admin/security/investigate`) refuses the data directory (DB, session workspaces), `*.db`/SQLite files and `.env*` files.
 
-### 7. Scheduled Jobs (Scheduled tasks)
+### 8. Scheduled Jobs (Scheduled tasks)
 
 **Path:** `/schedules`
 
@@ -280,16 +303,6 @@ Admins cannot read users' chats. There is no conversation viewer in the admin UI
 - For jobs created by users (`created_by != "admin"`), the API returns an empty `prompt` with `prompt_hidden: true`. Prompt and profile cannot be changed by admins; schedule, timezone, name, enable/disable and delete still can.
 - Admins cannot set `session_id`: every job runs in its own conversation, never inside an existing user chat.
 - Enable, disable, or force immediate execution of a job.
-
-### 8. API Credentials (API Keys)
-
-**Path:** `/api-keys`
-
-**Features:**
-- Generate secure programmatic access keys for external systems.
-- Assign granular authorization scopes (`conversations:read`, `conversations:write`, `chat`, `chat:scoped`, `files:read`, `files:write`, `admin`).
-- Monitor key usage (date of last access).
-- Instantly revoke obsolete or compromised API keys.
 
 ### 9. Memory Management
 
@@ -319,7 +332,7 @@ Admins cannot read users' chats. There is no conversation viewer in the admin UI
 - Initiate AI-driven security analyses (via profiles like "Security Officer") on specific code files.
 - View, mark as trusted ("trust") or download detailed reports in JSON or Markdown format.
 
-### 13. System Health (Infrastructure Integrity)
+### 12. System Health (Infrastructure Integrity)
 
 **Path:** `/system`
 
@@ -329,7 +342,7 @@ Admins cannot read users' chats. There is no conversation viewer in the admin UI
 - Monitor the unified SQLite database (physical file size and connection string).
 - View the active storage backend (local or hybrid) and its root directory for session files.
 
-### 14. General Settings
+### 13. General Settings
 
 **Path:** `/settings`
 
@@ -341,7 +354,7 @@ Admins cannot read users' chats. There is no conversation viewer in the admin UI
 - Default provider save syncs `AION_CHAT_MAX_TOKENS` / `AION_THINKING_TOKEN_BUDGET` into `.env` and clears the agent cache.
 - Automatic restart of the Docker container in case of changes (if the environment runs under Docker).
 
-### 15. First setup wizard
+### 14. First setup wizard
 
 **Path:** `/first-setup` (shown when the backend reports setup incomplete)
 
@@ -383,7 +396,6 @@ admin-ui/
 │   ├── skills/             # Skill Management
 │   ├── hub/                # MCP Hub (marketplace and wizard)
 │   ├── schedules/          # Scheduled Cron Jobs
-│   ├── api-keys/           # API Keys Management
 │   ├── memory/             # LTM & Memory Management
 │   ├── security/           # Security Audit & Scans
 │   ├── system/             # Infrastructure integrity (System health)

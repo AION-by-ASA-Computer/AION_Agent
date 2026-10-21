@@ -6,7 +6,7 @@ description: /v1/integrations endpoints for per-user credentials; chat Bearer au
 
 # MCP integrations API (`/v1/integrations`)
 
-These endpoints live under `/v1` but do **not** follow the "API Key" authentication model described in [REST API v1](rest-api.md).
+These endpoints live under `/v1` but do **not** follow the "API Key" authentication model described in [REST API v1](rest-api.md): API keys are rejected with `403 api_key_not_allowed` (see [API keys](../security/api-keys.md)).
 
 ## Authentication
 

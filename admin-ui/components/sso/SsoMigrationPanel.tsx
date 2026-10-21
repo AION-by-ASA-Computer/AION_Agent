@@ -34,7 +34,7 @@ interface AuthStatus {
   exempt?: number;
 }
 
-export function SsoMigrationPanel({ onManage }: { onManage?: () => void } = {}) {
+export function SsoMigrationPanel({ onManage, onModeChanged }: { onManage?: () => void; onModeChanged?: () => void } = {}) {
   const [status, setStatus] = useState<AuthStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -141,6 +141,7 @@ export function SsoMigrationPanel({ onManage }: { onManage?: () => void } = {}) 
       }
       
       await fetchStatus();
+      onModeChanged?.();
     } catch (e) {
       console.error(e);
       setError("Errore di rete.");

@@ -11,7 +11,6 @@
     "diagnostics": "Smoke test",
     "system": "Stato del sistema",
     "users": "Utenti",
-    "api_keys": "Chiavi API",
     "security": "Sicurezza",
     "settings": "Impostazioni",
     "logout": "Esci",
@@ -58,7 +57,6 @@
       "quick_mcp": "Installa un server MCP",
       "quick_profiles": "Modifica i profili",
       "quick_users": "Gestisci utenti",
-      "quick_api_keys": "Crea una chiave API",
       "keywords": {
         "profiles": "agente persona prompt soul profilo",
         "skills": "skill capacità markdown",
@@ -70,7 +68,6 @@
         "diagnostics": "smoke test diagnostica verifica",
         "system": "salute redis database storage stato",
         "users": "utente account ruolo admin 2fa totp password sso",
-        "api_keys": "chiave api token scope credenziali",
         "security": "sicurezza audit pii redazione scansione",
         "settings": "modello llm provider embedding ocr login sso microsoft google 2fa lingua"
       }
@@ -122,8 +119,6 @@
     "nodes": {
       "users": "Utenti",
       "users_active": "{{count}} attivi nelle 24 h",
-      "api_keys": "Chiavi API",
-      "api_keys_detail": "Accesso programmatico",
       "jobs": "Job pianificati",
       "jobs_enabled": "{{count}} attivi",
       "jobs_failed": "{{count}} falliti",
@@ -1285,7 +1280,8 @@
       "body": "Crea il primo account per consentire a qualcuno di accedere alla chat.",
       "search": "Nessun utente corrisponde alla ricerca.",
       "clear": "Cancella ricerca",
-      "clear_filters": "Rimuovi filtri"
+      "clear_filters": "Rimuovi filtri",
+      "sso_body": "Con il single sign-on le persone compaiono qui dopo il loro primo accesso."
     },
     "badge": {
       "twofa": "2FA attivo",
@@ -1344,7 +1340,21 @@
       "done_body": "Consegna queste credenziali a {{name}}. Dopo la chiusura di questa finestra la password non sarà più visibile.",
       "done_must_change": "Al primo accesso dovrà sceglierne una nuova.",
       "copy_credentials": "Copia credenziali",
-      "done": "Fatto"
+      "done": "Fatto",
+      "api_keys": {
+        "title": "Chiavi API",
+        "description": "Gli utenti creano e revocano le proprie chiavi dalle impostazioni della chat.",
+        "enable": "Può creare chiavi API",
+        "enable_description": "Consente all'utente di generare chiavi personali per chiamare l'API.",
+        "max_keys": "Numero massimo di chiavi attive",
+        "max_days": "Durata massima (giorni)",
+        "range_hint": "Da {{min}} a {{max}}",
+        "range_error": "Inserisci un numero intero da {{min}} a {{max}}",
+        "revoke_warning": "Salvando, le chiavi API attive di questo utente ({{count}}) verranno revocate subito.",
+        "revoke_warning_none": "Salvando, l'utente non potrà più creare chiavi API e ogni chiave esistente verrà revocata subito.",
+        "badge": "Chiavi API {{active}}/{{max}}",
+        "badge_title": "{{active}} chiavi API attive su {{max}} consentite"
+      }
     },
     "profiles": {
       "title": "Accesso ai profili",
@@ -1377,7 +1387,9 @@
       "sso_title": "Single sign-on",
       "sso_body": "Scegli come accedono le persone e migra gli account esistenti al tuo identity provider.",
       "tfa_title": "Autenticazione a due fattori",
-      "tfa_body": "Richiede un codice dell'app authenticator a ogni accesso con password, in chat e in questo pannello. Non si applica al single sign-on."
+      "tfa_body": "Richiede un codice dell'app authenticator a ogni accesso con password, in chat e in questo pannello. Non si applica al single sign-on.",
+      "signup_title": "Nuovi account",
+      "signup_body": "Decidi chi ottiene un account al primo accesso con single sign-on. Chi ha già un account non viene toccato."
     },
     "toast": {
       "updated": "Utente aggiornato.",
@@ -1388,7 +1400,8 @@
       "profiles_load_failed": "Impossibile caricare i profili dell'utente: {{error}}",
       "save_failed": "Impossibile salvare l'utente: {{error}}",
       "delete_failed": "Impossibile eliminare l'utente: {{error}}",
-      "reset_failed": "Impossibile reimpostare il 2FA: {{error}}"
+      "reset_failed": "Impossibile reimpostare il 2FA: {{error}}",
+      "sso_user_creation_disabled": "Il single sign-on è attivo: gli account vengono creati al primo accesso."
     },
     "filter": {
       "aria": "Filtra per {{col}}",
@@ -1529,67 +1542,37 @@
       "c9": "Client OAuth creato: copia i due valori (qui nascosti).",
       "shots_note": "Gli screenshot provengono dal portale in italiano; le etichette seguono la lingua del tuo account Google. Credenziali e indirizzi email nelle immagini sono nascosti.",
       "close": "Chiudi"
-    }
-  },
-  "admin_api_keys": {
-    "title": "Chiavi API",
-    "subtitle": "Credenziali per l’accesso programmatico alla piattaforma, con permessi limitati a ciò che serve.",
-    "new": "Nuova chiave",
-    "search": "Cerca per nome, prefisso o permesso",
-    "loading": "Caricamento chiavi…",
-    "col_key": "Chiave",
-    "col_scopes": "Permessi",
-    "col_used": "Ultimo uso",
-    "col_actions": "Azioni",
-    "never": "Mai usata",
-    "used_at": "{{when}}",
-    "revoke": "Revoca chiave",
-    "revoke_aria": "Revoca la chiave {{name}}",
-    "empty_search": "Nessuna chiave corrisponde alla ricerca.",
-    "empty": {
-      "title": "Ancora nessuna chiave API",
-      "body": "Crea una chiave per far accedere app e servizi esterni alla piattaforma, solo con i permessi necessari."
     },
-    "secret": {
-      "title": "Chiave creata: copiala adesso",
-      "body": "Il valore completo non verrà mostrato di nuovo. Conservalo in un luogo sicuro.",
-      "copy": "Copia",
-      "copied": "Copiata",
-      "done": "Chiudi"
-    },
-    "create": {
-      "title": "Nuova chiave API",
-      "name": "Nome",
-      "name_placeholder": "Es. Backend app mobile",
-      "scopes": "Permessi",
-      "scopes_hint": "Seleziona almeno un permesso. Dai solo quelli necessari.",
-      "admin_warning": "Il permesso admin concede accesso completo alla gestione della piattaforma.",
-      "cancel": "Annulla",
-      "submit": "Crea chiave",
-      "submitting": "Creazione…"
-    },
-    "scope_desc": {
-      "conversations_read": "Leggere le conversazioni",
-      "conversations_write": "Creare e modificare le conversazioni",
-      "chat": "Chattare con qualsiasi profilo",
-      "chat_scoped": "Chattare solo con i profili consentiti",
-      "files_read": "Leggere i file",
-      "files_write": "Caricare e modificare i file",
-      "admin": "Accesso completo all’amministrazione"
-    },
-    "revoke_dialog": {
-      "title": "Revocare questa chiave?",
-      "body": "La chiave {{name}} verrà revocata subito: ogni app o servizio che la usa perderà l’accesso. L’operazione non è reversibile.",
-      "confirm_label": "Scrivi {{name}} per confermare",
-      "cancel": "Annulla",
-      "confirm": "Revoca",
-      "deleting": "Revoca…"
-    },
-    "toast": {
-      "load_error": "Impossibile caricare le chiavi API.",
-      "create_error": "Impossibile creare la chiave.",
-      "revoked": "Chiave revocata.",
-      "revoke_error": "Impossibile revocare la chiave."
+    "sso_add_hint": "Con il single sign-on gli account vengono creati al primo accesso di ogni persona.",
+    "sso_add_manage": "Scegli chi può accedere",
+    "signup_policy": {
+      "label": "Policy per i nuovi account",
+      "open": {
+        "title": "Chiunque nell'organizzazione",
+        "description": "Ogni account accettato dal tuo identity provider ottiene l'accesso al primo login."
+      },
+      "allowlist": {
+        "title": "Solo indirizzi in elenco",
+        "description": "Solo le email e i domini qui sotto possono creare un account. Utile per un rilascio graduale."
+      },
+      "closed": {
+        "title": "Nessun nuovo account",
+        "description": "Possono accedere solo le persone che hanno già un account."
+      },
+      "list_label": "Email e domini autorizzati",
+      "list_hint": "Uno per riga: un'email completa (nome@azienda.it) o un intero dominio (@azienda.it).",
+      "count_one": "{{count}} voce",
+      "count_other": "{{count}} voci",
+      "empty_warning": "L'elenco è vuoto: nessun nuovo utente potrà accedere finché non aggiungi un indirizzo.",
+      "save": "Salva policy",
+      "saving": "Salvataggio…",
+      "saved": "Policy per i nuovi account salvata.",
+      "error": {
+        "invalid_entry": "\"{{entry}}\" non è un'email o un dominio valido (usa nome@azienda.it o @azienda.it).",
+        "too_long": "Troppe voci: il massimo è {{max}}.",
+        "generic": "Impossibile salvare la policy.",
+        "load": "Impossibile caricare la policy per i nuovi account."
+      }
     }
   },
   "admin_security": {

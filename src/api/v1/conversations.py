@@ -10,6 +10,7 @@ from pydantic import AliasChoices, BaseModel, Field
 from sqlalchemy import select, update
 
 from src.api.auth import AuthContext, Scope, require_scope
+from src.api.profile_access import enforce_profile_access
 from src.api.ownership import api_key_context_principal, owned_by
 from src.data.engine import get_async_session_maker
 from src.identity import sanitize_user_id
@@ -52,6 +53,7 @@ async def create_conversation(
     ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     _require_unified()
+    body.profile = await enforce_profile_access(ctx.user_row_id, body.profile)
     cid = new_uuid7_str()
     owner = api_key_context_principal(ctx)
     async with get_async_session_maker()() as session:

@@ -15,7 +15,8 @@ from sse_starlette.sse import EventSourceResponse
 from src.session_workspace import list_dir, normalize_session_id, save_upload
 from src.tools.doc_auto_ingest import schedule_auto_ingest
 from src.tools.office_auto_convert import apply_legacy_word_conversion
-from .auth_login import ChatAuthIdentity, require_chat_auth
+from .auth.scopes import Scope
+from .auth_login import ChatAuthIdentity, require_chat_scope
 from .ownership import assert_conversation_access, effective_user_id
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,7 @@ async def _owned_session_id(
 async def upload_session_files(
     session_id: str,
     files: List[UploadFile] = File(...),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.FILES_WRITE)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """Carica uno o più file in uploads/ per la sessione."""
@@ -138,7 +139,7 @@ async def upload_session_files(
 async def list_session_files(
     session_id: str,
     subdir: str = "uploads",
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.FILES_READ)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """Elenco file (uploads, derived, workspace)."""
@@ -166,7 +167,7 @@ async def list_session_files(
 @router.get("/sessions/{session_id}/tool-ledger")
 async def get_session_tool_ledger(
     session_id: str,
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CONVERSATIONS_READ)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """Tool call trace for the session (from derived/tool_results/_ledger.jsonl)."""
@@ -195,7 +196,7 @@ async def download_session_file(
     relative_path: str = Query(
         ..., description="Path relativo, es. workspace/matricielle.csv"
     ),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.FILES_READ)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """
@@ -244,7 +245,7 @@ async def download_session_file(
 @router.get("/sessions/{session_id}/events/stream")
 async def session_events_sse(
     session_id: str,
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CONVERSATIONS_READ)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """SSE: eventi Redis di sessione (es. orchestration_plan_approved) per chat-ui.

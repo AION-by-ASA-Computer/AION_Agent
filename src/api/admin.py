@@ -70,8 +70,8 @@ from ..data.user_password import (
     create_password_user,
     password_policy_violations,
 )
+from ..data import api_keys as api_keys_db
 from ..data.models import (
-    ApiKey,
     Conversation,
     Message,
     SecurityScan,
@@ -3611,18 +3611,15 @@ async def get_stats():
 
     mcp_count = len(mcp_manager._registry)
 
-    # Calculate scheduled jobs and api keys
+    # Calculate scheduled jobs
     jobs_total = 0
     jobs_enabled = 0
-    api_keys_total = 0
-    api_keys_by_scope = {}
     model_usage = {}
     projects_total = 0
 
     from ..data.models import (
         Conversation,
         LlmProvider,
-        ApiKey,
         ScheduledJob,
         SqlQueryProject,
     )
@@ -3648,19 +3645,7 @@ async def get_stats():
             jobs_total = len(jobs_rows)
             jobs_enabled = sum(1 for j in jobs_rows if j.enabled)
 
-            # 4) Get API keys and group by scopes
-            keys_rows = (await session.execute(select(ApiKey))).scalars().all()
-            api_keys_total = len(keys_rows)
-            for k in keys_rows:
-                scopes = json.loads(k.scopes_json or "[]")
-                if not scopes:
-                    api_keys_by_scope["no_scopes"] = (
-                        api_keys_by_scope.get("no_scopes", 0) + 1
-                    )
-                for s in scopes:
-                    api_keys_by_scope[s] = api_keys_by_scope.get(s, 0) + 1
-
-            # 5) Get SQL query projects count
+            # 4) Get SQL query projects count
             projects_rows = (
                 (await session.execute(select(SqlQueryProject))).scalars().all()
             )
@@ -3679,10 +3664,6 @@ async def get_stats():
         "cron_jobs": {
             "total": jobs_total,
             "enabled": jobs_enabled,
-        },
-        "api_keys": {
-            "total": api_keys_total,
-            "by_scope": api_keys_by_scope,
         },
     }
 
@@ -3791,13 +3772,6 @@ async def json_recovery_stats():
     return get_recovery_stats()
 
 
-class ApiKeyCreate(BaseModel):
-    name: str
-    tenant_id: str = "default"
-    scopes: List[str] = ["chat:scoped"]
-    expires_in_days: Optional[int] = None
-
-
 class UserCreate(BaseModel):
     identifier: str
     password: str
@@ -3806,6 +3780,10 @@ class UserCreate(BaseModel):
     tenant_id: str = "default"
     roles: List[str] = []
     must_change_password: bool = False
+    # Policy API key personali (create dall'utente in chat-ui).
+    can_create_api_keys: bool = False
+    max_api_keys: int = Field(5, ge=1, le=100)
+    api_key_max_ttl_days: int = Field(90, ge=1, le=3650)
 
 
 class UserUpdate(BaseModel):
@@ -3814,6 +3792,9 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     roles: Optional[List[str]] = None
     must_change_password: Optional[bool] = None
+    can_create_api_keys: Optional[bool] = None
+    max_api_keys: Optional[int] = Field(None, ge=1, le=100)
+    api_key_max_ttl_days: Optional[int] = Field(None, ge=1, le=3650)
 
 
 class UserProfilesUpdate(BaseModel):
@@ -3859,6 +3840,7 @@ async def list_users():
     async with get_async_session_maker()() as session:
         q = select(User).order_by(User.created_at.desc())
         rows = (await session.execute(q)).scalars().all()
+        active_keys = await api_keys_db.count_active_by_user(session)
         identities: Dict[str, list] = {}
         for ident in (await session.execute(select(UserSsoIdentity))).scalars().all():
             identities.setdefault(ident.user_id, []).append(ident)
@@ -3907,6 +3889,10 @@ async def list_users():
                         getattr(r, "must_change_password", False)
                     ),
                     "totp_enabled": r.totp_enabled_at is not None,
+                    "can_create_api_keys": bool(r.can_create_api_keys),
+                    "max_api_keys": r.max_api_keys,
+                    "api_key_max_ttl_days": r.api_key_max_ttl_days,
+                    "api_keys_active": active_keys.get(r.id, 0),
                     "created_at": r.created_at,
                     "last_active_at": r.last_active_at,
                     **auth_info(r),
@@ -3919,6 +3905,16 @@ async def list_users():
 @router.post("/users")
 async def create_user(body: UserCreate):
     """Create a new user."""
+    from ..auth.sso.login_mode import get_login_settings
+
+    # Con SSO attivo gli account nascono solo al primo login SSO
+    # (vedi signup policy): niente nuovi utenti con password.
+    settings = await get_login_settings(body.tenant_id or "default")
+    if settings.get("login_mode", "password") != "password":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "sso_active_user_creation_disabled"},
+        )
     _enforce_password_policy(body.password, body.identifier)
     try:
         uid = await create_password_user(
@@ -3932,6 +3928,15 @@ async def create_user(body: UserCreate):
         )
     except UserAlreadyExistsError:
         raise HTTPException(status_code=400, detail="User already exists")
+    from ..data.models import User
+
+    async with get_async_session_maker()() as session:
+        u = await session.get(User, uid)
+        if u is not None:
+            u.can_create_api_keys = body.can_create_api_keys
+            u.max_api_keys = body.max_api_keys
+            u.api_key_max_ttl_days = body.api_key_max_ttl_days
+            await session.commit()
     return {"status": "success", "id": uid}
 
 
@@ -4011,6 +4016,16 @@ async def update_user(
             set_roles(u, body.roles)
         if body.must_change_password is not None:
             u.must_change_password = bool(body.must_change_password)
+        if body.can_create_api_keys is not None:
+            # Disabilitare l'utente revoca subito tutte le sue chiavi attive;
+            # quota e durata massima ridotte valgono solo per le nuove chiavi.
+            if u.can_create_api_keys and not body.can_create_api_keys:
+                await api_keys_db.revoke_all_for_user(session, user_id)
+            u.can_create_api_keys = body.can_create_api_keys
+        if body.max_api_keys is not None:
+            u.max_api_keys = body.max_api_keys
+        if body.api_key_max_ttl_days is not None:
+            u.api_key_max_ttl_days = body.api_key_max_ttl_days
 
         await session.commit()
 
@@ -4023,6 +4038,8 @@ async def delete_user(user_id: str):
     from ..data.models import User, UserProfileAccess
 
     async with get_async_session_maker()() as session:
+        # Le FK CASCADE non esistono sui DB SQLite patchati: pulizia esplicita.
+        await api_keys_db.delete_all_for_user(session, [user_id])
         await session.execute(delete(User).where(User.id == user_id))
         await session.execute(
             delete(UserProfileAccess).where(UserProfileAccess.user_id == user_id)
@@ -4073,75 +4090,6 @@ async def update_user_profiles(user_id: str, body: UserProfilesUpdate):
         await session.commit()
 
     return {"status": "success"}
-
-
-@router.get("/api-keys")
-async def list_api_keys():
-    """List all API keys (admin only)."""
-    async with get_async_session_maker()() as session:
-        q = select(ApiKey).order_by(ApiKey.created_at.desc())
-        rows = (await session.execute(q)).scalars().all()
-        return {
-            "keys": [
-                {
-                    "id": r.id,
-                    "tenant_id": r.tenant_id,
-                    "name": r.name,
-                    "prefix": r.prefix,
-                    "scopes": json.loads(r.scopes_json or "[]"),
-                    "created_at": r.created_at,
-                    "expires_at": r.expires_at,
-                    "last_used_at": r.last_used_at,
-                    "revoked_at": r.revoked_at,
-                }
-                for r in rows
-            ]
-        }
-
-
-@router.post("/api-keys")
-async def create_api_key(body: ApiKeyCreate):
-    """Generate a new API key."""
-    from ..data.ids import new_uuid7_str
-    from ..api.auth.api_key import generate_api_key_pair, hash_api_key
-    from datetime import timedelta
-
-    raw_key, prefix, secret = generate_api_key_pair()
-    hashed = hash_api_key(raw_key)
-
-    expires_at = None
-    if body.expires_in_days:
-        expires_at = datetime.now() + timedelta(days=body.expires_in_days)
-
-    async with get_async_session_maker()() as session:
-        new_key = ApiKey(
-            id=new_uuid7_str(),
-            tenant_id=body.tenant_id,
-            name=body.name,
-            prefix=prefix,
-            hash=hashed,
-            scopes_json=json.dumps(body.scopes),
-            expires_at=expires_at,
-        )
-        session.add(new_key)
-        await session.commit()
-
-    return {
-        "id": new_key.id,
-        "name": new_key.name,
-        "key": raw_key,  # RETURNED ONLY ONCE
-        "prefix": prefix,
-        "scopes": body.scopes,
-        "expires_at": expires_at,
-    }
-
-
-@router.delete("/api-keys/{key_id}")
-async def revoke_api_key(key_id: str):
-    async with get_async_session_maker()() as session:
-        await session.execute(delete(ApiKey).where(ApiKey.id == key_id))
-        await session.commit()
-    return {"status": "revoked"}
 
 
 @router.get("/feedback")

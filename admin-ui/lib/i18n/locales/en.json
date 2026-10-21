@@ -11,7 +11,6 @@
     "diagnostics": "Smoke tests",
     "system": "System health",
     "users": "Users",
-    "api_keys": "API keys",
     "security": "Security",
     "settings": "Settings",
     "logout": "Log out",
@@ -58,7 +57,6 @@
       "quick_mcp": "Install an MCP server",
       "quick_profiles": "Edit agent profiles",
       "quick_users": "Manage users",
-      "quick_api_keys": "Create an API key",
       "keywords": {
         "profiles": "agent persona prompt soul profile",
         "skills": "skill capability markdown distill",
@@ -70,7 +68,6 @@
         "diagnostics": "smoke test diagnostics check",
         "system": "health redis database storage status",
         "users": "user account role admin 2fa totp password sso",
-        "api_keys": "api key token scope credential",
         "security": "security audit pii redaction scan",
         "settings": "model llm provider embedding ocr login sso microsoft google 2fa language"
       }
@@ -122,8 +119,6 @@
     "nodes": {
       "users": "Users",
       "users_active": "{{count}} active in 24 h",
-      "api_keys": "API keys",
-      "api_keys_detail": "Programmatic access",
       "jobs": "Scheduled jobs",
       "jobs_enabled": "{{count}} enabled",
       "jobs_failed": "{{count}} failed",
@@ -1285,7 +1280,8 @@
       "body": "Create the first account to let someone sign in to the chat.",
       "search": "No user matches your search.",
       "clear": "Clear search",
-      "clear_filters": "Clear filters"
+      "clear_filters": "Clear filters",
+      "sso_body": "With single sign-on, people appear here after their first sign-in."
     },
     "badge": {
       "twofa": "2FA on",
@@ -1344,7 +1340,21 @@
       "done_body": "Share these credentials with {{name}}. The password won't be shown again after you close this window.",
       "done_must_change": "They'll be asked to choose a new password at first sign-in.",
       "copy_credentials": "Copy credentials",
-      "done": "Done"
+      "done": "Done",
+      "api_keys": {
+        "title": "API keys",
+        "description": "Users create and revoke their own keys from the chat settings.",
+        "enable": "Can create API keys",
+        "enable_description": "Lets this user generate personal keys to call the API.",
+        "max_keys": "Maximum active keys",
+        "max_days": "Maximum lifetime (days)",
+        "range_hint": "From {{min}} to {{max}}",
+        "range_error": "Enter a whole number from {{min}} to {{max}}",
+        "revoke_warning": "Saving will immediately revoke this user's active API keys ({{count}}).",
+        "revoke_warning_none": "Saving will stop this user from creating API keys and immediately revoke any existing key.",
+        "badge": "API key {{active}}/{{max}}",
+        "badge_title": "{{active}} active API keys out of {{max}} allowed"
+      }
     },
     "profiles": {
       "title": "Profile access",
@@ -1377,7 +1387,9 @@
       "sso_title": "Single sign-on",
       "sso_body": "Choose how people sign in and migrate existing accounts to your identity provider.",
       "tfa_title": "Two-factor authentication",
-      "tfa_body": "Require an authenticator code at every password sign-in, in the chat and in this panel. It does not apply to single sign-on."
+      "tfa_body": "Require an authenticator code at every password sign-in, in the chat and in this panel. It does not apply to single sign-on.",
+      "signup_title": "New accounts",
+      "signup_body": "Decide who gets an account the first time they sign in with single sign-on. People who already have an account are not affected."
     },
     "toast": {
       "updated": "User updated.",
@@ -1388,7 +1400,8 @@
       "profiles_load_failed": "Couldn't load this user's profiles: {{error}}",
       "save_failed": "Couldn't save the user: {{error}}",
       "delete_failed": "Couldn't delete the user: {{error}}",
-      "reset_failed": "Couldn't reset 2FA: {{error}}"
+      "reset_failed": "Couldn't reset 2FA: {{error}}",
+      "sso_user_creation_disabled": "Single sign-on is active: accounts are created at first sign-in."
     },
     "filter": {
       "aria": "Filter by {{col}}",
@@ -1529,67 +1542,37 @@
       "c9": "OAuth client created: copy both values (hidden here).",
       "shots_note": "Screenshots come from the Italian portal; labels follow the language of your Google account. Credentials and email addresses in the images are hidden.",
       "close": "Close"
-    }
-  },
-  "admin_api_keys": {
-    "title": "API keys",
-    "subtitle": "Credentials for programmatic access to the platform, limited to the permissions each one needs.",
-    "new": "New key",
-    "search": "Search by name, prefix or permission",
-    "loading": "Loading keys…",
-    "col_key": "Key",
-    "col_scopes": "Permissions",
-    "col_used": "Last used",
-    "col_actions": "Actions",
-    "never": "Never used",
-    "used_at": "{{when}}",
-    "revoke": "Revoke key",
-    "revoke_aria": "Revoke key {{name}}",
-    "empty_search": "No key matches your search.",
-    "empty": {
-      "title": "No API keys yet",
-      "body": "Create a key to let apps and external services reach the platform with only the permissions they need."
     },
-    "secret": {
-      "title": "Key created: copy it now",
-      "body": "The full value won’t be shown again. Store it somewhere safe.",
-      "copy": "Copy",
-      "copied": "Copied",
-      "done": "Dismiss"
-    },
-    "create": {
-      "title": "New API key",
-      "name": "Name",
-      "name_placeholder": "e.g. Mobile app backend",
-      "scopes": "Permissions",
-      "scopes_hint": "Select at least one. Grant only what is needed.",
-      "admin_warning": "The admin permission grants full access to platform management.",
-      "cancel": "Cancel",
-      "submit": "Create key",
-      "submitting": "Creating…"
-    },
-    "scope_desc": {
-      "conversations_read": "Read conversations",
-      "conversations_write": "Create and edit conversations",
-      "chat": "Chat with any profile",
-      "chat_scoped": "Chat with allowed profiles only",
-      "files_read": "Read files",
-      "files_write": "Upload and edit files",
-      "admin": "Full administration access"
-    },
-    "revoke_dialog": {
-      "title": "Revoke this key?",
-      "body": "Key {{name}} will be revoked immediately: any app or service using it loses access. This cannot be undone.",
-      "confirm_label": "Type {{name}} to confirm",
-      "cancel": "Cancel",
-      "confirm": "Revoke",
-      "deleting": "Revoking…"
-    },
-    "toast": {
-      "load_error": "Couldn’t load API keys.",
-      "create_error": "Couldn’t create the key.",
-      "revoked": "Key revoked.",
-      "revoke_error": "Couldn’t revoke the key."
+    "sso_add_hint": "With single sign-on, accounts are created at each person's first sign-in.",
+    "sso_add_manage": "Choose who can sign in",
+    "signup_policy": {
+      "label": "New account policy",
+      "open": {
+        "title": "Anyone in the organization",
+        "description": "Every account your identity provider accepts gets access at first sign-in."
+      },
+      "allowlist": {
+        "title": "Only listed addresses",
+        "description": "Only the emails and domains below can create an account. Useful for a gradual rollout."
+      },
+      "closed": {
+        "title": "No new accounts",
+        "description": "Only people who already have an account can sign in."
+      },
+      "list_label": "Allowed emails and domains",
+      "list_hint": "One per line: a full email (name@company.com) or a whole domain (@company.com).",
+      "count_one": "{{count}} entry",
+      "count_other": "{{count}} entries",
+      "empty_warning": "The list is empty: nobody new can sign in until you add an address.",
+      "save": "Save policy",
+      "saving": "Saving…",
+      "saved": "New account policy saved.",
+      "error": {
+        "invalid_entry": "\"{{entry}}\" is not a valid email or domain (use name@company.com or @company.com).",
+        "too_long": "Too many entries: the maximum is {{max}}.",
+        "generic": "Couldn't save the policy.",
+        "load": "Couldn't load the new account policy."
+      }
     }
   },
   "admin_security": {

@@ -11,7 +11,6 @@
     "diagnostics": "Tests de fumée",
     "system": "Santé du système",
     "users": "Utilisateurs",
-    "api_keys": "Clés API",
     "security": "Sécurité",
     "settings": "Paramètres",
     "logout": "Déconnexion",
@@ -58,7 +57,6 @@
       "quick_mcp": "Installer un serveur MCP",
       "quick_profiles": "Modifier les profils",
       "quick_users": "Gérer les utilisateurs",
-      "quick_api_keys": "Créer une clé API",
       "keywords": {
         "profiles": "agent persona prompt soul profil",
         "skills": "compétence skill markdown",
@@ -70,7 +68,6 @@
         "diagnostics": "test diagnostic vérification",
         "system": "santé redis base de données stockage",
         "users": "utilisateur compte rôle admin 2fa totp mot de passe sso",
-        "api_keys": "clé api jeton portée",
         "security": "sécurité audit pii caviardage",
         "settings": "modèle llm fournisseur embedding ocr connexion sso 2fa langue"
       }
@@ -122,8 +119,6 @@
     "nodes": {
       "users": "Utilisateurs",
       "users_active": "{{count}} actifs en 24 h",
-      "api_keys": "Clés API",
-      "api_keys_detail": "Accès programmatique",
       "jobs": "Tâches planifiées",
       "jobs_enabled": "{{count}} actives",
       "jobs_failed": "{{count}} en échec",
@@ -1285,7 +1280,8 @@
       "body": "Créez le premier compte pour permettre à quelqu'un de se connecter au chat.",
       "search": "Aucun utilisateur ne correspond à votre recherche.",
       "clear": "Effacer la recherche",
-      "clear_filters": "Effacer les filtres"
+      "clear_filters": "Effacer les filtres",
+      "sso_body": "Avec l'authentification unique, les personnes apparaissent ici après leur première connexion."
     },
     "badge": {
       "twofa": "2FA activée",
@@ -1344,7 +1340,21 @@
       "done_body": "Transmettez ces identifiants à {{name}}. Le mot de passe ne sera plus affiché après la fermeture de cette fenêtre.",
       "done_must_change": "Un nouveau mot de passe lui sera demandé à la première connexion.",
       "copy_credentials": "Copier les identifiants",
-      "done": "Terminé"
+      "done": "Terminé",
+      "api_keys": {
+        "title": "Clés API",
+        "description": "Les utilisateurs créent et révoquent leurs propres clés depuis les paramètres du chat.",
+        "enable": "Peut créer des clés API",
+        "enable_description": "Permet à cet utilisateur de générer des clés personnelles pour appeler l'API.",
+        "max_keys": "Nombre maximal de clés actives",
+        "max_days": "Durée de validité maximale (jours)",
+        "range_hint": "De {{min}} à {{max}}",
+        "range_error": "Saisissez un nombre entier de {{min}} à {{max}}",
+        "revoke_warning": "L'enregistrement révoquera immédiatement les clés API actives de cet utilisateur ({{count}}).",
+        "revoke_warning_none": "Après l'enregistrement, l'utilisateur ne pourra plus créer de clés API et toute clé existante sera révoquée immédiatement.",
+        "badge": "Clés API {{active}}/{{max}}",
+        "badge_title": "{{active}} clés API actives sur {{max}} autorisées"
+      }
     },
     "profiles": {
       "title": "Accès aux profils",
@@ -1377,7 +1387,9 @@
       "sso_title": "Authentification unique (SSO)",
       "sso_body": "Choisissez comment les personnes se connectent et migrez les comptes existants vers votre fournisseur d'identité.",
       "tfa_title": "Authentification à deux facteurs",
-      "tfa_body": "Exige un code d'application d'authentification à chaque connexion par mot de passe, dans le chat et dans ce panneau. Ne s'applique pas au SSO."
+      "tfa_body": "Exige un code d'application d'authentification à chaque connexion par mot de passe, dans le chat et dans ce panneau. Ne s'applique pas au SSO.",
+      "signup_title": "Nouveaux comptes",
+      "signup_body": "Décidez qui obtient un compte lors de sa première connexion par authentification unique. Les comptes existants ne sont pas concernés."
     },
     "toast": {
       "updated": "Utilisateur mis à jour.",
@@ -1388,7 +1400,8 @@
       "profiles_load_failed": "Impossible de charger les profils de l'utilisateur : {{error}}",
       "save_failed": "Impossible d'enregistrer l'utilisateur : {{error}}",
       "delete_failed": "Impossible de supprimer l'utilisateur : {{error}}",
-      "reset_failed": "Impossible de réinitialiser la 2FA : {{error}}"
+      "reset_failed": "Impossible de réinitialiser la 2FA : {{error}}",
+      "sso_user_creation_disabled": "L'authentification unique est active : les comptes sont créés à la première connexion."
     },
     "filter": {
       "aria": "Filtrer par {{col}}",
@@ -1529,67 +1542,37 @@
       "c9": "Client OAuth créé : copiez les deux valeurs (masquées ici).",
       "shots_note": "Les captures viennent du portail en italien ; les libellés suivent la langue de votre compte Google. Les identifiants et adresses e-mail des images sont masqués.",
       "close": "Fermer"
-    }
-  },
-  "admin_api_keys": {
-    "title": "Clés API",
-    "subtitle": "Identifiants d’accès programmatique à la plateforme, limités aux permissions nécessaires à chacun.",
-    "new": "Nouvelle clé",
-    "search": "Rechercher par nom, préfixe ou permission",
-    "loading": "Chargement des clés…",
-    "col_key": "Clé",
-    "col_scopes": "Permissions",
-    "col_used": "Dernière utilisation",
-    "col_actions": "Actions",
-    "never": "Jamais utilisée",
-    "used_at": "{{when}}",
-    "revoke": "Révoquer la clé",
-    "revoke_aria": "Révoquer la clé {{name}}",
-    "empty_search": "Aucune clé ne correspond à la recherche.",
-    "empty": {
-      "title": "Aucune clé API pour l’instant",
-      "body": "Créez une clé pour que des applications et services externes accèdent à la plateforme avec uniquement les permissions requises."
     },
-    "secret": {
-      "title": "Clé créée : copiez-la maintenant",
-      "body": "La valeur complète ne sera plus affichée. Conservez-la en lieu sûr.",
-      "copy": "Copier",
-      "copied": "Copiée",
-      "done": "Fermer"
-    },
-    "create": {
-      "title": "Nouvelle clé API",
-      "name": "Nom",
-      "name_placeholder": "Ex. Backend de l’app mobile",
-      "scopes": "Permissions",
-      "scopes_hint": "Sélectionnez-en au moins une. N’accordez que le nécessaire.",
-      "admin_warning": "La permission admin donne un accès complet à l’administration de la plateforme.",
-      "cancel": "Annuler",
-      "submit": "Créer la clé",
-      "submitting": "Création…"
-    },
-    "scope_desc": {
-      "conversations_read": "Lire les conversations",
-      "conversations_write": "Créer et modifier les conversations",
-      "chat": "Discuter avec n’importe quel profil",
-      "chat_scoped": "Discuter uniquement avec les profils autorisés",
-      "files_read": "Lire les fichiers",
-      "files_write": "Téléverser et modifier les fichiers",
-      "admin": "Accès complet à l’administration"
-    },
-    "revoke_dialog": {
-      "title": "Révoquer cette clé ?",
-      "body": "La clé {{name}} sera révoquée immédiatement : toute application ou tout service qui l’utilise perdra l’accès. Action irréversible.",
-      "confirm_label": "Saisissez {{name}} pour confirmer",
-      "cancel": "Annuler",
-      "confirm": "Révoquer",
-      "deleting": "Révocation…"
-    },
-    "toast": {
-      "load_error": "Impossible de charger les clés API.",
-      "create_error": "Impossible de créer la clé.",
-      "revoked": "Clé révoquée.",
-      "revoke_error": "Impossible de révoquer la clé."
+    "sso_add_hint": "Avec l'authentification unique, les comptes sont créés à la première connexion de chaque personne.",
+    "sso_add_manage": "Choisir qui peut se connecter",
+    "signup_policy": {
+      "label": "Politique des nouveaux comptes",
+      "open": {
+        "title": "Tout le monde dans l'organisation",
+        "description": "Tout compte accepté par votre fournisseur d'identité obtient l'accès à la première connexion."
+      },
+      "allowlist": {
+        "title": "Uniquement les adresses listées",
+        "description": "Seuls les e-mails et domaines ci-dessous peuvent créer un compte. Utile pour un déploiement progressif."
+      },
+      "closed": {
+        "title": "Aucun nouveau compte",
+        "description": "Seules les personnes qui ont déjà un compte peuvent se connecter."
+      },
+      "list_label": "E-mails et domaines autorisés",
+      "list_hint": "Un par ligne : un e-mail complet (nom@entreprise.fr) ou un domaine entier (@entreprise.fr).",
+      "count_one": "{{count}} entrée",
+      "count_other": "{{count}} entrées",
+      "empty_warning": "La liste est vide : personne de nouveau ne pourra se connecter tant que vous n'aurez pas ajouté d'adresse.",
+      "save": "Enregistrer la politique",
+      "saving": "Enregistrement…",
+      "saved": "Politique des nouveaux comptes enregistrée.",
+      "error": {
+        "invalid_entry": "« {{entry}} » n'est pas un e-mail ou un domaine valide (utilisez nom@entreprise.fr ou @entreprise.fr).",
+        "too_long": "Trop d'entrées : le maximum est {{max}}.",
+        "generic": "Impossible d'enregistrer la politique.",
+        "load": "Impossible de charger la politique des nouveaux comptes."
+      }
     }
   },
   "admin_security": {

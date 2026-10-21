@@ -908,24 +908,6 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
         else "0"
     )
 
-    print("\n--- Opzionale: API key bootstrap /v1 ---\n")
-    if _prompt_yesno(
-        "Impostare AION_API_KEY_BOOTSTRAP (solo dev)?",
-        bool(state.get("AION_API_KEY_BOOTSTRAP", "").strip()),
-    ):
-        if _prompt_yesno(
-            "Generare valore casuale?",
-            not bool(state.get("AION_API_KEY_BOOTSTRAP", "").strip()),
-        ):
-            state["AION_API_KEY_BOOTSTRAP"] = f"aion_dev_{secrets.token_urlsafe(24)}"
-            print("  → Salvata in .env; non committare.")
-        else:
-            state["AION_API_KEY_BOOTSTRAP"] = _prompt_str(
-                "Valore", state.get("AION_API_KEY_BOOTSTRAP", ""), secret=True
-            )
-    else:
-        state["AION_API_KEY_BOOTSTRAP"] = ""
-
     print("\n--- Observability / Telemetry ---\n")
     state["AION_ENV"] = _prompt_choice(
         "Etichetta ambiente (AION_ENV):",
@@ -1085,6 +1067,17 @@ def run_advanced(state: Dict[str, str]) -> Dict[str, str]:
     return state
 
 
+async def _sso_login_active(tenant_id: str) -> bool:
+    """True se il tenant usa gia' il login SSO: niente nuovi utenti con password."""
+    try:
+        from src.auth.sso.login_mode import get_login_settings
+
+        settings = await get_login_settings(tenant_id)
+    except Exception:
+        return False
+    return settings.get("login_mode", "password") != "password"
+
+
 async def _bootstrap_admin_default(
     *,
     merged_env: Dict[str, str],
@@ -1109,6 +1102,13 @@ async def _bootstrap_admin_default(
         return
 
     if await admin_exists(tenant_id=tenant_id):
+        return
+
+    if await _sso_login_active(tenant_id):
+        print(
+            "\n→ Login SSO attivo: admin di default non creato. "
+            "Per recuperare l'accesso usa `python -m src.auth.recover`.\n"
+        )
         return
 
     identifier = (
@@ -1178,6 +1178,13 @@ async def _bootstrap_chat_user_coroutine(
 
     # Creazione utente chat: solo se il login chat e' attivo.
     if not chat_auth_enabled:
+        return
+
+    if await _sso_login_active(tenant_id):
+        print(
+            "\n→ Login SSO attivo: gli account vengono creati al primo accesso SSO; "
+            "nessun utente con password creato.\n"
+        )
         return
 
     if interactive:

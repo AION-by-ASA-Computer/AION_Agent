@@ -14,7 +14,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import AliasChoices, BaseModel, Field
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
-from src.api.ownership import chat_user_id, claim_conversation_for_write
+from src.api.auth.scopes import Scope
+from src.api.ownership import chat_user_id_scope, claim_conversation_for_write
 from src.data.engine import get_async_session_maker
 from src.data.history_bridge import (
     fetch_message_by_id,
@@ -109,7 +110,7 @@ async def list_conversations_chat_ui(
     include_threads: bool = Query(
         False, description="Include side threads (child conversations) in the list"
     ),
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     _require_unified()
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
@@ -222,7 +223,7 @@ class SideThreadCreateBody(BaseModel):
 @router.get("/conversations/{conv_id}/threads")
 async def list_side_threads_chat_ui(
     conv_id: str,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     _require_unified()
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
@@ -250,7 +251,7 @@ async def list_side_threads_chat_ui(
 async def create_side_thread_chat_ui(
     conv_id: str,
     body: SideThreadCreateBody,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     _require_unified()
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
@@ -342,7 +343,7 @@ async def create_side_thread_chat_ui(
 @router.post("/conversations")
 async def create_conversation_chat_ui(
     body: ConversationCreateBody,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     _require_unified()
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
@@ -372,7 +373,7 @@ async def create_conversation_chat_ui(
 @router.get("/conversations/{conv_id}/stream-status")
 async def get_conversation_stream_status_chat_ui(
     conv_id: str,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     """Whether a /chat SSE turn is still running (client reconnect after navigation)."""
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
@@ -420,7 +421,7 @@ async def get_conversation_messages_chat_ui(
     conv_id: str,
     include_plan_internal: bool = False,
     include_archived: bool = True,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     """Retrieve full message history for chat-ui (display). Includes archived rows by default.
 
@@ -548,7 +549,7 @@ async def get_conversation_messages_chat_ui(
 @router.get("/conversations/{conv_id}")
 async def get_conversation_chat_ui(
     conv_id: str,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     _require_unified()
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
@@ -602,7 +603,7 @@ class ConversationUpdateMetadataBody(BaseModel):
 async def update_conversation_metadata_chat_ui(
     conv_id: str,
     body: ConversationUpdateMetadataBody,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     _require_unified()
     # Upsert con id scelto dal client: la sessione puo' gia' essere di altri.
@@ -663,7 +664,7 @@ async def update_conversation_metadata_chat_ui(
 async def delete_turn_chat_ui(
     conv_id: str,
     message_id: str,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Prune conversation from the specified user message, deleting it and all subsequent turns, steps, and attachments."""
     _require_unified()
@@ -771,7 +772,7 @@ class StepsBulkBody(BaseModel):
 async def save_partial_message_chat_ui(
     conv_id: str,
     body: MessageCreateBody,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Salva (o ignora se già presente) un messaggio assistente — usato per risposta parziale su Stop."""
     _require_unified()
@@ -849,7 +850,7 @@ async def patch_message_timeline_chat_ui(
     conv_id: str,
     message_id: str,
     body: MessageTimelinePatchBody,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Aggiorna solo timeline_json (es. backup client a fine stream)."""
     _require_unified()
@@ -872,7 +873,7 @@ async def rate_message_chat_ui(
     conv_id: str,
     message_id: str,
     body: MessageRateBody,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Save user rating and comments for a message."""
     _require_unified()
@@ -896,7 +897,7 @@ async def save_partial_steps_chat_ui(
     conv_id: str,
     message_id: str,
     body: StepsBulkBody,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Salva in bulk step parziali (tool call) associati a un messaggio assistente."""
     _require_unified()
@@ -958,7 +959,7 @@ async def save_partial_steps_chat_ui(
 @router.delete("/conversations/{conv_id}")
 async def delete_conversation_chat_ui(
     conv_id: str,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     _require_unified()
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"

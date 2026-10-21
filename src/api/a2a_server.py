@@ -6,7 +6,9 @@ from ..main import get_agent
 from ..agent_pipeline import AgentPipeline
 from ..identity import sanitize_user_id
 from ..session_workspace import normalize_session_id
-from .auth_login import ChatAuthIdentity, require_chat_auth
+from .auth.scopes import Scope
+from .auth_login import ChatAuthIdentity, require_chat_scope
+from .profile_access import enforce_profile_access
 from .ownership import claim_conversation_for_write, effective_user_id
 import uuid
 
@@ -30,7 +32,7 @@ async def read_agent_card(profile_name: str, request: Request):
 async def invoke_agent(
     msg: A2AMessage,
     x_aion_origin: str = Header(None),
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
 ):
     """
     JSON-RPC entry point per chiamate Agent-to-Agent.
@@ -54,6 +56,8 @@ async def invoke_agent(
         session_id = normalize_session_id(session_id)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+    profile_name = await enforce_profile_access(auth.user_row_id, profile_name)
 
     if auth.via == "anonymous":
         user_id = sanitize_user_id(f"a2a_{x_aion_origin or 'external'}")
