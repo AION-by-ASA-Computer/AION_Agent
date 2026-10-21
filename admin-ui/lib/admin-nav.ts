@@ -5,7 +5,6 @@ import {
   Clock,
   FlaskConical,
   HeartPulse,
-  KeyRound,
   LayoutDashboard,
   Server,
   Settings,
@@ -70,7 +69,6 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     labelKey: "admin_nav.groups.access",
     items: [
       { id: "users", href: "/users", icon: Users, labelKey: "admin_nav.users" },
-      { id: "api_keys", href: "/api-keys", icon: KeyRound, labelKey: "admin_nav.api_keys" },
       { id: "security", href: "/security", icon: ShieldCheck, labelKey: "admin_nav.security" },
     ],
   },

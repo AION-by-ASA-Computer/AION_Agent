@@ -62,6 +62,7 @@ Backend (`.env`): `AION_CORS_ORIGINS` can list `http://localhost:8003`; default 
 - `GET /v1/integrations/status`, `GET /v1/integrations`, `POST /v1/integrations/credentials` — state and MCP credentials per user (Bearer chat; see [MCP Integrations (API)](../api-and-runtime/mcp-integrations-api.md))
 - `GET|PUT /v1/runtime-settings` — allowlisted turn limits and generation kwargs (sidebar Tunings)
 - `POST|PATCH|DELETE /v1/runtime-settings/presets` — per-user named snapshots (max 20)
+- `GET|POST /v1/me/api-keys`, `DELETE /v1/me/api-keys/{id}` — personal API keys (Settings → API keys; see [API keys](../security/api-keys.md))
 
 ## Sidebar tunings (runtime + presets)
 
@@ -75,7 +76,9 @@ Hard ceilings (cannot be raised from the UI): 200 agent steps, 200 tool calls pe
 
 ## User settings (`/settings`)
 
-Full-page route (profile menu → **Impostazioni**): profile, appearance, security, instructions (`USER.md`). Same layout as before the tunings panel — not embedded in the sidebar.
+Full-page route (profile menu → **Impostazioni**): profile, appearance, security, API keys, instructions (`USER.md`). Same layout as before the tunings panel — not embedded in the sidebar.
+
+The **API keys** tab (`/settings?tab=api-keys`, shown only with a chat login token) lets the user create, list and revoke personal keys within the policy set by the admin (enabled flag, max active keys, max lifetime). The full key is shown only once at creation. Keys act as the user; see [API keys](../security/api-keys.md).
 
 ## My integrations
 

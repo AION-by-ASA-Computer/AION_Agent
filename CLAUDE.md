@@ -356,6 +356,8 @@ Switching from password to an SSO mode places the system in a migration state.
 - Existing users must log in via password first, and are then blocked by a required "link account" modal.
 - If users don't have a password set, the backend generates temporary 12-char passwords and returns them to the admin to distribute securely.
 - No auto-provisioning links identities by email automatically.
+- In SSO mode new accounts are created **only** at first SSO login: `POST /admin/users` returns 409 `sso_active_user_creation_disabled`, and the default-admin/setup bootstraps are skipped.
+- New-account policy (`auth_settings.sso_signup_policy`: `open` | `allowlist` | `closed`, list of emails/`@domains` in `sso_signup_allowlist`) via `GET/PUT /admin/auth/signup-policy`; enforced in `resolve_user` only for new accounts (`sso_signup_closed`, `sso_signup_not_allowed`).
 - Temp passwords expire after `AION_SSO_TEMP_PASSWORD_TTL_DAYS` (default 7); local passwords are cleared on link, admins included.
 - Every switch to SSO starts a new migration: only identities confirmed after `migration_started_at` count as migrated.
 - Break-glass: `AION_SSO_FORCE_PASSWORD=1` restores password login for everyone; `python -m src.auth.recover set-password <user>` (or `docker compose -f docker-compose.ghcr.yml exec backend ...`) gives a migrated admin a temporary password; the admin-ui login then shows the password form again.

@@ -34,11 +34,11 @@ export function FontSizeSlider({
       </span>
       <div className="relative min-w-0 flex-1 pt-1 pb-1">
         <div
-          className="pointer-events-none absolute top-1/2 right-0 left-0 h-1 -translate-y-1/2 rounded-full bg-muted"
+          className="pointer-events-none absolute top-1/2 right-0 left-0 h-1 -translate-y-1/2 rounded-full bg-border"
           aria-hidden
         />
         <div
-          className="pointer-events-none absolute top-1/2 left-0 h-1 -translate-y-1/2 rounded-full bg-primary/70"
+          className="pointer-events-none absolute top-1/2 left-0 h-1 -translate-y-1/2 rounded-full bg-foreground"
           style={{ width: `${pct}%` }}
           aria-hidden
         />

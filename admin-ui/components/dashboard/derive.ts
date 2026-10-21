@@ -3,7 +3,6 @@ import {
   Brain,
   Clock,
   Database,
-  KeyRound,
   Plug,
   Layers,
   Cpu,
@@ -58,7 +57,6 @@ export type MapEdge = {
 /** The request path: callers pick a profile, the profile is handed to the model, the model works with its capabilities. */
 export const MAP_EDGES: MapEdge[] = [
   { from: "users", to: "profiles", kind: "uses" },
-  { from: "api_keys", to: "profiles", kind: "uses" },
   { from: "jobs", to: "profiles", kind: "uses" },
   { from: "profiles", to: "models", kind: "uses" },
   { from: "profiles", to: "skills", kind: "contains", over: "models" },
@@ -371,7 +369,6 @@ export function deriveDashboard(d: DashboardData, t: T, locale: string) {
           users?.length,
           activeUsers !== undefined ? t(`${k}.nodes.users_active`, { count: activeUsers }) : "—",
         ),
-        node("api_keys", KeyRound, "/api-keys", s?.api_keys?.total, t(`${k}.nodes.api_keys_detail`)),
         node(
           "jobs",
           Clock,

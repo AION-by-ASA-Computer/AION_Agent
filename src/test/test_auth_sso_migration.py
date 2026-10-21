@@ -404,3 +404,60 @@ async def test_email_follows_new_provider(env, monkeypatch):
         _claims("g1", "Bob@Gmail.com"), {}, PROVIDER, migration_active=True
     )
     assert (await env["get_user"](bob)).email == "bob@gmail.com"
+
+
+# --- Policy nuovi account SSO ---------------------------------------------
+
+
+@with_env
+async def test_signup_closed_blocks_new_but_not_existing(env, monkeypatch):
+    prov = env["prov"]
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    existing = await prov.resolve_user(_claims("old", "old@x.io"), {}, PROVIDER)
+
+    await env["set"](sso_signup_policy="closed")
+    with pytest.raises(ValueError, match="sso_signup_closed"):
+        await prov.resolve_user(_claims("new", "new@x.io"), {}, PROVIDER)
+    # Chi ha gia' un'identita' collegata continua ad accedere.
+    again = await prov.resolve_user(_claims("old", "old@x.io"), {}, PROVIDER)
+    assert again["id"] == existing["id"]
+
+
+@with_env
+async def test_signup_allowlist_emails_and_domains(env, monkeypatch):
+    import json
+
+    prov = env["prov"]
+    await env["set"](
+        login_mode="google",
+        sso_origin="first_setup",
+        sso_signup_policy="allowlist",
+        sso_signup_allowlist=json.dumps(["anna@x.io", "@pilot.x.io"]),
+    )
+    assert await prov.resolve_user(_claims("a", "Anna@X.io"), {}, PROVIDER)
+    assert await prov.resolve_user(_claims("p", "piero@pilot.x.io"), {}, PROVIDER)
+    with pytest.raises(ValueError, match="sso_signup_not_allowed"):
+        await prov.resolve_user(_claims("o", "other@x.io"), {}, PROVIDER)
+    # Il dominio non copre i sottodomini o i domini che lo contengono.
+    with pytest.raises(ValueError, match="sso_signup_not_allowed"):
+        await prov.resolve_user(_claims("s", "s@sub.pilot.x.io"), {}, PROVIDER)
+
+
+@with_env
+async def test_signup_open_is_default(env, monkeypatch):
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    settings = await env["lm"].get_login_settings("default")
+    assert settings["sso_signup_policy"] == "open"
+    assert settings["sso_signup_allowlist"] == []
+    assert await env["prov"].resolve_user(_claims("n", "n@x.io"), {}, PROVIDER)
+
+
+def test_allowlist_entry_normalization():
+    from src.auth.sso.login_mode import normalize_allowlist_entry, signup_denied_reason
+
+    assert normalize_allowlist_entry("  Mario.Rossi@Azienda.IT ") == "mario.rossi@azienda.it"
+    assert normalize_allowlist_entry("@Azienda.it") == "@azienda.it"
+    for bad in ("azienda.it", "@", "@azienda", "mario@", "a b@x.it", "@-x.it"):
+        assert normalize_allowlist_entry(bad) is None, bad
+    assert signup_denied_reason("a@x.it", "bogus", []) is None  # policy ignota -> open
+    assert signup_denied_reason(None, "allowlist", ["@x.it"]) == "sso_signup_not_allowed"

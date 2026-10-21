@@ -28,13 +28,16 @@ from .orchestration import router as orchestration_router
 from .research import router as research_router
 from .plan_execution import router as plan_execution_router
 from .v1 import api_v1_router
-from .auth_login import ChatAuthIdentity, require_chat_auth
+from .auth.scopes import Scope
+from .auth_login import ChatAuthIdentity, require_chat_auth, require_chat_scope
 from .ownership import (
     assert_conversation_access,
     chat_user_id,
+    chat_user_id_scope,
     claim_conversation_for_write,
     effective_user_id,
 )
+from .profile_access import enforce_profile_access
 from .web_search_params import normalize_web_search_restrict_hosts
 from src.version import __version__
 
@@ -134,6 +137,17 @@ async def _bootstrap_default_admin_user() -> None:
 
     tenant_id = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     if await admin_exists(tenant_id=tenant_id):
+        return
+
+    from src.auth.sso.login_mode import get_login_settings
+
+    # Con SSO attivo niente account con password: il recupero passa da
+    # ``python -m src.auth.recover`` / AION_SSO_FORCE_PASSWORD.
+    if (await get_login_settings(tenant_id)).get("login_mode", "password") != "password":
+        logger.warning(
+            "No admin found but SSO login is active: default admin not created. "
+            "Use `python -m src.auth.recover` to regain access."
+        )
         return
 
     identifier = (
@@ -552,7 +566,7 @@ async def _deprecation_headers(request: Request, call_next):
 @app.post("/chat/stop")
 async def chat_stop_compat(
     session_id: str = Query(..., description="conversation / session id"),
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CHAT)),
 ):
     """Interrompe lo stream agent per sessione (stesso meccanismo di /v1/chat/stop)."""
     await assert_conversation_access(session_id.strip(), user_id)
@@ -585,7 +599,7 @@ async def get_allowed_profiles_for_user(user_id: Optional[str]) -> List[dict]:
 
 @app.get("/profiles")
 async def profiles_list_compat(
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
 ):
     """Compat: alcuni client chiamano /profiles invece di /admin/profiles."""
     return await get_allowed_profiles_for_user(_auth.user_row_id)
@@ -690,7 +704,7 @@ _GLOBAL_LOOP = None
 async def chat(
     request: ChatRequest,
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
 ):
     logger.info(">>> API: Received chat request for session %s", request.session_id)
     global _GLOBAL_LOOP
@@ -701,6 +715,7 @@ async def chat(
     user_id = effective_user_id(
         auth, header_user_id=x_aion_user_id, body_user_id=request.user_id
     )
+    request.profile = await enforce_profile_access(auth.user_row_id, request.profile)
 
     from src.runtime.agent_mode_resolve import resolve_agent_mode
 
@@ -944,7 +959,7 @@ async def chat(
 @app.get("/sessions/{session_id}/charts")
 async def get_session_charts(
     session_id: str,
-    user_id: str = Depends(chat_user_id),
+    user_id: str = Depends(chat_user_id_scope(Scope.CHAT)),
 ):
     """
     Chart accumulati nel turno (stesso processo) per la sessione chat-ui.

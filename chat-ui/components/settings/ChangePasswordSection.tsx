@@ -1,12 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, CheckCircle2, KeyRound, Loader2 } from "lucide-react";
+import { KeyRound, Loader2 } from "lucide-react";
 
 import { apiBase } from "@/lib/config";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { useT } from "@/lib/i18n/use-t";
-import { SettingsFieldRow } from "./SettingsCard";
+import { Field, FieldGrid, Group, Note, inputCls, solidBtn } from "./ui";
 
 export function ChangePasswordSection({
   onSuccess,
@@ -19,13 +19,11 @@ export function ChangePasswordSection({
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
   const [err, setErr] = useState<string | null>(null);
-  const [ok, setOk] = useState(false);
   const [loading, setLoading] = useState(false);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    setOk(false);
     if (newPw.length < 6) {
       setErr(t("settings.security.password_min"));
       return;
@@ -53,75 +51,67 @@ export function ChangePasswordSection({
         setErr(j?.detail || t("settings.security.password_error"));
         return;
       }
-      setOk(true);
       setOldPw("");
       setNewPw("");
       setConfirmPw("");
       onSuccess?.(t("settings.security.password_updated"));
+    } catch {
+      setErr(t("toast.conn_error"));
     } finally {
       setLoading(false);
     }
   }
 
-  const inputClass =
-    "focus-ring w-full rounded-xl border border-border/50 bg-background/50 px-3.5 py-2.5 text-sm text-foreground outline-none transition focus:border-primary focus:ring-1 focus:ring-primary";
+  const filled = oldPw.length > 0 && newPw.length > 0 && confirmPw.length > 0;
 
   return (
-    <form onSubmit={submit} className="space-y-1">
-      <SettingsFieldRow label={t("settings.security.current_password")}>
-        <input
-          type="password"
-          className={inputClass}
-          value={oldPw}
-          onChange={(e) => setOldPw(e.target.value)}
-          autoComplete="current-password"
-        />
-      </SettingsFieldRow>
-      <SettingsFieldRow label={t("settings.security.new_password")}>
-        <input
-          type="password"
-          className={inputClass}
-          value={newPw}
-          onChange={(e) => setNewPw(e.target.value)}
-          autoComplete="new-password"
-        />
-      </SettingsFieldRow>
-      <SettingsFieldRow
-        label={t("settings.security.confirm_password")}
-        hint={t("settings.security.password_hint")}
+    <form onSubmit={submit}>
+      <Group
+        title={t("settings.security.password_title")}
+        description={t("settings.security.password_desc")}
+        footer={
+          <button type="submit" disabled={loading || !filled} className={solidBtn}>
+            {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <KeyRound className="h-3.5 w-3.5" aria-hidden />}
+            {t("settings.security.update_password")}
+          </button>
+        }
       >
-        <input
-          type="password"
-          className={inputClass}
-          value={confirmPw}
-          onChange={(e) => setConfirmPw(e.target.value)}
-          autoComplete="new-password"
-        />
-      </SettingsFieldRow>
-
-      {err ? (
-        <div className="flex items-start gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
-          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <span>{err}</span>
-        </div>
-      ) : null}
-      {ok ? (
-        <div className="flex items-center gap-2 rounded-xl border border-primary/40 bg-primary/10 px-3 py-2.5 text-xs text-primary">
-          <CheckCircle2 className="h-4 w-4" aria-hidden />
-          <span>{t("settings.security.password_updated")}</span>
-        </div>
-      ) : null}
-
-      <div className="flex justify-end pt-3">
-        <button
-          type="submit"
-          disabled={loading}
-          className="focus-ring inline-flex items-center gap-2 rounded-2xl bg-gradient-to-r from-rose-500 to-red-600 hover:from-rose-600 hover:to-red-700 px-5 py-2.5 text-xs font-bold text-white shadow-md shadow-rose-500/25 border border-rose-400/30 backdrop-blur-xl transition-all duration-200 hover:scale-[1.01] active:scale-[0.98] disabled:opacity-50 cursor-pointer"
-        >
-          {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <KeyRound className="h-4 w-4" aria-hidden />}
-          {t("settings.security.update_password")}
-        </button>
-      </div>
+        <FieldGrid>
+          <Field label={t("settings.security.current_password")} wide>
+            <input
+              type="password"
+              className={`${inputCls} md:max-w-[calc(50%-var(--spacing)*2.5)]`}
+              value={oldPw}
+              onChange={(e) => setOldPw(e.target.value)}
+              autoComplete="current-password"
+            />
+          </Field>
+          <Field label={t("settings.security.new_password")} hint={t("settings.security.password_hint")}>
+            <input
+              type="password"
+              className={inputCls}
+              value={newPw}
+              onChange={(e) => setNewPw(e.target.value)}
+              autoComplete="new-password"
+              minLength={6}
+            />
+          </Field>
+          <Field label={t("settings.security.confirm_password")}>
+            <input
+              type="password"
+              className={inputCls}
+              value={confirmPw}
+              onChange={(e) => setConfirmPw(e.target.value)}
+              autoComplete="new-password"
+            />
+          </Field>
+          {err ? (
+            <div className="md:col-span-2">
+              <Note tone="error">{err}</Note>
+            </div>
+          ) : null}
+        </FieldGrid>
+      </Group>
     </form>
   );
 }

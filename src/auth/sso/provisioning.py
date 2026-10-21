@@ -144,6 +144,20 @@ async def resolve_user(
         if not email:
             raise ValueError("email_required_for_provisioning")
 
+        # Policy nuovi account (open / allowlist / closed): vale solo qui,
+        # chi ha gia' un'identita' collegata e' passato dal ramo sopra.
+        from src.auth.sso.login_mode import get_login_settings, signup_denied_reason
+
+        settings = await get_login_settings(tenant_id)
+        denied = signup_denied_reason(
+            email,
+            settings.get("sso_signup_policy", "open"),
+            settings.get("sso_signup_allowlist", []),
+        )
+        if denied:
+            logger.info("SSO signup denied for %s via %s: %s", email, provider, denied)
+            raise ValueError(denied)
+
         # Verifica allowed_domains (fix 0.7) — già verificata in id_token,
         # ma ri-verifichiamo qui per sicurezza.
         allowed_domains = provider_config.get("allowed_domains", [])

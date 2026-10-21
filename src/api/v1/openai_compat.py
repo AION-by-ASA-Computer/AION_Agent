@@ -31,7 +31,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
-from src.api.auth_login import ChatAuthIdentity, require_chat_auth
+from src.api.auth.scopes import Scope
+from src.api.auth_login import ChatAuthIdentity, require_chat_scope
 from src.api.ownership import claim_conversation_for_write
 from src.api.v1.chat import _resolve_chat_user_id
 from src.session_workspace import normalize_session_id
@@ -455,7 +456,7 @@ async def _resolve_profile(
 
 
 @router.get("/models")
-async def list_models(auth: ChatAuthIdentity = Depends(require_chat_auth)):
+async def list_models(auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT))):
     profiles = await _profiles_for(auth.user_row_id)
     data = [
         model_card(p)
@@ -467,7 +468,7 @@ async def list_models(auth: ChatAuthIdentity = Depends(require_chat_auth)):
 @router.get("/models/{model_id}")
 async def retrieve_model(
     model_id: str,
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
 ):
     slug, provider = split_model(model_id)
     if not slug:
@@ -491,7 +492,7 @@ async def retrieve_model(
 @router.post("/chat/completions")
 async def chat_completions(
     body: ChatCompletionBody,
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
     x_aion_conversation_id: Optional[str] = Header(
         None, alias="X-AION-Conversation-Id"

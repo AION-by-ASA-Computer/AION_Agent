@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useSyncExternalStore } from "react";
-import { Check, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, Loader2, Pencil, Plus, Save, Trash2, X } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
@@ -16,6 +16,7 @@ import {
   subscribeRuntimeSettings,
   valuesEqual,
 } from "@/lib/runtime/runtime-settings-store";
+import { Badge, Group, iconBtn, inputCls, outlineBtn, solidBtn } from "./ui";
 
 export function RuntimePresetsPanel() {
   const t = useT();
@@ -31,8 +32,7 @@ export function RuntimePresetsPanel() {
 
   const keys = sidebarRuntimeSchema().map((f) => f.key);
   const active = snap.presets.find((p) => p.id === snap.activePresetId);
-  const dirty =
-    Boolean(active) && !valuesEqual(snap.values, active?.values || {}, keys);
+  const dirty = Boolean(active) && !valuesEqual(snap.values, active?.values || {}, keys);
 
   async function handleCreate() {
     const name = newName.trim();
@@ -43,106 +43,130 @@ export function RuntimePresetsPanel() {
     if (ok) setNewName("");
   }
 
+  async function handleSaveActive() {
+    setBusy(true);
+    await saveActiveRuntimePreset();
+    setBusy(false);
+  }
+
+  function commitRename(id: string) {
+    const name = renameValue.trim();
+    if (name) void renameRuntimePreset(id, name);
+    setRenamingId(null);
+  }
+
   return (
-    <div className="space-y-3 px-2 pb-4">
-      <p className="text-[0.7rem] leading-snug text-muted-foreground">{t("settings.presets.hint")}</p>
-      <div className="flex gap-1.5">
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          placeholder={t("settings.presets.name_placeholder")}
-          maxLength={40}
-          className="h-8 min-w-0 flex-1 rounded-md border border-border/50 bg-background px-2 text-xs"
-        />
-        <button
-          type="button"
-          disabled={busy || !newName.trim()}
-          onClick={() => void handleCreate()}
-          className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-2 text-[0.7rem] font-semibold text-primary-foreground disabled:opacity-50"
+    <>
+      <Group title={t("settings.presets.new_title")} description={t("settings.presets.hint")}>
+        <form
+          className="flex flex-col gap-2 px-5 py-4 sm:flex-row"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void handleCreate();
+          }}
         >
-          <Plus className="h-3.5 w-3.5" aria-hidden />
-          {t("settings.presets.save_as")}
-        </button>
-      </div>
-      {dirty ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void saveActiveRuntimePreset()}
-          className="w-full rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5 text-[0.7rem] font-medium text-foreground"
-        >
-          {t("settings.presets.save_active")}
-        </button>
-      ) : null}
-      <ul className="space-y-1">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            placeholder={t("settings.presets.name_placeholder")}
+            aria-label={t("settings.presets.name_placeholder")}
+            maxLength={40}
+            className={cn(inputCls, "py-0 sm:max-w-sm h-9")}
+          />
+          <button type="submit" disabled={busy || !newName.trim()} className={solidBtn}>
+            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Plus className="h-3.5 w-3.5" aria-hidden />}
+            {t("settings.presets.save_as")}
+          </button>
+        </form>
+      </Group>
+
+      <Group
+        title={t("settings.presets.list_title")}
+        action={
+          dirty ? (
+            <button type="button" disabled={busy} onClick={() => void handleSaveActive()} className={outlineBtn}>
+              <Save className="h-3.5 w-3.5" aria-hidden />
+              {t("settings.presets.save_active")}
+            </button>
+          ) : null
+        }
+      >
         {snap.presets.length === 0 ? (
-          <li className="px-1 py-3 text-center text-[0.7rem] text-muted-foreground">
-            {t("settings.presets.empty")}
-          </li>
+          <p className="px-5 py-8 text-center text-sm text-muted-foreground">{t("settings.presets.empty")}</p>
         ) : (
-          snap.presets.map((preset) => {
-            const isActive = preset.id === snap.activePresetId;
-            return (
-              <li
-                key={preset.id}
-                className={cn(
-                  "flex items-center gap-1 rounded-lg border px-2 py-1.5",
-                  isActive ? "border-primary/40 bg-primary/8" : "border-border/40",
-                )}
-              >
-                {renamingId === preset.id ? (
-                  <input
-                    value={renameValue}
-                    onChange={(e) => setRenameValue(e.target.value)}
-                    className="h-7 min-w-0 flex-1 rounded border border-border bg-background px-1.5 text-xs"
-                  />
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void activateRuntimePreset(preset.id)}
-                    className="min-w-0 flex-1 truncate text-left text-xs font-medium"
-                  >
-                    {preset.name}
-                    {isActive && dirty ? (
-                      <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-500" />
-                    ) : null}
-                  </button>
-                )}
-                {renamingId === preset.id ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void renameRuntimePreset(preset.id, renameValue);
-                      setRenamingId(null);
-                    }}
-                    className="rounded p-1 text-foreground hover:bg-muted/60"
-                  >
-                    <Check className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setRenamingId(preset.id);
-                      setRenameValue(preset.name);
-                    }}
-                    className="rounded p-1 text-muted-foreground hover:bg-muted/60"
-                  >
-                    <Pencil className="h-3.5 w-3.5" aria-hidden />
-                  </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => void deleteRuntimePreset(preset.id)}
-                  className="rounded p-1 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                </button>
-              </li>
-            );
-          })
+          <ul className="divide-y divide-border/40">
+            {snap.presets.map((preset) => {
+              const isActive = preset.id === snap.activePresetId;
+              const renaming = renamingId === preset.id;
+              return (
+                <li key={preset.id} className="flex min-h-14 items-center gap-3 px-5 py-2.5">
+                  {renaming ? (
+                    <form
+                      className="flex min-w-0 flex-1 items-center gap-1"
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        commitRename(preset.id);
+                      }}
+                    >
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Escape") setRenamingId(null);
+                        }}
+                        maxLength={40}
+                        aria-label={t("btn.rename")}
+                        className={cn(inputCls, "h-9 py-0 sm:max-w-sm")}
+                      />
+                      <button type="submit" aria-label={t("btn.save")} className={iconBtn}>
+                        <Check className="h-4 w-4" aria-hidden />
+                      </button>
+                      <button type="button" aria-label={t("btn.cancel")} onClick={() => setRenamingId(null)} className={iconBtn}>
+                        <X className="h-4 w-4" aria-hidden />
+                      </button>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="flex min-w-0 flex-1 items-center gap-2">
+                        <span className="truncate text-sm font-medium">{preset.name}</span>
+                        {isActive ? <Badge tone="success">{t("settings.presets.active")}</Badge> : null}
+                        {isActive && dirty ? <Badge tone="warning">{t("settings.presets.unsaved")}</Badge> : null}
+                      </div>
+                      {!isActive ? (
+                        <button type="button" onClick={() => void activateRuntimePreset(preset.id)} className={cn(outlineBtn, "h-8")}>
+                          {t("settings.presets.activate")}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setRenamingId(preset.id);
+                          setRenameValue(preset.name);
+                        }}
+                        aria-label={`${t("btn.rename")}: ${preset.name}`}
+                        title={t("btn.rename")}
+                        className={iconBtn}
+                      >
+                        <Pencil className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void deleteRuntimePreset(preset.id)}
+                        aria-label={`${t("btn.delete")}: ${preset.name}`}
+                        title={t("btn.delete")}
+                        className={cn(iconBtn, "hover:bg-destructive/10 hover:text-destructive")}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                      </button>
+                    </>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
         )}
-      </ul>
-    </div>
+      </Group>
+    </>
   );
 }

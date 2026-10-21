@@ -19,6 +19,7 @@
       "profile": "Profilo",
       "appearance": "Preferenze",
       "security": "Sicurezza",
+      "api_keys": "Chiavi API",
       "instructions": "Istruzioni",
       "tunings": "Tuning e parametri",
       "runtime": "Runtime",
@@ -33,7 +34,11 @@
       "avatar_too_large": "L'immagine deve essere inferiore a 256 KB.",
       "appearance_saved": "Preferenze profilo aggiornate.",
       "username_hint": "Identificativo di accesso. Deve essere univoco.",
-      "shortcuts_desc": "Accesso veloce alle sezioni principali dell'app."
+      "shortcuts_desc": "Accesso veloce alle sezioni principali dell'app.",
+      "photo_title": "Foto",
+      "photo_hint": "Mostrata accanto ai tuoi messaggi e nella barra laterale.",
+      "details_title": "Dati dell'account",
+      "details_desc": "Come ti vedono l'assistente e gli amministratori."
     },
     "appearance": {
       "title": "Preferenze",
@@ -57,7 +62,104 @@
       "password_updated": "Password aggiornata con successo.",
       "update_password": "Aggiorna password",
       "must_change_title": "Password temporanea",
-      "must_change_desc": "Per sicurezza, aggiorna la password prima di continuare."
+      "must_change_desc": "Per sicurezza, aggiorna la password prima di continuare.",
+      "desc": "Proteggi il tuo account."
+    },
+    "api_keys": {
+      "title": "Chiavi API",
+      "desc": "Crea chiavi personali per usare AION da script e integrazioni (es. n8n). Una chiave agisce come te, limitata agli scope che le concedi.",
+      "loading": "Caricamento chiavi API…",
+      "retry": "Riprova",
+      "disabled": "La creazione di chiavi API non è abilitata per il tuo account. Contatta l'amministratore.",
+      "counter": "{{active}} di {{max}} chiavi attive",
+      "new_key": "Nuova chiave",
+      "quota_hint": "Hai raggiunto il numero massimo di chiavi attive. Revocane una per crearne una nuova.",
+      "empty": "Non hai ancora nessuna chiave API.",
+      "created": "Creata",
+      "expires": "Scadenza",
+      "revoked_on": "Revocata",
+      "no_expiry": "Nessuna scadenza",
+      "last_used": "Ultimo utilizzo",
+      "never": "Mai",
+      "revoke": "Revoca",
+      "usage_title": "Come usare una chiave",
+      "usage_desc": "Invia la chiave in uno di questi header HTTP. Le richieste agiscono per tuo conto, limitate agli scope della chiave.",
+      "status": {
+        "active": "Attiva",
+        "expired": "Scaduta",
+        "revoked": "Revocata"
+      },
+      "scope": {
+        "chat": {
+          "label": "Chat",
+          "desc": "Invia messaggi agli agenti e ricevi le risposte."
+        },
+        "conversations_read": {
+          "label": "Lettura conversazioni",
+          "desc": "Elenca le tue conversazioni e leggine i messaggi."
+        },
+        "conversations_write": {
+          "label": "Gestione conversazioni",
+          "desc": "Crea, rinomina ed elimina le tue conversazioni."
+        },
+        "files_read": {
+          "label": "Lettura file",
+          "desc": "Elenca e scarica i file delle tue sessioni."
+        },
+        "files_write": {
+          "label": "Caricamento file",
+          "desc": "Carica file nelle tue sessioni."
+        }
+      },
+      "create": {
+        "title": "Nuova chiave API",
+        "subtitle": "La chiave verrà mostrata una sola volta, subito dopo la creazione.",
+        "name_label": "Nome",
+        "name_placeholder": "es. automazione n8n",
+        "name_hint": "Un'etichetta per ricordare dove viene usata la chiave.",
+        "scopes_label": "Permessi",
+        "scopes_hint": "Concedi solo ciò di cui l'integrazione ha davvero bisogno.",
+        "expiry_label": "Scadenza",
+        "expiry_days": "{{days}} giorni",
+        "expiry_one_day": "1 giorno",
+        "expiry_hint": "Massimo consentito: {{max}} giorni.",
+        "submit": "Crea chiave",
+        "creating": "Creazione…",
+        "cancel": "Annulla"
+      },
+      "secret": {
+        "title": "Copia la nuova chiave \"{{name}}\"",
+        "warning": "È l'unica volta in cui la chiave completa viene mostrata. Conservala in un posto sicuro: non potrai più visualizzarla.",
+        "key_label": "Chiave API",
+        "copy": "Copia",
+        "copied": "Copiata",
+        "copy_failed": "Copia automatica non riuscita. Seleziona la chiave e copiala manualmente.",
+        "dismiss": "L'ho salvata"
+      },
+      "revoke_dialog": {
+        "title": "Revoca chiave API",
+        "subtitle": "Questa azione non può essere annullata.",
+        "warning": "Le integrazioni che usano questa chiave smetteranno subito di funzionare.",
+        "desc": "Vuoi revocare la chiave",
+        "key": "Chiave",
+        "confirm": "Revoca chiave",
+        "revoking": "Revoca in corso…"
+      },
+      "toast": {
+        "created": "Chiave API creata.",
+        "revoked": "Chiave API revocata."
+      },
+      "err": {
+        "disabled": "La creazione di chiavi API non è abilitata per il tuo account. Contatta l'amministratore.",
+        "quota": "Hai raggiunto il limite di {{max}} chiavi attive. Revocane una prima di crearne una nuova.",
+        "quota_generic": "Hai raggiunto il numero massimo di chiavi attive. Revocane una prima di crearne una nuova.",
+        "invalid_scopes": "Uno o più permessi selezionati non sono consentiti per il tuo account.",
+        "invalid_expiration": "La scadenza selezionata non è consentita.",
+        "user_token_required": "Accedi con il tuo account per gestire le chiavi API.",
+        "not_found": "Chiave API non trovata.",
+        "generic": "Si è verificato un errore. Riprova."
+      },
+      "list_title": "Le tue chiavi"
     },
     "section": {
       "profile": {
@@ -104,7 +206,9 @@
         "restore": "Ripristina Default",
         "save": "Salva Istruzioni",
         "saving": "Salvataggio..."
-      }
+      },
+      "profile_locked": "Salva o annulla le modifiche prima di cambiare profilo.",
+      "user_id": "ID utente"
     },
     "tunings": {
       "title": "Tuning e parametri",
@@ -160,7 +264,24 @@
       "name_placeholder": "Nome preset",
       "save_as": "Salva come",
       "save_active": "Salva modifiche al preset attivo",
-      "empty": "Nessun preset."
+      "empty": "Nessun preset.",
+      "new_title": "Nuovo preset",
+      "list_title": "Preset salvati",
+      "active": "Attivo",
+      "unsaved": "Non salvato",
+      "activate": "Attiva",
+      "none": "Nessuno",
+      "save_to": "Aggiorna “{{name}}” con i valori attuali"
+    },
+    "ui": {
+      "nav": "Sezioni impostazioni",
+      "unsaved": "Hai modifiche non salvate",
+      "discard": "Annulla modifiche",
+      "save": "Salva modifiche",
+      "saving": "Salvataggio…",
+      "saved": "Modifiche salvate",
+      "loading": "Caricamento impostazioni…",
+      "dismiss": "Chiudi"
     }
   },
   "sidebar": {
@@ -737,7 +858,9 @@
       "exchange_failed": "Errore durante il completamento dell'accesso.",
       "link_failed": "Collegamento non riuscito.",
       "session_invalid": "Sessione scaduta, accedi di nuovo.",
-      "user_not_found": "Utente non trovato."
+      "user_not_found": "Utente non trovato.",
+      "sso_signup_closed": "Al momento non vengono accettati nuovi account. Contatta l'amministratore per richiedere l'accesso.",
+      "sso_signup_not_allowed": "Il tuo account non è ancora abilitato a questa piattaforma. Contatta l'amministratore per richiedere l'accesso."
     }
   },
   "authgate": {

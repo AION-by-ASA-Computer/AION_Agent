@@ -99,6 +99,49 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
             "totp_required_changed_at",
             "totp_required_changed_at DATETIME",
         )
+        # Policy nuovi account SSO (z8a9b0c028).
+        await _sqlite_add_column_if_missing(
+            conn,
+            "auth_settings",
+            "sso_signup_policy",
+            "sso_signup_policy VARCHAR(16) NOT NULL DEFAULT 'open'",
+        )
+        await _sqlite_add_column_if_missing(
+            conn,
+            "auth_settings",
+            "sso_signup_allowlist",
+            "sso_signup_allowlist TEXT",
+        )
+
+    # API key per-utente (y7z8a9b027): stesso motivo del blocco users.roles qui sopra.
+    if await _sqlite_table_exists(conn, "users"):
+        for col, ddl in (
+            ("can_create_api_keys", "can_create_api_keys BOOLEAN NOT NULL DEFAULT 0"),
+            ("max_api_keys", "max_api_keys INTEGER NOT NULL DEFAULT 5"),
+            ("api_key_max_ttl_days", "api_key_max_ttl_days INTEGER NOT NULL DEFAULT 90"),
+        ):
+            await _sqlite_add_column_if_missing(conn, "users", col, ddl)
+    if await _sqlite_table_exists(conn, "api_keys"):
+        await _sqlite_add_column_if_missing(
+            conn, "api_keys", "user_id", "user_id VARCHAR(64)"
+        )
+        await _sqlite_create_index_if_missing(
+            conn,
+            "ix_api_keys_user_id",
+            "CREATE INDEX IF NOT EXISTS ix_api_keys_user_id ON api_keys(user_id)",
+        )
+        await _sqlite_create_index_if_missing(
+            conn,
+            "ux_api_keys_hash",
+            "CREATE UNIQUE INDEX IF NOT EXISTS ux_api_keys_hash ON api_keys(hash)",
+        )
+        # Chiavi legacy senza proprietario: revocate (l'auth le rifiuta comunque).
+        await conn.execute(
+            text(
+                "UPDATE api_keys SET revoked_at = CURRENT_TIMESTAMP "
+                "WHERE user_id IS NULL AND revoked_at IS NULL"
+            )
+        )
 
     # Side threads (w5x6y7z025): stesso motivo del blocco users.roles qui sopra.
     if await _sqlite_table_exists(conn, "conversations"):

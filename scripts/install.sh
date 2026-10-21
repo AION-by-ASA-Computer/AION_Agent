@@ -778,7 +778,6 @@ config = {
     'AION_CREDENTIAL_ENCRYPTION_KEY': (
         os.environ.get('AION_CREDENTIAL_ENCRYPTION_KEY') or secrets.token_hex(32)
     ),
-    'AION_API_KEY_BOOTSTRAP': f"aion_dev_{secrets.token_hex(16)}",
     'REDIS_PASSWORD': redis_password,
 
     # Auth

@@ -103,7 +103,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Security and Identity',
       collapsed: false,
-      items: ['security/identity-and-chat-auth'],
+      items: ['security/identity-and-chat-auth', 'security/api-keys'],
     },
     {
       type: 'category',

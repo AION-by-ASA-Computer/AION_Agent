@@ -77,11 +77,11 @@ def test_header_trusted_only_in_open_mode_or_internal():
     assert effective_user_id(internal, header_user_id="bob") == "bob"
 
 
-def test_api_key_is_its_own_principal():
-    key = ChatAuthIdentity(via="api_key", identifier="k1", roles=["admin"])
-    assert effective_user_id(key, header_user_id="bob", body_user_id="bob") == (
-        "apikey_k1"
+def test_api_key_acts_as_its_owner():
+    key = ChatAuthIdentity(
+        via="api_key", identifier="alice", user_row_id="u-alice", api_key_id="k1"
     )
+    assert effective_user_id(key, header_user_id="bob", body_user_id="bob") == "alice"
 
 
 def test_internal_secret_grants_no_admin(monkeypatch):

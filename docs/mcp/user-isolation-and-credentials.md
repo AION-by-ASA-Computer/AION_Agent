@@ -81,7 +81,7 @@ Profilo consulente: `mcp_integration_advisor` (chat-ui `?profile=mcp_integration
 
 - **Admin** (Bearer admin): `GET/POST/PATCH/DELETE /admin/mcp-integrations` — gestione catalogo integrazioni.
 - **Chat** (Bearer token chat o secret BFF dove applicabile): `GET /v1/integrations`, `POST /v1/integrations/credentials`, `DELETE /v1/integrations/credentials/{slug}/{key}`.  
-  Autenticazione: **non** usano `X-API-Key` delle API v1 “SDK”; usano lo stesso modello degli altri endpoint user-facing protetti da `require_chat_auth`. Con `AION_CHAT_PASSWORD_AUTH=0`, la lista è anonima senza hint credenziali; **mutazioni** (salvataggio credenziali) richiedono identità non anonima.
+  Autenticazione: **non** accettano le API key (`X-API-Key`, risposta `403 api_key_not_allowed`, vedi [API keys](../security/api-keys.md)); usano lo stesso modello degli altri endpoint user-facing protetti da `require_chat_auth`. Con `AION_CHAT_PASSWORD_AUTH=0`, la lista è anonima senza hint credenziali; **mutazioni** (salvataggio credenziali) richiedono identità non anonima.
 
 ## UI
 
