@@ -4035,16 +4035,35 @@ async def update_user(
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str):
     """Delete a user."""
-    from ..data.models import User, UserProfileAccess
+    from ..auth.sso.login_mode import (
+        _check_migration_completion,
+        _invalidate_cache,
+        get_login_settings,
+    )
+    from ..data.models import User, UserProfileAccess, UserSsoIdentity
 
     async with get_async_session_maker()() as session:
+        u = await session.get(User, user_id)
+        tenant_id = (u.tenant_id if u else None) or "default"
         # Le FK CASCADE non esistono sui DB SQLite patchati: pulizia esplicita.
         await api_keys_db.delete_all_for_user(session, [user_id])
+        # Un'identita' orfana farebbe fallire il primo login SSO successivo
+        # della stessa persona (vincolo unico su provider+subject).
+        await session.execute(
+            delete(UserSsoIdentity).where(UserSsoIdentity.user_id == user_id)
+        )
         await session.execute(delete(User).where(User.id == user_id))
         await session.execute(
             delete(UserProfileAccess).where(UserProfileAccess.user_id == user_id)
         )
         await session.commit()
+
+    # Se era l'ultimo utente da migrare, la migrazione SSO si chiude adesso:
+    # altrimenti resta "attiva" e blocca i nuovi account con sso_not_linked.
+    _invalidate_cache(tenant_id)
+    provider = (await get_login_settings(tenant_id)).get("sso_provider")
+    if provider:
+        await _check_migration_completion(tenant_id, provider)
     return {"status": "success"}
 
 

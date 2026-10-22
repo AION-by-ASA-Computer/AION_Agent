@@ -22,6 +22,7 @@ from src.auth.sso.login_mode import (
     get_login_settings,
     normalize_allowlist_entry,
     pending_users_count,
+    reopen_migration,
 )
 from src.data.engine import get_async_session_maker
 from src.data.models import AuthSettings, User, UserSsoIdentity
@@ -439,7 +440,13 @@ async def unlink_sso_identity(
     identity_id: str,
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
-    """Scollega un'identità SSO da un utente."""
+    """Scollega un'identità SSO da un utente.
+
+    Se era l'identita' del provider attivo l'utente deve ricollegarsi col
+    flusso standard (password -> obbligo SSO -> collegamento): senza password
+    ne riceve una temporanea, mostrata solo in questa risposta, e la
+    migrazione viene riaperta.
+    """
     tenant = _tenant_id()
     async with get_async_session_maker()() as session:
         user = await session.get(User, user_id)
@@ -450,17 +457,23 @@ async def unlink_sso_identity(
         if not identity or identity.user_id != user_id:
             raise HTTPException(404, detail="Identità non trovata")
 
+        provider = identity.provider
+        has_password = bool(user.password_hash)
         await session.delete(identity)
         await session.commit()
 
     _invalidate_cache(tenant)
-    # Avviso se l'utente non ha più password (non potrà più accedere)
-    needs_temp = not user.password_hash
+    temp_passwords: List[Dict[str, Any]] = []
+    if provider == (await get_login_settings(tenant)).get("sso_provider"):
+        if has_password:
+            await reopen_migration(tenant)
+        else:
+            temp_passwords = await generate_temp_passwords(tenant, [user_id], provider)
     return {
         "ok": True,
         "user_id": user_id,
         "identity_id": identity_id,
-        "user_has_no_password": needs_temp,
+        "temp_passwords": temp_passwords,
     }
 
 

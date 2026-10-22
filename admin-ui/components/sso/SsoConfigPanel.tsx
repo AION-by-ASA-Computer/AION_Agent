@@ -24,6 +24,7 @@ export function SsoConfigPanel({
   forcedProvider,
   onActivate,
   onValidatedChange,
+  onConfiguredChange,
   isActive,
 }: {
   forcedProvider: "microsoft" | "google";
@@ -31,6 +32,8 @@ export function SsoConfigPanel({
   onActivate?: () => void;
   /** Notifica ogni cambio dello stato di validazione (usato dal first-setup). */
   onValidatedChange?: (validated: boolean) => void;
+  /** Stato salvato sul server: il provider e' gia' stato collegato almeno una volta. */
+  onConfiguredChange?: (configured: boolean) => void;
   isActive?: boolean;
 }) {
   const [loading, setLoading] = useState(true);
@@ -93,6 +96,7 @@ export function SsoConfigPanel({
       if (res.ok) {
         const data = await res.json();
         const active = data.find((d: any) => d.provider === forcedProvider);
+        onConfiguredChange?.(!!active?.validated_at);
         if (active) {
           setClientId(active.client_id || "");
           setDirectoryId(active.directory_tenant_id || "");

@@ -371,6 +371,30 @@ async def _check_migration_completion(tenant_id: str, provider: str) -> None:
         _invalidate_cache(tenant_id)
 
 
+async def reopen_migration(tenant_id: str) -> None:
+    """Riapre la migrazione quando un utente torna a doversi collegare (es. dopo
+    lo scollegamento dell'identita' SSO e l'emissione di una password temporanea).
+
+    Senza riapertura il form password resta nascosto (``first_setup``) e un
+    login SSO diretto finirebbe nell'auto-provisioning invece che in
+    ``sso_not_linked``. Le identita' gia' confermate restano valide:
+    ``migration_started_at`` non cambia (``None`` per chi veniva dal first_setup,
+    che fa contare ogni identita' esistente).
+    """
+    async with get_async_session_maker()() as session:
+        row = await session.get(AuthSettings, tenant_id)
+        if not row or (row.login_mode or "password") == "password":
+            return
+        if row.sso_origin == "migration" and not row.migration_completed_at:
+            return
+        row.sso_origin = "migration"
+        row.migration_completed_at = None
+        row.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+    _invalidate_cache(tenant_id)
+    logger.info("SSO migration reopened for tenant %s", tenant_id)
+
+
 async def set_login_mode(
     tenant_id: str,
     mode: str,
@@ -696,4 +720,8 @@ async def generate_temp_passwords(
         await session.commit()
 
     _invalidate_cache(tenant_id)
+    # Chi riceve una password temporanea deve (ri)collegarsi: serve il form
+    # password e la migrazione deve risultare in corso.
+    if results:
+        await reopen_migration(tenant_id)
     return results

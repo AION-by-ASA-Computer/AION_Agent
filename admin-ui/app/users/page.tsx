@@ -18,7 +18,6 @@ import { DeleteDialog } from "@/components/ui/ConfirmDialogs";
 import { SsoMigrationPanel } from "@/components/sso/SsoMigrationPanel";
 import { MigrationUsers } from "@/components/sso/MigrationUsers";
 import { TwoFactorPanel } from "@/components/sso/TwoFactorPanel";
-import { SignupPolicyPanel } from "@/components/sso/SignupPolicyPanel";
 
 const k = "admin_users";
 const GRIDS: Record<string, string> = {
@@ -1141,7 +1140,7 @@ export default function UsersPage() {
               </h2>
               <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.migration.subtitle`)}</p>
             </div>
-            <MigrationUsers />
+            <MigrationUsers onChanged={() => void loadUsers()} />
           </section>
         )}
 
@@ -1154,21 +1153,13 @@ export default function UsersPage() {
                 </h2>
                 <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.signin.sso_body`)}</p>
               </div>
-              <SsoMigrationPanel onManage={showMigration ? () => setTab("migration") : undefined} onModeChanged={() => void loadUsers()} />
+              {/* "Nuovi account" lives under the Microsoft/Google tabs: only SSO creates accounts on its own. */}
+              <SsoMigrationPanel
+                onManage={showMigration ? () => setTab("migration") : undefined}
+                onModeChanged={() => void loadUsers()}
+                onToast={setToast}
+              />
             </section>
-
-            {/* Only SSO creates accounts on its own (at first sign-in): this decides who may. */}
-            {listState === "ready" && loginMode !== "password" && (
-              <section aria-labelledby="users-signup" className="flex flex-col gap-4 border-t border-border/60 pt-8">
-                <div>
-                  <h2 id="users-signup" className="text-lg font-semibold tracking-[-0.015em]">
-                    {t(`${k}.signin.signup_title`)}
-                  </h2>
-                  <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.signin.signup_body`)}</p>
-                </div>
-                <SignupPolicyPanel onToast={setToast} />
-              </section>
-            )}
 
             {/* TOTP exists only for the classic login; with SSO the provider's own 2FA applies. */}
             {listState === "ready" && loginMode === "password" && (

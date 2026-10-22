@@ -28,6 +28,22 @@ const parseEntries = (text: string) =>
     .map((s) => s.trim())
     .filter(Boolean);
 
+/** The policy with its heading, as shown under a single sign-on provider tab. */
+export function SignupPolicySection({ onToast }: { onToast: (toast: ToastState) => void }) {
+  const t = useT();
+  return (
+    <section aria-labelledby="users-signup" className="flex flex-col gap-3">
+      <div>
+        <h3 id="users-signup" className="text-base font-semibold tracking-[-0.01em]">
+          {t("admin_users.signin.signup_title")}
+        </h3>
+        <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t("admin_users.signin.signup_body")}</p>
+      </div>
+      <SignupPolicyPanel onToast={onToast} />
+    </section>
+  );
+}
+
 /** Who can get a new account at their first single sign-on: everyone, only listed emails/domains, or nobody. */
 export function SignupPolicyPanel({ onToast }: { onToast: (toast: ToastState) => void }) {
   const t = useT();
