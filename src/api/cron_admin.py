@@ -1,4 +1,9 @@
-"""Admin CRUD for all users' scheduled jobs."""
+"""Admin CRUD for all users' scheduled jobs.
+
+Privacy: admins manage scheduling metadata only. Prompts of user-created jobs and
+any run output (assistant preview, conversation id) are never returned, and admins
+cannot point a job at an existing conversation.
+"""
 
 from __future__ import annotations
 
@@ -33,8 +38,34 @@ def _require_cron() -> None:
     pass
 
 
+def _redact_run(run: Optional[dict]) -> Optional[dict]:
+    if not run:
+        return run
+    return {
+        **run,
+        "assistant_preview": None,
+        "conversation_id": None,
+        "session_id": None,
+    }
+
+
+def _is_user_job(d: dict) -> bool:
+    return (d.get("created_by") or "user") != "admin"
+
+
 def _out(d: dict) -> ScheduledJobOut:
+    d = {**d, "last_run": _redact_run(d.get("last_run"))}
+    if _is_user_job(d):
+        d.update(prompt="", session_id=None, prompt_hidden=True)
     return ScheduledJobOut(**d)
+
+
+def _reject_session_id(session_id: Optional[str]) -> None:
+    if (session_id or "").strip():
+        raise HTTPException(
+            status_code=400,
+            detail="session_id cannot be set by admins (privacy: jobs always run in their own conversation)",
+        )
 
 
 @router.get("", response_model=ScheduledJobListResponse)
@@ -72,6 +103,7 @@ async def create_cron_job(
     body: AdminScheduledJobCreate, _admin=Depends(require_admin_role)
 ):
     _require_cron()
+    _reject_session_id(body.session_id)
     uid = sanitize_user_id(body.user_id.strip() if body.user_id else None)
     if not uid:
         raise HTTPException(status_code=400, detail="user_id is required")
@@ -83,7 +115,7 @@ async def create_cron_job(
             prompt=body.prompt,
             profile_slug=body.profile_slug,
             session_mode=body.session_mode,
-            session_id=body.session_id,
+            session_id=None,
             sql_query_project=body.sql_query_project,
             timezone=body.timezone,
             description=body.description,
@@ -106,10 +138,19 @@ async def patch_cron_job(
 ):
     _require_cron()
     patch = body.model_dump(exclude_unset=True)
+    _reject_session_id(patch.get("session_id"))
+    patch.pop("session_id", None)
+    job = await cron_db.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if _is_user_job(job):
+        locked = sorted({"prompt", "profile_slug"} & patch.keys())
+        if locked:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Fields of user-created jobs are private: {', '.join(locked)}",
+            )
     if not patch:
-        job = await cron_db.get_job(job_id)
-        if not job:
-            raise HTTPException(status_code=404, detail="Job not found")
         return _out(job)
     try:
         updated = await cron_db.update_job(job_id, patch=patch)
@@ -156,4 +197,6 @@ async def list_cron_job_runs(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     runs = await cron_db.list_runs(job_id, limit=limit)
-    return ScheduledRunListResponse(runs=[ScheduledRunOut(**r) for r in runs])
+    return ScheduledRunListResponse(
+        runs=[ScheduledRunOut(**_redact_run(r)) for r in runs]
+    )

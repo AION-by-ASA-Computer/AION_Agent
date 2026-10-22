@@ -21,7 +21,7 @@ When AION is switched from "Password Mode" to "SSO Mode" (e.g., Microsoft or Goo
 When the administrator switches the system to "Microsoft" or "Google":
 
 1. The user visits the login page. The SSO button (e.g., "Accedi con Microsoft") is displayed.
-2. If the user clicks the SSO button but they haven't linked their account yet, AION will create a *new* account for them, or show an error if auto-provisioning is disabled. (Auto-provisioning is disabled during migration by default to avoid creating duplicate ghost accounts).
+2. If the user clicks the SSO button but they haven't linked their account yet, login fails with `sso_not_linked`: while the migration is active no new account is created from an unlinked identity (this avoids duplicate ghost accounts).
 3. Therefore, existing users must log in using the **username and password form**.
 4. Upon successful password login, the API detects that the system requires SSO and the user hasn't linked their account. The API returns `sso_link_required: true`.
 5. The Chat UI intercepts this flag and displays the **Security Update Modal** (SSO Link Modal), blocking access to the chat.
@@ -38,6 +38,8 @@ Switching to an SSO mode does **not** generate passwords automatically. Users wh
 - When `clear_password_on_link` is on (default), the local password is removed as soon as the user links SSO, **admins included**. The admin who activates SSO (after `admin_validate`) counts as migrated immediately and loses the password when the switch is applied. Emergency access goes through the recovery CLI (see Break-glass).
 - While the migration is active (`origin = migration`, not completed) an IdP identity that is not yet linked can **not** create a new user: login fails with `sso_not_linked`. Only an explicit, authenticated link can attach an identity; there is never auto-linking by email.
 - The migration completes automatically when no user is pending; the password form then disappears from chat-ui.
+- **Reopening.** Unlinking a user's identity for the active provider, or generating a temporary password, after the migration has completed (or after a `first_setup`) reopens it: `migration_completed_at` is cleared, `origin` becomes `migration` and `migration_started_at` is kept, so users who are already linked stay migrated. The password form comes back in chat-ui until that user links again, and then the migration closes by itself.
+- **Unlink = standard relink.** `DELETE /admin/auth/users/{id}/sso-identities/{identity_id}` on an identity of the active provider puts the user back into the normal flow: password → `sso_link_required` → link the work account. A user without a password receives a temporary one, returned **once** in `temp_passwords` of the response and shown to the admin in the same dialog used for temporary passwords. A user who still has a password keeps it. Unlinking an identity of another provider changes nothing. While the migration is active, an SSO login whose email matches an existing account answers `sso_not_linked` (sign in with the password and link), whatever the new-account policy says.
 - Admin sign-in from admin-ui sends `client: "admin"`: the SSO/password restrictions of the chat client do not apply to users with the `admin` role.
 - In SSO mode the admin-ui login page shows an **"Accedi con Microsoft/Google"** button (`/auth/sso/start?client=admin`, callback purpose `admin_login`, handoff to `/admin/login/sso`). Only users with the `admin` role are accepted; new identities are never provisioned from this flow. The password form is shown only while at least one admin still has a local password (`admin_password_login` in `GET /auth/status`: migration still pending for an admin, or a password restored with the recovery CLI) or with `AION_SSO_FORCE_PASSWORD=1`. Once every admin has migrated, only the SSO button is shown.
 - Each switch to SSO with `origin = migration` starts a **new** migration: only identities confirmed (linked or used to sign in) after `migration_started_at` count, so identities left over from a previous migration must be confirmed again.
@@ -57,7 +59,30 @@ docker compose -f docker-compose.ghcr.yml exec backend python -m src.auth.recove
 
 The admin login page then shows the password form again (an admin has a password). `--password <value>` sets a specific password instead of a generated one.
 
-## 3. The `handoff` State
+## 3. New accounts in SSO mode
+
+With an SSO mode active, accounts are created **only** by single sign-on, at each person's first login (auto-provisioning, after the migration has completed or with `origin = first_setup`):
+
+- `POST /admin/users` returns `409 {"code": "sso_active_user_creation_disabled"}`: no new password accounts. The admin-ui hides the "Add user" button and points to the new-account policy instead.
+- The default-admin bootstrap (`AION_SETUP_ADMIN_BOOTSTRAP`, backend startup and `setup_aion_env.py`) and the setup wizard's chat user are skipped. Emergency access still goes through the recovery CLI (see Break-glass).
+
+### New-account policy
+
+Since every account of the company tenant/domain could sign in, the administrator decides who may get a **new** account (admin-ui → Users → Sign-in → *New accounts*). Stored per tenant in `auth_settings.sso_signup_policy` / `sso_signup_allowlist`:
+
+| Policy | Effect on a first SSO login | Error code |
+|--------|-----------------------------|------------|
+| `open` (default) | Every identity accepted by the provider (and its `allowed_domains`) gets an account | — |
+| `allowlist` | Only listed full emails (`mario.rossi@azienda.it`) or whole domains (`@azienda.it`, exact match, no subdomains) | `sso_signup_not_allowed` |
+| `closed` | No new accounts | `sso_signup_closed` |
+
+- The policy applies **only to new accounts**: a user whose identity is already linked keeps signing in. To revoke access, delete the user (this also removes their SSO identities, and closes the migration if they were the last pending user).
+- It is checked **before** the migration gate: while a migration is active an unknown identity that the policy rejects gets `sso_signup_closed` / `sso_signup_not_allowed`; one the policy accepts gets `sso_not_linked` (it must link from an existing account first). The admin-ui SSO login never creates accounts and always answers `sso_not_linked`.
+- It can be configured while still in password mode (e.g. before switching), and is enforced only in SSO mode. The list is kept when switching to `closed`, so a gradual rollout can be paused and resumed.
+- Entries are case-insensitive and deduplicated; at most 2000.
+- chat-ui shows a translated message for both error codes (`login.sso_error.*`).
+
+## 4. The `handoff` State
 
 Because the SSO callback flow happens in a separate browser context (or requires redirects), AION uses a `handoff` mechanism.
 
@@ -65,7 +90,7 @@ When the user completes the SSO login or link flow, they are redirected to `/log
 
 This endpoints exchanges the code for a full `access_token` and `user_id`, preventing tokens from leaking in the URL history or referer headers.
 
-## 4. API Endpoints for Migration
+## 5. API Endpoints for Migration
 
 The administrator UI interacts with the following endpoints:
 
@@ -74,7 +99,9 @@ The administrator UI interacts with the following endpoints:
 - `GET /v1/admin/auth/sso-migration/users?status=pending|migrated|exempt|no_access`: User lists per migration state.
 - `POST /v1/admin/auth/sso-migration/users/{id}/exempt`: Exempt/reinstate a user.
 - `POST /v1/admin/auth/temp-passwords`: Generate temporary passwords for selected users.
-- `DELETE /v1/admin/auth/users/{id}/sso-identities/{identity_id}`: Unlink an identity.
+- `DELETE /v1/admin/auth/users/{id}/sso-identities/{identity_id}`: Unlink an identity. For the active provider it reopens the migration and, if the user has no password, returns a temporary one in `temp_passwords`.
+- `GET /v1/admin/auth/signup-policy`: `{policy, allowlist, applies, max_entries}` (`applies` is true when an SSO mode is active).
+- `PUT /v1/admin/auth/signup-policy` `{policy: "open"|"allowlist"|"closed", allowlist: [...]}`: Saves the new-account policy. `400` with `invalid_signup_policy`, `invalid_allowlist_entry` (+ `entry`) or `allowlist_too_long` (+ `max`).
 - `GET /v1/admin/sso/providers/redirect-uri`: Redirect URI to register at the IdP (derived from the backend public URL).
 - The active provider cannot be disabled or deleted directly (`use_login_mode`, `provider_in_use`); changing its client id/secret requires re-validation but keeps it active.
 

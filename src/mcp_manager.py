@@ -288,6 +288,57 @@ def _merge_mcp_registries(
     return out
 
 
+def _is_remote_bridge(config: Dict[str, Any]) -> bool:
+    from .mcp_remote_install import is_mcp_remote_proxy_arg
+
+    if (config.get("type") or "").lower() == "remote-bridge":
+        return True
+    return any(is_mcp_remote_proxy_arg(a) for a in config.get("args") or [])
+
+
+def _server_needs_user_credentials(config: Optional[Dict[str, Any]]) -> bool:
+    """True se il server usa credenziali per utente (placeholder ${AION_USER_*})."""
+    if not config:
+        return False
+    env_block = config.get("env")
+    if isinstance(env_block, dict) and any(
+        isinstance(v, str) and "${AION_USER_" in v for v in env_block.values()
+    ):
+        return True
+    return _is_remote_bridge(config) and bool(
+        (config.get("auth_env_var") or "").strip()
+    )
+
+
+def _remote_bridge_auth_missing(
+    server_name: str, config: Dict[str, Any], env: Dict[str, Any]
+) -> Optional[str]:
+    """
+    Messaggio di errore se un remote-bridge partirebbe senza token.
+
+    Senza Bearer valido mcp-remote riceve 401 e avvia il proprio flusso OAuth
+    (registrazione dinamica + browser sul callback localhost): va evitato.
+    """
+    if not _is_remote_bridge(config):
+        return None
+    from .mcp_credential_discovery import resolve_remote_bridge_auth_env_var
+
+    var = resolve_remote_bridge_auth_env_var(config)
+    if not var or str(env.get(var) or "").strip():
+        return None
+    return (
+        f"OAuth non connesso per {server_name}: collega l'integrazione da chat-ui "
+        f"(credenziali mancanti)"
+    )
+
+
+def _missing_user_context_error(server_name: str) -> RuntimeError:
+    return RuntimeError(
+        f"contesto utente mancante per {server_name}: avvio annullato "
+        "(credenziali mancanti)"
+    )
+
+
 def _apply_mcp_home_isolation(env: Dict[str, Any], uid: str) -> None:
     """Isola HOME/XDG per processo MCP (per user_id)."""
     if os.getenv("AION_MCP_USER_HOME_ISOLATION", "1").lower() not in (
@@ -459,6 +510,12 @@ class MCPStdioWorker:
         if self._init_error is not None:
             raise self._init_error
 
+    def _abort_spawn(self, err: BaseException) -> None:
+        """Rinuncia all'avvio del processo MCP (condizione attesa, non un crash)."""
+        logger.info("MCP '%s' non avviato: %s", self.server_name, err)
+        self._init_error = err
+        self._ready.set()
+
     async def _run(self) -> None:
         try:
             config = self._manager.get_server_config(self.server_name)
@@ -505,9 +562,16 @@ class MCPStdioWorker:
                 else:
                     slug = "generic_assistant"
             else:
+                needs_user = _server_needs_user_credentials(config)
+                # Server per utente: mai il contesto __bootstrap__ (utente del warm)
+                # come ripiego per una sessione senza contesto.
                 ctx = self._manager._session_ctx.get(
-                    lookup_sid, ("generic_assistant", "default", "default")
+                    self._chat_session_id if needs_user else lookup_sid
                 )
+                if not ctx and needs_user:
+                    self._abort_spawn(_missing_user_context_error(self.server_name))
+                    return
+                ctx = ctx or ("generic_assistant", "default", "default")
                 if len(ctx) == 2:
                     slug, uid = ctx
                     tid = "default"
@@ -540,6 +604,11 @@ class MCPStdioWorker:
                 _merge_mcp_subprocess_env(env, resolved_server_env)
             apply_runtime_env_aliases(env, self.server_name, config)
             _adjust_stdio_spawn_env(env, command)
+
+            auth_missing = _remote_bridge_auth_missing(self.server_name, config, env)
+            if auth_missing:
+                self._abort_spawn(RuntimeError(auth_missing))
+                return
 
             if (
                 self.server_name == "session_sandbox"
@@ -1487,9 +1556,13 @@ class MCPManager:
             return (chat_session_id, server_name)
         if not _user_pool_enabled():
             return (chat_session_id, server_name)
-        ctx = self._session_ctx.get(chat_session_id) or self._session_ctx.get(
-            BOOTSTRAP_SESSION_ID
-        )
+        ctx = self._session_ctx.get(chat_session_id)
+        if not ctx and not _server_needs_user_credentials(
+            self.get_server_config(server_name)
+        ):
+            # Solo i server senza credenziali per utente possono riusare il pool
+            # dell'utente di bootstrap: gli altri userebbero token altrui.
+            ctx = self._session_ctx.get(BOOTSTRAP_SESSION_ID)
         if not ctx:
             return (chat_session_id, server_name)
         if len(ctx) == 2:
@@ -1533,6 +1606,8 @@ class MCPManager:
             return None
         ctx = self._session_ctx.get(chat_session_id)
         if not ctx:
+            if _server_needs_user_credentials(cfg):
+                return str(_missing_user_context_error(server_name))
             return None
         if len(ctx) == 2:
             _, uid = ctx
@@ -2028,17 +2103,15 @@ class MCPManager:
             headers = {"Authorization": f"Bearer {token}"} if token else {}
 
             # Resolve user-specific environment variables for headers/credentials
-            if chat_session_id:
-                ctx = self._session_ctx.get(
-                    chat_session_id, ("generic_assistant", "default", "default")
-                )
-                if len(ctx) == 2:
-                    slug, uid = ctx
-                    tid = "default"
-                else:
-                    slug, uid, tid = ctx
+            ctx = self._session_ctx.get(chat_session_id or "")
+            if not ctx and _server_needs_user_credentials(config):
+                raise _missing_user_context_error(name)
+            ctx = ctx or ("generic_assistant", "default", "default")
+            if len(ctx) == 2:
+                slug, uid = ctx
+                tid = "default"
             else:
-                slug, uid, tid = "generic_assistant", "default", "default"
+                slug, uid, tid = ctx
 
             resolved_env = {}
             if "env" in config:
@@ -2146,16 +2219,15 @@ class MCPManager:
                 )
             if chat_session_id:
                 env["AION_CHAT_SESSION_ID"] = chat_session_id
-                ctx = self._session_ctx.get(
-                    chat_session_id, ("generic_assistant", "default", "default")
-                )
-                if len(ctx) == 2:
-                    slug, uid = ctx
-                    tid = "default"
-                else:
-                    slug, uid, tid = ctx
+            ctx = self._session_ctx.get(chat_session_id or "")
+            if not ctx and _server_needs_user_credentials(config):
+                raise _missing_user_context_error(name)
+            ctx = ctx or ("generic_assistant", "default", "default")
+            if len(ctx) == 2:
+                slug, uid = ctx
+                tid = "default"
             else:
-                slug, uid, tid = "generic_assistant", "default", "default"
+                slug, uid, tid = ctx
             env["AION_CURRENT_PROFILE_SLUG"] = slug
             env["AION_CURRENT_USER_ID"] = uid
             env["AION_CURRENT_TENANT_ID"] = tid
@@ -2176,6 +2248,9 @@ class MCPManager:
                 _merge_mcp_subprocess_env(env, resolved_server_env)
             apply_runtime_env_aliases(env, name, config)
             _adjust_stdio_spawn_env(env, command)
+            auth_missing = _remote_bridge_auth_missing(name, config, env)
+            if auth_missing:
+                raise RuntimeError(auth_missing)
             server_params = StdioServerParameters(command=command, args=args, env=env)
             init_timeout = float(os.getenv("AION_MCP_INIT_TIMEOUT", "60"))
             is_active = False

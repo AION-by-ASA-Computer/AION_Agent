@@ -20,6 +20,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from .encrypted_types import EncryptedOAuthConfigJSON
+
 
 class Base(DeclarativeBase):
     pass
@@ -82,6 +84,17 @@ class User(Base):
     totp_locked_until: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # API key personali (migration y7z8a9b027): l'admin abilita l'utente e
+    # fissa quante chiavi attive può avere e la loro durata massima.
+    can_create_api_keys: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
+    max_api_keys: Mapped[int] = mapped_column(
+        Integer, default=5, server_default="5", nullable=False
+    )
+    api_key_max_ttl_days: Mapped[int] = mapped_column(
+        Integer, default=90, server_default="90", nullable=False
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "identifier", name="uq_users_tenant_identifier"),
@@ -94,8 +107,18 @@ class ApiKey(Base):
     tenant_id: Mapped[str] = mapped_column(
         String(64), ForeignKey("tenants.id"), nullable=False
     )
+    # Proprietario: la chiave agisce come questo utente. NULL solo sulle righe
+    # legacy (pre y7z8a9b027), sempre rifiutate in autenticazione.
+    user_id: Mapped[Optional[str]] = mapped_column(
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
     name: Mapped[str] = mapped_column(String(256), nullable=False)
+    # Solo per la visualizzazione (``aion_<prefix>_…``); il lookup usa ``hash``.
     prefix: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    # SHA-256 hex della chiave completa (vedi ``src/api/auth/api_key.py``).
     hash: Mapped[str] = mapped_column(String(256), nullable=False)
     scopes_json: Mapped[str] = mapped_column("scopes", Text, default="[]")
     created_at: Mapped[datetime] = mapped_column(
@@ -104,6 +127,8 @@ class ApiKey(Base):
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (Index("ux_api_keys_hash", "hash", unique=True),)
 
 
 class Conversation(Base):
@@ -644,7 +669,10 @@ class McpServerConfig(Base):
     credential_schema_json: Mapped[Optional[str]] = mapped_column(
         "credential_schema", Text
     )
-    oauth_config_json: Mapped[Optional[str]] = mapped_column("oauth_config", Text)
+    # client_secret cifrato a riposo (AION_CREDENTIAL_ENCRYPTION_KEY)
+    oauth_config_json: Mapped[Optional[str]] = mapped_column(
+        "oauth_config", EncryptedOAuthConfigJSON
+    )
     category: Mapped[Optional[str]] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -992,6 +1020,13 @@ class AuthSettings(Base):
     totp_required_changed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Chi puo' ottenere un nuovo account al primo login SSO (migration z8a9b0c028).
+    # Valori: 'open', 'allowlist', 'closed'
+    sso_signup_policy: Mapped[str] = mapped_column(
+        String(16), default="open", server_default="open", nullable=False
+    )
+    # JSON list di email complete o domini "@azienda.it" (solo con 'allowlist')
+    sso_signup_allowlist: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     updated_by_user_id: Mapped[Optional[str]] = mapped_column(
         String(64), ForeignKey("users.id"), nullable=True
     )

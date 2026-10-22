@@ -10,9 +10,12 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 from sqlalchemy import func, select
-from fastapi import APIRouter, Header, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import AliasChoices, BaseModel, Field
 
+from src.api.auth_login import ChatAuthIdentity, require_chat_auth
+from src.api.auth.scopes import Scope
+from src.api.ownership import chat_user_id_scope, claim_conversation_for_write
 from src.data.engine import get_async_session_maker
 from src.data.history_bridge import (
     fetch_message_by_id,
@@ -80,22 +83,6 @@ def _resolve_message_timeline(
 
 router = APIRouter(prefix="/chat-ui", tags=["chat-ui"])
 
-_warned_no_secret = False
-
-
-def _check_internal_secret(x_chat_ui_secret: Optional[str]) -> None:
-    global _warned_no_secret
-    expected = (os.getenv("AION_CHAT_UI_INTERNAL_SECRET") or "").strip()
-    if not expected:
-        if not _warned_no_secret:
-            logger.warning(
-                "AION_CHAT_UI_INTERNAL_SECRET unset: /chat-ui/* accepts any caller with X-AION-User-Id (dev only)."
-            )
-            _warned_no_secret = True
-        return
-    if (x_chat_ui_secret or "").strip() != expected:
-        raise HTTPException(status_code=403, detail="Invalid chat-ui secret")
-
 
 def _require_unified():
     if os.getenv("AION_UNIFIED_DB", "1").lower() not in ("1", "true", "yes"):
@@ -123,12 +110,9 @@ async def list_conversations_chat_ui(
     include_threads: bool = Query(
         False, description="Include side threads (child conversations) in the list"
     ),
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
         conds = [
@@ -239,12 +223,9 @@ class SideThreadCreateBody(BaseModel):
 @router.get("/conversations/{conv_id}/threads")
 async def list_side_threads_chat_ui(
     conv_id: str,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
         parent = await session.get(Conversation, conv_id)
@@ -270,12 +251,9 @@ async def list_side_threads_chat_ui(
 async def create_side_thread_chat_ui(
     conv_id: str,
     body: SideThreadCreateBody,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     quote = body.quote.strip()[:_THREAD_QUOTE_MAX]
     if not quote:
@@ -365,12 +343,9 @@ async def create_side_thread_chat_ui(
 @router.post("/conversations")
 async def create_conversation_chat_ui(
     body: ConversationCreateBody,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     cid = new_uuid7_str()
     async with get_async_session_maker()() as session:
@@ -398,12 +373,9 @@ async def create_conversation_chat_ui(
 @router.get("/conversations/{conv_id}/stream-status")
 async def get_conversation_stream_status_chat_ui(
     conv_id: str,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     """Whether a /chat SSE turn is still running (client reconnect after navigation)."""
-    _check_internal_secret(x_chat_ui_secret)
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     async with get_async_session_maker()() as session:
@@ -449,17 +421,14 @@ async def get_conversation_messages_chat_ui(
     conv_id: str,
     include_plan_internal: bool = False,
     include_archived: bool = True,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     """Retrieve full message history for chat-ui (display). Includes archived rows by default.
 
     The LLM/agent path uses ``history_manager.get_window()`` which excludes
     ``archived_at`` messages — only this replay endpoint returns the full transcript.
     """
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     async with get_async_session_maker()() as session:
@@ -580,12 +549,9 @@ async def get_conversation_messages_chat_ui(
 @router.get("/conversations/{conv_id}")
 async def get_conversation_chat_ui(
     conv_id: str,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
         r = await session.get(Conversation, conv_id)
@@ -637,12 +603,11 @@ class ConversationUpdateMetadataBody(BaseModel):
 async def update_conversation_metadata_chat_ui(
     conv_id: str,
     body: ConversationUpdateMetadataBody,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
+    # Upsert con id scelto dal client: la sessione puo' gia' essere di altri.
+    await claim_conversation_for_write(conv_id, user_id)
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
         r = await session.get(Conversation, conv_id)
@@ -699,13 +664,10 @@ async def update_conversation_metadata_chat_ui(
 async def delete_turn_chat_ui(
     conv_id: str,
     message_id: str,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Prune conversation from the specified user message, deleting it and all subsequent turns, steps, and attachments."""
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     async with get_async_session_maker()() as session:
@@ -810,13 +772,10 @@ class StepsBulkBody(BaseModel):
 async def save_partial_message_chat_ui(
     conv_id: str,
     body: MessageCreateBody,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Salva (o ignora se già presente) un messaggio assistente — usato per risposta parziale su Stop."""
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     async with get_async_session_maker()() as session:
@@ -891,13 +850,10 @@ async def patch_message_timeline_chat_ui(
     conv_id: str,
     message_id: str,
     body: MessageTimelinePatchBody,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Aggiorna solo timeline_json (es. backup client a fine stream)."""
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     async with get_async_session_maker()() as session:
@@ -917,13 +873,10 @@ async def rate_message_chat_ui(
     conv_id: str,
     message_id: str,
     body: MessageRateBody,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Save user rating and comments for a message."""
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     async with get_async_session_maker()() as session:
@@ -944,13 +897,10 @@ async def save_partial_steps_chat_ui(
     conv_id: str,
     message_id: str,
     body: StepsBulkBody,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Salva in bulk step parziali (tool call) associati a un messaggio assistente."""
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     async with get_async_session_maker()() as session:
@@ -1009,12 +959,9 @@ async def save_partial_steps_chat_ui(
 @router.delete("/conversations/{conv_id}")
 async def delete_conversation_chat_ui(
     conv_id: str,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     async with get_async_session_maker()() as session:
@@ -1059,7 +1006,7 @@ async def delete_conversation_chat_ui(
 @router.get("/khub/file")
 async def get_khub_file_endpoint(
     path: str = Query(..., description="The path to the file in KHUb"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    _auth: ChatAuthIdentity = Depends(require_chat_auth),
 ):
     """Retrieve file content from external Knowledge Hub (KHUb) service using OAuth2 client credentials.
 
@@ -1067,7 +1014,6 @@ async def get_khub_file_endpoint(
     caches and auto-renews the Keycloak token, avoiding a round-trip to Keycloak on
     every request.
     """
-    _check_internal_secret(x_chat_ui_secret)
 
     api_endpoint = (os.getenv("KHUB_API_ENDPOINT") or "").strip()
     if not api_endpoint:

@@ -25,6 +25,8 @@
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
   --color-ring: hsl(var(--ring));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
 
   --color-sidebar: hsl(var(--sidebar-background));
   --color-sidebar-foreground: hsl(var(--sidebar-foreground));
@@ -136,6 +138,31 @@
   }
   .prose-chat :where(tbody tr):not(:where([class~="not-prose"])) {
     @apply transition-colors hover:bg-primary/5;
+  }
+
+  /*
+   * Settings pages are drawn on the admin-ui scale (16px root) while chat-ui's root
+   * follows the chat text size (14px default). Re-basing Tailwind's size tokens by 16/14
+   * gives admin's exact sizes at the default and keeps them following the text-size slider.
+   */
+  .settings-scope {
+    --settings-k: calc(16 / 14);
+    --spacing: calc(0.25rem * var(--settings-k));
+    --text-xs: calc(0.75rem * var(--settings-k));
+    --text-sm: calc(0.875rem * var(--settings-k));
+    --text-base: calc(1rem * var(--settings-k));
+    --text-lg: calc(1.125rem * var(--settings-k));
+    --text-xl: calc(1.25rem * var(--settings-k));
+    --text-2xl: calc(1.5rem * var(--settings-k));
+    --text-3xl: calc(1.875rem * var(--settings-k));
+    --radius-md: calc(0.375rem * var(--settings-k));
+    --radius-xl: calc(0.75rem * var(--settings-k));
+    --radius-2xl: calc(1rem * var(--settings-k));
+    --radius-3xl: calc(1.5rem * var(--settings-k));
+  }
+  .settings-scope ::selection {
+    background: hsl(var(--primary) / 0.28);
+    color: hsl(var(--foreground));
   }
 
   .focus-ring {

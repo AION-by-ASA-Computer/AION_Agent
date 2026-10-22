@@ -29,7 +29,7 @@ Regardless of `AION_CHAT_PASSWORD_AUTH`, `/admin` is **always protected** via `r
 2. Set `AION_CHAT_PASSWORD_AUTH=1` to require login on chat-ui.
 3. Create users in the `users` table:
    - Setup wizard: `scripts/setup-aion-env.sh` (prompts to bootstrap the initial user during setup).
-   - Admin UI or `POST /admin/users`
+   - Admin UI or `POST /admin/users` (password mode only; with SSO active, accounts are created at first SSO sign-in — see [SSO migration](sso-migration.md#3-new-accounts-in-sso-mode))
    - Password hash: `python -m src.chat_auth hash`
 4. `identifier` + `AION_DEFAULT_TENANT_ID` scope login; the same identifier is used as `user_id` toward `USER.md` and `/chat`.
 
@@ -42,18 +42,24 @@ With login disabled (`AION_CHAT_PASSWORD_AUTH=0`), chat endpoints remain open (d
 During chat session initiation (e.g. `POST /chat/stream`), `user_id` is resolved dynamically based on the current client identity context using `_resolve_chat_user_id()`:
 
 1. **Authenticated Chat Session**: If `AION_CHAT_PASSWORD_AUTH` is enabled and a valid Bearer token is provided via the `Authorization` header or query parameters (common in EventSource/SSE), the user identifier from the token payload takes absolute precedence.
-2. **Anonymous or Non-Chat Client (Bypass/Fallback)**: If no chat token is resolved, it falls back to:
+2. **Open mode or trusted BFF**: only when the caller is anonymous (`AION_CHAT_PASSWORD_AUTH=0`) or presents `X-AION-Chat-Ui-Secret` (server-to-server), the user comes from:
    - The `user_id` provided inside the JSON request body.
    - The `X-AION-User-Id` request header (sanitized in `src/identity.py`).
-   - The programmatic client identifier associated with the presented `X-Api-Key` or API key Bearer token.
-3. **Default Value**: If no identification mechanism is provided, the system defaults the session owner to `"default"`.
+3. **API key**: the key acts **as its owner** (`api_keys.user_id`): `user_id` is the owner's identifier, the same as with the owner's chat token, so the key sees the owner's conversations and allowed profiles. Header and body identities are ignored, and the key never carries the `admin` role. A presented key is validated even when `AION_CHAT_PASSWORD_AUTH=0`. See [API keys](./api-keys.md).
+4. **Default Value**: In open mode, if no identification mechanism is provided, the session owner defaults to `"default"`.
+
+The resolution lives in `effective_user_id()` (`src/api/ownership.py`). With a chat token, `X-AION-User-Id` is ignored.
+
+## Conversation Ownership
+
+No one, admins included, can read another user's chats. Every endpoint that touches a conversation, session, step, file, chart, tool ledger, cron target or A2A session calls `assert_conversation_access()`; a mismatch returns **404**. Admin endpoints follow the same rule: `/admin/ltm/*` and `/admin/memory/facts` only serve the caller's own `user` scope, and `/admin/diagnostics/file` only serves files from smoke-test sessions (`smoke*`).
 
 All resolved user IDs are sanitized through `sanitize_user_id()` to guarantee safe directory-friendly pathnames under `data/sessions/` and database entries.
 
 ## Admin Role Protection
 
 Administrative endpoints `/admin/*` are gated via the `require_admin_role` FastAPI dependency.
-- **Default (Grafana-style protection)**: `AION_ADMIN_PASSWORD_AUTH=1` requires a authenticated session token with the `admin` role, or an authorized server-to-server secret (`X-AION-Chat-Ui-Secret` matching `AION_CHAT_UI_INTERNAL_SECRET`), or a programmatic API key with admin scope.
+- **Default (Grafana-style protection)**: `AION_ADMIN_PASSWORD_AUTH=1` requires an authenticated session token with the `admin` role. The server-to-server secret (`X-AION-Chat-Ui-Secret`) does **not** grant the admin role, and API keys are rejected on every `/admin/*` endpoint.
 - **Development Bypass**: Setting `AION_ADMIN_PASSWORD_AUTH=0` allows administrative access without authentication checks (for local debugging/testing only).
 
 ## Principles

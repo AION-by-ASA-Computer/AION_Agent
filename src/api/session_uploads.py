@@ -6,33 +6,52 @@ import asyncio
 import json
 import logging
 import mimetypes
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from sse_starlette.sse import EventSourceResponse
 
 from src.session_workspace import list_dir, normalize_session_id, save_upload
 from src.tools.doc_auto_ingest import schedule_auto_ingest
 from src.tools.office_auto_convert import apply_legacy_word_conversion
-from .auth_login import ChatAuthIdentity, require_chat_auth
+from .auth.scopes import Scope
+from .auth_login import ChatAuthIdentity, require_chat_scope
+from .ownership import assert_conversation_access, effective_user_id
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["sessions"])
 
 
+async def _owned_session_id(
+    session_id: str,
+    auth: ChatAuthIdentity,
+    x_aion_user_id: Optional[str],
+    *,
+    write: bool = False,
+) -> str:
+    """Valida ``session_id`` e verifica che appartenga al chiamante (404 altrimenti)."""
+    try:
+        sid = normalize_session_id(session_id)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    uid = effective_user_id(auth, header_user_id=x_aion_user_id)
+    await assert_conversation_access(
+        sid, uid, allow_missing=write, claim_if_missing=write
+    )
+    return sid
+
+
 @router.post("/sessions/{session_id}/upload")
 async def upload_session_files(
     session_id: str,
     files: List[UploadFile] = File(...),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.FILES_WRITE)),
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """Carica uno o più file in uploads/ per la sessione."""
-    try:
-        session_id = normalize_session_id(session_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    session_id = await _owned_session_id(session_id, _auth, x_aion_user_id, write=True)
     if not files:
         raise HTTPException(status_code=400, detail="Nessun file")
 
@@ -120,11 +139,12 @@ async def upload_session_files(
 async def list_session_files(
     session_id: str,
     subdir: str = "uploads",
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.FILES_READ)),
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """Elenco file (uploads, derived, workspace)."""
+    session_id = await _owned_session_id(session_id, _auth, x_aion_user_id)
     try:
-        session_id = normalize_session_id(session_id)
         rows = list_dir(session_id, subdir=subdir)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
@@ -147,13 +167,14 @@ async def list_session_files(
 @router.get("/sessions/{session_id}/tool-ledger")
 async def get_session_tool_ledger(
     session_id: str,
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CONVERSATIONS_READ)),
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """Tool call trace for the session (from derived/tool_results/_ledger.jsonl)."""
     from src.runtime.tool_ledger import list_ledger_entries, tool_ledger_enabled
 
+    session_id = await _owned_session_id(session_id, _auth, x_aion_user_id)
     try:
-        session_id = normalize_session_id(session_id)
         entries = list_ledger_entries(session_id)
     except Exception as exc:
         logger.debug("tool-ledger read failed session=%s: %s", session_id[:8], exc)
@@ -175,7 +196,8 @@ async def download_session_file(
     relative_path: str = Query(
         ..., description="Path relativo, es. workspace/matricielle.csv"
     ),
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.FILES_READ)),
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """
     Scarica un file dalla cartella sessione (solo uploads/, derived/, workspace/).
@@ -183,10 +205,15 @@ async def download_session_file(
     """
     from src.session_workspace import safe_resolve
 
-    try:
-        session_id = normalize_session_id(session_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    if _auth.via == "anonymous" and not (x_aion_user_id or "").strip():
+        # Modalita' aperta: il download arriva da navigazione browser (niente
+        # header) e non esiste un'identita' da verificare.
+        try:
+            session_id = normalize_session_id(session_id)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+    else:
+        session_id = await _owned_session_id(session_id, _auth, x_aion_user_id)
 
     rel = (relative_path or "").strip().replace("\\", "/").lstrip("/")
     if rel.startswith("."):
@@ -218,7 +245,8 @@ async def download_session_file(
 @router.get("/sessions/{session_id}/events/stream")
 async def session_events_sse(
     session_id: str,
-    _auth: ChatAuthIdentity = Depends(require_chat_auth),
+    _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CONVERSATIONS_READ)),
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
 ):
     """SSE: eventi Redis di sessione (es. orchestration_plan_approved) per chat-ui.
 
@@ -227,10 +255,7 @@ async def session_events_sse(
     header custom (gestito da ``require_chat_auth``).
     """
 
-    try:
-        session_id = normalize_session_id(session_id)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    session_id = await _owned_session_id(session_id, _auth, x_aion_user_id)
 
     async def gen():
         from src.runtime.redis_client import redis_drain_session_events

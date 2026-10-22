@@ -6,14 +6,14 @@ description: /v1/integrations endpoints for per-user credentials; chat Bearer au
 
 # MCP integrations API (`/v1/integrations`)
 
-These endpoints live under `/v1` but do **not** follow the "API Key" authentication model described in [REST API v1](rest-api.md).
+These endpoints live under `/v1` but do **not** follow the "API Key" authentication model described in [REST API v1](rest-api.md): API keys are rejected with `403 api_key_not_allowed` (see [API keys](../security/api-keys.md)).
 
 ## Authentication
 
 - **Chat Bearer JWT** — same token obtained from `POST /auth/login` used by the chat UI (`Authorization: Bearer ...`).
 - **Open mode** — if `AION_CHAT_PASSWORD_AUTH=0`, `GET /v1/integrations` responds without a token (list without credentials hint). Write/modify operations (`POST` / `PATCH` / `DELETE`) still require a non-anonymous identity (`403` if missing).
 
-When `AION_CHAT_UI_INTERNAL_SECRET` is configured, the backend also accepts the `X-AION-Chat-Ui-Secret` header for server-to-server calls (Next.js BFF), as with other user-facing endpoints.
+When `AION_CHAT_UI_INTERNAL_SECRET` is configured, the backend also accepts the `X-AION-Chat-Ui-Secret` header for server-to-server calls (Next.js BFF), as with other user-facing endpoints. The secret never grants the admin role and must not be shipped to the browser.
 
 ## Prerequisites
 

@@ -553,16 +553,15 @@ class ChatAuthIdentity(BaseModel):
 
     user_row_id: Optional[str] = None
     identifier: Optional[str] = None
-    via: str = "anonymous"  # "anonymous" | "chat_token" | "api_key"
+    via: str = "anonymous"  # "anonymous" | "chat_token" | "api_key" | "internal"
     roles: List[str] = Field(default_factory=list)
+    # Solo per via="api_key": la chiave usata e i suoi scope (già filtrati).
+    api_key_id: Optional[str] = None
+    scopes: List[str] = Field(default_factory=list)
 
 
-# Lista di ruoli ottenuta dal contesto auth, gestendo i casi anonymous/api_key.
+# Lista di ruoli ottenuta dal contesto auth (le API key non hanno mai ruoli).
 def _resolve_roles(ctx: "ChatAuthIdentity") -> List[str]:
-    if ctx.via == "api_key":
-        # Le API key con scope admin sono trattate come ruolo admin per il
-        # router /admin/*. La via "anonymous" rispetta solo il bypass dev.
-        return ctx.roles or []
     return ctx.roles or []
 
 
@@ -575,7 +574,11 @@ async def require_chat_auth(
         description="Token chat via query (per SSE via EventSource che non supporta header custom).",
     ),
 ) -> ChatAuthIdentity:
-    """Protegge gli endpoint user-facing della chat (con gate SSO/2FA)."""
+    """Protegge gli endpoint user-facing della chat (con gate SSO/2FA).
+
+    Le API key sono rifiutate (403 ``api_key_not_allowed``): un endpoint le
+    accetta solo dichiarando uno scope con ``require_chat_scope``.
+    """
     return await _resolve_chat_identity(
         authorization,
         x_api_key,
@@ -583,6 +586,33 @@ async def require_chat_auth(
         access_token,
         enforce_user_gates=True,
     )
+
+
+def require_chat_scope(*accepted: str):
+    """Come ``require_chat_auth``, ma accetta anche le API key che hanno almeno
+    uno degli scope ``accepted`` (403 ``missing_scope`` altrimenti)."""
+    if not accepted:
+        raise ValueError("require_chat_scope needs at least one scope")
+
+    async def _dep(
+        authorization: Optional[str] = Header(None),
+        x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+        x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+        access_token: Optional[str] = Query(
+            None,
+            description="Token chat via query (per SSE via EventSource che non supporta header custom).",
+        ),
+    ) -> ChatAuthIdentity:
+        return await _resolve_chat_identity(
+            authorization,
+            x_api_key,
+            x_chat_ui_secret,
+            access_token,
+            enforce_user_gates=True,
+            api_key_scopes=accepted,
+        )
+
+    return _dep
 
 
 async def require_chat_token_only(
@@ -614,34 +644,50 @@ async def _resolve_chat_identity(
     access_token: Optional[str],
     *,
     enforce_user_gates: bool,
+    api_key_scopes: tuple[str, ...] = (),
 ) -> ChatAuthIdentity:
     """Protegge gli endpoint user-facing della chat.
 
-    - Se ``AION_CHAT_PASSWORD_AUTH`` non e' attivo -> no-op (back-compat).
+    - Una API key (``X-Api-Key`` o ``Authorization: Bearer aion_...``) viene
+      SEMPRE validata, anche con auth disattivata, e agisce come il suo
+      proprietario. È accettata solo se ``api_key_scopes`` non è vuoto e la
+      chiave ne possiede almeno uno (deny-by-default).
+    - Se ``AION_CHAT_PASSWORD_AUTH`` non e' attivo -> identità anonima.
     - Altrimenti accetta uno dei seguenti:
         1. Bearer token emesso da ``/auth/login`` (token HMAC opaco) via
            ``Authorization`` header **oppure** query string ``?access_token=...``
            (necessario per gli endpoint SSE invocati via ``EventSource``).
-        2. API key (header ``X-Api-Key`` o ``Authorization: Bearer aion_...``).
-        3. ``X-AION-Chat-Ui-Secret`` valido (server-to-server, per il
-           Next.js BFF del chat-ui).
+        2. ``X-AION-Chat-Ui-Secret`` valido (solo server-to-server; identita'
+           da ``X-AION-User-Id``, nessun ruolo admin).
     """
+    api_key_raw = (x_api_key or "").strip()
+    if (
+        not api_key_raw
+        and authorization
+        and authorization.lower().startswith("bearer ")
+    ):
+        bearer = authorization.split(" ", 1)[1].strip()
+        if _looks_like_api_key(bearer):
+            api_key_raw = bearer
+    if api_key_raw:
+        return await _resolve_api_key_identity(api_key_raw, api_key_scopes)
+
     # 1. Auth NON richiesta -> identita' anonima (modalita' default user).
     if not password_auth_enabled():
         return ChatAuthIdentity(via="anonymous")
 
-    # 2. Secret interno chat-ui (BFF) -> bypass legittimo (trusted server-to-server).
+    # 2. Secret interno (BFF server-to-server): l'utente arriva da
+    #    X-AION-User-Id (vedi src/api/ownership.py). Nessun ruolo: il secret
+    #    non concede mai l'accesso admin. Non va mai esposto al browser.
     expected_internal = (os.getenv("AION_CHAT_UI_INTERNAL_SECRET") or "").strip()
-    if expected_internal and (x_chat_ui_secret or "").strip() == expected_internal:
-        return ChatAuthIdentity(
-            via="api_key",
-            identifier="chat-ui-internal",
-            roles=["admin"],
-        )
+    if expected_internal and hmac.compare_digest(
+        (x_chat_ui_secret or "").strip().encode(), expected_internal.encode()
+    ):
+        return ChatAuthIdentity(via="internal", identifier=None, roles=[])
 
-    # 3. Token Bearer (header), API key (header) o query token (SSE).
-    token_raw = (x_api_key or "").strip()
-    if not token_raw and authorization and authorization.lower().startswith("bearer "):
+    # 3. Token Bearer (header) o query token (SSE).
+    token_raw = ""
+    if authorization and authorization.lower().startswith("bearer "):
         token_raw = authorization.split(" ", 1)[1].strip()
     if not token_raw and access_token:
         token_raw = access_token.strip()
@@ -656,28 +702,9 @@ async def _resolve_chat_identity(
             ),
         )
 
-    # API key (prefisso aion_) -> riusa il flusso esistente con le scope.
+    # API key passata via query (?access_token=aion_...): stesse regole.
     if _looks_like_api_key(token_raw):
-        try:
-            from src.api.auth.dependencies import require_auth as _api_require_auth
-            from src.api.auth.scopes import Scope as _Scope
-
-            ctx = await _api_require_auth(
-                authorization=f"Bearer {token_raw}", x_api_key=token_raw
-            )
-        except HTTPException:
-            raise
-        except Exception as e:  # noqa: BLE001
-            logger.warning("API-key auth fallback failed: %s", e)
-            raise HTTPException(401, detail="Invalid API key") from None
-        # Mappa lo scope "admin" sulle API key in ruolo "admin" del modello user.
-        api_scopes = list(getattr(ctx, "scopes", []) or [])
-        api_roles = ["admin"] if _Scope.ADMIN in api_scopes else []
-        return ChatAuthIdentity(
-            via="api_key",
-            identifier=getattr(ctx, "api_key_id", None),
-            roles=api_roles,
-        )
+        return await _resolve_api_key_identity(token_raw, api_key_scopes)
 
     # Token chat (HMAC opaco).
     parsed = verify_chat_token(token_raw)
@@ -729,6 +756,48 @@ async def _resolve_chat_identity(
             logger.warning("2FA check failed in require_chat_auth: %s", _e)
 
     return auth_identity
+
+
+async def _resolve_api_key_identity(
+    token: str, accepted_scopes: tuple[str, ...]
+) -> ChatAuthIdentity:
+    """Valida la chiave (401 se non valida) e lo scope richiesto (403)."""
+    from src.api.auth.api_key import authenticate_api_key
+
+    if not _looks_like_api_key(token):
+        raise HTTPException(
+            401,
+            detail={
+                "code": "api_key_invalid_format",
+                "message": "Invalid API key format",
+            },
+        )
+    principal = await authenticate_api_key(token)
+    if not accepted_scopes:
+        raise HTTPException(
+            403,
+            detail={
+                "code": "api_key_not_allowed",
+                "message": "This endpoint does not accept API keys",
+            },
+        )
+    if not any(sc in principal.scopes for sc in accepted_scopes):
+        raise HTTPException(
+            403,
+            detail={
+                "code": "missing_scope",
+                "scope": " | ".join(accepted_scopes),
+                "message": f"API key is missing scope {' or '.join(accepted_scopes)}",
+            },
+        )
+    return ChatAuthIdentity(
+        via="api_key",
+        user_row_id=principal.user_row_id,
+        identifier=principal.identifier,
+        roles=[],
+        api_key_id=principal.api_key_id,
+        scopes=list(principal.scopes),
+    )
 
 
 # --- Admin role guard -------------------------------------------------------

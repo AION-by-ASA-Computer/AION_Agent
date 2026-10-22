@@ -28,7 +28,7 @@ Start the FastAPI API as usual (`uvicorn src.api.main:app`).
 |-----------|--------|
 | `NEXT_PUBLIC_AION_API_URL` | FastAPI base URL (browser) |
 | `NEXT_PUBLIC_AION_ADMIN_UI_URL` | admin-ui base for Agent DB iframe |
-| `NEXT_PUBLIC_AION_CHAT_UI_SECRET` | Optional: same value as `AION_CHAT_UI_INTERNAL_SECRET` on the backend |
+| _(removed)_ `NEXT_PUBLIC_AION_CHAT_UI_SECRET` | Never expose `AION_CHAT_UI_INTERNAL_SECRET` in the browser bundle: chat-ui authenticates with the chat token (`Authorization: Bearer`) |
 | _(removed)_ | Orchestration approve uses the **chat JWT** (`Authorization: Bearer`); do not expose orchestration secrets in the browser bundle |
 | `NEXT_PUBLIC_AION_CHAT_UI_DEBUG` | **[hardcoded in `dev-flags.ts:7`]** — console log stream chunk counters (token / reasoning) |
 | `NEXT_PUBLIC_AION_PROMPT_DEBUG` | **[hardcoded in `dev-flags.ts:8`]** — Prompt dock tab (requires `AION_PROMPT_DEBUG=1` on the backend) |
@@ -62,6 +62,7 @@ Backend (`.env`): `AION_CORS_ORIGINS` can list `http://localhost:8003`; default 
 - `GET /v1/integrations/status`, `GET /v1/integrations`, `POST /v1/integrations/credentials` — state and MCP credentials per user (Bearer chat; see [MCP Integrations (API)](../api-and-runtime/mcp-integrations-api.md))
 - `GET|PUT /v1/runtime-settings` — allowlisted turn limits and generation kwargs (sidebar Tunings)
 - `POST|PATCH|DELETE /v1/runtime-settings/presets` — per-user named snapshots (max 20)
+- `GET|POST /v1/me/api-keys`, `DELETE /v1/me/api-keys/{id}` — personal API keys (Settings → API keys; see [API keys](../security/api-keys.md))
 
 ## Sidebar tunings (runtime + presets)
 
@@ -75,7 +76,9 @@ Hard ceilings (cannot be raised from the UI): 200 agent steps, 200 tool calls pe
 
 ## User settings (`/settings`)
 
-Full-page route (profile menu → **Impostazioni**): profile, appearance, security, instructions (`USER.md`). Same layout as before the tunings panel — not embedded in the sidebar.
+Full-page route (profile menu → **Impostazioni**): profile, appearance, security, API keys, instructions (`USER.md`). Same layout as before the tunings panel — not embedded in the sidebar.
+
+The **API keys** tab (`/settings?tab=api-keys`, shown only with a chat login token) lets the user create, list and revoke personal keys within the policy set by the admin (enabled flag, max active keys, max lifetime). The full key is shown only once at creation. Keys act as the user; see [API keys](../security/api-keys.md).
 
 ## My integrations
 
@@ -195,7 +198,7 @@ Update this section with dark/light captures from the active chat-ui (header + s
   "  - Stream ancora attivo su un’altra conversazione che bloccava il merge (mitigato: abort + `chatStop` al cambio thread, merge solo per la conversazione in stream)."
   So "mitigato: abort + `chatStop` al cambio thread" translates to "mitigated: abort + `chatStop` on thread change"]
   - Messages in the DB but filtered as technical (role `internal`, orchestrator content, empty assistant without steps/timeline).
-- **Debug**: `NEXT_PUBLIC_AION_CHAT_UI_DEBUG=1` logs in the console `[aion-chat-ui] history fetch` with `count`, `streamingRef`, `source`. Verify alignment of `AION_CHAT_UI_INTERNAL_SECRET` (backend) and `NEXT_PUBLIC_AION_CHAT_UI_SECRET` (chat-ui).
+- **Debug**: `NEXT_PUBLIC_AION_CHAT_UI_DEBUG=1` logs in the console `[aion-chat-ui] history fetch` with `count`, `streamingRef`, `source`. With password auth on, verify the chat token is present: `X-AION-User-Id` alone does not select the user.
 - **Implementation**: local/server merge in `chat-ui/lib/merge-chat-history.ts`, orchestration in `chat-ui/lib/use-conversation-transcript.ts`.
 
 ### Streaming / reasoning QA checklist

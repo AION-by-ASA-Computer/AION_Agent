@@ -81,7 +81,7 @@ Profilo consulente: `mcp_integration_advisor` (chat-ui `?profile=mcp_integration
 
 - **Admin** (Bearer admin): `GET/POST/PATCH/DELETE /admin/mcp-integrations` — gestione catalogo integrazioni.
 - **Chat** (Bearer token chat o secret BFF dove applicabile): `GET /v1/integrations`, `POST /v1/integrations/credentials`, `DELETE /v1/integrations/credentials/{slug}/{key}`.  
-  Autenticazione: **non** usano `X-API-Key` delle API v1 “SDK”; usano lo stesso modello degli altri endpoint user-facing protetti da `require_chat_auth`. Con `AION_CHAT_PASSWORD_AUTH=0`, la lista è anonima senza hint credenziali; **mutazioni** (salvataggio credenziali) richiedono identità non anonima.
+  Autenticazione: **non** accettano le API key (`X-API-Key`, risposta `403 api_key_not_allowed`, vedi [API keys](../security/api-keys.md)); usano lo stesso modello degli altri endpoint user-facing protetti da `require_chat_auth`. Con `AION_CHAT_PASSWORD_AUTH=0`, la lista è anonima senza hint credenziali; **mutazioni** (salvataggio credenziali) richiedono identità non anonima.
 
 ## UI
 
@@ -108,6 +108,8 @@ Il flusso OAuth 2.0 (Authorization Code + PKCE S256) è implementato in `src/api
 - `GET /v1/integrations/{slug}/oauth-status` — stato connessione utente.
 
 I token (`OAUTH_TOKEN`, `OAUTH_REFRESH_TOKEN`) sono salvati cifrati in `user_mcp_credentials`. Il refresh automatico avviene in `src/runtime/credential_store.py` quando il token di accesso scade ma il refresh token è ancora valido. Lo scambio HTTP è centralizzato in `src/runtime/oauth_token_exchange.py`.
+
+Anche il `client_secret` OAuth del server (configurato dall'admin o ottenuto via registrazione dinamica) è cifrato a riposo: in `mcp_server_configs.oauth_config` compare solo `client_secret_encrypted` (stessa chiave `AION_CREDENTIAL_ENCRYPTION_KEY`, tipo colonna `EncryptedOAuthConfigJSON` in `src/data/encrypted_types.py`). I valori legacy in chiaro restano leggibili e vengono cifrati alla prima scrittura o dalla migrazione `x6y7z8a026`, che viene saltata se la chiave non è impostata nell'ambiente in cui gira.
 
 **Vincolo architetturale**: lo stato PKCE (`_oauth_pending`) è in memoria di processo — il backend deve restare a `--workers 1`.
 

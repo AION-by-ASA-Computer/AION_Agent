@@ -73,7 +73,7 @@ A side thread is a `Conversation` with three extra columns (migration
 
 ## API
 
-All endpoints use the usual chat-ui headers (`X-AION-User-Id`, `X-AION-Chat-Ui-Secret`).
+All endpoints use the usual chat-ui auth (`Authorization: Bearer <chat token>`; `X-AION-User-Id` only counts in open mode). Threads of a conversation owned by another user answer 404.
 
 - `GET /chat-ui/conversations` — excludes threads by default (`include_threads=1` to
   include them); every summary carries `thread_count`.
@@ -86,10 +86,6 @@ All endpoints use the usual chat-ui headers (`X-AION-User-Id`, `X-AION-Chat-Ui-S
   `parent_message_id`, `parent_title`, `anchor`.
 - `DELETE /chat-ui/conversations/{id}` — archives the child threads too and releases
   their MCP sessions.
-- `GET /admin/conversations/global` — every row carries `parent_conversation_id`,
-  `parent_message_id` and `anchor_quote`. `limit` caps top-level conversations; their
-  threads are always included, a recently active thread brings its parent along, and
-  `truncated` tells whether older top-level conversations were left out.
 - `POST /v1/chat/stream` — now rejects (`404`) an existing `session_id` owned by another user.
 
 ## Agent context

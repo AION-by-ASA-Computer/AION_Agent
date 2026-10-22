@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ExternalLink, History, Loader2, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
+import { AlertTriangle, History, Loader2, Pencil, Play, RefreshCw, Trash2 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
-import { chatUrl } from "@/lib/paths";
 import { getLocale } from "@/lib/i18n/i18n-store";
 import { PageToast, ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
@@ -14,9 +13,7 @@ import { DeleteDialog } from "@/components/ui/ConfirmDialogs";
 import { Select } from "@/components/ui/Select";
 import { SearchField } from "@/components/ui/SearchField";
 import { ghostBtn, inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
-import { fullWhen, shortWhen, toMs } from "@/components/conversations/format";
-import { Transcript } from "@/components/conversations/Transcript";
-import type { ThreadMessage } from "@/components/conversations/types";
+import { fullWhen, shortWhen, toMs } from "@/lib/datetime";
 
 const k = "admin_schedules";
 const ALL = "__all";
@@ -36,6 +33,8 @@ type CronJob = {
   next_run_at?: string | null;
   last_run?: { status?: string; started_at?: string } | null;
   sql_query_project?: string | null;
+  /** User-created job: the prompt is private and not returned to admins. */
+  prompt_hidden?: boolean;
 };
 
 type CronRun = {
@@ -44,8 +43,6 @@ type CronRun = {
   started_at?: string;
   finished_at?: string;
   error_message?: string;
-  assistant_preview?: string;
-  conversation_id?: string | null;
 };
 
 type Option = { value: string; label: string };
@@ -133,49 +130,13 @@ const duration = (r: CronRun) => {
   return m < 60 ? `${m}m ${sec % 60}s` : `${Math.floor(m / 60)}h ${m % 60}m`;
 };
 
+/** Run metadata only: outputs and transcripts belong to the user and are never shown to admins. */
 function RunDetail({ run, t }: { run: CronRun; t: (k: string, v?: Record<string, string | number>) => string }) {
-  const convId = run.conversation_id || null;
-  const [thread, setThread] = useState<{ id: string; state: "ready" | "error"; messages: ThreadMessage[] } | null>(null);
-  const [showTools, setShowTools] = useState(false);
-
-  useEffect(() => {
-    if (!convId) return;
-    let live = true;
-    apiFetch(`${apiBase()}/admin/conversations/${encodeURIComponent(convId)}/messages?include_internal=true`)
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => live && setThread({ id: convId, state: "ready", messages: data.messages || [] }))
-      .catch(() => live && setThread({ id: convId, state: "error", messages: [] }));
-    return () => {
-      live = false;
-    };
-  }, [convId]);
-
-  const loaded = thread && thread.id === convId ? thread : null;
-  const toolCount = loaded?.messages.filter((m) => m.tool_name).length ?? 0;
-  const href = convId ? chatUrl(`/c/${encodeURIComponent(convId)}`) : null;
-  const chip = "focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-colors";
-
   return (
     <section className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/70 bg-background" aria-label={t(`${k}.runs.detail_aria`)}>
       <header className="flex flex-col gap-3 border-b border-border/60 px-5 py-4">
         <div className="flex flex-wrap items-center gap-3">
           <StatusPill status={run.status} t={t} />
-          <div className="ml-auto flex items-center gap-2">
-            {toolCount > 0 && (
-              <button type="button" aria-pressed={showTools} onClick={() => setShowTools((v) => !v)} className={cn(chip, showTools ? "border-foreground/30 bg-secondary" : "border-border hover:bg-secondary")}>
-                {t("admin_conversations.detail.show_tools")}
-                <span className="tabular-nums text-muted-foreground">{toolCount}</span>
-              </button>
-            )}
-            {href ? (
-              <a href={href} target="_blank" rel="noopener" className="focus-ring inline-flex h-9 items-center gap-2 rounded-xl bg-foreground px-3.5 text-sm font-semibold text-background transition-opacity hover:opacity-90">
-                <ExternalLink className="h-3.5 w-3.5" aria-hidden />
-                {t(`${k}.runs.open_chat`)}
-              </a>
-            ) : (
-              <span className="text-xs text-muted-foreground">{t(`${k}.runs.no_chat`)}</span>
-            )}
-          </div>
         </div>
         <dl className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
           {[
@@ -192,25 +153,8 @@ function RunDetail({ run, t }: { run: CronRun; t: (k: string, v?: Record<string,
         {run.error_message && <p className="whitespace-pre-wrap break-words rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive">{run.error_message}</p>}
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-6 sm:px-6" aria-busy={!!convId && !loaded}>
-        {!convId ? (
-          run.assistant_preview ? (
-            <p className="mx-auto max-w-3xl whitespace-pre-wrap break-words text-sm leading-relaxed">{run.assistant_preview}</p>
-          ) : (
-            <p className="py-16 text-center text-sm text-muted-foreground">{t(`${k}.runs.no_output`)}</p>
-          )
-        ) : !loaded ? (
-          <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground" role="status">
-            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-            {t("admin_conversations.detail.loading")}
-          </div>
-        ) : loaded.state === "error" ? (
-          <p className="py-16 text-center text-sm text-destructive">{t("admin_conversations.detail.load_error")}</p>
-        ) : loaded.messages.length === 0 ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">{t("admin_conversations.detail.no_messages")}</p>
-        ) : (
-          <Transcript messages={loaded.messages} convId={loaded.id} highlightId={null} showTools={showTools} t={t} />
-        )}
+      <div className="flex min-h-0 flex-1 items-center justify-center px-6 py-16">
+        <p className="mx-auto max-w-[44ch] text-center text-sm text-muted-foreground">{t(`${k}.runs.output_private`)}</p>
       </div>
     </section>
   );
@@ -446,8 +390,8 @@ export default function SchedulesPage() {
         body: JSON.stringify({
           name: form.name.trim(),
           cron_expression: form.cron.trim(),
-          prompt: form.prompt,
-          profile_slug: form.profile,
+          // Prompt and profile of user-created jobs are private: never sent back.
+          ...(editing.prompt_hidden ? {} : { prompt: form.prompt, profile_slug: form.profile }),
           timezone: form.tz.trim(),
           session_mode: form.sessionMode,
           enabled: form.enabled,
@@ -549,7 +493,7 @@ export default function SchedulesPage() {
         if (status === "off" && j.enabled) return false;
         if (userFilter !== ALL && j.user_id !== userFilter) return false;
         if (!q) return true;
-        return [j.name, j.user_id, j.profile_slug, profileName(j.profile_slug), j.prompt, j.cron_expression].some((v) => (v || "").toLowerCase().includes(q));
+        return [j.name, j.user_id, j.profile_slug, profileName(j.profile_slug), j.prompt_hidden ? "" : j.prompt, j.cron_expression].some((v) => (v || "").toLowerCase().includes(q));
       })
       .sort((a, b) => Number(b.enabled) - Number(a.enabled) || (toMs(a.next_run_at) || Infinity) - (toMs(b.next_run_at) || Infinity) || a.name.localeCompare(b.name));
   }, [jobs, query, status, userFilter, profileName]);
@@ -754,13 +698,17 @@ export default function SchedulesPage() {
             </div>
 
             <Field label={t(`${k}.edit.prompt`)}>
-              <textarea className={cn(inputCls, "min-h-28 resize-y leading-relaxed")} value={form.prompt} onChange={(e) => patch({ prompt: e.target.value })} />
+              {editing.prompt_hidden ? (
+                <p className="rounded-xl border border-dashed border-border px-3.5 py-3 text-sm text-muted-foreground">{t(`${k}.edit.prompt_private`)}</p>
+              ) : (
+                <textarea className={cn(inputCls, "min-h-28 resize-y leading-relaxed")} value={form.prompt} onChange={(e) => patch({ prompt: e.target.value })} />
+              )}
             </Field>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium">{t(`${k}.edit.profile`)}</span>
-                <Select value={form.profile} onChange={(v) => patch({ profile: v })} options={profileOptions} aria-label={t(`${k}.edit.profile`)} />
+                <Select value={form.profile} onChange={(v) => patch({ profile: v })} options={profileOptions} disabled={!!editing.prompt_hidden} aria-label={t(`${k}.edit.profile`)} />
               </div>
               <div className="flex flex-col gap-1.5">
                 <span className="text-sm font-medium">{t(`${k}.edit.session_mode`)}</span>

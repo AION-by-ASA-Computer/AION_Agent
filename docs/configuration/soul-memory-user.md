@@ -152,7 +152,7 @@ USER.md remains the only recommended file layer. It works as described on this p
 2. With active split, **`ProfileMemoryBundle(profile.slug, user_id)`** is created and **`snapshot()`** reads the three files.
 3. The same `user_id` is propagated where needed (MCP, context, etc.) — consistency with the `USER.md` path.
 
-For **direct APIs**: `POST /chat` accepts `user_id` in the JSON and/or the **`X-AION-User-Id`** header (priority to the header if present), as in [REST API and contract](../api-and-runtime/rest-api.md).
+For **direct APIs**: `POST /chat` accepts `user_id` in the JSON and/or the **`X-AION-User-Id`** header only in open mode or from the trusted BFF; with a chat token the token's user wins. See [REST API and contract](../api-and-runtime/rest-api.md).
 
 ## Management from Chat UI and REST API
 

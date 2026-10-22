@@ -63,7 +63,7 @@ chart_queue.push_serialized(session_id, chart_data)
 
 Retrieves all charts accumulated during the current chat turn.
 
-- **Authentication**: Chat Bearer JWT or BFF Shared Secret (`X-AION-Chat-Ui-Secret`).
+- **Authentication**: Chat Bearer JWT or BFF Shared Secret (`X-AION-Chat-Ui-Secret`). The session must belong to the caller, otherwise 404.
 - **Behavior**: This is a **destructive read** (flush operation). Consuming the charts clears the queue for this session on the backend.
 - **Response Example (200 OK)**:
   ```json

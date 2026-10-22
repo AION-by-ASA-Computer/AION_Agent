@@ -18,6 +18,7 @@
       "profile": "Profil",
       "appearance": "Erscheinungsbild",
       "security": "Sicherheit",
+      "api_keys": "API-Schlüssel",
       "instructions": "Anweisungen",
       "tunings": "Tuning & Parameter",
       "runtime": "Runtime",
@@ -73,7 +74,14 @@
       "name_placeholder": "Preset-Name",
       "save_as": "Speichern unter",
       "save_active": "Änderungen am aktiven Preset speichern",
-      "empty": "Noch keine Presets."
+      "empty": "Noch keine Presets.",
+      "new_title": "Neue Vorlage",
+      "list_title": "Gespeicherte Vorlagen",
+      "active": "Aktiv",
+      "unsaved": "Nicht gespeichert",
+      "activate": "Aktivieren",
+      "none": "Keine",
+      "save_to": "„{{name}}“ mit aktuellen Werten aktualisieren"
     },
     "section": {
       "profile": {
@@ -120,7 +128,9 @@
         "restore": "Standard wiederherstellen",
         "save": "Anweisungen speichern",
         "saving": "Wird gespeichert..."
-      }
+      },
+      "profile_locked": "Speichern oder verwerfen Sie Ihre Änderungen, bevor Sie das Profil wechseln.",
+      "user_id": "Benutzer-ID"
     },
     "appearance": {
       "desc": "Design der Benutzeroberfläche, Textgröße und Anwendungssprache.",
@@ -140,7 +150,11 @@
       "shortcuts_desc": "Schneller Zugriff auf die Hauptbereiche der App.",
       "title": "Profil",
       "upload_photo": "Foto hochladen",
-      "username_hint": "Anmeldekennung. Muss eindeutig sein."
+      "username_hint": "Anmeldekennung. Muss eindeutig sein.",
+      "photo_title": "Foto",
+      "photo_hint": "Wird neben Ihren Nachrichten und in der Seitenleiste angezeigt.",
+      "details_title": "Kontodaten",
+      "details_desc": "Wie Sie für den Assistenten und die Administratoren erscheinen."
     },
     "security": {
       "confirm_password": "Passwort bestätigen",
@@ -155,12 +169,119 @@
       "password_mismatch": "Bestätigung stimmt nicht mit dem neuen Passwort überein.",
       "password_title": "Passwort",
       "password_updated": "Passwort erfolgreich aktualisiert.",
-      "update_password": "Passwort aktualisieren"
+      "update_password": "Passwort aktualisieren",
+      "desc": "Schützen Sie Ihr Konto."
+    },
+    "api_keys": {
+      "title": "API-Schlüssel",
+      "desc": "Erstelle persönliche Schlüssel, um AION aus Skripten und Integrationen (z. B. n8n) zu nutzen. Ein Schlüssel handelt in deinem Namen, beschränkt auf die erteilten Berechtigungen.",
+      "loading": "API-Schlüssel werden geladen…",
+      "retry": "Erneut versuchen",
+      "disabled": "Das Erstellen von API-Schlüsseln ist für dein Konto nicht aktiviert. Wende dich an deinen Administrator.",
+      "counter": "{{active}} von {{max}} aktiven Schlüsseln",
+      "new_key": "Neuer Schlüssel",
+      "quota_hint": "Du hast die maximale Anzahl aktiver Schlüssel erreicht. Widerrufe einen, um einen neuen zu erstellen.",
+      "empty": "Du hast noch keine API-Schlüssel.",
+      "created": "Erstellt",
+      "expires": "Läuft ab",
+      "revoked_on": "Widerrufen",
+      "no_expiry": "Kein Ablauf",
+      "last_used": "Zuletzt verwendet",
+      "never": "Nie",
+      "revoke": "Widerrufen",
+      "usage_title": "So verwendest du einen Schlüssel",
+      "usage_desc": "Sende den Schlüssel in einem dieser HTTP-Header. Anfragen handeln in deinem Namen, beschränkt auf die Berechtigungen des Schlüssels.",
+      "status": {
+        "active": "Aktiv",
+        "expired": "Abgelaufen",
+        "revoked": "Widerrufen"
+      },
+      "scope": {
+        "chat": {
+          "label": "Chat",
+          "desc": "Nachrichten an Agenten senden und Antworten erhalten."
+        },
+        "conversations_read": {
+          "label": "Unterhaltungen lesen",
+          "desc": "Deine Unterhaltungen auflisten und ihre Nachrichten lesen."
+        },
+        "conversations_write": {
+          "label": "Unterhaltungen verwalten",
+          "desc": "Deine Unterhaltungen erstellen, umbenennen und löschen."
+        },
+        "files_read": {
+          "label": "Dateien lesen",
+          "desc": "Dateien deiner Sitzungen auflisten und herunterladen."
+        },
+        "files_write": {
+          "label": "Dateien hochladen",
+          "desc": "Dateien in deine Sitzungen hochladen."
+        }
+      },
+      "create": {
+        "title": "Neuer API-Schlüssel",
+        "subtitle": "Der Schlüssel wird nur einmal angezeigt, direkt nach der Erstellung.",
+        "name_label": "Name",
+        "name_placeholder": "z. B. n8n-Automatisierung",
+        "name_hint": "Eine Bezeichnung, um zu erkennen, wo der Schlüssel verwendet wird.",
+        "scopes_label": "Berechtigungen",
+        "scopes_hint": "Erteile nur, was die Integration wirklich benötigt.",
+        "expiry_label": "Ablauf",
+        "expiry_days": "{{days}} Tage",
+        "expiry_one_day": "1 Tag",
+        "expiry_hint": "Maximal zulässig: {{max}} Tage.",
+        "submit": "Schlüssel erstellen",
+        "creating": "Wird erstellt…",
+        "cancel": "Abbrechen"
+      },
+      "secret": {
+        "title": "Kopiere deinen neuen Schlüssel „{{name}}“",
+        "warning": "Der vollständige Schlüssel wird nur dieses eine Mal angezeigt. Bewahre ihn sicher auf: Du kannst ihn später nicht mehr einsehen.",
+        "key_label": "API-Schlüssel",
+        "copy": "Kopieren",
+        "copied": "Kopiert",
+        "copy_failed": "Automatisches Kopieren fehlgeschlagen. Markiere den Schlüssel und kopiere ihn manuell.",
+        "dismiss": "Ich habe ihn gespeichert"
+      },
+      "revoke_dialog": {
+        "title": "API-Schlüssel widerrufen",
+        "subtitle": "Diese Aktion kann nicht rückgängig gemacht werden.",
+        "warning": "Integrationen, die diesen Schlüssel verwenden, funktionieren sofort nicht mehr.",
+        "desc": "Möchtest du den Schlüssel widerrufen:",
+        "key": "Schlüssel",
+        "confirm": "Schlüssel widerrufen",
+        "revoking": "Wird widerrufen…"
+      },
+      "toast": {
+        "created": "API-Schlüssel erstellt.",
+        "revoked": "API-Schlüssel widerrufen."
+      },
+      "err": {
+        "disabled": "Das Erstellen von API-Schlüsseln ist für dein Konto nicht aktiviert. Wende dich an deinen Administrator.",
+        "quota": "Du hast das Limit von {{max}} aktiven Schlüsseln erreicht. Widerrufe einen, bevor du einen neuen erstellst.",
+        "quota_generic": "Du hast die maximale Anzahl aktiver Schlüssel erreicht. Widerrufe einen, bevor du einen neuen erstellst.",
+        "invalid_scopes": "Eine oder mehrere ausgewählte Berechtigungen sind für dein Konto nicht zulässig.",
+        "invalid_expiration": "Der gewählte Ablauf ist nicht zulässig.",
+        "user_token_required": "Melde dich mit deinem Konto an, um API-Schlüssel zu verwalten.",
+        "not_found": "API-Schlüssel nicht gefunden.",
+        "generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut."
+      },
+      "list_title": "Ihre Schlüssel"
     },
     "subtitle": "Verwalten Sie Profil, Erscheinungsbild, Sicherheit und benutzerdefinierte Anweisungen.",
     "tunings": {
       "desc": "Modellparameter, Generierungssteuerungen, Ausführungsschritte und Laufzeit-Voreinstellungen konfigurieren.",
       "title": "Feinabstimmung & Parameter"
+    },
+    "ui": {
+      "nav": "Einstellungsbereiche",
+      "unsaved": "Sie haben ungespeicherte Änderungen",
+      "discard": "Verwerfen",
+      "save": "Änderungen speichern",
+      "saving": "Wird gespeichert…",
+      "saved": "Änderungen gespeichert",
+      "loading": "Einstellungen werden geladen…",
+      "dismiss": "Schließen"
     }
   },
   "sidebar": {
@@ -720,7 +841,7 @@
       "sso_user_already_linked": "Sie haben bereits ein verknüpftes Konto.",
       "generic": "Anmeldung fehlgeschlagen. Bitte erneut versuchen.",
       "sso_not_linked": "Ihr Konto ist noch nicht verknüpft. Melden Sie sich mit Passwort an und verknüpfen Sie Ihr Firmenkonto.",
-      "sso_domain_not_allowed": "Ihre E-Mail-Domain ist nicht zugelassen.",
+      "sso_domain_not_allowed": "Dieses Konto ist nicht für den Zugang freigeschaltet. Sie verwenden vermutlich das falsche Konto – melden Sie sich mit Ihrem Firmenkonto an.",
       "sso_required": "Für dieses Konto ist SSO-Anmeldung erforderlich.",
       "password_login_disabled": "Die Passwort-Anmeldung ist deaktiviert.",
       "temp_password_expired": "Das temporäre Passwort ist abgelaufen. Kontaktieren Sie den Administrator.",
@@ -737,7 +858,9 @@
       "exchange_failed": "Fehler beim Abschluss der Anmeldung.",
       "link_failed": "Verknüpfung fehlgeschlagen.",
       "session_invalid": "Sitzung abgelaufen, bitte erneut anmelden.",
-      "user_not_found": "Benutzer nicht gefunden."
+      "user_not_found": "Benutzer nicht gefunden.",
+      "sso_signup_closed": "Derzeit werden keine neuen Konten angenommen. Wenden Sie sich an Ihren Administrator, um Zugriff anzufordern.",
+      "sso_signup_not_allowed": "Ihr Konto ist für diese Plattform noch nicht freigeschaltet. Wenden Sie sich an Ihren Administrator, um Zugriff anzufordern."
     }
   },
   "authgate": {

@@ -1,8 +1,8 @@
 "use client";
 
-import { Check, ChevronDown, Moon, Sun } from "lucide-react";
+import { useSyncExternalStore } from "react";
+import { Moon, Sun } from "lucide-react";
 
-import { cn } from "@/lib/cn";
 import { getLocale, setLocale, subscribe, type Locale } from "@/lib/i18n/i18n-store";
 import { LOCALE_OPTIONS } from "@/lib/i18n/locale-options";
 import { syncLanguagePreferenceToServer } from "@/lib/i18n/sync-language";
@@ -10,10 +10,11 @@ import { useT } from "@/lib/i18n/use-t";
 import { useChatTheme } from "@/lib/theme/chat-theme";
 import { useChatFontSize } from "@/lib/theme/chat-font-scale";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
-import { useSyncExternalStore, useState } from "react";
-import { SettingsFieldRow } from "./SettingsCard";
 import { FontSizeSlider } from "./FontSizeSlider";
+import { Select } from "./Select";
+import { Group, Row, RowList, SectionHead, Segmented } from "./ui";
 
+/** Theme, text size and language. Every change applies (and persists) immediately. */
 export function AppearanceSection({
   onLanguageSaved,
 }: {
@@ -24,122 +25,59 @@ export function AppearanceSection({
   const [theme, setTheme] = useChatTheme();
   const [fontSize, setFontSize] = useChatFontSize();
   const locale = useSyncExternalStore(subscribe, getLocale, () => "en" as Locale);
-  const [langOpen, setLangOpen] = useState(false);
 
   async function handleLanguageChange(code: Locale) {
     setLocale(code);
-    setLangOpen(false);
     if (token) {
       const ok = await syncLanguagePreferenceToServer(token, code);
-      onLanguageSaved?.(
-        ok ? t("toast.language_saved") : t("toast.language_server_error"),
-      );
+      onLanguageSaved?.(ok ? t("toast.language_saved") : t("toast.language_server_error"));
     } else {
       onLanguageSaved?.(t("toast.language_local"));
     }
   }
 
-  const current = LOCALE_OPTIONS.find((l) => l.code === locale) ?? LOCALE_OPTIONS[0];
-
   return (
-    <div className="space-y-1">
-      <SettingsFieldRow
-        label={t("settings.appearance.font_scale_label")}
-        hint={t("settings.appearance.font_scale_desc")}
-      >
-        <FontSizeSlider
-          value={fontSize}
-          onChange={setFontSize}
-          aria-label={t("settings.appearance.font_scale_label")}
-        />
-      </SettingsFieldRow>
-
-      <SettingsFieldRow
-        label={t("settings.appearance.theme_label")}
-        hint={t("settings.appearance.theme_desc")}
-      >
-        <div className="grid max-w-xs grid-cols-2 gap-1 rounded-xl bg-muted/40 p-1">
-          <button
-            type="button"
-            onClick={() => setTheme("light")}
-            className={cn(
-              "focus-ring flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition",
-              theme === "light"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Sun className="h-3.5 w-3.5" aria-hidden />
-            {t("sidebar.profile_menu.theme_light")}
-          </button>
-          <button
-            type="button"
-            onClick={() => setTheme("dark")}
-            className={cn(
-              "focus-ring flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition",
-              theme === "dark"
-                ? "bg-background text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Moon className="h-3.5 w-3.5" aria-hidden />
-            {t("sidebar.profile_menu.theme_dark")}
-          </button>
-        </div>
-      </SettingsFieldRow>
-
-      <SettingsFieldRow
-        label={t("settings.appearance.language_label")}
-        hint={t("settings.section.language.desc")}
-      >
-        <div className="relative max-w-xs">
-          <button
-            type="button"
-            onClick={() => setLangOpen((prev) => !prev)}
-            className="focus-ring flex w-full items-center justify-between gap-2 rounded-xl border border-border/50 bg-background/50 px-3.5 py-2.5 text-sm transition hover:bg-muted/40"
-          >
-            <span className="flex items-center gap-2 text-xs font-semibold">
-              <span aria-hidden>{current.flag}</span>
-              {current.name}
-            </span>
-            <ChevronDown
-              className={cn("h-4 w-4 text-muted-foreground transition", langOpen && "rotate-180")}
-              aria-hidden
+    <>
+      <SectionHead title={t("settings.appearance.title")} description={t("settings.appearance.desc")} />
+      <Group>
+        <RowList>
+          <Row label={t("settings.appearance.theme_label")} description={t("settings.appearance.theme_desc")}>
+            <Segmented
+              label={t("settings.appearance.theme_label")}
+              value={theme === "light" ? "light" : "dark"}
+              onChange={setTheme}
+              className="w-full sm:w-auto"
+              options={[
+                { value: "light", label: t("sidebar.profile_menu.theme_light"), icon: <Sun className="h-3.5 w-3.5" aria-hidden /> },
+                { value: "dark", label: t("sidebar.profile_menu.theme_dark"), icon: <Moon className="h-3.5 w-3.5" aria-hidden /> },
+              ]}
             />
-          </button>
-          {langOpen ? (
-            <>
-              <button
-                type="button"
-                className="fixed inset-0 z-40"
-                aria-label={t("btn.cancel")}
-                onClick={() => setLangOpen(false)}
+          </Row>
+          <Row label={t("settings.appearance.font_scale_label")} description={t("settings.appearance.font_scale_desc")}>
+            <div className="flex items-center gap-4 sm:w-80">
+              <FontSizeSlider
+                value={fontSize}
+                onChange={setFontSize}
+                aria-label={t("settings.appearance.font_scale_label")}
+                className="max-w-none flex-1"
               />
-              <div className="absolute left-0 right-0 z-50 mt-1.5 rounded-xl border border-border/60 bg-card/95 p-1 shadow-xl backdrop-blur-xl">
-                {LOCALE_OPTIONS.map((lang) => (
-                  <button
-                    key={lang.code}
-                    type="button"
-                    onClick={() => void handleLanguageChange(lang.code)}
-                    className={cn(
-                      "focus-ring flex w-full items-center justify-between rounded-lg px-3 py-2 text-xs font-semibold transition",
-                      locale === lang.code
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                      <span aria-hidden>{lang.flag}</span>
-                      {lang.name}
-                    </span>
-                    {locale === lang.code ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
-                  </button>
-                ))}
-              </div>
-            </>
-          ) : null}
-        </div>
-      </SettingsFieldRow>
-    </div>
+              <output className="w-11 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
+                {fontSize}px
+              </output>
+            </div>
+          </Row>
+          <Row label={t("settings.appearance.language_label")} description={t("settings.section.language.desc")}>
+            <div className="sm:w-56">
+              <Select
+                aria-label={t("settings.appearance.language_label")}
+                value={locale}
+                onChange={(code) => void handleLanguageChange(code)}
+                options={LOCALE_OPTIONS.map((l) => ({ value: l.code, label: l.name }))}
+              />
+            </div>
+          </Row>
+        </RowList>
+      </Group>
+    </>
   );
 }
