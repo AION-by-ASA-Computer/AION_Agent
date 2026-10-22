@@ -11,6 +11,7 @@ import {
   type ConversationSummary,
 } from "@/lib/api/aion";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
+import { randomUUID } from "@/lib/uuid";
 
 export function useConversationIdFromPath(): string {
   const pathname = usePathname();
@@ -50,7 +51,7 @@ export function useConversationThreads() {
         await deleteConversation(idToDelete, userId, token);
         await refreshThreads();
         if (currentId === idToDelete) {
-          router.push(`/c/${crypto.randomUUID()}`);
+          router.push(`/c/${randomUUID()}`);
         }
       } catch (err) {
         console.error("Error deleting conversation:", err);

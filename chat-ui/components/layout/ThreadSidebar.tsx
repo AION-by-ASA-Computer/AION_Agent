@@ -30,6 +30,7 @@ import { SidebarProfileMenu } from "./SidebarProfileMenu";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { useT } from "@/lib/i18n/use-t";
 import { usePathname } from "next/navigation";
+import { randomUUID } from "@/lib/uuid";
 
 function isFavorite(c: ConversationSummary) {
   return c.metadata?.favorite === true || c.metadata?.favorite === "true";
@@ -154,7 +155,7 @@ export function ThreadSidebar({
   );
 
   const startNewChat = () => {
-    const id = crypto.randomUUID();
+    const id = randomUUID();
     if (onSelectConversation) {
       onSelectConversation(id);
     } else {
