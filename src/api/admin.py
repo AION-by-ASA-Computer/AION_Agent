@@ -367,6 +367,31 @@ def _is_private_data_path(path: Path) -> bool:
     )
 
 
+_SECRET_NAME_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
+
+
+def _investigable_path(raw: str) -> Optional[Path]:
+    """Percorso che /security/investigate puo' leggere, oppure None.
+
+    Solo file del progetto (i percorsi relativi delle scansioni partono dalla
+    root), mai dati utente, segreti o metadati git: il contenuto finisce nel
+    prompt dell'LLM e nel report salvato. ``resolve()`` segue i symlink, quindi
+    un link verso l'esterno del progetto viene rifiutato.
+    """
+    root = _project_root().resolve()
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = candidate.resolve()
+    if not _is_under_dir(resolved, root) or _is_private_data_path(resolved):
+        return None
+    rel_parts = resolved.relative_to(root).parts
+    name = resolved.name.lower()
+    if ".git" in rel_parts or ".local." in name or name.endswith(_SECRET_NAME_SUFFIXES):
+        return None
+    return resolved
+
+
 @router.get("/security/investigate")
 async def investigate_code(path: str, profile: str = "Security Officer"):
     """
@@ -374,13 +399,15 @@ async def investigate_code(path: str, profile: str = "Security Officer"):
     Returns a stream of tokens and reasoning.
     """
 
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="File not found")
-    if _is_private_data_path(Path(path)):
+    # Prima il controllo, poi l'esistenza: fuori dal progetto non si sonda nulla.
+    target = _investigable_path(path)
+    if target is None:
         raise HTTPException(status_code=403, detail="Path not allowed")
+    if not target.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(target, "r", encoding="utf-8") as f:
             code_content = f.read()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not read file: {str(e)}")

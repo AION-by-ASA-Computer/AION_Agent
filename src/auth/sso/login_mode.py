@@ -141,7 +141,10 @@ async def get_login_settings(tenant_id: str) -> Dict[str, Any]:
 
 SIGNUP_POLICIES = ("open", "allowlist", "closed")
 SIGNUP_ALLOWLIST_MAX = 2000
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# L'ultima etichetta del dominio non contiene punti: senza questo vincolo la
+# regex torna indietro in tempo quadratico su input come ``a@a.a.a...`` (ReDoS).
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s.]+$")
+_MAX_ALLOWLIST_ENTRY = 254  # lunghezza massima di un indirizzo email (RFC 5321)
 _DOMAIN_RE = re.compile(r"^@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
 
 
@@ -168,7 +171,7 @@ def normalize_allowlist_entry(entry: str) -> Optional[str]:
     Restituisce la voce in minuscolo, oppure None se non valida.
     """
     v = (entry or "").strip().lower()
-    if not v:
+    if not v or len(v) > _MAX_ALLOWLIST_ENTRY:
         return None
     if v.startswith("@"):
         return v if _DOMAIN_RE.match(v) else None

@@ -498,8 +498,21 @@ def test_allowlist_entry_normalization():
     assert normalize_allowlist_entry("@Azienda.it") == "@azienda.it"
     for bad in ("azienda.it", "@", "@azienda", "mario@", "a b@x.it", "@-x.it"):
         assert normalize_allowlist_entry(bad) is None, bad
+    assert normalize_allowlist_entry("a@" + "b" * 260 + ".it") is None  # > 254
     assert signup_denied_reason("a@x.it", "bogus", []) is None  # policy ignota -> open
     assert signup_denied_reason(None, "allowlist", ["@x.it"]) == "sso_signup_not_allowed"
+
+
+def test_allowlist_email_regex_is_linear():
+    """Niente backtracking quadratico (ReDoS) su ``a@a.a.a...`` non valido."""
+    import time
+
+    from src.auth.sso.login_mode import _EMAIL_RE
+
+    evil = "!@!." + "!." * 50_000 + "@"
+    t0 = time.perf_counter()
+    assert _EMAIL_RE.match(evil) is None
+    assert time.perf_counter() - t0 < 0.5
 
 
 # --- Eliminazione utenti ----------------------------------------------------
