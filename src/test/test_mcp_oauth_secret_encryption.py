@@ -165,8 +165,8 @@ def test_migration_upgrade_and_downgrade(oauth_db: str) -> None:  # noqa: F811
 
 
 def test_migration_skips_without_key(
-    oauth_db: str,
-    monkeypatch: pytest.MonkeyPatch,  # noqa: F811
+    oauth_db: str,  # noqa: F811
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     asyncio.run(_insert_mcp_server_config("khub", oauth_config={"client_id": "x"}))
     legacy = json.dumps({"client_id": "x", "client_secret": _SECRET})

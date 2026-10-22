@@ -661,7 +661,11 @@ async def _resolve_chat_identity(
            da ``X-AION-User-Id``, nessun ruolo admin).
     """
     api_key_raw = (x_api_key or "").strip()
-    if not api_key_raw and authorization and authorization.lower().startswith("bearer "):
+    if (
+        not api_key_raw
+        and authorization
+        and authorization.lower().startswith("bearer ")
+    ):
         bearer = authorization.split(" ", 1)[1].strip()
         if _looks_like_api_key(bearer):
             api_key_raw = bearer
@@ -762,7 +766,11 @@ async def _resolve_api_key_identity(
 
     if not _looks_like_api_key(token):
         raise HTTPException(
-            401, detail={"code": "api_key_invalid_format", "message": "Invalid API key format"}
+            401,
+            detail={
+                "code": "api_key_invalid_format",
+                "message": "Invalid API key format",
+            },
         )
     principal = await authenticate_api_key(token)
     if not accepted_scopes:

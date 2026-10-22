@@ -33,6 +33,8 @@ def test_invalid_passwords(password, code):
 
 
 def test_contains_username():
-    assert "contains_username" in password_policy_violations("xMario.Rossi1!", "mario.rossi")
+    assert "contains_username" in password_policy_violations(
+        "xMario.Rossi1!", "mario.rossi"
+    )
     # Username troppo corti non vengono considerati.
     assert password_policy_violations("Str0ng!pw", "pw") == []

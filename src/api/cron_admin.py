@@ -41,7 +41,12 @@ def _require_cron() -> None:
 def _redact_run(run: Optional[dict]) -> Optional[dict]:
     if not run:
         return run
-    return {**run, "assistant_preview": None, "conversation_id": None, "session_id": None}
+    return {
+        **run,
+        "assistant_preview": None,
+        "conversation_id": None,
+        "session_id": None,
+    }
 
 
 def _is_user_job(d: dict) -> bool:
@@ -192,4 +197,6 @@ async def list_cron_job_runs(
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
     runs = await cron_db.list_runs(job_id, limit=limit)
-    return ScheduledRunListResponse(runs=[ScheduledRunOut(**_redact_run(r)) for r in runs])
+    return ScheduledRunListResponse(
+        runs=[ScheduledRunOut(**_redact_run(r)) for r in runs]
+    )

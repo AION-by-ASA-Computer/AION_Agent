@@ -31,7 +31,9 @@ async def list_user_keys(session: AsyncSession, user_id: str) -> List[ApiKey]:
 
 async def count_active(session: AsyncSession, user_id: str) -> int:
     now = datetime.now(timezone.utc)
-    q = select(func.count(ApiKey.id)).where(ApiKey.user_id == user_id, *_active_clause(now))
+    q = select(func.count(ApiKey.id)).where(
+        ApiKey.user_id == user_id, *_active_clause(now)
+    )
     return int((await session.execute(q)).scalar() or 0)
 
 
@@ -74,7 +76,9 @@ async def create_user_key(
     return row, full_key
 
 
-async def revoke_key(session: AsyncSession, user_id: str, key_id: str) -> Optional[ApiKey]:
+async def revoke_key(
+    session: AsyncSession, user_id: str, key_id: str
+) -> Optional[ApiKey]:
     """Revoca soft; ``None`` se la chiave non esiste o non è dell'utente."""
     row = await session.get(ApiKey, key_id)
     if row is None or row.user_id != user_id:

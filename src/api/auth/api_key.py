@@ -104,7 +104,9 @@ async def authenticate_api_key(token: str) -> ApiKeyPrincipal:
     now = datetime.now(timezone.utc)
     async with get_async_session_maker()() as session:
         row = (
-            await session.execute(select(ApiKey).where(ApiKey.hash == hash_api_key(token)))
+            await session.execute(
+                select(ApiKey).where(ApiKey.hash == hash_api_key(token))
+            )
         ).scalar_one_or_none()
         if row is None:
             raise _reject("api_key_invalid", "Invalid API key")
@@ -121,10 +123,15 @@ async def authenticate_api_key(token: str) -> ApiKeyPrincipal:
             user_row_id=owner.id,
             identifier=owner.identifier,
             tenant_id=owner.tenant_id,
-            scopes=[s for s in scopes_from_json(row.scopes_json) if s in ALLOWED_USER_SCOPES],
+            scopes=[
+                s for s in scopes_from_json(row.scopes_json) if s in ALLOWED_USER_SCOPES
+            ],
         )
 
-        if row.last_used_at is None or now - _as_utc(row.last_used_at) >= _LAST_USED_RESOLUTION:
+        if (
+            row.last_used_at is None
+            or now - _as_utc(row.last_used_at) >= _LAST_USED_RESOLUTION
+        ):
             try:
                 await session.execute(
                     update(ApiKey).where(ApiKey.id == row.id).values(last_used_at=now)

@@ -55,7 +55,11 @@ def require_scope(scope: str):
             return ctx
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            detail={"code": "missing_scope", "scope": scope, "message": f"Missing scope {scope}"},
+            detail={
+                "code": "missing_scope",
+                "scope": scope,
+                "message": f"Missing scope {scope}",
+            },
         )
 
     return _dep

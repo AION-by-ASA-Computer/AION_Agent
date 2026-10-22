@@ -107,9 +107,7 @@ def test_chat_ui_history_collapses_stream_loop_fragments(monkeypatch, tmp_path):
             message_id="assistant-frag",
         )
 
-        payload = await get_conversation_messages_chat_ui(
-            "conv-frag", user_id="u1"
-        )
+        payload = await get_conversation_messages_chat_ui("conv-frag", user_id="u1")
         assistants = [m for m in payload["messages"] if m["role"] == "assistant"]
         assert len(assistants) == 1
         assert assistants[0]["id"] == "assistant-main"
@@ -141,9 +139,7 @@ def test_chat_ui_history_shows_empty_assistant_with_steps(monkeypatch, tmp_path)
             message_id="assistant-1",
         )
 
-        payload = await get_conversation_messages_chat_ui(
-            "conv-empty", user_id="u1"
-        )
+        payload = await get_conversation_messages_chat_ui("conv-empty", user_id="u1")
         assert len(payload["messages"]) == 2
         assistant = payload["messages"][1]
         assert assistant["id"] == "assistant-1"
@@ -183,9 +179,7 @@ def test_chat_ui_history_shows_terminal_empty_assistant(monkeypatch, tmp_path):
             message_id="assistant-1",
         )
 
-        payload = await get_conversation_messages_chat_ui(
-            "conv-term", user_id="u1"
-        )
+        payload = await get_conversation_messages_chat_ui("conv-term", user_id="u1")
         assert len(payload["messages"]) == 2
         assert payload["messages"][1]["role"] == "assistant"
         assert payload["messages"][1]["id"] == "assistant-1"
@@ -317,9 +311,7 @@ def test_no_dedup_needed_with_single_writer(monkeypatch, tmp_path):
             message_id="assistant-2",
         )
 
-        payload = await get_conversation_messages_chat_ui(
-            "conv-dedup", user_id="u1"
-        )
+        payload = await get_conversation_messages_chat_ui("conv-dedup", user_id="u1")
         assistants = [m for m in payload["messages"] if m["role"] == "assistant"]
         assert len(assistants) == 2
         assert assistants[0]["id"] == "assistant-1"

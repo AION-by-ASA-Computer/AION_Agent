@@ -4201,7 +4201,10 @@ async def get_feedback_summary(days: int = Query(7, ge=1, le=365)):
         "window_days": days,
         "totals": totals,
         "by_profile": _by_total(
-            [{"profile": profile_names[slug], "slug": slug, **c} for slug, c in by_profile.items()]
+            [
+                {"profile": profile_names[slug], "slug": slug, **c}
+                for slug, c in by_profile.items()
+            ]
         ),
         "by_model": _by_total([{"model": name, **c} for name, c in by_model.items()]),
     }

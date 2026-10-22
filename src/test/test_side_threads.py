@@ -125,9 +125,7 @@ def test_delete_parent_archives_threads(monkeypatch, tmp_path):
 
         await delete_conversation_chat_ui("parent", user_id="u1")
 
-        assert (await list_side_threads_chat_ui("parent", user_id="u1"))[
-            "data"
-        ] == []
+        assert (await list_side_threads_chat_ui("parent", user_id="u1"))["data"] == []
         everything = await list_conversations_chat_ui(
             limit=40, exclude_scheduled=True, include_threads=True, user_id="u1"
         )

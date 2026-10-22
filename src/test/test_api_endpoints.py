@@ -166,7 +166,12 @@ mcp_servers: []
             assert data["totals"] == {"positive": 0, "negative": 1}
             assert data["by_profile"] == [
                 # Stored slug is resolved to the profile's display name
-                {"profile": "Generic Assistant", "slug": "generic_assistant", "positive": 0, "negative": 1}
+                {
+                    "profile": "Generic Assistant",
+                    "slug": "generic_assistant",
+                    "positive": 0,
+                    "negative": 1,
+                }
             ]
             assert [r["negative"] for r in data["by_model"]] == [1]
             raw = res_get.text
@@ -181,7 +186,10 @@ mcp_servers: []
                 assert leaked not in raw
 
             # Per-message feedback management and conversation reading are gone
-            assert client.delete("/admin/feedback/msg-assistant-1").status_code in (404, 405)
+            assert client.delete("/admin/feedback/msg-assistant-1").status_code in (
+                404,
+                405,
+            )
             for path in (
                 "/admin/conversations/global",
                 "/admin/conversations/conv-test-feedback/messages",

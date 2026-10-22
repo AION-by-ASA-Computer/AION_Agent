@@ -83,12 +83,18 @@ async def test_admin_cron_jobs_hide_user_job_content(monkeypatch, tmp_path: Path
 
         runs = client.get(f"/admin/cron-jobs/{job_id}/runs").json()["runs"]
         assert runs and all(
-            r["assistant_preview"] is None and r["conversation_id"] is None for r in runs
+            r["assistant_preview"] is None and r["conversation_id"] is None
+            for r in runs
         )
 
-        assert client.patch(f"/admin/cron-jobs/{job_id}", json={"prompt": "x"}).status_code == 400
         assert (
-            client.patch(f"/admin/cron-jobs/{job_id}", json={"session_id": "other"}).status_code
+            client.patch(f"/admin/cron-jobs/{job_id}", json={"prompt": "x"}).status_code
+            == 400
+        )
+        assert (
+            client.patch(
+                f"/admin/cron-jobs/{job_id}", json={"session_id": "other"}
+            ).status_code
             == 400
         )
         ok = client.patch(f"/admin/cron-jobs/{job_id}", json={"enabled": True})

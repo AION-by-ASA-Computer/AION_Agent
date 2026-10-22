@@ -118,7 +118,10 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
         for col, ddl in (
             ("can_create_api_keys", "can_create_api_keys BOOLEAN NOT NULL DEFAULT 0"),
             ("max_api_keys", "max_api_keys INTEGER NOT NULL DEFAULT 5"),
-            ("api_key_max_ttl_days", "api_key_max_ttl_days INTEGER NOT NULL DEFAULT 90"),
+            (
+                "api_key_max_ttl_days",
+                "api_key_max_ttl_days INTEGER NOT NULL DEFAULT 90",
+            ),
         ):
             await _sqlite_add_column_if_missing(conn, "users", col, ddl)
     if await _sqlite_table_exists(conn, "api_keys"):

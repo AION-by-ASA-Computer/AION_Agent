@@ -143,7 +143,9 @@ async def _bootstrap_default_admin_user() -> None:
 
     # Con SSO attivo niente account con password: il recupero passa da
     # ``python -m src.auth.recover`` / AION_SSO_FORCE_PASSWORD.
-    if (await get_login_settings(tenant_id)).get("login_mode", "password") != "password":
+    if (await get_login_settings(tenant_id)).get(
+        "login_mode", "password"
+    ) != "password":
         logger.warning(
             "No admin found but SSO login is active: default admin not created. "
             "Use `python -m src.auth.recover` to regain access."

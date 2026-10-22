@@ -17,4 +17,3 @@ def test_resume_filters_empty_technical_messages():
     assert is_replay_visible_message("assistant", "") is False
     assert is_replay_visible_message("tool", "   ") is False
     assert is_replay_visible_message("assistant", "testo reale") is True
-

@@ -145,7 +145,9 @@ SIGNUP_ALLOWLIST_MAX = 2000
 # regex torna indietro in tempo quadratico su input come ``a@a.a.a...`` (ReDoS).
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s.]+$")
 _MAX_ALLOWLIST_ENTRY = 254  # lunghezza massima di un indirizzo email (RFC 5321)
-_DOMAIN_RE = re.compile(r"^@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
+_DOMAIN_RE = re.compile(
+    r"^@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+)
 
 
 def normalize_signup_policy(value: Optional[str]) -> str:

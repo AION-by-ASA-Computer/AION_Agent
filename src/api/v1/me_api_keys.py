@@ -32,7 +32,10 @@ def _me(auth: ChatAuthIdentity = Depends(require_chat_auth)) -> ChatAuthIdentity
     if auth.via != "chat_token" or not auth.user_row_id:
         raise HTTPException(
             403,
-            detail={"code": "user_token_required", "message": "User login token required"},
+            detail={
+                "code": "user_token_required",
+                "message": "User login token required",
+            },
         )
     return auth
 
@@ -105,7 +108,11 @@ async def create_my_api_key(
     if invalid:
         raise HTTPException(
             422,
-            detail={"code": "invalid_scopes", "scopes": invalid, "message": "Invalid scopes"},
+            detail={
+                "code": "invalid_scopes",
+                "scopes": invalid,
+                "message": "Invalid scopes",
+            },
         )
     async with get_async_session_maker()() as session:
         user = await _load_user(session, auth.user_row_id)

@@ -38,7 +38,11 @@ def test_microsoft_domain_rejected(monkeypatch):
 
 
 def test_microsoft_domain_case_insensitive(monkeypatch):
-    payload = {"nonce": "n1", "tid": "tid-1", "preferred_username": "a@SECRET-corp.example"}
+    payload = {
+        "nonce": "n1",
+        "tid": "tid-1",
+        "preferred_username": "a@SECRET-corp.example",
+    }
     assert _verify(monkeypatch, "microsoft", payload)["nonce"] == "n1"
 
 
@@ -56,7 +60,9 @@ def test_google_domain_rejected(monkeypatch):
         ("admin_login", "http://admin.test/login?error="),
     ],
 )
-def test_callback_redirects_without_leaking_domains(monkeypatch, purpose, expected_prefix):
+def test_callback_redirects_without_leaking_domains(
+    monkeypatch, purpose, expected_prefix
+):
     async def fake_handle_callback(**_kw):
         return {
             "provider_config": {"provider": "microsoft", "allowed_domains": ALLOWED},
@@ -87,7 +93,10 @@ def test_account_domain_from_claims():
     from src.auth.sso.config_service import account_domain_from_claims as f
 
     assert f("microsoft", {"preferred_username": "A@Corp.Example"}) == "corp.example"
-    assert f("microsoft", {"preferred_username": "a@t.onmicrosoft.com"}) == "t.onmicrosoft.com"
+    assert (
+        f("microsoft", {"preferred_username": "a@t.onmicrosoft.com"})
+        == "t.onmicrosoft.com"
+    )
     assert f("microsoft", {}) is None
     assert f("google", {"hd": "Corp.Example"}) == "corp.example"
     assert f("google", {"email": "a@gmail.com"}) is None

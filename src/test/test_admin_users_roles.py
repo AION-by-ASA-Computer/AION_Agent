@@ -153,9 +153,7 @@ async def test_api_key_policy_fields(monkeypatch, tmp_path):
     )
     async with sm() as session:
         u = (
-            await session.execute(
-                select(User).where(User.identifier == "mario")
-            )
+            await session.execute(select(User).where(User.identifier == "mario"))
         ).scalar_one()
         assert (u.can_create_api_keys, u.max_api_keys, u.api_key_max_ttl_days) == (
             True,
@@ -237,7 +235,10 @@ async def test_signup_policy_endpoints(monkeypatch, tmp_path):
             auth=_auth("a1"),
         )
     assert e.value.status_code == 400
-    assert e.value.detail == {"code": "invalid_allowlist_entry", "entry": "not-an-email"}
+    assert e.value.detail == {
+        "code": "invalid_allowlist_entry",
+        "entry": "not-an-email",
+    }
 
     with pytest.raises(HTTPException) as e:
         await put_signup_policy(SetSignupPolicyBody(policy="maybe"), auth=_auth("a1"))

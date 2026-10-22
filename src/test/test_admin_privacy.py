@@ -13,7 +13,9 @@ def test_private_data_paths_are_detected(tmp_path: Path):
     from src.session_workspace import data_root
 
     assert _is_private_data_path(data_root() / "aion.db")
-    assert _is_private_data_path(data_root() / "sessions" / "conv-1" / "uploads" / "a.txt")
+    assert _is_private_data_path(
+        data_root() / "sessions" / "conv-1" / "uploads" / "a.txt"
+    )
     assert _is_private_data_path(_project_root() / ".env")
     assert _is_private_data_path(tmp_path / "chat_memory.sqlite3")
     assert not _is_private_data_path(_project_root() / "src" / "api" / "admin.py")
@@ -54,7 +56,9 @@ def test_investigable_path_rejects_symlink_out_of_project(tmp_path: Path):
 
 
 @pytest.mark.anyio
-async def test_security_investigate_rejects_files_outside_project(monkeypatch, tmp_path: Path):
+async def test_security_investigate_rejects_files_outside_project(
+    monkeypatch, tmp_path: Path
+):
     await _reset_unified_db(monkeypatch, tmp_path)
 
     from src.api.main import app

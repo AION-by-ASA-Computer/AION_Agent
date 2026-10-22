@@ -106,10 +106,16 @@ async def test_patch_adds_api_key_ownership_and_revokes_legacy_keys():
         user_cols = {row[1] for row in verify.execute("PRAGMA table_info(users)")}
         key_cols = {row[1] for row in verify.execute("PRAGMA table_info(api_keys)")}
         indexes = {row[1] for row in verify.execute("PRAGMA index_list(api_keys)")}
-        revoked = verify.execute("SELECT revoked_at FROM api_keys WHERE id='k1'").fetchone()[0]
+        revoked = verify.execute(
+            "SELECT revoked_at FROM api_keys WHERE id='k1'"
+        ).fetchone()[0]
         verify.close()
 
-        assert {"can_create_api_keys", "max_api_keys", "api_key_max_ttl_days"} <= user_cols
+        assert {
+            "can_create_api_keys",
+            "max_api_keys",
+            "api_key_max_ttl_days",
+        } <= user_cols
         assert "user_id" in key_cols
         assert {"ix_api_keys_user_id", "ux_api_keys_hash"} <= indexes
         assert revoked is not None

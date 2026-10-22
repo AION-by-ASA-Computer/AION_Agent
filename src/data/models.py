@@ -110,7 +110,10 @@ class ApiKey(Base):
     # Proprietario: la chiave agisce come questo utente. NULL solo sulle righe
     # legacy (pre y7z8a9b027), sempre rifiutate in autenticazione.
     user_id: Mapped[Optional[str]] = mapped_column(
-        String(64), ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
     )
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     # Solo per la visualizzazione (``aion_<prefix>_…``); il lookup usa ``hash``.
