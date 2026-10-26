@@ -983,6 +983,9 @@ async def chat_sync(
     resolved_effort = resolve_turn_reasoning(effort_in, thinking_in)
 
     timeout = float(body.timeout_seconds or 300.0)
+    # Un turno precedente scaduto (o /chat/stop) lascia il flag di cancel per
+    # 120 s: azzerarlo, altrimenti questo turno si annulla da solo.
+    await redis_clear_stream_cancel(conversation_id)
 
     try:
         agent_instance, profile_name = await get_agent(

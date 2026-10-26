@@ -13,7 +13,11 @@ from src.agent_pipeline import AgentPipeline
 from src.identity import sanitize_user_id
 from src.main import get_agent, set_event_loop
 from src.runtime import cron_db
-from src.runtime.redis_client import redis_set_stream_active, redis_clear_stream_active
+from src.runtime.redis_client import (
+    redis_clear_stream_active,
+    redis_clear_stream_cancel,
+    redis_set_stream_active,
+)
 
 
 logger = logging.getLogger("aion.cron_runner")
@@ -182,6 +186,17 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
         # Sostituisci con la tua funzione effettiva di salvataggio a DB
         # await save_chat_message(conversation_id, user_message_id, "user", prompt, user_id)
 
+        from src.api.v1.chat import (
+            BackgroundChatRun,
+            _background_runs,
+            _stop_background_run,
+        )
+
+        # Un turno alla volta per conversazione: ferma quello in corso e azzera
+        # il flag di cancel che resterebbe attivo per il nuovo turno.
+        await _stop_background_run(conversation_id, timeout=45.0)
+        await redis_clear_stream_cancel(conversation_id)
+
         # 3. ATTIVAZIONE STREAM REDIS (Innesca il polling nella UI)
         await redis_set_stream_active(
             conversation_id,
@@ -189,8 +204,6 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
             user_message_id=user_message_id,
             profile_name=profile,
         )
-        from src.api.v1.chat import _background_runs, BackgroundChatRun
-
         run = BackgroundChatRun(conversation_id)
         _background_runs[conversation_id] = run
         # ---------------------------------------------------------
