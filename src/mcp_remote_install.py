@@ -55,6 +55,9 @@ def resolve_remote_bridge_spawn(config: Dict[str, Any]) -> Tuple[str, List[str]]
     """
     raw_args = list(config.get("args") or [])
     tail = remote_bridge_tail_args(raw_args)
+    # Broker su rete interna in HTTP: mcp-remote rifiuta http:// non loopback senza flag.
+    if config.get("allow_http") is True and "--allow-http" not in tail:
+        tail.append("--allow-http")
 
     local = mcp_remote_proxy_path()
     if local:
