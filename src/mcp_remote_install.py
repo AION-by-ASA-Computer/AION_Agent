@@ -114,6 +114,9 @@ def build_remote_bridge_registry_config(
         "aion_market_install": "remote",
         "description": description,
     }
-    if auth_type != "none" and env_var:
+    if auth_key and credential_mode == "per_user":
         config["auth_env_var"] = env_var
+    elif auth_key and credential_mode == "org_shared":
+        # Token unico dell'organizzazione: mcp-remote legge ${API_KEY}, non AION_USER_*.
+        config["auth_env_var"] = auth_key
     return config

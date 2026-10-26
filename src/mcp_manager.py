@@ -305,9 +305,11 @@ def _server_needs_user_credentials(config: Optional[Dict[str, Any]]) -> bool:
         isinstance(v, str) and "${AION_USER_" in v for v in env_block.values()
     ):
         return True
-    return _is_remote_bridge(config) and bool(
-        (config.get("auth_env_var") or "").strip()
-    )
+    if not _is_remote_bridge(config) or not (config.get("auth_env_var") or "").strip():
+        return False
+    from .mcp_credential_discovery import resolve_remote_bridge_auth_env_var
+
+    return (resolve_remote_bridge_auth_env_var(config) or "").startswith("AION_USER_")
 
 
 def _remote_bridge_auth_missing(
