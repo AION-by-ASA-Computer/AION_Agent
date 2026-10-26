@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 import { probeBaseUrlFromOcrServiceUrl } from "@/lib/llm-probe";
 import { PageToast, type ToastState } from "@/components/PageToast";
+import { RestartOverlay } from "@/components/RestartOverlay";
 import { outlineBtn, solidBtn } from "@/components/ui/classes";
 import { ModelsSection } from "@/components/settings/ModelsSection";
 import { MemorySection } from "@/components/settings/MemorySection";
@@ -51,7 +52,6 @@ export default function SettingsPage() {
   const [restarting, setRestarting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const [active, setActive] = useState<SectionId>("models");
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const notify: Notify = useCallback((message, variant = "info") => setToast({ message, variant }), []);
 
@@ -77,9 +77,6 @@ export default function SettingsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount
     void fetchSettings();
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
   }, [fetchSettings]);
 
   // Section follows the URL hash so a link can open a given section.
@@ -109,37 +106,9 @@ export default function SettingsPage() {
     return false;
   }, [baseline, settings, ocrMode]);
 
-  const pollHealth = useCallback(async () => {
-    const max = 30;
-    let attempt = 0;
-    await new Promise((r) => setTimeout(r, 2000));
-    pollRef.current = setInterval(async () => {
-      attempt++;
-      try {
-        const res = await fetch(`${apiBase()}/health`);
-        if (res.ok && (await res.json()).status === "ok") {
-          if (pollRef.current) clearInterval(pollRef.current);
-          setRestarting(false);
-          notify(t(`${k}.page.restarted`), "success");
-          void fetchSettings();
-          return;
-        }
-      } catch {
-        /* backend still coming back */
-      }
-      if (attempt >= max) {
-        if (pollRef.current) clearInterval(pollRef.current);
-        setRestarting(false);
-        notify(t(`${k}.page.restart_slow`), "error");
-        void fetchSettings();
-      }
-    }, 1500);
-  }, [fetchSettings, notify, t]);
-
   const onRestart = useCallback(() => {
     setRestarting(true);
-    void pollHealth();
-  }, [pollHealth]);
+  }, []);
 
   const validate = (): string | null => {
     if (ocrMode === "remote") {
@@ -302,13 +271,15 @@ export default function SettingsPage() {
       )}
 
       {restarting && (
-        <div role="alertdialog" aria-modal="true" aria-labelledby="restart-title" className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 p-6">
-          <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden />
-            <h2 id="restart-title" className="text-lg font-semibold">{t(`${k}.page.restarting`)}</h2>
-            <p className="text-sm text-muted-foreground">{t(`${k}.page.restarting_hint`)}</p>
-          </div>
-        </div>
+        <RestartOverlay
+          isOpen={restarting}
+          onSuccess={() => {
+            setRestarting(false);
+            notify(t(`${k}.page.restarted`), "success");
+            void fetchSettings();
+          }}
+          onDismiss={() => setRestarting(false)}
+        />
       )}
 
       <PageToast toast={toast} onDismiss={() => setToast(null)} />

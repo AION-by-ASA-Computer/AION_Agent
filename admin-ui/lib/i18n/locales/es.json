@@ -568,6 +568,8 @@
       "verified": "Verificado",
       "configure_url": "Definir URL",
       "install": "Instalar",
+      "installed": "Instalado",
+      "uninstall": "Desinstalar",
       "community_title": "Comunidad",
       "searching": "Buscando en los registros…",
       "empty_title": "Sin resultados",
@@ -1968,5 +1970,18 @@
     "few_ratings": "Menos de {{n}} valoraciones: muy pocas para juzgar",
     "footnote": "La aprobación solo se colorea a partir de {{n}} valoraciones. Para mejorar un perfil débil, ajusta su prompt o su modelo.",
     "open_profiles": "Abrir perfiles"
+  },
+  "restart_overlay": {
+    "title": "Reiniciando la API",
+    "hint_initial": "Aplicando la nueva configuración y reiniciando el contenedor...",
+    "hint_slow": "Servicios y herramientas MCP inicializándose... Espere por favor...",
+    "success_title": "API reiniciada con éxito",
+    "success_body": "La nueva configuración está activa. Actualizando...",
+    "timed_out_title": "El servidor aún no responde",
+    "timed_out_body": "El reinicio tardó más de lo esperado. El contenedor podría estar aún arrancando o haberse producido un error.",
+    "continue_waiting": "Seguir esperando (+90s)",
+    "retry_now": "Comprobar ahora",
+    "reload_page": "Recargar página",
+    "dismiss": "Cerrar"
   }
 }
