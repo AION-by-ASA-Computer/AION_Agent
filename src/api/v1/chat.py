@@ -24,6 +24,7 @@ from src.api.ownership import (
     effective_user_id,
 )
 from src.api.profile_access import enforce_profile_access
+from src.chart_queue import chart_queue
 from src.main import get_agent, set_event_loop
 from src.runtime.reasoning_effort import resolve_turn_reasoning
 from src.session_workspace import normalize_session_id
@@ -1068,12 +1069,17 @@ async def chat_sync(
         logger.exception("sync chat failed conv=%s", conversation_id[:12])
         raise HTTPException(status_code=500, detail=str(e)) from e
 
+    # I tool grafici accodano i chart per sessione (chat-ui li legge con
+    # GET /sessions/{id}/charts): qui li consumiamo e li restituiamo nel JSON.
+    charts = list(result.get("charts") or []) + chart_queue.get_serialized(
+        conversation_id
+    )
     return ChatSyncResponse(
         text=result.get("text") or "",
         conversation_id=conversation_id,
         session_id=conversation_id,
         profile=profile_name,
         success=bool(result.get("success", True)),
-        charts=list(result.get("charts") or []),
+        charts=charts,
         error=(result.get("error") or None),
     )
