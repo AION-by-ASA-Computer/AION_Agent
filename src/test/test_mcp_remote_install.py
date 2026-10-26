@@ -1,6 +1,10 @@
 """Remote MCP install helpers."""
 
+import json
+from pathlib import Path
+
 from src.mcp_remote_install import (
+    MCP_REMOTE_VERSION,
     build_remote_bridge_registry_config,
     resolve_remote_bridge_spawn,
 )
@@ -33,7 +37,7 @@ def test_resolve_remote_bridge_spawn_uses_npx_when_local_missing(
     )
     command, args = resolve_remote_bridge_spawn(cfg)
     assert command == "npx"
-    assert args[0:2] == ["-y", "mcp-remote"]
+    assert args[0:2] == ["-y", f"mcp-remote@{MCP_REMOTE_VERSION}"]
     assert args[2] == "https://mcp.clickup.com/mcp"
     assert "--header" in args
 
@@ -62,3 +66,11 @@ def test_build_remote_bridge_org_shared_auth_env_var() -> None:
     assert cfg["auth_env_var"] == "API_KEY"
     assert cfg["env"] == {"API_KEY": "${API_KEY}"}
     assert "Authorization: Bearer ${API_KEY}" in cfg["args"]
+
+
+def test_mcp_remote_version_matches_docker_package() -> None:
+    docker = Path(__file__).resolve().parents[2] / "docker"
+    pkg = json.loads((docker / "package.mcp-remote.json").read_text())
+    lock = json.loads((docker / "package-lock.mcp-remote.json").read_text())
+    assert pkg["dependencies"]["mcp-remote"] == MCP_REMOTE_VERSION
+    assert lock["packages"]["node_modules/mcp-remote"]["version"] == MCP_REMOTE_VERSION
