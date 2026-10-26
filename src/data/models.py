@@ -136,6 +136,18 @@ class Conversation(Base):
     parent_message_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     anchor_json: Mapped[str] = mapped_column(Text, default="{}")
 
+    # Conversation branching / message forking
+    root_conversation_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    forked_from_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    forked_at_message_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
+    fork_seq: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation", cascade="all, delete-orphan"
     )
@@ -170,6 +182,9 @@ class Message(Base):
     )
     profile_name: Mapped[str] = mapped_column(String(256), default="default")
     trace_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    forked_from_message_id: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
+    )
     rating: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     feedback_comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     archived_at: Mapped[Optional[datetime]] = mapped_column(

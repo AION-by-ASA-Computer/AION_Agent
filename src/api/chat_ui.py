@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -123,11 +124,23 @@ async def list_conversations_chat_ui(
     include_threads: bool = Query(
         False, description="Include side threads (child conversations) in the list"
     ),
+    include_branches: bool = Query(
+        False,
+        description="Include conversation branches (forked conversations) in the list",
+    ),
     x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
     x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
 ):
     _check_internal_secret(x_chat_ui_secret)
     _require_unified()
+    if hasattr(limit, "default"):
+        limit = limit.default
+    if hasattr(exclude_scheduled, "default"):
+        exclude_scheduled = exclude_scheduled.default
+    if hasattr(include_threads, "default"):
+        include_threads = include_threads.default
+    if hasattr(include_branches, "default"):
+        include_branches = include_branches.default
     user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
@@ -138,6 +151,8 @@ async def list_conversations_chat_ui(
         ]
         if not include_threads:
             conds.append(Conversation.parent_conversation_id.is_(None))
+        if not include_branches:
+            conds.append(Conversation.forked_from_id.is_(None))
         q = (
             select(Conversation)
             .where(*conds)
@@ -444,6 +459,131 @@ def _is_plan_tagged_internal(row: Message, nr: str, meta: Dict[str, Any]) -> boo
     return bool((meta.get("plan_task_id") or "").strip())
 
 
+async def _compute_branch_info(
+    session,
+    conv: Conversation,
+    tenant: str,
+    user_id: str,
+) -> Dict[int, Dict[str, Any]]:
+    """Calcola per ogni seq le varianti disponibili tra tutte le conversazioni dello stesso albero di branch."""
+    root_id = conv.root_conversation_id or conv.id
+    q_all = (
+        select(Conversation)
+        .where(
+            (Conversation.id == root_id)
+            | (Conversation.root_conversation_id == root_id),
+            Conversation.tenant_id == tenant,
+            Conversation.user_id == user_id,
+            Conversation.archived_at.is_(None),
+        )
+        .order_by(Conversation.created_at.asc())
+    )
+    all_convs = (await session.execute(q_all)).scalars().all()
+    if len(all_convs) <= 1:
+        return {}
+
+    conv_ids = [c.id for c in all_convs]
+    q_msgs = (
+        select(Message)
+        .where(Message.conversation_id.in_(conv_ids), Message.role == "user")
+        .order_by(Message.seq.asc(), Message.created_at.asc())
+    )
+    all_user_msgs = (await session.execute(q_msgs)).scalars().all()
+    if not all_user_msgs:
+        return {}
+
+    from collections import defaultdict
+
+    msgs_by_conv: Dict[str, Dict[int, Message]] = defaultdict(dict)
+    for m in all_user_msgs:
+        msgs_by_conv[m.conversation_id][m.seq] = m
+
+    current_conv_msgs = msgs_by_conv.get(conv.id, {})
+    if not current_conv_msgs:
+        return {}
+
+    conv_order_map = {c.id: idx for idx, c in enumerate(all_convs)}
+    result = {}
+
+    for seq, cur_msg in current_conv_msgs.items():
+        prior_seqs = sorted([s for s in current_conv_msgs.keys() if s < seq])
+
+        # Una conversazione è un ramo alternativo valido se condivide la stessa cronologia utente per tutte le seq precedenti
+        candidate_conv_ids = []
+        for other_cid, other_seq_map in msgs_by_conv.items():
+            if seq not in other_seq_map:
+                continue
+            history_matches = True
+            for ps in prior_seqs:
+                other_m = other_seq_map.get(ps)
+                cur_prev_m = current_conv_msgs.get(ps)
+                if (
+                    not other_m
+                    or (other_m.content or "").strip()
+                    != (cur_prev_m.content or "").strip()
+                ):
+                    history_matches = False
+                    break
+            if history_matches:
+                candidate_conv_ids.append(other_cid)
+
+        # Ordina per ordine di creazione delle conversazioni
+        candidate_conv_ids.sort(key=lambda cid: conv_order_map.get(cid, 999999))
+
+        variants = []
+        seen_contents = set()
+        for cid in candidate_conv_ids:
+            cand_m = msgs_by_conv[cid][seq]
+            text_val = (cand_m.content or "").strip()
+            if text_val not in seen_contents:
+                seen_contents.add(text_val)
+                variants.append(
+                    {
+                        "conversation_id": cid,
+                        "message_id": cand_m.id,
+                        "content": cand_m.content,
+                    }
+                )
+
+        if len(variants) <= 1:
+            continue
+
+        current_index = 1
+        for idx, v in enumerate(variants):
+            if (v["content"] or "").strip() == (cur_msg.content or "").strip():
+                current_index = idx + 1
+                break
+
+        total = len(variants)
+        prev_cid = (
+            variants[current_index - 2]["conversation_id"]
+            if current_index > 1
+            else None
+        )
+        next_cid = (
+            variants[current_index]["conversation_id"]
+            if current_index < total
+            else None
+        )
+
+        result[seq] = {
+            "total": total,
+            "current_index": current_index,
+            "prev_branch_conversation_id": prev_cid,
+            "next_branch_conversation_id": next_cid,
+            "variants": [
+                {
+                    "conversation_id": v["conversation_id"],
+                    "message_id": v["message_id"],
+                    "index": i + 1,
+                }
+                for i, v in enumerate(variants)
+            ],
+        }
+
+    return result
+
+
 @router.get("/conversations/{conv_id}/messages")
 async def get_conversation_messages_chat_ui(
     conv_id: str,
@@ -469,6 +609,8 @@ async def get_conversation_messages_chat_ui(
             return {"messages": []}
         if conv.tenant_id != tenant or conv.user_id != user_id:
             raise HTTPException(404, "Conversation not found")
+
+        branches_by_seq = await _compute_branch_info(session, conv, tenant, user_id)
 
         # Fetch Messages
         q_msg = (
@@ -572,6 +714,8 @@ async def get_conversation_messages_chat_ui(
                 row["metadata"] = meta
             if nr == "assistant":
                 row["timeline"] = timeline
+            if r.seq in branches_by_seq:
+                row["branches"] = branches_by_seq[r.seq]
             data.append(row)
 
         return {"messages": data}
@@ -620,6 +764,10 @@ async def get_conversation_chat_ui(
             "anchor": _parse_anchor(r.anchor_json)
             if r.parent_conversation_id
             else None,
+            "root_conversation_id": r.root_conversation_id,
+            "forked_from_id": r.forked_from_id,
+            "forked_at_message_id": r.forked_at_message_id,
+            "fork_seq": r.fork_seq,
         }
 
 
@@ -766,6 +914,221 @@ async def delete_turn_chat_ui(
             "success": True,
             "message_id": message_id,
             "message_count": r.message_count,
+        }
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Conversation Branching / Message Forking
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+class ConversationForkBody(BaseModel):
+    source_message_id: str
+    new_content: str
+    artifacts: Optional[List[Dict[str, Any]]] = None
+
+
+@router.post("/conversations/{conv_id}/fork")
+async def fork_conversation_chat_ui(
+    conv_id: str,
+    body: ConversationForkBody,
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
+    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+):
+    """Fork conversation from a specific user message, creating a parallel branch.
+
+    Copies all turns prior to source_message_id, creates a new conversation row,
+    and inserts the edited user message as the first turn of the new branch.
+    """
+    _check_internal_secret(x_chat_ui_secret)
+    _require_unified()
+    user_id = (x_aion_user_id or "").strip() or "default"
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
+
+    async with get_async_session_maker()() as session:
+        parent_conv = await session.get(Conversation, conv_id)
+        if (
+            not parent_conv
+            or parent_conv.tenant_id != tenant
+            or parent_conv.user_id != user_id
+        ):
+            raise HTTPException(404, "Conversation not found")
+
+        q_msg = select(Message).where(
+            Message.id == body.source_message_id,
+            Message.conversation_id == conv_id,
+        )
+        source_msg = (await session.execute(q_msg)).scalar_one_or_none()
+        if not source_msg:
+            raise HTTPException(404, "Source message not found")
+
+        if source_msg.role != "user":
+            raise HTTPException(400, "Only user messages can be forked")
+
+        root_id = parent_conv.root_conversation_id or parent_conv.id
+        new_conv_id = f"c_{uuid.uuid4().hex[:16]}"
+
+        new_conv = Conversation(
+            id=new_conv_id,
+            tenant_id=tenant,
+            user_id=user_id,
+            profile_slug=parent_conv.profile_slug,
+            title=parent_conv.title,
+            root_conversation_id=root_id,
+            forked_from_id=conv_id,
+            forked_at_message_id=source_msg.id,
+            fork_seq=source_msg.seq,
+            metadata_json=parent_conv.metadata_json or "{}",
+            tags_json=parent_conv.tags_json or "[]",
+        )
+        session.add(new_conv)
+        await session.flush()
+
+        # Clona i messaggi precedenti (seq < source_msg.seq)
+        q_prev = (
+            select(Message)
+            .where(
+                Message.conversation_id == conv_id,
+                Message.seq < source_msg.seq,
+            )
+            .order_by(Message.seq.asc())
+        )
+        prev_msgs = (await session.execute(q_prev)).scalars().all()
+        msg_id_map: Dict[str, str] = {}
+
+        for old_m in prev_msgs:
+            new_mid = f"m_{uuid.uuid4().hex[:16]}"
+            msg_id_map[old_m.id] = new_mid
+            cloned_m = Message(
+                id=new_mid,
+                conversation_id=new_conv_id,
+                tenant_id=tenant,
+                seq=old_m.seq,
+                role=old_m.role,
+                content=old_m.content,
+                reasoning=old_m.reasoning,
+                timeline_json=old_m.timeline_json,
+                metadata_json=old_m.metadata_json,
+                tool_name=old_m.tool_name,
+                tool_call_id=old_m.tool_call_id,
+                tokens_in=old_m.tokens_in,
+                tokens_out=old_m.tokens_out,
+                finish_reason=old_m.finish_reason,
+                profile_name=old_m.profile_name,
+                forked_from_message_id=old_m.forked_from_message_id or old_m.id,
+                created_at=old_m.created_at,
+            )
+            session.add(cloned_m)
+        await session.flush()
+
+        # Clona Steps e Attachments per i messaggi precedenti
+        if prev_msgs:
+            prev_ids = [m.id for m in prev_msgs]
+            q_steps = select(Step).where(
+                Step.conversation_id == conv_id,
+                Step.message_id.in_(prev_ids),
+            )
+            old_steps = (await session.execute(q_steps)).scalars().all()
+            for s in old_steps:
+                new_s = Step(
+                    id=f"step_{uuid.uuid4().hex[:16]}",
+                    conversation_id=new_conv_id,
+                    tenant_id=tenant,
+                    message_id=msg_id_map.get(s.message_id or ""),
+                    parent_id=s.parent_id,
+                    name=s.name,
+                    type=s.type,
+                    input=s.input,
+                    output=s.output,
+                    is_error=s.is_error,
+                    streaming=s.streaming,
+                    start=s.start,
+                    end=s.end,
+                    indent=s.indent,
+                    metadata_json=s.metadata_json,
+                    tags_json=s.tags_json,
+                    trace_id=s.trace_id,
+                    created_at=s.created_at,
+                )
+                session.add(new_s)
+
+            q_atts = select(Attachment).where(
+                Attachment.conversation_id == conv_id,
+                Attachment.message_id.in_(prev_ids),
+            )
+            old_atts = (await session.execute(q_atts)).scalars().all()
+            for a in old_atts:
+                new_a = Attachment(
+                    id=f"att_{uuid.uuid4().hex[:16]}",
+                    conversation_id=new_conv_id,
+                    tenant_id=tenant,
+                    message_id=msg_id_map.get(a.message_id or ""),
+                    storage_key=a.storage_key,
+                    original_name=a.original_name,
+                    mime=a.mime,
+                    size_bytes=a.size_bytes,
+                    kind=a.kind,
+                    created_at=a.created_at,
+                )
+                session.add(new_a)
+            await session.flush()
+
+        # Inserisci il nuovo messaggio utente modificato
+        new_user_msg_id = f"m_{uuid.uuid4().hex[:16]}"
+        new_user_msg = Message(
+            id=new_user_msg_id,
+            conversation_id=new_conv_id,
+            tenant_id=tenant,
+            seq=source_msg.seq,
+            role="user",
+            content=body.new_content,
+            profile_name=source_msg.profile_name,
+            forked_from_message_id=source_msg.id,
+            created_at=datetime.now(timezone.utc),
+        )
+        session.add(new_user_msg)
+        new_conv.message_count = source_msg.seq
+        new_conv.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+
+        # Duplica i file della sandbox sessione genitore verso la nuova sessione
+        try:
+            from src.session_workspace import sync_parent_uploads_to_child
+
+            sync_parent_uploads_to_child(conv_id, new_conv_id)
+        except Exception as ex:
+            logger.warning("sync_parent_uploads_to_child during fork error: %s", ex)
+
+        return {
+            "conversation_id": new_conv_id,
+            "message_id": new_user_msg_id,
+            "root_conversation_id": root_id,
+            "fork_seq": source_msg.seq,
+        }
+
+
+@router.get("/conversations/{conv_id}/branches")
+async def get_conversation_branches_chat_ui(
+    conv_id: str,
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
+    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+):
+    """Restituisce le informazioni sui rami dell'albero di conversazione."""
+    _check_internal_secret(x_chat_ui_secret)
+    _require_unified()
+    user_id = (x_aion_user_id or "").strip() or "default"
+    tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
+
+    async with get_async_session_maker()() as session:
+        conv = await session.get(Conversation, conv_id)
+        if not conv or conv.tenant_id != tenant or conv.user_id != user_id:
+            raise HTTPException(404, "Conversation not found")
+
+        branches = await _compute_branch_info(session, conv, tenant, user_id)
+        return {
+            "conversation_id": conv_id,
+            "root_conversation_id": conv.root_conversation_id or conv.id,
+            "branches": branches,
         }
 
 
