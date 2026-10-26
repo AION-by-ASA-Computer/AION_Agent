@@ -35,6 +35,70 @@ _DEFAULT_DENY_PREFIXES = (
     "AION_SETUP_",
 )
 
+# Variabili d'ambiente di sistema necessarie ai processi su Windows.
+_WINDOWS_SYSTEM_KEYS = frozenset(
+    {
+        "SYSTEMROOT",
+        "SYSTEMDRIVE",
+        "TEMP",
+        "TMP",
+        "USERPROFILE",
+        "APPDATA",
+        "LOCALAPPDATA",
+        "COMSPEC",
+        "PATHEXT",
+        "HOMEDRIVE",
+        "HOMEPATH",
+        "USERNAME",
+        "WINDIR",
+    }
+)
+
+# Server MCP stdio di terze parti (npx, uvx, mcp-remote, ...): dal backend
+# ricevono solo rete, certificati, locale e configurazione dei package manager.
+# Credenziali e variabili per server arrivano dal blocco ``env`` del registro.
+_MCP_THIRD_PARTY_ALLOWLIST = frozenset(
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "TERM",
+        "LANG",
+        "LANGUAGE",
+        "TZ",
+        "TMPDIR",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+        "all_proxy",
+        "NODE_EXTRA_CA_CERTS",
+        "NODE_PATH",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REQUESTS_CA_BUNDLE",
+        "CURL_CA_BUNDLE",
+        "DOCKER_HOST",
+    }
+)
+_MCP_THIRD_PARTY_ALLOW_PREFIXES = ("LC_", "UV_", "NPM_CONFIG_", "npm_config_", "PIP_")
+
+# Segreti di firma e di bootstrap: nessun server MCP, nemmeno interno, li legge.
+_MCP_SIGNING_SECRETS = frozenset(
+    {
+        "AION_CHAT_AUTH_SECRET",
+        "AION_CHAT_UI_INTERNAL_SECRET",
+        "AION_ORCHESTRATION_INTERNAL_SECRET",
+        "AION_API_KEY_BOOTSTRAP",
+    }
+)
+_MCP_SIGNING_SECRET_PREFIXES = ("AION_SETUP_",)
+
 # Exec allowlist forwards only these AION_* keys (audit-safe ids).
 _EXEC_AION_ALLOWLIST = frozenset(
     {
@@ -103,6 +167,39 @@ def scrub_secrets_from_env(env: Dict[str, str]) -> None:
     for key in list(env.keys()):
         if key in extra_exact or _is_denied_key(key, deny_prefixes):
             env.pop(key, None)
+
+
+def mcp_env_scrub_enabled() -> bool:
+    """``AION_MCP_ENV_SCRUB=0`` ripristina l'ambiente completo (solo emergenza)."""
+    return _truthy("AION_MCP_ENV_SCRUB", "1")
+
+
+def build_mcp_stdio_base_env(*, first_party: bool) -> Dict[str, str]:
+    """
+    Ambiente di partenza per un server MCP stdio, prima delle variabili per server.
+
+    - ``first_party`` (server Python del repository): ambiente del backend senza
+      i segreti di firma, perché importano ``src.*`` e ne usano la configurazione.
+    - terze parti: solo ``_MCP_THIRD_PARTY_ALLOWLIST`` (+ ``AION_MCP_ENV_ALLOWLIST``).
+    """
+    env = dict(os.environ)
+    if not mcp_env_scrub_enabled():
+        return env
+    if first_party:
+        for key in list(env):
+            if key in _MCP_SIGNING_SECRETS or key.startswith(
+                _MCP_SIGNING_SECRET_PREFIXES
+            ):
+                env.pop(key, None)
+        return env
+    allow = _MCP_THIRD_PARTY_ALLOWLIST | _parse_csv("AION_MCP_ENV_ALLOWLIST", ())
+    return {
+        k: v
+        for k, v in env.items()
+        if k in allow
+        or k.startswith(_MCP_THIRD_PARTY_ALLOW_PREFIXES)
+        or (os.name == "nt" and k.upper() in _WINDOWS_SYSTEM_KEYS)
+    }
 
 
 def build_session_env(
@@ -215,23 +312,8 @@ def build_exec_env(
         env[key] = val
 
     if os.name == "nt":
-        win_keys = {
-            "SYSTEMROOT",
-            "SYSTEMDRIVE",
-            "TEMP",
-            "TMP",
-            "USERPROFILE",
-            "APPDATA",
-            "LOCALAPPDATA",
-            "COMSPEC",
-            "PATHEXT",
-            "HOMEDRIVE",
-            "HOMEPATH",
-            "USERNAME",
-            "WINDIR",
-        }
         for key, val in os.environ.items():
-            if key.upper() in win_keys:
+            if key.upper() in _WINDOWS_SYSTEM_KEYS:
                 env[key] = val
 
     return env

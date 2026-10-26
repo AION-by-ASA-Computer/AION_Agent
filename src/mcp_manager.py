@@ -332,6 +332,38 @@ def _remote_bridge_auth_missing(
     )
 
 
+def _is_first_party_stdio(
+    command: str, args: List[Any], config: Dict[str, Any]
+) -> bool:
+    """Server Python del repository (``mcp_servers/``, ``-m src.*``)."""
+    if _is_remote_bridge(config):
+        return False
+    if not os.path.basename(str(command or "")).lower().startswith("python"):
+        return False
+    root = _repo_root().resolve()
+    for i, arg in enumerate(args or []):
+        s = str(arg)
+        if s == "-m" and i + 1 < len(args):
+            return str(args[i + 1]).startswith(("mcp_servers.", "src."))
+        if s.endswith(".py"):
+            path = Path(s)
+            if not path.is_absolute():
+                path = root / path
+            try:
+                return os.path.commonpath([str(root), str(path.resolve())]) == str(root)
+            except ValueError:
+                return False
+    return False
+
+
+def _stdio_base_env(command: str, args: List[Any], config: Dict[str, Any]):
+    from .security.session_env import build_mcp_stdio_base_env
+
+    return build_mcp_stdio_base_env(
+        first_party=_is_first_party_stdio(command, args, config)
+    )
+
+
 def _missing_user_context_error(server_name: str) -> RuntimeError:
     return RuntimeError(
         f"contesto utente mancante per {server_name}: avvio annullato "
@@ -526,7 +558,7 @@ class MCPStdioWorker:
             command, args = self._manager.resolve_stdio_spawn_command(
                 self.server_name, config
             )
-            env = os.environ.copy()
+            env = _stdio_base_env(command, args, config)
             repo_root_dir = str(_repo_root())
             env.setdefault("FASTMCP_LOG_LEVEL", "ERROR")
             env.setdefault("FASTMCP_SHOW_SERVER_BANNER", "false")
@@ -2187,7 +2219,7 @@ class MCPManager:
 
         else:
             command, args = self.resolve_stdio_spawn_command(name, config)
-            env = os.environ.copy()
+            env = _stdio_base_env(command, args, config)
             repo_root_dir = str(_repo_root())
             env.setdefault("FASTMCP_LOG_LEVEL", "WARNING")
             env.setdefault("FASTMCP_SHOW_SERVER_BANNER", "false")
