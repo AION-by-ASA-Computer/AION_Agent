@@ -132,7 +132,7 @@ During long reasoning **before** `tool_start`, only the reasoning block is visib
 ## Persisted timeline (history / saving)
 
 - **DB**: additive column `messages.timeline_json` (JSON array of segments: `reasoning` | `tool` | `artifact` | `text`).
-- **API** (`GET /chat-ui/conversations/{id}/messages`): **[the `timeline` field is currently not exposed by the GET API]** — existing fields (`content`, `reasoning`, `tool_name`, `tool_call_id`, `created_at`) remain unchanged for legacy integrations.
+- **API** (`GET /chat-ui/conversations/{id}/messages`): each assistant message includes `timeline` (the parsed segments), alongside `steps`, `artifacts`, `rating` and `feedback_comment`; existing fields (`content`, `reasoning`, `tool_name`, `tool_call_id`, `created_at`) remain unchanged for legacy integrations.
 - **New turns**: `agent_pipeline` builds the timeline from the same SSE chunks sent to the client.
 - **Historical messages**: automatic backfill on `./scripts/upgrade-aion.sh`, `scripts/init_unified_db.py`, setup wizard and backend startup (idempotente); manual: `python scripts/backfill_message_timelines.py`. Best-effort: reasoning at the head, tool/artifact by `created_at`, text at the tail. GET also does lazy-backfill if `timeline_json` is still null.
 - **Chat-ui**: `segmentsForMessage()` prefers `timeline` / `segments` in memory; fallback `segmentsFromHistoryMessage()` only if absent.
