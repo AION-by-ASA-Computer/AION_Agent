@@ -50,3 +50,15 @@ def test_resolve_remote_bridge_spawn_uses_local_proxy(monkeypatch) -> None:
     assert command == "node"
     assert args[0] == "/app/node_modules/mcp-remote/dist/proxy.js"
     assert args[1] == "https://mcp.clickup.com/mcp"
+
+
+def test_build_remote_bridge_org_shared_auth_env_var() -> None:
+    cfg = build_remote_bridge_registry_config(
+        "http://broker:8080/mcp",
+        "ssh_broker",
+        auth_type="api-key",
+        credential_mode="org_shared",
+    )
+    assert cfg["auth_env_var"] == "API_KEY"
+    assert cfg["env"] == {"API_KEY": "${API_KEY}"}
+    assert "Authorization: Bearer ${API_KEY}" in cfg["args"]
