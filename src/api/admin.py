@@ -65,20 +65,15 @@ from ..mcp_connector_catalog import (
     infer_connector_id_for_registry_name,
     load_mcp_connector_catalog,
 )
-from ..data.user_password import UserAlreadyExistsError, create_password_user
-from ..data.message_roles import (
-    is_empty_technical_message,
-    is_ui_visible_role,
-    looks_like_internal_content,
-    looks_like_raw_plan_content,
-    normalize_message_role,
+from ..data.user_password import (
+    UserAlreadyExistsError,
+    create_password_user,
+    password_policy_violations,
 )
+from ..data import api_keys as api_keys_db
 from ..data.models import (
-    ApiKey,
     Conversation,
     Message,
-    Step,
-    Attachment,
     SecurityScan,
     McpServerConfig,
 )
@@ -277,22 +272,6 @@ router = APIRouter(
 )
 
 
-def _message_render_reason_codes(role: str | None, content: str | None) -> List[str]:
-    nr = normalize_message_role(role)
-    codes: List[str] = []
-    if not is_ui_visible_role(nr):
-        codes.append("hidden.internal_role")
-    if looks_like_internal_content(content):
-        codes.append("hidden.internal_marker")
-    if looks_like_raw_plan_content(content):
-        codes.append("hidden.raw_plan")
-    if is_empty_technical_message(nr, content):
-        codes.append("hidden.empty_technical")
-    if not codes:
-        codes.append("shown.ui_visible")
-    return codes
-
-
 router.include_router(settings_router)
 router.include_router(ltm_admin_router)
 router.include_router(admin_profile_memory_router)
@@ -372,6 +351,47 @@ def _legacy_security_reports_dir() -> Path:
     return _project_root() / "static" / "admin" / "reports"
 
 
+_PRIVATE_SUFFIXES = (".db", ".sqlite", ".sqlite3", ".db-wal", ".db-shm", ".db-journal")
+
+
+def _is_private_data_path(path: Path) -> bool:
+    """True for files that may hold users' chats (data dir, DB files, env secrets)."""
+    from ..session_workspace import data_root
+
+    resolved = path.resolve()
+    name = resolved.name.lower()
+    if name.startswith(".env") or name.endswith(_PRIVATE_SUFFIXES):
+        return True
+    return _is_under_dir(resolved, data_root()) or _is_under_dir(
+        resolved, _project_root() / "data"
+    )
+
+
+_SECRET_NAME_SUFFIXES = (".pem", ".key", ".p12", ".pfx")
+
+
+def _investigable_path(raw: str) -> Optional[Path]:
+    """Percorso che /security/investigate puo' leggere, oppure None.
+
+    Solo file del progetto (i percorsi relativi delle scansioni partono dalla
+    root), mai dati utente, segreti o metadati git: il contenuto finisce nel
+    prompt dell'LLM e nel report salvato. ``resolve()`` segue i symlink, quindi
+    un link verso l'esterno del progetto viene rifiutato.
+    """
+    root = _project_root().resolve()
+    candidate = Path(raw).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    resolved = candidate.resolve()
+    if not _is_under_dir(resolved, root) or _is_private_data_path(resolved):
+        return None
+    rel_parts = resolved.relative_to(root).parts
+    name = resolved.name.lower()
+    if ".git" in rel_parts or ".local." in name or name.endswith(_SECRET_NAME_SUFFIXES):
+        return None
+    return resolved
+
+
 @router.get("/security/investigate")
 async def investigate_code(path: str, profile: str = "Security Officer"):
     """
@@ -379,11 +399,15 @@ async def investigate_code(path: str, profile: str = "Security Officer"):
     Returns a stream of tokens and reasoning.
     """
 
-    if not os.path.exists(path):
+    # Prima il controllo, poi l'esistenza: fuori dal progetto non si sonda nulla.
+    target = _investigable_path(path)
+    if target is None:
+        raise HTTPException(status_code=403, detail="Path not allowed")
+    if not target.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(target, "r", encoding="utf-8") as f:
             code_content = f.read()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Could not read file: {str(e)}")
@@ -1253,6 +1277,7 @@ def _oauth_config_for_admin(raw_json: Optional[str]) -> Dict[str, Any]:
     if not isinstance(cfg, dict):
         cfg = {}
     secret_set = bool(str(cfg.pop("client_secret", "") or "").strip())
+    cfg.pop("client_secret_encrypted", None)
     cfg["client_secret"] = ""
     cfg["client_secret_set"] = secret_set
     return cfg
@@ -3018,10 +3043,21 @@ async def get_ltm_facts(
     scope_type: str = "user",
     scope_key: str = "default",
     tenant_id: str = "default",
+    auth: ChatAuthIdentity = Depends(require_admin_role),
 ):
-    """Retrieve semantic facts from Mnemos LTM."""
+    """Retrieve semantic facts from Mnemos LTM.
+
+    La memoria ``user`` e' leggibile solo dal proprietario (admin inclusi).
+    """
+    from src.api.ownership import effective_user_id
+    from src.identity import sanitize_user_id
     from src.memory.mnemos.scope import global_scope, project_scope, user_scope
     from src.memory.mnemos import store
+
+    if scope_type not in ("project", "global") and sanitize_user_id(
+        scope_key
+    ) != effective_user_id(auth):
+        raise HTTPException(status_code=404, detail="Scope not found")
 
     try:
         if scope_type == "project":
@@ -3576,6 +3612,22 @@ async def update_mcp_config(name: str, config: MCPUpdate):
     return {"status": "success", "config": updated}
 
 
+def _model_name_resolver(providers) -> Any:
+    """Map a conversation's ``metadata_json`` to the LLM provider display name."""
+    names = {p.slug: p.display_name for p in providers}
+    default = next((p for p in providers if p.is_default), None)
+    default_name = default.display_name if default else "Default Model"
+
+    def resolve(meta_str: Optional[str]) -> str:
+        try:
+            slug = json.loads(meta_str or "{}").get("llm_provider_name")
+        except Exception:
+            slug = None
+        return names.get(slug, default_name) if slug else default_name
+
+    return resolve
+
+
 @router.get("/stats")
 async def get_stats():
     """Aggregates system-wide statistics for the dashboard."""
@@ -3586,18 +3638,15 @@ async def get_stats():
 
     mcp_count = len(mcp_manager._registry)
 
-    # Calculate scheduled jobs and api keys
+    # Calculate scheduled jobs
     jobs_total = 0
     jobs_enabled = 0
-    api_keys_total = 0
-    api_keys_by_scope = {}
     model_usage = {}
     projects_total = 0
 
     from ..data.models import (
         Conversation,
         LlmProvider,
-        ApiKey,
         ScheduledJob,
         SqlQueryProject,
     )
@@ -3608,51 +3657,22 @@ async def get_stats():
             # 1) Get all providers to resolve slugs to display names
             providers_query = select(LlmProvider)
             providers = (await session.execute(providers_query)).scalars().all()
-            provider_names = {p.slug: p.display_name for p in providers}
-            default_provider = next((p for p in providers if p.is_default), None)
-            default_name = (
-                default_provider.display_name
-                if default_provider
-                else (default_provider.slug if default_provider else "Default Model")
-            )
+            model_of = _model_name_resolver(providers)
 
             # 2) Get all conversations metadata
             conv_query = select(Conversation.metadata_json)
             convs = (await session.execute(conv_query)).scalars().all()
 
             for meta_str in convs:
-                try:
-                    meta = json.loads(meta_str or "{}")
-                    prov_slug = meta.get("llm_provider_name")
-                    if prov_slug and prov_slug in provider_names:
-                        name = provider_names[prov_slug]
-                    elif default_provider:
-                        name = default_name
-                    else:
-                        name = "Default Model"
-                    model_usage[name] = model_usage.get(name, 0) + 1
-                except Exception:
-                    name = default_name if default_provider else "Default Model"
-                    model_usage[name] = model_usage.get(name, 0) + 1
+                name = model_of(meta_str)
+                model_usage[name] = model_usage.get(name, 0) + 1
 
             # 3) Get scheduled jobs
             jobs_rows = (await session.execute(select(ScheduledJob))).scalars().all()
             jobs_total = len(jobs_rows)
             jobs_enabled = sum(1 for j in jobs_rows if j.enabled)
 
-            # 4) Get API keys and group by scopes
-            keys_rows = (await session.execute(select(ApiKey))).scalars().all()
-            api_keys_total = len(keys_rows)
-            for k in keys_rows:
-                scopes = json.loads(k.scopes_json or "[]")
-                if not scopes:
-                    api_keys_by_scope["no_scopes"] = (
-                        api_keys_by_scope.get("no_scopes", 0) + 1
-                    )
-                for s in scopes:
-                    api_keys_by_scope[s] = api_keys_by_scope.get(s, 0) + 1
-
-            # 5) Get SQL query projects count
+            # 4) Get SQL query projects count
             projects_rows = (
                 (await session.execute(select(SqlQueryProject))).scalars().all()
             )
@@ -3671,10 +3691,6 @@ async def get_stats():
         "cron_jobs": {
             "total": jobs_total,
             "enabled": jobs_enabled,
-        },
-        "api_keys": {
-            "total": api_keys_total,
-            "by_scope": api_keys_by_scope,
         },
     }
 
@@ -3783,13 +3799,6 @@ async def json_recovery_stats():
     return get_recovery_stats()
 
 
-class ApiKeyCreate(BaseModel):
-    name: str
-    tenant_id: str = "default"
-    scopes: List[str] = ["chat:scoped"]
-    expires_in_days: Optional[int] = None
-
-
 class UserCreate(BaseModel):
     identifier: str
     password: str
@@ -3798,6 +3807,10 @@ class UserCreate(BaseModel):
     tenant_id: str = "default"
     roles: List[str] = []
     must_change_password: bool = False
+    # Policy API key personali (create dall'utente in chat-ui).
+    can_create_api_keys: bool = False
+    max_api_keys: int = Field(5, ge=1, le=100)
+    api_key_max_ttl_days: int = Field(90, ge=1, le=3650)
 
 
 class UserUpdate(BaseModel):
@@ -3806,10 +3819,36 @@ class UserUpdate(BaseModel):
     password: Optional[str] = None
     roles: Optional[List[str]] = None
     must_change_password: Optional[bool] = None
+    can_create_api_keys: Optional[bool] = None
+    max_api_keys: Optional[int] = Field(None, ge=1, le=100)
+    api_key_max_ttl_days: Optional[int] = Field(None, ge=1, le=3650)
 
 
 class UserProfilesUpdate(BaseModel):
     allowed_profiles: List[str]
+
+
+def _enforce_password_policy(password: str, identifier: Optional[str]) -> None:
+    """422 se la password non rispetta la policy (vedi ``password_policy_violations``)."""
+    violations = password_policy_violations(password, identifier)
+    if violations:
+        raise HTTPException(
+            status_code=422,
+            detail="Password does not meet the security policy: "
+            + ", ".join(violations),
+        )
+
+
+def _confirmed_on(idents, provider: Optional[str], since) -> bool:
+    """True se una delle identita' SSO e' confermata sul provider attivo."""
+    from ..auth.sso.login_mode import is_identity_confirmed
+
+    return bool(
+        provider
+        and any(
+            i.provider == provider and is_identity_confirmed(i, since) for i in idents
+        )
+    )
 
 
 @router.get("/users")
@@ -3817,7 +3856,7 @@ async def list_users():
     """List all users in the unified database."""
     from ..data.models import User, UserSsoIdentity
     from ..data.user_password import get_roles
-    from ..auth.sso.login_mode import get_login_settings, is_identity_confirmed
+    from ..auth.sso.login_mode import get_login_settings
 
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip()
     settings = await get_login_settings(tenant)
@@ -3828,6 +3867,7 @@ async def list_users():
     async with get_async_session_maker()() as session:
         q = select(User).order_by(User.created_at.desc())
         rows = (await session.execute(q)).scalars().all()
+        active_keys = await api_keys_db.count_active_by_user(session)
         identities: Dict[str, list] = {}
         for ident in (await session.execute(select(UserSsoIdentity))).scalars().all():
             identities.setdefault(ident.user_id, []).append(ident)
@@ -3836,13 +3876,7 @@ async def list_users():
             idents = identities.get(r.id, [])
             has_password = r.password_hash is not None
             exempt = bool(getattr(r, "sso_migration_exempt", False))
-            confirmed = bool(
-                provider
-                and any(
-                    i.provider == provider and is_identity_confirmed(i, since)
-                    for i in idents
-                )
-            )
+            confirmed = _confirmed_on(idents, provider, since)
             # Metodo di accesso corrente: in modalita' SSO conta solo il provider
             # attivo se confermato; altrimenti (migrazione non fatta) la password.
             # Le identita' di provider precedenti non sono piu' valide.
@@ -3882,6 +3916,10 @@ async def list_users():
                         getattr(r, "must_change_password", False)
                     ),
                     "totp_enabled": r.totp_enabled_at is not None,
+                    "can_create_api_keys": bool(r.can_create_api_keys),
+                    "max_api_keys": r.max_api_keys,
+                    "api_key_max_ttl_days": r.api_key_max_ttl_days,
+                    "api_keys_active": active_keys.get(r.id, 0),
                     "created_at": r.created_at,
                     "last_active_at": r.last_active_at,
                     **auth_info(r),
@@ -3894,6 +3932,17 @@ async def list_users():
 @router.post("/users")
 async def create_user(body: UserCreate):
     """Create a new user."""
+    from ..auth.sso.login_mode import get_login_settings
+
+    # Con SSO attivo gli account nascono solo al primo login SSO
+    # (vedi signup policy): niente nuovi utenti con password.
+    settings = await get_login_settings(body.tenant_id or "default")
+    if settings.get("login_mode", "password") != "password":
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "sso_active_user_creation_disabled"},
+        )
+    _enforce_password_policy(body.password, body.identifier)
     try:
         uid = await create_password_user(
             tenant_id=body.tenant_id,
@@ -3906,19 +3955,81 @@ async def create_user(body: UserCreate):
         )
     except UserAlreadyExistsError:
         raise HTTPException(status_code=400, detail="User already exists")
+    from ..data.models import User
+
+    async with get_async_session_maker()() as session:
+        u = await session.get(User, uid)
+        if u is not None:
+            u.can_create_api_keys = body.can_create_api_keys
+            u.max_api_keys = body.max_api_keys
+            u.api_key_max_ttl_days = body.api_key_max_ttl_days
+            await session.commit()
     return {"status": "success", "id": uid}
 
 
 @router.put("/users/{user_id}")
-async def update_user(user_id: str, body: UserUpdate):
+async def update_user(
+    user_id: str,
+    body: UserUpdate,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+):
     """Update an existing user."""
-    from ..data.models import User
-    from ..data.user_password import hash_password, set_roles
+    from ..data.models import User, UserSsoIdentity
+    from ..data.user_password import get_roles, hash_password, set_roles
+    from ..auth.sso.login_mode import get_login_settings
 
     async with get_async_session_maker()() as session:
         u = await session.get(User, user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+
+        if (
+            body.roles is not None
+            and "admin" in get_roles(u)
+            and "admin" not in body.roles
+        ):
+            if auth.user_row_id == user_id:
+                raise HTTPException(
+                    status_code=400, detail="You cannot remove your own admin role"
+                )
+            others = (
+                (await session.execute(select(User).where(User.id != user_id)))
+                .scalars()
+                .all()
+            )
+            if not any("admin" in get_roles(o) for o in others):
+                raise HTTPException(
+                    status_code=409, detail="Cannot remove the last administrator"
+                )
+
+        if body.password:
+            # Un utente migrato a SSO accede solo tramite il provider: impostare
+            # una password locale riaprirebbe l'accesso classico.
+            settings = await get_login_settings(u.tenant_id or "default")
+            if (settings.get("login_mode") or "password") != "password":
+                idents = (
+                    (
+                        await session.execute(
+                            select(UserSsoIdentity).where(
+                                UserSsoIdentity.user_id == user_id
+                            )
+                        )
+                    )
+                    .scalars()
+                    .all()
+                )
+                if _confirmed_on(
+                    idents,
+                    settings.get("sso_provider"),
+                    settings.get("migration_started_at"),
+                ):
+                    raise HTTPException(
+                        status_code=400,
+                        detail="User signs in via SSO; password cannot be set",
+                    )
+
+        if body.password:
+            _enforce_password_policy(body.password, u.identifier)
 
         if body.display_name is not None:
             u.display_name = body.display_name
@@ -3932,6 +4043,16 @@ async def update_user(user_id: str, body: UserUpdate):
             set_roles(u, body.roles)
         if body.must_change_password is not None:
             u.must_change_password = bool(body.must_change_password)
+        if body.can_create_api_keys is not None:
+            # Disabilitare l'utente revoca subito tutte le sue chiavi attive;
+            # quota e durata massima ridotte valgono solo per le nuove chiavi.
+            if u.can_create_api_keys and not body.can_create_api_keys:
+                await api_keys_db.revoke_all_for_user(session, user_id)
+            u.can_create_api_keys = body.can_create_api_keys
+        if body.max_api_keys is not None:
+            u.max_api_keys = body.max_api_keys
+        if body.api_key_max_ttl_days is not None:
+            u.api_key_max_ttl_days = body.api_key_max_ttl_days
 
         await session.commit()
 
@@ -3941,14 +4062,35 @@ async def update_user(user_id: str, body: UserUpdate):
 @router.delete("/users/{user_id}")
 async def delete_user(user_id: str):
     """Delete a user."""
-    from ..data.models import User, UserProfileAccess
+    from ..auth.sso.login_mode import (
+        _check_migration_completion,
+        _invalidate_cache,
+        get_login_settings,
+    )
+    from ..data.models import User, UserProfileAccess, UserSsoIdentity
 
     async with get_async_session_maker()() as session:
+        u = await session.get(User, user_id)
+        tenant_id = (u.tenant_id if u else None) or "default"
+        # Le FK CASCADE non esistono sui DB SQLite patchati: pulizia esplicita.
+        await api_keys_db.delete_all_for_user(session, [user_id])
+        # Un'identita' orfana farebbe fallire il primo login SSO successivo
+        # della stessa persona (vincolo unico su provider+subject).
+        await session.execute(
+            delete(UserSsoIdentity).where(UserSsoIdentity.user_id == user_id)
+        )
         await session.execute(delete(User).where(User.id == user_id))
         await session.execute(
             delete(UserProfileAccess).where(UserProfileAccess.user_id == user_id)
         )
         await session.commit()
+
+    # Se era l'ultimo utente da migrare, la migrazione SSO si chiude adesso:
+    # altrimenti resta "attiva" e blocca i nuovi account con sso_not_linked.
+    _invalidate_cache(tenant_id)
+    provider = (await get_login_settings(tenant_id)).get("sso_provider")
+    if provider:
+        await _check_migration_completion(tenant_id, provider)
     return {"status": "success"}
 
 
@@ -3996,487 +4138,75 @@ async def update_user_profiles(user_id: str, body: UserProfilesUpdate):
     return {"status": "success"}
 
 
-@router.get("/api-keys")
-async def list_api_keys():
-    """List all API keys (admin only)."""
-    async with get_async_session_maker()() as session:
-        q = select(ApiKey).order_by(ApiKey.created_at.desc())
-        rows = (await session.execute(q)).scalars().all()
-        return {
-            "keys": [
-                {
-                    "id": r.id,
-                    "tenant_id": r.tenant_id,
-                    "name": r.name,
-                    "prefix": r.prefix,
-                    "scopes": json.loads(r.scopes_json or "[]"),
-                    "created_at": r.created_at,
-                    "expires_at": r.expires_at,
-                    "last_used_at": r.last_used_at,
-                    "revoked_at": r.revoked_at,
-                }
-                for r in rows
-            ]
-        }
-
-
-@router.post("/api-keys")
-async def create_api_key(body: ApiKeyCreate):
-    """Generate a new API key."""
-    from ..data.ids import new_uuid7_str
-    from ..api.auth.api_key import generate_api_key_pair, hash_api_key
-    from datetime import timedelta
-
-    raw_key, prefix, secret = generate_api_key_pair()
-    hashed = hash_api_key(raw_key)
-
-    expires_at = None
-    if body.expires_in_days:
-        expires_at = datetime.now() + timedelta(days=body.expires_in_days)
-
-    async with get_async_session_maker()() as session:
-        new_key = ApiKey(
-            id=new_uuid7_str(),
-            tenant_id=body.tenant_id,
-            name=body.name,
-            prefix=prefix,
-            hash=hashed,
-            scopes_json=json.dumps(body.scopes),
-            expires_at=expires_at,
-        )
-        session.add(new_key)
-        await session.commit()
-
-    return {
-        "id": new_key.id,
-        "name": new_key.name,
-        "key": raw_key,  # RETURNED ONLY ONCE
-        "prefix": prefix,
-        "scopes": body.scopes,
-        "expires_at": expires_at,
-    }
-
-
-@router.delete("/api-keys/{key_id}")
-async def revoke_api_key(key_id: str):
-    async with get_async_session_maker()() as session:
-        await session.execute(delete(ApiKey).where(ApiKey.id == key_id))
-        await session.commit()
-    return {"status": "revoked"}
-
-
 @router.get("/feedback")
-async def get_feedback_messages():
-    """Retrieve all messages that have a rating (feedback)."""
-    async with get_async_session_maker()() as session:
-        # Fetch assistant messages with ratings
-        q = (
-            select(Message, Conversation)
-            .join(Conversation, Message.conversation_id == Conversation.id)
-            .where(Message.rating.isnot(None))
-            .order_by(Message.created_at.desc())
-        )
-        result = await session.execute(q)
-        items = result.all()
+async def get_feedback_summary(days: int = Query(7, ge=1, le=365)):
+    """Aggregated rating counts per profile and model over the last ``days``.
 
-        feedback_list = []
-        for msg, conv in items:
-            # Retrieve the closest preceding user message (the prompt/question)
-            # as requested, to avoid getting the system instructions/tools
-            q_prev = (
-                select(Message)
-                .where(
-                    Message.conversation_id == msg.conversation_id,
-                    Message.seq < msg.seq,
-                    Message.role == "user",
-                )
-                .order_by(Message.seq.desc())
-                .limit(1)
-            )
-            prev_msg = (await session.execute(q_prev)).scalars().first()
-
-            feedback_list.append(
-                {
-                    "message_id": msg.id,
-                    "conversation_id": msg.conversation_id,
-                    "seq": msg.seq,
-                    "role": msg.role,
-                    "content": msg.content,
-                    "rating": msg.rating,
-                    "feedback_comment": msg.feedback_comment,
-                    "created_at": msg.created_at,
-                    "profile_name": msg.profile_name or conv.profile_slug or "default",
-                    "user_id": conv.user_id,
-                    "tenant_id": conv.tenant_id,
-                    "prompt": {
-                        "role": prev_msg.role,
-                        "content": prev_msg.content,
-                        "created_at": prev_msg.created_at,
-                    }
-                    if prev_msg
-                    else None,
-                }
-            )
-        return {"feedback": feedback_list}
-
-
-@router.delete("/feedback/{message_id}")
-async def delete_message_feedback(message_id: str):
-    """Clear/remove user feedback (rating/comment) from a message."""
-    async with get_async_session_maker()() as session:
-        q = select(Message).where(Message.id == message_id).limit(1)
-        result = await session.execute(q)
-        msg = result.scalars().first()
-        if not msg:
-            raise HTTPException(404, "Message not found")
-        msg.rating = None
-        msg.feedback_comment = None
-        await session.commit()
-    return {"success": True, "message_id": message_id}
-
-
-@router.get("/conversations/global")
-async def list_conversations_global(limit: int = 200):
-    """List all conversations across all users/tenants, with per-thread issue counters.
-
-    ``limit`` caps top-level conversations. Side threads (child conversations) are
-    returned alongside their parent, and a recently active thread pulls in its parent,
-    so the admin list can nest them instead of showing them as standalone chats.
+    Privacy: admins must not read other users' chats, so this endpoint never
+    returns message content, feedback comments, prompts or user/conversation ids.
     """
-    limit = max(1, min(int(limit), 1000))
+    from datetime import timedelta
+    from ..data.models import LlmProvider
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+    totals = {"positive": 0, "negative": 0}
+    by_profile: Dict[str, Dict[str, int]] = {}
+    by_model: Dict[str, Dict[str, int]] = {}
+
     async with get_async_session_maker()() as session:
-        is_root = Conversation.parent_conversation_id.is_(None)
-        roots = list(
-            (
-                await session.execute(
-                    select(Conversation)
-                    .where(is_root)
-                    .order_by(Conversation.updated_at.desc())
-                    .limit(limit)
+        providers = (await session.execute(select(LlmProvider))).scalars().all()
+        model_of = _model_name_resolver(providers)
+        rows = (
+            await session.execute(
+                select(
+                    Message.rating,
+                    Message.profile_name,
+                    Conversation.profile_slug,
+                    Conversation.metadata_json,
+                    func.count(),
+                )
+                .join(Conversation, Message.conversation_id == Conversation.id)
+                .where(Message.rating.in_((1, -1)), Message.created_at >= since)
+                .group_by(
+                    Message.rating,
+                    Message.profile_name,
+                    Conversation.profile_slug,
+                    Conversation.metadata_json,
                 )
             )
-            .scalars()
-            .all()
-        )
-        truncated = len(roots) >= limit
-        recent_threads = (
-            (
-                await session.execute(
-                    select(Conversation)
-                    .where(Conversation.parent_conversation_id.is_not(None))
-                    .order_by(Conversation.updated_at.desc())
-                    .limit(limit)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        root_ids = {r.id for r in roots}
-        missing = {t.parent_conversation_id for t in recent_threads} - root_ids
-        if missing:
-            roots += (
-                (
-                    await session.execute(
-                        select(Conversation).where(Conversation.id.in_(missing))
-                    )
-                )
-                .scalars()
-                .all()
-            )
-            root_ids = {r.id for r in roots}
-        threads = (
-            (
-                await session.execute(
-                    select(Conversation).where(
-                        Conversation.parent_conversation_id.in_(root_ids)
-                    )
-                )
-            )
-            .scalars()
-            .all()
-            if root_ids
-            else []
-        )
-        # Threads whose parent row no longer exists still get listed (as orphans).
-        seen = root_ids | {t.id for t in threads}
-        threads = list(threads) + [t for t in recent_threads if t.id not in seen]
-        rows = roots + threads
-        ids = [r.id for r in rows]
-        disliked: dict[str, int] = {}
-        errored: dict[str, int] = {}
-        liked: dict[str, int] = {}
-        commented: dict[str, int] = {}
-        if ids:
-            q_up = (
-                select(Message.conversation_id, func.count())
-                .where(Message.conversation_id.in_(ids), Message.rating == 1)
-                .group_by(Message.conversation_id)
-            )
-            liked = {cid: n for cid, n in (await session.execute(q_up)).all()}
-            q_com = (
-                select(Message.conversation_id, func.count())
-                .where(
-                    Message.conversation_id.in_(ids),
-                    Message.feedback_comment.is_not(None),
-                    Message.feedback_comment != "",
-                )
-                .group_by(Message.conversation_id)
-            )
-            commented = {cid: n for cid, n in (await session.execute(q_com)).all()}
-            q_down = (
-                select(Message.conversation_id, func.count())
-                .where(Message.conversation_id.in_(ids), Message.rating == -1)
-                .group_by(Message.conversation_id)
-            )
-            disliked = {cid: n for cid, n in (await session.execute(q_down)).all()}
-            q_err = (
-                select(Step.conversation_id, func.count())
-                .where(Step.conversation_id.in_(ids), Step.is_error != 0)
-                .group_by(Step.conversation_id)
-            )
-            errored = {cid: n for cid, n in (await session.execute(q_err)).all()}
-        return {
-            "conversations": [
-                {
-                    "id": r.id,
-                    "tenant_id": r.tenant_id,
-                    "user_id": r.user_id,
-                    "profile_slug": r.profile_slug,
-                    "title": r.title,
-                    "message_count": r.message_count,
-                    "updated_at": r.updated_at,
-                    "metadata": json.loads(r.metadata_json or "{}"),
-                    "disliked_count": disliked.get(r.id, 0),
-                    "liked_count": liked.get(r.id, 0),
-                    "comment_count": commented.get(r.id, 0),
-                    "error_count": errored.get(r.id, 0),
-                    "parent_conversation_id": r.parent_conversation_id,
-                    "parent_message_id": r.parent_message_id,
-                    "anchor_quote": _side_thread_quote(r),
-                }
-                for r in rows
-            ],
-            "limit": limit,
-            "truncated": truncated,
-        }
+        ).all()
 
+    # Messages store the profile slug; show the profile's display name instead.
+    profile_names: Dict[str, str] = {}
 
-def _side_thread_quote(conv: Conversation) -> Optional[str]:
-    if not conv.parent_conversation_id:
-        return None
-    try:
-        quote = json.loads(conv.anchor_json or "{}").get("quote")
-    except (ValueError, AttributeError):
-        return None
-    return quote if isinstance(quote, str) and quote else None
+    def _profile(raw: str) -> tuple[str, str]:
+        p = profile_manager.get_profile(raw)
+        slug = p.slug if p else raw
+        profile_names.setdefault(slug, (p.name if p and p.name else raw))
+        return slug, profile_names[slug]
 
+    for rating, profile_name, profile_slug, meta_str, count in rows:
+        key = "positive" if rating == 1 else "negative"
+        totals[key] += count
+        slug, _ = _profile(profile_name or profile_slug or "default")
+        model = model_of(meta_str)
+        for bucket, name in ((by_profile, slug), (by_model, model)):
+            entry = bucket.setdefault(name, {"positive": 0, "negative": 0})
+            entry[key] += count
 
-@router.get("/conversations/{conv_id}/messages")
-async def get_conversation_messages(conv_id: str, include_internal: bool = False):
-    """Retrieve full message history for a conversation including steps and artifacts."""
-    async with get_async_session_maker()() as session:
-        # Fetch Messages
-        q_msg = (
-            select(Message)
-            .where(Message.conversation_id == conv_id)
-            .order_by(Message.seq.asc())
-        )
-        msgs = (await session.execute(q_msg)).scalars().all()
-
-        # Fetch Steps
-        q_steps = (
-            select(Step)
-            .where(Step.conversation_id == conv_id)
-            .order_by(Step.created_at.asc())
-        )
-        steps = (await session.execute(q_steps)).scalars().all()
-
-        # Fetch Attachments
-        q_att = (
-            select(Attachment)
-            .where(Attachment.conversation_id == conv_id)
-            .order_by(Attachment.created_at.asc())
-        )
-        atts = (await session.execute(q_att)).scalars().all()
-
-        # Group steps and attachments by message_id
-        steps_by_msg = {}
-        for s in steps:
-            mid = s.message_id or "orphan"
-            steps_by_msg.setdefault(mid, []).append(
-                {
-                    "id": s.id,
-                    "name": s.name,
-                    "type": s.type,
-                    "input": s.input,
-                    "output": s.output,
-                    "is_error": bool(s.is_error),
-                    "created_at": s.created_at,
-                }
-            )
-
-        atts_by_msg = {}
-        for a in atts:
-            mid = a.message_id or "orphan"
-            atts_by_msg.setdefault(mid, []).append(
-                {
-                    "id": a.id,
-                    "storage_key": a.storage_key,
-                    "original_name": a.original_name,
-                    "mime": a.mime,
-                    "size_bytes": a.size_bytes,
-                    "kind": a.kind,
-                    "created_at": a.created_at,
-                }
-            )
-
-        data = []
-
-        for r in msgs:
-            nr = normalize_message_role(r.role)
-
-            current_steps = steps_by_msg.get(r.id, [])
-            current_atts = atts_by_msg.get(r.id, [])
-
-            if not include_internal and (
-                (not is_ui_visible_role(nr))
-                or looks_like_internal_content(r.content)
-                or looks_like_raw_plan_content(r.content)
-                or is_empty_technical_message(nr, r.content)
-            ):
-                continue
-
-            data.append(
-                {
-                    "id": r.id,
-                    "role": nr,
-                    "content": r.content,
-                    "reasoning": r.reasoning,
-                    "tool_name": r.tool_name,
-                    "tool_call_id": r.tool_call_id,
-                    "created_at": r.created_at,
-                    "seq": r.seq,
-                    "steps": current_steps,
-                    "artifacts": current_atts,
-                    "rating": r.rating,
-                    "feedback_comment": r.feedback_comment,
-                }
-            )
-        return {"messages": data}
-
-
-@router.get("/conversations/{conv_id}/render-audit")
-async def get_conversation_render_audit(conv_id: str):
-    """
-    Debug endpoint: shows why records are rendered or filtered in resume UI.
-    Useful to diagnose role leakage and legacy step issues.
-    """
-    async with get_async_session_maker()() as session:
-        msg_rows = (
-            (
-                await session.execute(
-                    select(Message)
-                    .where(Message.conversation_id == conv_id)
-                    .order_by(Message.seq.asc())
-                )
-            )
-            .scalars()
-            .all()
-        )
-        step_rows = (
-            (
-                await session.execute(
-                    select(Step)
-                    .where(Step.conversation_id == conv_id)
-                    .order_by(Step.created_at.asc())
-                )
-            )
-            .scalars()
-            .all()
-        )
-
-    msg_summary: Dict[str, int] = {}
-    hidden_internal = 0
-    hidden_content_marker = 0
-    internal_trigger_messages = 0
-    raw_plan_messages = 0
-    empty_assistant_messages = 0
-    empty_tool_messages = 0
-    message_samples: List[Dict[str, Any]] = []
-    for m in msg_rows:
-        nr = normalize_message_role(m.role)
-        msg_summary[nr] = msg_summary.get(nr, 0) + 1
-        hidden_role = not is_ui_visible_role(nr)
-        hidden_marker = looks_like_internal_content(m.content)
-        is_raw_plan = looks_like_raw_plan_content(m.content)
-        is_empty_tech = is_empty_technical_message(nr, m.content)
-        reason_codes = _message_render_reason_codes(m.role, m.content)
-        if hidden_role:
-            hidden_internal += 1
-        if hidden_marker:
-            hidden_content_marker += 1
-        if nr in {"internal", "system"}:
-            internal_trigger_messages += 1
-        if is_raw_plan:
-            raw_plan_messages += 1
-        if nr == "assistant" and not (m.content or "").strip():
-            empty_assistant_messages += 1
-        if nr == "tool" and not (m.content or "").strip():
-            empty_tool_messages += 1
-        if len(message_samples) < 20:
-            message_samples.append(
-                {
-                    "id": m.id,
-                    "seq": m.seq,
-                    "role_raw": m.role,
-                    "role_normalized": nr,
-                    "ui_visible": not (
-                        hidden_role or hidden_marker or is_raw_plan or is_empty_tech
-                    ),
-                    "hidden_by_role": hidden_role,
-                    "hidden_by_content_marker": hidden_marker,
-                    "hidden_by_raw_plan": is_raw_plan,
-                    "hidden_by_empty_technical": is_empty_tech,
-                    "reason_codes": reason_codes,
-                    "content_preview": (m.content or "")[:160],
-                }
-            )
-
-    step_type_summary: Dict[str, int] = {}
-    legacy_step_types = {"message", "user_message", "assistant_message"}
-    legacy_steps = 0
-    step_samples: List[Dict[str, Any]] = []
-    for s in step_rows:
-        t = (s.type or "").strip()
-        step_type_summary[t] = step_type_summary.get(t, 0) + 1
-        if t in legacy_step_types:
-            legacy_steps += 1
-        if len(step_samples) < 20:
-            step_samples.append(
-                {
-                    "id": s.id,
-                    "type": t,
-                    "name": s.name,
-                    "parent_id": s.parent_id,
-                    "output_preview": (s.output or "")[:160],
-                }
-            )
+    def _by_total(items: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        return sorted(items, key=lambda r: -(r["positive"] + r["negative"]))
 
     return {
-        "conversation_id": conv_id,
-        "messages_total": len(msg_rows),
-        "steps_total": len(step_rows),
-        "message_roles": msg_summary,
-        "message_hidden_by_internal_role": hidden_internal,
-        "message_hidden_by_internal_marker": hidden_content_marker,
-        "internal_trigger_messages": internal_trigger_messages,
-        "raw_plan_messages": raw_plan_messages,
-        "empty_assistant_messages": empty_assistant_messages,
-        "empty_tool_messages": empty_tool_messages,
-        "step_types": step_type_summary,
-        "legacy_message_like_steps": legacy_steps,
-        "message_samples": message_samples,
-        "step_samples": step_samples,
+        "window_days": days,
+        "totals": totals,
+        "by_profile": _by_total(
+            [
+                {"profile": profile_names[slug], "slug": slug, **c}
+                for slug, c in by_profile.items()
+            ]
+        ),
+        "by_model": _by_total([{"model": name, **c} for name, c in by_model.items()]),
     }
 
 

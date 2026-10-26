@@ -275,14 +275,21 @@ export function UserAccountSettings({ tab }: { tab: SettingsTab }) {
           userMdContent={userMdContent}
           onUserMdChange={setUserMdContent}
           loadingUserMd={loadingUserMd}
-          savingUserMd={savingUserMd}
-          isOverLimit={userMdContent.length > 1400}
-          charCount={userMdContent.length}
+          limit={1400}
           onRestoreDefault={() =>
             setUserMdContent(DEFAULT_USER_MD_BY_LANG[selectedLanguage as string] || DEFAULT_USER_MD_BY_LANG.en)
           }
-          onSave={() => void handleSaveUserMd()}
         />
+      ) : null}
+      {tab === "instructions" ? (
+        <button
+          type="button"
+          onClick={() => void handleSaveUserMd()}
+          disabled={savingUserMd || userMdContent.length > 1400}
+          className="self-end rounded-lg bg-foreground px-3 py-1.5 text-xs font-medium text-background disabled:opacity-50"
+        >
+          {t("btn.save")}
+        </button>
       ) : null}
 
       {toastMessage ? (

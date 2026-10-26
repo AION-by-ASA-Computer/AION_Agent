@@ -7,10 +7,13 @@ import { AlertTriangle, CheckCircle2, ChevronRight, Key, Loader2 } from "lucide-
 import { cn } from "@/lib/cn";
 import { Dialog } from "@/components/profiles/Dialog";
 import { ghostBtn, outlineBtn, solidBtn } from "@/components/ui/classes";
+import type { ToastState } from "@/components/PageToast";
 import { TempPasswordsDialog } from "./TempPasswordsDialog";
 import { SsoConfigPanel } from "./SsoConfigPanel";
+import { SignupPolicySection } from "./SignupPolicyPanel";
 
 type LoginMode = "password" | "microsoft" | "google";
+type SsoProvider = Exclude<LoginMode, "password">;
 
 const MODE_ERRORS: Record<string, string> = {
   sso_revalidation_required:
@@ -34,8 +37,19 @@ interface AuthStatus {
   exempt?: number;
 }
 
-export function SsoMigrationPanel({ onManage }: { onManage?: () => void } = {}) {
+export function SsoMigrationPanel({
+  onManage,
+  onModeChanged,
+  onToast,
+}: {
+  onManage?: () => void;
+  onModeChanged?: () => void;
+  onToast: (toast: ToastState) => void;
+}) {
   const [status, setStatus] = useState<AuthStatus | null>(null);
+  // Provider gia' collegato (salvato sul server): la policy nuovi account va
+  // prima della guida di collegamento, altrimenti dopo. Assente = in caricamento.
+  const [configured, setConfigured] = useState<Partial<Record<SsoProvider, boolean>>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,6 +155,7 @@ export function SsoMigrationPanel({ onManage }: { onManage?: () => void } = {}) 
       }
       
       await fetchStatus();
+      onModeChanged?.();
     } catch (e) {
       console.error(e);
       setError("Errore di rete.");
@@ -159,6 +174,11 @@ export function SsoMigrationPanel({ onManage }: { onManage?: () => void } = {}) 
   }
 
   if (!status) return null;
+
+  // Con un SSO attivo la policy compare solo sotto quel provider; in modalita'
+  // password sotto entrambi, per prepararla prima del passaggio.
+  const showSignupPolicy =
+    selectedTab !== "password" && (status.login_mode === "password" || status.login_mode === selectedTab);
 
   const stats: { label: string; value: number; tone?: string }[] = [
     { label: "Totali", value: status.total || 0 },
@@ -243,13 +263,18 @@ export function SsoMigrationPanel({ onManage }: { onManage?: () => void } = {}) 
         </div>
       )}
 
+      {showSignupPolicy && configured[selectedTab] === true && <SignupPolicySection onToast={onToast} />}
+
       {selectedTab !== "password" && (
         <SsoConfigPanel
-          forcedProvider={selectedTab as any}
+          forcedProvider={selectedTab}
           onActivate={() => handleModeChangeRequest(selectedTab)}
+          onConfiguredChange={(c) => setConfigured((prev) => ({ ...prev, [selectedTab]: c }))}
           isActive={status.login_mode === selectedTab}
         />
       )}
+
+      {showSignupPolicy && configured[selectedTab] === false && <SignupPolicySection onToast={onToast} />}
 
       {selectedTab === "password" && status.login_mode !== "password" && (
         <div className="rounded-2xl border border-border/70 bg-card p-6">

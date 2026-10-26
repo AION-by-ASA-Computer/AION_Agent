@@ -18,6 +18,7 @@
       "profile": "Profil",
       "appearance": "Apparence",
       "security": "Sécurité",
+      "api_keys": "Clés API",
       "instructions": "Instructions",
       "tunings": "Réglages et Paramètres",
       "runtime": "Runtime",
@@ -73,7 +74,14 @@
       "name_placeholder": "Nom du préréglage",
       "save_as": "Enregistrer sous",
       "save_active": "Enregistrer le préréglage actif",
-      "empty": "Aucun préréglage."
+      "empty": "Aucun préréglage.",
+      "new_title": "Nouveau préréglage",
+      "list_title": "Préréglages enregistrés",
+      "active": "Actif",
+      "unsaved": "Non enregistré",
+      "activate": "Activer",
+      "none": "Aucun",
+      "save_to": "Mettre à jour « {{name}} » avec les valeurs actuelles"
     },
     "section": {
       "profile": {
@@ -120,7 +128,9 @@
         "restore": "Restaurer par Défaut",
         "save": "Sauvegarder les Instructions",
         "saving": "Sauvegarde..."
-      }
+      },
+      "profile_locked": "Enregistrez ou annulez vos modifications avant de changer de profil.",
+      "user_id": "ID utilisateur"
     },
     "appearance": {
       "desc": "Thème de l'interface, taille du texte et langue de l'application.",
@@ -140,7 +150,11 @@
       "shortcuts_desc": "Accès rapide aux sections principales de l'application.",
       "title": "Profil",
       "upload_photo": "Téléverser une photo",
-      "username_hint": "Identifiant de connexion. Doit être unique."
+      "username_hint": "Identifiant de connexion. Doit être unique.",
+      "photo_title": "Photo",
+      "photo_hint": "Affichée à côté de vos messages et dans la barre latérale.",
+      "details_title": "Informations du compte",
+      "details_desc": "Comment l'assistant et les administrateurs vous voient."
     },
     "security": {
       "confirm_password": "Confirmer le mot de passe",
@@ -155,12 +169,119 @@
       "password_mismatch": "La confirmation ne correspond pas au nouveau mot de passe.",
       "password_title": "Mot de passe",
       "password_updated": "Mot de passe mis à jour avec succès.",
-      "update_password": "Mettre à jour le mot de passe"
+      "update_password": "Mettre à jour le mot de passe",
+      "desc": "Protégez votre compte."
+    },
+    "api_keys": {
+      "title": "Clés API",
+      "desc": "Créez des clés personnelles pour utiliser AION depuis des scripts et des intégrations (ex. n8n). Une clé agit en votre nom, limitée aux autorisations que vous lui accordez.",
+      "loading": "Chargement des clés API…",
+      "retry": "Réessayer",
+      "disabled": "La création de clés API n'est pas activée pour votre compte. Contactez votre administrateur.",
+      "counter": "{{active}} sur {{max}} clés actives",
+      "new_key": "Nouvelle clé",
+      "quota_hint": "Vous avez atteint le nombre maximal de clés actives. Révoquez-en une pour en créer une nouvelle.",
+      "empty": "Vous n'avez encore aucune clé API.",
+      "created": "Créée",
+      "expires": "Expire",
+      "revoked_on": "Révoquée",
+      "no_expiry": "Sans expiration",
+      "last_used": "Dernière utilisation",
+      "never": "Jamais",
+      "revoke": "Révoquer",
+      "usage_title": "Comment utiliser une clé",
+      "usage_desc": "Envoyez la clé dans l'un de ces en-têtes HTTP. Les requêtes agissent en votre nom, limitées aux autorisations de la clé.",
+      "status": {
+        "active": "Active",
+        "expired": "Expirée",
+        "revoked": "Révoquée"
+      },
+      "scope": {
+        "chat": {
+          "label": "Chat",
+          "desc": "Envoyer des messages aux agents et recevoir leurs réponses."
+        },
+        "conversations_read": {
+          "label": "Lire les conversations",
+          "desc": "Lister vos conversations et lire leurs messages."
+        },
+        "conversations_write": {
+          "label": "Gérer les conversations",
+          "desc": "Créer, renommer et supprimer vos conversations."
+        },
+        "files_read": {
+          "label": "Lire les fichiers",
+          "desc": "Lister et télécharger les fichiers de vos sessions."
+        },
+        "files_write": {
+          "label": "Téléverser des fichiers",
+          "desc": "Téléverser des fichiers dans vos sessions."
+        }
+      },
+      "create": {
+        "title": "Nouvelle clé API",
+        "subtitle": "La clé ne sera affichée qu'une seule fois, juste après sa création.",
+        "name_label": "Nom",
+        "name_placeholder": "ex. automatisation n8n",
+        "name_hint": "Un libellé pour retrouver où la clé est utilisée.",
+        "scopes_label": "Autorisations",
+        "scopes_hint": "N'accordez que ce dont l'intégration a réellement besoin.",
+        "expiry_label": "Expiration",
+        "expiry_days": "{{days}} jours",
+        "expiry_one_day": "1 jour",
+        "expiry_hint": "Maximum autorisé : {{max}} jours.",
+        "submit": "Créer la clé",
+        "creating": "Création…",
+        "cancel": "Annuler"
+      },
+      "secret": {
+        "title": "Copiez votre nouvelle clé « {{name}} »",
+        "warning": "C'est la seule fois où la clé complète est affichée. Conservez-la en lieu sûr : vous ne pourrez plus la voir.",
+        "key_label": "Clé API",
+        "copy": "Copier",
+        "copied": "Copiée",
+        "copy_failed": "Copie automatique impossible. Sélectionnez la clé et copiez-la manuellement.",
+        "dismiss": "Je l'ai enregistrée"
+      },
+      "revoke_dialog": {
+        "title": "Révoquer la clé API",
+        "subtitle": "Cette action est irréversible.",
+        "warning": "Les intégrations qui utilisent cette clé cesseront immédiatement de fonctionner.",
+        "desc": "Voulez-vous révoquer la clé",
+        "key": "Clé",
+        "confirm": "Révoquer la clé",
+        "revoking": "Révocation…"
+      },
+      "toast": {
+        "created": "Clé API créée.",
+        "revoked": "Clé API révoquée."
+      },
+      "err": {
+        "disabled": "La création de clés API n'est pas activée pour votre compte. Contactez votre administrateur.",
+        "quota": "Vous avez atteint la limite de {{max}} clés actives. Révoquez-en une avant d'en créer une nouvelle.",
+        "quota_generic": "Vous avez atteint le nombre maximal de clés actives. Révoquez-en une avant d'en créer une nouvelle.",
+        "invalid_scopes": "Une ou plusieurs autorisations sélectionnées ne sont pas permises pour votre compte.",
+        "invalid_expiration": "L'expiration sélectionnée n'est pas autorisée.",
+        "user_token_required": "Connectez-vous avec votre compte pour gérer les clés API.",
+        "not_found": "Clé API introuvable.",
+        "generic": "Une erreur s'est produite. Veuillez réessayer."
+      },
+      "list_title": "Vos clés"
     },
     "subtitle": "Gérez votre profil, apparence, sécurité et instructions personnalisées.",
     "tunings": {
       "desc": "Configurez les paramètres du modèle, contrôles de génération, étapes d'exécution et préréglages d'exécution.",
       "title": "Ajustements & Paramètres"
+    },
+    "ui": {
+      "nav": "Sections des paramètres",
+      "unsaved": "Vous avez des modifications non enregistrées",
+      "discard": "Annuler",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…",
+      "saved": "Modifications enregistrées",
+      "loading": "Chargement des paramètres…",
+      "dismiss": "Fermer"
     }
   },
   "sidebar": {
@@ -720,7 +841,7 @@
       "sso_user_already_linked": "Vous avez déjà un compte lié.",
       "generic": "Échec de la connexion. Réessayez.",
       "sso_not_linked": "Votre compte n'est pas encore lié. Connectez-vous avec votre mot de passe et liez votre compte professionnel.",
-      "sso_domain_not_allowed": "Le domaine de votre e-mail n'est pas autorisé.",
+      "sso_domain_not_allowed": "Ce compte n'est pas autorisé à se connecter. Vous utilisez peut-être le mauvais compte : connectez-vous avec votre compte professionnel.",
       "sso_required": "La connexion SSO est obligatoire pour ce compte.",
       "password_login_disabled": "La connexion par mot de passe est désactivée.",
       "temp_password_expired": "Le mot de passe temporaire a expiré. Contactez l'administrateur.",
@@ -737,7 +858,9 @@
       "exchange_failed": "Erreur lors de la finalisation de la connexion.",
       "link_failed": "Échec de la liaison.",
       "session_invalid": "Session expirée, reconnectez-vous.",
-      "user_not_found": "Utilisateur introuvable."
+      "user_not_found": "Utilisateur introuvable.",
+      "sso_signup_closed": "Les nouveaux comptes ne sont pas acceptés pour le moment. Contactez votre administrateur pour demander l'accès.",
+      "sso_signup_not_allowed": "Votre compte n'est pas encore activé pour cette plateforme. Contactez votre administrateur pour demander l'accès."
     }
   },
   "authgate": {

@@ -1,0 +1,12 @@
+{
+    "runtimes": {
+      "nvidia": {
+        "args": [],
+        "path": "nvidia-container-runtime"
+      }
+    },
+    "bip": "172.26.0.1/24",
+    "default-address-pools": [
+      { "base": "172.26.128.0/17", "size": 24 }
+    ]
+  }

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
-from src.identity import sanitize_user_id
+from src.api.ownership import effective_user_id
 from src.runtime.runtime_settings import (
     clamp_runtime_values,
     load_user_runtime_blob,
@@ -79,9 +79,7 @@ class PatchPresetBody(BaseModel):
 
 
 def _uid(auth: ChatAuthIdentity, x_user: Optional[str]) -> str:
-    if auth.via == "chat_token" and auth.identifier:
-        return sanitize_user_id(auth.identifier)
-    return sanitize_user_id(x_user or auth.identifier)
+    return effective_user_id(auth, header_user_id=x_user)
 
 
 def _payload_dict(payload: Optional[RuntimeSettingsPayload]) -> Dict[str, Any]:

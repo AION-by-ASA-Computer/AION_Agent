@@ -1,16 +1,18 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { KeyRound, Loader2, Pencil, Plus, ShieldCheck, Trash2, TriangleAlert, UserCog } from "lucide-react";
+import { Check, Copy, Eye, EyeOff, KeyRound, Loader2, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, TriangleAlert, UserCog, UserRound, X } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
+import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, checkPassword, generatePassword, isPasswordValid } from "@/lib/passwordPolicy";
 import { getLocale } from "@/lib/i18n/i18n-store";
 import { PageToast, type ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
 import { dangerBtn, ghostBtn, inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
 import { SearchField } from "@/components/ui/SearchField";
+import { Switch } from "@/components/settings/ui";
 import { ColumnFilter, type ColumnFilterLabels } from "@/components/ui/ColumnFilter";
 import { DeleteDialog } from "@/components/ui/ConfirmDialogs";
 import { SsoMigrationPanel } from "@/components/sso/SsoMigrationPanel";
@@ -44,7 +46,16 @@ interface UserRow {
   sso_providers?: string[];
   sso_migration_exempt?: boolean;
   migration_pending?: boolean;
+  roles?: string[];
+  can_create_api_keys?: boolean;
+  max_api_keys?: number;
+  api_key_max_ttl_days?: number;
+  api_keys_active?: number;
 }
+
+const isAdmin = (u: UserRow) => !!u.roles?.includes("admin");
+/** Migrated to SSO: signs in through the identity provider, no local password. */
+const isSsoUser = (u: UserRow) => !!u.login_method && u.login_method !== "password";
 
 /** The single method the account signs in with right now (computed by the backend; stale identities from previous providers are ignored). */
 const methodsOf = (u: UserRow) => (u.login_method ? [u.login_method] : []);
@@ -60,6 +71,29 @@ interface ProfileRow {
 }
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
+
+type FormValues = {
+  identifier: string;
+  password: string;
+  displayName: string;
+  email: string;
+  admin: boolean;
+  mustChange: boolean;
+  can_create_api_keys: boolean;
+  max_api_keys: number;
+  api_key_max_ttl_days: number;
+};
+
+/** Per-user API key policy: allowed ranges and the defaults the backend applies to new users. */
+const API_KEYS_LIMIT = { min: 1, max: 100, default: 5 };
+const API_KEY_DAYS = { min: 1, max: 3650, default: 90 };
+
+/** Whole number within the range, or null when the text isn't one. */
+function parseInRange(text: string, range: { min: number; max: number }): number | null {
+  if (!/^\d+$/.test(text.trim())) return null;
+  const n = Number(text);
+  return n >= range.min && n <= range.max ? n : null;
+}
 
 const nameOf = (u: UserRow) => u.display_name || u.identifier;
 
@@ -100,6 +134,297 @@ function IconAction({ label, onClick, danger, children }: { label: string; onCli
   );
 }
 
+/** Suggested username from the display name (or the email's local part): "Mario Rossi" -> "mario.rossi". */
+function suggestIdentifier(displayName: string, email: string): string {
+  const source = displayName.trim() || email.split("@")[0] || "";
+  return source
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, ".")
+    .replace(/[^a-z0-9._-]/g, "")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^[._-]+|[._-]+$/g, "");
+}
+
+function Field({ label, htmlFor, optional, hint, children, t }: { label: string; htmlFor: string; optional?: boolean; hint?: string; children: React.ReactNode; t: T }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={htmlFor} className="flex items-baseline justify-between gap-2 text-sm font-medium">
+        {label}
+        {optional && <span className="text-xs font-normal text-muted-foreground">{t(`${k}.form.optional`)}</span>}
+      </label>
+      {children}
+      {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
+    </div>
+  );
+}
+
+function useCopy() {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const id = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(id);
+  }, [copied]);
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch {
+      /* clipboard unavailable (insecure context): the text stays visible to copy by hand */
+    }
+  };
+  return { copied, copy, reset: () => setCopied(false) };
+}
+
+/** Password input with a generated default, show/copy/regenerate and a compact policy readout. */
+function PasswordField({
+  value,
+  onChange,
+  identifier,
+  mustChange,
+  onMustChange,
+  t,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  identifier: string;
+  mustChange: boolean;
+  onMustChange: (v: boolean) => void;
+  t: T;
+}) {
+  const [visible, setVisible] = useState(true);
+  const { copied, copy, reset } = useCopy();
+  const rules = checkPassword(value, identifier);
+  const failing = rules.filter((r) => !r.ok);
+  const iconBtn =
+    "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50";
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-baseline justify-between gap-2">
+        <label htmlFor="user-form-password" className="text-sm font-medium">
+          {t(`${k}.form.password`)}
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            onChange(generatePassword());
+            reset();
+          }}
+          className="focus-ring -my-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+          {t(`${k}.form.password_regenerate`)}
+        </button>
+      </div>
+      <div className="relative">
+        <input
+          id="user-form-password"
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          required
+          maxLength={PASSWORD_MAX_LENGTH}
+          autoComplete="new-password"
+          spellCheck={false}
+          aria-invalid={failing.length > 0}
+          aria-describedby="user-form-password-status"
+          className={cn(inputCls, "pr-[4.75rem] font-mono tracking-[0.02em]", failing.length > 0 && value && "border-destructive/60 hover:border-destructive/70 focus:border-destructive")}
+        />
+        <div className="absolute inset-y-0 right-1 flex items-center">
+          <button type="button" className={iconBtn} onClick={() => setVisible((v) => !v)} title={t(`${k}.form.${visible ? "password_hide" : "password_show"}`)} aria-label={t(`${k}.form.${visible ? "password_hide" : "password_show"}`)}>
+            {visible ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+          </button>
+          <button type="button" className={iconBtn} onClick={() => void copy(value)} disabled={!value} title={t(`${k}.form.${copied ? "password_copied" : "password_copy"}`)} aria-label={t(`${k}.form.${copied ? "password_copied" : "password_copy"}`)}>
+            {copied ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
+          </button>
+        </div>
+      </div>
+
+      <div id="user-form-password-status" aria-live="polite" className="text-xs">
+        {failing.length === 0 ? (
+          <p className="flex items-center gap-1.5 text-success">
+            <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            {t(`${k}.form.password_ok`)}
+          </p>
+        ) : (
+          <ul className="flex flex-wrap gap-x-3 gap-y-1">
+            {failing.map((r) => (
+              <li key={r.code} className="flex items-center gap-1 text-destructive">
+                <X className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                {t(`${k}.form.password_rules.${r.code}`, { min: PASSWORD_MIN_LENGTH })}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <label className="mt-1 flex cursor-pointer items-center gap-2.5 text-sm">
+        <input type="checkbox" checked={mustChange} onChange={(e) => onMustChange(e.target.checked)} className="focus-ring h-4 w-4 shrink-0 accent-foreground" />
+        {t(`${k}.form.must_change`)}
+      </label>
+    </div>
+  );
+}
+
+function NumberField({
+  id,
+  label,
+  value,
+  onChange,
+  range,
+  disabled,
+  t,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  range: { min: number; max: number };
+  disabled: boolean;
+  t: T;
+}) {
+  const invalid = !disabled && parseInRange(value, range) === null;
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5">
+      <label htmlFor={id} className={cn("text-sm font-medium", disabled && "text-muted-foreground")}>
+        {label}
+      </label>
+      <input
+        id={id}
+        type="number"
+        inputMode="numeric"
+        min={range.min}
+        max={range.max}
+        step={1}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={disabled}
+        aria-invalid={invalid}
+        aria-describedby={`${id}-hint`}
+        className={cn(inputCls, "tabular-nums disabled:cursor-not-allowed disabled:opacity-60", invalid && "border-destructive/60 hover:border-destructive/70 focus:border-destructive")}
+      />
+      <span id={`${id}-hint`} className={cn("text-xs", invalid ? "text-destructive" : "text-muted-foreground")}>
+        {t(`${k}.form.api_keys.${invalid ? "range_error" : "range_hint"}`, { min: range.min, max: range.max })}
+      </span>
+    </div>
+  );
+}
+
+/** Whether the user may create their own API keys in chat-ui, how many and for how long. */
+function ApiKeyPolicy({
+  enabled,
+  onEnabled,
+  maxKeys,
+  onMaxKeys,
+  maxDays,
+  onMaxDays,
+  revoking,
+  activeKeys,
+  t,
+}: {
+  enabled: boolean;
+  onEnabled: (v: boolean) => void;
+  maxKeys: string;
+  onMaxKeys: (v: string) => void;
+  maxDays: string;
+  onMaxDays: (v: string) => void;
+  revoking: boolean;
+  activeKeys: number;
+  t: T;
+}) {
+  return (
+    <fieldset className="flex flex-col gap-4">
+      <legend className="sr-only">{t(`${k}.form.api_keys.title`)}</legend>
+      <div>
+        <p className="text-sm font-medium">{t(`${k}.form.api_keys.title`)}</p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{t(`${k}.form.api_keys.description`)}</p>
+      </div>
+      <div className="flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm">{t(`${k}.form.api_keys.enable`)}</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">{t(`${k}.form.api_keys.enable_description`)}</p>
+        </div>
+        <Switch checked={enabled} onChange={onEnabled} label={t(`${k}.form.api_keys.enable`)} />
+      </div>
+      {revoking && (
+        <p role="alert" className="flex items-start gap-2 rounded-xl bg-warning/10 px-3 py-2 text-xs text-warning">
+          <TriangleAlert className="mt-px h-3.5 w-3.5 shrink-0" aria-hidden />
+          {activeKeys > 0 ? t(`${k}.form.api_keys.revoke_warning`, { count: activeKeys }) : t(`${k}.form.api_keys.revoke_warning_none`)}
+        </p>
+      )}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <NumberField id="user-form-api-keys-max" label={t(`${k}.form.api_keys.max_keys`)} value={maxKeys} onChange={onMaxKeys} range={API_KEYS_LIMIT} disabled={!enabled} t={t} />
+        <NumberField id="user-form-api-keys-days" label={t(`${k}.form.api_keys.max_days`)} value={maxDays} onChange={onMaxDays} range={API_KEY_DAYS} disabled={!enabled} t={t} />
+      </div>
+    </fieldset>
+  );
+}
+
+function RolePicker({ admin, onChange, t }: { admin: boolean; onChange: (v: boolean) => void; t: T }) {
+  const options = [
+    { value: false, label: t(`${k}.form.role_user`), hint: t(`${k}.form.role_user_hint`), Icon: UserRound },
+    { value: true, label: t(`${k}.form.admin`), hint: t(`${k}.form.admin_hint`), Icon: ShieldCheck },
+  ];
+  return (
+    <fieldset className="flex flex-col gap-1.5">
+      <legend className="mb-1.5 text-sm font-medium">{t(`${k}.form.role`)}</legend>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {options.map(({ value, label, hint, Icon }) => {
+          const on = admin === value;
+          return (
+            <label
+              key={label}
+              className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/50 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
+                on ? "border-foreground/50 bg-secondary/70" : "border-border hover:border-foreground/25 hover:bg-secondary/40",
+              )}
+            >
+              <input type="radio" name="user-form-role" checked={on} onChange={() => onChange(value)} className="sr-only" />
+              <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", on ? "text-foreground" : "text-muted-foreground")} aria-hidden />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium">{label}</span>
+                <span className="mt-0.5 block text-xs text-muted-foreground">{hint}</span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
+type Credentials = { identifier: string; password: string; name: string; mustChange: boolean; created: boolean };
+
+/** Last step after a password is set: the only moment the admin can still read it. */
+function CredentialsStep({ creds, t, onClose }: { creds: Credentials; t: T; onClose: () => void }) {
+  const { copied, copy } = useCopy();
+  const text = `${t(`${k}.form.username`)}: ${creds.identifier}\n${t(`${k}.form.password`)}: ${creds.password}`;
+  return (
+    <div className="flex flex-col gap-5">
+      <p className="text-sm text-muted-foreground">{t(`${k}.form.done_body`, { name: creds.name })}</p>
+      <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-6 gap-y-3 rounded-2xl bg-secondary/60 px-4 py-3.5 text-sm">
+        <dt className="text-muted-foreground">{t(`${k}.form.username`)}</dt>
+        <dd className="select-all break-all font-mono">{creds.identifier}</dd>
+        <dt className="text-muted-foreground">{t(`${k}.form.password`)}</dt>
+        <dd className="select-all break-all font-mono">{creds.password}</dd>
+      </dl>
+      {creds.mustChange && <p className="-mt-2 text-xs text-muted-foreground">{t(`${k}.form.done_must_change`)}</p>}
+      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <button type="button" className={cn(outlineBtn, "justify-center")} onClick={() => void copy(text)}>
+          {copied ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
+          {t(`${k}.form.${copied ? "password_copied" : "copy_credentials"}`)}
+        </button>
+        <button type="button" className={cn(solidBtn, "justify-center")} onClick={onClose} autoFocus>
+          {t(`${k}.form.done`)}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function UserFormDialog({
   user,
   busy,
@@ -110,87 +435,182 @@ function UserFormDialog({
   user: UserRow | null;
   busy: boolean;
   t: T;
-  onSubmit: (v: { identifier: string; password: string; displayName: string; email: string }) => void;
+  onSubmit: (v: FormValues) => Promise<boolean>;
   onClose: () => void;
 }) {
   const editing = !!user;
-  const [identifier, setIdentifier] = useState(user?.identifier ?? "");
-  const [password, setPassword] = useState("");
+  const sso = !!user && isSsoUser(user);
   const [displayName, setDisplayName] = useState(user?.display_name ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
+  const [identifier, setIdentifier] = useState(user?.identifier ?? "");
+  // Until the admin types a username, keep suggesting one from the name.
+  const [identifierTouched, setIdentifierTouched] = useState(editing);
+  // New users get a strong generated password; existing ones keep theirs unless the admin opts in.
+  const [settingPassword, setSettingPassword] = useState(!editing);
+  const [password, setPassword] = useState(() => (editing ? "" : generatePassword()));
+  const [mustChange, setMustChange] = useState(true);
+  const [admin, setAdmin] = useState(!!user && isAdmin(user));
+  const initialMaxKeys = user?.max_api_keys ?? API_KEYS_LIMIT.default;
+  const initialMaxDays = user?.api_key_max_ttl_days ?? API_KEY_DAYS.default;
+  const [apiKeysEnabled, setApiKeysEnabled] = useState(!!user?.can_create_api_keys);
+  const [maxKeys, setMaxKeys] = useState(String(initialMaxKeys));
+  const [maxDays, setMaxDays] = useState(String(initialMaxDays));
+  const [creds, setCreds] = useState<Credentials | null>(null);
+
+  const ident = identifierTouched ? identifier : suggestIdentifier(displayName, email);
+  const passwordOk = !settingPassword || isPasswordValid(password, ident);
+  const maxKeysValue = parseInRange(maxKeys, API_KEYS_LIMIT);
+  const maxDaysValue = parseInRange(maxDays, API_KEY_DAYS);
+  // The limits only matter while the switch is on; when off, unparseable edits fall back to the stored values.
+  const apiKeysOk = !apiKeysEnabled || (maxKeysValue !== null && maxDaysValue !== null);
+  const revokingKeys = editing && !!user.can_create_api_keys && !apiKeysEnabled;
+  const canSubmit = !busy && !!ident.trim() && passwordOk && apiKeysOk;
+
+  const startPassword = () => {
+    setPassword(generatePassword());
+    setSettingPassword(true);
+  };
+
+  if (creds) {
+    return (
+      <Dialog title={t(`${k}.form.${creds.created ? "done_title_new" : "done_title_password"}`)} closeLabel={t(`${k}.form.done`)} onClose={onClose} className="max-w-lg">
+        <CredentialsStep creds={creds} t={t} onClose={onClose} />
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog title={t(`${k}.form.${editing ? "title_edit" : "title_new"}`)} closeLabel={t(`${k}.form.cancel`)} onClose={onClose} className="max-w-xl">
       <form
-        className="flex flex-col gap-4"
-        onSubmit={(e) => {
+        className="flex flex-col"
+        onSubmit={async (e) => {
           e.preventDefault();
-          onSubmit({ identifier: identifier.trim(), password, displayName: displayName.trim(), email: email.trim() });
+          if (!canSubmit) return;
+          const v: FormValues = {
+            identifier: ident.trim(),
+            password: settingPassword ? password : "",
+            displayName: displayName.trim(),
+            email: email.trim(),
+            admin,
+            mustChange: settingPassword && mustChange,
+            can_create_api_keys: apiKeysEnabled,
+            max_api_keys: maxKeysValue ?? initialMaxKeys,
+            api_key_max_ttl_days: maxDaysValue ?? initialMaxDays,
+          };
+          const ok = await onSubmit(v);
+          if (ok && v.password) setCreds({ identifier: v.identifier, password: v.password, name: v.displayName || v.identifier, mustChange: v.mustChange, created: !editing });
         }}
       >
+        {editing && (
+          <div className="mb-5 flex items-center gap-3">
+            <Avatar user={user} />
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium">{nameOf(user)}</p>
+              <p className="truncate font-mono text-xs text-muted-foreground">{user.identifier}</p>
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">{t(`${k}.form.username`)}</span>
+          <Field label={t(`${k}.form.display_name`)} htmlFor="user-form-name" optional t={t}>
             <input
-              autoFocus={!editing}
-              type="text"
-              value={identifier}
-              onChange={(e) => setIdentifier(e.target.value)}
-              disabled={editing}
-              required={!editing}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="mario.rossi"
-              className={cn(inputCls, "font-mono disabled:cursor-not-allowed disabled:opacity-60")}
-            />
-            {!editing && <span className="text-xs text-muted-foreground">{t(`${k}.form.username_hint`)}</span>}
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
-            <input
-              autoFocus={editing}
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required={!editing}
-              autoComplete="new-password"
-              placeholder="••••••••"
-              className={inputCls}
-            />
-            {editing && <span className="text-xs text-muted-foreground">{t(`${k}.form.password_keep`)}</span>}
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="flex items-baseline justify-between text-sm font-medium">
-              {t(`${k}.form.display_name`)}
-              <span className="text-xs font-normal text-muted-foreground">{t(`${k}.form.optional`)}</span>
-            </span>
-            <input
+              id="user-form-name"
+              autoFocus
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder={t(`${k}.form.display_name_placeholder`)}
+              autoComplete="off"
               className={inputCls}
             />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="flex items-baseline justify-between text-sm font-medium">
-              {t(`${k}.form.email`)}
-              <span className="text-xs font-normal text-muted-foreground">{t(`${k}.form.optional`)}</span>
-            </span>
+          </Field>
+          <Field label={t(`${k}.form.email`)} htmlFor="user-form-email" optional t={t}>
             <input
+              id="user-form-email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t(`${k}.form.email_placeholder`)}
+              autoComplete="off"
               className={inputCls}
             />
-          </label>
+          </Field>
         </div>
-        <div className="mt-2 flex justify-end gap-2">
-          <button type="button" className={ghostBtn} onClick={onClose}>
+
+        <div className="mt-6 flex flex-col gap-4 border-t border-border/60 pt-5">
+          {!editing && (
+            <Field label={t(`${k}.form.username`)} htmlFor="user-form-username" hint={t(`${k}.form.username_hint`)} t={t}>
+              <input
+                id="user-form-username"
+                type="text"
+                value={ident}
+                onChange={(e) => {
+                  setIdentifierTouched(true);
+                  setIdentifier(e.target.value);
+                }}
+                required
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                placeholder="mario.rossi"
+                className={cn(inputCls, "font-mono")}
+              />
+            </Field>
+          )}
+
+          {sso ? (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
+              <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
+                {t(`${k}.form.password_sso`, { provider: t(`${k}.access.${user.login_method}`) })}
+              </p>
+            </div>
+          ) : settingPassword ? (
+            <div className="flex flex-col gap-2">
+              <PasswordField value={password} onChange={setPassword} identifier={ident} mustChange={mustChange} onMustChange={setMustChange} t={t} />
+              {editing && (
+                <button type="button" onClick={() => setSettingPassword(false)} className="focus-ring self-start rounded-md text-xs font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground">
+                  {t(`${k}.form.password_keep_current`)}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border px-3.5 py-2.5">
+                <span className="text-sm text-muted-foreground">{t(`${k}.form.password_unchanged`)}</span>
+                <button type="button" className={outlineBtn} onClick={startPassword}>
+                  <KeyRound className="h-4 w-4" aria-hidden />
+                  {t(`${k}.form.password_change`)}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="mt-6 border-t border-border/60 pt-5">
+          <RolePicker admin={admin} onChange={setAdmin} t={t} />
+        </div>
+
+        <div className="mt-6 border-t border-border/60 pt-5">
+          <ApiKeyPolicy
+            enabled={apiKeysEnabled}
+            onEnabled={setApiKeysEnabled}
+            maxKeys={maxKeys}
+            onMaxKeys={setMaxKeys}
+            maxDays={maxDays}
+            onMaxDays={setMaxDays}
+            revoking={revokingKeys}
+            activeKeys={user?.api_keys_active ?? 0}
+            t={t}
+          />
+        </div>
+
+        <div className="mt-7 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <button type="button" className={cn(ghostBtn, "justify-center")} onClick={onClose}>
             {t(`${k}.form.cancel`)}
           </button>
-          <button type="submit" className={solidBtn} disabled={busy}>
+          <button type="submit" className={cn(solidBtn, "justify-center")} disabled={!canSubmit}>
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
             {busy ? t(`${k}.form.saving`) : t(`${k}.form.${editing ? "save" : "create"}`)}
           </button>
@@ -340,6 +760,8 @@ export default function UsersPage() {
   const showMigration = loginMode !== "password" || users.some((u) => migrationOf(u) !== "");
   // TOTP is a classic-login feature: with SSO the provider's own 2FA applies.
   const showSecurity = loginMode === "password";
+  // With SSO, accounts are created at first sign-in (see the new-account policy), never here.
+  const canCreate = loginMode === "password";
   const grid = GRIDS[`${showMigration ? 1 : 0}${showSecurity ? 1 : 0}`];
 
   const rows = useMemo(() => {
@@ -371,28 +793,58 @@ export default function UsersPage() {
     { value: "off", label: t(`${k}.badge.twofa_off`) },
   ];
 
-  const saveUser = async (v: { identifier: string; password: string; displayName: string; email: string }) => {
+  /** Resolves true on success; when a password was set the dialog stays open to show the credentials. */
+  const saveUser = async (v: FormValues): Promise<boolean> => {
     const editing = formUser !== null && formUser !== "new";
+    const current = editing ? (formUser as UserRow) : null;
     if (!editing && (!v.identifier || !v.password)) {
       setToast({ message: t(`${k}.form.required`), variant: "error" });
-      return;
+      return false;
+    }
+    const withPassword = !!v.password && !(current && isSsoUser(current));
+    if (withPassword && !isPasswordValid(v.password, current?.identifier ?? v.identifier)) {
+      setToast({ message: t(`${k}.form.password_weak`), variant: "error" });
+      return false;
     }
     setSaving(true);
     try {
-      const payload: Record<string, string> = { display_name: v.displayName, email: v.email };
+      // Keep any non-admin roles the user already has; only toggle "admin".
+      const roles = [...(current?.roles ?? []).filter((r) => r !== "admin"), ...(v.admin ? ["admin"] : [])];
+      const payload: Record<string, unknown> = {
+        display_name: v.displayName,
+        email: v.email,
+        roles,
+        can_create_api_keys: v.can_create_api_keys,
+        max_api_keys: v.max_api_keys,
+        api_key_max_ttl_days: v.api_key_max_ttl_days,
+      };
       if (!editing) payload.identifier = v.identifier;
-      if (v.password) payload.password = v.password;
+      if (withPassword) {
+        payload.password = v.password;
+        payload.must_change_password = v.mustChange;
+      }
       const res = await apiFetch(editing ? `${apiBase()}/admin/users/${(formUser as UserRow).id}` : `${apiBase()}/admin/users`, {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!editing && res.status === 409) {
+        // SSO was switched on meanwhile: creation is no longer allowed.
+        setFormUser(null);
+        setToast({ message: t(`${k}.toast.sso_user_creation_disabled`), variant: "warning" });
+        void loadUsers();
+        return false;
+      }
       if (!res.ok) throw new Error(await errorDetail(res, String(res.status)));
-      setFormUser(null);
-      setToast({ message: t(`${k}.toast.${editing ? "updated" : "created"}`), variant: "success" });
+      if (!withPassword) {
+        setFormUser(null);
+        setToast({ message: t(`${k}.toast.updated`), variant: "success" });
+      }
       void loadUsers();
+      return true;
     } catch (err) {
       fail("save_failed", err);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -475,10 +927,21 @@ export default function UsersPage() {
           <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-[28px]">{t(`${k}.title`)}</h1>
           <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.subtitle`)}</p>
         </div>
-        <button type="button" className={solidBtn} onClick={() => setFormUser("new")}>
-          <Plus className="h-4 w-4" aria-hidden />
-          {t(`${k}.add`)}
-        </button>
+        {canCreate ? (
+          <button type="button" className={solidBtn} onClick={() => setFormUser("new")}>
+            <Plus className="h-4 w-4" aria-hidden />
+            {t(`${k}.add`)}
+          </button>
+        ) : (
+          listState === "ready" && (
+            <p className="max-w-[34ch] text-sm text-muted-foreground sm:text-right">
+              {t(`${k}.sso_add_hint`)}{" "}
+              <button type="button" className="focus-ring rounded font-medium text-foreground underline underline-offset-4" onClick={() => setTab("signin")}>
+                {t(`${k}.sso_add_manage`)}
+              </button>
+            </p>
+          )
+        )}
       </header>
 
       <div role="tablist" aria-label={t(`${k}.tabs.aria`)} className="no-scrollbar -mt-2 flex gap-1 overflow-x-auto border-b border-border/60">
@@ -537,11 +1000,13 @@ export default function UsersPage() {
             {listState === "ready" && users.length === 0 && (
               <div className="flex flex-col items-center rounded-3xl border border-dashed border-border px-6 py-20 text-center">
                 <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.empty.title`)}</h2>
-                <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">{t(`${k}.empty.body`)}</p>
-                <button type="button" className={cn(solidBtn, "mt-6")} onClick={() => setFormUser("new")}>
-                  <Plus className="h-4 w-4" aria-hidden />
-                  {t(`${k}.add`)}
-                </button>
+                <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">{t(canCreate ? `${k}.empty.body` : `${k}.empty.sso_body`)}</p>
+                {canCreate && (
+                  <button type="button" className={cn(solidBtn, "mt-6")} onClick={() => setFormUser("new")}>
+                    <Plus className="h-4 w-4" aria-hidden />
+                    {t(`${k}.add`)}
+                  </button>
+                )}
               </div>
             )}
 
@@ -586,7 +1051,18 @@ export default function UsersPage() {
                               <div className="flex min-w-0 items-center gap-3">
                                 <Avatar user={u} />
                                 <div className="min-w-0">
-                                  <div className="truncate text-sm font-medium">{name}</div>
+                                  <div className="flex min-w-0 items-center gap-2">
+                                    <span className="truncate text-sm font-medium">{name}</span>
+                                    {isAdmin(u) && <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground">{t(`${k}.badge.admin`)}</span>}
+                                    {u.can_create_api_keys && (
+                                      <span
+                                        title={t(`${k}.form.api_keys.badge_title`, { active: u.api_keys_active ?? 0, max: u.max_api_keys ?? API_KEYS_LIMIT.default })}
+                                        className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium tabular-nums text-muted-foreground"
+                                      >
+                                        {t(`${k}.form.api_keys.badge`, { active: u.api_keys_active ?? 0, max: u.max_api_keys ?? API_KEYS_LIMIT.default })}
+                                      </span>
+                                    )}
+                                  </div>
                                   {u.display_name && <div className="truncate font-mono text-xs text-muted-foreground">{u.identifier}</div>}
                                 </div>
                               </div>
@@ -664,7 +1140,7 @@ export default function UsersPage() {
               </h2>
               <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.migration.subtitle`)}</p>
             </div>
-            <MigrationUsers />
+            <MigrationUsers onChanged={() => void loadUsers()} />
           </section>
         )}
 
@@ -677,7 +1153,12 @@ export default function UsersPage() {
                 </h2>
                 <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.signin.sso_body`)}</p>
               </div>
-              <SsoMigrationPanel onManage={showMigration ? () => setTab("migration") : undefined} />
+              {/* "Nuovi account" lives under the Microsoft/Google tabs: only SSO creates accounts on its own. */}
+              <SsoMigrationPanel
+                onManage={showMigration ? () => setTab("migration") : undefined}
+                onModeChanged={() => void loadUsers()}
+                onToast={setToast}
+              />
             </section>
 
             {/* TOTP exists only for the classic login; with SSO the provider's own 2FA applies. */}
@@ -696,7 +1177,7 @@ export default function UsersPage() {
         )}
       </div>
 
-      {formUser && (
+      {formUser && (formUser !== "new" || canCreate) && (
         <UserFormDialog user={formUser === "new" ? null : formUser} busy={saving} t={t} onSubmit={saveUser} onClose={() => !saving && setFormUser(null)} />
       )}
 

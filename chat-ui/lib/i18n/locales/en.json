@@ -19,6 +19,7 @@
       "profile": "Profile",
       "appearance": "Appearance",
       "security": "Security",
+      "api_keys": "API keys",
       "instructions": "Instructions",
       "tunings": "Tuning & Parameters",
       "runtime": "Runtime",
@@ -33,7 +34,11 @@
       "avatar_too_large": "Image must be smaller than 256 KB.",
       "appearance_saved": "Profile appearance updated.",
       "username_hint": "Login identifier. Must be unique.",
-      "shortcuts_desc": "Fast access to main app sections."
+      "shortcuts_desc": "Fast access to main app sections.",
+      "photo_title": "Photo",
+      "photo_hint": "Shown next to your messages and in the sidebar.",
+      "details_title": "Account details",
+      "details_desc": "How you appear to the assistant and to administrators."
     },
     "appearance": {
       "title": "Appearance",
@@ -57,7 +62,104 @@
       "password_updated": "Password updated successfully.",
       "update_password": "Update password",
       "must_change_title": "Temporary password",
-      "must_change_desc": "For security, please update your password before continuing."
+      "must_change_desc": "For security, please update your password before continuing.",
+      "desc": "Keep your account protected."
+    },
+    "api_keys": {
+      "title": "API keys",
+      "desc": "Create personal keys to call AION from scripts and integrations (e.g. n8n). A key acts as you, limited to the scopes you grant it.",
+      "loading": "Loading API keys…",
+      "retry": "Retry",
+      "disabled": "API key creation is not enabled for your account. Contact your administrator.",
+      "counter": "{{active}} of {{max}} active keys",
+      "new_key": "New key",
+      "quota_hint": "You have reached the maximum number of active keys. Revoke one to create a new key.",
+      "empty": "You don't have any API keys yet.",
+      "created": "Created",
+      "expires": "Expires",
+      "revoked_on": "Revoked",
+      "no_expiry": "No expiry",
+      "last_used": "Last used",
+      "never": "Never",
+      "revoke": "Revoke",
+      "usage_title": "How to use a key",
+      "usage_desc": "Send the key in one of these HTTP headers. Requests act on your behalf, limited to the key's scopes.",
+      "status": {
+        "active": "Active",
+        "expired": "Expired",
+        "revoked": "Revoked"
+      },
+      "scope": {
+        "chat": {
+          "label": "Chat",
+          "desc": "Send messages to agents and receive their replies."
+        },
+        "conversations_read": {
+          "label": "Read conversations",
+          "desc": "List your conversations and read their messages."
+        },
+        "conversations_write": {
+          "label": "Manage conversations",
+          "desc": "Create, rename and delete your conversations."
+        },
+        "files_read": {
+          "label": "Read files",
+          "desc": "List and download files in your sessions."
+        },
+        "files_write": {
+          "label": "Upload files",
+          "desc": "Upload files to your sessions."
+        }
+      },
+      "create": {
+        "title": "New API key",
+        "subtitle": "The key will be shown only once, right after creation.",
+        "name_label": "Name",
+        "name_placeholder": "e.g. n8n automation",
+        "name_hint": "A label that helps you recognise where the key is used.",
+        "scopes_label": "Permissions",
+        "scopes_hint": "Grant only what the integration actually needs.",
+        "expiry_label": "Expiration",
+        "expiry_days": "{{days}} days",
+        "expiry_one_day": "1 day",
+        "expiry_hint": "Maximum allowed: {{max}} days.",
+        "submit": "Create key",
+        "creating": "Creating…",
+        "cancel": "Cancel"
+      },
+      "secret": {
+        "title": "Copy your new key \"{{name}}\"",
+        "warning": "This is the only time the full key is shown. Store it somewhere safe: you won't be able to see it again.",
+        "key_label": "API key",
+        "copy": "Copy",
+        "copied": "Copied",
+        "copy_failed": "Could not copy automatically. Select the key and copy it manually.",
+        "dismiss": "I've saved it"
+      },
+      "revoke_dialog": {
+        "title": "Revoke API key",
+        "subtitle": "This action cannot be undone.",
+        "warning": "Integrations using this key will stop working immediately.",
+        "desc": "Do you want to revoke the key",
+        "key": "Key",
+        "confirm": "Revoke key",
+        "revoking": "Revoking…"
+      },
+      "toast": {
+        "created": "API key created.",
+        "revoked": "API key revoked."
+      },
+      "err": {
+        "disabled": "API key creation is not enabled for your account. Contact your administrator.",
+        "quota": "You have reached the limit of {{max}} active keys. Revoke one before creating a new key.",
+        "quota_generic": "You have reached the maximum number of active keys. Revoke one before creating a new key.",
+        "invalid_scopes": "One or more selected permissions are not allowed for your account.",
+        "invalid_expiration": "The selected expiration is not allowed.",
+        "user_token_required": "Sign in with your account to manage API keys.",
+        "not_found": "API key not found.",
+        "generic": "Something went wrong. Please try again."
+      },
+      "list_title": "Your keys"
     },
     "section": {
       "profile": {
@@ -104,7 +206,9 @@
         "restore": "Restore Default",
         "save": "Save Instructions",
         "saving": "Saving..."
-      }
+      },
+      "profile_locked": "Save or discard your changes before switching profile.",
+      "user_id": "User ID"
     },
     "tunings": {
       "title": "Tuning & Parameters",
@@ -160,7 +264,24 @@
       "name_placeholder": "Preset name",
       "save_as": "Save as",
       "save_active": "Save changes to active preset",
-      "empty": "No presets yet."
+      "empty": "No presets yet.",
+      "new_title": "New preset",
+      "list_title": "Saved presets",
+      "active": "Active",
+      "unsaved": "Unsaved",
+      "activate": "Activate",
+      "none": "None",
+      "save_to": "Update “{{name}}” with current values"
+    },
+    "ui": {
+      "nav": "Settings sections",
+      "unsaved": "You have unsaved changes",
+      "discard": "Discard",
+      "save": "Save changes",
+      "saving": "Saving…",
+      "saved": "Changes saved",
+      "loading": "Loading settings…",
+      "dismiss": "Dismiss"
     }
   },
   "sidebar": {
@@ -720,7 +841,7 @@
       "sso_user_already_linked": "You already have an account linked.",
       "generic": "Sign-in failed. Please try again.",
       "sso_not_linked": "Your account is not linked yet. Sign in with your password and link your company account.",
-      "sso_domain_not_allowed": "Your email domain is not allowed.",
+      "sso_domain_not_allowed": "This account isn't enabled for access. You may be signed in with the wrong account — use your work account instead.",
       "sso_required": "SSO sign-in is required for this account.",
       "password_login_disabled": "Password sign-in is disabled.",
       "temp_password_expired": "Your temporary password has expired. Contact your administrator.",
@@ -737,7 +858,9 @@
       "exchange_failed": "Error completing sign-in.",
       "link_failed": "Linking failed.",
       "session_invalid": "Session expired, please sign in again.",
-      "user_not_found": "User not found."
+      "user_not_found": "User not found.",
+      "sso_signup_closed": "New accounts aren't being accepted right now. Contact your administrator to request access.",
+      "sso_signup_not_allowed": "Your account isn't enabled for this platform yet. Contact your administrator to request access."
     }
   },
   "authgate": {

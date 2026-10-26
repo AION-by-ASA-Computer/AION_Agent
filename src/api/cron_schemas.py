@@ -58,6 +58,8 @@ class ScheduledJobOut(BaseModel):
     updated_at: Optional[str] = None
     next_run_at: Optional[str] = None
     last_run: Optional[Dict[str, Any]] = None
+    # True when the admin view hides the prompt of a user-created job (privacy).
+    prompt_hidden: bool = False
 
 
 class ScheduledJobListResponse(BaseModel):

@@ -168,6 +168,7 @@ import { SessionCharts } from "@/components/chat/SessionCharts";
 import { formatMessageTime, formatTurnDuration } from "@/lib/format-turn-time";
 
 import type { DockTab } from "@/lib/layout/dock-tab";
+import { randomUUID } from "@/lib/uuid";
 
 type PlanPendingChunk = ChatChunk & { type: "orchestration_plan_pending" };
 type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research";
@@ -667,7 +668,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editInput, setEditInput] = useState("");
   const [messageRatings, setMessageRatings] = useState<Record<string, MessageRating>>({});
-  const [activeCommentBoxId, setActiveCommentBoxId] = useState<string | null>(null);
 
   useEffect(() => {
     setMessageRatings(loadMessageRatings());
@@ -680,12 +680,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       else copy[messageId] = rating;
       return copy;
     });
-
-    if (rating === -1) {
-      setActiveCommentBoxId(messageId);
-    } else {
-      setActiveCommentBoxId(null);
-    }
 
     if (rating == null) {
       clearMessageRating(messageId);
@@ -709,23 +703,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       console.error("Error rating message:", e);
     }
   }, [conversationId, userId, token, messages]);
-
-  const handleMessageComment = useCallback(async (messageId: string, comment: string) => {
-    setMessages((prev) =>
-      prev.map((m) =>
-        m.id === messageId
-          ? { ...m, feedbackComment: comment }
-          : m
-      )
-    );
-
-    try {
-      const rating = messageRatings[messageId] ?? null;
-      await rateMessage(conversationId, messageId, rating, comment, userId, token);
-    } catch (e) {
-      console.error("Error saving comment:", e);
-    }
-  }, [conversationId, userId, token, messageRatings]);
 
   const lastUserMessageId = useMemo(() => {
     for (let i = messages.length - 1; i >= 0; i--) {
@@ -1754,7 +1731,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         if (planFinalSummaryHandledRef.current.has(rid)) return;
         planFinalSummaryHandledRef.current.add(rid);
       }
-      const aid = crypto.randomUUID();
+      const aid = randomUUID();
       setMessages((m) => [...m, { id: aid, role: "assistant", content: text }]);
       // Documented exception: plan final summary is not persisted by the standard turn pipeline.
       void saveAssistantMessage(conversationId, aid, text, undefined, userId, token).catch((err) =>
@@ -2086,8 +2063,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         return;
       }
 
-      let uidMsg: string = opts?.userMessageIdOverride ?? crypto.randomUUID();
-      let aid: string = crypto.randomUUID();
+      let uidMsg: string = opts?.userMessageIdOverride ?? randomUUID();
+      let aid: string = randomUUID();
       setActiveMessageId(aid);
 
       const uploads = [...pendingUploadedAttachments];
@@ -2543,7 +2520,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           return;
         }
         const msg = e instanceof Error ? e.message : String(e);
-        setMessages((m) => [...m, { id: crypto.randomUUID(), role: "assistant", content: `❌ ${msg}` }]);
+        setMessages((m) => [...m, { id: randomUUID(), role: "assistant", content: `❌ ${msg}` }]);
       } finally {
         if (streamGen !== clientStreamGenRef.current) return;
         streamingRef.current = false;
@@ -3482,10 +3459,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       setDbTableHint(hint);
       setDockTab("agentdb");
       setInput("");
-      setMessages((m) => [...m, { id: crypto.randomUUID(), role: "user", content: t }]);
+      setMessages((m) => [...m, { id: randomUUID(), role: "user", content: t }]);
       setMessages((m) => [
         ...m,
-        { id: crypto.randomUUID(), role: "assistant", content: "Pannello Agent DB aperto sulla destra." },
+        { id: randomUUID(), role: "assistant", content: "Pannello Agent DB aperto sulla destra." },
       ]);
       return;
     }
@@ -5727,66 +5704,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   }}
                                 />
                               </div>
-                              {activeCommentBoxId === m.id && (
-                                <div className="mt-3 w-full max-w-xl p-4 sm:p-5 rounded-2xl bg-card border border-rose-500/30 shadow-[0_0_20px_rgba(244,63,94,0.08)] flex flex-col gap-4 relative">
-                                  {/* Header */}
-                                  <div className="flex items-center justify-between shrink-0">
-                                    <div className="flex items-center gap-2 font-bold text-xs text-rose-400">
-                                      <ThumbsDown className="w-4 h-4 text-rose-500 fill-current" />
-                                      {t("chat.actions.feedback_title")}
-                                    </div>
-                                    <button
-                                      onClick={() => setActiveCommentBoxId(null)}
-                                      className="p-1 text-muted-foreground hover:text-foreground hover:bg-foreground/5 rounded-lg transition-colors cursor-pointer"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  </div>
-
-                                  {/* Textarea Wrapper */}
-                                  <div className="relative w-full">
-                                    <textarea
-                                      id={`feedback-textarea-${m.id}`}
-                                      placeholder={t("chat.actions.feedback_placeholder")}
-                                      className="w-full min-h-[85px] text-xs bg-black/40 border border-white/10 hover:border-white/20 focus:border-rose-500 rounded-xl p-3 pr-8 text-foreground focus:outline-none focus:ring-1 focus:ring-rose-500/30 resize-none transition-all placeholder:text-muted-foreground/75"
-                                      defaultValue={m.feedbackComment ?? ""}
-                                      onKeyDown={(e) => {
-                                        if (e.key === "Enter" && !e.shiftKey) {
-                                          e.preventDefault();
-                                          const text = (e.target as HTMLTextAreaElement).value;
-                                          handleMessageComment(m.id, text);
-                                          setActiveCommentBoxId(null);
-                                        }
-                                      }}
-                                    />
-                                  </div>
-
-                                  {/* Footer Actions */}
-                                  <div className="flex items-center justify-end gap-2 shrink-0">
-                                    <button
-                                      onClick={() => {
-                                        handleMessageRate(m.id, null);
-                                        setActiveCommentBoxId(null);
-                                      }}
-                                      className="px-4 py-1.5 text-xs font-semibold rounded-full border border-white/10 bg-white/5 hover:bg-white/10 text-gray-300 transition-all cursor-pointer"
-                                    >
-                                      {t("chat.actions.feedback_cancel")}
-                                    </button>
-                                    <button
-                                      onClick={() => {
-                                        const el = document.getElementById(`feedback-textarea-${m.id}`) as HTMLTextAreaElement;
-                                        if (el) {
-                                          handleMessageComment(m.id, el.value);
-                                        }
-                                        setActiveCommentBoxId(null);
-                                      }}
-                                      className="px-5 py-1.5 text-xs font-bold rounded-full bg-rose-500 hover:bg-rose-600 text-white transition-all shadow-md shadow-rose-500/20 cursor-pointer"
-                                    >
-                                      {t("chat.actions.feedback_submit")}
-                                    </button>
-                                  </div>
-                                </div>
-                              )}
                             </div>
                           ) : null}
 

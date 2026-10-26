@@ -10,7 +10,10 @@ from pydantic import AliasChoices, BaseModel, Field
 from sqlalchemy import select, update
 
 from src.api.auth import AuthContext, Scope, require_scope
+from src.api.profile_access import enforce_profile_access
+from src.api.ownership import api_key_context_principal, owned_by
 from src.data.engine import get_async_session_maker
+from src.identity import sanitize_user_id
 from src.data.ids import new_uuid7_str
 from src.data.message_roles import (
     is_empty_technical_message,
@@ -26,7 +29,8 @@ router = APIRouter()
 
 class ConversationCreate(BaseModel):
     profile: str = Field(validation_alias=AliasChoices("profile", "profile_slug"))
-    user_id: str
+    # Ignorato: il proprietario e' sempre il principal della API key.
+    user_id: Optional[str] = None
     title: Optional[str] = None
     metadata: Dict[str, Any] = Field(default_factory=dict)
     tags: List[str] = Field(default_factory=list)
@@ -49,12 +53,14 @@ async def create_conversation(
     ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     _require_unified()
+    body.profile = await enforce_profile_access(ctx.user_row_id, body.profile)
     cid = new_uuid7_str()
+    owner = api_key_context_principal(ctx)
     async with get_async_session_maker()() as session:
         c = Conversation(
             id=cid,
             tenant_id=ctx.tenant_id,
-            user_id=body.user_id,
+            user_id=owner,
             profile_slug=body.profile,
             title=body.title,
             metadata_json=json.dumps(body.metadata or {}),
@@ -65,7 +71,7 @@ async def create_conversation(
     return {
         "id": cid,
         "tenant_id": ctx.tenant_id,
-        "user_id": body.user_id,
+        "user_id": owner,
         "profile_slug": body.profile,
         "title": body.title,
         "message_count": 0,
@@ -82,11 +88,16 @@ async def list_conversations(
 ):
     _require_unified()
     async with get_async_session_maker()() as session:
+        # Solo le conversazioni del chiamante: ``user_id`` non puo' selezionare
+        # quelle di altri utenti.
+        owner = api_key_context_principal(ctx)
+        if user_id and sanitize_user_id(user_id) != owner:
+            return {"data": []}
         q = select(Conversation).where(
-            Conversation.tenant_id == ctx.tenant_id, Conversation.archived_at.is_(None)
+            Conversation.tenant_id == ctx.tenant_id,
+            Conversation.user_id == owner,
+            Conversation.archived_at.is_(None),
         )
-        if user_id:
-            q = q.where(Conversation.user_id == user_id)
         q = q.order_by(Conversation.updated_at.desc()).limit(limit)
         rows = (await session.execute(q)).scalars().all()
     return {
@@ -113,7 +124,7 @@ async def get_conversation(
     _require_unified()
     async with get_async_session_maker()() as session:
         r = await session.get(Conversation, conversation_id)
-    if not r or r.tenant_id != ctx.tenant_id:
+    if not owned_by(r, ctx.tenant_id, api_key_context_principal(ctx)):
         raise HTTPException(404, "Not found")
     return {
         "id": r.id,
@@ -135,7 +146,7 @@ async def patch_conversation(
     _require_unified()
     async with get_async_session_maker()() as session:
         r = await session.get(Conversation, conversation_id)
-        if not r or r.tenant_id != ctx.tenant_id:
+        if not owned_by(r, ctx.tenant_id, api_key_context_principal(ctx)):
             raise HTTPException(404, "Not found")
         vals: Dict[str, Any] = {"updated_at": datetime.now(timezone.utc)}
         if "title" in body:
@@ -161,7 +172,7 @@ async def delete_conversation(
     _require_unified()
     async with get_async_session_maker()() as session:
         r = await session.get(Conversation, conversation_id)
-        if not r or r.tenant_id != ctx.tenant_id:
+        if not owned_by(r, ctx.tenant_id, api_key_context_principal(ctx)):
             raise HTTPException(404, "Not found")
         await session.execute(
             update(Conversation)
@@ -189,7 +200,7 @@ async def get_conversation_messages(
     async with get_async_session_maker()() as session:
         # Verify conversation belongs to tenant
         c = await session.get(Conversation, conversation_id)
-        if not c or c.tenant_id != ctx.tenant_id:
+        if not owned_by(c, ctx.tenant_id, api_key_context_principal(ctx)):
             raise HTTPException(404, "Conversation not found")
 
         q = (

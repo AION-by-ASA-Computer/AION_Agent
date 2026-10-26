@@ -7,9 +7,12 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from src.api.auth_login import ChatAuthIdentity, require_admin_role
+from src.api.ownership import effective_user_id
+from src.identity import sanitize_user_id
 from src.memory.ltm_audit import append_ltm_audit
 from src.memory.mnemos.compress import compress_scope
 from src.memory.mnemos.scope import (
@@ -31,7 +34,20 @@ class CompressBody(BaseModel):
     tenant_id: str = Field(default="default")
 
 
-def _scope(tenant_id: str, scope_type: str, scope_key: str):
+def _scope(
+    tenant_id: str,
+    scope_type: str,
+    scope_key: str,
+    auth: Optional[ChatAuthIdentity] = None,
+):
+    """Scope Mnemos; la memoria ``user`` e' leggibile solo dal proprietario.
+
+    Le note utente sono estratte dalle chat: nemmeno un admin puo' leggere
+    quelle di un altro utente. ``auth=None`` solo per conteggi aggregati.
+    """
+    if scope_type == "user" and auth is not None:
+        if sanitize_user_id(scope_key) != effective_user_id(auth):
+            raise HTTPException(status_code=404, detail="Scope not found")
     if scope_type == "project":
         return project_scope(tenant_id, scope_key)
     if scope_type == "global":
@@ -58,8 +74,9 @@ async def ltm_notes(
     status: str = Query("active"),
     limit: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> List[Dict[str, Any]]:
-    scope = _scope(tenant_id, scope_type, scope_key)
+    scope = _scope(tenant_id, scope_type, scope_key, auth)
     notes = await store.list_notes(
         scope, category=category, status=status, limit=limit, offset=offset
     )
@@ -85,8 +102,9 @@ async def ltm_search(
     tenant_id: str = Query("default"),
     mode: str = Query("current"),
     limit: int = Query(20, ge=1, le=100),
+    auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> List[Dict[str, Any]]:
-    scope = _scope(tenant_id, scope_type, scope_key)
+    scope = _scope(tenant_id, scope_type, scope_key, auth)
     notes = await store.fts_search(scope, q, limit=limit, mode=mode)
     return [
         {"id": n.id, "seq": n.seq, "content": n.content, "status": n.status}
@@ -101,14 +119,18 @@ async def ltm_zoom(
     lo: int = Query(..., ge=0),
     hi: int = Query(..., gt=0),
     tenant_id: str = Query("default"),
+    auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
-    scope = _scope(tenant_id, scope_type, scope_key)
+    scope = _scope(tenant_id, scope_type, scope_key, auth)
     return await zoom_digest(scope, lo, hi)
 
 
 @router.post("/compress")
-async def ltm_compress(body: CompressBody) -> Dict[str, Any]:
-    scope = _scope(body.tenant_id, body.scope_type, body.scope_key)
+async def ltm_compress(
+    body: CompressBody,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+) -> Dict[str, Any]:
+    scope = _scope(body.tenant_id, body.scope_type, body.scope_key, auth)
     n = await compress_scope(scope)
     append_ltm_audit(
         {

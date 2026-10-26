@@ -57,7 +57,7 @@ def test_chat_ui_history_preserves_steps_artifacts_and_reasoning(monkeypatch, tm
             message_id="assistant-1",
         )
 
-        payload = await get_conversation_messages_chat_ui("conv-1", x_aion_user_id="u1")
+        payload = await get_conversation_messages_chat_ui("conv-1", user_id="u1")
         assistant = payload["messages"][1]
         assert assistant["id"] == "assistant-1"
         assert assistant["reasoning"] == "Ho creato un file Python."
@@ -107,9 +107,7 @@ def test_chat_ui_history_collapses_stream_loop_fragments(monkeypatch, tmp_path):
             message_id="assistant-frag",
         )
 
-        payload = await get_conversation_messages_chat_ui(
-            "conv-frag", x_aion_user_id="u1"
-        )
+        payload = await get_conversation_messages_chat_ui("conv-frag", user_id="u1")
         assistants = [m for m in payload["messages"] if m["role"] == "assistant"]
         assert len(assistants) == 1
         assert assistants[0]["id"] == "assistant-main"
@@ -141,9 +139,7 @@ def test_chat_ui_history_shows_empty_assistant_with_steps(monkeypatch, tmp_path)
             message_id="assistant-1",
         )
 
-        payload = await get_conversation_messages_chat_ui(
-            "conv-empty", x_aion_user_id="u1"
-        )
+        payload = await get_conversation_messages_chat_ui("conv-empty", user_id="u1")
         assert len(payload["messages"]) == 2
         assistant = payload["messages"][1]
         assert assistant["id"] == "assistant-1"
@@ -161,7 +157,7 @@ def test_chat_ui_history_missing_conversation_returns_empty(monkeypatch, tmp_pat
         await bridge.init()
         payload = await get_conversation_messages_chat_ui(
             "conv-does-not-exist",
-            x_aion_user_id="u1",
+            user_id="u1",
         )
         assert payload["messages"] == []
 
@@ -183,9 +179,7 @@ def test_chat_ui_history_shows_terminal_empty_assistant(monkeypatch, tmp_path):
             message_id="assistant-1",
         )
 
-        payload = await get_conversation_messages_chat_ui(
-            "conv-term", x_aion_user_id="u1"
-        )
+        payload = await get_conversation_messages_chat_ui("conv-term", user_id="u1")
         assert len(payload["messages"]) == 2
         assert payload["messages"][1]["role"] == "assistant"
         assert payload["messages"][1]["id"] == "assistant-1"
@@ -205,7 +199,7 @@ def test_chat_ui_history_404_for_wrong_user(monkeypatch, tmp_path):
         from fastapi import HTTPException
 
         with pytest.raises(HTTPException) as exc:
-            await get_conversation_messages_chat_ui("conv-own", x_aion_user_id="other")
+            await get_conversation_messages_chat_ui("conv-own", user_id="other")
         assert exc.value.status_code == 404
 
     asyncio.run(run())
@@ -236,7 +230,7 @@ def test_chat_ui_history_excludes_orphan_steps(monkeypatch, tmp_path):
             "conv-2", "assistant", "Risposta", user_id="u1", message_id="assistant-1"
         )
 
-        payload = await get_conversation_messages_chat_ui("conv-2", x_aion_user_id="u1")
+        payload = await get_conversation_messages_chat_ui("conv-2", user_id="u1")
         first_user, second_user, assistant = payload["messages"]
         assert first_user["steps"] == []
         assert second_user["steps"] == []
@@ -279,7 +273,7 @@ def test_get_does_not_mutate_timeline_json(monkeypatch, tmp_path):
                 )
             ).scalar_one()
 
-        await get_conversation_messages_chat_ui("conv-mut", x_aion_user_id="u1")
+        await get_conversation_messages_chat_ui("conv-mut", user_id="u1")
 
         async with get_async_session_maker()() as session:
             after = (
@@ -317,9 +311,7 @@ def test_no_dedup_needed_with_single_writer(monkeypatch, tmp_path):
             message_id="assistant-2",
         )
 
-        payload = await get_conversation_messages_chat_ui(
-            "conv-dedup", x_aion_user_id="u1"
-        )
+        payload = await get_conversation_messages_chat_ui("conv-dedup", user_id="u1")
         assistants = [m for m in payload["messages"] if m["role"] == "assistant"]
         assert len(assistants) == 2
         assert assistants[0]["id"] == "assistant-1"

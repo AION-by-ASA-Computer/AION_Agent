@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from src.api.auth import AuthContext, Scope, require_scope
+from src.api.ownership import api_key_context_principal, owned_by
 from src.api.v1.conversations import _require_unified
 from src.data.engine import get_async_session_maker
 from src.data.models import Conversation, Step
@@ -35,7 +36,7 @@ async def create_step(
     sid = new_uuid7_str()
     async with get_async_session_maker()() as session:
         c = await session.get(Conversation, conversation_id)
-        if not c or c.tenant_id != ctx.tenant_id:
+        if not owned_by(c, ctx.tenant_id, api_key_context_principal(ctx)):
             raise HTTPException(404, "conversation not found")
         st = Step(
             id=sid,
@@ -61,7 +62,7 @@ async def list_steps(
     _require_unified()
     async with get_async_session_maker()() as session:
         c = await session.get(Conversation, conversation_id)
-        if not c or c.tenant_id != ctx.tenant_id:
+        if not owned_by(c, ctx.tenant_id, api_key_context_principal(ctx)):
             raise HTTPException(404, "conversation not found")
         q = (
             select(Step)

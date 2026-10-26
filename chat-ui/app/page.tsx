@@ -3,11 +3,12 @@
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
+import { randomUUID } from "@/lib/uuid";
 
 export default function HomePage() {
   const router = useRouter();
   useEffect(() => {
-    const id = crypto.randomUUID();
+    const id = randomUUID();
     router.replace(`/c/${id}`);
   }, [router]);
   return (

@@ -223,7 +223,35 @@ async def upsert_provider(
         await session.commit()
 
 
-async def mark_validated(tenant_id: str, provider: str, user_id: str) -> None:
+def account_domain_from_claims(provider: str, claims: Dict[str, Any]) -> Optional[str]:
+    """Dominio dell'account che ha validato l'SSO, se significativo come restrizione.
+
+    Google: claim ``hd`` (assente per gli account personali). Microsoft: dominio
+    dell'UPN/email (lo stesso usato da ``verify_id_token``).
+    """
+    if provider == "google":
+        return (claims.get("hd") or "").strip().lower() or None
+    if provider == "microsoft":
+        email = (claims.get("preferred_username") or claims.get("email") or "").strip()
+        if "@" not in email:
+            return None
+        # Stessa derivazione del controllo in ``verify_id_token``: l'admin che
+        # valida non puo' restare escluso dalla restrizione appena impostata.
+        return email.rsplit("@", 1)[1].lower() or None
+    return None
+
+
+async def mark_validated(
+    tenant_id: str,
+    provider: str,
+    user_id: str,
+    claims: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Segna il provider come validato.
+
+    Se ``claims`` e' passato e nessun dominio e' ancora configurato, precompila
+    ``allowed_domains`` con il dominio dell'account che ha validato.
+    """
     _CACHE.pop(tenant_id, None)
     async with get_async_session_maker()() as session:
         row = (
@@ -241,6 +269,10 @@ async def mark_validated(tenant_id: str, provider: str, user_id: str) -> None:
         if row:
             row.validated_at = datetime.now(timezone.utc)
             row.validated_by_user_id = user_id
+            if claims and not row.allowed_domains:
+                domain = account_domain_from_claims(provider, claims)
+                if domain:
+                    row.allowed_domains = json.dumps([domain])
             await session.commit()
 
 

@@ -3,8 +3,10 @@
 Implementa §2 del piano di migrazione.
 """
 
+import json
 import logging
 import os
+import re
 import secrets
 import time
 from datetime import datetime, timedelta, timezone
@@ -108,6 +110,8 @@ async def get_login_settings(tenant_id: str) -> Dict[str, Any]:
             "clear_password_on_link": True,
             "sso_provider": None,
             "totp_required": False,
+            "sso_signup_policy": "open",
+            "sso_signup_allowlist": [],
         }
     else:
         mode = row.login_mode or "password"
@@ -119,10 +123,79 @@ async def get_login_settings(tenant_id: str) -> Dict[str, Any]:
             "clear_password_on_link": bool(row.clear_password_on_link),
             "sso_provider": mode if mode != "password" else None,
             "totp_required": bool(getattr(row, "totp_required", False)),
+            "sso_signup_policy": normalize_signup_policy(
+                getattr(row, "sso_signup_policy", None)
+            ),
+            "sso_signup_allowlist": parse_signup_allowlist(
+                getattr(row, "sso_signup_allowlist", None)
+            ),
         }
 
     _SETTINGS_CACHE[tenant_id] = (now + CACHE_TTL, result)
     return result
+
+
+# --- Policy nuovi account SSO ----------------------------------------------
+# Decide chi puo' ottenere un account al primo login SSO (auto-provisioning).
+# Non tocca chi ha gia' un account: per revocare l'accesso si elimina l'utente.
+
+SIGNUP_POLICIES = ("open", "allowlist", "closed")
+SIGNUP_ALLOWLIST_MAX = 2000
+# L'ultima etichetta del dominio non contiene punti: senza questo vincolo la
+# regex torna indietro in tempo quadratico su input come ``a@a.a.a...`` (ReDoS).
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s.]+$")
+_MAX_ALLOWLIST_ENTRY = 254  # lunghezza massima di un indirizzo email (RFC 5321)
+_DOMAIN_RE = re.compile(
+    r"^@[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$"
+)
+
+
+def normalize_signup_policy(value: Optional[str]) -> str:
+    v = (value or "open").strip().lower()
+    return v if v in SIGNUP_POLICIES else "open"
+
+
+def parse_signup_allowlist(raw: Optional[str]) -> List[str]:
+    if not raw:
+        return []
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(data, list):
+        return []
+    return [str(x).strip().lower() for x in data if str(x).strip()]
+
+
+def normalize_allowlist_entry(entry: str) -> Optional[str]:
+    """Email completa (``mario@azienda.it``) o dominio (``@azienda.it``).
+
+    Restituisce la voce in minuscolo, oppure None se non valida.
+    """
+    v = (entry or "").strip().lower()
+    if not v or len(v) > _MAX_ALLOWLIST_ENTRY:
+        return None
+    if v.startswith("@"):
+        return v if _DOMAIN_RE.match(v) else None
+    return v if _EMAIL_RE.match(v) else None
+
+
+def signup_denied_reason(
+    email: Optional[str], policy: str, allowlist: List[str]
+) -> Optional[str]:
+    """Codice d'errore se ``email`` non puo' creare un nuovo account, altrimenti None."""
+    policy = normalize_signup_policy(policy)
+    if policy == "open":
+        return None
+    if policy == "closed":
+        return "sso_signup_closed"
+    e = (email or "").strip().lower()
+    if not e or "@" not in e:
+        return "sso_signup_not_allowed"
+    entries = set(allowlist)
+    if e in entries or ("@" + e.rsplit("@", 1)[1]) in entries:
+        return None
+    return "sso_signup_not_allowed"
 
 
 async def pending_users_count(tenant_id: str, provider: str) -> int:
@@ -301,6 +374,30 @@ async def _check_migration_completion(tenant_id: str, provider: str) -> None:
                     provider,
                 )
         _invalidate_cache(tenant_id)
+
+
+async def reopen_migration(tenant_id: str) -> None:
+    """Riapre la migrazione quando un utente torna a doversi collegare (es. dopo
+    lo scollegamento dell'identita' SSO e l'emissione di una password temporanea).
+
+    Senza riapertura il form password resta nascosto (``first_setup``) e un
+    login SSO diretto finirebbe nell'auto-provisioning invece che in
+    ``sso_not_linked``. Le identita' gia' confermate restano valide:
+    ``migration_started_at`` non cambia (``None`` per chi veniva dal first_setup,
+    che fa contare ogni identita' esistente).
+    """
+    async with get_async_session_maker()() as session:
+        row = await session.get(AuthSettings, tenant_id)
+        if not row or (row.login_mode or "password") == "password":
+            return
+        if row.sso_origin == "migration" and not row.migration_completed_at:
+            return
+        row.sso_origin = "migration"
+        row.migration_completed_at = None
+        row.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+    _invalidate_cache(tenant_id)
+    logger.info("SSO migration reopened for tenant %s", tenant_id)
 
 
 async def set_login_mode(
@@ -628,4 +725,8 @@ async def generate_temp_passwords(
         await session.commit()
 
     _invalidate_cache(tenant_id)
+    # Chi riceve una password temporanea deve (ri)collegarsi: serve il form
+    # password e la migrazione deve risultare in corso.
+    if results:
+        await reopen_migration(tenant_id)
     return results

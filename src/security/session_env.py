@@ -97,6 +97,7 @@ def scrub_secrets_from_env(env: Dict[str, str]) -> None:
             "AION_CHAT_AUTH_SECRET",
             "AION_ORCHESTRATION_INTERNAL_SECRET",
             "AION_CHAT_UI_INTERNAL_SECRET",
+            # Rimossa (API key ora per-utente): resta qui per i .env legacy.
             "AION_API_KEY_BOOTSTRAP",
         }
     )

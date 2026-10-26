@@ -8,7 +8,7 @@ import os
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 
 from src.api.auth_login import ChatAuthIdentity, require_admin_role
@@ -17,8 +17,12 @@ from src.auth.sso.login_mode import (
     _invalidate_cache,
     confirmed_identity_exists,
     generate_temp_passwords,
+    SIGNUP_ALLOWLIST_MAX,
+    SIGNUP_POLICIES,
     get_login_settings,
+    normalize_allowlist_entry,
     pending_users_count,
+    reopen_migration,
 )
 from src.data.engine import get_async_session_maker
 from src.data.models import AuthSettings, User, UserSsoIdentity
@@ -436,7 +440,13 @@ async def unlink_sso_identity(
     identity_id: str,
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
-    """Scollega un'identità SSO da un utente."""
+    """Scollega un'identità SSO da un utente.
+
+    Se era l'identita' del provider attivo l'utente deve ricollegarsi col
+    flusso standard (password -> obbligo SSO -> collegamento): senza password
+    ne riceve una temporanea, mostrata solo in questa risposta, e la
+    migrazione viene riaperta.
+    """
     tenant = _tenant_id()
     async with get_async_session_maker()() as session:
         user = await session.get(User, user_id)
@@ -447,17 +457,23 @@ async def unlink_sso_identity(
         if not identity or identity.user_id != user_id:
             raise HTTPException(404, detail="Identità non trovata")
 
+        provider = identity.provider
+        has_password = bool(user.password_hash)
         await session.delete(identity)
         await session.commit()
 
     _invalidate_cache(tenant)
-    # Avviso se l'utente non ha più password (non potrà più accedere)
-    needs_temp = not user.password_hash
+    temp_passwords: List[Dict[str, Any]] = []
+    if provider == (await get_login_settings(tenant)).get("sso_provider"):
+        if has_password:
+            await reopen_migration(tenant)
+        else:
+            temp_passwords = await generate_temp_passwords(tenant, [user_id], provider)
     return {
         "ok": True,
         "user_id": user_id,
         "identity_id": identity_id,
-        "user_has_no_password": needs_temp,
+        "temp_passwords": temp_passwords,
     }
 
 
@@ -531,6 +547,79 @@ async def put_two_factor(
     _invalidate_cache(tid)
     logger.info("2FA required=%s set by %s", body.required, auth.identifier)
     return await get_two_factor(auth)
+
+
+# ---------------------------------------------------------------------------
+# Policy nuovi account SSO (chi puo' entrare al primo login SSO)
+# ---------------------------------------------------------------------------
+
+
+class SetSignupPolicyBody(BaseModel):
+    policy: str
+    allowlist: List[str] = Field(default_factory=list)
+
+
+@router.get("/signup-policy")
+async def get_signup_policy(
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+) -> Dict[str, Any]:
+    settings = await get_login_settings(_tenant_id())
+    return {
+        "policy": settings.get("sso_signup_policy", "open"),
+        "allowlist": settings.get("sso_signup_allowlist", []),
+        # Applicata solo con login SSO; configurabile anche prima dello switch.
+        "applies": settings.get("login_mode") != "password",
+        "max_entries": SIGNUP_ALLOWLIST_MAX,
+    }
+
+
+@router.put("/signup-policy")
+async def put_signup_policy(
+    body: SetSignupPolicyBody,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+) -> Dict[str, Any]:
+    import json
+
+    policy = (body.policy or "").strip().lower()
+    if policy not in SIGNUP_POLICIES:
+        raise HTTPException(400, detail={"code": "invalid_signup_policy"})
+    entries: List[str] = []
+    seen = set()
+    for raw in body.allowlist:
+        if not (raw or "").strip():
+            continue
+        entry = normalize_allowlist_entry(raw)
+        if entry is None:
+            raise HTTPException(
+                400, detail={"code": "invalid_allowlist_entry", "entry": raw.strip()}
+            )
+        if entry not in seen:
+            seen.add(entry)
+            entries.append(entry)
+    if len(entries) > SIGNUP_ALLOWLIST_MAX:
+        raise HTTPException(
+            400,
+            detail={"code": "allowlist_too_long", "max": SIGNUP_ALLOWLIST_MAX},
+        )
+
+    tid = _tenant_id()
+    async with get_async_session_maker()() as session:
+        row = await session.get(AuthSettings, tid)
+        if row is None:
+            row = AuthSettings(tenant_id=tid, login_mode="password")
+            session.add(row)
+        row.sso_signup_policy = policy
+        row.sso_signup_allowlist = json.dumps(entries)
+        row.updated_by_user_id = auth.user_row_id
+        await session.commit()
+    _invalidate_cache(tid)
+    logger.info(
+        "SSO signup policy=%s (%d entries) set by %s",
+        policy,
+        len(entries),
+        auth.identifier,
+    )
+    return await get_signup_policy(auth)
 
 
 @router.delete("/users/{user_id}/2fa")

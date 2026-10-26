@@ -15,7 +15,6 @@ const QUICK = [
   { id: "quick_mcp", href: "/hub" },
   { id: "quick_profiles", href: "/profiles" },
   { id: "quick_users", href: "/users" },
-  { id: "quick_api_keys", href: "/api-keys" },
 ];
 
 const noopSubscribe = () => () => {};

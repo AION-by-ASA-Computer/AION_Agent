@@ -404,3 +404,357 @@ async def test_email_follows_new_provider(env, monkeypatch):
         _claims("g1", "Bob@Gmail.com"), {}, PROVIDER, migration_active=True
     )
     assert (await env["get_user"](bob)).email == "bob@gmail.com"
+
+
+# --- Policy nuovi account SSO ---------------------------------------------
+
+
+@with_env
+async def test_signup_closed_blocks_new_but_not_existing(env, monkeypatch):
+    prov = env["prov"]
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    existing = await prov.resolve_user(_claims("old", "old@x.io"), {}, PROVIDER)
+
+    await env["set"](sso_signup_policy="closed")
+    with pytest.raises(ValueError, match="sso_signup_closed"):
+        await prov.resolve_user(_claims("new", "new@x.io"), {}, PROVIDER)
+    # Chi ha gia' un'identita' collegata continua ad accedere.
+    again = await prov.resolve_user(_claims("old", "old@x.io"), {}, PROVIDER)
+    assert again["id"] == existing["id"]
+
+
+@with_env
+async def test_signup_allowlist_emails_and_domains(env, monkeypatch):
+    import json
+
+    prov = env["prov"]
+    await env["set"](
+        login_mode="google",
+        sso_origin="first_setup",
+        sso_signup_policy="allowlist",
+        sso_signup_allowlist=json.dumps(["anna@x.io", "@pilot.x.io"]),
+    )
+    assert await prov.resolve_user(_claims("a", "Anna@X.io"), {}, PROVIDER)
+    assert await prov.resolve_user(_claims("p", "piero@pilot.x.io"), {}, PROVIDER)
+    with pytest.raises(ValueError, match="sso_signup_not_allowed"):
+        await prov.resolve_user(_claims("o", "other@x.io"), {}, PROVIDER)
+    # Il dominio non copre i sottodomini o i domini che lo contengono.
+    with pytest.raises(ValueError, match="sso_signup_not_allowed"):
+        await prov.resolve_user(_claims("s", "s@sub.pilot.x.io"), {}, PROVIDER)
+
+
+@with_env
+async def test_signup_policy_applies_during_migration(env, monkeypatch):
+    import json
+
+    prov = env["prov"]
+    await env["set"](login_mode="google", sso_origin="migration")
+    # Chi non potrebbe comunque avere un account vede il motivo vero,
+    # non l'invito a collegarsi con una password che non ha.
+    await env["set"](sso_signup_policy="closed")
+    with pytest.raises(ValueError, match="sso_signup_closed"):
+        await prov.resolve_user(
+            _claims("n", "n@x.io"), {}, PROVIDER, migration_active=True
+        )
+    await env["set"](
+        sso_signup_policy="allowlist", sso_signup_allowlist=json.dumps(["ok@x.io"])
+    )
+    with pytest.raises(ValueError, match="sso_signup_not_allowed"):
+        await prov.resolve_user(
+            _claims("n", "n@x.io"), {}, PROVIDER, migration_active=True
+        )
+    # Ammesso dalla policy: durante la migrazione deve comunque collegarsi.
+    with pytest.raises(ValueError, match="sso_not_linked"):
+        await prov.resolve_user(
+            _claims("ok", "ok@x.io"), {}, PROVIDER, migration_active=True
+        )
+
+
+@with_env
+async def test_signup_policy_ignored_without_auto_provision(env, monkeypatch):
+    # Login dal pannello admin: non crea mai account, resta sso_not_linked.
+    await env["set"](
+        login_mode="google", sso_origin="first_setup", sso_signup_policy="closed"
+    )
+    with pytest.raises(ValueError, match="sso_not_linked"):
+        await env["prov"].resolve_user(
+            _claims("n", "n@x.io"), {}, {**PROVIDER, "auto_provision": False}
+        )
+
+
+@with_env
+async def test_signup_open_is_default(env, monkeypatch):
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    settings = await env["lm"].get_login_settings("default")
+    assert settings["sso_signup_policy"] == "open"
+    assert settings["sso_signup_allowlist"] == []
+    assert await env["prov"].resolve_user(_claims("n", "n@x.io"), {}, PROVIDER)
+
+
+def test_allowlist_entry_normalization():
+    from src.auth.sso.login_mode import normalize_allowlist_entry, signup_denied_reason
+
+    assert (
+        normalize_allowlist_entry("  Mario.Rossi@Azienda.IT ")
+        == "mario.rossi@azienda.it"
+    )
+    assert normalize_allowlist_entry("@Azienda.it") == "@azienda.it"
+    for bad in ("azienda.it", "@", "@azienda", "mario@", "a b@x.it", "@-x.it"):
+        assert normalize_allowlist_entry(bad) is None, bad
+    assert normalize_allowlist_entry("a@" + "b" * 260 + ".it") is None  # > 254
+    assert signup_denied_reason("a@x.it", "bogus", []) is None  # policy ignota -> open
+    assert (
+        signup_denied_reason(None, "allowlist", ["@x.it"]) == "sso_signup_not_allowed"
+    )
+
+
+def test_allowlist_email_regex_is_linear():
+    """Niente backtracking quadratico (ReDoS) su ``a@a.a.a...`` non valido."""
+    import time
+
+    from src.auth.sso.login_mode import _EMAIL_RE
+
+    evil = "!@!." + "!." * 50_000 + "@"
+    t0 = time.perf_counter()
+    assert _EMAIL_RE.match(evil) is None
+    assert time.perf_counter() - t0 < 0.5
+
+
+# --- Eliminazione utenti ----------------------------------------------------
+
+
+@with_env
+async def test_delete_user_completes_migration_and_drops_identities(env, monkeypatch):
+    import src.api.admin as admin_api
+    from src.data.models import UserSsoIdentity
+
+    monkeypatch.setattr(admin_api, "get_async_session_maker", lambda: env["sm"])
+    lm, prov = env["lm"], env["prov"]
+    await env["set"](login_mode="google", sso_origin="migration")
+    adm = await env["mkuser"]("root", roles=["admin"])
+    bob = await env["mkuser"]("bob")
+    await prov.link_identity_to_user(
+        "default",
+        adm,
+        _claims("s-adm", "root@x.io"),
+        {},
+        PROVIDER,
+        finalize_migration=True,
+    )
+    # Bob ha un'identita' di una migrazione precedente, non riconfermata.
+    async with env["sm"]() as s:
+        s.add(
+            UserSsoIdentity(
+                id="old-bob",
+                tenant_id="default",
+                user_id=bob,
+                provider="google",
+                subject="s-bob",
+                email="bob@x.io",
+            )
+        )
+        await s.commit()
+    assert await lm.is_migration_active("default")
+
+    await admin_api.delete_user(bob)
+
+    # Bob era l'ultimo da migrare: la migrazione si chiude subito.
+    assert not await lm.is_migration_active("default")
+    async with env["sm"]() as s:
+        left = (
+            (
+                await s.execute(
+                    select(UserSsoIdentity).where(UserSsoIdentity.user_id == bob)
+                )
+            )
+            .scalars()
+            .all()
+        )
+    assert left == []
+    # Senza identita' orfana la stessa persona puo' di nuovo ottenere un account.
+    assert await prov.resolve_user(_claims("s-bob", "bob@x.io"), {}, PROVIDER)
+
+
+async def _unlink(env, monkeypatch, uid):
+    import src.api.admin_auth_mode as aam
+    from src.data.models import UserSsoIdentity
+
+    monkeypatch.setattr(aam, "get_async_session_maker", lambda: env["sm"])
+    async with env["sm"]() as s:
+        ident = (
+            (
+                await s.execute(
+                    select(UserSsoIdentity).where(UserSsoIdentity.user_id == uid)
+                )
+            )
+            .scalars()
+            .first()
+        )
+    return await aam.unlink_sso_identity(uid, ident.id, auth=None)
+
+
+async def _all_linked(env):
+    """Migrazione google completata: admin e bob collegati, senza password."""
+    await env["set"](login_mode="google", sso_origin="migration")
+    adm = await env["mkuser"]("root", roles=["admin"])
+    bob = await env["mkuser"]("bob@x.io")
+    for uid, sub, mail in ((adm, "s-adm", "root@x.io"), (bob, "s-bob", "bob@x.io")):
+        await env["prov"].link_identity_to_user(
+            "default", uid, _claims(sub, mail), {}, PROVIDER, finalize_migration=True
+        )
+    env["lm"]._invalidate_cache("default")
+    assert not await env["lm"].is_migration_active("default")
+    return adm, bob
+
+
+@with_env
+async def test_unlink_without_password_restarts_standard_relink(env, monkeypatch):
+    lm, prov = env["lm"], env["prov"]
+    _, bob = await _all_linked(env)
+    assert not (await env["get_user"](bob)).password_hash
+
+    out = await _unlink(env, monkeypatch, bob)
+
+    # Password temporanea restituita una sola volta, migrazione riaperta.
+    assert [t["user_id"] for t in out["temp_passwords"]] == [bob]
+    assert (await env["get_user"](bob)).password_hash
+    assert await lm.is_migration_active("default")
+    assert await lm.password_login_visible("default")
+    assert await lm.user_needs_link("default", bob)
+    # L'SSO diretto non crea un secondo account: va collegato dopo la password.
+    await env["set"](sso_signup_policy="closed")
+    with pytest.raises(ValueError, match="sso_not_linked"):
+        await prov.resolve_user(
+            _claims("s-bob-new", "bob@x.io"), {}, PROVIDER, migration_active=True
+        )
+
+    # Collegando di nuovo la migrazione si richiude.
+    await prov.link_identity_to_user(
+        "default",
+        bob,
+        _claims("s-bob", "bob@x.io"),
+        {},
+        PROVIDER,
+        finalize_migration=True,
+    )
+    lm._invalidate_cache("default")
+    assert not await lm.is_migration_active("default")
+    assert not await lm.user_needs_link("default", bob)
+
+
+@with_env
+async def test_unlink_after_first_setup_opens_migration(env, monkeypatch):
+    lm = env["lm"]
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    bob = await env["mkuser"]("bob")
+    await env["prov"].link_identity_to_user(
+        "default",
+        bob,
+        _claims("s-bob", "bob@x.io"),
+        {},
+        PROVIDER,
+        finalize_migration=True,
+    )
+    lm._invalidate_cache("default")
+    assert not await lm.password_login_visible("default")
+
+    out = await _unlink(env, monkeypatch, bob)
+
+    assert out["temp_passwords"]
+    assert (await lm.get_login_settings("default"))["sso_origin"] == "migration"
+    assert await lm.password_login_visible("default")
+    assert await lm.user_needs_link("default", bob)
+
+
+@with_env
+async def test_unlink_other_provider_changes_nothing(env, monkeypatch):
+    from src.data.models import UserSsoIdentity
+
+    lm = env["lm"]
+    _, bob = await _all_linked(env)
+    async with env["sm"]() as s:
+        for ident in (
+            await s.execute(
+                select(UserSsoIdentity).where(UserSsoIdentity.user_id == bob)
+            )
+        ).scalars():
+            ident.provider = "microsoft"
+        s.add(
+            UserSsoIdentity(
+                id="g-bob",
+                tenant_id="default",
+                user_id=bob,
+                provider="google",
+                subject="s-bob-g",
+                email="bob@x.io",
+            )
+        )
+        await s.commit()
+    # Solo l'identita' microsoft (non attiva) viene scollegata.
+    import src.api.admin_auth_mode as aam
+
+    monkeypatch.setattr(aam, "get_async_session_maker", lambda: env["sm"])
+    async with env["sm"]() as s:
+        ms = (
+            (
+                await s.execute(
+                    select(UserSsoIdentity).where(
+                        UserSsoIdentity.user_id == bob,
+                        UserSsoIdentity.provider == "microsoft",
+                    )
+                )
+            )
+            .scalars()
+            .first()
+        )
+    out = await aam.unlink_sso_identity(bob, ms.id, auth=None)
+
+    assert out["temp_passwords"] == []
+    lm._invalidate_cache("default")
+    assert not await lm.is_migration_active("default")
+
+
+@with_env
+async def test_unlink_with_password_reopens_without_new_password(env, monkeypatch):
+    lm = env["lm"]
+    await env["set"](login_mode="google", sso_origin="migration")
+    bob = await env["mkuser"]("bob")
+    await env["prov"].link_identity_to_user(
+        "default",
+        bob,
+        _claims("s-bob", "bob@x.io"),
+        {},
+        PROVIDER,
+        finalize_migration=True,
+    )
+    # Es. password temporanea generata da "Senza accesso" e poi ricollegato.
+    await _set_password(env, bob)
+    env["lm"]._invalidate_cache("default")
+    old_hash = (await env["get_user"](bob)).password_hash
+    assert old_hash and not await lm.is_migration_active("default")
+
+    out = await _unlink(env, monkeypatch, bob)
+
+    assert out["temp_passwords"] == []
+    assert (await env["get_user"](bob)).password_hash == old_hash
+    assert await lm.is_migration_active("default")
+    assert await lm.user_needs_link("default", bob)
+
+
+@with_env
+async def test_temp_passwords_reopen_completed_migration(env, monkeypatch):
+    lm = env["lm"]
+    _, bob = await _all_linked(env)
+    from src.data.models import UserSsoIdentity
+    from sqlalchemy import delete
+
+    async with env["sm"]() as s:
+        await s.execute(delete(UserSsoIdentity).where(UserSsoIdentity.user_id == bob))
+        await s.commit()
+    lm._invalidate_cache("default")
+
+    out = await lm.generate_temp_passwords("default", [bob], "google")
+
+    assert out
+    assert await lm.is_migration_active("default")
+    assert await lm.password_login_visible("default")

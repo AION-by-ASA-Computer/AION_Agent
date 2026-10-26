@@ -10,7 +10,7 @@ import { PageToast, type ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
 import { SearchField } from "@/components/ui/SearchField";
 import { dangerBtn, ghostBtn, outlineBtn, solidBtn } from "@/components/ui/classes";
-import { fullWhen, toMs } from "@/components/conversations/format";
+import { fullWhen, toMs } from "@/lib/datetime";
 import { TempPasswordsDialog } from "./TempPasswordsDialog";
 
 const k = "admin_users.migration";
@@ -34,7 +34,8 @@ type Confirm = { kind: "temp" | "unlink"; user: MigrationUser } | null;
 
 const rowBtn = cn(outlineBtn, "h-8 px-2.5 text-[13px]");
 
-export function MigrationUsers() {
+/** ``onChanged``: lo stato di migrazione di qualche utente e' cambiato (aggiorna la lista utenti). */
+export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
   const t = useT();
   const [tab, setTab] = useState<Tab>("pending");
   const [q, setQ] = useState("");
@@ -45,6 +46,7 @@ export function MigrationUsers() {
   const [toast, setToast] = useState<ToastState>(null);
   const [tempPasswords, setTempPasswords] = useState<any[]>([]);
   const [showTemp, setShowTemp] = useState(false);
+  const [tempMessage, setTempMessage] = useState("");
   const [confirm, setConfirm] = useState<Confirm>(null);
 
   const load = useCallback(async () => {
@@ -80,6 +82,7 @@ export function MigrationUsers() {
       }
       setToast({ message: okMsg, variant: "success" });
       await load();
+      onChanged?.();
     } finally {
       setBusyId(null);
     }
@@ -111,15 +114,41 @@ export function MigrationUsers() {
       }
       const data = await res.json();
       setTempPasswords(data.temp_passwords || []);
+      setTempMessage(t(`${k}.temp_dialog_message`));
       setShowTemp(true);
       await load();
+      onChanged?.();
     } finally {
       setBusyId(null);
     }
   };
 
-  const unlink = (u: MigrationUser) =>
-    run(u.id, () => apiFetch(`${apiBase()}/admin/auth/users/${u.id}/sso-identities/${u.identity_id}`, { method: "DELETE" }), t(`${k}.did_unlink`));
+  // Senza password il backend ne genera una temporanea: l'utente rientra con
+  // quella e ricollega l'account aziendale (flusso standard di migrazione).
+  const unlink = async (u: MigrationUser) => {
+    setBusyId(u.id);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/auth/users/${u.id}/sso-identities/${u.identity_id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setToast({ message: t(`${k}.failed`), variant: "error" });
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data.temp_passwords?.length) {
+        setTempPasswords(data.temp_passwords);
+        setTempMessage(t(`${k}.relink_dialog_message`));
+        setShowTemp(true);
+      } else {
+        setToast({ message: t(`${k}.did_unlink`), variant: "success" });
+      }
+      await load();
+      onChanged?.();
+    } catch {
+      setToast({ message: t(`${k}.network_error`), variant: "error" });
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const accept = () => {
     const c = confirm;
@@ -267,7 +296,7 @@ export function MigrationUsers() {
         }}
         passwords={tempPasswords}
         title={t(`${k}.temp_dialog_title`)}
-        message={t(`${k}.temp_dialog_message`)}
+        message={tempMessage}
       />
       <PageToast toast={toast} onDismiss={() => setToast(null)} />
     </div>

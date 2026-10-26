@@ -11,6 +11,8 @@ description: How to integrate AION Agent into external applications using the of
 
 To facilitate the adoption of AION Agent in different ecosystems, official SDKs are available for Python and TypeScript, in addition to a "drop-in" widget for websites.
 
+All clients authenticate with a personal API key created from **chat-ui → Settings → API keys** (the admin must enable the feature for the user). The key acts **as its owner**: any `user_id` passed by the client is ignored. See [API keys](../security/api-keys.md).
+
 ## Python SDK
 
 The Python SDK allows for programmatic interaction with AION, ideal for backend automations or integrations into other Python services.
@@ -94,7 +96,7 @@ The widget allows you to add an AION chat to your website with a few lines of co
 ```
 
 ### Widget Security
-When you expose a widget publicly, make sure that the API Key used has the limited scope `chat:scoped`. This prevents malicious users from accessing other people's conversations.
+A key embedded in a public page is visible to anyone, and whoever holds it acts **as the key's owner**. When you expose a widget publicly, use a key that belongs to a dedicated (non-admin) user, grant only the `chat` scope (no `conversations:*` or `files:*`), and choose a short expiration. Revoke it from chat-ui → Settings → API keys if it leaks. See [API keys](../security/api-keys.md).
 
 ---
 

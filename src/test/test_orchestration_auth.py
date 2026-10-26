@@ -33,7 +33,7 @@ async def test_orchestration_auth_accepts_valid_secret(monkeypatch):
 
 
 @pytest.mark.anyio
-async def test_assert_session_owner_forbidden_for_other_user(monkeypatch):
+async def test_assert_session_owner_not_found_for_other_user(monkeypatch):
     monkeypatch.setenv("AION_CHAT_PASSWORD_AUTH", "1")
 
     class _Row:
@@ -54,7 +54,7 @@ async def test_assert_session_owner_forbidden_for_other_user(monkeypatch):
                 "sess-1",
                 ChatAuthIdentity(via="chat_token", identifier="bob"),
             )
-    assert exc.value.status_code == 403
+    assert exc.value.status_code == 404
 
 
 @pytest.mark.anyio

@@ -35,6 +35,8 @@ html[data-theme="dark"],
   --border: 240 4% 20%; /* Distinct, crisp borders matching light theme outline clarity */
   --input: 240 4% 20%;
   --ring: 0 72% 50%; /* Ring matches brand primary */
+  --success: 160 60% 45%;
+  --warning: 30 80% 55%;
   --chart-1: 0 72% 52%;
   --chart-2: 160 60% 45%;
   --chart-3: 30 80% 55%;
@@ -71,6 +73,8 @@ html[data-theme="light"] {
   --border: 0 0% 88%;
   --input: 0 0% 88%;
   --ring: 0 72% 46%;
+  --success: 160 75% 27%;
+  --warning: 30 90% 36%;
   --chart-1: 0 72% 46%;
   --chart-2: 0 65% 48%;
   --chart-3: 160 55% 36%;

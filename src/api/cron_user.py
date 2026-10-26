@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from typing import Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.api.cron_schemas import (
@@ -13,7 +15,8 @@ from src.api.cron_schemas import (
     ScheduledRunListResponse,
     ScheduledRunOut,
 )
-from src.identity import sanitize_user_id
+from src.api.ownership import assert_conversation_access, effective_user_id
+from src.session_workspace import normalize_session_id
 from src.runtime import cron_db
 from src.runtime.cron_runner import execute_job
 from src.runtime.cron_scheduler import register_job, reschedule_job, unregister_job
@@ -43,14 +46,29 @@ def _require_cron() -> None:
         )
 
 
-def _user_id(auth: ChatAuthIdentity) -> str:
-    raw = (auth.identifier or auth.user_row_id or "").strip()
-    uid = sanitize_user_id(raw if raw else None)
-    if not uid or auth.via == "anonymous":
+async def _cron_user_id(
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
+) -> str:
+    if auth.via == "anonymous":
         raise HTTPException(
             status_code=403, detail="Authentication required for scheduled jobs."
         )
-    return uid
+    return effective_user_id(auth, header_user_id=x_aion_user_id)
+
+
+async def _require_owned_session(session_id: Optional[str], uid: str) -> None:
+    """Un job non puo' scrivere nella conversazione di un altro utente."""
+    sid = (session_id or "").strip()
+    if not sid:
+        return
+    try:
+        sid = normalize_session_id(sid)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    await assert_conversation_access(
+        sid, uid, allow_missing=True, claim_if_missing=True
+    )
 
 
 def _out(d: dict) -> ScheduledJobOut:
@@ -70,36 +88,33 @@ async def _get_owned(job_id: str, user_id: str) -> dict:
 async def list_my_cron_jobs(
     enabled: bool | None = Query(None),
     limit: int = Query(100, ge=1, le=200),
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    uid: str = Depends(_cron_user_id),
 ):
     _require_cron()
-    uid = _user_id(auth)
     jobs = await cron_db.list_jobs(user_id=uid, enabled=enabled, limit=limit)
     return ScheduledJobListResponse(jobs=[_out(j) for j in jobs], total=len(jobs))
 
 
 @router.get("/{job_id}", response_model=ScheduledJobOut)
-async def get_my_cron_job(
-    job_id: str, auth: ChatAuthIdentity = Depends(require_chat_auth)
-):
+async def get_my_cron_job(job_id: str, uid: str = Depends(_cron_user_id)):
     _require_cron()
-    job = await _get_owned(job_id, _user_id(auth))
+    job = await _get_owned(job_id, uid)
     return _out(job)
 
 
 @router.post("", response_model=ScheduledJobOut)
 async def create_my_cron_job(
     body: ScheduledJobCreate,
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    uid: str = Depends(_cron_user_id),
 ):
     _require_cron()
-    uid = _user_id(auth)
     n = await cron_db.count_jobs_for_user(uid)
     if n >= _max_jobs_per_user():
         raise HTTPException(
             status_code=400,
             detail=f"Max scheduled jobs per user ({_max_jobs_per_user()}) reached.",
         )
+    await _require_owned_session(body.session_id, uid)
     try:
         job = await cron_db.create_job(
             user_id=uid,
@@ -127,11 +142,13 @@ async def create_my_cron_job(
 async def patch_my_cron_job(
     job_id: str,
     body: ScheduledJobUpdate,
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    uid: str = Depends(_cron_user_id),
 ):
     _require_cron()
-    await _get_owned(job_id, _user_id(auth))
+    await _get_owned(job_id, uid)
     patch = body.model_dump(exclude_unset=True)
+    if "session_id" in patch:
+        await _require_owned_session(patch.get("session_id"), uid)
     if not patch:
         job = await cron_db.get_job(job_id)
         return _out(job)  # type: ignore[arg-type]
@@ -146,11 +163,9 @@ async def patch_my_cron_job(
 
 
 @router.delete("/{job_id}")
-async def delete_my_cron_job(
-    job_id: str, auth: ChatAuthIdentity = Depends(require_chat_auth)
-):
+async def delete_my_cron_job(job_id: str, uid: str = Depends(_cron_user_id)):
     _require_cron()
-    await _get_owned(job_id, _user_id(auth))
+    await _get_owned(job_id, uid)
     await unregister_job(job_id)
     ok = await cron_db.delete_job(job_id)
     if not ok:
@@ -162,10 +177,10 @@ async def delete_my_cron_job(
 async def run_my_cron_job_now(
     job_id: str,
     background_tasks: BackgroundTasks,
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    uid: str = Depends(_cron_user_id),
 ):
     _require_cron()
-    await _get_owned(job_id, _user_id(auth))
+    await _get_owned(job_id, uid)
     background_tasks.add_task(execute_job, job_id, trigger="user")
     return {"ok": True, "job_id": job_id, "status": "running"}
 
@@ -174,9 +189,9 @@ async def run_my_cron_job_now(
 async def list_my_cron_job_runs(
     job_id: str,
     limit: int = Query(50, ge=1, le=200),
-    auth: ChatAuthIdentity = Depends(require_chat_auth),
+    uid: str = Depends(_cron_user_id),
 ):
     _require_cron()
-    await _get_owned(job_id, _user_id(auth))
+    await _get_owned(job_id, uid)
     runs = await cron_db.list_runs(job_id, limit=limit)
     return ScheduledRunListResponse(runs=[ScheduledRunOut(**r) for r in runs])

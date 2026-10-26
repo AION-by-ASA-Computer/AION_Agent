@@ -154,33 +154,47 @@ mcp_servers: []
             assert msg is not None
             msg.rating = -1
             msg.feedback_comment = "Incorrect tone"
+            msg.profile_name = "generic_assistant"
             await session.commit()
 
-        # Call get_feedback_messages via FastAPI test client
         with TestClient(app) as client:
-            # 1. Verify GET /admin/feedback retrieves the seeded feedback
-            res_get = client.get("/admin/feedback")
+            # Aggregated counts only: no content, comments, prompts or ids (privacy)
+            res_get = client.get("/admin/feedback?days=7")
             assert res_get.status_code == 200
-            data_get = res_get.json()
-            assert "feedback" in data_get
-            assert len(data_get["feedback"]) == 1
-            item = data_get["feedback"][0]
-            assert item["message_id"] == "msg-assistant-1"
-            assert item["rating"] == -1
-            assert item["feedback_comment"] == "Incorrect tone"
-            assert item["prompt"]["content"] == "What is the capital of Italy?"
+            data = res_get.json()
+            assert data["window_days"] == 7
+            assert data["totals"] == {"positive": 0, "negative": 1}
+            assert data["by_profile"] == [
+                # Stored slug is resolved to the profile's display name
+                {
+                    "profile": "Generic Assistant",
+                    "slug": "generic_assistant",
+                    "positive": 0,
+                    "negative": 1,
+                }
+            ]
+            assert [r["negative"] for r in data["by_model"]] == [1]
+            raw = res_get.text
+            for leaked in (
+                "Rome",
+                "capital of Italy",
+                "Incorrect tone",
+                "user-1",
+                "conv-test-feedback",
+                "msg-assistant-1",
+            ):
+                assert leaked not in raw
 
-            # 2. Verify DELETE /admin/feedback/{message_id} clears the feedback
-            res_del = client.delete("/admin/feedback/msg-assistant-1")
-            assert res_del.status_code == 200
-            data_del = res_del.json()
-            assert data_del["success"] is True
-            assert data_del["message_id"] == "msg-assistant-1"
-
-            # 3. Verify GET /admin/feedback is now empty
-            res_get_after = client.get("/admin/feedback")
-            assert res_get_after.status_code == 200
-            data_get_after = res_get_after.json()
-            assert len(data_get_after["feedback"]) == 0
+            # Per-message feedback management and conversation reading are gone
+            assert client.delete("/admin/feedback/msg-assistant-1").status_code in (
+                404,
+                405,
+            )
+            for path in (
+                "/admin/conversations/global",
+                "/admin/conversations/conv-test-feedback/messages",
+                "/admin/conversations/conv-test-feedback/render-audit",
+            ):
+                assert client.get(path).status_code == 404, path
 
     asyncio.run(run())

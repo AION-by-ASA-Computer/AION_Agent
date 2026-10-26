@@ -10,7 +10,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from src.chat_auth import _user_to_auth_dict
@@ -132,13 +132,58 @@ async def resolve_user(
                     await _check_migration_completion(tenant_id, provider)
                 return _user_to_auth_dict(user)
 
+        auto_provision = provider_config.get("auto_provision", True)
+
+        # In migrazione chi ha gia' un account con questa email (es. appena
+        # scollegato) deve collegarsi con la password: la policy dei nuovi
+        # account non lo riguarda. Serve solo a scegliere il messaggio, non
+        # collega nulla (fix 0.8).
+        if migration_active and email:
+            existing = (
+                await session.execute(
+                    select(User.id).where(
+                        User.tenant_id == tenant_id,
+                        or_(
+                            func.lower(User.email) == email,
+                            func.lower(User.identifier) == email,
+                        ),
+                    )
+                )
+            ).first()
+            if existing:
+                raise ValueError("sso_not_linked")
+
+        # Policy nuovi account (open / allowlist / closed): vale solo qui,
+        # chi ha gia' un'identita' collegata e' passato dal ramo sopra.
+        # Valutata anche in migrazione: a chi non potrebbe comunque avere un
+        # account si mostra il motivo vero, non l'invito a collegarsi.
+        # Senza auto_provision (es. login dal pannello admin) non si crea mai
+        # un account, quindi la policy non c'entra.
+        if auto_provision:
+            from src.auth.sso.login_mode import (
+                get_login_settings,
+                signup_denied_reason,
+            )
+
+            settings = await get_login_settings(tenant_id)
+            denied = signup_denied_reason(
+                email,
+                settings.get("sso_signup_policy", "open"),
+                settings.get("sso_signup_allowlist", []),
+            )
+            if denied:
+                logger.info(
+                    "SSO signup denied for %s via %s: %s", email, provider, denied
+                )
+                raise ValueError(denied)
+
         # Fix 0.8: nessun auto-link per email/identifier.
         # 2. Migrazione attiva → errore, l'utente deve usare la password prima
         if migration_active:
             raise ValueError("sso_not_linked")
 
         # 3. Auto-provisioning (solo se migrazione non attiva e auto_provision=True)
-        if not provider_config.get("auto_provision", True):
+        if not auto_provision:
             raise ValueError("sso_not_linked")
 
         if not email:
@@ -148,8 +193,8 @@ async def resolve_user(
         # ma ri-verifichiamo qui per sicurezza.
         allowed_domains = provider_config.get("allowed_domains", [])
         if allowed_domains:
-            domain = email.split("@")[-1] if "@" in email else ""
-            if domain not in allowed_domains:
+            domain = email.split("@")[-1].lower() if "@" in email else ""
+            if domain not in [d.lower() for d in allowed_domains]:
                 raise ValueError("sso_domain_not_allowed")
 
         user_id = new_uuid7_str()

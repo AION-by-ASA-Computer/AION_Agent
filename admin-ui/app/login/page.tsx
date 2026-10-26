@@ -28,6 +28,7 @@ const LOGIN_ERRORS: Record<string, string> = {
   password_login_disabled: "L'accesso con password non è disponibile per questo account.",
   not_admin: "Questo account non ha il ruolo 'admin'.",
   sso_not_linked: "Questo account SSO non è collegato a nessun utente AION.",
+  sso_domain_not_allowed: "Questo account non è abilitato all'accesso. Stai usando l'account sbagliato: accedi con quello aziendale.",
   sso_failed: "Accesso SSO non riuscito. Riprova.",
   sso_token_invalid: "Accesso SSO non riuscito (token non valido). Riprova.",
   sso_start_failed: "Impossibile avviare l'accesso SSO.",

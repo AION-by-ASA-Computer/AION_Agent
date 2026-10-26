@@ -13,6 +13,7 @@ import {
 } from "@/lib/api/aion";
 import { newTurn, reduceChunk, segmentsForMessage } from "@/lib/sse/reducer";
 import type { TurnSegment, TurnState } from "@/lib/sse/types";
+import { randomUUID } from "@/lib/uuid";
 
 export type SideThreadMessage = {
   id: string;
@@ -189,8 +190,8 @@ export function useSideThreadChat(opts: {
       setError(null);
       setFailedInput(null);
       setStreaming(true);
-      const userMsgId = crypto.randomUUID();
-      const asstId = crypto.randomUUID();
+      const userMsgId = randomUUID();
+      const asstId = randomUUID();
       setMessages((prev) => [...prev, { id: userMsgId, role: "user", content: message }]);
 
       let id = activeIdRef.current;

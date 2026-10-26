@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useSyncExternalStore } from "react";
-import { RotateCcw } from "lucide-react";
+import { useMemo, useSyncExternalStore, type ReactNode } from "react";
+import { ChevronRight, Loader2, RotateCcw } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
@@ -12,97 +12,68 @@ import {
   resetRuntimeField,
   resetRuntimeToDefaults,
   subscribeRuntimeSettings,
+  valuesEqual,
   type RuntimeFieldSchema,
 } from "@/lib/runtime/runtime-settings-store";
+import { Group, Note, RowList, Segmented, Switch, ghostBtn, iconBtn } from "./ui";
 
 const GROUPS = ["loop", "generation", "thinking", "advanced"] as const;
 
-function FieldControl({ field, value }: { field: RuntimeFieldSchema; value: unknown }) {
+function FieldControl({ field, value, label }: { field: RuntimeFieldSchema; value: unknown; label: string }) {
   const t = useT();
   if (field.type === "bool") {
-    const on = Boolean(value);
-    return (
-      <button
-        type="button"
-        role="switch"
-        aria-checked={on}
-        onClick={() => patchRuntimeValues({ [field.key]: !on })}
-        className={cn(
-          "relative h-6 w-10 rounded-full transition",
-          on ? "bg-primary" : "bg-muted",
-        )}
-      >
-        <span
-          className={cn(
-            "absolute top-0.5 h-5 w-5 rounded-full bg-background shadow transition",
-            on ? "left-4.5 translate-x-0 left-[1.15rem]" : "left-0.5",
-          )}
-        />
-      </button>
-    );
+    return <Switch checked={Boolean(value)} onChange={(v) => patchRuntimeValues({ [field.key]: v })} label={label} />;
   }
   if (field.type === "enum") {
-    const current = String(value ?? field.default ?? "");
     return (
-      <div className="flex flex-wrap gap-1">
-        {(field.enum || []).map((opt) => (
-          <button
-            key={opt}
-            type="button"
-            onClick={() => patchRuntimeValues({ [field.key]: opt })}
-            className={cn(
-              "rounded-md border px-2 py-1 text-[0.7rem] font-medium",
-              current === opt
-                ? "border-primary/40 bg-primary/10 text-foreground"
-                : "border-border/50 text-muted-foreground hover:bg-muted/50",
-            )}
-          >
-            {t(`settings.runtime.enum.${opt}`)}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        label={label}
+        value={String(value ?? field.default ?? "")}
+        onChange={(v) => patchRuntimeValues({ [field.key]: v })}
+        options={(field.enum || []).map((opt) => ({ value: opt, label: t(`settings.runtime.enum.${opt}`) }))}
+      />
     );
   }
   const num = typeof value === "number" ? value : Number(value);
   const min = field.min ?? 0;
   const max = field.max ?? 100;
   const step = field.step ?? 1;
-  const display = Number.isFinite(num) ? num : "";
+  const parse = (raw: string) => (field.type === "int" ? parseInt(raw, 10) : parseFloat(raw));
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex w-full items-center gap-3 sm:w-72">
       <input
         type="range"
         min={min}
         max={max}
         step={step}
         value={Number.isFinite(num) ? num : min}
-        onChange={(e) => {
-          const n = field.type === "int" ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
-          patchRuntimeValues({ [field.key]: n });
-        }}
-        className="min-w-0 flex-1 accent-primary"
+        onChange={(e) => patchRuntimeValues({ [field.key]: parse(e.target.value) })}
+        aria-label={label}
+        className="focus-ring min-w-0 flex-1 cursor-pointer accent-[hsl(var(--foreground))]"
       />
       <input
         type="number"
         min={min}
         max={max}
         step={step}
-        value={display}
+        value={Number.isFinite(num) ? num : ""}
         onChange={(e) => {
           const raw = e.target.value;
           if (raw === "" && field.nullable) {
             patchRuntimeValues({ [field.key]: null });
             return;
           }
-          const n = field.type === "int" ? parseInt(raw, 10) : parseFloat(raw);
+          const n = parse(raw);
           if (Number.isFinite(n)) patchRuntimeValues({ [field.key]: n });
         }}
-        className="h-7 w-16 shrink-0 rounded-md border border-border/50 bg-background px-1.5 text-right text-[0.7rem]"
+        aria-label={label}
+        className="focus-ring h-9 w-22 shrink-0 rounded-xl border border-border bg-background px-2.5 text-right font-mono text-[0.893rem] tabular-nums transition-colors hover:border-foreground/25 focus:border-foreground/40"
       />
     </div>
   );
 }
 
+/** Runtime parameters. Each change applies to the next turn and is persisted by the store. */
 export function RuntimeSettingsForm() {
   const t = useT();
   const snap = useSyncExternalStore(
@@ -123,82 +94,100 @@ export function RuntimeSettingsForm() {
   }, [snap.schema]);
 
   if (!snap.loaded) {
-    return <p className="px-3 py-4 text-xs text-muted-foreground">{t("settings.runtime.loading")}</p>;
+    return (
+      <p className="flex items-center gap-2 py-8 text-sm text-muted-foreground" role="status">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        {t("settings.runtime.loading")}
+      </p>
+    );
   }
 
+  const rows = (fields: RuntimeFieldSchema[]) => (
+    <RowList>
+      {fields.map((field) => {
+        const label = t(`settings.runtime.fields.${field.key}`);
+        const fallback = field.default ?? snap.defaults[field.key];
+        const atDefault = valuesEqual(snap.values, snap.defaults, [field.key]);
+        return (
+          <li key={field.key} className="flex flex-col gap-x-6 gap-y-3 px-5 py-3.5 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">{label}</div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {t("settings.runtime.server_default", { value: String(fallback ?? "—") })}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <FieldControl field={field} value={snap.values[field.key]} label={label} />
+              <button
+                type="button"
+                onClick={() => resetRuntimeField(field.key)}
+                disabled={atDefault}
+                aria-label={`${t("settings.runtime.reset_field")}: ${label}`}
+                title={t("settings.runtime.reset_field")}
+                className={cn(iconBtn, "disabled:invisible")}
+              >
+                <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+              </button>
+            </div>
+          </li>
+        );
+      })}
+    </RowList>
+  );
+
+  const extra = (group: string): ReactNode => {
+    if (group === "loop" && typeof snap.profileMaxAgentSteps === "number") {
+      return (
+        <div className="px-5 pt-4">
+          <Note tone="warn">{t("settings.runtime.profile_cap", { value: snap.profileMaxAgentSteps })}</Note>
+        </div>
+      );
+    }
+    return null;
+  };
+
   return (
-    <div className="space-y-4 px-1 pb-4">
-      <div className="flex items-center justify-between gap-2 px-2">
-        <p className="text-[0.7rem] leading-snug text-muted-foreground">{t("settings.runtime.hint")}</p>
-        <button
-          type="button"
-          onClick={() => resetRuntimeToDefaults()}
-          className="shrink-0 rounded-md px-2 py-1 text-[0.7rem] font-medium text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-        >
+    <>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <p className="min-w-0 flex-1 text-sm text-muted-foreground">{t("settings.runtime.hint")}</p>
+        <button type="button" onClick={() => resetRuntimeToDefaults()} className={ghostBtn}>
+          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
           {t("settings.runtime.reset_all")}
         </button>
       </div>
+
       {GROUPS.map((group) => {
         const fields = byGroup.get(group);
         if (!fields?.length) return null;
-        const body = (
-          <>
-            {group === "loop" && typeof snap.profileMaxAgentSteps === "number" ? (
-              <p className="px-2 text-[0.65rem] text-amber-600 dark:text-amber-400">
-                {t("settings.runtime.profile_cap", { value: snap.profileMaxAgentSteps })}
-              </p>
-            ) : null}
-            {fields.map((field) => (
-              <div key={field.key} className="rounded-lg border border-border/40 bg-background/30 px-2.5 py-2">
-                <div className="mb-1.5 flex items-start justify-between gap-2">
-                  <div>
-                    <div className="text-xs font-medium text-foreground">
-                      {t(`settings.runtime.fields.${field.key}`)}
-                    </div>
-                    <p className="mt-0.5 text-[0.65rem] text-muted-foreground">
-                      {t("settings.runtime.server_default", {
-                        value: String(field.default ?? snap.defaults[field.key] ?? "—"),
-                      })}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    title={t("settings.runtime.reset_field")}
-                    onClick={() => resetRuntimeField(field.key)}
-                    className="rounded p-1 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
-                  >
-                    <RotateCcw className="h-3 w-3" aria-hidden />
-                  </button>
-                </div>
-                <FieldControl field={field} value={snap.values[field.key]} />
-              </div>
-            ))}
-          </>
-        );
+        const title = t(`settings.runtime.group.${group}`);
+
         if (group === "advanced") {
           return (
-            <details key={group} className="space-y-2">
-              <summary className="cursor-pointer px-2 text-[0.65rem] font-semibold uppercase tracking-wider text-primary">
-                {t(`settings.runtime.group.${group}`)}
+            <details key={group} className="group/adv overflow-hidden rounded-2xl border border-border bg-card/60">
+              <summary className="focus-ring flex cursor-pointer list-none items-center gap-2 bg-secondary/60 px-5 py-3.5 [&::-webkit-details-marker]:hidden">
+                <ChevronRight
+                  className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open/adv:rotate-90"
+                  aria-hidden
+                />
+                <h3 className="text-[1.0714rem] font-semibold tracking-[-0.01em]">{title}</h3>
+                <span className="ml-auto text-xs tabular-nums text-muted-foreground">{fields.length}</span>
               </summary>
-              <div className="space-y-2">{body}</div>
+              <div className="border-t border-border">{rows(fields)}</div>
             </details>
           );
         }
+
         return (
-          <section key={group} className="space-y-2">
-            <h3 className="px-2 text-[0.65rem] font-semibold uppercase tracking-wider text-primary">
-              {t(`settings.runtime.group.${group}`)}
-            </h3>
-            {group === "thinking" ? (
-              <p className="px-2 text-[0.65rem] leading-snug text-muted-foreground">
-                {t("settings.runtime.composer_thinking_hint")}
-              </p>
-            ) : null}
-            {body}
-          </section>
+          <Group
+            key={group}
+            title={title}
+            description={group === "thinking" ? t("settings.runtime.composer_thinking_hint") : undefined}
+          >
+            {extra(group)}
+            {rows(fields)}
+          </Group>
         );
       })}
-    </div>
+    </>
   );
 }
