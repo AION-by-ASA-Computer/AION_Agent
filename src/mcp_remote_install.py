@@ -7,6 +7,10 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# Versione di mcp-remote: deve coincidere con docker/package.mcp-remote.json
+# (tutto il traffico verso i broker remoti passa da qui).
+MCP_REMOTE_VERSION = "0.1.49"
+
 MCP_REMOTE_PROXY_MARKERS = (
     "node_modules/mcp-remote/dist/proxy.js",
     "mcp-remote/dist/proxy.js",
@@ -47,7 +51,7 @@ def resolve_remote_bridge_spawn(config: Dict[str, Any]) -> Tuple[str, List[str]]
     Spawn command for remote-bridge MCP servers.
 
     Prefer local ``node_modules/mcp-remote`` (Docker image); fall back to
-    ``npx -y mcp-remote`` when the package is not installed under /app.
+    ``npx -y mcp-remote@<MCP_REMOTE_VERSION>`` when the package is not installed under /app.
     """
     raw_args = list(config.get("args") or [])
     tail = remote_bridge_tail_args(raw_args)
@@ -56,7 +60,7 @@ def resolve_remote_bridge_spawn(config: Dict[str, Any]) -> Tuple[str, List[str]]
     if local:
         return ("node", [local, *tail])
     if shutil.which("npx"):
-        return ("npx", ["-y", "mcp-remote", *tail])
+        return ("npx", ["-y", f"mcp-remote@{MCP_REMOTE_VERSION}", *tail])
 
     command = str(config.get("command") or "node")
     return (command, raw_args)
