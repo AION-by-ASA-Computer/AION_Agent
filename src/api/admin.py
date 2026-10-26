@@ -214,6 +214,8 @@ class ProfileUpdate(BaseModel):
     critical_skills: Optional[List[str]] = None
     mcp_servers: List[str]
     native_tool_groups: Optional[List[str]] = None
+    max_agent_steps: Optional[int] = None
+    agent: Optional[Dict[str, Any]] = None
 
 
 class SkillUpdate(BaseModel):
@@ -682,6 +684,41 @@ async def wizard_refine_skill(req: WizardRefineSkillRequest):
         raise HTTPException(status_code=500, detail=f"Modifica skill fallita: {exc}")
 
 
+def _profile_to_dict(p: Any) -> Dict[str, Any]:
+    """Campi del profilo per GET ed export, comprese le chiavi del YAML
+    che l'admin-ui non modifica (``max_agent_steps``, ``agent``)."""
+    out: Dict[str, Any] = {
+        "name": p.name,
+        "description": p.description,
+        "instructions": p.instructions,
+        "skills": list(p.skills or []),
+        "mcp_servers": list(p.mcp_servers or []),
+        "native_tool_groups": list(getattr(p, "native_tool_groups", None) or []),
+        "critical_skills": p.critical_skills,
+        "max_agent_steps": getattr(p, "max_agent_steps", None),
+        "agent": None,
+    }
+    file_path = profile_manager.profile_yaml_path(p.slug)
+    if file_path.is_file():
+        try:
+            with open(file_path, encoding="utf-8") as f:
+                raw = yaml.safe_load(f) or {}
+            if isinstance(raw.get("agent"), dict):
+                out["agent"] = raw["agent"]
+        except Exception as exc:
+            logger.warning("profile %s: cannot read agent block: %s", p.slug, exc)
+    return out
+
+
+def _profile_export_yaml(p: Any) -> str:
+    data = {
+        k: v
+        for k, v in _profile_to_dict(p).items()
+        if v is not None or k not in ("max_agent_steps", "agent")
+    }
+    return yaml.dump(data, allow_unicode=True, sort_keys=False)
+
+
 @router.get("/profiles")
 async def list_profiles():
     return profile_manager.list_profiles()
@@ -692,16 +729,7 @@ async def get_profile(name: str):
     p = profile_manager.get_profile(name)
     if not p:
         raise HTTPException(status_code=404, detail="Profile not found")
-    return {
-        "name": p.name,
-        "slug": p.slug,
-        "description": p.description,
-        "instructions": p.instructions,
-        "skills": list(p.skills or []),
-        "mcp_servers": list(p.mcp_servers or []),
-        "native_tool_groups": list(getattr(p, "native_tool_groups", None) or []),
-        "critical_skills": p.critical_skills,
-    }
+    return {"slug": p.slug, **_profile_to_dict(p)}
 
 
 @router.post("/profiles")
@@ -717,24 +745,27 @@ async def save_profile(p: ProfileUpdate):
     if existing_path.is_file():
         with open(existing_path, encoding="utf-8") as f:
             existing = yaml.safe_load(f) or {}
-    data: Dict[str, Any] = {
-        "name": p.name,
-        "description": p.description,
-        "instructions": p.instructions,
-        "skills": p.skills,
-        "mcp_servers": p.mcp_servers,
-    }
-    if p.critical_skills:
-        data["critical_skills"] = p.critical_skills
-    data["mcp_servers"] = p.mcp_servers
-    if p.native_tool_groups is not None:
-        data["native_tool_groups"] = p.native_tool_groups
-    elif "native_tool_groups" in existing:
-        data["native_tool_groups"] = existing["native_tool_groups"]
-    if p.critical_skills is not None:
-        data["critical_skills"] = p.critical_skills
-    elif "critical_skills" in existing:
-        data["critical_skills"] = existing["critical_skills"]
+    # Si parte dal YAML esistente: le chiavi non gestite dall'admin-ui
+    # (max_agent_steps, agent, ...) restano invariate.
+    data: Dict[str, Any] = dict(existing)
+    data.update(
+        {
+            "name": p.name,
+            "description": p.description,
+            "instructions": p.instructions,
+            "skills": p.skills,
+            "mcp_servers": p.mcp_servers,
+        }
+    )
+    for key in ("native_tool_groups", "critical_skills"):
+        if getattr(p, key) is not None:
+            data[key] = getattr(p, key)
+    for key in ("max_agent_steps", "agent"):
+        if key in p.model_fields_set:
+            if getattr(p, key) is None:
+                data.pop(key, None)
+            else:
+                data[key] = getattr(p, key)
     try:
         schema = ProfileSchema.from_yaml_dict(data, slug)
     except Exception as exc:
@@ -774,15 +805,7 @@ async def export_profile_yaml(name: str):
     file_path = profile_manager.profile_yaml_path(p.slug)
     if not file_path.exists():
         # Genera al volo se manca il file fisico ma esiste in memoria
-        data = {
-            "name": p.name,
-            "description": p.description,
-            "instructions": p.instructions,
-            "skills": p.skills,
-            "mcp_servers": p.mcp_servers,
-            "critical_skills": p.critical_skills,
-        }
-        content = yaml.dump(data, allow_unicode=True, sort_keys=False)
+        content = _profile_export_yaml(p)
     else:
         with open(file_path, "r", encoding="utf-8") as f:
             content = f.read()
@@ -803,18 +826,7 @@ async def export_all_profiles_zip():
             if file_path.exists():
                 z.write(file_path, f"{p.slug}.yaml")
             else:
-                data = {
-                    "name": p.name,
-                    "description": p.description,
-                    "instructions": p.instructions,
-                    "skills": p.skills,
-                    "mcp_servers": p.mcp_servers,
-                    "critical_skills": p.critical_skills,
-                }
-                z.writestr(
-                    f"{p.slug}.yaml",
-                    yaml.dump(data, allow_unicode=True, sort_keys=False),
-                )
+                z.writestr(f"{p.slug}.yaml", _profile_export_yaml(p))
     buf.seek(0)
     return Response(
         content=buf.getvalue(),
