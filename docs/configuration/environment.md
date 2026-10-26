@@ -58,8 +58,8 @@ These variables **enable/disable** advanced features:
 
 | Variable | Default | When to enable |
 |-----------|---------|------------------|
-| `AION_APPROVAL_ENABLED` | `1` | You want control over critical tools (shell/python) |
-| `AION_APPROVAL_LEARN` | `1` | Learn from user approvals (smart rules) |
+| `AION_APPROVAL_ENABLED` | — | **No effect today**: `src/security/approval_manager.py` is not called by any tool, so no tool asks for approval. Plan-mode approval (`draft_execution_plan`) is a separate mechanism. |
+| `AION_APPROVAL_LEARN` | — | **No effect today** (see above). |
 | `AION_PLUGINS_ENABLED` | `1` | Allows loading plugins from `data/plugins/` |
 | `AION_PII_REDACT` | `1` | Enables redacting sensitive data from messages |
 | `AION_CONTEXT_COMPRESS_ENABLED` | `1` | Auto-compact STM before `agent.run` (mandatory for long chats) |
@@ -76,6 +76,8 @@ These variables **enable/disable** advanced features:
 | `AION_MCP_POOL` | `1` | Persistent stdio pool (via `src/settings.py`) |
 | `AION_MCP_SESSION_ENV_INJECT` | `0` | Inject parent env for call_tool (legacy; prefer session-scoped pool) |
 | `AION_MCP_SESSION_SCOPED_SERVERS` | *(CSV)* | Servers with pool for `chat_session_id` |
+| `AION_MCP_ENV_SCRUB` | `1` | Environment of MCP stdio processes. Repository servers (`mcp_servers/`, `-m src.*`) inherit the backend env minus the signing secrets (`AION_CHAT_AUTH_SECRET`, `AION_CHAT_UI_INTERNAL_SECRET`, `AION_ORCHESTRATION_INTERNAL_SECRET`, `AION_API_KEY_BOOTSTRAP`, `AION_SETUP_*`). Third-party servers (`npx`, `node`, `mcp-remote`, external scripts) get only PATH/HOME/locale/proxy/CA variables plus the registry `env:`. `0` restores the full env for every server. |
+| `AION_MCP_ENV_ALLOWLIST` | *(CSV)* | Extra variables passed to third-party MCP servers as well. |
 | `AION_MEMPALACE_NAV_ENABLED` | `1` | Inject/search ERP navigation on `wing_proj_{project}` |
 | `AION_MEMPALACE_NAV_AUTO_LEARN` | `0` | Auto-drawer post_tool (disabled: agent tools only) |
 | `AION_MEMPALACE_NAV_SKIP_WHEN_SQL_INJECT` | `1` | Skip MemPalace pre_turn search if QueryMemory has already injected SQL |
