@@ -2179,19 +2179,11 @@ class MCPManager:
                         await self._increment_active_server(name)
                         is_active = True
                         yield session
-            except Exception:
-                raise
             finally:
                 if is_active:
                     await self._decrement_active_server(name)
                 else:
                     metrics.aion_mcp_server_healthy.labels(mcp_server=name).set(0)
-
-            async with sse_client(url, headers=headers) as (r, w):
-                session = ClientSession(r, w)
-                async with session:
-                    await session.initialize()
-                    yield session
 
         else:
             command, args = self.resolve_stdio_spawn_command(name, config)
@@ -2264,8 +2256,6 @@ class MCPManager:
                         await self._increment_active_server(name)
                         is_active = True
                         yield session
-            except Exception as e:
-                raise e
             finally:
                 if is_active:
                     await self._decrement_active_server(name)
