@@ -115,8 +115,7 @@ async def list_conversations_chat_ui(
         False,
         description="Include conversation branches (forked conversations) in the list",
     ),
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     _require_unified()
     if hasattr(limit, "default"):
@@ -127,7 +126,6 @@ async def list_conversations_chat_ui(
         include_threads = include_threads.default
     if hasattr(include_branches, "default"):
         include_branches = include_branches.default
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
         conds = [
@@ -896,17 +894,14 @@ class ConversationForkBody(BaseModel):
 async def fork_conversation_chat_ui(
     conv_id: str,
     body: ConversationForkBody,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_WRITE)),
 ):
     """Fork conversation from a specific user message, creating a parallel branch.
 
     Copies all turns prior to source_message_id, creates a new conversation row,
     and inserts the edited user message as the first turn of the new branch.
     """
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     async with get_async_session_maker()() as session:
@@ -1074,13 +1069,10 @@ async def fork_conversation_chat_ui(
 @router.get("/conversations/{conv_id}/branches")
 async def get_conversation_branches_chat_ui(
     conv_id: str,
-    x_aion_user_id: Optional[str] = Header(None, alias="X-AION-User-Id"),
-    x_chat_ui_secret: Optional[str] = Header(None, alias="X-AION-Chat-Ui-Secret"),
+    user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     """Restituisce le informazioni sui rami dell'albero di conversazione."""
-    _check_internal_secret(x_chat_ui_secret)
     _require_unified()
-    user_id = (x_aion_user_id or "").strip() or "default"
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
 
     async with get_async_session_maker()() as session:

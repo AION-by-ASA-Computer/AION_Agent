@@ -66,7 +66,7 @@ def test_conversation_fork_and_branch_navigation(monkeypatch, tmp_path):
         seed = await _seed_chat_tree()
 
         # 1. Verifica che la conversazione root appaia nella lista
-        listed_init = await list_conversations_chat_ui(x_aion_user_id="u1")
+        listed_init = await list_conversations_chat_ui(user_id="u1")
         conv_ids_init = [c["id"] for c in listed_init["data"]]
         assert "conv_root" in conv_ids_init
 
@@ -77,7 +77,7 @@ def test_conversation_fork_and_branch_navigation(monkeypatch, tmp_path):
                 source_message_id="m-u2",
                 new_content="Secondo messaggio MODIFICATO (ramo 2)",
             ),
-            x_aion_user_id="u1",
+            user_id="u1",
         )
 
         child_id = fork_res["conversation_id"]
@@ -86,7 +86,7 @@ def test_conversation_fork_and_branch_navigation(monkeypatch, tmp_path):
         assert fork_res["fork_seq"] == 3
 
         # 3. Dettagli conversazione child
-        child_details = await get_conversation_chat_ui(child_id, x_aion_user_id="u1")
+        child_details = await get_conversation_chat_ui(child_id, user_id="u1")
         assert child_details["root_conversation_id"] == "conv_root"
         assert child_details["forked_from_id"] == "conv_root"
         assert child_details["forked_at_message_id"] == "m-u2"
@@ -94,23 +94,21 @@ def test_conversation_fork_and_branch_navigation(monkeypatch, tmp_path):
 
         # 4. Verifica sidebar: child non deve apparire se include_branches=False
         listed_default = await list_conversations_chat_ui(
-            x_aion_user_id="u1", include_branches=False
+            user_id="u1", include_branches=False
         )
         default_ids = [c["id"] for c in listed_default["data"]]
         assert "conv_root" in default_ids
         assert child_id not in default_ids
 
         listed_with_branches = await list_conversations_chat_ui(
-            x_aion_user_id="u1", include_branches=True
+            user_id="u1", include_branches=True
         )
         branch_ids = [c["id"] for c in listed_with_branches["data"]]
         assert "conv_root" in branch_ids
         assert child_id in branch_ids
 
         # 5. Verifica messaggi e navigazione branch nel parent
-        parent_msgs = await get_conversation_messages_chat_ui(
-            "conv_root", x_aion_user_id="u1"
-        )
+        parent_msgs = await get_conversation_messages_chat_ui("conv_root", user_id="u1")
         msgs_p = parent_msgs["messages"]
         # seq 1 (primo messaggio) non ha biforcazioni
         assert "branches" not in msgs_p[0]
@@ -124,9 +122,7 @@ def test_conversation_fork_and_branch_navigation(monkeypatch, tmp_path):
         assert u2_branch["next_branch_conversation_id"] == child_id
 
         # 6. Verifica messaggi e navigazione branch nel child
-        child_msgs = await get_conversation_messages_chat_ui(
-            child_id, x_aion_user_id="u1"
-        )
+        child_msgs = await get_conversation_messages_chat_ui(child_id, user_id="u1")
         msgs_c = child_msgs["messages"]
         # Messaggio 1 clonato (seq 1)
         assert msgs_c[0]["content"] == "Primo messaggio utente"
@@ -151,32 +147,32 @@ def test_conversation_fork_and_branch_navigation(monkeypatch, tmp_path):
                 source_message_id="m-u2",
                 new_content="Terzo messaggio alternativo (ramo 3)",
             ),
-            x_aion_user_id="u1",
+            user_id="u1",
         )
         child3_id = fork_res_3["conversation_id"]
 
         # Verifica che ora a seq 3 ci siano 3 rami (1/3, 2/3, 3/3)
         msgs_p_after = (
-            await get_conversation_messages_chat_ui("conv_root", x_aion_user_id="u1")
+            await get_conversation_messages_chat_ui("conv_root", user_id="u1")
         )["messages"]
         assert msgs_p_after[2]["branches"]["total"] == 3
         assert msgs_p_after[2]["branches"]["current_index"] == 1
 
         msgs_c1_after = (
-            await get_conversation_messages_chat_ui(child_id, x_aion_user_id="u1")
+            await get_conversation_messages_chat_ui(child_id, user_id="u1")
         )["messages"]
         assert msgs_c1_after[2]["branches"]["total"] == 3
         assert msgs_c1_after[2]["branches"]["current_index"] == 2
 
         msgs_c3_after = (
-            await get_conversation_messages_chat_ui(child3_id, x_aion_user_id="u1")
+            await get_conversation_messages_chat_ui(child3_id, user_id="u1")
         )["messages"]
         assert msgs_c3_after[2]["branches"]["total"] == 3
         assert msgs_c3_after[2]["branches"]["current_index"] == 3
 
         # 8. Endpoint /branches
         branches_data = await get_conversation_branches_chat_ui(
-            "conv_root", x_aion_user_id="u1"
+            "conv_root", user_id="u1"
         )
         assert branches_data["root_conversation_id"] == "conv_root"
         assert 3 in branches_data["branches"]
@@ -189,13 +185,13 @@ def test_conversation_fork_and_branch_navigation(monkeypatch, tmp_path):
                 source_message_id="m-u1",
                 new_content="Meteo Torino invece di Milano (fork seq 1)",
             ),
-            x_aion_user_id="u1",
+            user_id="u1",
         )
         child_seq1_id = fork_res_seq1["conversation_id"]
 
         # A seq 1 ora ci sono 2 rami tra conv_root e child_seq1_id
         msgs_p_seq1 = (
-            await get_conversation_messages_chat_ui("conv_root", x_aion_user_id="u1")
+            await get_conversation_messages_chat_ui("conv_root", user_id="u1")
         )["messages"]
         assert msgs_p_seq1[0]["branches"]["total"] == 2
         assert msgs_p_seq1[0]["branches"]["current_index"] == 1
@@ -204,7 +200,7 @@ def test_conversation_fork_and_branch_navigation(monkeypatch, tmp_path):
         )
 
         msgs_c_seq1 = (
-            await get_conversation_messages_chat_ui(child_seq1_id, x_aion_user_id="u1")
+            await get_conversation_messages_chat_ui(child_seq1_id, user_id="u1")
         )["messages"]
         assert msgs_c_seq1[0]["branches"]["total"] == 2
         assert msgs_c_seq1[0]["branches"]["current_index"] == 2
