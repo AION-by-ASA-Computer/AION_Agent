@@ -18,6 +18,7 @@ from src.api.contract_models import ChatStopResponse
 from src.api.auth.scopes import Scope
 from src.api.auth_login import ChatAuthIdentity, require_chat_scope
 from src.api.v1.runtime_settings import RuntimeSettingsPayload
+from src.api.v1.sse_schema import EventStreamResponse, stream_openapi_response
 from src.api.ownership import (
     assert_conversation_access,
     chat_user_id_scope,
@@ -603,7 +604,11 @@ async def chat_stop(
     return {"ok": True, "conversation_id": cid, "session_id": cid}
 
 
-@router.post("/chat/stream")
+@router.post(
+    "/chat/stream",
+    response_class=EventStreamResponse,
+    responses=stream_openapi_response(),
+)
 async def chat_stream(
     body: ChatStreamBody,
     auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
@@ -829,8 +834,8 @@ async def chat_stream(
         except asyncio.CancelledError:
             pass
         finally:
-            if run and body.conversation_id in _background_runs:
-                _background_runs[body.conversation_id].queues.discard(q)
+            if run is not None:
+                run.queues.discard(q)
 
     return EventSourceResponse(
         gen(),
@@ -839,7 +844,11 @@ async def chat_stream(
     )
 
 
-@router.get("/chat/stream/reconnect/{conversation_id}")
+@router.get(
+    "/chat/stream/reconnect/{conversation_id}",
+    response_class=EventStreamResponse,
+    responses=stream_openapi_response(),
+)
 async def chat_stream_reconnect(
     conversation_id: str,
     auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
@@ -847,7 +856,8 @@ async def chat_stream_reconnect(
 ):
     uid = _resolve_chat_user_id(auth, body_user_id=None, x_aion_user_id=x_aion_user_id)
     await assert_conversation_access(conversation_id, uid)
-    run = _background_runs.get(conversation_id)
+    # Stessa chiave usata da ``chat_stream`` per registrare il run.
+    run = _background_runs.get((conversation_id or "").strip())
     if not run:
 
         async def empty_gen():
@@ -872,8 +882,7 @@ async def chat_stream_reconnect(
         except asyncio.CancelledError:
             pass
         finally:
-            if conversation_id in _background_runs:
-                _background_runs[conversation_id].queues.discard(q)
+            run.queues.discard(q)
 
     return EventSourceResponse(
         gen(),
