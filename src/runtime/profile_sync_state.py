@@ -68,7 +68,12 @@ def should_preserve_profile_on_force(
     state: Dict[str, str],
     rel_key: str,
 ) -> Tuple[bool, str]:
-    """Return (preserve, reason). May update *state* in place."""
+    """Return (preserve, reason). May update *state* in place.
+
+    *state* holds the hash of the template content sync last wrote (the baseline),
+    never a customized hash: recording a local edit would make it look "unchanged"
+    and the next ``--force`` boot would overwrite it.
+    """
     if not target.is_file():
         return False, "new"
     target_hash = file_sha256(target)
@@ -78,11 +83,9 @@ def should_preserve_profile_on_force(
         return False, "identical"
     recorded = state.get(rel_key)
     if recorded is None:
-        state[rel_key] = target_hash
         return True, "customized (no prior sync state)"
     if target_hash == recorded:
         return False, "unchanged since last sync"
-    state[rel_key] = target_hash
     return True, "customized"
 
 
@@ -96,9 +99,18 @@ def record_profile_after_sync(
 def record_profile_after_admin_save(
     yaml_path: Path, config_root: Path | None = None
 ) -> None:
+    """Mark an admin-saved profile as customized so ``sync_config --force`` keeps it.
+
+    Drops the baseline instead of recording the new hash: with no baseline the
+    file is preserved until it again matches the template byte for byte.
+    """
     rel_key = profile_rel_key(Path("profiles") / yaml_path.name)
     if not rel_key or not yaml_path.is_file():
         return
+    # Saves to a separate overlay (AION_PROFILES_WRITE_DIR) never touch the synced copy.
+    synced_dir = (_config_dir(config_root) / "profiles").resolve()
+    if yaml_path.resolve().parent != synced_dir:
+        return
     state = load_profile_sync_state(config_root)
-    state[rel_key] = file_sha256(yaml_path)
-    save_profile_sync_state(state, config_root)
+    if state.pop(rel_key, None) is not None:
+        save_profile_sync_state(state, config_root)
