@@ -115,7 +115,7 @@ async def get_login_mode(
 
 @router.get("/login-mode/simulate")
 async def simulate_login_mode_change(
-    mode: str = Query(..., regex="^(password|microsoft|google)$"),
+    mode: str = Query(..., pattern="^(password|microsoft|google)$"),
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
     """Simula il cambio di modalità per identificare gli utenti che riceveranno una password temporanea."""
@@ -241,7 +241,7 @@ async def put_login_mode(
 
 @router.get("/sso-migration/users")
 async def list_migration_users(
-    status: str = Query("pending", regex="^(pending|migrated|exempt|no_access)$"),
+    status: str = Query("pending", pattern="^(pending|migrated|exempt|no_access)$"),
     q: str = Query(""),
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
