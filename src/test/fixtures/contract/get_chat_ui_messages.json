@@ -1,0 +1,179 @@
+{
+  "messages": [
+    {
+      "artifacts": [],
+      "content": "Analizza l'allarme",
+      "created_at": "<iso:nofrac:naive>",
+      "feedback_comment": null,
+      "id": "m-user-1",
+      "rating": null,
+      "reasoning": null,
+      "role": "user",
+      "seq": 1,
+      "steps": [],
+      "tool_call_id": null,
+      "tool_name": null
+    },
+    {
+      "archived": true,
+      "archived_reason": "mid_turn_compaction",
+      "artifacts": [],
+      "content": "Prima risposta, poi archiviata.",
+      "created_at": "<iso:nofrac:naive>",
+      "feedback_comment": null,
+      "id": "m-asst-archived",
+      "metadata": {
+        "sre_author": "mario.rossi"
+      },
+      "rating": null,
+      "reasoning": null,
+      "role": "assistant",
+      "seq": 2,
+      "steps": [],
+      "timeline": [
+        {
+          "content": "Prima risposta, poi archiviata.",
+          "id": "text_0",
+          "kind": "text"
+        }
+      ],
+      "tool_call_id": null,
+      "tool_name": null
+    },
+    {
+      "artifacts": [],
+      "content": "Continua",
+      "created_at": "<iso:nofrac:naive>",
+      "feedback_comment": null,
+      "id": "m-user-2",
+      "rating": null,
+      "reasoning": null,
+      "role": "user",
+      "seq": 3,
+      "steps": [],
+      "tool_call_id": null,
+      "tool_name": null
+    },
+    {
+      "artifacts": [],
+      "content": "Risposta con timeline salvata.",
+      "created_at": "<iso:nofrac:naive>",
+      "feedback_comment": null,
+      "id": "m-asst-timeline",
+      "rating": null,
+      "reasoning": "Controllo i log.",
+      "role": "assistant",
+      "seq": 4,
+      "steps": [],
+      "timeline": [
+        {
+          "content": "Controllo i log.",
+          "id": "r1",
+          "kind": "reasoning"
+        },
+        {
+          "id": "t1",
+          "input": {
+            "q": "error"
+          },
+          "isError": false,
+          "kind": "tool",
+          "name": "splunk_search",
+          "output": "3 risultati",
+          "status": "done",
+          "tokens_in": 10,
+          "tokens_out": 20
+        },
+        {
+          "content": "Risposta con timeline salvata.",
+          "id": "x1",
+          "kind": "text"
+        }
+      ],
+      "tool_call_id": null,
+      "tool_name": null
+    },
+    {
+      "artifacts": [],
+      "content": "Riassumi",
+      "created_at": "<iso:nofrac:naive>",
+      "feedback_comment": null,
+      "id": "m-user-3",
+      "rating": null,
+      "reasoning": null,
+      "role": "user",
+      "seq": 5,
+      "steps": [],
+      "tool_call_id": null,
+      "tool_name": null
+    },
+    {
+      "artifacts": [
+        {
+          "created_at": "<iso:nofrac:naive>",
+          "id": "<uuid>",
+          "kind": "artifact",
+          "mime": "text/markdown",
+          "original_name": "report.md",
+          "size_bytes": 128,
+          "storage_key": "workspace/report.md"
+        }
+      ],
+      "content": "Risposta con timeline ricostruita.",
+      "created_at": "<iso:nofrac:naive>",
+      "feedback_comment": null,
+      "id": "m-asst-legacy",
+      "rating": null,
+      "reasoning": "Leggo il file.",
+      "role": "assistant",
+      "seq": 6,
+      "steps": [
+        {
+          "created_at": "<iso:nofrac:naive>",
+          "id": "<uuid>",
+          "input": "{\"path\":\"a.txt\"}",
+          "is_error": false,
+          "metadata_json": "{\"duration_ms\": 12}",
+          "name": "sandbox_read_file",
+          "output": "contenuto",
+          "type": "tool"
+        }
+      ],
+      "timeline": [
+        {
+          "content": "Leggo il file.",
+          "id": "reasoning_0",
+          "kind": "reasoning"
+        },
+        {
+          "id": "<uuid>",
+          "input": {
+            "path": "a.txt"
+          },
+          "isError": false,
+          "kind": "tool",
+          "name": "sandbox_read_file",
+          "output": "contenuto",
+          "status": "done",
+          "tokens_in": null,
+          "tokens_out": null
+        },
+        {
+          "artType": "text/markdown",
+          "buffer": "",
+          "id": "<uuid>",
+          "kind": "artifact",
+          "savedPath": "workspace/report.md",
+          "title": "report.md"
+        },
+        {
+          "content": "Risposta con timeline ricostruita.",
+          "id": "text_0",
+          "kind": "text"
+        }
+      ],
+      "tool_call_id": null,
+      "tool_name": null
+    }
+  ]
+}

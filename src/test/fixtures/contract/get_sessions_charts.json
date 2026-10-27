@@ -1,0 +1,17 @@
+{
+  "charts": [
+    {
+      "chart_kind": "line",
+      "data": [
+        {
+          "index": 0,
+          "value": 1
+        }
+      ],
+      "legend_off": false,
+      "query": "up",
+      "stacked": false,
+      "x_key": "index"
+    }
+  ]
+}
