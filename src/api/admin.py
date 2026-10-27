@@ -240,6 +240,8 @@ class MCPUpdate(BaseModel):
     type: Optional[str] = None
     url: Optional[str] = None
     remote_url: Optional[str] = None
+    # Modalità credenziali che il client salverà subito dopo (none, org_shared, per_user).
+    credential_mode: Optional[str] = None
 
 
 class MCPInstallRequest(BaseModel):
@@ -3570,6 +3572,8 @@ async def update_mcp_config(name: str, config: MCPUpdate):
         raise HTTPException(status_code=404, detail="MCP not found")
 
     update_data = config.model_dump(exclude_unset=True)
+    # Modalità che admin-ui salva subito dopo: non va scritta nel registry.
+    target_mode = (update_data.pop("credential_mode", None) or "").strip().lower()
 
     # Cleanup per credential_mode="none": rimuovi env e --header args per remote-bridge
     if update_data:
@@ -3586,7 +3590,10 @@ async def update_mcp_config(name: str, config: MCPUpdate):
                 .first()
             )
 
-        if row and row.credential_mode == "none":
+        # Passando da "none" a credenziali condivise vale la modalità nuova,
+        # altrimenti il Bearer nell'header sparisce prima che la policy cambi.
+        effective_mode = target_mode or (row.credential_mode if row else "")
+        if row and effective_mode == "none":
             cfg = mcp_manager.get_server_config(name) or {}
             is_remote = (
                 cfg.get("type") == "remote-bridge"
