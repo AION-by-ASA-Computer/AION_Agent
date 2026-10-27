@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from src.api.auth import AuthContext, Scope, require_scope
+from src.api.contract_models import StepsResponse
 from src.api.ownership import api_key_context_principal, owned_by
 from src.api.v1.conversations import _require_unified
 from src.data.engine import get_async_session_maker
@@ -54,7 +55,7 @@ async def create_step(
     return {"id": sid}
 
 
-@router.get("/conversations/{conversation_id}/steps")
+@router.get("/conversations/{conversation_id}/steps", response_model=StepsResponse)
 async def list_steps(
     conversation_id: str,
     ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_READ)),

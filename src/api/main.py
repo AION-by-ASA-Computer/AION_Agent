@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, AliasChoices
 from sse_starlette.sse import EventSourceResponse
 
 from src.agent_pipeline import AgentPipeline
+from src.api.contract_models import ChartsResponse, ProfileSummary
 from src.main import get_agent
 from src.runtime.reasoning_effort import resolve_turn_reasoning
 from src.runtime.runtime_settings import (
@@ -599,7 +600,7 @@ async def get_allowed_profiles_for_user(user_id: Optional[str]) -> List[dict]:
     return [p for p in all_profiles if p.get("slug") in allowed_slugs]
 
 
-@app.get("/profiles")
+@app.get("/profiles", response_model=List[ProfileSummary])
 async def profiles_list_compat(
     _auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
 ):
@@ -958,7 +959,11 @@ async def chat(
     )
 
 
-@app.get("/sessions/{session_id}/charts")
+@app.get(
+    "/sessions/{session_id}/charts",
+    response_model=ChartsResponse,
+    response_model_exclude_unset=True,
+)
 async def get_session_charts(
     session_id: str,
     user_id: str = Depends(chat_user_id_scope(Scope.CHAT)),
