@@ -121,3 +121,31 @@ def test_expired_sunset_allows_removal():
     assert breaking_changes(old, gone, today=date(2025, 12, 31)) == [
         "GET /x: route rimossa"
     ]
+
+
+def test_deprecated_route_headers_and_openapi():
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from src.api.deprecation import deprecated_route
+
+    demo = FastAPI()
+
+    @demo.get("/old", **deprecated_route(date(2027, 3, 1), successor="/v1/new"))
+    def old():
+        return {"ok": True}
+
+    res = TestClient(demo).get("/old")
+    assert res.json() == {"ok": True}
+    assert res.headers["Deprecation"] == "true"
+    assert res.headers["Sunset"] == "Mon, 01 Mar 2027 00:00:00 GMT"
+    assert res.headers["Link"] == '</v1/new>; rel="successor-version"'
+
+    op = demo.openapi()["paths"]["/old"]["get"]
+    assert op["deprecated"] is True
+    assert op["x-sunset"] == "2027-03-01"
+    gone = {"paths": {}, "components": {}}
+    assert (
+        breaking_changes({"paths": {"/old": {"get": op}}}, gone, today=date(2027, 3, 1))
+        == []
+    )
