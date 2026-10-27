@@ -1,0 +1,15 @@
+{
+  "id": "<uuid>",
+  "message_count": 0,
+  "metadata": {
+    "incident": "INC0012345"
+  },
+  "profile_slug": "contract_profile",
+  "tags": [
+    "sre",
+    "checkmk"
+  ],
+  "tenant_id": "default",
+  "title": "INC0012345",
+  "user_id": "sre-bot"
+}
