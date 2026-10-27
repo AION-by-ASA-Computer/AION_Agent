@@ -15,6 +15,7 @@ from pydantic import AliasChoices, BaseModel, Field
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.api.auth.scopes import Scope
+from src.api.contract_models import MessagesResponse, StreamStatus, UpdatedResponse
 from src.api.ownership import chat_user_id_scope, claim_conversation_for_write
 from src.data.engine import get_async_session_maker
 from src.data.history_bridge import (
@@ -370,7 +371,11 @@ async def create_conversation_chat_ui(
     }
 
 
-@router.get("/conversations/{conv_id}/stream-status")
+@router.get(
+    "/conversations/{conv_id}/stream-status",
+    response_model=StreamStatus,
+    response_model_exclude_unset=True,
+)
 async def get_conversation_stream_status_chat_ui(
     conv_id: str,
     user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
@@ -416,7 +421,11 @@ def _is_plan_tagged_internal(row: Message, nr: str, meta: Dict[str, Any]) -> boo
     return bool((meta.get("plan_task_id") or "").strip())
 
 
-@router.get("/conversations/{conv_id}/messages")
+@router.get(
+    "/conversations/{conv_id}/messages",
+    response_model=MessagesResponse,
+    response_model_exclude_unset=True,
+)
 async def get_conversation_messages_chat_ui(
     conv_id: str,
     include_plan_internal: bool = False,
@@ -868,7 +877,10 @@ async def patch_message_timeline_chat_ui(
     return {"updated": True, "message_id": message_id}
 
 
-@router.post("/conversations/{conv_id}/messages/{message_id}/rate")
+@router.post(
+    "/conversations/{conv_id}/messages/{message_id}/rate",
+    response_model=UpdatedResponse,
+)
 async def rate_message_chat_ui(
     conv_id: str,
     message_id: str,

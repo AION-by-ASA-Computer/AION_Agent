@@ -305,9 +305,11 @@ def _server_needs_user_credentials(config: Optional[Dict[str, Any]]) -> bool:
         isinstance(v, str) and "${AION_USER_" in v for v in env_block.values()
     ):
         return True
-    return _is_remote_bridge(config) and bool(
-        (config.get("auth_env_var") or "").strip()
-    )
+    if not _is_remote_bridge(config) or not (config.get("auth_env_var") or "").strip():
+        return False
+    from .mcp_credential_discovery import resolve_remote_bridge_auth_env_var
+
+    return (resolve_remote_bridge_auth_env_var(config) or "").startswith("AION_USER_")
 
 
 def _remote_bridge_auth_missing(
@@ -329,6 +331,38 @@ def _remote_bridge_auth_missing(
     return (
         f"OAuth non connesso per {server_name}: collega l'integrazione da chat-ui "
         f"(credenziali mancanti)"
+    )
+
+
+def _is_first_party_stdio(
+    command: str, args: List[Any], config: Dict[str, Any]
+) -> bool:
+    """Server Python del repository (``mcp_servers/``, ``-m src.*``)."""
+    if _is_remote_bridge(config):
+        return False
+    if not os.path.basename(str(command or "")).lower().startswith("python"):
+        return False
+    root = _repo_root().resolve()
+    for i, arg in enumerate(args or []):
+        s = str(arg)
+        if s == "-m" and i + 1 < len(args):
+            return str(args[i + 1]).startswith(("mcp_servers.", "src."))
+        if s.endswith(".py"):
+            path = Path(s)
+            if not path.is_absolute():
+                path = root / path
+            try:
+                return os.path.commonpath([str(root), str(path.resolve())]) == str(root)
+            except ValueError:
+                return False
+    return False
+
+
+def _stdio_base_env(command: str, args: List[Any], config: Dict[str, Any]):
+    from .security.session_env import build_mcp_stdio_base_env
+
+    return build_mcp_stdio_base_env(
+        first_party=_is_first_party_stdio(command, args, config)
     )
 
 
@@ -526,7 +560,7 @@ class MCPStdioWorker:
             command, args = self._manager.resolve_stdio_spawn_command(
                 self.server_name, config
             )
-            env = os.environ.copy()
+            env = _stdio_base_env(command, args, config)
             repo_root_dir = str(_repo_root())
             env.setdefault("FASTMCP_LOG_LEVEL", "ERROR")
             env.setdefault("FASTMCP_SHOW_SERVER_BANNER", "false")
@@ -2179,23 +2213,15 @@ class MCPManager:
                         await self._increment_active_server(name)
                         is_active = True
                         yield session
-            except Exception:
-                raise
             finally:
                 if is_active:
                     await self._decrement_active_server(name)
                 else:
                     metrics.aion_mcp_server_healthy.labels(mcp_server=name).set(0)
 
-            async with sse_client(url, headers=headers) as (r, w):
-                session = ClientSession(r, w)
-                async with session:
-                    await session.initialize()
-                    yield session
-
         else:
             command, args = self.resolve_stdio_spawn_command(name, config)
-            env = os.environ.copy()
+            env = _stdio_base_env(command, args, config)
             repo_root_dir = str(_repo_root())
             env.setdefault("FASTMCP_LOG_LEVEL", "WARNING")
             env.setdefault("FASTMCP_SHOW_SERVER_BANNER", "false")
@@ -2264,8 +2290,6 @@ class MCPManager:
                         await self._increment_active_server(name)
                         is_active = True
                         yield session
-            except Exception as e:
-                raise e
             finally:
                 if is_active:
                     await self._decrement_active_server(name)

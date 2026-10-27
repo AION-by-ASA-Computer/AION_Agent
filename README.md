@@ -228,7 +228,7 @@ Report vulnerabilities privately — [SECURITY.md](SECURITY.md).
 
 ## Disclaimer
 
-**AION Agent is under active development.** APIs, configuration, and behavior may change between releases without prior notice.
+**AION Agent is under active development.** APIs, configuration, and behavior may change between releases without prior notice. The exception is the routes listed under [API contract and deprecation](docs/api-and-runtime/rest-api.md#api-contract-and-deprecation): changes to them are additive, and removals follow the deprecation rule documented there.
 
 The software is provided **“as is”**, without warranty of any kind. AION / ASA Computer **assumes no liability** for damages, data loss, security incidents, or operational issues arising from the use of this project in any environment (including production).
 

@@ -14,9 +14,11 @@ from pydantic import AliasChoices, BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from src.agent_pipeline import AgentPipeline
+from src.api.contract_models import ChatStopResponse
 from src.api.auth.scopes import Scope
 from src.api.auth_login import ChatAuthIdentity, require_chat_scope
 from src.api.v1.runtime_settings import RuntimeSettingsPayload
+from src.api.v1.sse_schema import EventStreamResponse, stream_openapi_response
 from src.api.ownership import (
     assert_conversation_access,
     chat_user_id_scope,
@@ -24,6 +26,7 @@ from src.api.ownership import (
     effective_user_id,
 )
 from src.api.profile_access import enforce_profile_access
+from src.chart_queue import chart_queue
 from src.main import get_agent, set_event_loop
 from src.runtime.reasoning_effort import resolve_turn_reasoning
 from src.session_workspace import normalize_session_id
@@ -582,7 +585,7 @@ def _resolve_chat_user_id(
     )
 
 
-@router.post("/chat/stop")
+@router.post("/chat/stop", response_model=ChatStopResponse)
 async def chat_stop(
     conversation_id: Optional[str] = Query(
         None, description="Conversation / session id"
@@ -601,7 +604,11 @@ async def chat_stop(
     return {"ok": True, "conversation_id": cid, "session_id": cid}
 
 
-@router.post("/chat/stream")
+@router.post(
+    "/chat/stream",
+    response_class=EventStreamResponse,
+    responses=stream_openapi_response(),
+)
 async def chat_stream(
     body: ChatStreamBody,
     auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
@@ -827,8 +834,8 @@ async def chat_stream(
         except asyncio.CancelledError:
             pass
         finally:
-            if run and body.conversation_id in _background_runs:
-                _background_runs[body.conversation_id].queues.discard(q)
+            if run is not None:
+                run.queues.discard(q)
 
     return EventSourceResponse(
         gen(),
@@ -837,7 +844,11 @@ async def chat_stream(
     )
 
 
-@router.get("/chat/stream/reconnect/{conversation_id}")
+@router.get(
+    "/chat/stream/reconnect/{conversation_id}",
+    response_class=EventStreamResponse,
+    responses=stream_openapi_response(),
+)
 async def chat_stream_reconnect(
     conversation_id: str,
     auth: ChatAuthIdentity = Depends(require_chat_scope(Scope.CHAT)),
@@ -845,7 +856,8 @@ async def chat_stream_reconnect(
 ):
     uid = _resolve_chat_user_id(auth, body_user_id=None, x_aion_user_id=x_aion_user_id)
     await assert_conversation_access(conversation_id, uid)
-    run = _background_runs.get(conversation_id)
+    # Stessa chiave usata da ``chat_stream`` per registrare il run.
+    run = _background_runs.get((conversation_id or "").strip())
     if not run:
 
         async def empty_gen():
@@ -870,8 +882,7 @@ async def chat_stream_reconnect(
         except asyncio.CancelledError:
             pass
         finally:
-            if conversation_id in _background_runs:
-                _background_runs[conversation_id].queues.discard(q)
+            run.queues.discard(q)
 
     return EventSourceResponse(
         gen(),
@@ -983,6 +994,9 @@ async def chat_sync(
     resolved_effort = resolve_turn_reasoning(effort_in, thinking_in)
 
     timeout = float(body.timeout_seconds or 300.0)
+    # Un turno precedente scaduto (o /chat/stop) lascia il flag di cancel per
+    # 120 s: azzerarlo, altrimenti questo turno si annulla da solo.
+    await redis_clear_stream_cancel(conversation_id)
 
     try:
         agent_instance, profile_name = await get_agent(
@@ -1065,12 +1079,17 @@ async def chat_sync(
         logger.exception("sync chat failed conv=%s", conversation_id[:12])
         raise HTTPException(status_code=500, detail=str(e)) from e
 
+    # I tool grafici accodano i chart per sessione (chat-ui li legge con
+    # GET /sessions/{id}/charts): qui li consumiamo e li restituiamo nel JSON.
+    charts = list(result.get("charts") or []) + chart_queue.get_serialized(
+        conversation_id
+    )
     return ChatSyncResponse(
         text=result.get("text") or "",
         conversation_id=conversation_id,
         session_id=conversation_id,
         profile=profile_name,
         success=bool(result.get("success", True)),
-        charts=list(result.get("charts") or []),
+        charts=charts,
         error=(result.get("error") or None),
     )

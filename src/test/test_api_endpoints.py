@@ -91,6 +91,12 @@ mcp_servers: []
             data_charts = res_charts.json()
             assert "charts" in data_charts
             assert isinstance(data_charts["charts"], list)
+            # Route del contratto API: esclusa dal Sunset di /sessions/*.
+            assert "Deprecation" not in res_charts.headers
+            assert "Sunset" not in res_charts.headers
+            res_files = client.get("/sessions/test-session-123/files")
+            assert res_files.headers.get("Deprecation") == "true"
+            assert "Sunset" in res_files.headers
 
             # 6. Test /chat/stop endpoint
             res_stop = client.post("/chat/stop?session_id=test-session-123")

@@ -922,6 +922,12 @@ def resolve_remote_bridge_auth_env_var(cfg: dict) -> Optional[str]:
     """Preferisce auth_env_var esplicito nel registry; fallback su parsing args CLI."""
     explicit = (cfg.get("auth_env_var") or "").strip()
     if explicit:
+        # Voci org_shared installate prima della correzione: auth_env_var per-utente ma
+        # header con il token dell'organizzazione (${API_KEY}). Vale l'header.
+        if explicit.startswith("AION_USER_"):
+            header_key = _extract_remote_bridge_token_key(cfg)
+            if header_key and not header_key.startswith("AION_USER_"):
+                return header_key
         return explicit
     token_key = _extract_remote_bridge_token_key(cfg)
     if token_key:

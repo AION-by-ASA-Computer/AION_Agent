@@ -486,6 +486,9 @@ export function useHub() {
       if (typeof v.aion_connector_id === "string" && v.aion_connector_id.trim()) {
         payload.aion_connector_id = v.aion_connector_id.trim();
       }
+      // savePolicy runs after the PUT: send the new mode so the backend does not
+      // strip the auth header using the mode still stored in the DB.
+      if (editingPolicy) payload.credential_mode = editingPolicy.mode;
       const res = await apiFetch(`${apiBase()}/admin/mcp/${editing.name}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

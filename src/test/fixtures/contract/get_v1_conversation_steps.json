@@ -1,0 +1,12 @@
+{
+  "data": [
+    {
+      "id": "<uuid>",
+      "input": "{\"path\":\"a.txt\"}",
+      "name": "sandbox_read_file",
+      "output": "contenuto",
+      "parent_id": null,
+      "type": "tool"
+    }
+  ]
+}

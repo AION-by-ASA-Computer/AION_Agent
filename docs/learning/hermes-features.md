@@ -57,6 +57,11 @@ Discrete suggestions that appear periodically to guide the user toward advanced 
 **DB Table:** `approval_rules`
 
 ### Why approval system?
+
+:::warning Not active
+`src/security/approval_manager.py` exists but no tool calls it: `AION_APPROVAL_*` currently has no effect and no tool asks for approval. Plan-mode approval (`draft_execution_plan`) is a separate mechanism. The description below is the intended design.
+:::
+
 It guarantees security in the execution of sensitive tools (shell, python, file writing).
 - **Auto-allow**: For safe tools or already approved rules.
 - **Ask**: Explicitly requests the user's intervention via SSE `approval_required`.
@@ -125,10 +130,10 @@ AION_SKILL_DISTILL_ENABLED=1
 AION_SKILL_DISTILL_MIN_TOOLS=5
 AION_SKILL_GENERATED_DIR=data/skills/generated
 
-# PHASE M - Approval
-AION_APPROVAL_ENABLED=1
-AION_APPROVAL_LEARN=1
-AION_APPROVAL_CRITICAL_TOOLS=sandbox_execute_python,shell_execute
+# PHASE M - Approval (not active: approval_manager is not wired to any tool)
+# AION_APPROVAL_ENABLED=1
+# AION_APPROVAL_LEARN=1
+# AION_APPROVAL_CRITICAL_TOOLS=sandbox_execute_python,shell_execute
 
 # PHASE E - Nudge
 AION_NUDGE_ENABLED=0
