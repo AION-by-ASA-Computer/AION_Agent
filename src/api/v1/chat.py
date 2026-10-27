@@ -14,6 +14,7 @@ from pydantic import AliasChoices, BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from src.agent_pipeline import AgentPipeline
+from src.api.contract_models import ChatStopResponse
 from src.api.auth.scopes import Scope
 from src.api.auth_login import ChatAuthIdentity, require_chat_scope
 from src.api.v1.runtime_settings import RuntimeSettingsPayload
@@ -583,7 +584,7 @@ def _resolve_chat_user_id(
     )
 
 
-@router.post("/chat/stop")
+@router.post("/chat/stop", response_model=ChatStopResponse)
 async def chat_stop(
     conversation_id: Optional[str] = Query(
         None, description="Conversation / session id"
