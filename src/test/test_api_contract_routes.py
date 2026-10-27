@@ -57,3 +57,13 @@ def test_contract_scopes_match_expected():
         assert expected.get((entry.method, entry.path)) == entry.scope, (
             f"{entry.method} {entry.path}"
         )
+
+
+def test_contract_routes_documented():
+    doc = (
+        Path(__file__).resolve().parents[2] / "docs" / "api-and-runtime" / "rest-api.md"
+    ).read_text(encoding="utf-8")
+    for entry in CONTRACT_ROUTES:
+        assert f"| `{entry.method}` | `{entry.path}` | `{entry.scope}` |" in doc, (
+            f"{entry.method} {entry.path} manca dalla tabella del contratto"
+        )
