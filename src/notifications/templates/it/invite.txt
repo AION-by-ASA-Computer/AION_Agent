@@ -1,0 +1,11 @@
+Il tuo account su $platform
+
+Ciao $name,
+
+è stato creato per te un account su $platform con nome utente: $identifier
+
+Per iniziare, imposta la tua password da questo link:
+$link
+
+Il link è personale, funziona una sola volta e scade il $expires.
+Se non ti aspettavi questa email, puoi ignorarla.

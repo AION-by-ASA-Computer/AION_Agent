@@ -1,5 +1,5 @@
 /**
- * Password policy for admin-created users.
+ * Password policy for the admin's own password change.
  * Mirrors `password_policy_violations` in src/data/user_password.py: keep the two in sync.
  */
 
@@ -23,32 +23,3 @@ export function checkPassword(password: string, identifier = ""): { code: Passwo
 }
 
 export const isPasswordValid = (password: string, identifier = "") => checkPassword(password, identifier).every((r) => r.ok);
-
-// No ambiguous characters (0/O, 1/l/I) so the password can be read out or retyped safely.
-const LOWER = "abcdefghijkmnopqrstuvwxyz";
-const UPPER = "ABCDEFGHJKLMNPQRSTUVWXYZ";
-const DIGITS = "23456789";
-const SYMBOLS = "!@#$%&*?-_+=";
-
-/** Uniform random integer in [0, max) from the Web Crypto API (rejection sampling, no modulo bias). */
-function randomInt(max: number): number {
-  const limit = Math.floor(0x100000000 / max) * max;
-  const buf = new Uint32Array(1);
-  do crypto.getRandomValues(buf);
-  while (buf[0] >= limit);
-  return buf[0] % max;
-}
-
-const pick = (set: string) => set[randomInt(set.length)];
-
-/** Cryptographically random password that always satisfies the policy. */
-export function generatePassword(length = 16): string {
-  const all = LOWER + UPPER + DIGITS + SYMBOLS;
-  const chars = [pick(LOWER), pick(UPPER), pick(DIGITS), pick(SYMBOLS)];
-  while (chars.length < Math.max(length, PASSWORD_MIN_LENGTH)) chars.push(pick(all));
-  for (let i = chars.length - 1; i > 0; i--) {
-    const j = randomInt(i + 1);
-    [chars[i], chars[j]] = [chars[j], chars[i]];
-  }
-  return chars.join("");
-}

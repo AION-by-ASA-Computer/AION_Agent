@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, Copy, Eye, EyeOff, KeyRound, Loader2, Pencil, Plus, RefreshCw, ShieldCheck, Trash2, TriangleAlert, UserCog, UserRound, X } from "lucide-react";
+import Link from "next/link";
+import { KeyRound, Loader2, Mail, MailWarning, Pencil, Plus, ShieldCheck, Trash2, TriangleAlert, UserCog, UserRound } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
-import { PASSWORD_MAX_LENGTH, PASSWORD_MIN_LENGTH, checkPassword, generatePassword, isPasswordValid } from "@/lib/passwordPolicy";
 import { getLocale } from "@/lib/i18n/i18n-store";
 import { PageToast, type ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
@@ -16,15 +16,16 @@ import { Switch } from "@/components/settings/ui";
 import { ColumnFilter, type ColumnFilterLabels } from "@/components/ui/ColumnFilter";
 import { DeleteDialog } from "@/components/ui/ConfirmDialogs";
 import { SsoMigrationPanel } from "@/components/sso/SsoMigrationPanel";
+import { linkErrorText } from "@/components/sso/setupLinks";
 import { MigrationUsers } from "@/components/sso/MigrationUsers";
 import { TwoFactorPanel } from "@/components/sso/TwoFactorPanel";
 
 const k = "admin_users";
 const GRIDS: Record<string, string> = {
-  "00": "md:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_10.5rem]",
-  "01": "md:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_6.5rem_10.5rem]",
-  "10": "md:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_7.5rem_10.5rem]",
-  "11": "md:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_7.5rem_6.5rem_10.5rem]",
+  "00": "md:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_12.5rem]",
+  "01": "md:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_6.5rem_12.5rem]",
+  "10": "md:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_7.5rem_12.5rem]",
+  "11": "md:grid-cols-[minmax(0,2fr)_minmax(0,1.6fr)_minmax(0,1.2fr)_7.5rem_6.5rem_12.5rem]",
 };
 
 type Filters = { user: string; email: string; access: string; migration: string; twofa: string };
@@ -51,6 +52,10 @@ interface UserRow {
   max_api_keys?: number;
   api_key_max_ttl_days?: number;
   api_keys_active?: number;
+  setup_link_pending?: boolean;
+  setup_link_purpose?: "invite" | "reset" | "migration" | null;
+  setup_link_expires_at?: string | null;
+  setup_link_send_error?: string | null;
 }
 
 const isAdmin = (u: UserRow) => !!u.roles?.includes("admin");
@@ -74,11 +79,9 @@ type T = (key: string, vars?: Record<string, string | number>) => string;
 
 type FormValues = {
   identifier: string;
-  password: string;
   displayName: string;
   email: string;
   admin: boolean;
-  mustChange: boolean;
   can_create_api_keys: boolean;
   max_api_keys: number;
   api_key_max_ttl_days: number;
@@ -100,11 +103,18 @@ const nameOf = (u: UserRow) => u.display_name || u.identifier;
 async function errorDetail(res: Response, fallback: string) {
   try {
     const data = await res.json();
-    return typeof data?.detail === "string" ? data.detail : fallback;
+    return typeof data?.detail === "string" ? data.detail : typeof data?.detail?.code === "string" ? data.detail.code : fallback;
   } catch {
     return fallback;
   }
 }
+
+/** Basic shape check; the backend validates the address for real. */
+const looksLikeEmail = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+
+const emailError = linkErrorText;
+
+const formatDate = (iso: string) => new Date(iso).toLocaleString(getLocale(), { dateStyle: "medium", timeStyle: "short" });
 
 function Avatar({ user }: { user: UserRow }) {
   return (
@@ -156,115 +166,6 @@ function Field({ label, htmlFor, optional, hint, children, t }: { label: string;
       </label>
       {children}
       {hint && <span className="text-xs text-muted-foreground">{hint}</span>}
-    </div>
-  );
-}
-
-function useCopy() {
-  const [copied, setCopied] = useState(false);
-  useEffect(() => {
-    if (!copied) return;
-    const id = setTimeout(() => setCopied(false), 2000);
-    return () => clearTimeout(id);
-  }, [copied]);
-  const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-    } catch {
-      /* clipboard unavailable (insecure context): the text stays visible to copy by hand */
-    }
-  };
-  return { copied, copy, reset: () => setCopied(false) };
-}
-
-/** Password input with a generated default, show/copy/regenerate and a compact policy readout. */
-function PasswordField({
-  value,
-  onChange,
-  identifier,
-  mustChange,
-  onMustChange,
-  t,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  identifier: string;
-  mustChange: boolean;
-  onMustChange: (v: boolean) => void;
-  t: T;
-}) {
-  const [visible, setVisible] = useState(true);
-  const { copied, copy, reset } = useCopy();
-  const rules = checkPassword(value, identifier);
-  const failing = rules.filter((r) => !r.ok);
-  const iconBtn =
-    "focus-ring inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50";
-
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline justify-between gap-2">
-        <label htmlFor="user-form-password" className="text-sm font-medium">
-          {t(`${k}.form.password`)}
-        </label>
-        <button
-          type="button"
-          onClick={() => {
-            onChange(generatePassword());
-            reset();
-          }}
-          className="focus-ring -my-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-          {t(`${k}.form.password_regenerate`)}
-        </button>
-      </div>
-      <div className="relative">
-        <input
-          id="user-form-password"
-          type={visible ? "text" : "password"}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          required
-          maxLength={PASSWORD_MAX_LENGTH}
-          autoComplete="new-password"
-          spellCheck={false}
-          aria-invalid={failing.length > 0}
-          aria-describedby="user-form-password-status"
-          className={cn(inputCls, "pr-[4.75rem] font-mono tracking-[0.02em]", failing.length > 0 && value && "border-destructive/60 hover:border-destructive/70 focus:border-destructive")}
-        />
-        <div className="absolute inset-y-0 right-1 flex items-center">
-          <button type="button" className={iconBtn} onClick={() => setVisible((v) => !v)} title={t(`${k}.form.${visible ? "password_hide" : "password_show"}`)} aria-label={t(`${k}.form.${visible ? "password_hide" : "password_show"}`)}>
-            {visible ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
-          </button>
-          <button type="button" className={iconBtn} onClick={() => void copy(value)} disabled={!value} title={t(`${k}.form.${copied ? "password_copied" : "password_copy"}`)} aria-label={t(`${k}.form.${copied ? "password_copied" : "password_copy"}`)}>
-            {copied ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
-          </button>
-        </div>
-      </div>
-
-      <div id="user-form-password-status" aria-live="polite" className="text-xs">
-        {failing.length === 0 ? (
-          <p className="flex items-center gap-1.5 text-success">
-            <ShieldCheck className="h-3.5 w-3.5 shrink-0" aria-hidden />
-            {t(`${k}.form.password_ok`)}
-          </p>
-        ) : (
-          <ul className="flex flex-wrap gap-x-3 gap-y-1">
-            {failing.map((r) => (
-              <li key={r.code} className="flex items-center gap-1 text-destructive">
-                <X className="h-3.5 w-3.5 shrink-0" aria-hidden />
-                {t(`${k}.form.password_rules.${r.code}`, { min: PASSWORD_MIN_LENGTH })}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-
-      <label className="mt-1 flex cursor-pointer items-center gap-2.5 text-sm">
-        <input type="checkbox" checked={mustChange} onChange={(e) => onMustChange(e.target.checked)} className="focus-ring h-4 w-4 shrink-0 accent-foreground" />
-        {t(`${k}.form.must_change`)}
-      </label>
     </div>
   );
 }
@@ -396,31 +297,31 @@ function RolePicker({ admin, onChange, t }: { admin: boolean; onChange: (v: bool
   );
 }
 
-type Credentials = { identifier: string; password: string; name: string; mustChange: boolean; created: boolean };
-
-/** Last step after a password is set: the only moment the admin can still read it. */
-function CredentialsStep({ creds, t, onClose }: { creds: Credentials; t: T; onClose: () => void }) {
-  const { copied, copy } = useCopy();
-  const text = `${t(`${k}.form.username`)}: ${creds.identifier}\n${t(`${k}.form.password`)}: ${creds.password}`;
+/** Password status of an existing account, with the action that emails a link to (re)set it. */
+function PasswordAccess({ user, busy, t, onSendLink }: { user: UserRow; busy: boolean; t: T; onSendLink: (u: UserRow) => void }) {
+  const pending = !!user.setup_link_pending;
+  const status = user.setup_link_send_error
+    ? t(`${k}.form.link_send_failed`, { error: emailError(t, user.setup_link_send_error) })
+    : pending && user.setup_link_expires_at
+      ? t(`${k}.form.link_pending`, { date: formatDate(user.setup_link_expires_at) })
+      : user.has_password
+        ? t(`${k}.form.password_set`)
+        : t(`${k}.form.password_not_set`);
   return (
-    <div className="flex flex-col gap-5">
-      <p className="text-sm text-muted-foreground">{t(`${k}.form.done_body`, { name: creds.name })}</p>
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-6 gap-y-3 rounded-2xl bg-secondary/60 px-4 py-3.5 text-sm">
-        <dt className="text-muted-foreground">{t(`${k}.form.username`)}</dt>
-        <dd className="select-all break-all font-mono">{creds.identifier}</dd>
-        <dt className="text-muted-foreground">{t(`${k}.form.password`)}</dt>
-        <dd className="select-all break-all font-mono">{creds.password}</dd>
-      </dl>
-      {creds.mustChange && <p className="-mt-2 text-xs text-muted-foreground">{t(`${k}.form.done_must_change`)}</p>}
-      <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-        <button type="button" className={cn(outlineBtn, "justify-center")} onClick={() => void copy(text)}>
-          {copied ? <Check className="h-4 w-4 text-success" aria-hidden /> : <Copy className="h-4 w-4" aria-hidden />}
-          {t(`${k}.form.${copied ? "password_copied" : "copy_credentials"}`)}
-        </button>
-        <button type="button" className={cn(solidBtn, "justify-center")} onClick={onClose} autoFocus>
-          {t(`${k}.form.done`)}
-        </button>
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border px-3.5 py-2.5">
+        <span className={cn("text-sm", user.setup_link_send_error ? "text-destructive" : "text-muted-foreground")}>{status}</span>
+        {user.email ? (
+          <button type="button" className={outlineBtn} disabled={busy} onClick={() => onSendLink(user)}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mail className="h-4 w-4" aria-hidden />}
+            {t(`${k}.form.${user.has_password ? "send_reset" : "resend_invite"}`)}
+          </button>
+        ) : (
+          <span className="text-xs text-muted-foreground">{t(`${k}.form.link_needs_email`)}</span>
+        )}
       </div>
+      <p className="text-xs text-muted-foreground">{t(`${k}.form.link_hint`)}</p>
     </div>
   );
 }
@@ -428,14 +329,18 @@ function CredentialsStep({ creds, t, onClose }: { creds: Credentials; t: T; onCl
 function UserFormDialog({
   user,
   busy,
+  linkBusy,
   t,
   onSubmit,
+  onSendLink,
   onClose,
 }: {
   user: UserRow | null;
   busy: boolean;
+  linkBusy: boolean;
   t: T;
   onSubmit: (v: FormValues) => Promise<boolean>;
+  onSendLink: (u: UserRow) => void;
   onClose: () => void;
 }) {
   const editing = !!user;
@@ -445,39 +350,22 @@ function UserFormDialog({
   const [identifier, setIdentifier] = useState(user?.identifier ?? "");
   // Until the admin types a username, keep suggesting one from the name.
   const [identifierTouched, setIdentifierTouched] = useState(editing);
-  // New users get a strong generated password; existing ones keep theirs unless the admin opts in.
-  const [settingPassword, setSettingPassword] = useState(!editing);
-  const [password, setPassword] = useState(() => (editing ? "" : generatePassword()));
-  const [mustChange, setMustChange] = useState(true);
   const [admin, setAdmin] = useState(!!user && isAdmin(user));
   const initialMaxKeys = user?.max_api_keys ?? API_KEYS_LIMIT.default;
   const initialMaxDays = user?.api_key_max_ttl_days ?? API_KEY_DAYS.default;
   const [apiKeysEnabled, setApiKeysEnabled] = useState(!!user?.can_create_api_keys);
   const [maxKeys, setMaxKeys] = useState(String(initialMaxKeys));
   const [maxDays, setMaxDays] = useState(String(initialMaxDays));
-  const [creds, setCreds] = useState<Credentials | null>(null);
 
   const ident = identifierTouched ? identifier : suggestIdentifier(displayName, email);
-  const passwordOk = !settingPassword || isPasswordValid(password, ident);
+  // New accounts get their password through the invitation email, so it must be there.
+  const emailOk = editing ? !email.trim() || looksLikeEmail(email) : looksLikeEmail(email);
   const maxKeysValue = parseInRange(maxKeys, API_KEYS_LIMIT);
   const maxDaysValue = parseInRange(maxDays, API_KEY_DAYS);
   // The limits only matter while the switch is on; when off, unparseable edits fall back to the stored values.
   const apiKeysOk = !apiKeysEnabled || (maxKeysValue !== null && maxDaysValue !== null);
   const revokingKeys = editing && !!user.can_create_api_keys && !apiKeysEnabled;
-  const canSubmit = !busy && !!ident.trim() && passwordOk && apiKeysOk;
-
-  const startPassword = () => {
-    setPassword(generatePassword());
-    setSettingPassword(true);
-  };
-
-  if (creds) {
-    return (
-      <Dialog title={t(`${k}.form.${creds.created ? "done_title_new" : "done_title_password"}`)} closeLabel={t(`${k}.form.done`)} onClose={onClose} className="max-w-lg">
-        <CredentialsStep creds={creds} t={t} onClose={onClose} />
-      </Dialog>
-    );
-  }
+  const canSubmit = !busy && !!ident.trim() && emailOk && apiKeysOk;
 
   return (
     <Dialog title={t(`${k}.form.${editing ? "title_edit" : "title_new"}`)} closeLabel={t(`${k}.form.cancel`)} onClose={onClose} className="max-w-xl">
@@ -488,17 +376,14 @@ function UserFormDialog({
           if (!canSubmit) return;
           const v: FormValues = {
             identifier: ident.trim(),
-            password: settingPassword ? password : "",
             displayName: displayName.trim(),
             email: email.trim(),
             admin,
-            mustChange: settingPassword && mustChange,
             can_create_api_keys: apiKeysEnabled,
             max_api_keys: maxKeysValue ?? initialMaxKeys,
             api_key_max_ttl_days: maxDaysValue ?? initialMaxDays,
           };
-          const ok = await onSubmit(v);
-          if (ok && v.password) setCreds({ identifier: v.identifier, password: v.password, name: v.displayName || v.identifier, mustChange: v.mustChange, created: !editing });
+          await onSubmit(v);
         }}
       >
         {editing && (
@@ -524,7 +409,7 @@ function UserFormDialog({
               className={inputCls}
             />
           </Field>
-          <Field label={t(`${k}.form.email`)} htmlFor="user-form-email" optional t={t}>
+          <Field label={t(`${k}.form.email`)} htmlFor="user-form-email" optional={editing} hint={editing ? undefined : t(`${k}.form.email_invite_hint`)} t={t}>
             <input
               id="user-form-email"
               type="email"
@@ -532,6 +417,8 @@ function UserFormDialog({
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t(`${k}.form.email_placeholder`)}
               autoComplete="off"
+              required={!editing}
+              aria-invalid={!!email.trim() && !looksLikeEmail(email)}
               className={inputCls}
             />
           </Field>
@@ -558,33 +445,17 @@ function UserFormDialog({
             </Field>
           )}
 
-          {sso ? (
+          {!editing ? (
+            <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">{t(`${k}.form.invite_note`)}</p>
+          ) : sso ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
               <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
                 {t(`${k}.form.password_sso`, { provider: t(`${k}.access.${user.login_method}`) })}
               </p>
             </div>
-          ) : settingPassword ? (
-            <div className="flex flex-col gap-2">
-              <PasswordField value={password} onChange={setPassword} identifier={ident} mustChange={mustChange} onMustChange={setMustChange} t={t} />
-              {editing && (
-                <button type="button" onClick={() => setSettingPassword(false)} className="focus-ring self-start rounded-md text-xs font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground">
-                  {t(`${k}.form.password_keep_current`)}
-                </button>
-              )}
-            </div>
           ) : (
-            <div className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border px-3.5 py-2.5">
-                <span className="text-sm text-muted-foreground">{t(`${k}.form.password_unchanged`)}</span>
-                <button type="button" className={outlineBtn} onClick={startPassword}>
-                  <KeyRound className="h-4 w-4" aria-hidden />
-                  {t(`${k}.form.password_change`)}
-                </button>
-              </div>
-            </div>
+            <PasswordAccess user={user} busy={linkBusy} t={t} onSendLink={onSendLink} />
           )}
         </div>
 
@@ -612,7 +483,7 @@ function UserFormDialog({
           </button>
           <button type="submit" className={cn(solidBtn, "justify-center")} disabled={!canSubmit}>
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
-            {busy ? t(`${k}.form.saving`) : t(`${k}.form.${editing ? "save" : "create"}`)}
+            {busy ? t(`${k}.form.saving`) : t(`${k}.form.${editing ? "save" : "create_and_invite"}`)}
           </button>
         </div>
       </form>
@@ -720,6 +591,9 @@ export default function UsersPage() {
 
   const [formUser, setFormUser] = useState<UserRow | "new" | null>(null);
   const [saving, setSaving] = useState(false);
+  const [linkBusy, setLinkBusy] = useState<string | null>(null);
+  // null while unknown: creation stays possible and the backend answers 409 if SMTP is missing.
+  const [smtpConfigured, setSmtpConfigured] = useState<boolean | null>(null);
   const [deleteUser, setDeleteUser] = useState<UserRow | null>(null);
   const [resetUser, setResetUser] = useState<UserRow | null>(null);
   const [profileUser, setProfileUser] = useState<{ user: UserRow; initial: string[] } | null>(null);
@@ -747,6 +621,10 @@ export default function UsersPage() {
       .then((res) => (res.ok ? res.json() : Promise.reject(res)))
       .then((data) => setAllProfiles(data || []))
       .catch(() => {});
+    apiFetch(`${apiBase()}/admin/smtp`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => setSmtpConfigured(!!data.configured))
+      .catch(() => {});
   }, [loadUsers]);
 
   const plural = (n: number) => t(`${k}.count_${new Intl.PluralRules(getLocale()).select(n) === "one" ? "one" : "other"}`, { count: n });
@@ -762,6 +640,8 @@ export default function UsersPage() {
   const showSecurity = loginMode === "password";
   // With SSO, accounts are created at first sign-in (see the new-account policy), never here.
   const canCreate = loginMode === "password";
+  // Accounts get their password through an invitation email, so creation needs SMTP.
+  const smtpMissing = smtpConfigured === false;
   const grid = GRIDS[`${showMigration ? 1 : 0}${showSecurity ? 1 : 0}`];
 
   const rows = useMemo(() => {
@@ -793,17 +673,12 @@ export default function UsersPage() {
     { value: "off", label: t(`${k}.badge.twofa_off`) },
   ];
 
-  /** Resolves true on success; when a password was set the dialog stays open to show the credentials. */
+  /** Resolves true on success. New accounts get an invitation email: the admin never sees a password or link. */
   const saveUser = async (v: FormValues): Promise<boolean> => {
     const editing = formUser !== null && formUser !== "new";
     const current = editing ? (formUser as UserRow) : null;
-    if (!editing && (!v.identifier || !v.password)) {
+    if (!editing && (!v.identifier || !looksLikeEmail(v.email))) {
       setToast({ message: t(`${k}.form.required`), variant: "error" });
-      return false;
-    }
-    const withPassword = !!v.password && !(current && isSsoUser(current));
-    if (withPassword && !isPasswordValid(v.password, current?.identifier ?? v.identifier)) {
-      setToast({ message: t(`${k}.form.password_weak`), variant: "error" });
       return false;
     }
     setSaving(true);
@@ -819,26 +694,40 @@ export default function UsersPage() {
         api_key_max_ttl_days: v.api_key_max_ttl_days,
       };
       if (!editing) payload.identifier = v.identifier;
-      if (withPassword) {
-        payload.password = v.password;
-        payload.must_change_password = v.mustChange;
-      }
       const res = await apiFetch(editing ? `${apiBase()}/admin/users/${(formUser as UserRow).id}` : `${apiBase()}/admin/users`, {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (!editing && res.status === 409) {
-        // SSO was switched on meanwhile: creation is no longer allowed.
-        setFormUser(null);
-        setToast({ message: t(`${k}.toast.sso_user_creation_disabled`), variant: "warning" });
-        void loadUsers();
-        return false;
+        const code = await errorDetail(res, "");
+        if (code === "smtp_not_configured") {
+          // SMTP was switched off meanwhile: nothing was created.
+          setSmtpConfigured(false);
+          setToast({ message: t(`${k}.toast.smtp_missing`), variant: "warning" });
+          return false;
+        }
+        if (code === "sso_active_user_creation_disabled") {
+          // SSO was switched on meanwhile: creation is no longer allowed.
+          setFormUser(null);
+          setToast({ message: t(`${k}.toast.sso_user_creation_disabled`), variant: "warning" });
+          void loadUsers();
+          return false;
+        }
+        throw new Error(code || "409");
       }
       if (!res.ok) throw new Error(await errorDetail(res, String(res.status)));
-      if (!withPassword) {
-        setFormUser(null);
+      setFormUser(null);
+      if (editing) {
         setToast({ message: t(`${k}.toast.updated`), variant: "success" });
+      } else {
+        const data = await res.json().catch(() => ({}));
+        const invite = data?.invite;
+        setToast(
+          invite?.sent
+            ? { message: t(`${k}.toast.invite_sent`, { email: v.email }), variant: "success" }
+            : { message: t(`${k}.toast.invite_failed`, { email: v.email, error: emailError(t, invite?.error) }), variant: "warning" },
+        );
       }
       void loadUsers();
       return true;
@@ -847,6 +736,31 @@ export default function UsersPage() {
       return false;
     } finally {
       setSaving(false);
+    }
+  };
+
+  /** Emails a one-time link to set (invite) or reset the password. The link itself never reaches the admin. */
+  const sendLink = async (user: UserRow) => {
+    setLinkBusy(user.id);
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/users/${user.id}/password-link`, { method: "POST" });
+      if (!res.ok) {
+        const code = await errorDetail(res, String(res.status));
+        if (code === "smtp_not_configured") setSmtpConfigured(false);
+        setToast({ message: t(`${k}.toast.link_failed`, { error: emailError(t, code) }), variant: "error" });
+        return;
+      }
+      const data = await res.json();
+      setToast(
+        data.sent
+          ? { message: t(`${k}.toast.link_sent_${data.purpose === "reset" ? "reset" : "invite"}`, { email: user.email || "" }), variant: "success" }
+          : { message: t(`${k}.toast.link_failed`, { error: emailError(t, data.error) }), variant: "warning" },
+      );
+      void loadUsers();
+    } catch (err) {
+      fail("save_failed", err);
+    } finally {
+      setLinkBusy(null);
     }
   };
 
@@ -928,7 +842,7 @@ export default function UsersPage() {
           <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.subtitle`)}</p>
         </div>
         {canCreate ? (
-          <button type="button" className={solidBtn} onClick={() => setFormUser("new")}>
+          <button type="button" className={solidBtn} onClick={() => setFormUser("new")} disabled={smtpMissing} title={smtpMissing ? t(`${k}.smtp_missing.short`) : undefined}>
             <Plus className="h-4 w-4" aria-hidden />
             {t(`${k}.add`)}
           </button>
@@ -943,6 +857,18 @@ export default function UsersPage() {
           )
         )}
       </header>
+
+      {smtpMissing && (
+        <div className="flex items-start gap-2.5 rounded-2xl bg-warning/10 px-4 py-3 text-sm" role="alert">
+          <MailWarning className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+          <p className="min-w-0 flex-1 leading-relaxed text-muted-foreground">
+            {t(`${k}.smtp_missing.body`)}{" "}
+            <Link href="/settings#smtp" className="focus-ring rounded font-medium text-foreground underline underline-offset-4">
+              {t(`${k}.smtp_missing.link`)}
+            </Link>
+          </p>
+        </div>
+      )}
 
       <div role="tablist" aria-label={t(`${k}.tabs.aria`)} className="no-scrollbar -mt-2 flex gap-1 overflow-x-auto border-b border-border/60">
         {tabs.map((x) => {
@@ -1002,7 +928,7 @@ export default function UsersPage() {
                 <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.empty.title`)}</h2>
                 <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">{t(canCreate ? `${k}.empty.body` : `${k}.empty.sso_body`)}</p>
                 {canCreate && (
-                  <button type="button" className={cn(solidBtn, "mt-6")} onClick={() => setFormUser("new")}>
+                  <button type="button" className={cn(solidBtn, "mt-6")} onClick={() => setFormUser("new")} disabled={smtpMissing}>
                     <Plus className="h-4 w-4" aria-hidden />
                     {t(`${k}.add`)}
                   </button>
@@ -1062,6 +988,25 @@ export default function UsersPage() {
                                         {t(`${k}.form.api_keys.badge`, { active: u.api_keys_active ?? 0, max: u.max_api_keys ?? API_KEYS_LIMIT.default })}
                                       </span>
                                     )}
+                                    {u.setup_link_send_error ? (
+                                      <span
+                                        title={emailError(t, u.setup_link_send_error)}
+                                        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
+                                      >
+                                        <MailWarning className="h-3 w-3" aria-hidden />
+                                        {t(`${k}.badge.link_failed`)}
+                                      </span>
+                                    ) : (
+                                      u.setup_link_pending && (
+                                        <span
+                                          title={u.setup_link_expires_at ? t(`${k}.badge.link_expires`, { date: formatDate(u.setup_link_expires_at) }) : undefined}
+                                          className="inline-flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                        >
+                                          <Mail className="h-3 w-3" aria-hidden />
+                                          {t(`${k}.badge.link_${u.setup_link_purpose === "reset" ? "reset" : "invite"}`)}
+                                        </span>
+                                      )
+                                    )}
                                   </div>
                                   {u.display_name && <div className="truncate font-mono text-xs text-muted-foreground">{u.identifier}</div>}
                                 </div>
@@ -1074,6 +1019,11 @@ export default function UsersPage() {
                                 {u.totp_enabled && (
                                   <IconAction label={t(`${k}.row.reset`, { name })} onClick={() => setResetUser(u)}>
                                     <KeyRound className="h-4 w-4" aria-hidden />
+                                  </IconAction>
+                                )}
+                                {!isSsoUser(u) && !!u.email && (
+                                  <IconAction label={t(`${k}.row.${u.has_password ? "send_reset" : "resend_invite"}`, { name })} onClick={() => linkBusy !== u.id && void sendLink(u)}>
+                                    {linkBusy === u.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mail className="h-4 w-4" aria-hidden />}
                                   </IconAction>
                                 )}
                                 <IconAction label={t(`${k}.row.edit`, { name })} onClick={() => setFormUser(u)}>
@@ -1178,7 +1128,15 @@ export default function UsersPage() {
       </div>
 
       {formUser && (formUser !== "new" || canCreate) && (
-        <UserFormDialog user={formUser === "new" ? null : formUser} busy={saving} t={t} onSubmit={saveUser} onClose={() => !saving && setFormUser(null)} />
+        <UserFormDialog
+          user={formUser === "new" ? null : (users.find((u) => u.id === formUser.id) ?? formUser)}
+          busy={saving}
+          linkBusy={formUser !== "new" && linkBusy === formUser.id}
+          t={t}
+          onSubmit={saveUser}
+          onSendLink={(u) => void sendLink(u)}
+          onClose={() => !saving && setFormUser(null)}
+        />
       )}
 
       {profileUser && (

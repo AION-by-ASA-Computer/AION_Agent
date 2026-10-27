@@ -55,15 +55,14 @@
       "current_password": "Current password",
       "new_password": "New password",
       "confirm_password": "Confirm password",
-      "password_hint": "At least 6 characters.",
-      "password_min": "New password must be at least 6 characters.",
       "password_mismatch": "Confirmation does not match the new password.",
       "password_error": "Could not update password.",
       "password_updated": "Password updated successfully.",
       "update_password": "Update password",
       "must_change_title": "Temporary password",
       "must_change_desc": "For security, please update your password before continuing.",
-      "desc": "Keep your account protected."
+      "desc": "Keep your account protected.",
+      "password_policy": "The new password doesn't meet the requirements."
     },
     "api_keys": {
       "title": "API keys",
@@ -844,7 +843,7 @@
       "sso_domain_not_allowed": "This account isn't enabled for access. You may be signed in with the wrong account — use your work account instead.",
       "sso_required": "SSO sign-in is required for this account.",
       "password_login_disabled": "Password sign-in is disabled.",
-      "temp_password_expired": "Your temporary password has expired. Contact your administrator.",
+      "temp_password_expired": "Your temporary password has expired. Use “Forgot password?” to get a link by email, or ask your administrator to send you one.",
       "sso_failed": "SSO authentication failed.",
       "sso_start_failed": "Unable to start SSO sign-in.",
       "sso_token_invalid": "Invalid SSO token.",
@@ -861,11 +860,90 @@
       "user_not_found": "User not found.",
       "sso_signup_closed": "New accounts aren't being accepted right now. Contact your administrator to request access.",
       "sso_signup_not_allowed": "Your account isn't enabled for this platform yet. Contact your administrator to request access."
-    }
+    },
+    "forgot_password": "Forgot password?"
   },
   "authgate": {
     "checking": "Checking access…",
     "redirecting": "Redirecting to login…"
+  },
+  "password_policy": {
+    "rules": {
+      "too_short": "At least {{min}} characters",
+      "too_long": "At most {{max}} characters",
+      "lowercase": "A lowercase letter",
+      "uppercase": "An uppercase letter",
+      "digit": "A number",
+      "symbol": "A symbol (e.g. ! @ # -)",
+      "contains_username": "Doesn't contain your username"
+    },
+    "met": "met",
+    "not_met": "not met",
+    "server_error": "The password doesn't meet these requirements: {{list}}.",
+    "server_error_generic": "The password doesn't meet the security requirements."
+  },
+  "set_password": {
+    "title_invite": "Set your password",
+    "title_reset": "Reset your password",
+    "title_migration": "Set your password",
+    "greeting": "Hi {{name}}, choose a password for your account.",
+    "migration_note": "After signing in, you'll be asked to link your company SSO account.",
+    "username": "Username",
+    "new_password": "New password",
+    "confirm_password": "Confirm password",
+    "mismatch": "Passwords don't match.",
+    "submit": "Save password",
+    "expires": "This link expires on {{date}}.",
+    "checking": "Checking your link…",
+    "success_title": "Password saved",
+    "success_desc": "You can now sign in with your new password.",
+    "go_login": "Go to login",
+    "go_admin": "Go to admin panel",
+    "request_new": "Request a new link",
+    "back_login": "← Back to login",
+    "error_title": {
+      "token_invalid": "Link not valid",
+      "token_expired": "Link expired",
+      "sso_user": "Sign in with SSO",
+      "rate_limited": "Too many attempts",
+      "generic": "Something went wrong"
+    },
+    "error": {
+      "token_invalid": "This link is invalid or has already been used. Request a new one to continue.",
+      "token_expired": "This link has expired. Request a new one to continue.",
+      "sso_user": "This account signs in with your company SSO, so it doesn't need a password.",
+      "rate_limited": "Too many attempts. Please wait a few minutes and try again.",
+      "generic": "We couldn't complete the request. Please try again.",
+      "network": "Unable to reach the server. Check your connection and try again."
+    }
+  },
+  "forgot_password": {
+    "title": "Forgot your password?",
+    "desc": "Enter your username or email and we'll send you a link to choose a new password.",
+    "identifier": "Username or email",
+    "submit": "Send link",
+    "sent_title": "Check your email",
+    "sent_desc": "If an account exists, we've sent an email with a link to set a new password. Don't forget to check your spam folder.",
+    "try_again": "Use a different username or email",
+    "back_login": "← Back to login",
+    "error": {
+      "rate_limited": "Too many requests. Please wait a few minutes and try again.",
+      "generic": "We couldn't send the request. Please try again.",
+      "network": "Unable to reach the server. Check your connection and try again."
+    }
+  },
+  "change_password": {
+    "title": "Change password",
+    "desc": "You're using a temporary password. Update it now or remind me tomorrow (skippable for 24h).",
+    "current": "Current password",
+    "new": "New password",
+    "confirm": "Confirm new password",
+    "mismatch": "Passwords don't match.",
+    "submit": "Update password",
+    "skip": "Remind me tomorrow",
+    "success": "Password updated. Redirecting…",
+    "session_expired": "Session expired. Please sign in again.",
+    "error": "Password change failed."
   },
   "toast": {
     "username_empty": "Username cannot be empty.",

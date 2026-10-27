@@ -8,6 +8,7 @@ import { apiBase } from "@/lib/api";
 import { setChangePwSkipUntil } from "@/lib/auth/storage";
 import { apiFetch } from "@/lib/api/headers";
 import { cn } from "@/lib/cn";
+import { PASSWORD_MIN_LENGTH, checkPassword, type PasswordRule } from "@/lib/passwordPolicy";
 import {
   AuthAlert,
   AuthHeading,
@@ -18,6 +19,18 @@ import {
 } from "@/components/auth/AuthShell";
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+// Same rules the backend enforces (src/data/user_password.py).
+const RULE_TEXT: Record<PasswordRule, string> = {
+  too_short: `at least ${PASSWORD_MIN_LENGTH} characters`,
+  lowercase: "a lowercase letter",
+  uppercase: "an uppercase letter",
+  digit: "a number",
+  symbol: "a symbol (e.g. ! @ # -)",
+  contains_username: "must not contain your username",
+};
+
+const describe = (codes: string[]) => `The new password needs ${codes.map((c) => RULE_TEXT[c as PasswordRule] ?? c).join(", ")}.`;
 
 export default function ChangePasswordPage() {
   const router = useRouter();
@@ -31,8 +44,9 @@ export default function ChangePasswordPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    if (newPw.length < 6) {
-      setErr("The new password must be at least 6 characters long.");
+    const failing = checkPassword(newPw).filter((r) => !r.ok).map((r) => r.code);
+    if (failing.length) {
+      setErr(describe(failing));
       return;
     }
     if (newPw !== confirmPw) {
@@ -46,9 +60,11 @@ export default function ChangePasswordPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ old_password: oldPw, new_password: newPw }),
       });
-      const j = (await r.json().catch(() => ({}))) as { detail?: string };
+      const j = (await r.json().catch(() => ({}))) as { detail?: string | { code?: string; violations?: string[] } };
       if (!r.ok) {
-        setErr(j?.detail || "Password change failed");
+        const d = j?.detail;
+        if (typeof d === "object" && d?.code === "password_policy") setErr(describe(d.violations ?? []));
+        else setErr((typeof d === "string" && d) || "Password change failed");
         return;
       }
       setOk(true);
@@ -84,8 +100,8 @@ export default function ChangePasswordPage() {
         <input
           type="password"
           className={authInputCls}
-          placeholder="New password (min. 6 characters)"
-          aria-label="New password (min. 6 characters)"
+          placeholder="New password (min. 8 characters, mixed case, number, symbol)"
+          aria-label="New password (min. 8 characters, mixed case, number, symbol)"
           value={newPw}
           onChange={(e) => setNewPw(e.target.value)}
           autoComplete="new-password"

@@ -197,6 +197,16 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
             "CREATE INDEX IF NOT EXISTS idx_audit_log_trace ON audit_log(trace_id)",
         )
 
+    # Esito dell'invio del link password (a9b0c1d029): la tabella puo' esistere gia'
+    # da create_all senza queste colonne.
+    if await _sqlite_table_exists(conn, "password_setup_tokens"):
+        await _sqlite_add_column_if_missing(
+            conn, "password_setup_tokens", "sent_at", "sent_at DATETIME"
+        )
+        await _sqlite_add_column_if_missing(
+            conn, "password_setup_tokens", "send_error", "send_error VARCHAR(64)"
+        )
+
     # scheduled_jobs.sql_query_project (m4n5o6p014). create_all() does not ALTER
     # existing tables; legacy DBs can have scheduled_jobs without this column while
     # alembic is blocked on k2l3m4n012 (llm_providers already from create_all).

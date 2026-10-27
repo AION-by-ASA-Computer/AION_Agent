@@ -1033,3 +1033,75 @@ class AuthSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class SmtpSettings(Base):
+    """Server SMTP per le email di piattaforma (migration a9b0c1d029).
+
+    Una riga per tenant. La password e' cifrata con credential_store.
+    """
+
+    __tablename__ = "smtp_settings"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tenants.id"), primary_key=True
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    host: Mapped[Optional[str]] = mapped_column(String(256))
+    port: Mapped[int] = mapped_column(Integer, default=587, server_default="587")
+    # Valori: 'starttls', 'ssl', 'none'
+    security: Mapped[str] = mapped_column(
+        String(16), default="starttls", server_default="starttls", nullable=False
+    )
+    username: Mapped[Optional[str]] = mapped_column(String(256))
+    password_encrypted: Mapped[Optional[str]] = mapped_column(Text)
+    from_address: Mapped[Optional[str]] = mapped_column(String(256))
+    from_name: Mapped[Optional[str]] = mapped_column(String(256))
+    reply_to: Mapped[Optional[str]] = mapped_column(String(256))
+    # Valori: 'it', 'en'
+    email_language: Mapped[str] = mapped_column(
+        String(8), default="it", server_default="it", nullable=False
+    )
+    last_test_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_test_ok: Mapped[Optional[bool]] = mapped_column(Boolean)
+    last_test_error: Mapped[Optional[str]] = mapped_column(String(64))
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class PasswordSetupToken(Base):
+    """Link monouso inviati via email per impostare la password.
+
+    Si salva solo lo SHA-256 del token: il valore in chiaro esiste solo
+    nell'email inviata all'utente (migration a9b0c1d029).
+    """
+
+    __tablename__ = "password_setup_tokens"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    # Valori: 'invite', 'reset', 'migration'
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False)
+    # NULL = richiesta self-service ("Password dimenticata?")
+    created_by_user_id: Mapped[Optional[str]] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # Codice dell'errore SMTP se l'invio e' fallito (es. smtp_auth_failed)
+    send_error: Mapped[Optional[str]] = mapped_column(String(64))
+    consumed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))

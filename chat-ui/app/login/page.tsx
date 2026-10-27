@@ -31,6 +31,7 @@ export default function LoginPage() {
   const [ssoEnabled, setSsoEnabled] = useState<boolean>(false);
   const [ssoProvider, setSsoProvider] = useState<"microsoft" | "google" | null>(null);
   const [passwordVisible, setPasswordVisible] = useState<boolean>(true);
+  const [resetAvailable, setResetAvailable] = useState<boolean>(false);
   const [mfa, setMfa] = useState<MfaChallenge | null>(null);
 
   const ssoErrorMessage = useCallback(
@@ -50,6 +51,10 @@ export default function LoginPage() {
         setSsoEnabled(s.sso_enabled || false);
         setSsoProvider(s.sso_provider || null);
         setPasswordVisible(s.password_login_visible ?? true);
+        setResetAvailable(Boolean(s.password_reset_available));
+        // Prefill dopo /set-password (?username=...).
+        const prefill = new URLSearchParams(window.location.search).get("username");
+        if (prefill) setUsername((u) => u || prefill);
       }
     });
 
@@ -172,6 +177,14 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
               />
+              {resetAvailable && (
+                <Link
+                  href="/forgot-password"
+                  className="focus-ring -mt-1 self-end rounded-md px-1 py-0.5 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
+                >
+                  {t("login.forgot_password")}
+                </Link>
+              )}
               {err && <AuthAlert>{err}</AuthAlert>}
               <button type="submit" className={cn(authPrimaryBtnCls, "mt-1")}>
                 {t("login.btn")}

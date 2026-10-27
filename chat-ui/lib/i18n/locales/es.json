@@ -164,13 +164,12 @@
       "new_password": "Nueva contraseña",
       "password_desc": "Actualiza la contraseña de tu cuenta.",
       "password_error": "No se pudo actualizar la contraseña.",
-      "password_hint": "Al menos 6 caracteres.",
-      "password_min": "La nueva contraseña debe tener al menos 6 caracteres.",
       "password_mismatch": "La confirmación no coincide con la nueva contraseña.",
       "password_title": "Contraseña",
       "password_updated": "Contraseña actualizada con éxito.",
       "update_password": "Actualizar contraseña",
-      "desc": "Mantén tu cuenta protegida."
+      "desc": "Mantén tu cuenta protegida.",
+      "password_policy": "La nueva contraseña no cumple los requisitos."
     },
     "api_keys": {
       "title": "Claves API",
@@ -844,7 +843,7 @@
       "sso_domain_not_allowed": "Esta cuenta no está habilitada para acceder. Es posible que estés usando la cuenta equivocada: inicia sesión con tu cuenta de trabajo.",
       "sso_required": "Esta cuenta requiere inicio de sesión SSO.",
       "password_login_disabled": "El inicio de sesión con contraseña está deshabilitado.",
-      "temp_password_expired": "La contraseña temporal ha caducado. Contacta con el administrador.",
+      "temp_password_expired": "La contraseña temporal ha caducado. Usa «¿Olvidaste tu contraseña?» para recibir un enlace por correo, o pídeselo al administrador.",
       "sso_failed": "Error de autenticación SSO.",
       "sso_start_failed": "No se pudo iniciar el acceso SSO.",
       "sso_token_invalid": "Token SSO no válido.",
@@ -861,11 +860,90 @@
       "user_not_found": "Usuario no encontrado.",
       "sso_signup_closed": "Ahora mismo no se aceptan cuentas nuevas. Contacta con tu administrador para solicitar acceso.",
       "sso_signup_not_allowed": "Tu cuenta aún no está habilitada para esta plataforma. Contacta con tu administrador para solicitar acceso."
-    }
+    },
+    "forgot_password": "¿Has olvidado tu contraseña?"
   },
   "authgate": {
     "checking": "Verificando acceso…",
     "redirecting": "Redirigiendo al login…"
+  },
+  "password_policy": {
+    "rules": {
+      "too_short": "Al menos {{min}} caracteres",
+      "too_long": "Como máximo {{max}} caracteres",
+      "lowercase": "Una letra minúscula",
+      "uppercase": "Una letra mayúscula",
+      "digit": "Un número",
+      "symbol": "Un símbolo (p. ej. ! @ # -)",
+      "contains_username": "No contiene tu nombre de usuario"
+    },
+    "met": "cumplido",
+    "not_met": "no cumplido",
+    "server_error": "La contraseña no cumple estos requisitos: {{list}}.",
+    "server_error_generic": "La contraseña no cumple los requisitos de seguridad."
+  },
+  "set_password": {
+    "title_invite": "Establece tu contraseña",
+    "title_reset": "Restablece tu contraseña",
+    "title_migration": "Establece tu contraseña",
+    "greeting": "Hola {{name}}, elige una contraseña para tu cuenta.",
+    "migration_note": "Después de iniciar sesión, se te pedirá que vincules tu cuenta SSO de empresa.",
+    "username": "Nombre de usuario",
+    "new_password": "Nueva contraseña",
+    "confirm_password": "Confirmar contraseña",
+    "mismatch": "Las contraseñas no coinciden.",
+    "submit": "Guardar contraseña",
+    "expires": "Este enlace caduca el {{date}}.",
+    "checking": "Comprobando el enlace…",
+    "success_title": "Contraseña guardada",
+    "success_desc": "Ya puedes iniciar sesión con tu nueva contraseña.",
+    "go_login": "Ir al inicio de sesión",
+    "go_admin": "Ir al panel de administración",
+    "request_new": "Solicitar un nuevo enlace",
+    "back_login": "← Volver al inicio de sesión",
+    "error_title": {
+      "token_invalid": "Enlace no válido",
+      "token_expired": "Enlace caducado",
+      "sso_user": "Inicia sesión con SSO",
+      "rate_limited": "Demasiados intentos",
+      "generic": "Algo ha salido mal"
+    },
+    "error": {
+      "token_invalid": "Este enlace no es válido o ya se ha utilizado. Solicita uno nuevo para continuar.",
+      "token_expired": "Este enlace ha caducado. Solicita uno nuevo para continuar.",
+      "sso_user": "Esta cuenta inicia sesión con el SSO de tu empresa, así que no necesita contraseña.",
+      "rate_limited": "Demasiados intentos. Espera unos minutos y vuelve a intentarlo.",
+      "generic": "No se ha podido completar la solicitud. Inténtalo de nuevo.",
+      "network": "No se puede contactar con el servidor. Comprueba tu conexión e inténtalo de nuevo."
+    }
+  },
+  "forgot_password": {
+    "title": "¿Has olvidado tu contraseña?",
+    "desc": "Introduce tu nombre de usuario o tu correo electrónico y te enviaremos un enlace para elegir una nueva contraseña.",
+    "identifier": "Nombre de usuario o correo electrónico",
+    "submit": "Enviar enlace",
+    "sent_title": "Revisa tu correo",
+    "sent_desc": "Si la cuenta existe, te hemos enviado un correo con un enlace para establecer una nueva contraseña. Revisa también la carpeta de spam.",
+    "try_again": "Usar otro nombre de usuario o correo",
+    "back_login": "← Volver al inicio de sesión",
+    "error": {
+      "rate_limited": "Demasiadas solicitudes. Espera unos minutos y vuelve a intentarlo.",
+      "generic": "No se ha podido enviar la solicitud. Inténtalo de nuevo.",
+      "network": "No se puede contactar con el servidor. Comprueba tu conexión e inténtalo de nuevo."
+    }
+  },
+  "change_password": {
+    "title": "Cambiar contraseña",
+    "desc": "Estás usando una contraseña temporal. Actualízala ahora o recuérdamelo mañana (aplazable 24 h).",
+    "current": "Contraseña actual",
+    "new": "Nueva contraseña",
+    "confirm": "Confirmar nueva contraseña",
+    "mismatch": "Las contraseñas no coinciden.",
+    "submit": "Actualizar contraseña",
+    "skip": "Recuérdamelo mañana",
+    "success": "Contraseña actualizada. Redirigiendo…",
+    "session_expired": "Sesión caducada. Vuelve a iniciar sesión.",
+    "error": "No se ha podido cambiar la contraseña."
   },
   "toast": {
     "username_empty": "El nombre de usuario no puede estar vacío.",

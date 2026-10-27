@@ -5,7 +5,16 @@ import os
 import yaml
 import frontmatter
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, File
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 import io
 import zipfile
 import shutil
@@ -67,8 +76,7 @@ from ..mcp_connector_catalog import (
 )
 from ..data.user_password import (
     UserAlreadyExistsError,
-    create_password_user,
-    password_policy_violations,
+    create_invited_user,
 )
 from ..data import api_keys as api_keys_db
 from ..data.models import (
@@ -3800,13 +3808,12 @@ async def json_recovery_stats():
 
 
 class UserCreate(BaseModel):
+    # Nessuna password: l'utente la imposta dal link d'invito inviato all'email.
     identifier: str
-    password: str
+    email: str
     display_name: Optional[str] = None
-    email: Optional[str] = None
     tenant_id: str = "default"
     roles: List[str] = []
-    must_change_password: bool = False
     # Policy API key personali (create dall'utente in chat-ui).
     can_create_api_keys: bool = False
     max_api_keys: int = Field(5, ge=1, le=100)
@@ -3814,9 +3821,9 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
+    # La password non si imposta da qui: POST /admin/users/{id}/password-link.
     display_name: Optional[str] = None
     email: Optional[str] = None
-    password: Optional[str] = None
     roles: Optional[List[str]] = None
     must_change_password: Optional[bool] = None
     can_create_api_keys: Optional[bool] = None
@@ -3828,15 +3835,13 @@ class UserProfilesUpdate(BaseModel):
     allowed_profiles: List[str]
 
 
-def _enforce_password_policy(password: str, identifier: Optional[str]) -> None:
-    """422 se la password non rispetta la policy (vedi ``password_policy_violations``)."""
-    violations = password_policy_violations(password, identifier)
-    if violations:
-        raise HTTPException(
-            status_code=422,
-            detail="Password does not meet the security policy: "
-            + ", ".join(violations),
-        )
+def _valid_email_or_422(value: Optional[str]) -> str:
+    from ..auth.password_setup import normalize_email
+
+    email = normalize_email(value)
+    if not email:
+        raise HTTPException(status_code=422, detail={"code": "invalid_email"})
+    return email
 
 
 def _confirmed_on(idents, provider: Optional[str], since) -> bool:
@@ -3864,6 +3869,9 @@ async def list_users():
     provider = settings.get("sso_provider")
     since = settings.get("migration_started_at")
 
+    from ..auth.password_setup import active_links_by_user
+
+    links = await active_links_by_user(tenant)
     async with get_async_session_maker()() as session:
         q = select(User).order_by(User.created_at.desc())
         rows = (await session.execute(q)).scalars().all()
@@ -3886,17 +3894,24 @@ async def list_users():
                 login_method = "password"
             else:
                 login_method = None
+            link = links.get(r.id)
             return {
                 "has_password": has_password,
                 "login_method": login_method,
+                # Link email per impostare la password ancora valido (mai il link stesso).
+                "setup_link_pending": link is not None,
+                "setup_link_purpose": link["purpose"] if link else None,
+                "setup_link_expires_at": link["expires_at"] if link else None,
+                "setup_link_send_error": link["send_error"] if link else None,
                 "sso_providers": sorted({i.provider for i in idents}),
                 "sso_migration_exempt": exempt,
-                # Da migrare: SSO attivo, ha ancora la password, non esonerato
-                # e non ha confermato l'identita' sul provider attivo.
+                # Da migrare: SSO attivo, ha ancora la password (o un link per
+                # impostarla), non esonerato e non ha confermato l'identita'
+                # sul provider attivo.
                 "migration_pending": bool(
                     login_mode != "password"
                     and provider
-                    and has_password
+                    and (has_password or link is not None)
                     and not exempt
                     and not confirmed
                 ),
@@ -3930,9 +3945,20 @@ async def list_users():
 
 
 @router.post("/users")
-async def create_user(body: UserCreate):
-    """Create a new user."""
+async def create_user(
+    body: UserCreate,
+    request: Request,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+):
+    """Crea un utente senza password e gli invia via email il link d'invito.
+
+    L'admin non sceglie e non vede mai la password (ne' il link).
+    """
+    from ..auth.password_setup import SetupLinkError, issue_setup_links
     from ..auth.sso.login_mode import get_login_settings
+    from ..data.audit import record_admin_action
+    from ..notifications.smtp_settings import smtp_configured
+    from .public_urls import chat_base_url
 
     # Con SSO attivo gli account nascono solo al primo login SSO
     # (vedi signup policy): niente nuovi utenti con password.
@@ -3942,19 +3968,21 @@ async def create_user(body: UserCreate):
             status_code=409,
             detail={"code": "sso_active_user_creation_disabled"},
         )
-    _enforce_password_policy(body.password, body.identifier)
+    email = _valid_email_or_422(body.email)
+    if not await smtp_configured(body.tenant_id):
+        raise HTTPException(status_code=409, detail={"code": "smtp_not_configured"})
     try:
-        uid = await create_password_user(
+        uid = await create_invited_user(
             tenant_id=body.tenant_id,
             identifier=body.identifier,
-            password=body.password,
+            email=email,
             display_name=body.display_name,
-            email=body.email,
             roles=body.roles or [],
-            must_change_password=body.must_change_password,
         )
     except UserAlreadyExistsError:
         raise HTTPException(status_code=400, detail="User already exists")
+    except ValueError:
+        raise HTTPException(status_code=422, detail={"code": "identifier_required"})
     from ..data.models import User
 
     async with get_async_session_maker()() as session:
@@ -3964,7 +3992,98 @@ async def create_user(body: UserCreate):
             u.max_api_keys = body.max_api_keys
             u.api_key_max_ttl_days = body.api_key_max_ttl_days
             await session.commit()
-    return {"status": "success", "id": uid}
+
+    try:
+        links = await issue_setup_links(
+            body.tenant_id,
+            [uid],
+            "invite",
+            actor_user_id=auth.user_row_id,
+            base_url=chat_base_url(request),
+        )
+    except SetupLinkError as e:
+        links = {"sent": [], "failed": [{"reason": e.code}], "missing_email": []}
+    invite = _link_outcome(links)
+    await record_admin_action(
+        tenant_id=body.tenant_id,
+        actor=auth.identifier,
+        operation="user.create",
+        resource_type="user",
+        resource_id=uid,
+        payload={"identifier": body.identifier, "roles": body.roles, "invite": invite},
+    )
+    return {"status": "success", "id": uid, "invite": invite}
+
+
+def _link_outcome(links: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
+    """Esito di un singolo invio (create user / password-link)."""
+    if links["sent"]:
+        return {"sent": True, "expires_at": links["sent"][0]["expires_at"]}
+    if links["missing_email"]:
+        return {"sent": False, "error": "user_email_missing"}
+    reason = links["failed"][0].get("reason") if links["failed"] else "smtp_send_failed"
+    return {"sent": False, "error": reason}
+
+
+@router.post("/users/{user_id}/password-link")
+async def send_password_link(
+    user_id: str,
+    request: Request,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+):
+    """Invia all'utente un link per (re)impostare la password.
+
+    ``reset`` se ha gia' una password, altrimenti ``invite`` (o ``migration``
+    con SSO attivo). La password attuale resta valida finche' l'utente non
+    ne sceglie una nuova.
+    """
+    from ..auth.password_setup import (
+        SetupLinkError,
+        issue_setup_links,
+        user_link_block_reason,
+    )
+    from ..auth.sso.login_mode import get_login_settings, reopen_migration
+    from ..data.audit import record_admin_action
+    from ..data.models import User
+    from .public_urls import chat_base_url
+
+    async with get_async_session_maker()() as session:
+        u = await session.get(User, user_id)
+    if not u:
+        raise HTTPException(status_code=404, detail="User not found")
+    tenant_id = u.tenant_id or "default"
+    blocked = await user_link_block_reason(u)
+    if blocked:
+        raise HTTPException(status_code=409, detail={"code": blocked})
+
+    sso_mode = (await get_login_settings(tenant_id)).get("login_mode") != "password"
+    if u.password_hash:
+        purpose = "reset"
+    else:
+        purpose = "migration" if sso_mode else "invite"
+    try:
+        links = await issue_setup_links(
+            tenant_id,
+            [user_id],
+            purpose,
+            actor_user_id=auth.user_row_id,
+            base_url=chat_base_url(request),
+        )
+    except SetupLinkError as e:
+        raise HTTPException(status_code=409, detail={"code": e.code})
+    outcome = _link_outcome(links)
+    # Con SSO attivo l'utente dovra' collegarsi: serve il form password.
+    if sso_mode and outcome["sent"]:
+        await reopen_migration(tenant_id)
+    await record_admin_action(
+        tenant_id=tenant_id,
+        actor=auth.identifier,
+        operation=f"user.password_link.{purpose}",
+        resource_type="user",
+        resource_id=user_id,
+        payload=outcome,
+    )
+    return {"status": "success", "purpose": purpose, **outcome}
 
 
 @router.put("/users/{user_id}")
@@ -3974,9 +4093,8 @@ async def update_user(
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ):
     """Update an existing user."""
-    from ..data.models import User, UserSsoIdentity
-    from ..data.user_password import get_roles, hash_password, set_roles
-    from ..auth.sso.login_mode import get_login_settings
+    from ..data.models import User
+    from ..data.user_password import get_roles, set_roles
 
     async with get_async_session_maker()() as session:
         u = await session.get(User, user_id)
@@ -4002,43 +4120,10 @@ async def update_user(
                     status_code=409, detail="Cannot remove the last administrator"
                 )
 
-        if body.password:
-            # Un utente migrato a SSO accede solo tramite il provider: impostare
-            # una password locale riaprirebbe l'accesso classico.
-            settings = await get_login_settings(u.tenant_id or "default")
-            if (settings.get("login_mode") or "password") != "password":
-                idents = (
-                    (
-                        await session.execute(
-                            select(UserSsoIdentity).where(
-                                UserSsoIdentity.user_id == user_id
-                            )
-                        )
-                    )
-                    .scalars()
-                    .all()
-                )
-                if _confirmed_on(
-                    idents,
-                    settings.get("sso_provider"),
-                    settings.get("migration_started_at"),
-                ):
-                    raise HTTPException(
-                        status_code=400,
-                        detail="User signs in via SSO; password cannot be set",
-                    )
-
-        if body.password:
-            _enforce_password_policy(body.password, u.identifier)
-
         if body.display_name is not None:
             u.display_name = body.display_name
         if body.email is not None:
-            u.email = body.email
-        if body.password:
-            u.password_hash = hash_password(body.password)
-            # Reset del flag se l'admin assegna una nuova password manualmente.
-            u.must_change_password = False
+            u.email = _valid_email_or_422(body.email) if body.email.strip() else None
         if body.roles is not None:
             set_roles(u, body.roles)
         if body.must_change_password is not None:
@@ -4067,11 +4152,19 @@ async def delete_user(user_id: str):
         _invalidate_cache,
         get_login_settings,
     )
-    from ..data.models import User, UserProfileAccess, UserSsoIdentity
+    from ..data.models import (
+        PasswordSetupToken,
+        User,
+        UserProfileAccess,
+        UserSsoIdentity,
+    )
 
     async with get_async_session_maker()() as session:
         u = await session.get(User, user_id)
         tenant_id = (u.tenant_id if u else None) or "default"
+        await session.execute(
+            delete(PasswordSetupToken).where(PasswordSetupToken.user_id == user_id)
+        )
         # Le FK CASCADE non esistono sui DB SQLite patchati: pulizia esplicita.
         await api_keys_db.delete_all_for_user(session, [user_id])
         # Un'identita' orfana farebbe fallire il primo login SSO successivo

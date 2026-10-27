@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from src.data.bootstrap import ensure_bootstrap_schema
+from src.test.smtp_fakes import configure_smtp, install_fake_smtp, patch_session_makers
 
 PROVIDER = {"provider": "google", "auto_provision": True, "default_roles": ["user"]}
 
@@ -33,10 +34,18 @@ async def _env(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(engine, "get_async_session_maker", lambda: sm)
     import src.chat_auth as ca
 
-    for mod in (lm, prov, ca):
+    import src.auth.sso.config_service as cs
+    from src.notifications import smtp_settings
+
+    for mod in (lm, prov, ca, cs):
         monkeypatch.setattr(mod, "get_async_session_maker", lambda: sm)
+    patch_session_makers(monkeypatch, sm)
     lm._SETTINGS_CACHE.clear()
     lm._PENDING_CACHE.clear()
+    smtp_settings._CACHE.clear()
+    monkeypatch.setenv("AION_CHAT_URL", "https://chat.example.com")
+    fake_smtp = install_fake_smtp(monkeypatch)
+    await configure_smtp()
 
     async def mkuser(name: str, roles=None) -> str:
         return await create_password_user(
@@ -71,6 +80,7 @@ async def _env(tmp_path: Path, monkeypatch):
         "mkuser": mkuser,
         "set": set_settings,
         "get_user": get_user,
+        "smtp": fake_smtp,
     }
     await eng.dispose()
 
@@ -590,7 +600,24 @@ async def _unlink(env, monkeypatch, uid):
             .scalars()
             .first()
         )
-    return await aam.unlink_sso_identity(uid, ident.id, auth=None)
+    return await aam.unlink_sso_identity(uid, ident.id, request=None, auth=_admin())
+
+
+def _admin():
+    from src.api.auth_login import ChatAuthIdentity
+
+    return ChatAuthIdentity(user_row_id=None, identifier="root", via="chat_token")
+
+
+def _sent_to(out) -> list:
+    return [t["user_id"] for t in out["setup_links"]["sent"]]
+
+
+def _assert_no_secrets(out) -> None:
+    import json
+
+    dumped = json.dumps(out, default=str)
+    assert '"password":' not in dumped and "set-password" not in dumped
 
 
 async def _all_linked(env):
@@ -615,9 +642,13 @@ async def test_unlink_without_password_restarts_standard_relink(env, monkeypatch
 
     out = await _unlink(env, monkeypatch, bob)
 
-    # Password temporanea restituita una sola volta, migrazione riaperta.
-    assert [t["user_id"] for t in out["temp_passwords"]] == [bob]
-    assert (await env["get_user"](bob)).password_hash
+    # Link per impostare la password inviato a bob (mai all'admin), migrazione
+    # riaperta: col solo link attivo bob conta come "in attesa".
+    assert _sent_to(out) == [bob]
+    _assert_no_secrets(out)
+    assert env["smtp"].sent[-1]["To"] == "bob@x.io"
+    assert not (await env["get_user"](bob)).password_hash
+    assert await lm.pending_users_count("default", "google") == 1
     assert await lm.is_migration_active("default")
     assert await lm.password_login_visible("default")
     assert await lm.user_needs_link("default", bob)
@@ -660,7 +691,7 @@ async def test_unlink_after_first_setup_opens_migration(env, monkeypatch):
 
     out = await _unlink(env, monkeypatch, bob)
 
-    assert out["temp_passwords"]
+    assert _sent_to(out) == [bob]
     assert (await lm.get_login_settings("default"))["sso_origin"] == "migration"
     assert await lm.password_login_visible("default")
     assert await lm.user_needs_link("default", bob)
@@ -707,9 +738,9 @@ async def test_unlink_other_provider_changes_nothing(env, monkeypatch):
             .scalars()
             .first()
         )
-    out = await aam.unlink_sso_identity(bob, ms.id, auth=None)
+    out = await aam.unlink_sso_identity(bob, ms.id, request=None, auth=_admin())
 
-    assert out["temp_passwords"] == []
+    assert "setup_links" not in out
     lm._invalidate_cache("default")
     assert not await lm.is_migration_active("default")
 
@@ -727,7 +758,7 @@ async def test_unlink_with_password_reopens_without_new_password(env, monkeypatc
         PROVIDER,
         finalize_migration=True,
     )
-    # Es. password temporanea generata da "Senza accesso" e poi ricollegato.
+    # Es. password impostata dal link di "Senza accesso" e poi ricollegato.
     await _set_password(env, bob)
     env["lm"]._invalidate_cache("default")
     old_hash = (await env["get_user"](bob)).password_hash
@@ -735,14 +766,14 @@ async def test_unlink_with_password_reopens_without_new_password(env, monkeypatc
 
     out = await _unlink(env, monkeypatch, bob)
 
-    assert out["temp_passwords"] == []
+    assert "setup_links" not in out
     assert (await env["get_user"](bob)).password_hash == old_hash
     assert await lm.is_migration_active("default")
     assert await lm.user_needs_link("default", bob)
 
 
 @with_env
-async def test_temp_passwords_reopen_completed_migration(env, monkeypatch):
+async def test_setup_links_reopen_completed_migration(env, monkeypatch):
     lm = env["lm"]
     _, bob = await _all_linked(env)
     from src.data.models import UserSsoIdentity
@@ -753,8 +784,67 @@ async def test_temp_passwords_reopen_completed_migration(env, monkeypatch):
         await s.commit()
     lm._invalidate_cache("default")
 
-    out = await lm.generate_temp_passwords("default", [bob], "google")
+    out = await lm.send_migration_links("default", [bob], "google", actor_user_id=None)
 
-    assert out
+    assert [t["user_id"] for t in out["sent"]] == [bob]
     assert await lm.is_migration_active("default")
     assert await lm.password_login_visible("default")
+
+
+@with_env
+async def test_setup_links_refused_for_linked_user(env, monkeypatch):
+    _, bob = await _all_linked(env)
+    with pytest.raises(ValueError, match="user_already_linked"):
+        await env["lm"].send_migration_links(
+            "default", [bob], "google", actor_user_id=None
+        )
+
+
+@with_env
+async def test_unlink_without_smtp_reports_error(env, monkeypatch):
+    from src.notifications.smtp_settings import invalidate_cache
+    from src.data.models import SmtpSettings
+
+    _, bob = await _all_linked(env)
+    async with env["sm"]() as s:
+        (await s.get(SmtpSettings, "default")).enabled = False
+        await s.commit()
+    invalidate_cache("default")
+
+    out = await _unlink(env, monkeypatch, bob)
+
+    assert out["setup_link_error"] == "smtp_not_configured"
+    assert "setup_links" not in out
+    assert env["smtp"].sent == []
+
+
+@with_env
+async def test_back_to_password_sends_links_not_passwords(env, monkeypatch):
+    from src.notifications.smtp_settings import invalidate_cache
+    from src.data.models import AuthSettings, SmtpSettings
+
+    lm = env["lm"]
+    adm, bob = await _all_linked(env)
+
+    # Senza SMTP il cambio e' rifiutato: nessuno resta chiuso fuori.
+    async with env["sm"]() as s:
+        (await s.get(SmtpSettings, "default")).enabled = False
+        await s.commit()
+    invalidate_cache("default")
+    with pytest.raises(ValueError, match="smtp_not_configured"):
+        await lm.set_login_mode("default", "password", actor_user_id=adm)
+    async with env["sm"]() as s:
+        assert (await s.get(AuthSettings, "default")).login_mode == "google"
+
+    async with env["sm"]() as s:
+        (await s.get(SmtpSettings, "default")).enabled = True
+        await s.commit()
+    invalidate_cache("default")
+    result = await lm.set_login_mode("default", "password", actor_user_id=adm)
+
+    assert result["login_mode"] == "password"
+    assert sorted(_sent_to(result)) == sorted([adm, bob])
+    _assert_no_secrets(result)
+    assert sorted(m["To"] for m in env["smtp"].sent) == ["bob@x.io", "root@x.io"]
+    for uid in (adm, bob):
+        assert (await env["get_user"](uid)).password_hash is None

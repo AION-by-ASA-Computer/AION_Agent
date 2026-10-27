@@ -1,14 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
-import { AlertTriangle, CheckCircle2, ChevronRight, Key, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronRight, Key, Loader2, MailWarning } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Dialog } from "@/components/profiles/Dialog";
 import { ghostBtn, outlineBtn, solidBtn } from "@/components/ui/classes";
 import type { ToastState } from "@/components/PageToast";
-import { TempPasswordsDialog } from "./TempPasswordsDialog";
+import { useT } from "@/lib/i18n/use-t";
+import { setupLinksToast } from "./setupLinks";
 import { SsoConfigPanel } from "./SsoConfigPanel";
 import { SignupPolicySection } from "./SignupPolicyPanel";
 
@@ -23,7 +25,11 @@ const MODE_ERRORS: Record<string, string> = {
   migration_in_progress:
     "C'è una migrazione in corso sul provider attuale: attendi che gli utenti si colleghino (o esonerali) prima di cambiare provider.",
   provider_not_configured: "Configura e verifica il provider prima di attivarlo.",
+  smtp_not_configured:
+    "Il server email non è configurato: gli utenti senza password non riceverebbero il link per impostarla. Configura SMTP in Impostazioni prima di cambiare modalità.",
 };
+
+type AffectedUser = { id: string; identifier: string; email: string | null; display_name: string | null };
 
 interface AuthStatus {
   login_mode: LoginMode;
@@ -46,23 +52,21 @@ export function SsoMigrationPanel({
   onModeChanged?: () => void;
   onToast: (toast: ToastState) => void;
 }) {
+  const t = useT();
   const [status, setStatus] = useState<AuthStatus | null>(null);
   // Provider gia' collegato (salvato sul server): la policy nuovi account va
   // prima della guida di collegamento, altrimenti dopo. Assente = in caricamento.
   const [configured, setConfigured] = useState<Partial<Record<SsoProvider, boolean>>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; code?: string } | null>(null);
   
   const [selectedTab, setSelectedTab] = useState<LoginMode>("password");
-  const [showTempDialog, setShowTempDialog] = useState(false);
-  const [tempPasswords, setTempPasswords] = useState<any[]>([]);
-  const [dialogTitle, setDialogTitle] = useState("");
-  const [dialogMessage, setDialogMessage] = useState("");
 
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [showEnableSsoDialog, setShowEnableSsoDialog] = useState(false);
-  const [affectedUsers, setAffectedUsers] = useState<any[]>([]);
+  const [affectedUsers, setAffectedUsers] = useState<AffectedUser[]>([]);
+  const [smtpReady, setSmtpReady] = useState(true);
   const [pendingModeChange, setPendingModeChange] = useState<LoginMode | null>(null);
   const [loadingSimulation, setLoadingSimulation] = useState(false);
 
@@ -104,6 +108,7 @@ export function SsoMigrationPanel({
           const data = await res.json();
           if (data.affected_users && data.affected_users.length > 0) {
             setAffectedUsers(data.affected_users);
+            setSmtpReady(data.smtp_configured !== false);
             setPendingModeChange(newMode);
             setShowConfirmDialog(true);
             setLoadingSimulation(false);
@@ -131,34 +136,28 @@ export function SsoMigrationPanel({
 
       if (!res.ok) {
         let msg = "Errore durante il cambio modalità.";
+        let code: string | undefined;
         try {
           const j = await res.json();
-          if (j.detail?.code) msg = MODE_ERRORS[j.detail.code] ?? `Errore: ${j.detail.code}`;
+          code = j.detail?.code;
+          if (code) msg = MODE_ERRORS[code] ?? `Errore: ${code}`;
           else if (typeof j.detail === "string") msg = j.detail;
         } catch {}
-        setError(msg);
+        setError({ message: msg, code });
         setSaving(false);
         return;
       }
 
       const data = await res.json();
-      
-      if (data.temp_passwords && data.temp_passwords.length > 0) {
-        setTempPasswords(data.temp_passwords);
-        setDialogTitle("Password Temporanee Generate");
-        setDialogMessage(
-          newMode === "password"
-            ? "Hai disattivato il login SSO. I seguenti utenti non avevano una password e hanno ricevuto una password temporanea per poter accedere."
-            : "Hai cambiato provider SSO durante una migrazione. I seguenti utenti necessitano di una password temporanea per ricollegare il loro account."
-        );
-        setShowTempDialog(true);
-      }
-      
+      // Riepilogo dell'invio: i link arrivano solo agli utenti, mai qui.
+      const summary = setupLinksToast(t, data.setup_links);
+      if (summary) onToast(summary);
+
       await fetchStatus();
       onModeChanged?.();
     } catch (e) {
       console.error(e);
-      setError("Errore di rete.");
+      setError({ message: "Errore di rete." });
     } finally {
       setSaving(false);
     }
@@ -227,7 +226,17 @@ export function SsoMigrationPanel({
       {error && (
         <div className="flex items-start gap-3 rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-          <div>{error}</div>
+          <div>
+            {error.message}
+            {error.code === "smtp_not_configured" && (
+              <>
+                {" "}
+                <Link href="/settings#smtp" className="font-medium underline underline-offset-2">
+                  Configura SMTP
+                </Link>
+              </>
+            )}
+          </div>
         </div>
       )}
 
@@ -289,14 +298,6 @@ export function SsoMigrationPanel({
         </div>
       )}
 
-      <TempPasswordsDialog
-        isOpen={showTempDialog}
-        onClose={() => { setShowTempDialog(false); setTempPasswords([]); }}
-        passwords={tempPasswords}
-        title={dialogTitle}
-        message={dialogMessage}
-      />
-
       {showConfirmDialog && pendingModeChange && (
         <Dialog
           title="Conferma cambio metodo di accesso"
@@ -309,13 +310,39 @@ export function SsoMigrationPanel({
         >
           <div className="flex flex-col gap-4">
             <p className="text-sm text-muted-foreground">
-              Stai per cambiare il metodo di accesso in uso. I seguenti {affectedUsers.length} utenti non hanno una password. Ne verrà generata una temporanea per ciascuno, mostrata una sola volta: comunicala in modo sicuro.
+              Stai per cambiare il metodo di accesso in uso. I seguenti {affectedUsers.length} utenti non hanno una password: verrà
+              inviata a ciascuno un&apos;email con un link per impostarla in autonomia. Le password non vengono mai mostrate
+              all&apos;amministratore.
             </p>
+            {!smtpReady && (
+              <div className="flex items-start gap-3 rounded-2xl bg-destructive/10 px-4 py-3 text-sm text-destructive" role="alert">
+                <MailWarning className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <div>
+                  Il server email non è configurato: senza SMTP questi utenti resterebbero senza accesso.{" "}
+                  <Link href="/settings#smtp" className="font-medium underline underline-offset-2">
+                    Configura SMTP
+                  </Link>
+                </div>
+              </div>
+            )}
+            {smtpReady && affectedUsers.some((u) => !u.email) && (
+              <div className="flex items-start gap-3 rounded-2xl bg-warning/10 px-4 py-3 text-sm text-warning" role="status">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <div>
+                  {affectedUsers.filter((u) => !u.email).length} utenti non hanno un indirizzo email e non riceveranno il link:
+                  aggiungilo dalla pagina Utenti e reinvia il link dalla gestione migrazione.
+                </div>
+              </div>
+            )}
             <ul className="-mx-1 flex max-h-64 flex-col overflow-y-auto px-1">
-              {affectedUsers.map((u, i) => (
-                <li key={i} className="border-b border-border/40 py-2.5 last:border-b-0">
+              {affectedUsers.map((u) => (
+                <li key={u.id} className="border-b border-border/40 py-2.5 last:border-b-0">
                   <div className="text-sm font-medium">{u.identifier}</div>
-                  {u.email && <div className="text-xs text-muted-foreground">{u.email}</div>}
+                  {u.email ? (
+                    <div className="text-xs text-muted-foreground">{u.email}</div>
+                  ) : (
+                    <div className="text-xs text-warning">Nessuna email</div>
+                  )}
                 </li>
               ))}
             </ul>
@@ -334,7 +361,7 @@ export function SsoMigrationPanel({
               <button
                 type="button"
                 className={solidBtn}
-                disabled={saving}
+                disabled={saving || !smtpReady}
                 onClick={async () => {
                   setShowConfirmDialog(false);
                   await handleModeChange(pendingModeChange);
@@ -342,7 +369,7 @@ export function SsoMigrationPanel({
                 }}
               >
                 {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
-                Conferma e genera password
+                Conferma e invia email
               </button>
             </div>
           </div>

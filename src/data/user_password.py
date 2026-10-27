@@ -127,12 +127,58 @@ async def create_password_user(
     ``must_change_password``: True per forzare il banner "cambia password" lato
     client al primo login (stile Grafana). Non blocca l'accesso.
     """
-    key = identifier.strip()
-    if not key or not password:
+    if not identifier.strip() or not password:
         raise ValueError("identifier e password sono obbligatori")
+    return await _insert_user(
+        tenant_id=tenant_id,
+        identifier=identifier,
+        password_hash=hash_password(password),
+        display_name=display_name,
+        email=email,
+        roles=roles,
+        must_change_password=must_change_password,
+        session_maker=session_maker,
+    )
 
+
+async def create_invited_user(
+    *,
+    tenant_id: str,
+    identifier: str,
+    email: str,
+    display_name: Optional[str] = None,
+    roles: Optional[Iterable[str]] = None,
+    session_maker: Optional[async_sessionmaker[AsyncSession]] = None,
+) -> str:
+    """Utente senza password: la sceglie lui dal link d'invito via email
+    (vedi ``src/auth/password_setup.py``). Ritorna l'id utente."""
+    if not identifier.strip() or not email:
+        raise ValueError("identifier ed email sono obbligatori")
+    return await _insert_user(
+        tenant_id=tenant_id,
+        identifier=identifier,
+        password_hash=None,
+        display_name=display_name,
+        email=email,
+        roles=roles,
+        must_change_password=False,
+        session_maker=session_maker,
+    )
+
+
+async def _insert_user(
+    *,
+    tenant_id: str,
+    identifier: str,
+    password_hash: Optional[str],
+    display_name: Optional[str],
+    email: Optional[str],
+    roles: Optional[Iterable[str]],
+    must_change_password: bool,
+    session_maker: Optional[async_sessionmaker[AsyncSession]],
+) -> str:
+    key = identifier.strip()
     sm = session_maker or get_async_session_maker()
-    hashed = hash_password(password)
     roles_list = list(roles or [])
 
     async with sm() as session:
@@ -156,7 +202,7 @@ async def create_password_user(
             identifier=key,
             display_name=display_name,
             email=email,
-            password_hash=hashed,
+            password_hash=password_hash,
             must_change_password=bool(must_change_password),
         )
         set_roles(new_user, roles_list)

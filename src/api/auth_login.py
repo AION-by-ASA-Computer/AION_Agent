@@ -496,6 +496,14 @@ async def auth_status():
             logger.warning("auth_status admin password check failed: %s", _e)
             admin_password_login = True
 
+    try:
+        from src.api.auth_password_setup import password_reset_available
+
+        reset_available = await password_reset_available(tenant)
+    except Exception as _e:
+        logger.warning("auth_status password reset check failed: %s", _e)
+        reset_available = False
+
     # AION_SSO_FORCE_PASSWORD: bypass di emergenza (vedi §5)
     if sso_force_password():
         admin_password_login = True
@@ -517,6 +525,8 @@ async def auth_status():
         "sso_enabled": sso_enabled,
         "sso_provider": sso_provider,
         "two_factor_required": two_factor_required,
+        # "Password dimenticata?": SMTP configurato e form password visibile
+        "password_reset_available": reset_available,
         "login_endpoint": "/auth/login",
         "token_ttl_seconds": _TOKEN_TTL_SEC,
         "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
@@ -840,7 +850,7 @@ async def require_admin_role(
 
 class ChangePasswordBody(BaseModel):
     old_password: str = Field(..., min_length=1)
-    new_password: str = Field(..., min_length=6, max_length=512)
+    new_password: str = Field(..., min_length=1, max_length=512)
 
 
 @router.post("/change-password")
@@ -864,7 +874,11 @@ async def change_password(
 
     from src.data.engine import get_async_session_maker
     from src.data.models import User
-    from src.data.user_password import hash_password, verify_password
+    from src.data.user_password import (
+        hash_password,
+        password_policy_violations,
+        verify_password,
+    )
 
     async with get_async_session_maker()() as session:
         u = await session.get(User, user_row_id)
@@ -874,6 +888,13 @@ async def change_password(
             raise HTTPException(401, detail="Old password is wrong")
         if body.new_password == body.old_password:
             raise HTTPException(400, detail="New password must differ from the old one")
+        # Stessa policy della pagina /set-password (src/data/user_password.py).
+        violations = password_policy_violations(body.new_password, u.identifier)
+        if violations:
+            raise HTTPException(
+                422,
+                detail={"code": "password_policy", "violations": violations},
+            )
         u.password_hash = hash_password(body.new_password)
         u.must_change_password = False
         # La password scelta dall'utente non e' piu' "temporanea": niente scadenza.

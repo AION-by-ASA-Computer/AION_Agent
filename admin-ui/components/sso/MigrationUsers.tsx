@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Key, Loader2, ShieldOff, UserCheck, UserX } from "lucide-react";
+import { Loader2, Mail, ShieldOff, UserCheck, UserX } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { cn } from "@/lib/cn";
@@ -11,7 +11,7 @@ import { Dialog } from "@/components/profiles/Dialog";
 import { SearchField } from "@/components/ui/SearchField";
 import { dangerBtn, ghostBtn, outlineBtn, solidBtn } from "@/components/ui/classes";
 import { fullWhen, toMs } from "@/lib/datetime";
-import { TempPasswordsDialog } from "./TempPasswordsDialog";
+import { linkErrorText, setupLinksToast, type SetupLinks } from "./setupLinks";
 
 const k = "admin_users.migration";
 type Tab = "pending" | "no_access" | "migrated" | "exempt";
@@ -23,14 +23,16 @@ interface MigrationUser {
   email: string | null;
   display_name: string | null;
   sso_migration_exempt: boolean;
-  has_temp_password?: boolean;
-  temp_password_expires_at?: string | null;
+  has_password?: boolean;
+  setup_link_pending?: boolean;
+  setup_link_expires_at?: string | null;
+  setup_link_send_error?: string | null;
   identity_id?: string;
   sso_email?: string;
   linked_at?: string;
 }
 
-type Confirm = { kind: "temp" | "unlink"; user: MigrationUser } | null;
+type Confirm = { kind: "link" | "unlink"; user: MigrationUser } | null;
 
 const rowBtn = cn(outlineBtn, "h-8 px-2.5 text-[13px]");
 
@@ -44,9 +46,6 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
   const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
-  const [tempPasswords, setTempPasswords] = useState<any[]>([]);
-  const [showTemp, setShowTemp] = useState(false);
-  const [tempMessage, setTempMessage] = useState("");
   const [confirm, setConfirm] = useState<Confirm>(null);
 
   const load = useCallback(async () => {
@@ -100,31 +99,36 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
       exempt ? t(`${k}.did_exempt`) : t(`${k}.did_reinstate`),
     );
 
-  const generateTemp = async (u: MigrationUser) => {
+  // Il link arriva solo all'utente: qui si vede l'esito dell'invio, mai il link.
+  const sendLink = async (u: MigrationUser) => {
     setBusyId(u.id);
     try {
-      const res = await apiFetch(`${apiBase()}/admin/auth/temp-passwords`, {
+      const res = await apiFetch(`${apiBase()}/admin/auth/setup-links`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_ids: [u.id] }),
       });
       if (!res.ok) {
-        setToast({ message: t(`${k}.temp_failed`), variant: "error" });
+        let code = "";
+        try {
+          code = (await res.json())?.detail?.code || "";
+        } catch {}
+        setToast({ message: code ? linkErrorText(t, code) : t(`${k}.link_failed`), variant: "error" });
         return;
       }
-      const data = await res.json();
-      setTempPasswords(data.temp_passwords || []);
-      setTempMessage(t(`${k}.temp_dialog_message`));
-      setShowTemp(true);
+      const data = (await res.json()) as { setup_links: SetupLinks };
+      setToast(setupLinksToast(t, data.setup_links));
       await load();
       onChanged?.();
+    } catch {
+      setToast({ message: t(`${k}.network_error`), variant: "error" });
     } finally {
       setBusyId(null);
     }
   };
 
-  // Senza password il backend ne genera una temporanea: l'utente rientra con
-  // quella e ricollega l'account aziendale (flusso standard di migrazione).
+  // Senza password il backend invia all'utente il link per impostarla: rientra
+  // con quella e ricollega l'account aziendale (flusso standard di migrazione).
   const unlink = async (u: MigrationUser) => {
     setBusyId(u.id);
     try {
@@ -134,10 +138,10 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
         return;
       }
       const data = await res.json().catch(() => ({}));
-      if (data.temp_passwords?.length) {
-        setTempPasswords(data.temp_passwords);
-        setTempMessage(t(`${k}.relink_dialog_message`));
-        setShowTemp(true);
+      if (data.setup_link_error) {
+        setToast({ message: t(`${k}.did_unlink_no_link`, { error: linkErrorText(t, data.setup_link_error) }), variant: "warning" });
+      } else if (data.setup_links) {
+        setToast(setupLinksToast(t, data.setup_links));
       } else {
         setToast({ message: t(`${k}.did_unlink`), variant: "success" });
       }
@@ -154,7 +158,7 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
     const c = confirm;
     setConfirm(null);
     if (!c) return;
-    if (c.kind === "temp") generateTemp(c.user);
+    if (c.kind === "link") sendLink(c.user);
     else unlink(c.user);
   };
 
@@ -221,11 +225,13 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
                       {u.email ? ` · ${u.email}` : ""}
                       {u.sso_email ? ` · SSO: ${u.sso_email}` : ""}
                     </div>
-                    {tab === "pending" && u.has_temp_password && (
-                      <div className="mt-1 text-xs font-medium text-warning">
-                        {u.temp_password_expires_at
-                          ? t(`${k}.temp_until`, { when: fullWhen(toMs(u.temp_password_expires_at)) })
-                          : t(`${k}.temp_active`)}
+                    {tab === "pending" && u.setup_link_pending && (
+                      <div className={cn("mt-1 text-xs font-medium", u.setup_link_send_error ? "text-destructive" : "text-warning")}>
+                        {u.setup_link_send_error
+                          ? t(`${k}.link_send_error`, { error: linkErrorText(t, u.setup_link_send_error) })
+                          : u.setup_link_expires_at
+                            ? t(`${k}.link_until`, { when: fullWhen(toMs(u.setup_link_expires_at)) })
+                            : t(`${k}.link_active`)}
                       </div>
                     )}
                   </div>
@@ -234,9 +240,15 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
                     {busy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" aria-hidden />}
                     {(tab === "pending" || tab === "no_access") && (
                       <>
-                        <button type="button" className={rowBtn} disabled={busy} onClick={() => setConfirm({ kind: "temp", user: u })}>
-                          <Key className="h-3.5 w-3.5" aria-hidden />
-                          {t(`${k}.act_temp`)}
+                        <button
+                          type="button"
+                          className={rowBtn}
+                          disabled={busy || !u.email}
+                          title={u.email ? undefined : t(`${k}.link_needs_email`)}
+                          onClick={() => setConfirm({ kind: "link", user: u })}
+                        >
+                          <Mail className="h-3.5 w-3.5" aria-hidden />
+                          {t(u.setup_link_pending ? `${k}.act_link_resend` : `${k}.act_link`)}
                         </button>
                         <button type="button" className={rowBtn} disabled={busy} onClick={() => setExempt(u, true)}>
                           <UserX className="h-3.5 w-3.5" aria-hidden />
@@ -268,36 +280,29 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
 
       {confirm && (
         <Dialog
-          title={confirm.kind === "temp" ? t(`${k}.confirm_temp_title`) : t(`${k}.confirm_unlink_title`)}
+          title={confirm.kind === "link" ? t(`${k}.confirm_link_title`) : t(`${k}.confirm_unlink_title`)}
           closeLabel={t(`${k}.cancel`)}
           onClose={() => setConfirm(null)}
         >
           <div className="flex flex-col gap-5">
             <p className="text-sm text-muted-foreground">
-              {t(confirm.kind === "temp" ? `${k}.confirm_temp_body` : `${k}.confirm_unlink_body`, { name: name(confirm.user) })}
+              {t(confirm.kind === "link" ? `${k}.confirm_link_body` : `${k}.confirm_unlink_body`, {
+                name: name(confirm.user),
+                email: confirm.user.email || "",
+              })}
             </p>
             <div className="flex justify-end gap-2">
               <button type="button" className={ghostBtn} onClick={() => setConfirm(null)}>
                 {t(`${k}.cancel`)}
               </button>
               <button type="button" className={confirm.kind === "unlink" ? dangerBtn : solidBtn} autoFocus onClick={accept}>
-                {confirm.kind === "temp" ? t(`${k}.confirm_temp`) : t(`${k}.confirm_unlink`)}
+                {confirm.kind === "link" ? t(`${k}.confirm_link`) : t(`${k}.confirm_unlink`)}
               </button>
             </div>
           </div>
         </Dialog>
       )}
 
-      <TempPasswordsDialog
-        isOpen={showTemp}
-        onClose={() => {
-          setShowTemp(false);
-          setTempPasswords([]);
-        }}
-        passwords={tempPasswords}
-        title={t(`${k}.temp_dialog_title`)}
-        message={tempMessage}
-      />
       <PageToast toast={toast} onDismiss={() => setToast(null)} />
     </div>
   );

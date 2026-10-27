@@ -164,13 +164,12 @@
       "new_password": "Nouveau mot de passe",
       "password_desc": "Mettez à jour le mot de passe de votre compte.",
       "password_error": "Impossible de mettre à jour le mot de passe.",
-      "password_hint": "Au moins 6 caractères.",
-      "password_min": "Le nouveau mot de passe doit comporter au moins 6 caractères.",
       "password_mismatch": "La confirmation ne correspond pas au nouveau mot de passe.",
       "password_title": "Mot de passe",
       "password_updated": "Mot de passe mis à jour avec succès.",
       "update_password": "Mettre à jour le mot de passe",
-      "desc": "Protégez votre compte."
+      "desc": "Protégez votre compte.",
+      "password_policy": "Le nouveau mot de passe ne respecte pas les exigences."
     },
     "api_keys": {
       "title": "Clés API",
@@ -844,7 +843,7 @@
       "sso_domain_not_allowed": "Ce compte n'est pas autorisé à se connecter. Vous utilisez peut-être le mauvais compte : connectez-vous avec votre compte professionnel.",
       "sso_required": "La connexion SSO est obligatoire pour ce compte.",
       "password_login_disabled": "La connexion par mot de passe est désactivée.",
-      "temp_password_expired": "Le mot de passe temporaire a expiré. Contactez l'administrateur.",
+      "temp_password_expired": "Le mot de passe temporaire a expiré. Utilisez « Mot de passe oublié ? » pour recevoir un lien par e-mail, ou demandez-le à l'administrateur.",
       "sso_failed": "Échec de l'authentification SSO.",
       "sso_start_failed": "Impossible de démarrer la connexion SSO.",
       "sso_token_invalid": "Jeton SSO invalide.",
@@ -861,11 +860,90 @@
       "user_not_found": "Utilisateur introuvable.",
       "sso_signup_closed": "Les nouveaux comptes ne sont pas acceptés pour le moment. Contactez votre administrateur pour demander l'accès.",
       "sso_signup_not_allowed": "Votre compte n'est pas encore activé pour cette plateforme. Contactez votre administrateur pour demander l'accès."
-    }
+    },
+    "forgot_password": "Mot de passe oublié ?"
   },
   "authgate": {
     "checking": "Vérification de l'accès…",
     "redirecting": "Redirection vers la connexion…"
+  },
+  "password_policy": {
+    "rules": {
+      "too_short": "Au moins {{min}} caractères",
+      "too_long": "Au maximum {{max}} caractères",
+      "lowercase": "Une lettre minuscule",
+      "uppercase": "Une lettre majuscule",
+      "digit": "Un chiffre",
+      "symbol": "Un symbole (ex. ! @ # -)",
+      "contains_username": "Ne contient pas votre nom d'utilisateur"
+    },
+    "met": "respecté",
+    "not_met": "non respecté",
+    "server_error": "Le mot de passe ne respecte pas ces exigences : {{list}}.",
+    "server_error_generic": "Le mot de passe ne respecte pas les exigences de sécurité."
+  },
+  "set_password": {
+    "title_invite": "Définissez votre mot de passe",
+    "title_reset": "Réinitialisez votre mot de passe",
+    "title_migration": "Définissez votre mot de passe",
+    "greeting": "Bonjour {{name}}, choisissez un mot de passe pour votre compte.",
+    "migration_note": "Après la connexion, il vous sera demandé de lier votre compte SSO d'entreprise.",
+    "username": "Nom d'utilisateur",
+    "new_password": "Nouveau mot de passe",
+    "confirm_password": "Confirmer le mot de passe",
+    "mismatch": "Les mots de passe ne correspondent pas.",
+    "submit": "Enregistrer le mot de passe",
+    "expires": "Ce lien expire le {{date}}.",
+    "checking": "Vérification du lien…",
+    "success_title": "Mot de passe enregistré",
+    "success_desc": "Vous pouvez maintenant vous connecter avec votre nouveau mot de passe.",
+    "go_login": "Aller à la connexion",
+    "go_admin": "Aller au panneau d'administration",
+    "request_new": "Demander un nouveau lien",
+    "back_login": "← Retour à la connexion",
+    "error_title": {
+      "token_invalid": "Lien non valide",
+      "token_expired": "Lien expiré",
+      "sso_user": "Connectez-vous avec le SSO",
+      "rate_limited": "Trop de tentatives",
+      "generic": "Une erreur s'est produite"
+    },
+    "error": {
+      "token_invalid": "Ce lien n'est pas valide ou a déjà été utilisé. Demandez-en un nouveau pour continuer.",
+      "token_expired": "Ce lien a expiré. Demandez-en un nouveau pour continuer.",
+      "sso_user": "Ce compte se connecte avec le SSO de votre entreprise : aucun mot de passe n'est nécessaire.",
+      "rate_limited": "Trop de tentatives. Patientez quelques minutes puis réessayez.",
+      "generic": "Impossible de traiter la demande. Veuillez réessayer.",
+      "network": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
+    }
+  },
+  "forgot_password": {
+    "title": "Mot de passe oublié ?",
+    "desc": "Saisissez votre nom d'utilisateur ou votre e-mail : nous vous enverrons un lien pour choisir un nouveau mot de passe.",
+    "identifier": "Nom d'utilisateur ou e-mail",
+    "submit": "Envoyer le lien",
+    "sent_title": "Consultez vos e-mails",
+    "sent_desc": "Si un compte existe, nous avons envoyé un e-mail contenant un lien pour définir un nouveau mot de passe. Pensez à vérifier vos courriers indésirables.",
+    "try_again": "Utiliser un autre nom d'utilisateur ou e-mail",
+    "back_login": "← Retour à la connexion",
+    "error": {
+      "rate_limited": "Trop de demandes. Patientez quelques minutes puis réessayez.",
+      "generic": "Impossible d'envoyer la demande. Veuillez réessayer.",
+      "network": "Impossible de joindre le serveur. Vérifiez votre connexion et réessayez."
+    }
+  },
+  "change_password": {
+    "title": "Changer le mot de passe",
+    "desc": "Vous utilisez un mot de passe temporaire. Mettez-le à jour maintenant ou recevez un rappel demain (report possible pendant 24 h).",
+    "current": "Mot de passe actuel",
+    "new": "Nouveau mot de passe",
+    "confirm": "Confirmer le nouveau mot de passe",
+    "mismatch": "Les mots de passe ne correspondent pas.",
+    "submit": "Mettre à jour le mot de passe",
+    "skip": "Me le rappeler demain",
+    "success": "Mot de passe mis à jour. Redirection…",
+    "session_expired": "Session expirée. Veuillez vous reconnecter.",
+    "error": "Échec du changement de mot de passe."
   },
   "toast": {
     "username_empty": "Le nom d'utilisateur ne peut pas être vide.",

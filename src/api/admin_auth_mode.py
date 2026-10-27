@@ -7,23 +7,26 @@ import logging
 import os
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 
 from src.api.auth_login import ChatAuthIdentity, require_admin_role
 from src.auth.sso.login_mode import (
     _check_migration_completion,
     _invalidate_cache,
     confirmed_identity_exists,
-    generate_temp_passwords,
     SIGNUP_ALLOWLIST_MAX,
     SIGNUP_POLICIES,
     get_login_settings,
     normalize_allowlist_entry,
     pending_users_count,
     reopen_migration,
+    send_migration_links,
 )
+from src.api.public_urls import chat_base_url
+from src.auth.password_setup import active_links_by_user, active_setup_link_exists
+from src.data.audit import record_admin_action
 from src.data.engine import get_async_session_maker
 from src.data.models import AuthSettings, User, UserSsoIdentity
 
@@ -118,7 +121,10 @@ async def simulate_login_mode_change(
     mode: str = Query(..., regex="^(password|microsoft|google)$"),
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
-    """Simula il cambio di modalità per identificare gli utenti che riceveranno una password temporanea."""
+    """Simula il cambio di modalità: utenti che riceveranno via email il link
+    per impostare la password, chi non ha email e se lo SMTP è pronto."""
+    from src.notifications.smtp_settings import smtp_configured
+
     tenant = _tenant_id()
     settings = await get_login_settings(tenant)
     current_mode = settings.get("login_mode", "password")
@@ -187,7 +193,12 @@ async def simulate_login_mode_change(
                 }
             )
 
-    return {"affected_users": users_affected}
+    missing_email = [u for u in users_affected if not (u["email"] or "").strip()]
+    return {
+        "affected_users": users_affected,
+        "missing_email_count": len(missing_email),
+        "smtp_configured": await smtp_configured(tenant),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -202,6 +213,7 @@ class SetLoginModeBody(BaseModel):
 @router.put("/login-mode")
 async def put_login_mode(
     body: SetLoginModeBody,
+    request: Request,
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
     """Imposta la modalità di login. Vedi §3.2."""
@@ -215,6 +227,7 @@ async def put_login_mode(
             tenant_id=_tenant_id(),
             mode=body.mode,
             actor_user_id=auth.user_row_id,
+            base_url=chat_base_url(request),
         )
     except ValueError as e:
         code = str(e)
@@ -226,12 +239,29 @@ async def put_login_mode(
                 "sso_admin_not_linked",
                 "migration_in_progress",
                 "provider_not_configured",
+                "smtp_not_configured",
             )
             else 400
         )
         raise HTTPException(status, detail={"code": code})
 
+    await record_admin_action(
+        tenant_id=_tenant_id(),
+        actor=auth.identifier,
+        operation="auth.login_mode",
+        resource_type="auth_settings",
+        payload={
+            "mode": body.mode,
+            "setup_links": _links_summary(result.get("setup_links")),
+        },
+    )
     return result
+
+
+def _links_summary(links: Optional[Dict[str, Any]]) -> Optional[Dict[str, int]]:
+    if links is None:
+        return None
+    return {k: len(links.get(k) or []) for k in ("sent", "failed", "missing_email")}
 
 
 # ---------------------------------------------------------------------------
@@ -266,14 +296,15 @@ async def list_migration_users(
                 confirmed_identity_exists(tenant, provider, since),
             )
         elif status == "no_access" and provider:
-            # Senza password e senza identita' sul provider attivo: non possono
-            # entrare in nessun modo finche' non ricevono una password temporanea
-            # (es. dopo uno scollegamento).
+            # Senza password, senza link attivo e senza identita' sul provider
+            # attivo: non possono entrare in nessun modo finche' non ricevono il
+            # link per impostare la password (es. dopo uno scollegamento).
             stmt = (
                 select(User)
                 .where(
                     User.tenant_id == tenant,
                     User.password_hash.is_(None),
+                    ~active_setup_link_exists(),
                     User.sso_migration_exempt.is_(False),  # noqa: E712
                 )
                 .where(
@@ -295,7 +326,10 @@ async def list_migration_users(
                     select(User)
                     .where(
                         User.tenant_id == tenant,
-                        User.password_hash.is_not(None),
+                        or_(
+                            User.password_hash.is_not(None),
+                            active_setup_link_exists(),
+                        ),
                         User.sso_migration_exempt.is_(False),  # noqa: E712
                     )
                     .where(~confirmed_identity_exists(tenant, provider, since))
@@ -303,7 +337,7 @@ async def list_migration_users(
             else:
                 stmt = select(User).where(
                     User.tenant_id == tenant,
-                    User.password_hash.is_not(None),
+                    or_(User.password_hash.is_not(None), active_setup_link_exists()),
                 )
 
         if q:
@@ -317,6 +351,7 @@ async def list_migration_users(
         stmt = stmt.order_by(User.identifier.asc())
         stmt = stmt.offset((page - 1) * page_size).limit(page_size)
         rows = (await session.execute(stmt)).scalars().all()
+        links = await active_links_by_user(tenant) if status == "pending" else {}
 
         users_out = []
         for u in rows:
@@ -329,11 +364,13 @@ async def list_migration_users(
                 "created_at": u.created_at,
                 "sso_migration_exempt": u.sso_migration_exempt,
             }
-            # Informazioni password temporanea per utenti in attesa
+            # Link email per impostare la password, per utenti in attesa
             if status == "pending":
-                has_temp = u.temp_password_expires_at is not None
-                entry["has_temp_password"] = has_temp
-                entry["temp_password_expires_at"] = u.temp_password_expires_at
+                link = links.get(u.id)
+                entry["has_password"] = bool(u.password_hash)
+                entry["setup_link_pending"] = link is not None
+                entry["setup_link_expires_at"] = link["expires_at"] if link else None
+                entry["setup_link_send_error"] = link["send_error"] if link else None
 
             if status == "migrated" and provider:
                 identity = (
@@ -399,34 +436,45 @@ async def set_user_exempt(
 
 
 # ---------------------------------------------------------------------------
-# POST /admin/auth/temp-passwords
+# POST /admin/auth/setup-links
 # ---------------------------------------------------------------------------
 
 
-class TempPasswordsBody(BaseModel):
-    user_ids: List[str]
+class SetupLinksBody(BaseModel):
+    user_ids: List[str] = Field(..., min_length=1, max_length=500)
 
 
-@router.post("/temp-passwords")
-async def admin_generate_temp_passwords(
-    body: TempPasswordsBody,
+@router.post("/setup-links")
+async def admin_send_setup_links(
+    body: SetupLinksBody,
+    request: Request,
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
-    """Genera (o rigenera) password temporanee per gli utenti indicati.
-
-    Le password in chiaro compaiono solo in questa risposta.
-    """
+    """Invia (o reinvia) via email il link per impostare la password agli
+    utenti indicati. La risposta riporta solo l'esito dell'invio."""
     tenant = _tenant_id()
     settings = await get_login_settings(tenant)
     provider = settings.get("sso_provider") or ""
 
     try:
-        results = await generate_temp_passwords(tenant, body.user_ids, provider)
+        results = await send_migration_links(
+            tenant,
+            body.user_ids,
+            provider,
+            actor_user_id=auth.user_row_id,
+            base_url=chat_base_url(request),
+        )
     except ValueError as e:
-        code = str(e)
-        raise HTTPException(409, detail={"code": code})
+        raise HTTPException(409, detail={"code": str(e)})
 
-    return {"temp_passwords": results}
+    await record_admin_action(
+        tenant_id=tenant,
+        actor=auth.identifier,
+        operation="user.password_link.migration",
+        resource_type="user",
+        payload={"user_ids": body.user_ids, **(_links_summary(results) or {})},
+    )
+    return {"setup_links": results}
 
 
 # ---------------------------------------------------------------------------
@@ -438,14 +486,16 @@ async def admin_generate_temp_passwords(
 async def unlink_sso_identity(
     user_id: str,
     identity_id: str,
+    request: Request,
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
     """Scollega un'identità SSO da un utente.
 
     Se era l'identita' del provider attivo l'utente deve ricollegarsi col
     flusso standard (password -> obbligo SSO -> collegamento): senza password
-    ne riceve una temporanea, mostrata solo in questa risposta, e la
-    migrazione viene riaperta.
+    riceve via email il link per impostarla e la migrazione viene riaperta.
+    Senza SMTP lo scollegamento avviene comunque; ``setup_link_error`` lo
+    segnala e il link si potra' inviare in seguito (POST /setup-links).
     """
     tenant = _tenant_id()
     async with get_async_session_maker()() as session:
@@ -463,18 +513,22 @@ async def unlink_sso_identity(
         await session.commit()
 
     _invalidate_cache(tenant)
-    temp_passwords: List[Dict[str, Any]] = []
+    out: Dict[str, Any] = {"ok": True, "user_id": user_id, "identity_id": identity_id}
     if provider == (await get_login_settings(tenant)).get("sso_provider"):
         if has_password:
             await reopen_migration(tenant)
         else:
-            temp_passwords = await generate_temp_passwords(tenant, [user_id], provider)
-    return {
-        "ok": True,
-        "user_id": user_id,
-        "identity_id": identity_id,
-        "temp_passwords": temp_passwords,
-    }
+            try:
+                out["setup_links"] = await send_migration_links(
+                    tenant,
+                    [user_id],
+                    provider,
+                    actor_user_id=auth.user_row_id,
+                    base_url=chat_base_url(request),
+                )
+            except ValueError as e:
+                out["setup_link_error"] = str(e)
+    return out
 
 
 # ---------------------------------------------------------------------------

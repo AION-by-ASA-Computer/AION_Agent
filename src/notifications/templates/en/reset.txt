@@ -1,0 +1,11 @@
+Reset your $platform password
+
+Hi $name,
+
+a password reset was requested for the account $identifier on $platform.
+
+Choose a new password using this link:
+$link
+
+The link works only once and expires on $expires.
+If you didn't request this, ignore this email: your current password stays valid.
