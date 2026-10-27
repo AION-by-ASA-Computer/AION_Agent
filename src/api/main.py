@@ -2,6 +2,7 @@ import os
 import json
 import logging
 import asyncio
+import re
 from contextlib import asynccontextmanager
 
 import src.aion_env  # noqa: F401 — carica `.env` prima delle altre importazioni
@@ -555,11 +556,15 @@ app.include_router(admin_auth_mode_router)
 app.include_router(chat_ui_router)
 
 
+_SESSION_CHARTS_RE = re.compile(r"^/sessions/[^/]+/charts/?$")
+
+
 @app.middleware("http")
 async def _deprecation_headers(request: Request, call_next):
     resp = await call_next(request)
     p = request.url.path
-    if p == "/chat" or p.startswith("/sessions/"):
+    # I chart di sessione sono nel contratto API usato da AION SRE: non deprecati.
+    if p == "/chat" or (p.startswith("/sessions/") and not _SESSION_CHARTS_RE.match(p)):
         resp.headers["Deprecation"] = "true"
         resp.headers["Sunset"] = "Wed, 22 Oct 2026 00:00:00 GMT"
         resp.headers["Link"] = '</docs>; rel="successor-version"'
