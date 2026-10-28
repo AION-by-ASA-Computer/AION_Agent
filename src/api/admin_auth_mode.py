@@ -536,7 +536,14 @@ async def unlink_sso_identity(
                 )
             except ValueError as e:
                 # Es. un'altra identita' sullo stesso provider: resta collegato.
-                out["setup_link_error"] = str(e)
+                logger.warning(
+                    "Failed to send migration links for tenant=%s user_id=%s provider=%s",
+                    tenant,
+                    user_id,
+                    provider,
+                    exc_info=True,
+                )
+                out["setup_link_error"] = "Impossibile inviare il link di configurazione."
                 return out
             out.update(delivered)
             await record_admin_action(
