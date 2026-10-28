@@ -202,30 +202,155 @@ async def test_password_link_reissue_invalidates_previous(monkeypatch, tmp_path)
 
 
 @pytest.mark.anyio
-async def test_create_user_requires_smtp_and_email(monkeypatch, tmp_path):
-    sm, fake = await _setup(monkeypatch, tmp_path, smtp=False)
-    from pydantic import ValidationError
+async def test_create_user_with_smtp_requires_email(monkeypatch, tmp_path):
+    sm, fake = await _setup(monkeypatch, tmp_path)
     from sqlalchemy import select
 
-    from src.api.admin import UserCreate
+    from src.api.admin import UserCreate, create_user
     from src.data.models import User
 
-    with pytest.raises(ValidationError):
-        UserCreate(identifier="mario")
-    with pytest.raises(HTTPException) as e:
-        await _create(email="not-an-email")
-    assert e.value.status_code == 422
-
-    with pytest.raises(HTTPException) as e:
-        await _create()
-    assert (e.value.status_code, e.value.detail) == (
-        409,
-        {"code": "smtp_not_configured"},
-    )
+    for bad in (None, "not-an-email"):
+        with pytest.raises(HTTPException) as e:
+            await create_user(
+                UserCreate(identifier="mario", email=bad), request=None, auth=_auth()
+            )
+        assert (e.value.status_code, e.value.detail) == (422, {"code": "invalid_email"})
     async with sm() as session:
         rows = (await session.execute(select(User.identifier))).scalars().all()
     assert "mario" not in rows
     assert fake.sent == []
+
+
+async def _audit_payloads(sm) -> list:
+    from sqlalchemy import select
+
+    from src.data.models import AuditLog
+
+    async with sm() as session:
+        rows = (await session.execute(select(AuditLog.payload))).scalars().all()
+    return [r or "" for r in rows]
+
+
+@pytest.mark.anyio
+async def test_create_user_without_smtp_issues_temp_password(monkeypatch, tmp_path):
+    sm, fake = await _setup(monkeypatch, tmp_path, smtp=False)
+    from src.api.admin import UserCreate, create_user
+    from src.data.user_password import verify_password
+
+    # Senza SMTP l'email e' facoltativa (validata se presente).
+    with pytest.raises(HTTPException) as e:
+        await _create(email="not-an-email")
+    assert e.value.status_code == 422
+    res = await create_user(UserCreate(identifier="mario"), request=None, auth=_auth())
+
+    assert res["delivery"] == "temp_password"
+    assert "invite" not in res
+    temp = res["temp_password"]["password"]
+    assert temp and res["temp_password"]["expires_at"]
+    u = await _user(sm, res["id"])
+    assert verify_password(temp, u.password_hash)
+    assert u.temp_password_expires_at is not None and u.must_change_password
+    assert u.email is None
+    assert fake.sent == []
+    # La password compare solo nella risposta, mai nell'audit.
+    payloads = await _audit_payloads(sm)
+    assert any("temp_password" in p for p in payloads)
+    assert all(temp not in p for p in payloads)
+
+
+@pytest.mark.anyio
+async def test_password_link_without_smtp_replaces_password(monkeypatch, tmp_path):
+    sm, fake = await _setup(monkeypatch, tmp_path)
+    from src.api.admin import send_password_link
+    from src.auth.password_setup import active_links_by_user, consume_token
+    from src.data.models import SmtpSettings, User
+    from src.data.user_password import verify_password
+    from src.notifications.smtp_settings import invalidate_cache
+
+    uid = (await _create())["id"]
+    await consume_token(token_from(fake.sent[-1]), STRONG)
+    async with sm() as session:
+        u = await session.get(User, uid)
+        u.email = None
+        (await session.get(SmtpSettings, "default")).enabled = False
+        await session.commit()
+    invalidate_cache("default")
+
+    res = await send_password_link(uid, request=None, auth=_auth())
+
+    assert (res["purpose"], res["delivery"]) == ("reset", "temp_password")
+    u = await _user(sm, uid)
+    assert verify_password(res["temp_password"]["password"], u.password_hash)
+    assert not verify_password(STRONG, u.password_hash)
+    assert u.temp_password_expires_at is not None
+    assert await active_links_by_user("default") == {}
+
+
+async def _login(username: str, password: str):
+    from src.api.auth_login import LoginBody, login
+
+    return await login(LoginBody(username=username, password=password))
+
+
+async def _gate(token: str):
+    from src.api.auth_login import require_chat_auth
+
+    return await require_chat_auth(
+        authorization=f"Bearer {token}",
+        x_api_key=None,
+        x_chat_ui_secret=None,
+        access_token=None,
+    )
+
+
+@pytest.mark.anyio
+async def test_temp_password_must_be_changed_before_use(monkeypatch, tmp_path):
+    sm, _ = await _setup(monkeypatch, tmp_path, smtp=False)
+    from src.api.auth_login import ChangePasswordBody, change_password, me
+
+    res = await _create()
+    temp = res["temp_password"]["password"]
+
+    out = await _login("mario", temp)
+    assert out["password_change_required"] is True
+    token = out["access_token"]
+    with pytest.raises(HTTPException) as e:
+        await _gate(token)
+    assert (e.value.status_code, e.value.detail) == (
+        403,
+        {"code": "password_change_required"},
+    )
+    assert (await me(authorization=f"Bearer {token}"))["password_change_required"]
+
+    await change_password(
+        ChangePasswordBody(old_password=temp, new_password=STRONG),
+        authorization=f"Bearer {token}",
+    )
+
+    assert (await _gate(token)).identifier == "mario"
+    assert not (await me(authorization=f"Bearer {token}"))["password_change_required"]
+    u = await _user(sm, res["id"])
+    assert u.temp_password_expires_at is None and not u.must_change_password
+    assert (await _login("mario", STRONG))["password_change_required"] is False
+
+
+@pytest.mark.anyio
+async def test_expired_temp_password_rejected(monkeypatch, tmp_path):
+    sm, _ = await _setup(monkeypatch, tmp_path, smtp=False)
+    from src.data.models import User
+
+    res = await _create()
+    async with sm() as session:
+        u = await session.get(User, res["id"])
+        u.temp_password_expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        await session.commit()
+
+    with pytest.raises(HTTPException) as e:
+        await _login("mario", res["temp_password"]["password"])
+    assert (e.value.status_code, e.value.detail) == (
+        401,
+        {"code": "temp_password_expired"},
+    )
 
 
 @pytest.mark.anyio

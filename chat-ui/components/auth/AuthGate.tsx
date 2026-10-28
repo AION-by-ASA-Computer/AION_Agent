@@ -76,6 +76,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         }
         const me = (await r.json().catch(() => ({}))) as {
           must_change_password?: boolean;
+          password_change_required?: boolean;
           sso_link_required?: boolean;
           sso_provider?: string;
           mfa_enrollment_required?: boolean;
@@ -93,6 +94,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         if (me.sso_link_required && me.sso_provider) {
           setSsoProvider(me.sso_provider);
           setState("sso_link");
+          return;
+        }
+
+        if (me.password_change_required) {
+          // Password temporanea data dall'admin: cambio obbligatorio, lo skip
+          // 24h non vale (il backend risponde 403 password_change_required
+          // su tutte le API chat finche' non viene cambiata).
+          setState("redirecting");
+          router.replace("/change-password");
           return;
         }
 

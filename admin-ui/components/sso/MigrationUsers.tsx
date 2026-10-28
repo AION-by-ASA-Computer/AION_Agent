@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2, Mail, ShieldOff, UserCheck, UserX } from "lucide-react";
+import { Loader2, Mail, RectangleEllipsis, ShieldOff, UserCheck, UserX } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { cn } from "@/lib/cn";
@@ -12,6 +12,7 @@ import { SearchField } from "@/components/ui/SearchField";
 import { dangerBtn, ghostBtn, outlineBtn, solidBtn } from "@/components/ui/classes";
 import { fullWhen, toMs } from "@/lib/datetime";
 import { linkErrorText, setupLinksToast, type SetupLinks } from "./setupLinks";
+import { TempPasswordsDialog, type TempPassword } from "./TempPasswordsDialog";
 
 const k = "admin_users.migration";
 type Tab = "pending" | "no_access" | "migrated" | "exempt";
@@ -47,6 +48,16 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
   const [confirm, setConfirm] = useState<Confirm>(null);
+  // Senza SMTP il backend genera password temporanee invece dei link: mostrate una sola volta.
+  const [smtpMissing, setSmtpMissing] = useState(false);
+  const [tempPasswords, setTempPasswords] = useState<TempPassword[] | null>(null);
+
+  useEffect(() => {
+    apiFetch(`${apiBase()}/admin/smtp`)
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => setSmtpMissing(!data.configured))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setState("loading");
@@ -116,8 +127,11 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
         setToast({ message: code ? linkErrorText(t, code) : t(`${k}.link_failed`), variant: "error" });
         return;
       }
-      const data = (await res.json()) as { setup_links: SetupLinks };
-      setToast(setupLinksToast(t, data.setup_links));
+      const data = (await res.json()) as { setup_links?: SetupLinks; temp_passwords?: TempPassword[] };
+      if (data.temp_passwords?.length) {
+        setSmtpMissing(true);
+        setTempPasswords(data.temp_passwords);
+      } else setToast(setupLinksToast(t, data.setup_links));
       await load();
       onChanged?.();
     } catch {
@@ -140,6 +154,8 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
       const data = await res.json().catch(() => ({}));
       if (data.setup_link_error) {
         setToast({ message: t(`${k}.did_unlink_no_link`, { error: linkErrorText(t, data.setup_link_error) }), variant: "warning" });
+      } else if (data.temp_passwords?.length) {
+        setTempPasswords(data.temp_passwords);
       } else if (data.setup_links) {
         setToast(setupLinksToast(t, data.setup_links));
       } else {
@@ -243,12 +259,12 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
                         <button
                           type="button"
                           className={rowBtn}
-                          disabled={busy || !u.email}
-                          title={u.email ? undefined : t(`${k}.link_needs_email`)}
+                          disabled={busy || (!smtpMissing && !u.email)}
+                          title={smtpMissing || u.email ? undefined : t(`${k}.link_needs_email`)}
                           onClick={() => setConfirm({ kind: "link", user: u })}
                         >
-                          <Mail className="h-3.5 w-3.5" aria-hidden />
-                          {t(u.setup_link_pending ? `${k}.act_link_resend` : `${k}.act_link`)}
+                          {smtpMissing ? <RectangleEllipsis className="h-3.5 w-3.5" aria-hidden /> : <Mail className="h-3.5 w-3.5" aria-hidden />}
+                          {t(smtpMissing ? `${k}.act_temp` : u.setup_link_pending ? `${k}.act_link_resend` : `${k}.act_link`)}
                         </button>
                         <button type="button" className={rowBtn} disabled={busy} onClick={() => setExempt(u, true)}>
                           <UserX className="h-3.5 w-3.5" aria-hidden />
@@ -280,13 +296,13 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
 
       {confirm && (
         <Dialog
-          title={confirm.kind === "link" ? t(`${k}.confirm_link_title`) : t(`${k}.confirm_unlink_title`)}
+          title={confirm.kind === "link" ? t(`${k}.${smtpMissing ? "confirm_temp_title" : "confirm_link_title"}`) : t(`${k}.confirm_unlink_title`)}
           closeLabel={t(`${k}.cancel`)}
           onClose={() => setConfirm(null)}
         >
           <div className="flex flex-col gap-5">
             <p className="text-sm text-muted-foreground">
-              {t(confirm.kind === "link" ? `${k}.confirm_link_body` : `${k}.confirm_unlink_body`, {
+              {t(`${k}.${confirm.kind === "link" ? "confirm_link_body" : "confirm_unlink_body"}${smtpMissing ? "_temp" : ""}`, {
                 name: name(confirm.user),
                 email: confirm.user.email || "",
               })}
@@ -296,12 +312,14 @@ export function MigrationUsers({ onChanged }: { onChanged?: () => void } = {}) {
                 {t(`${k}.cancel`)}
               </button>
               <button type="button" className={confirm.kind === "unlink" ? dangerBtn : solidBtn} autoFocus onClick={accept}>
-                {confirm.kind === "link" ? t(`${k}.confirm_link`) : t(`${k}.confirm_unlink`)}
+                {confirm.kind === "link" ? t(`${k}.${smtpMissing ? "confirm_temp" : "confirm_link"}`) : t(`${k}.confirm_unlink`)}
               </button>
             </div>
           </div>
         </Dialog>
       )}
+
+      {tempPasswords && <TempPasswordsDialog passwords={tempPasswords} t={t} onClose={() => setTempPasswords(null)} />}
 
       <PageToast toast={toast} onDismiss={() => setToast(null)} />
     </div>

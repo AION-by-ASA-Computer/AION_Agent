@@ -843,7 +843,7 @@
       "sso_domain_not_allowed": "Questo account non è abilitato all'accesso. Stai usando l'account sbagliato: accedi con quello aziendale.",
       "sso_required": "Per questo account è obbligatorio l'accesso SSO.",
       "password_login_disabled": "L'accesso con password è disabilitato.",
-      "temp_password_expired": "La password temporanea è scaduta. Usa «Password dimenticata?» per ricevere un link via email, o chiedi all'amministratore di inviartelo.",
+      "temp_password_expired": "La password temporanea è scaduta. Chiedi all'amministratore di fornirtene una nuova.",
       "sso_failed": "Autenticazione SSO non riuscita.",
       "sso_start_failed": "Impossibile avviare l'accesso SSO.",
       "sso_token_invalid": "Token SSO non valido.",
@@ -933,6 +933,9 @@
     }
   },
   "change_password": {
+    "title_required": "Imposta la tua password",
+    "desc_required": "Hai effettuato l'accesso con una password temporanea fornita da un amministratore. Scegli una nuova password per continuare.",
+    "current_temp": "Password temporanea",
     "title": "Cambia password",
     "desc": "Stai usando una password temporanea. Aggiornala ora o ricordamelo domani (rinviabile per 24 ore).",
     "current": "Password attuale",

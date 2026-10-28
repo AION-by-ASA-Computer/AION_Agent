@@ -24,7 +24,7 @@ import {
 const codeCls = "rounded-md border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-[0.95em] text-foreground";
 
 const LOGIN_ERRORS: Record<string, string> = {
-  temp_password_expired: "La password temporanea è scaduta. Usa «Password dimenticata?» o chiedi a un amministratore di inviarti un nuovo link.",
+  temp_password_expired: "La password temporanea è scaduta. Chiedi a un amministratore una nuova password temporanea o un nuovo link.",
   sso_required: "Questo account accede tramite SSO: usa il pulsante SSO.",
   password_login_disabled: "L'accesso con password non è disponibile per questo account.",
   not_admin: "Questo account non ha il ruolo 'admin'.",

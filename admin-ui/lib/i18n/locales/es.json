@@ -1290,7 +1290,8 @@
       "link_failed": "Envío fallido",
       "link_expires": "Caduca el {{date}}",
       "link_invite": "Invitación pendiente",
-      "link_reset": "Restablecimiento pendiente"
+      "link_reset": "Restablecimiento pendiente",
+      "temp_password": "Contraseña temporal"
     },
     "row": {
       "profiles": "Acceso a perfiles de {{name}}",
@@ -1298,7 +1299,8 @@
       "edit": "Editar a {{name}}",
       "delete": "Eliminar a {{name}}",
       "send_reset": "Enviar a {{name}} un enlace de restablecimiento de contraseña",
-      "resend_invite": "Reenviar la invitación a {{name}}"
+      "resend_invite": "Reenviar la invitación a {{name}}",
+      "issue_temp": "Generar una contraseña temporal para {{name}}"
     },
     "form": {
       "title_new": "Nuevo usuario",
@@ -1348,7 +1350,13 @@
       "resend_invite": "Reenviar invitación",
       "link_needs_email": "Añade un correo para poder enviar el enlace.",
       "link_hint": "El enlace llega solo al usuario y caduca pronto; enviar uno nuevo anula el anterior.",
-      "sending": "Enviando…"
+      "sending": "Enviando…",
+      "temp_pending": "Contraseña temporal que debe cambiarse en el primer inicio de sesión, válida hasta el {{date}}",
+      "temp_pending_nodate": "Contraseña temporal que debe cambiarse en el primer inicio de sesión",
+      "issue_temp": "Generar contraseña temporal",
+      "temp_hint": "Sin SMTP se genera una contraseña temporal, que se muestra una sola vez y sustituye de inmediato a la actual. El usuario debe cambiarla en el primer inicio de sesión.",
+      "temp_note": "El servidor de correo no está configurado: se generará una contraseña temporal, que se muestra una sola vez, para que se la comuniques al usuario. En el primer inicio de sesión deberá elegir una nueva.",
+      "create_with_temp": "Crear y generar contraseña"
     },
     "profiles": {
       "title": "Acceso a perfiles",
@@ -1464,7 +1472,12 @@
       "links_sent_one": "Correo enviado a {{email}}.",
       "links_sent": "Correos enviados: {{count}}.",
       "links_failed": "No se pudo enviar a {{names}} ({{error}}).",
-      "links_missing_email": "Sin correo, no se envió ningún enlace: {{names}}."
+      "links_missing_email": "Sin correo, no se envió ningún enlace: {{names}}.",
+      "act_temp": "Generar contraseña",
+      "confirm_temp_title": "¿Generar una contraseña temporal?",
+      "confirm_link_body_temp": "Se generará para {{name}} una contraseña temporal, que se muestra una sola vez, para comunicársela; cualquier enlace anterior dejará de ser válido. Tras iniciar sesión deberá vincular su cuenta de empresa.",
+      "confirm_unlink_body_temp": "{{name}} perderá el vínculo SSO. Si no tiene contraseña, se genera una temporal que se muestra una sola vez: con ella inicia sesión y vuelve a vincular su cuenta de empresa.",
+      "confirm_temp": "Generar contraseña"
     },
     "sso_guide": {
       "title": "Cómo configurar Microsoft Entra ID",
@@ -1582,7 +1595,7 @@
     },
     "smtp_missing": {
       "short": "Servidor de correo no configurado",
-      "body": "El servidor de correo no está configurado: sin SMTP no se pueden invitar usuarios ni enviar enlaces de restablecimiento de contraseña.",
+      "body": "El servidor de correo no está configurado: los nuevos usuarios y los restablecimientos reciben una contraseña temporal para comunicar, que deberán cambiar en el primer inicio de sesión.",
       "link": "Configurar SMTP"
     },
     "email_errors": {
@@ -1596,6 +1609,24 @@
       "invalid_email": "correo no válido",
       "identifier_required": "nombre de usuario obligatorio",
       "sso_active_user_creation_disabled": "con SSO activo, las cuentas se crean en el primer acceso"
+    },
+    "temp_password": {
+      "title": "Contraseña temporal",
+      "title_many": "Contraseñas temporales",
+      "body": "El servidor de correo no está configurado, así que no se envió ningún enlace. Comunica la contraseña al usuario por un canal seguro: en el primer inicio de sesión deberá elegir una nueva antes de continuar.",
+      "once": "Solo se muestra una vez: cópiala ahora.",
+      "expires": "Válida hasta el {{date}}",
+      "copy": "Copiar",
+      "copy_all": "Copiar todas",
+      "copied": "Copiado",
+      "done": "Listo",
+      "close": "Cerrar"
+    },
+    "temp_reset": {
+      "title": "¿Sustituir la contraseña?",
+      "body": "La contraseña actual de {{name}} dejará de funcionar de inmediato y se generará una contraseña temporal para comunicársela. En el primer inicio de sesión deberá elegir una nueva.",
+      "cancel": "Cancelar",
+      "confirm": "Generar contraseña temporal"
     }
   },
   "admin_security": {

@@ -89,6 +89,7 @@ export default function LoginPage() {
       mfa_required?: boolean;
       mfa_stage?: "enroll" | "verify";
       mfa_token?: string;
+      password_change_required?: boolean;
     };
     try {
       j = raw ? (JSON.parse(raw) as typeof j) : {};
@@ -122,12 +123,13 @@ export default function LoginPage() {
     await completeLogin(j);
   }
 
-  async function completeLogin(j: { access_token?: string; user_id?: string }) {
+  async function completeLogin(j: { access_token?: string; user_id?: string; password_change_required?: boolean }) {
     if (j.access_token && j.user_id) {
       setStoredAuth(j.access_token, j.user_id);
       initLocaleFromStorage();
       await syncLanguagePreferenceToServer(j.access_token);
-      window.location.href = "/";
+      // Password temporanea: dritti al cambio obbligatorio (AuthGate farebbe comunque il redirect).
+      window.location.href = j.password_change_required ? "/change-password" : "/";
     }
   }
 

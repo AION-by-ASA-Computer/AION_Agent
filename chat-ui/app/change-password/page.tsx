@@ -31,18 +31,28 @@ export default function ChangePasswordPage() {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [loading, setLoading] = useState(false);
+  // null finche' /auth/me non risponde: evita il flash del bottone "skip".
+  const [required, setRequired] = useState<boolean | null>(null);
 
-  // Serve solo alla regola "non contiene lo username" della checklist.
+  // Identifier per la regola "non contiene lo username" della checklist;
+  // password_change_required = password temporanea da cambiare (niente skip).
   useEffect(() => {
+    // Senza token /auth/me risponde 401 → required=false (setState solo nel callback).
     const token = getStoredToken();
-    if (!token) return;
     let cancelled = false;
-    void fetch(`${apiBase()}/auth/me`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" })
+    void fetch(`${apiBase()}/auth/me`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      cache: "no-store",
+    })
       .then((r) => (r.ok ? r.json() : null))
-      .then((me: { identifier?: string } | null) => {
-        if (!cancelled && me?.identifier) setIdentifier(me.identifier);
+      .then((me: { identifier?: string; password_change_required?: boolean } | null) => {
+        if (cancelled) return;
+        if (me?.identifier) setIdentifier(me.identifier);
+        setRequired(Boolean(me?.password_change_required));
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setRequired(false);
+      });
     return () => {
       cancelled = true;
     };
@@ -95,15 +105,15 @@ export default function ChangePasswordPage() {
     <AuthShell>
       <AuthHeading
         icon={<KeyRound className="h-5 w-5" aria-hidden />}
-        title={t("change_password.title")}
-        description={t("change_password.desc")}
+        title={required ? t("change_password.title_required") : t("change_password.title")}
+        description={required ? t("change_password.desc_required") : t("change_password.desc")}
       />
       <form onSubmit={submit} className="flex flex-col gap-3">
         <input
           type="password"
           className={authInputCls}
-          placeholder={t("change_password.current")}
-          aria-label={t("change_password.current")}
+          placeholder={required ? t("change_password.current_temp") : t("change_password.current")}
+          aria-label={required ? t("change_password.current_temp") : t("change_password.current")}
           value={oldPw}
           onChange={(e) => setOldPw(e.target.value)}
           autoComplete="current-password"
@@ -139,9 +149,11 @@ export default function ChangePasswordPage() {
           {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           {t("change_password.submit")}
         </button>
-        <button type="button" onClick={skip} className={cn(authQuietBtnCls, "self-center")}>
-          {t("change_password.skip")}
-        </button>
+        {required === false ? (
+          <button type="button" onClick={skip} className={cn(authQuietBtnCls, "self-center")}>
+            {t("change_password.skip")}
+          </button>
+        ) : null}
       </form>
     </AuthShell>
   );

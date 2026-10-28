@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, Loader2 } from "lucide-react";
 
@@ -40,6 +40,20 @@ export default function ChangePasswordPage() {
   const [err, setErr] = useState<string | null>(null);
   const [ok, setOk] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Temporary password from an admin: the change can't be skipped (the backend blocks everything else meanwhile).
+  // null until /auth/me answers, so the skip button never flashes.
+  const [required, setRequired] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch(`${apiBase()}/auth/me`, { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((me: { password_change_required?: boolean }) => !cancelled && setRequired(!!me.password_change_required))
+      .catch(() => !cancelled && setRequired(false));
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -83,15 +97,19 @@ export default function ChangePasswordPage() {
     <AuthShell>
       <AuthHeading
         icon={<KeyRound className="h-5 w-5" aria-hidden />}
-        title="Change password"
-        description="You're using a default password. Change it now or remind me tomorrow (skippable for 24h)."
+        title={required ? "Set your own password" : "Change password"}
+        description={
+          required
+            ? "You signed in with a temporary password provided by an administrator. Choose a new password to continue."
+            : "You're using a default password. Change it now or remind me tomorrow (skippable for 24h)."
+        }
       />
       <form onSubmit={submit} className="flex flex-col gap-3">
         <input
           type="password"
           className={authInputCls}
-          placeholder="Current password"
-          aria-label="Current password"
+          placeholder={required ? "Temporary password" : "Current password"}
+          aria-label={required ? "Temporary password" : "Current password"}
           value={oldPw}
           onChange={(e) => setOldPw(e.target.value)}
           autoComplete="current-password"
@@ -121,9 +139,11 @@ export default function ChangePasswordPage() {
           {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
           Update password
         </button>
-        <button type="button" onClick={skip} className={cn(authQuietBtnCls, "self-center")}>
-          Remind me tomorrow
-        </button>
+        {required === false && (
+          <button type="button" onClick={skip} className={cn(authQuietBtnCls, "self-center")}>
+            Remind me tomorrow
+          </button>
+        )}
       </form>
     </AuthShell>
   );

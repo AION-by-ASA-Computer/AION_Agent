@@ -1290,7 +1290,8 @@
       "link_failed": "Send failed",
       "link_expires": "Expires {{date}}",
       "link_invite": "Invite pending",
-      "link_reset": "Reset pending"
+      "link_reset": "Reset pending",
+      "temp_password": "Temporary password"
     },
     "row": {
       "profiles": "Profile access for {{name}}",
@@ -1298,7 +1299,8 @@
       "edit": "Edit {{name}}",
       "delete": "Delete {{name}}",
       "send_reset": "Send {{name}} a password reset link",
-      "resend_invite": "Resend the invite to {{name}}"
+      "resend_invite": "Resend the invite to {{name}}",
+      "issue_temp": "Generate a temporary password for {{name}}"
     },
     "form": {
       "title_new": "New user",
@@ -1348,7 +1350,13 @@
       "resend_invite": "Resend invite",
       "link_needs_email": "Add an email address to send the link.",
       "link_hint": "The link goes only to the user and expires soon; sending a new one cancels the previous one.",
-      "sending": "Sending…"
+      "sending": "Sending…",
+      "temp_pending": "Temporary password to change at first sign-in, valid until {{date}}",
+      "temp_pending_nodate": "Temporary password to change at first sign-in",
+      "issue_temp": "Generate temporary password",
+      "temp_hint": "Without SMTP a temporary password is generated, shown only once, and replaces the current one right away. The user must change it at first sign-in.",
+      "temp_note": "The email server isn't configured: a temporary password will be generated, shown only once, for you to give the user. At first sign-in they must choose a new one.",
+      "create_with_temp": "Create and generate password"
     },
     "profiles": {
       "title": "Profile access",
@@ -1464,7 +1472,12 @@
       "links_sent_one": "Email sent to {{email}}.",
       "links_sent": "Emails sent: {{count}}.",
       "links_failed": "Couldn't send to {{names}} ({{error}}).",
-      "links_missing_email": "No email address, no link sent: {{names}}."
+      "links_missing_email": "No email address, no link sent: {{names}}.",
+      "act_temp": "Generate password",
+      "confirm_temp_title": "Generate a temporary password?",
+      "confirm_link_body_temp": "A temporary password will be generated for {{name}}, shown only once, for you to hand over; any previous link stops working. After signing in they must link their work account.",
+      "confirm_unlink_body_temp": "{{name}} will lose the SSO link. If they have no password, a temporary one is generated and shown only once: they sign in with it and link their work account again.",
+      "confirm_temp": "Generate password"
     },
     "sso_guide": {
       "title": "How to set up Microsoft Entra ID",
@@ -1582,7 +1595,7 @@
     },
     "smtp_missing": {
       "short": "Email server not configured",
-      "body": "The email server isn't configured: without SMTP you can't invite users or send password reset links.",
+      "body": "The email server isn't configured: new users and password resets get a temporary password for you to hand over, which they must change at first sign-in.",
       "link": "Set up SMTP"
     },
     "email_errors": {
@@ -1596,6 +1609,24 @@
       "invalid_email": "invalid email address",
       "identifier_required": "username is required",
       "sso_active_user_creation_disabled": "with SSO active, accounts are created at first sign-in"
+    },
+    "temp_password": {
+      "title": "Temporary password",
+      "title_many": "Temporary passwords",
+      "body": "The email server isn't configured, so no link was sent. Give the password to the user over a secure channel: at first sign-in they must choose a new one before they can continue.",
+      "once": "It's shown only once: copy it now.",
+      "expires": "Valid until {{date}}",
+      "copy": "Copy",
+      "copy_all": "Copy all",
+      "copied": "Copied",
+      "done": "Done",
+      "close": "Close"
+    },
+    "temp_reset": {
+      "title": "Replace the password?",
+      "body": "{{name}}'s current password will stop working right away and a temporary password will be generated for you to hand over. At first sign-in they must choose a new one.",
+      "cancel": "Cancel",
+      "confirm": "Generate temporary password"
     }
   },
   "admin_security": {

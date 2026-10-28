@@ -786,7 +786,8 @@ async def test_setup_links_reopen_completed_migration(env, monkeypatch):
 
     out = await lm.send_migration_links("default", [bob], "google", actor_user_id=None)
 
-    assert [t["user_id"] for t in out["sent"]] == [bob]
+    assert out["delivery"] == "email"
+    assert _sent_to(out) == [bob]
     assert await lm.is_migration_active("default")
     assert await lm.password_login_visible("default")
 
@@ -800,49 +801,80 @@ async def test_setup_links_refused_for_linked_user(env, monkeypatch):
         )
 
 
-@with_env
-async def test_unlink_without_smtp_reports_error(env, monkeypatch):
-    from src.notifications.smtp_settings import invalidate_cache
+async def _disable_smtp(env) -> None:
     from src.data.models import SmtpSettings
+    from src.notifications.smtp_settings import invalidate_cache
 
-    _, bob = await _all_linked(env)
     async with env["sm"]() as s:
         (await s.get(SmtpSettings, "default")).enabled = False
         await s.commit()
     invalidate_cache("default")
 
+
+@with_env
+async def test_unlink_without_smtp_issues_temp_password(env, monkeypatch):
+    from src.data.user_password import verify_password
+
+    lm = env["lm"]
+    _, bob = await _all_linked(env)
+    await _disable_smtp(env)
+
     out = await _unlink(env, monkeypatch, bob)
 
-    assert out["setup_link_error"] == "smtp_not_configured"
-    assert "setup_links" not in out
+    assert out["delivery"] == "temp_password"
+    assert [t["user_id"] for t in out["temp_passwords"]] == [bob]
     assert env["smtp"].sent == []
+    u = await env["get_user"](bob)
+    assert verify_password(out["temp_passwords"][0]["password"], u.password_hash)
+    assert u.temp_password_expires_at is not None
+    # Con la password temporanea bob si ricollega col flusso standard.
+    assert await lm.is_migration_active("default")
+    assert await lm.user_needs_link("default", bob)
+    await env["prov"].link_identity_to_user(
+        "default",
+        bob,
+        _claims("s-bob", "bob@x.io"),
+        {},
+        PROVIDER,
+        finalize_migration=True,
+    )
+    u = await env["get_user"](bob)
+    assert u.temp_password_expires_at is None and not u.password_hash
+
+
+@with_env
+async def test_back_to_password_without_smtp_issues_temp_passwords(env, monkeypatch):
+    from src.data.models import AuthSettings
+    from src.data.user_password import verify_password
+
+    lm = env["lm"]
+    adm, bob = await _all_linked(env)
+    await _disable_smtp(env)
+
+    result = await lm.set_login_mode("default", "password", actor_user_id=adm)
+
+    assert result["login_mode"] == "password"
+    assert result["delivery"] == "temp_password"
+    issued = {t["user_id"]: t["password"] for t in result["temp_passwords"]}
+    assert sorted(issued) == sorted([adm, bob])
+    assert env["smtp"].sent == []
+    async with env["sm"]() as s:
+        assert (await s.get(AuthSettings, "default")).login_mode == "password"
+    for uid, plain in issued.items():
+        u = await env["get_user"](uid)
+        assert verify_password(plain, u.password_hash)
+        assert u.temp_password_expires_at is not None and u.must_change_password
 
 
 @with_env
 async def test_back_to_password_sends_links_not_passwords(env, monkeypatch):
-    from src.notifications.smtp_settings import invalidate_cache
-    from src.data.models import AuthSettings, SmtpSettings
-
     lm = env["lm"]
     adm, bob = await _all_linked(env)
 
-    # Senza SMTP il cambio e' rifiutato: nessuno resta chiuso fuori.
-    async with env["sm"]() as s:
-        (await s.get(SmtpSettings, "default")).enabled = False
-        await s.commit()
-    invalidate_cache("default")
-    with pytest.raises(ValueError, match="smtp_not_configured"):
-        await lm.set_login_mode("default", "password", actor_user_id=adm)
-    async with env["sm"]() as s:
-        assert (await s.get(AuthSettings, "default")).login_mode == "google"
-
-    async with env["sm"]() as s:
-        (await s.get(SmtpSettings, "default")).enabled = True
-        await s.commit()
-    invalidate_cache("default")
     result = await lm.set_login_mode("default", "password", actor_user_id=adm)
 
     assert result["login_mode"] == "password"
+    assert result["delivery"] == "email" and "temp_passwords" not in result
     assert sorted(_sent_to(result)) == sorted([adm, bob])
     _assert_no_secrets(result)
     assert sorted(m["To"] for m in env["smtp"].sent) == ["bob@x.io", "root@x.io"]

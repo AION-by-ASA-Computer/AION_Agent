@@ -15,6 +15,7 @@ export type MfaChallenge = {
 export type MfaLoginResult = {
   access_token?: string;
   user_id?: string;
+  password_change_required?: boolean;
 };
 
 type Enrollment = { qr_svg: string; secret: string };

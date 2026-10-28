@@ -419,7 +419,8 @@ async def set_login_mode(
     Restituisce il dizionario con le impostazioni aggiornate. Se il cambio
     lascia utenti senza modo di accedere, ricevono via email un link per
     impostare la password: l'esito è in 'setup_links' (mai password o token).
-    ``ValueError("smtp_not_configured")`` se servono link ma manca lo SMTP.
+    Senza SMTP ricevono invece una password temporanea, presente solo in
+    'temp_passwords'; 'delivery' indica quale dei due canali è stato usato.
     """
     from src.auth.sso.config_service import enable_provider, get_provider
 
@@ -608,20 +609,14 @@ async def set_login_mode(
                     )
                 )
 
-        # Senza SMTP questi utenti resterebbero chiusi fuori: niente cambio.
-        if link_user_ids:
-            from src.notifications.smtp_settings import smtp_configured
-
-            if not await smtp_configured(tenant_id):
-                raise ValueError("smtp_not_configured")
-
         await session.commit()
 
-    # Link inviati prima del controllo di completamento: chi ha un link
-    # attivo conta come "in attesa" (pending_users_count).
-    setup_links: Optional[Dict[str, Any]] = None
+    # Link (o password temporanee) prima del controllo di completamento: chi
+    # ha un link attivo o una password conta come "in attesa"
+    # (pending_users_count).
+    delivered: Optional[Dict[str, Any]] = None
     if link_user_ids:
-        setup_links = await _send_links(
+        delivered = await _deliver(
             tenant_id, link_user_ids, actor_user_id=actor_user_id, base_url=base_url
         )
 
@@ -654,12 +649,12 @@ async def set_login_mode(
 
     settings = await get_login_settings(tenant_id)
     result = dict(settings)
-    if setup_links is not None:
-        result["setup_links"] = setup_links
+    if delivered is not None:
+        result.update(delivered)
     return result
 
 
-async def _send_links(
+async def _deliver(
     tenant_id: str,
     user_ids: List[str],
     *,
@@ -667,20 +662,15 @@ async def _send_links(
     base_url: Optional[str],
 ) -> Dict[str, Any]:
     from src.api.public_urls import chat_base_url
-    from src.auth.password_setup import SetupLinkError, issue_setup_links
+    from src.auth.password_setup import deliver_password_setup
 
-    try:
-        return await issue_setup_links(
-            tenant_id,
-            user_ids,
-            "migration",
-            actor_user_id=actor_user_id,
-            base_url=base_url or chat_base_url(),
-        )
-    except SetupLinkError as e:
-        # SMTP disattivato tra il controllo e l'invio: nessun link creato.
-        failed = [{"user_id": uid, "reason": e.code} for uid in user_ids]
-        return {"sent": [], "failed": failed, "missing_email": []}
+    return await deliver_password_setup(
+        tenant_id,
+        user_ids,
+        "migration",
+        actor_user_id=actor_user_id,
+        base_url=base_url or chat_base_url(),
+    )
 
 
 async def send_migration_links(
@@ -692,14 +682,12 @@ async def send_migration_links(
     base_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Invia (o reinvia) via email il link per impostare la password agli
-    utenti indicati, che poi collegheranno l'account SSO.
+    utenti indicati, che poi collegheranno l'account SSO. Senza SMTP emette
+    password temporanee (vedi ``deliver_password_setup``).
 
     Usato da POST /admin/auth/setup-links e dallo scollegamento di un'identita'.
-    ``ValueError("user_already_linked:<id>")`` per chi e' gia' collegato,
-    ``ValueError("smtp_not_configured")`` senza SMTP.
+    ``ValueError("user_already_linked:<id>")`` per chi e' gia' collegato.
     """
-    from src.notifications.smtp_settings import smtp_configured
-
     async with get_async_session_maker()() as session:
         for uid in user_ids:
             already_linked = (
@@ -717,14 +705,13 @@ async def send_migration_links(
             )
             if already_linked:
                 raise ValueError(f"user_already_linked:{uid}")
-    if not await smtp_configured(tenant_id):
-        raise ValueError("smtp_not_configured")
 
-    result = await _send_links(
+    result = await _deliver(
         tenant_id, user_ids, actor_user_id=actor_user_id, base_url=base_url
     )
-    # Chi riceve il link deve (ri)collegarsi: serve il form password e la
-    # migrazione deve risultare in corso.
-    if result["sent"] or result["failed"]:
+    # Chi riceve il link o la password deve (ri)collegarsi: serve il form
+    # password e la migrazione deve risultare in corso.
+    links = result.get("setup_links") or {}
+    if result.get("temp_passwords") or links.get("sent") or links.get("failed"):
         await reopen_migration(tenant_id)
     return result

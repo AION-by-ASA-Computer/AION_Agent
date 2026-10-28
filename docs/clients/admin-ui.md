@@ -205,8 +205,12 @@ only says whether it was sent (`invite: {sent, expires_at}` or `{sent: false, er
 The edit dialog shows the password state and a "Send reset link" / "Resend
 invite" button (`POST /admin/users/{id}/password-link`); the list shows
 "Invite pending", "Reset pending" and "Send failed" badges with a mail action.
-Without SMTP (Settings → SMTP) creation is disabled and a banner links to the
-SMTP settings. The user chooses the password on chat-ui `/set-password`, which
+Without SMTP (Settings → SMTP) a banner links to the SMTP settings, the email
+becomes optional and creation or reset generates a **temporary password**
+shown once in a dialog (copy, CSV for batches): the user must change it at first
+sign-in before doing anything else ("Temporary password" badge in the list).
+The same dialog appears for SSO migration switches, setup links and unlinks.
+The user chooses the password on chat-ui `/set-password`, which
 enforces the policy (at least 8 characters, lowercase, uppercase, digit, symbol,
 not containing the username; `src/data/user_password.py::password_policy_violations`).
 See [Password setup by email](../security/password-setup-email.md).

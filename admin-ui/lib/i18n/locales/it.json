@@ -1290,7 +1290,8 @@
       "link_failed": "Invio fallito",
       "link_expires": "Scade il {{date}}",
       "link_invite": "Invito in attesa",
-      "link_reset": "Reset in corso"
+      "link_reset": "Reset in corso",
+      "temp_password": "Password temporanea"
     },
     "row": {
       "profiles": "Accesso ai profili di {{name}}",
@@ -1298,7 +1299,8 @@
       "edit": "Modifica {{name}}",
       "delete": "Elimina {{name}}",
       "send_reset": "Invia a {{name}} un link di reimpostazione password",
-      "resend_invite": "Reinvia l'invito a {{name}}"
+      "resend_invite": "Reinvia l'invito a {{name}}",
+      "issue_temp": "Genera una password temporanea per {{name}}"
     },
     "form": {
       "title_new": "Nuovo utente",
@@ -1348,7 +1350,13 @@
       "resend_invite": "Reinvia invito",
       "link_needs_email": "Aggiungi un'email per poter inviare il link.",
       "link_hint": "Il link arriva solo all'utente e scade dopo poco tempo; inviarne uno nuovo annulla il precedente.",
-      "sending": "Invio…"
+      "sending": "Invio…",
+      "temp_pending": "Password temporanea da cambiare al primo accesso, valida fino al {{date}}",
+      "temp_pending_nodate": "Password temporanea da cambiare al primo accesso",
+      "issue_temp": "Genera password temporanea",
+      "temp_hint": "Senza SMTP viene generata una password temporanea, mostrata una sola volta, che sostituisce subito quella attuale. L'utente deve cambiarla al primo accesso.",
+      "temp_note": "Il server email non è configurato: verrà generata una password temporanea, mostrata una sola volta, da comunicare all'utente. Al primo accesso dovrà sceglierne una nuova.",
+      "create_with_temp": "Crea e genera password"
     },
     "profiles": {
       "title": "Accesso ai profili",
@@ -1464,7 +1472,12 @@
       "links_sent_one": "Email inviata a {{email}}.",
       "links_sent": "Email inviate: {{count}}.",
       "links_failed": "Invio non riuscito per {{names}} ({{error}}).",
-      "links_missing_email": "Senza email, nessun link inviato: {{names}}."
+      "links_missing_email": "Senza email, nessun link inviato: {{names}}.",
+      "act_temp": "Genera password",
+      "confirm_temp_title": "Generare una password temporanea?",
+      "confirm_link_body_temp": "Verrà generata per {{name}} una password temporanea, mostrata una sola volta, da comunicargli; un eventuale link precedente non sarà più valido. Dopo l'accesso dovrà collegare l'account aziendale.",
+      "confirm_unlink_body_temp": "{{name}} perderà il collegamento SSO. Se non ha una password ne verrà generata una temporanea, mostrata una sola volta: con quella accede e ricollega l'account aziendale.",
+      "confirm_temp": "Genera password"
     },
     "sso_guide": {
       "title": "Come configurare Microsoft Entra ID",
@@ -1582,7 +1595,7 @@
     },
     "smtp_missing": {
       "short": "Server email non configurato",
-      "body": "Il server email non è configurato: senza SMTP non è possibile invitare utenti né inviare link di reimpostazione password.",
+      "body": "Il server email non è configurato: per nuovi utenti e reimpostazioni verrà generata una password temporanea da comunicare all'utente, che dovrà cambiarla al primo accesso.",
       "link": "Configura SMTP"
     },
     "email_errors": {
@@ -1596,6 +1609,24 @@
       "invalid_email": "indirizzo email non valido",
       "identifier_required": "username obbligatorio",
       "sso_active_user_creation_disabled": "con SSO attivo gli account si creano al primo accesso"
+    },
+    "temp_password": {
+      "title": "Password temporanea",
+      "title_many": "Password temporanee",
+      "body": "Il server email non è configurato, quindi non è stato inviato alcun link. Comunica la password all'utente tramite un canale sicuro: al primo accesso dovrà sceglierne una nuova prima di poter continuare.",
+      "once": "Viene mostrata una sola volta: copiala ora.",
+      "expires": "Valida fino al {{date}}",
+      "copy": "Copia",
+      "copy_all": "Copia tutte",
+      "copied": "Copiato",
+      "done": "Fatto",
+      "close": "Chiudi"
+    },
+    "temp_reset": {
+      "title": "Sostituire la password?",
+      "body": "La password attuale di {{name}} smetterà subito di funzionare e verrà generata una password temporanea da comunicargli. Al primo accesso dovrà sceglierne una nuova.",
+      "cancel": "Annulla",
+      "confirm": "Genera password temporanea"
     }
   },
   "admin_security": {

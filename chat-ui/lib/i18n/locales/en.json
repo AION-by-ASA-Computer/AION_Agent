@@ -843,7 +843,7 @@
       "sso_domain_not_allowed": "This account isn't enabled for access. You may be signed in with the wrong account — use your work account instead.",
       "sso_required": "SSO sign-in is required for this account.",
       "password_login_disabled": "Password sign-in is disabled.",
-      "temp_password_expired": "Your temporary password has expired. Use “Forgot password?” to get a link by email, or ask your administrator to send you one.",
+      "temp_password_expired": "Your temporary password has expired. Ask an administrator for a new one.",
       "sso_failed": "SSO authentication failed.",
       "sso_start_failed": "Unable to start SSO sign-in.",
       "sso_token_invalid": "Invalid SSO token.",
@@ -933,6 +933,9 @@
     }
   },
   "change_password": {
+    "title_required": "Set your own password",
+    "desc_required": "You signed in with a temporary password provided by an administrator. Choose a new password to continue.",
+    "current_temp": "Temporary password",
     "title": "Change password",
     "desc": "You're using a temporary password. Update it now or remind me tomorrow (skippable for 24h).",
     "current": "Current password",

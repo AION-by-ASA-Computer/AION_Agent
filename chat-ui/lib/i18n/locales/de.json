@@ -843,7 +843,7 @@
       "sso_domain_not_allowed": "Dieses Konto ist nicht für den Zugang freigeschaltet. Sie verwenden vermutlich das falsche Konto – melden Sie sich mit Ihrem Firmenkonto an.",
       "sso_required": "Für dieses Konto ist SSO-Anmeldung erforderlich.",
       "password_login_disabled": "Die Passwort-Anmeldung ist deaktiviert.",
-      "temp_password_expired": "Das temporäre Passwort ist abgelaufen. Nutzen Sie „Passwort vergessen?“, um einen Link per E-Mail zu erhalten, oder bitten Sie den Administrator darum.",
+      "temp_password_expired": "Ihr temporäres Passwort ist abgelaufen. Bitten Sie einen Administrator um ein neues.",
       "sso_failed": "SSO-Authentifizierung fehlgeschlagen.",
       "sso_start_failed": "SSO-Anmeldung konnte nicht gestartet werden.",
       "sso_token_invalid": "Ungültiges SSO-Token.",
@@ -933,6 +933,9 @@
     }
   },
   "change_password": {
+    "title_required": "Eigenes Passwort festlegen",
+    "desc_required": "Sie haben sich mit einem temporären Passwort angemeldet, das Ihnen ein Administrator gegeben hat. Wählen Sie ein neues Passwort, um fortzufahren.",
+    "current_temp": "Temporäres Passwort",
     "title": "Passwort ändern",
     "desc": "Sie verwenden ein temporäres Passwort. Aktualisieren Sie es jetzt oder lassen Sie sich morgen erinnern (24 Std. aufschiebbar).",
     "current": "Aktuelles Passwort",

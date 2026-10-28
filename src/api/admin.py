@@ -3808,9 +3808,11 @@ async def json_recovery_stats():
 
 
 class UserCreate(BaseModel):
-    # Nessuna password: l'utente la imposta dal link d'invito inviato all'email.
+    # Nessuna password scelta dall'admin: link d'invito via email, oppure (senza
+    # SMTP) password temporanea da cambiare al primo login. Email obbligatoria
+    # solo con SMTP configurato.
     identifier: str
-    email: str
+    email: Optional[str] = None
     display_name: Optional[str] = None
     tenant_id: str = "default"
     roles: List[str] = []
@@ -3895,9 +3897,17 @@ async def list_users():
             else:
                 login_method = None
             link = links.get(r.id)
+            temp_expires = r.temp_password_expires_at
+            if temp_expires is not None and temp_expires.tzinfo is None:
+                temp_expires = temp_expires.replace(tzinfo=timezone.utc)
             return {
                 "has_password": has_password,
                 "login_method": login_method,
+                # Password temporanea (senza SMTP) non ancora cambiata dall'utente.
+                "temp_password_pending": temp_expires is not None,
+                "temp_password_expires_at": (
+                    temp_expires.isoformat() if temp_expires else None
+                ),
                 # Link email per impostare la password ancora valido (mai il link stesso).
                 "setup_link_pending": link is not None,
                 "setup_link_purpose": link["purpose"] if link else None,
@@ -3952,9 +3962,11 @@ async def create_user(
 ):
     """Crea un utente senza password e gli invia via email il link d'invito.
 
-    L'admin non sceglie e non vede mai la password (ne' il link).
+    L'admin non sceglie e non vede mai la password (ne' il link). Senza SMTP
+    l'utente riceve una password temporanea, restituita solo in questa
+    risposta, che deve cambiare al primo login.
     """
-    from ..auth.password_setup import SetupLinkError, issue_setup_links
+    from ..auth.password_setup import deliver_password_setup
     from ..auth.sso.login_mode import get_login_settings
     from ..data.audit import record_admin_action
     from ..notifications.smtp_settings import smtp_configured
@@ -3968,9 +3980,10 @@ async def create_user(
             status_code=409,
             detail={"code": "sso_active_user_creation_disabled"},
         )
-    email = _valid_email_or_422(body.email)
-    if not await smtp_configured(body.tenant_id):
-        raise HTTPException(status_code=409, detail={"code": "smtp_not_configured"})
+    if await smtp_configured(body.tenant_id) or (body.email or "").strip():
+        email: Optional[str] = _valid_email_or_422(body.email)
+    else:
+        email = None
     try:
         uid = await create_invited_user(
             tenant_id=body.tenant_id,
@@ -3993,26 +4006,23 @@ async def create_user(
             u.api_key_max_ttl_days = body.api_key_max_ttl_days
             await session.commit()
 
-    try:
-        links = await issue_setup_links(
-            body.tenant_id,
-            [uid],
-            "invite",
-            actor_user_id=auth.user_row_id,
-            base_url=chat_base_url(request),
-        )
-    except SetupLinkError as e:
-        links = {"sent": [], "failed": [{"reason": e.code}], "missing_email": []}
-    invite = _link_outcome(links)
+    delivered = await deliver_password_setup(
+        body.tenant_id,
+        [uid],
+        "invite",
+        actor_user_id=auth.user_row_id,
+        base_url=chat_base_url(request),
+    )
+    out, audit = _delivery_outcome(delivered, key="invite")
     await record_admin_action(
         tenant_id=body.tenant_id,
         actor=auth.identifier,
         operation="user.create",
         resource_type="user",
         resource_id=uid,
-        payload={"identifier": body.identifier, "roles": body.roles, "invite": invite},
+        payload={"identifier": body.identifier, "roles": body.roles, **audit},
     )
-    return {"status": "success", "id": uid, "invite": invite}
+    return {"status": "success", "id": uid, **out}
 
 
 def _link_outcome(links: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
@@ -4025,6 +4035,33 @@ def _link_outcome(links: Dict[str, List[Dict[str, Any]]]) -> Dict[str, Any]:
     return {"sent": False, "error": reason}
 
 
+def _delivery_outcome(
+    delivered: Dict[str, Any], *, key: Optional[str]
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
+    """Esito di ``deliver_password_setup`` per un solo utente.
+
+    Ritorna ``(risposta, payload_audit)``: la password temporanea compare solo
+    nella risposta, mai nell'audit. Con ``key`` l'esito email e' annidato
+    (``{"invite": {...}}``), altrimenti e' al primo livello.
+    """
+    if delivered["delivery"] == "email":
+        outcome = _link_outcome(delivered["setup_links"])
+        body = {key: outcome} if key else outcome
+        return {"delivery": "email", **body}, {"delivery": "email", **body}
+    temp = (delivered["temp_passwords"] or [{}])[0]
+    expires_at = temp.get("expires_at")
+    return (
+        {
+            "delivery": "temp_password",
+            "temp_password": {
+                "password": temp.get("password"),
+                "expires_at": expires_at,
+            },
+        },
+        {"delivery": "temp_password", "expires_at": expires_at},
+    )
+
+
 @router.post("/users/{user_id}/password-link")
 async def send_password_link(
     user_id: str,
@@ -4035,16 +4072,14 @@ async def send_password_link(
 
     ``reset`` se ha gia' una password, altrimenti ``invite`` (o ``migration``
     con SSO attivo). La password attuale resta valida finche' l'utente non
-    ne sceglie una nuova.
+    ne sceglie una nuova. Senza SMTP la password viene sostituita subito da
+    una temporanea, restituita solo in questa risposta.
     """
-    from ..auth.password_setup import (
-        SetupLinkError,
-        issue_setup_links,
-        user_link_block_reason,
-    )
+    from ..auth.password_setup import deliver_password_setup, user_link_block_reason
     from ..auth.sso.login_mode import get_login_settings, reopen_migration
     from ..data.audit import record_admin_action
     from ..data.models import User
+    from ..notifications.smtp_settings import smtp_configured
     from .public_urls import chat_base_url
 
     async with get_async_session_maker()() as session:
@@ -4052,7 +4087,9 @@ async def send_password_link(
     if not u:
         raise HTTPException(status_code=404, detail="User not found")
     tenant_id = u.tenant_id or "default"
-    blocked = await user_link_block_reason(u)
+    blocked = await user_link_block_reason(
+        u, needs_email=await smtp_configured(tenant_id)
+    )
     if blocked:
         raise HTTPException(status_code=409, detail={"code": blocked})
 
@@ -4061,19 +4098,16 @@ async def send_password_link(
         purpose = "reset"
     else:
         purpose = "migration" if sso_mode else "invite"
-    try:
-        links = await issue_setup_links(
-            tenant_id,
-            [user_id],
-            purpose,
-            actor_user_id=auth.user_row_id,
-            base_url=chat_base_url(request),
-        )
-    except SetupLinkError as e:
-        raise HTTPException(status_code=409, detail={"code": e.code})
-    outcome = _link_outcome(links)
+    delivered = await deliver_password_setup(
+        tenant_id,
+        [user_id],
+        purpose,
+        actor_user_id=auth.user_row_id,
+        base_url=chat_base_url(request),
+    )
+    out, audit = _delivery_outcome(delivered, key=None)
     # Con SSO attivo l'utente dovra' collegarsi: serve il form password.
-    if sso_mode and outcome["sent"]:
+    if sso_mode and (out.get("sent") or delivered["delivery"] == "temp_password"):
         await reopen_migration(tenant_id)
     await record_admin_action(
         tenant_id=tenant_id,
@@ -4081,9 +4115,9 @@ async def send_password_link(
         operation=f"user.password_link.{purpose}",
         resource_type="user",
         resource_id=user_id,
-        payload=outcome,
+        payload=audit,
     )
-    return {"status": "success", "purpose": purpose, **outcome}
+    return {"status": "success", "purpose": purpose, **out}
 
 
 @router.put("/users/{user_id}")

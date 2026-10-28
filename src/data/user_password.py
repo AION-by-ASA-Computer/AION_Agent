@@ -145,15 +145,16 @@ async def create_invited_user(
     *,
     tenant_id: str,
     identifier: str,
-    email: str,
+    email: Optional[str],
     display_name: Optional[str] = None,
     roles: Optional[Iterable[str]] = None,
     session_maker: Optional[async_sessionmaker[AsyncSession]] = None,
 ) -> str:
-    """Utente senza password: la sceglie lui dal link d'invito via email
+    """Utente senza password: la sceglie lui dal link d'invito via email, o
+    cambiando la password temporanea emessa senza SMTP
     (vedi ``src/auth/password_setup.py``). Ritorna l'id utente."""
-    if not identifier.strip() or not email:
-        raise ValueError("identifier ed email sono obbligatori")
+    if not identifier.strip():
+        raise ValueError("identifier obbligatorio")
     return await _insert_user(
         tenant_id=tenant_id,
         identifier=identifier,

@@ -843,7 +843,7 @@
       "sso_domain_not_allowed": "Ce compte n'est pas autorisé à se connecter. Vous utilisez peut-être le mauvais compte : connectez-vous avec votre compte professionnel.",
       "sso_required": "La connexion SSO est obligatoire pour ce compte.",
       "password_login_disabled": "La connexion par mot de passe est désactivée.",
-      "temp_password_expired": "Le mot de passe temporaire a expiré. Utilisez « Mot de passe oublié ? » pour recevoir un lien par e-mail, ou demandez-le à l'administrateur.",
+      "temp_password_expired": "Votre mot de passe temporaire a expiré. Demandez-en un nouveau à un administrateur.",
       "sso_failed": "Échec de l'authentification SSO.",
       "sso_start_failed": "Impossible de démarrer la connexion SSO.",
       "sso_token_invalid": "Jeton SSO invalide.",
@@ -933,6 +933,9 @@
     }
   },
   "change_password": {
+    "title_required": "Définissez votre mot de passe",
+    "desc_required": "Vous vous êtes connecté avec un mot de passe temporaire fourni par un administrateur. Choisissez un nouveau mot de passe pour continuer.",
+    "current_temp": "Mot de passe temporaire",
     "title": "Changer le mot de passe",
     "desc": "Vous utilisez un mot de passe temporaire. Mettez-le à jour maintenant ou recevez un rappel demain (report possible pendant 24 h).",
     "current": "Mot de passe actuel",

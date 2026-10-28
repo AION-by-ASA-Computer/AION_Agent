@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { KeyRound, Loader2, Mail, MailWarning, Pencil, Plus, ShieldCheck, Trash2, TriangleAlert, UserCog, UserRound } from "lucide-react";
+import { KeyRound, Loader2, Mail, MailWarning, Pencil, Plus, RectangleEllipsis, ShieldCheck, Trash2, TriangleAlert, UserCog, UserRound } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
 import { cn } from "@/lib/cn";
@@ -18,6 +18,7 @@ import { DeleteDialog } from "@/components/ui/ConfirmDialogs";
 import { SsoMigrationPanel } from "@/components/sso/SsoMigrationPanel";
 import { linkErrorText } from "@/components/sso/setupLinks";
 import { MigrationUsers } from "@/components/sso/MigrationUsers";
+import { TempPasswordsDialog, type TempPassword } from "@/components/sso/TempPasswordsDialog";
 import { TwoFactorPanel } from "@/components/sso/TwoFactorPanel";
 
 const k = "admin_users";
@@ -56,6 +57,8 @@ interface UserRow {
   setup_link_purpose?: "invite" | "reset" | "migration" | null;
   setup_link_expires_at?: string | null;
   setup_link_send_error?: string | null;
+  temp_password_pending?: boolean;
+  temp_password_expires_at?: string | null;
 }
 
 const isAdmin = (u: UserRow) => !!u.roles?.includes("admin");
@@ -297,22 +300,31 @@ function RolePicker({ admin, onChange, t }: { admin: boolean; onChange: (v: bool
   );
 }
 
-/** Password status of an existing account, with the action that emails a link to (re)set it. */
-function PasswordAccess({ user, busy, t, onSendLink }: { user: UserRow; busy: boolean; t: T; onSendLink: (u: UserRow) => void }) {
+/** Password status of an existing account, with the action that emails a link to (re)set it, or issues a temporary password without SMTP. */
+function PasswordAccess({ user, busy, smtpMissing, t, onSendLink }: { user: UserRow; busy: boolean; smtpMissing: boolean; t: T; onSendLink: (u: UserRow) => void }) {
   const pending = !!user.setup_link_pending;
-  const status = user.setup_link_send_error
-    ? t(`${k}.form.link_send_failed`, { error: emailError(t, user.setup_link_send_error) })
-    : pending && user.setup_link_expires_at
-      ? t(`${k}.form.link_pending`, { date: formatDate(user.setup_link_expires_at) })
-      : user.has_password
-        ? t(`${k}.form.password_set`)
-        : t(`${k}.form.password_not_set`);
+  const status = user.temp_password_pending
+    ? user.temp_password_expires_at
+      ? t(`${k}.form.temp_pending`, { date: formatDate(user.temp_password_expires_at) })
+      : t(`${k}.form.temp_pending_nodate`)
+    : user.setup_link_send_error
+      ? t(`${k}.form.link_send_failed`, { error: emailError(t, user.setup_link_send_error) })
+      : pending && user.setup_link_expires_at
+        ? t(`${k}.form.link_pending`, { date: formatDate(user.setup_link_expires_at) })
+        : user.has_password
+          ? t(`${k}.form.password_set`)
+          : t(`${k}.form.password_not_set`);
   return (
     <div className="flex flex-col gap-1.5">
       <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-border px-3.5 py-2.5">
         <span className={cn("text-sm", user.setup_link_send_error ? "text-destructive" : "text-muted-foreground")}>{status}</span>
-        {user.email ? (
+        {smtpMissing ? (
+          <button type="button" className={outlineBtn} disabled={busy} onClick={() => onSendLink(user)}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <RectangleEllipsis className="h-4 w-4" aria-hidden />}
+            {t(`${k}.form.issue_temp`)}
+          </button>
+        ) : user.email ? (
           <button type="button" className={outlineBtn} disabled={busy} onClick={() => onSendLink(user)}>
             {busy ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mail className="h-4 w-4" aria-hidden />}
             {t(`${k}.form.${user.has_password ? "send_reset" : "resend_invite"}`)}
@@ -321,7 +333,7 @@ function PasswordAccess({ user, busy, t, onSendLink }: { user: UserRow; busy: bo
           <span className="text-xs text-muted-foreground">{t(`${k}.form.link_needs_email`)}</span>
         )}
       </div>
-      <p className="text-xs text-muted-foreground">{t(`${k}.form.link_hint`)}</p>
+      <p className="text-xs text-muted-foreground">{t(`${k}.form.${smtpMissing ? "temp_hint" : "link_hint"}`)}</p>
     </div>
   );
 }
@@ -330,6 +342,7 @@ function UserFormDialog({
   user,
   busy,
   linkBusy,
+  smtpMissing,
   t,
   onSubmit,
   onSendLink,
@@ -338,6 +351,7 @@ function UserFormDialog({
   user: UserRow | null;
   busy: boolean;
   linkBusy: boolean;
+  smtpMissing: boolean;
   t: T;
   onSubmit: (v: FormValues) => Promise<boolean>;
   onSendLink: (u: UserRow) => void;
@@ -358,8 +372,8 @@ function UserFormDialog({
   const [maxDays, setMaxDays] = useState(String(initialMaxDays));
 
   const ident = identifierTouched ? identifier : suggestIdentifier(displayName, email);
-  // New accounts get their password through the invitation email, so it must be there.
-  const emailOk = editing ? !email.trim() || looksLikeEmail(email) : looksLikeEmail(email);
+  // New accounts get their password through the invitation email, so it must be there (without SMTP they get a temporary password instead).
+  const emailOk = editing || smtpMissing ? !email.trim() || looksLikeEmail(email) : looksLikeEmail(email);
   const maxKeysValue = parseInRange(maxKeys, API_KEYS_LIMIT);
   const maxDaysValue = parseInRange(maxDays, API_KEY_DAYS);
   // The limits only matter while the switch is on; when off, unparseable edits fall back to the stored values.
@@ -409,7 +423,7 @@ function UserFormDialog({
               className={inputCls}
             />
           </Field>
-          <Field label={t(`${k}.form.email`)} htmlFor="user-form-email" optional={editing} hint={editing ? undefined : t(`${k}.form.email_invite_hint`)} t={t}>
+          <Field label={t(`${k}.form.email`)} htmlFor="user-form-email" optional={editing || smtpMissing} hint={editing || smtpMissing ? undefined : t(`${k}.form.email_invite_hint`)} t={t}>
             <input
               id="user-form-email"
               type="email"
@@ -417,7 +431,7 @@ function UserFormDialog({
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t(`${k}.form.email_placeholder`)}
               autoComplete="off"
-              required={!editing}
+              required={!editing && !smtpMissing}
               aria-invalid={!!email.trim() && !looksLikeEmail(email)}
               className={inputCls}
             />
@@ -446,7 +460,7 @@ function UserFormDialog({
           )}
 
           {!editing ? (
-            <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">{t(`${k}.form.invite_note`)}</p>
+            <p className="rounded-xl bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">{t(`${k}.form.${smtpMissing ? "temp_note" : "invite_note"}`)}</p>
           ) : sso ? (
             <div className="flex flex-col gap-1.5">
               <span className="text-sm font-medium">{t(`${k}.form.password`)}</span>
@@ -455,7 +469,7 @@ function UserFormDialog({
               </p>
             </div>
           ) : (
-            <PasswordAccess user={user} busy={linkBusy} t={t} onSendLink={onSendLink} />
+            <PasswordAccess user={user} busy={linkBusy} smtpMissing={smtpMissing} t={t} onSendLink={onSendLink} />
           )}
         </div>
 
@@ -483,7 +497,7 @@ function UserFormDialog({
           </button>
           <button type="submit" className={cn(solidBtn, "justify-center")} disabled={!canSubmit}>
             {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
-            {busy ? t(`${k}.form.saving`) : t(`${k}.form.${editing ? "save" : "create_and_invite"}`)}
+            {busy ? t(`${k}.form.saving`) : t(`${k}.form.${editing ? "save" : smtpMissing ? "create_with_temp" : "create_and_invite"}`)}
           </button>
         </div>
       </form>
@@ -577,6 +591,26 @@ function ResetDialog({ user, busy, t, onConfirm, onClose }: { user: UserRow; bus
   );
 }
 
+/** Without SMTP a reset replaces the current password right away, so it is confirmed first. */
+function TempResetDialog({ user, busy, t, onConfirm, onClose }: { user: UserRow; busy: boolean; t: T; onConfirm: () => void; onClose: () => void }) {
+  return (
+    <Dialog title={t(`${k}.temp_reset.title`)} closeLabel={t(`${k}.temp_reset.cancel`)} onClose={onClose}>
+      <div className="flex flex-col gap-5">
+        <p className="text-sm text-muted-foreground">{t(`${k}.temp_reset.body`, { name: nameOf(user) })}</p>
+        <div className="flex justify-end gap-2">
+          <button type="button" className={ghostBtn} autoFocus onClick={onClose}>
+            {t(`${k}.temp_reset.cancel`)}
+          </button>
+          <button type="button" className={dangerBtn} disabled={busy} onClick={onConfirm}>
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+            {t(`${k}.temp_reset.confirm`)}
+          </button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
 export default function UsersPage() {
   const t = useT();
 
@@ -592,8 +626,11 @@ export default function UsersPage() {
   const [formUser, setFormUser] = useState<UserRow | "new" | null>(null);
   const [saving, setSaving] = useState(false);
   const [linkBusy, setLinkBusy] = useState<string | null>(null);
-  // null while unknown: creation stays possible and the backend answers 409 if SMTP is missing.
+  // null while unknown: the backend decides between email and temporary password anyway.
   const [smtpConfigured, setSmtpConfigured] = useState<boolean | null>(null);
+  // Shown once, right after the backend issues them (no SMTP): never stored nor fetched again.
+  const [tempPasswords, setTempPasswords] = useState<TempPassword[] | null>(null);
+  const [tempResetUser, setTempResetUser] = useState<UserRow | null>(null);
   const [deleteUser, setDeleteUser] = useState<UserRow | null>(null);
   const [resetUser, setResetUser] = useState<UserRow | null>(null);
   const [profileUser, setProfileUser] = useState<{ user: UserRow; initial: string[] } | null>(null);
@@ -640,7 +677,7 @@ export default function UsersPage() {
   const showSecurity = loginMode === "password";
   // With SSO, accounts are created at first sign-in (see the new-account policy), never here.
   const canCreate = loginMode === "password";
-  // Accounts get their password through an invitation email, so creation needs SMTP.
+  // Without SMTP accounts get a temporary password the admin hands over, changed at first sign-in.
   const smtpMissing = smtpConfigured === false;
   const grid = GRIDS[`${showMigration ? 1 : 0}${showSecurity ? 1 : 0}`];
 
@@ -673,11 +710,11 @@ export default function UsersPage() {
     { value: "off", label: t(`${k}.badge.twofa_off`) },
   ];
 
-  /** Resolves true on success. New accounts get an invitation email: the admin never sees a password or link. */
+  /** Resolves true on success. New accounts get an invitation email, or a one-time temporary password without SMTP. */
   const saveUser = async (v: FormValues): Promise<boolean> => {
     const editing = formUser !== null && formUser !== "new";
     const current = editing ? (formUser as UserRow) : null;
-    if (!editing && (!v.identifier || !looksLikeEmail(v.email))) {
+    if (!editing && (!v.identifier || (v.email ? !looksLikeEmail(v.email) : !smtpMissing))) {
       setToast({ message: t(`${k}.form.required`), variant: "error" });
       return false;
     }
@@ -701,12 +738,6 @@ export default function UsersPage() {
       });
       if (!editing && res.status === 409) {
         const code = await errorDetail(res, "");
-        if (code === "smtp_not_configured") {
-          // SMTP was switched off meanwhile: nothing was created.
-          setSmtpConfigured(false);
-          setToast({ message: t(`${k}.toast.smtp_missing`), variant: "warning" });
-          return false;
-        }
         if (code === "sso_active_user_creation_disabled") {
           // SSO was switched on meanwhile: creation is no longer allowed.
           setFormUser(null);
@@ -722,12 +753,17 @@ export default function UsersPage() {
         setToast({ message: t(`${k}.toast.updated`), variant: "success" });
       } else {
         const data = await res.json().catch(() => ({}));
-        const invite = data?.invite;
-        setToast(
-          invite?.sent
-            ? { message: t(`${k}.toast.invite_sent`, { email: v.email }), variant: "success" }
-            : { message: t(`${k}.toast.invite_failed`, { email: v.email, error: emailError(t, invite?.error) }), variant: "warning" },
-        );
+        if (data?.delivery === "temp_password" && data.temp_password?.password) {
+          setSmtpConfigured(false);
+          setTempPasswords([{ user_id: data.id, identifier: v.identifier, email: v.email || null, ...data.temp_password }]);
+        } else {
+          const invite = data?.invite;
+          setToast(
+            invite?.sent
+              ? { message: t(`${k}.toast.invite_sent`, { email: v.email }), variant: "success" }
+              : { message: t(`${k}.toast.invite_failed`, { email: v.email, error: emailError(t, invite?.error) }), variant: "warning" },
+          );
+        }
       }
       void loadUsers();
       return true;
@@ -739,18 +775,28 @@ export default function UsersPage() {
     }
   };
 
-  /** Emails a one-time link to set (invite) or reset the password. The link itself never reaches the admin. */
+  /** Emails a one-time link to set (invite) or reset the password; without SMTP issues a temporary password instead. */
   const sendLink = async (user: UserRow) => {
+    if (smtpMissing && user.has_password && tempResetUser?.id !== user.id) {
+      setTempResetUser(user);
+      return;
+    }
+    setTempResetUser(null);
     setLinkBusy(user.id);
     try {
       const res = await apiFetch(`${apiBase()}/admin/users/${user.id}/password-link`, { method: "POST" });
       if (!res.ok) {
         const code = await errorDetail(res, String(res.status));
-        if (code === "smtp_not_configured") setSmtpConfigured(false);
         setToast({ message: t(`${k}.toast.link_failed`, { error: emailError(t, code) }), variant: "error" });
         return;
       }
       const data = await res.json();
+      if (data.delivery === "temp_password" && data.temp_password?.password) {
+        setSmtpConfigured(false);
+        setTempPasswords([{ user_id: user.id, identifier: user.identifier, email: user.email, ...data.temp_password }]);
+        void loadUsers();
+        return;
+      }
       setToast(
         data.sent
           ? { message: t(`${k}.toast.link_sent_${data.purpose === "reset" ? "reset" : "invite"}`, { email: user.email || "" }), variant: "success" }
@@ -842,7 +888,7 @@ export default function UsersPage() {
           <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.subtitle`)}</p>
         </div>
         {canCreate ? (
-          <button type="button" className={solidBtn} onClick={() => setFormUser("new")} disabled={smtpMissing} title={smtpMissing ? t(`${k}.smtp_missing.short`) : undefined}>
+          <button type="button" className={solidBtn} onClick={() => setFormUser("new")}>
             <Plus className="h-4 w-4" aria-hidden />
             {t(`${k}.add`)}
           </button>
@@ -859,8 +905,8 @@ export default function UsersPage() {
       </header>
 
       {smtpMissing && (
-        <div className="flex items-start gap-2.5 rounded-2xl bg-warning/10 px-4 py-3 text-sm" role="alert">
-          <MailWarning className="mt-0.5 h-4 w-4 shrink-0 text-warning" aria-hidden />
+        <div className="flex items-start gap-2.5 rounded-2xl bg-secondary/60 px-4 py-3 text-sm" role="status">
+          <MailWarning className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
           <p className="min-w-0 flex-1 leading-relaxed text-muted-foreground">
             {t(`${k}.smtp_missing.body`)}{" "}
             <Link href="/settings#smtp" className="focus-ring rounded font-medium text-foreground underline underline-offset-4">
@@ -928,7 +974,7 @@ export default function UsersPage() {
                 <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.empty.title`)}</h2>
                 <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">{t(canCreate ? `${k}.empty.body` : `${k}.empty.sso_body`)}</p>
                 {canCreate && (
-                  <button type="button" className={cn(solidBtn, "mt-6")} onClick={() => setFormUser("new")} disabled={smtpMissing}>
+                  <button type="button" className={cn(solidBtn, "mt-6")} onClick={() => setFormUser("new")}>
                     <Plus className="h-4 w-4" aria-hidden />
                     {t(`${k}.add`)}
                   </button>
@@ -988,7 +1034,15 @@ export default function UsersPage() {
                                         {t(`${k}.form.api_keys.badge`, { active: u.api_keys_active ?? 0, max: u.max_api_keys ?? API_KEYS_LIMIT.default })}
                                       </span>
                                     )}
-                                    {u.setup_link_send_error ? (
+                                    {u.temp_password_pending ? (
+                                      <span
+                                        title={u.temp_password_expires_at ? t(`${k}.badge.link_expires`, { date: formatDate(u.temp_password_expires_at) }) : undefined}
+                                        className="inline-flex shrink-0 items-center gap-1 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground"
+                                      >
+                                        <RectangleEllipsis className="h-3 w-3" aria-hidden />
+                                        {t(`${k}.badge.temp_password`)}
+                                      </span>
+                                    ) : u.setup_link_send_error ? (
                                       <span
                                         title={emailError(t, u.setup_link_send_error)}
                                         className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive"
@@ -1021,9 +1075,18 @@ export default function UsersPage() {
                                     <KeyRound className="h-4 w-4" aria-hidden />
                                   </IconAction>
                                 )}
-                                {!isSsoUser(u) && !!u.email && (
-                                  <IconAction label={t(`${k}.row.${u.has_password ? "send_reset" : "resend_invite"}`, { name })} onClick={() => linkBusy !== u.id && void sendLink(u)}>
-                                    {linkBusy === u.id ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Mail className="h-4 w-4" aria-hidden />}
+                                {!isSsoUser(u) && (smtpMissing || !!u.email) && (
+                                  <IconAction
+                                    label={t(`${k}.row.${smtpMissing ? "issue_temp" : u.has_password ? "send_reset" : "resend_invite"}`, { name })}
+                                    onClick={() => linkBusy !== u.id && void sendLink(u)}
+                                  >
+                                    {linkBusy === u.id ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                                    ) : smtpMissing ? (
+                                      <RectangleEllipsis className="h-4 w-4" aria-hidden />
+                                    ) : (
+                                      <Mail className="h-4 w-4" aria-hidden />
+                                    )}
                                   </IconAction>
                                 )}
                                 <IconAction label={t(`${k}.row.edit`, { name })} onClick={() => setFormUser(u)}>
@@ -1132,6 +1195,7 @@ export default function UsersPage() {
           user={formUser === "new" ? null : (users.find((u) => u.id === formUser.id) ?? formUser)}
           busy={saving}
           linkBusy={formUser !== "new" && linkBusy === formUser.id}
+          smtpMissing={smtpMissing}
           t={t}
           onSubmit={saveUser}
           onSendLink={(u) => void sendLink(u)}
@@ -1151,6 +1215,10 @@ export default function UsersPage() {
         />
       )}
 
+      {tempResetUser && (
+        <TempResetDialog user={tempResetUser} busy={linkBusy === tempResetUser.id} t={t} onConfirm={() => void sendLink(tempResetUser)} onClose={() => setTempResetUser(null)} />
+      )}
+      {tempPasswords && <TempPasswordsDialog passwords={tempPasswords} t={t} onClose={() => setTempPasswords(null)} />}
       {resetUser && <ResetDialog user={resetUser} busy={saving} t={t} onConfirm={resetTwoFactor} onClose={() => !saving && setResetUser(null)} />}
 
       {deleteUser && (

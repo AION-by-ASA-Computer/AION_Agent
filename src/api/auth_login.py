@@ -251,6 +251,9 @@ def build_login_response(
     uid = sanitize_user_id(str(row["identifier"]))
     roles = list(row.get("roles") or [])
     must_change = bool(row.get("must_change_password", False))
+    # In migrazione SSO la password temporanea serve solo a collegare l'account
+    # (al collegamento viene rimossa): il cambio non e' richiesto.
+    change_required = bool(row.get("temp_password")) and not sso_link_required
     tok = issue_chat_token(
         user_row_id=user_id_raw,
         user_identifier=str(row["identifier"]),
@@ -263,7 +266,8 @@ def build_login_response(
         "identifier": row["identifier"],
         "display_name": row.get("display_name") or row["identifier"],
         "roles": roles,
-        "must_change_password": must_change,
+        "must_change_password": must_change or change_required,
+        "password_change_required": change_required,
         "sso_link_required": sso_link_required,
     }
 
@@ -311,6 +315,7 @@ async def me(authorization: Optional[str] = Header(None)):
                 "metadata": {},
                 "roles": parsed.get("roles", []),
                 "must_change_password": False,
+                "password_change_required": False,
                 "sso_link_required": sso_link_required,
                 "sso_linked": sso_linked,
                 "sso_provider": sso_provider_name,
@@ -338,6 +343,10 @@ async def me(authorization: Optional[str] = Header(None)):
             "roles": get_roles(u),
             "must_change_password": bool(getattr(u, "must_change_password", False))
             and not sso_linked,
+            # Password temporanea: cambio obbligatorio, non rimandabile
+            # (gate ``password_change_required`` in ``_resolve_chat_identity``).
+            "password_change_required": u.temp_password_expires_at is not None
+            and not sso_link_required,
             "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
             "sso_link_required": sso_link_required,
             "sso_linked": sso_linked,
@@ -748,6 +757,24 @@ async def _resolve_chat_identity(
             raise
         except Exception as _e:
             logger.warning("SSO link check failed in require_chat_auth: %s", _e)
+
+        # Password temporanea (emessa senza SMTP): finche' l'utente non la
+        # cambia (POST /auth/change-password) puo' usare solo gli endpoint /auth.
+        try:
+            from src.data.engine import get_async_session_maker
+            from src.data.models import User
+
+            async with get_async_session_maker()() as session:
+                u = await session.get(User, user_row_id)
+            if u is not None and u.temp_password_expires_at is not None:
+                raise HTTPException(
+                    403,
+                    detail={"code": "password_change_required"},
+                )
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logger.warning("Temp password check failed in require_chat_auth: %s", _e)
 
         # 2FA obbligatorio ma non ancora configurato (token pre-attivazione
         # o utente resettato dall'admin): serve un nuovo login con enrollment.

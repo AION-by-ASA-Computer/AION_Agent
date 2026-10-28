@@ -122,7 +122,8 @@ async def simulate_login_mode_change(
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
     """Simula il cambio di modalità: utenti che riceveranno via email il link
-    per impostare la password, chi non ha email e se lo SMTP è pronto."""
+    per impostare la password (o, senza SMTP, una password temporanea), chi
+    non ha email e se lo SMTP è pronto."""
     from src.notifications.smtp_settings import smtp_configured
 
     tenant = _tenant_id()
@@ -194,10 +195,12 @@ async def simulate_login_mode_change(
             )
 
     missing_email = [u for u in users_affected if not (u["email"] or "").strip()]
+    smtp_ready = await smtp_configured(tenant)
     return {
         "affected_users": users_affected,
         "missing_email_count": len(missing_email),
-        "smtp_configured": await smtp_configured(tenant),
+        "smtp_configured": smtp_ready,
+        "delivery": "email" if smtp_ready else "temp_password",
     }
 
 
@@ -239,7 +242,6 @@ async def put_login_mode(
                 "sso_admin_not_linked",
                 "migration_in_progress",
                 "provider_not_configured",
-                "smtp_not_configured",
             )
             else 400
         )
@@ -250,18 +252,23 @@ async def put_login_mode(
         actor=auth.identifier,
         operation="auth.login_mode",
         resource_type="auth_settings",
-        payload={
-            "mode": body.mode,
-            "setup_links": _links_summary(result.get("setup_links")),
-        },
+        payload={"mode": body.mode, **_delivery_summary(result)},
     )
     return result
 
 
-def _links_summary(links: Optional[Dict[str, Any]]) -> Optional[Dict[str, int]]:
-    if links is None:
-        return None
-    return {k: len(links.get(k) or []) for k in ("sent", "failed", "missing_email")}
+def _delivery_summary(result: Dict[str, Any]) -> Dict[str, Any]:
+    """Esito per l'audit: solo conteggi, mai password o token."""
+    delivery = result.get("delivery")
+    if delivery == "email":
+        links = result.get("setup_links") or {}
+        counts = {
+            k: len(links.get(k) or []) for k in ("sent", "failed", "missing_email")
+        }
+        return {"delivery": delivery, "setup_links": counts}
+    if delivery == "temp_password":
+        return {"delivery": delivery, "temp_passwords": len(result["temp_passwords"])}
+    return {}
 
 
 # ---------------------------------------------------------------------------
@@ -451,7 +458,9 @@ async def admin_send_setup_links(
     auth: ChatAuthIdentity = Depends(require_admin_role),
 ) -> Dict[str, Any]:
     """Invia (o reinvia) via email il link per impostare la password agli
-    utenti indicati. La risposta riporta solo l'esito dell'invio."""
+    utenti indicati. La risposta riporta solo l'esito dell'invio; senza SMTP
+    contiene invece le password temporanee (``temp_passwords``), mostrate solo
+    qui."""
     tenant = _tenant_id()
     settings = await get_login_settings(tenant)
     provider = settings.get("sso_provider") or ""
@@ -472,9 +481,9 @@ async def admin_send_setup_links(
         actor=auth.identifier,
         operation="user.password_link.migration",
         resource_type="user",
-        payload={"user_ids": body.user_ids, **(_links_summary(results) or {})},
+        payload={"user_ids": body.user_ids, **_delivery_summary(results)},
     )
-    return {"setup_links": results}
+    return results
 
 
 # ---------------------------------------------------------------------------
@@ -493,9 +502,8 @@ async def unlink_sso_identity(
 
     Se era l'identita' del provider attivo l'utente deve ricollegarsi col
     flusso standard (password -> obbligo SSO -> collegamento): senza password
-    riceve via email il link per impostarla e la migrazione viene riaperta.
-    Senza SMTP lo scollegamento avviene comunque; ``setup_link_error`` lo
-    segnala e il link si potra' inviare in seguito (POST /setup-links).
+    riceve via email il link per impostarla (senza SMTP una password
+    temporanea, solo in questa risposta) e la migrazione viene riaperta.
     """
     tenant = _tenant_id()
     async with get_async_session_maker()() as session:
@@ -519,7 +527,7 @@ async def unlink_sso_identity(
             await reopen_migration(tenant)
         else:
             try:
-                out["setup_links"] = await send_migration_links(
+                delivered = await send_migration_links(
                     tenant,
                     [user_id],
                     provider,
@@ -527,7 +535,18 @@ async def unlink_sso_identity(
                     base_url=chat_base_url(request),
                 )
             except ValueError as e:
+                # Es. un'altra identita' sullo stesso provider: resta collegato.
                 out["setup_link_error"] = str(e)
+                return out
+            out.update(delivered)
+            await record_admin_action(
+                tenant_id=tenant,
+                actor=auth.identifier,
+                operation="user.password_link.migration",
+                resource_type="user",
+                resource_id=user_id,
+                payload=_delivery_summary(delivered),
+            )
     return out
 
 

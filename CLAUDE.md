@@ -354,7 +354,7 @@ for the full design.
 The system supports `password`, `microsoft`, and `google` auth modes (via `PUT /admin/auth/login-mode`). 
 Switching from password to an SSO mode places the system in a migration state.
 - Existing users must log in via password first, and are then blocked by a required "link account" modal.
-- Users without a password get a one-time **email link** to set it themselves (`POST /admin/auth/setup-links`, also sent on SSO→password / SSO→SSO switches and on unlink). The admin only sees the delivery outcome (`setup_links: {sent, failed, missing_email}`), never a password or token. Without SMTP these actions return 409 `smtp_not_configured`.
+- Users without a password get a one-time **email link** to set it themselves (`POST /admin/auth/setup-links`, also sent on SSO→password / SSO→SSO switches and on unlink). The admin only sees the delivery outcome (`setup_links: {sent, failed, missing_email}`), never a password or token. Without SMTP they issue a one-time temporary password instead (`temp_passwords`, shown once to the admin).
 - No auto-provisioning links identities by email automatically.
 - In SSO mode new accounts are created **only** at first SSO login: `POST /admin/users` returns 409 `sso_active_user_creation_disabled`, and the default-admin/setup bootstraps are skipped.
 - New-account policy (`auth_settings.sso_signup_policy`: `open` | `allowlist` | `closed`, list of emails/`@domains` in `sso_signup_allowlist`) via `GET/PUT /admin/auth/signup-policy`; enforced in `resolve_user` only for new accounts (`sso_signup_closed`, `sso_signup_not_allowed`).
@@ -371,6 +371,7 @@ See `docs/security/sso-migration.md` for the full migration flow.
 - Tokens: `password_setup_tokens` (sha256 only, single use, link `/set-password#token=…` built from `AION_PUBLIC_CHAT_URL`). Public endpoints in `src/api/auth_password_setup.py`: `/auth/password/setup/inspect`, `/auth/password/setup`, `/auth/password/forgot` (always 202, rate limited). Logic in `src/auth/password_setup.py`.
 - SMTP per tenant (`smtp_settings`, password encrypted, write-only) via admin-ui → Settings → SMTP (`GET/PUT /admin/smtp`, `POST /admin/smtp/test`); mailer in `src/notifications/`.
 - Env: `AION_PASSWORD_INVITE_TTL_HOURS` (72), `AION_PASSWORD_RESET_TTL_MINUTES` (60), `AION_EMAIL_PLATFORM_NAME`, `AION_PASSWORD_FORGOT_LIMIT_PER_IP` (10), `AION_PASSWORD_FORGOT_LIMIT_PER_ACCOUNT` (3).
+- **Without SMTP** the same actions fall back to a random temporary password (`deliver_password_setup` → `issue_temp_passwords`), returned once in the response (`delivery: "temp_password"`), never in audit/logs; email becomes optional. While `users.temp_password_expires_at` is set, login/`/auth/me` return `password_change_required` and `require_chat_auth` (chat + `/admin/*`) answers 403 `password_change_required` until `/auth/change-password`; no 24h skip.
 - The recover CLI is unchanged (break-glass). See `docs/security/password-setup-email.md`.
 
 ### Two-factor authentication (TOTP)

@@ -843,7 +843,7 @@
       "sso_domain_not_allowed": "Esta cuenta no está habilitada para acceder. Es posible que estés usando la cuenta equivocada: inicia sesión con tu cuenta de trabajo.",
       "sso_required": "Esta cuenta requiere inicio de sesión SSO.",
       "password_login_disabled": "El inicio de sesión con contraseña está deshabilitado.",
-      "temp_password_expired": "La contraseña temporal ha caducado. Usa «¿Olvidaste tu contraseña?» para recibir un enlace por correo, o pídeselo al administrador.",
+      "temp_password_expired": "Tu contraseña temporal ha caducado. Pide una nueva a un administrador.",
       "sso_failed": "Error de autenticación SSO.",
       "sso_start_failed": "No se pudo iniciar el acceso SSO.",
       "sso_token_invalid": "Token SSO no válido.",
@@ -933,6 +933,9 @@
     }
   },
   "change_password": {
+    "title_required": "Establece tu contraseña",
+    "desc_required": "Has iniciado sesión con una contraseña temporal proporcionada por un administrador. Elige una nueva contraseña para continuar.",
+    "current_temp": "Contraseña temporal",
     "title": "Cambiar contraseña",
     "desc": "Estás usando una contraseña temporal. Actualízala ahora o recuérdamelo mañana (aplazable 24 h).",
     "current": "Contraseña actual",

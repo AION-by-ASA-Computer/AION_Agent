@@ -7,6 +7,11 @@ solo nell'email inviata all'utente; nel DB resta lo SHA-256
 - ``invite``: nuovo account creato dall'admin;
 - ``reset``: reimpostazione (da admin o "Password dimenticata?");
 - ``migration``: utenti senza password durante un cambio di modalita' SSO.
+
+Senza SMTP configurato (:func:`deliver_password_setup`) si ripiega su una
+password temporanea casuale, mostrata una sola volta all'admin nella risposta:
+scade (``users.temp_password_expires_at``) e l'utente deve cambiarla al primo
+login prima di poter usare la piattaforma (gate ``password_change_required``).
 """
 
 from __future__ import annotations
@@ -244,6 +249,98 @@ async def issue_setup_links(
     return result
 
 
+def _temp_ttl(purpose: str) -> timedelta:
+    # Il reset via link dura 60 minuti: troppo poco per una password che
+    # l'admin comunica a mano, quindi invite e reset usano la durata dell'invito.
+    return _ttl("migration" if purpose == "migration" else "invite")
+
+
+async def issue_temp_passwords(
+    tenant_id: str,
+    user_ids: List[str],
+    purpose: str,
+) -> List[Dict[str, Any]]:
+    """Imposta una password temporanea casuale per ogni utente.
+
+    Sostituisce subito la password attuale e invalida i link ancora aperti.
+    Ritorna ``[{user_id, identifier, email, password, expires_at}]``: la password
+    in chiaro esiste solo in questa risposta (mai in DB, log o audit).
+    """
+    from src.auth.sso.login_mode import _invalidate_cache
+    from src.data.user_password import hash_password
+
+    if purpose not in PURPOSES:
+        raise ValueError(f"invalid purpose: {purpose}")
+    now = _now()
+    expires = now + _temp_ttl(purpose)
+    out: List[Dict[str, Any]] = []
+    async with get_async_session_maker()() as session:
+        for uid in user_ids:
+            user = await session.get(User, uid)
+            if not user or user.tenant_id != tenant_id:
+                continue
+            await session.execute(
+                update(PasswordSetupToken)
+                .where(
+                    PasswordSetupToken.user_id == user.id,
+                    PasswordSetupToken.consumed_at.is_(None),
+                )
+                .values(consumed_at=now)
+            )
+            plain = secrets.token_urlsafe(12)
+            user.password_hash = hash_password(plain)
+            user.temp_password_expires_at = expires
+            user.must_change_password = True
+            out.append(
+                {
+                    "user_id": user.id,
+                    "identifier": user.identifier,
+                    "email": user.email,
+                    "password": plain,
+                    "expires_at": expires.isoformat(),
+                }
+            )
+        await session.commit()
+
+    if out:
+        _invalidate_cache(tenant_id)
+        logger.info("Password temporanee (%s) emesse per %d utenti", purpose, len(out))
+    return out
+
+
+async def deliver_password_setup(
+    tenant_id: str,
+    user_ids: List[str],
+    purpose: str,
+    *,
+    actor_user_id: Optional[str],
+    base_url: str,
+) -> Dict[str, Any]:
+    """Link via email se lo SMTP e' configurato, altrimenti password temporanee.
+
+    ``{"delivery": "email", "setup_links": {...}}`` oppure
+    ``{"delivery": "temp_password", "temp_passwords": [...]}``.
+    """
+    if await get_smtp_config(tenant_id) is not None:
+        try:
+            links = await issue_setup_links(
+                tenant_id,
+                user_ids,
+                purpose,
+                actor_user_id=actor_user_id,
+                base_url=base_url,
+            )
+            return {"delivery": "email", "setup_links": links}
+        except SetupLinkError as e:
+            if e.code != "smtp_not_configured":
+                raise
+            # SMTP disattivato tra il controllo e l'invio: password temporanee.
+    return {
+        "delivery": "temp_password",
+        "temp_passwords": await issue_temp_passwords(tenant_id, user_ids, purpose),
+    }
+
+
 async def _load_valid_token(session, raw: str) -> PasswordSetupToken:
     row = (
         (
@@ -400,9 +497,12 @@ async def find_user_for_reset(
         return user
 
 
-async def user_link_block_reason(user: User) -> Optional[str]:
-    """Motivo per cui non si puo' inviare un link all'utente, o None."""
-    if not (user.email or "").strip():
+async def user_link_block_reason(
+    user: User, *, needs_email: bool = True
+) -> Optional[str]:
+    """Motivo per cui non si puo' inviare un link (o, con ``needs_email=False``,
+    emettere una password temporanea) all'utente, o None."""
+    if needs_email and not (user.email or "").strip():
         return "user_email_missing"
     async with get_async_session_maker()() as session:
         if await _user_signs_in_with_sso(session, user):

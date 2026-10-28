@@ -1,7 +1,7 @@
 ---
 title: Password setup by email
 sidebar_position: 3
-description: How users choose their own password through one-time email links (invite, reset, SSO migration) and how admins configure SMTP — admins never see passwords.
+description: How users choose their own password through one-time email links (invite, reset, SSO migration), the temporary-password fallback without SMTP, and how admins configure SMTP.
 ---
 
 # Password setup by email
@@ -10,11 +10,13 @@ Administrators **never see, choose or receive a user's password**. That holds wh
 
 The admin gets only the outcome of the delivery ("sent", "failed: SMTP authentication", "no email address"). The link and its token never appear in an API response, in admin-ui or in the audit log.
 
+When SMTP is **not** configured the same actions fall back to a one-time **temporary password** that the user must change at first sign-in. See [Without SMTP](#without-smtp-temporary-passwords).
+
 ## Flows
 
 | Flow | Trigger | Link purpose | Default validity |
 |------|---------|--------------|------------------|
-| New user | `POST /admin/users` (email required) | `invite` | `AION_PASSWORD_INVITE_TTL_HOURS` (72 h) |
+| New user | `POST /admin/users` (email required with SMTP) | `invite` | `AION_PASSWORD_INVITE_TTL_HOURS` (72 h) |
 | Resend / reset by admin | `POST /admin/users/{id}/password-link` | `reset` if the user has a password, otherwise `invite` (`migration` during an SSO migration) | 60 min / 72 h |
 | Self-service "Forgot password?" | `POST /auth/password/forgot` | `reset` (or `invite` / `migration` when the user has no password yet) | `AION_PASSWORD_RESET_TTL_MINUTES` (60 min) |
 | SSO migration | `PUT /admin/auth/login-mode`, `POST /admin/auth/setup-links`, unlink of an identity | `migration` | `AION_SSO_TEMP_PASSWORD_TTL_DAYS` (7 days) |
@@ -37,6 +39,25 @@ sequenceDiagram
   B->>B: policy check, hash, consume token (once)
   U->>B: POST /auth/login
 ```
+
+## Without SMTP: temporary passwords
+
+When no SMTP server is configured, every action above that would send a link generates a random temporary password instead (`src/auth/password_setup.py::deliver_password_setup` → `issue_temp_passwords`). This covers creating a user, resending or resetting by admin, SSO→password and SSO→SSO switches, `POST /admin/auth/setup-links` and unlinking an identity.
+
+- **Shown once.** The plaintext password is in the API response only, so the admin can hand it over (admin-ui shows it once, with copy and CSV export). It is never stored in clear, logged or written to the audit log.
+- **Responses** carry `delivery: "email" | "temp_password"`:
+  - `POST /admin/users` → `{id, delivery: "temp_password", temp_password: {password, expires_at}}`.
+  - `POST /admin/users/{id}/password-link` → `{purpose, delivery: "temp_password", temp_password: {password, expires_at}}`.
+  - Migration endpoints → `temp_passwords: [{user_id, identifier, email, password, expires_at}]` in place of `setup_links`.
+- **Email is optional.** Without SMTP `POST /admin/users` accepts a user without an email, and a reset doesn't need one.
+- **Reset replaces at once.** Issuing a temporary password replaces the user's current password and invalidates their active setup links.
+- **Expiry.** `invite` / `reset` use `AION_PASSWORD_INVITE_TTL_HOURS` (72 h), `migration` uses `AION_SSO_TEMP_PASSWORD_TTL_DAYS` (7 days). An expired temporary password is refused at login with `401 temp_password_expired`.
+- **Mandatory change.** The marker is `users.temp_password_expires_at IS NOT NULL`. While it is set:
+  - `POST /auth/login` and `GET /auth/me` return `password_change_required: true` (and `must_change_password: true`).
+  - Every endpoint behind `require_chat_auth`, `/admin/*` included, answers `403 {"code": "password_change_required"}`. Only `/auth/me`, `/auth/change-password` and `/auth/status` stay reachable.
+  - chat-ui and admin-ui send the user to `/change-password` with no "remind me tomorrow". `POST /auth/change-password` clears the marker.
+- **SSO migration.** In an SSO mode the temporary password only serves to sign in and link the work account (`sso_link_required` comes first). Linking removes the local password and the marker, so no change is asked.
+- The plain `must_change_password` flag (default `admin`/`admin`, recovery CLI) stays the non-blocking banner that can be skipped for 24 h.
 
 ## Tokens
 
@@ -91,7 +112,7 @@ Configure host `127.0.0.1`, port `1025` and security `none`, then read the email
 
 ## Audit
 
-Every admin action is written to `audit_logs` (`src/data/audit.py::record_admin_action`). That covers creating a user, sending invite, reset or migration links, changing SMTP settings and sending an SMTP test. The payload holds user ids and delivery counts only, never tokens or passwords.
+Every admin action is written to `audit_logs` (`src/data/audit.py::record_admin_action`). That covers creating a user, sending invite, reset or migration links (or issuing temporary passwords), changing SMTP settings and sending an SMTP test. The payload holds user ids, `delivery`, expiry and delivery counts only, never tokens or passwords.
 
 ## Out of scope
 
