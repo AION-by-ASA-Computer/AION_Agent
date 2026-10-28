@@ -534,8 +534,10 @@ async def unlink_sso_identity(
                     actor_user_id=auth.user_row_id,
                     base_url=chat_base_url(request),
                 )
-            except ValueError as e:
-                # Es. un'altra identita' sullo stesso provider: resta collegato.
+            except ValueError:
+                # Unico caso: un'altra identita' sullo stesso provider, l'utente resta
+                # collegato. Codice fisso (chiave i18n admin_users.email_errors.*),
+                # niente testo dell'eccezione nella risposta.
                 logger.warning(
                     "Failed to send migration links for tenant=%s user_id=%s provider=%s",
                     tenant,
@@ -543,7 +545,7 @@ async def unlink_sso_identity(
                     provider,
                     exc_info=True,
                 )
-                out["setup_link_error"] = "Impossibile inviare il link di configurazione."
+                out["setup_link_error"] = "user_already_linked"
                 return out
             out.update(delivered)
             await record_admin_action(
