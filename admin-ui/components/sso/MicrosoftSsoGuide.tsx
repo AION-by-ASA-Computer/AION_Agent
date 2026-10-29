@@ -31,12 +31,30 @@ const SECRET_MARKS: Mark[] = [
   { x: 70.6, y: 95.4, w: 5.3, h: 3.4 },
 ];
 
-export function Shot({ src, alt, caption, marks, className }: { src: string; alt: string; caption: string; marks: Mark[]; className?: string }) {
+/**
+ * Screenshot with highlight boxes and a caption. `dir` is the folder under `public/`
+ * (defaults to the SSO guide; the WhatsApp guide passes `whatsapp-guide`).
+ */
+export function Shot({
+  src,
+  alt,
+  caption,
+  marks,
+  className,
+  dir = "sso-guide",
+}: {
+  src: string;
+  alt: string;
+  caption: string;
+  marks: Mark[];
+  className?: string;
+  dir?: string;
+}) {
   return (
     <figure className={cn("flex flex-col gap-2", className)}>
       <div className="relative overflow-hidden rounded-xl border border-border bg-background">
         {/* eslint-disable-next-line @next/next/no-img-element -- static guide asset, shown at natural size ratio */}
-        <img src={`${BASE}/sso-guide/${src}`} alt={alt} loading="lazy" className="block h-auto w-full" />
+        <img src={`${BASE}/${dir}/${src}`} alt={alt} loading="lazy" className="block h-auto w-full" />
         {marks.map((m, i) => (
           <span
             key={i}
