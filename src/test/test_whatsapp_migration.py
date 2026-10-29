@@ -16,16 +16,21 @@ TABLES = {
 }
 
 
-def _load():
-    path = _ROOT / "migrations/versions/a9b0c1d029_whatsapp_channel.py"
-    spec = importlib.util.spec_from_file_location("mig_a9b0c1d029", path)
+def _load(rev="a9b0c1d029", filename="a9b0c1d029_whatsapp_channel.py"):
+    path = _ROOT / "migrations/versions" / filename
+    spec = importlib.util.spec_from_file_location(f"mig_{rev}", path)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     return mod
 
 
-def _run(eng, fn_name):
-    mod = _load()
+def _run(eng, fn_name, *, thinking_migration=False):
+    """Run a migration function; ``thinking_migration`` selects ``b0c1d2e030``."""
+    mod = (
+        _load("b0c1d2e030", "b0c1d2e030_whatsapp_thinking_level.py")
+        if thinking_migration
+        else _load()
+    )
     with eng.begin() as conn:
         with Operations.context(MigrationContext.configure(conn)):
             getattr(mod, fn_name)()
@@ -62,8 +67,41 @@ def test_migration_matches_models():
 
     eng = create_engine("sqlite://")
     _run(eng, "upgrade")
+    # Columns added after the table-creation revision (default_thinking_level).
+    _run(eng, "upgrade", thinking_migration=True)
     insp = inspect(eng)
     for table in TABLES:
         orm_cols = {c.name for c in Base.metadata.tables[table].columns}
         mig_cols = {c["name"] for c in insp.get_columns(table)}
         assert orm_cols == mig_cols, table
+
+
+def test_thinking_level_migration(tmp_path):
+    """``b0c1d2e030`` adds ``default_thinking_level``: idempotent and reversible."""
+    mod = _load("b0c1d2e030", "b0c1d2e030_whatsapp_thinking_level.py")
+    assert mod.down_revision == "a9b0c1d029"
+    eng = create_engine(f"sqlite:///{tmp_path}/t.db")
+
+    def cols():
+        return {c["name"] for c in inspect(eng).get_columns("whatsapp_channels")}
+
+    # No table yet: the migration is a no-op instead of failing.
+    _run(eng, "upgrade", thinking_migration=True)
+    assert "whatsapp_channels" not in inspect(eng).get_table_names()
+
+    # batch_alter_table (SQLite drop) reflects the FK targets, which the
+    # isolated migration test does not otherwise create.
+    with eng.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE tenants (id VARCHAR(64) PRIMARY KEY)")
+        conn.exec_driver_sql("CREATE TABLE users (id VARCHAR(64) PRIMARY KEY)")
+
+    _run(eng, "upgrade")
+    assert "default_thinking_level" not in cols()
+
+    _run(eng, "upgrade", thinking_migration=True)
+    assert "default_thinking_level" in cols()
+    _run(eng, "upgrade", thinking_migration=True)  # idempotent
+
+    _run(eng, "downgrade", thinking_migration=True)
+    assert "default_thinking_level" not in cols()
+    _run(eng, "downgrade", thinking_migration=True)  # idempotent

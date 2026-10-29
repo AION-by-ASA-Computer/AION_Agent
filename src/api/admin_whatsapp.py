@@ -29,6 +29,8 @@ class WhatsAppConfigBody(BaseModel):
     access_token: Optional[str] = None
     app_secret: Optional[str] = None
     default_profile_slug: Optional[str] = None
+    # off | min | medium | max; empty/null = system default.
+    default_thinking_level: Optional[str] = None
 
 
 class WhatsAppEnableBody(BaseModel):
@@ -56,6 +58,23 @@ async def put_whatsapp_config(body: WhatsAppConfigBody) -> Dict[str, Any]:
                     "message": f"Profile '{profile}' not found",
                 },
             )
+    # Reject unknown levels up front instead of silently storing one the
+    # dispatcher would ignore.
+    try:
+        thinking_level = config_service.parse_thinking_level(
+            body.default_thinking_level
+        )
+    except ValueError:
+        raise HTTPException(
+            400,
+            detail={
+                "code": "invalid_thinking_level",
+                "message": (
+                    f"Invalid thinking level '{body.default_thinking_level}' "
+                    "(expected off, min, medium or max)"
+                ),
+            },
+        )
     await config_service.upsert_channel(
         _tenant_id(),
         waba_id=body.waba_id,
@@ -63,6 +82,7 @@ async def put_whatsapp_config(body: WhatsAppConfigBody) -> Dict[str, Any]:
         access_token=body.access_token,
         app_secret=body.app_secret,
         default_profile_slug=profile,
+        default_thinking_level=thinking_level,
     )
     return await config_service.admin_view(_tenant_id())
 

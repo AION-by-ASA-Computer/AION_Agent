@@ -392,6 +392,65 @@ async def _resolve_profile(user_row_id: str, preferred: Optional[str]) -> str:
         return allowed[0] if allowed else profile
 
 
+def _resolve_thinking(cfg: ChannelConfig) -> str:
+    """Turn-level reasoning (``off|min|medium|max``) for a WhatsApp turn.
+
+    Mirrors what chat-ui sends (``thinking_enabled`` + ``reasoning_effort``)
+    via ``resolve_turn_reasoning``, but the level comes from the channel config
+    set in admin-ui instead of the user's composer:
+
+    * ``off``                 → thinking disabled;
+    * ``min|medium|max``      → thinking enabled at that effort (an explicit
+      ``min`` is low-effort thinking, not "off", as in chat-ui);
+    * unset (NULL)            → system default (``AION_DEFAULT_REASONING_EFFORT`` /
+      ``AION_THINKING_ENABLED``), instead of the previously hard-coded medium.
+    """
+    from src.runtime.reasoning_effort import resolve_turn_reasoning
+
+    level = (cfg.default_thinking_level or "").strip().lower()
+    if level == "off":
+        return resolve_turn_reasoning(None, False)
+    if level in ("min", "medium", "max"):
+        return resolve_turn_reasoning(level, True)
+    return resolve_turn_reasoning(None, None)
+
+
+async def _sync_thinking_metadata(conversation_id: str, level: str) -> None:
+    """Mirror the turn's thinking level into the conversation metadata.
+
+    chat-ui restores its Thinking toggle/effort from ``metadata.thinking_enabled``
+    / ``metadata.reasoning_effort`` when a conversation is opened and otherwise
+    falls back to the browser's last-used value (usually "medium"). Writing the
+    level used by the WhatsApp turn keeps the chat-ui composer consistent with
+    what the channel actually ran. Called on every turn so a change made in
+    admin-ui reaches already-open conversations too; best-effort (never blocks
+    the reply).
+    """
+    try:
+        async with get_async_session_maker()() as session:
+            conv = await session.get(Conversation, conversation_id)
+            if conv is None:
+                return
+            try:
+                meta = json.loads(conv.metadata_json or "{}")
+            except (TypeError, ValueError):
+                meta = {}
+            if not isinstance(meta, dict):
+                meta = {}
+            patch: Dict[str, object] = {"thinking_enabled": level != "off"}
+            # chat-ui's effort selector only knows min|medium|max: "off" keeps
+            # the previous effort and only flips the toggle.
+            if level != "off":
+                patch["reasoning_effort"] = level
+            if all(meta.get(k) == v for k, v in patch.items()):
+                return
+            meta.update(patch)
+            conv.metadata_json = json.dumps(meta)
+            await session.commit()
+    except Exception:
+        logger.warning("WhatsApp: thinking metadata sync failed", exc_info=True)
+
+
 async def _ensure_conversation(
     *,
     conversation_id: Optional[str],
@@ -472,6 +531,9 @@ async def run_turn(
     if conversation_id != ident.active_conversation_id:
         await linking.update_identity(ident.id, active_conversation_id=conversation_id)
 
+    thinking_level = _resolve_thinking(cfg)
+    await _sync_thinking_metadata(conversation_id, thinking_level)
+
     result = TurnResult(conversation_id=conversation_id)
     user_message_id = str(uuid.uuid4())
     assistant_message_id = str(uuid.uuid4())
@@ -505,6 +567,9 @@ async def run_turn(
         tokens: list[str] = []
         async for chunk in pipeline.run_stream(
             text,
+            # Thinking level configured for the channel (reasoning chunks are
+            # not forwarded: only "token"/"final" reach the WhatsApp reply).
+            reasoning_effort=thinking_level,
             user_message_id=user_message_id,
             assistant_message_id=assistant_message_id,
             message_source="user_input",

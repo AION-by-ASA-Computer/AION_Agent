@@ -441,3 +441,90 @@ async def test_run_turn_streams_through_pipeline(wa_db, monkeypatch):
     assert (
         await linking.get_identity(TENANT, BSUID)
     ).active_conversation_id == result.conversation_id
+
+
+def test_resolve_thinking(monkeypatch):
+    """Channel thinking level -> turn reasoning, mirroring chat-ui's toggle+effort."""
+    from src.channels.whatsapp import dispatcher
+
+    monkeypatch.delenv("AION_DEFAULT_REASONING_EFFORT", raising=False)
+    monkeypatch.delenv("AION_THINKING_ENABLED", raising=False)
+
+    class Cfg:  # only the field read by _resolve_thinking
+        def __init__(self, level):
+            self.default_thinking_level = level
+
+    assert dispatcher._resolve_thinking(Cfg("off")) == "off"
+    # An explicit "min" is low-effort thinking (toggle on), not "off".
+    assert dispatcher._resolve_thinking(Cfg("min")) == "min"
+    assert dispatcher._resolve_thinking(Cfg("medium")) == "medium"
+    assert dispatcher._resolve_thinking(Cfg("max")) == "max"
+
+    # Unset -> system default: medium without env, env overrides apply.
+    assert dispatcher._resolve_thinking(Cfg(None)) == "medium"
+    monkeypatch.setenv("AION_DEFAULT_REASONING_EFFORT", "max")
+    assert dispatcher._resolve_thinking(Cfg(None)) == "max"
+    # An explicit channel level wins over the env default.
+    assert dispatcher._resolve_thinking(Cfg("off")) == "off"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("level,expected", [("off", "off"), ("max", "max")])
+async def test_run_turn_passes_thinking_level(wa_db, monkeypatch, level, expected):
+    """``run_turn`` forwards the channel thinking level as ``reasoning_effort``."""
+    import src.agent_pipeline as agent_pipeline
+    import src.api.v1.chat as chat_mod
+    import src.main as main_mod
+    from src.channels.whatsapp import dispatcher
+
+    cfg = replace(await configure_channel(), default_thinking_level=level)
+    ident = await _link()
+    seen = {}
+
+    async def fake_get_agent(profile, **kwargs):
+        return object(), profile
+
+    class FakePipeline:
+        def __init__(self, **kwargs):
+            pass
+
+        async def run_stream(self, text, **kwargs):
+            seen["kwargs"] = kwargs
+            yield {"type": "final", "text": "ok"}
+
+    async def fake_runtime(runtime, uid, profile_name):
+        return {}
+
+    async def fake_profile(user_row_id, preferred):
+        return "aion_std"
+
+    monkeypatch.setattr(main_mod, "get_agent", fake_get_agent)
+    monkeypatch.setattr(main_mod, "set_event_loop", lambda loop: None)
+    monkeypatch.setattr(agent_pipeline, "AgentPipeline", FakePipeline)
+    monkeypatch.setattr(chat_mod, "_clamped_runtime", fake_runtime)
+    monkeypatch.setattr(dispatcher, "_resolve_profile", fake_profile)
+
+    from src.data.engine import get_async_session_maker
+    from src.data.models import User
+
+    async with get_async_session_maker()() as session:
+        user = await session.get(User, "u1")
+
+    result = await dispatcher.run_turn(
+        tenant_id=TENANT, cfg=cfg, ident=ident, user=user, text="Ciao", wamid="w2"
+    )
+    assert seen["kwargs"]["reasoning_effort"] == expected
+
+    # chat-ui restores its Thinking toggle/effort from the conversation
+    # metadata: it must mirror the level the WhatsApp turn actually used.
+    async with get_async_session_maker()() as session:
+        from src.data.models import Conversation
+
+        conv = await session.get(Conversation, result.conversation_id)
+    meta = json.loads(conv.metadata_json)
+    assert meta["source"] == "whatsapp"
+    assert meta["thinking_enabled"] is (level != "off")
+    if level == "off":
+        assert "reasoning_effort" not in meta
+    else:
+        assert meta["reasoning_effort"] == level

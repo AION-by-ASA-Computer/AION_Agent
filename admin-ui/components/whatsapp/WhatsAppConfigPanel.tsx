@@ -30,6 +30,8 @@ export type WhatsAppChannel = {
   app_secret_hint: string | null;
   verify_token: string | null;
   default_profile_slug: string | null;
+  /** off | min | medium | max; null = system default. */
+  default_thinking_level: string | null;
   webhook_url: string | null;
   graph_api_version: string | null;
   validated_at: string | null;
@@ -62,6 +64,7 @@ export function WhatsAppConfigPanel({ notify }: { notify: Notify }) {
   const [accessToken, setAccessToken] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [profile, setProfile] = useState("");
+  const [thinking, setThinking] = useState("");
   const [profiles, setProfiles] = useState<{ value: string; label: string }[]>([]);
 
   const [saving, setSaving] = useState(false);
@@ -76,6 +79,7 @@ export function WhatsAppConfigPanel({ notify }: { notify: Notify }) {
     setWabaId(c.waba_id || "");
     setPhoneId(c.phone_number_id || "");
     setProfile(c.default_profile_slug || "");
+    setThinking(c.default_thinking_level || "");
     setAccessToken("");
     setAppSecret("");
   }, []);
@@ -134,6 +138,7 @@ export function WhatsAppConfigPanel({ notify }: { notify: Notify }) {
     wabaId.trim() !== (cfg.waba_id || "") ||
     phoneId.trim() !== (cfg.phone_number_id || "") ||
     profile !== (cfg.default_profile_slug || "") ||
+    thinking !== (cfg.default_thinking_level || "") ||
     !!accessToken.trim() ||
     !!appSecret.trim();
   const canSave = !saving && !!wabaId.trim() && !!phoneId.trim() && dirty;
@@ -151,6 +156,7 @@ export function WhatsAppConfigPanel({ notify }: { notify: Notify }) {
           access_token: accessToken.trim() || undefined,
           app_secret: appSecret.trim() || undefined,
           default_profile_slug: profile || null,
+          default_thinking_level: thinking || null,
         }),
       });
       if (!res.ok) throw new Error(await readApiErrorMessage(res));
@@ -295,6 +301,19 @@ export function WhatsAppConfigPanel({ notify }: { notify: Notify }) {
                 ...profiles,
                 // Keep a saved slug selectable even if the profile list did not load.
                 ...(profile && !profiles.some((p) => p.value === profile) ? [{ value: profile, label: profile }] : []),
+              ]}
+            />
+          </Field>
+          <Field label={t(`${k}.fields.thinking`)} hint={t(`${k}.fields.thinking_hint`)} wide>
+            <Select
+              value={thinking}
+              onChange={setThinking}
+              options={[
+                { value: "", label: t(`${k}.fields.thinking_default`) },
+                { value: "off", label: t(`${k}.fields.thinking_off`) },
+                { value: "min", label: t(`${k}.fields.thinking_min`) },
+                { value: "medium", label: t(`${k}.fields.thinking_medium`) },
+                { value: "max", label: t(`${k}.fields.thinking_max`) },
               ]}
             />
           </Field>

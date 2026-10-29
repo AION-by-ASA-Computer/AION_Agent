@@ -1057,6 +1057,9 @@ class WhatsAppChannel(Base):
     app_secret_encrypted: Mapped[Optional[str]] = mapped_column(Text)
     verify_token_encrypted: Mapped[Optional[str]] = mapped_column(Text)
     default_profile_slug: Mapped[Optional[str]] = mapped_column(String(128))
+    # Thinking level for WhatsApp turns: off | min | medium | max.
+    # NULL = system default (AION_DEFAULT_REASONING_EFFORT / AION_THINKING_ENABLED).
+    default_thinking_level: Mapped[Optional[str]] = mapped_column(String(8))
     validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     validated_by_user_id: Mapped[Optional[str]] = mapped_column(
         String(64), ForeignKey("users.id", ondelete="SET NULL")

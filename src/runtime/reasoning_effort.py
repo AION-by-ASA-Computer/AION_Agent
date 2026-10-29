@@ -40,6 +40,10 @@ _LEVELS = frozenset({"min", "medium", "max"})
 _TURN_LEVELS = frozenset({"off", "min", "medium", "max"})
 _DIALECTS = frozenset({"qwen38", "vllm", "openai_reasoning"})
 
+# Public alias: per-turn levels accepted by channel configs (e.g. the WhatsApp
+# default thinking level set from admin-ui).
+TURN_REASONING_LEVELS = _TURN_LEVELS
+
 # OpenAI Chat Completions / SDK: none, minimal, low, medium, high, xhigh, max.
 _NATIVE_OPENAI_SDK = frozenset(
     {"none", "minimal", "low", "medium", "high", "xhigh", "max"}

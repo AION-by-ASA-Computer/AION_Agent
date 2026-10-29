@@ -104,6 +104,7 @@ class ChannelConfig:
     app_secret: Optional[str]
     verify_token: Optional[str]
     default_profile_slug: Optional[str]
+    default_thinking_level: Optional[str]
     validated_at: Optional[datetime]
     webhook_verified_at: Optional[datetime]
     last_webhook_at: Optional[datetime]
@@ -141,6 +142,7 @@ def _row_to_config(row: WhatsAppChannel) -> ChannelConfig:
         app_secret=_decrypt(row.app_secret_encrypted),
         verify_token=_decrypt(row.verify_token_encrypted),
         default_profile_slug=row.default_profile_slug,
+        default_thinking_level=row.default_thinking_level,
         validated_at=_as_utc(row.validated_at),
         webhook_verified_at=_as_utc(row.webhook_verified_at),
         last_webhook_at=_as_utc(row.last_webhook_at),
@@ -225,6 +227,23 @@ async def find_tenant_by_verify_token(token: str) -> Optional[str]:
     return None
 
 
+def parse_thinking_level(value: Optional[str]) -> Optional[str]:
+    """Normalizza il livello di pensiero del canale.
+
+    Vuoto/None → ``None`` (default di sistema); altrimenti uno tra
+    ``off|min|medium|max`` (case-insensitive). Valore non valido → ``ValueError``,
+    così l'admin API risponde 400 invece di salvare un livello ignorato in silenzio.
+    """
+    from src.runtime.reasoning_effort import TURN_REASONING_LEVELS
+
+    level = (value or "").strip().lower()
+    if not level:
+        return None
+    if level not in TURN_REASONING_LEVELS:
+        raise ValueError(f"invalid thinking level: {value!r}")
+    return level
+
+
 async def upsert_channel(
     tenant_id: str,
     *,
@@ -233,14 +252,21 @@ async def upsert_channel(
     access_token: Optional[str] = None,
     app_secret: Optional[str] = None,
     default_profile_slug: Optional[str] = None,
+    default_thinking_level: Optional[str] = None,
 ) -> None:
-    """Crea o aggiorna la configurazione. Segreti vuoti = mantieni gli attuali."""
+    """Crea o aggiorna la configurazione. Segreti vuoti = mantieni gli attuali.
+
+    Profilo e livello di pensiero sono impostazioni "a sostituzione" (come il
+    profilo): ``None`` li riporta al default di sistema. Nessuno dei due richiede
+    una nuova validazione del collegamento Meta.
+    """
     invalidate_cache()
     waba_id = (waba_id or "").strip()
     phone_number_id = (phone_number_id or "").strip()
     access_token = (access_token or "").strip() or None
     app_secret = (app_secret or "").strip() or None
     profile = (default_profile_slug or "").strip() or None
+    thinking_level = parse_thinking_level(default_thinking_level)
 
     async with get_async_session_maker()() as session:
         row = await _load_row(session, tenant_id)
@@ -271,6 +297,7 @@ async def upsert_channel(
         if app_secret is not None:
             row.app_secret_encrypted = encrypt_value(app_secret)
         row.default_profile_slug = profile
+        row.default_thinking_level = thinking_level
         row.updated_at = datetime.now(timezone.utc)
         if needs_revalidation:
             row.validated_at = None
@@ -394,6 +421,7 @@ async def admin_view(tenant_id: str) -> Dict[str, Any]:
         "app_secret_hint": None,
         "verify_token": None,
         "default_profile_slug": None,
+        "default_thinking_level": None,
         "webhook_url": webhook_url(),
         "graph_api_version": graph_version(),
         "validated_at": None,
@@ -415,6 +443,7 @@ async def admin_view(tenant_id: str) -> Dict[str, Any]:
             "app_secret_hint": _hint(cfg.app_secret),
             "verify_token": cfg.verify_token,
             "default_profile_slug": cfg.default_profile_slug,
+            "default_thinking_level": cfg.default_thinking_level,
             "validated_at": _iso(cfg.validated_at),
             "webhook_verified_at": _iso(cfg.webhook_verified_at),
             "last_webhook_at": _iso(cfg.last_webhook_at),

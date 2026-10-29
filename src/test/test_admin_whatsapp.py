@@ -147,6 +147,58 @@ async def test_put_unknown_profile(wa_db):
 
 
 @pytest.mark.anyio
+async def test_put_thinking_level(wa_db):
+    """Valid levels are stored and returned, empty means system default, junk is a 400."""
+    from src.api.admin_whatsapp import put_whatsapp_config
+
+    view = await put_whatsapp_config(_body())
+    assert view["default_thinking_level"] is None  # default: system default
+
+    for level in ("off", "min", "medium", "max"):
+        view = await put_whatsapp_config(_body(default_thinking_level=level))
+        assert view["default_thinking_level"] == level
+
+    # Case/whitespace are normalised.
+    view = await put_whatsapp_config(_body(default_thinking_level=" MAX "))
+    assert view["default_thinking_level"] == "max"
+
+    with pytest.raises(HTTPException) as e:
+        await put_whatsapp_config(_body(default_thinking_level="turbo"))
+    assert e.value.status_code == 400
+    assert e.value.detail["code"] == "invalid_thinking_level"
+    # The rejected request must not have changed the stored value.
+    assert (await put_whatsapp_config(_body(default_thinking_level="max")))[
+        "default_thinking_level"
+    ] == "max"
+
+    # Empty string / null reset to the system default.
+    for empty in ("", None):
+        await put_whatsapp_config(_body(default_thinking_level="medium"))
+        view = await put_whatsapp_config(_body(default_thinking_level=empty))
+        assert view["default_thinking_level"] is None
+
+
+@pytest.mark.anyio
+async def test_thinking_level_does_not_require_revalidation(wa_db):
+    """Changing only the thinking level keeps the channel validated and enabled."""
+    from src.api.admin_whatsapp import put_whatsapp_config
+    from src.channels.whatsapp import config_service
+
+    await put_whatsapp_config(_body())
+    await config_service.mark_validated(
+        TENANT, "u1", display_phone_number="+39 0", verified_name="ACME"
+    )
+    await config_service.set_enabled(TENANT, True)
+
+    # Same Meta credentials (no new secrets), only the thinking level changes.
+    view = await put_whatsapp_config(
+        _body(access_token=None, app_secret=None, default_thinking_level="off")
+    )
+    assert view["default_thinking_level"] == "off"
+    assert view["enabled"] is True and view["validated_at"] is not None
+
+
+@pytest.mark.anyio
 async def test_validate_requires_config(wa_db):
     from src.api.admin_whatsapp import validate_whatsapp
 

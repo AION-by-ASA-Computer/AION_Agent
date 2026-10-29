@@ -62,7 +62,16 @@ il collegamento e solo dopo si **attiva** il canale.
 ### A2. Lato AION (admin-ui → Piattaforma → WhatsApp)
 
 7. Si incollano WABA ID, Phone Number ID, token e app secret, e si sceglie il
-   profilo agente predefinito (facoltativo, default `aion_std`). Poi si salva.
+   profilo agente predefinito (facoltativo, default `aion_std`) e il livello
+   di pensiero (facoltativo, vedi sotto). Poi si salva.
+   - **Livello di pensiero**: `Spento`, `Minimo`, `Medio` o `Massimo`, come il
+     menu Thinking della chat-ui. "Predefinito di sistema" (nessun valore)
+     segue `AION_DEFAULT_REASONING_EFFORT` / `AION_THINKING_ENABLED`. Livelli
+     alti rendono la risposta più lenta e possono superare il timeout del
+     turno (`AION_WHATSAPP_TURN_TIMEOUT_S`). Il ragionamento non viene mai
+     inviato su WhatsApp, solo la risposta finale.
+   - Come il profilo, il livello vale per tutto il canale e non richiede di
+     rifare la verifica del collegamento con Meta.
    - Token e app secret sono cifrati nel DB (`AION_CREDENTIAL_ENCRYPTION_KEY`),
      come i segreti SSO, e nella pagina si vedono solo le ultime 4 cifre.
    - Per non cambiarli basta lasciare vuoti i campi.
@@ -197,6 +206,8 @@ sequenceDiagram
 4. **Turno.** È lo stesso della chat-ui:
    - profilo predefinito del canale, se l'utente ha accesso; altrimenti il
      primo profilo consentito;
+   - livello di pensiero configurato per il canale (admin-ui), con le stesse
+     regole di mappatura sul modello della chat-ui;
    - conversazione attiva dell'utente, oppure una nuova con
      `metadata.source = "whatsapp"`;
    - il turno è registrato tra le run in background, quindi la chat-ui lo può
@@ -316,6 +327,6 @@ sono in `src/test/fixtures/whatsapp/`.
 
 - media in ingresso e in uscita, messaggi vocali;
 - template e messaggi proattivi (es. notifiche dei cron);
-- scelta del profilo da WhatsApp;
+- scelta del profilo e del livello di pensiero da WhatsApp (per utente);
 - Embedded Signup;
 - rate limit per utente.
