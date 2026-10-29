@@ -1,5 +1,6 @@
 """Dispatcher: collegamento, comandi, turno dell'agente, risposte, ripresa."""
 
+import asyncio
 import json
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
@@ -39,12 +40,15 @@ def turns(monkeypatch):
             conversation_id="conv-1", text="**Ieri 12 ordini**"
         )
         raise_exc = None
+        delay = 0.0  # simulated turn duration (seconds)
 
     state = _Turns()
     state.calls = []
 
     async def fake_run_turn(**kwargs):
         state.calls.append(kwargs)
+        if state.delay:
+            await asyncio.sleep(state.delay)
         if state.raise_exc:
             raise state.raise_exc
         return state.reply
@@ -157,6 +161,113 @@ async def test_linked_turn_sends_formatted_reply(wa_db, graph, turns):
     ident = await linking.get_identity(TENANT, BSUID)
     assert ident.last_inbound_at is not None
     assert ident.wa_profile_name == "Mario Rossi"
+
+
+@pytest.fixture
+def fast_typing(monkeypatch):
+    """Shrink the keep-alive timings so a long turn lasts a fraction of a second."""
+    from src.channels.whatsapp import dispatcher
+
+    monkeypatch.setattr(dispatcher, "TYPING_REFRESH_S", 0.02)
+    monkeypatch.setenv("AION_WHATSAPP_WORKING_NOTICE_S", "0.05")
+
+
+@pytest.mark.anyio
+async def test_long_turn_keeps_typing_and_sends_working_notice(
+    wa_db, graph, turns, fast_typing
+):
+    """A turn longer than Meta's 25 s window: the indicator is refreshed, the
+    "ci sto lavorando" notice goes out once before the reply, and the
+    keep-alive stops with the turn."""
+    from src.channels.whatsapp.dispatcher import MESSAGES
+
+    await configure_channel()
+    await _link()
+    turns.delay = 0.2
+
+    msg = _msg("analisi lunga")
+    await _deliver(msg)
+
+    assert len(graph.typing) >= 3 and set(graph.typing) == {msg.wamid}
+    assert graph.bodies == [MESSAGES["working"], "*Ieri 12 ordini*"]
+    # The notice hides the indicator: it is re-sent right after it.
+    refreshes = len(graph.typing)
+    await asyncio.sleep(0.1)
+    assert len(graph.typing) == refreshes
+
+
+@pytest.mark.anyio
+async def test_working_notice_disabled(wa_db, graph, turns, fast_typing, monkeypatch):
+    """``AION_WHATSAPP_WORKING_NOTICE_S=0``: keep-alive only, no notice."""
+    monkeypatch.setenv("AION_WHATSAPP_WORKING_NOTICE_S", "0")
+    await configure_channel()
+    await _link()
+    turns.delay = 0.1
+
+    await _deliver(_msg("analisi lunga"))
+
+    assert len(graph.typing) > 1
+    assert graph.bodies == ["*Ieri 12 ordini*"]
+
+
+@pytest.mark.anyio
+async def test_typing_keepalive_gives_up_after_failures(
+    wa_db, graph, turns, fast_typing, monkeypatch
+):
+    """Meta rejecting the indicator: refreshes stop after ``TYPING_MAX_FAILURES``
+    in a row, and the turn still gets its reply."""
+    from src.channels.whatsapp import dispatcher
+    from src.channels.whatsapp.graph_client import GraphError
+
+    monkeypatch.setenv("AION_WHATSAPP_WORKING_NOTICE_S", "0")
+    await configure_channel()
+    await _link()
+    graph.typing_error = GraphError("message too old")
+    turns.delay = 0.3
+
+    await _deliver(_msg("analisi lunga"))
+
+    # Initial indicator + the failed refreshes, then nothing more.
+    assert len(graph.typing) == 1 + dispatcher.TYPING_MAX_FAILURES
+    assert graph.bodies == ["*Ieri 12 ordini*"]
+
+
+@pytest.mark.anyio
+async def test_rejected_typing_sends_working_notice_early(
+    wa_db, graph, turns, fast_typing, monkeypatch
+):
+    """Meta rejecting a refresh: the notice goes out right away (once), without
+    waiting for ``AION_WHATSAPP_WORKING_NOTICE_S``."""
+    from src.channels.whatsapp.dispatcher import MESSAGES
+    from src.channels.whatsapp.graph_client import GraphError
+
+    monkeypatch.setenv("AION_WHATSAPP_WORKING_NOTICE_S", "60")
+    await configure_channel()
+    await _link()
+    graph.typing_error = GraphError("message too old")
+    turns.delay = 0.15
+
+    await _deliver(_msg("analisi lunga"))
+
+    assert graph.bodies == [MESSAGES["working"], "*Ieri 12 ordini*"]
+
+
+@pytest.mark.anyio
+async def test_typing_keepalive_stops_on_turn_exception(
+    wa_db, graph, turns, fast_typing
+):
+    """A turn that crashes mid-way does not leave the keep-alive running."""
+    await configure_channel()
+    await _link()
+    turns.delay = 0.03
+    turns.raise_exc = RuntimeError("boom")
+
+    row = await _deliver(_msg("rompi tutto"))
+
+    assert row.status == "failed"
+    refreshes = len(graph.typing)
+    await asyncio.sleep(0.1)
+    assert len(graph.typing) == refreshes
 
 
 @pytest.mark.anyio

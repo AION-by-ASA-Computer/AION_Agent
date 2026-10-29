@@ -133,6 +133,8 @@ class FakeGraph:
         self.media_bytes = b"\x89PNG fake image"
         self.download_error: Optional[Exception] = None
         self.downloaded: List[str] = []
+        # Raised by ``mark_read_typing`` (after recording the attempt) when set.
+        self.typing_error: Optional[Exception] = None
         self._n = 0
 
     def factory(self, token: str, *args: Any, **kwargs: Any) -> "FakeGraph":
@@ -145,6 +147,8 @@ class FakeGraph:
 
     async def mark_read_typing(self, phone_number_id, wamid) -> None:
         self.typing.append(wamid)
+        if self.typing_error is not None:
+            raise self.typing_error
 
     async def mark_read(self, phone_number_id, wamid) -> None:
         self.read.append(wamid)

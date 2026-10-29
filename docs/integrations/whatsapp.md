@@ -216,6 +216,16 @@ sequenceDiagram
      seguire dal vivo;
    - foto e documenti ricevuti sono passati come allegati del turno, come gli
      upload della chat-ui (vedi [File e foto](#file-e-foto)).
+   - "Sta scrivendo…": Meta lo mostra per 25 secondi al massimo, quindi AION
+     lo rinnova ogni 20 secondi finché il turno non finisce (dopo 3 rifiuti di
+     fila da Meta smette di riprovare).
+   - Turni lunghi: dopo `AION_WHATSAPP_WORKING_NOTICE_S` secondi (default 90)
+     AION manda una sola volta "⏳ Ci sto lavorando, appena finisco ti
+     scrivo…". Se Meta rifiuta il rinnovo di "sta scrivendo…" il messaggio
+     parte subito, senza aspettare la soglia. Meta però conferma solo di aver
+     accettato la richiesta, non che l'indicatore compaia sul telefono: un
+     rinnovo accettato viene considerato funzionante. Con `0` il messaggio è
+     disattivato.
    - Timeout: `AION_WHATSAPP_TURN_TIMEOUT_S`. Allo scadere AION manda il link
      alla conversazione.
 5. **Risposta.** Il Markdown diventa formattazione WhatsApp:
@@ -307,6 +317,7 @@ collegamento, formattazione, dispatcher), `src/api/v1/whatsapp.py` e
 | `AION_WHATSAPP_FORCE_DISABLE` | `0` | Kill switch: `1` ignora i webhook e blocca l'attivazione |
 | `AION_WHATSAPP_GRAPH_VERSION` | `v26.0` | Versione Graph API |
 | `AION_WHATSAPP_TURN_TIMEOUT_S` | `600` | Timeout del turno (minimo 30) |
+| `AION_WHATSAPP_WORKING_NOTICE_S` | `90` | Secondi prima del messaggio "Ci sto lavorando…" nei turni lunghi; `0` = mai |
 | `AION_WHATSAPP_MAX_CHUNKS` | `3` | Messaggi massimi per risposta |
 | `AION_WHATSAPP_MEDIA` | `1` | `0` = solo testo (foto/documenti rifiutati, nessun file in uscita) |
 | `AION_WHATSAPP_MAX_OUTBOUND_FILES` | `5` | File generati inviati per risposta; gli altri con link |

@@ -8,6 +8,8 @@ mittente (i messaggi della stessa persona vanno in ordine):
 2. comandi ``/aiuto``, ``/nuova``, ``/scollega``;
 3. turno dell'agente con la stessa pipeline della chat-ui (profili, memoria,
    tool MCP), nella conversazione attiva (``metadata.source = "whatsapp"``);
+   for the whole turn "sta scrivendo…" is kept alive (``_Replier.keep_typing``)
+   and long turns get a one-time "ci sto lavorando" notice;
 4. risposta convertita in formattazione WhatsApp e inviata a blocchi, seguita
    dai file generati dall'agente nel turno (``media.send_outputs``).
 
@@ -23,13 +25,14 @@ dal vivo come quelli dei cron.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, AsyncIterator, Dict, List, Optional, Set, Tuple
 
 from src.data.engine import get_async_session_maker
 from src.data.models import Conversation, User, WhatsAppIdentity
@@ -54,6 +57,14 @@ TEXT_TYPES = ("text", "button", "interactive")
 PENDING_MEDIA_TTL = timedelta(hours=24)
 # Keys of the pending entries that are bookkeeping, not part of AttachmentRef.
 _PENDING_META_KEYS = ("added_at", "conversation_id")
+# Meta drops the "typing…" indicator after 25 s (or at our next message), so
+# during a turn it is re-sent a bit earlier than that to keep it on screen.
+TYPING_REFRESH_S = 20.0
+# After this many refreshes in a row rejected by Meta (e.g. the inbound wamid is
+# no longer accepted) the keep-alive gives up instead of retrying for 10 minutes.
+TYPING_MAX_FAILURES = 3
+# Default delay before the one-time "ci sto lavorando" notice on long turns.
+DEFAULT_WORKING_NOTICE_S = 90.0
 
 _TASKS: Set[asyncio.Task] = set()
 _LOCKS: Dict[str, asyncio.Lock] = {}
@@ -117,6 +128,7 @@ MESSAGES = {
     ),
     "empty": "Non ho una risposta testuale da mostrare qui. Vedi su AION: {conversation_url}",
     "continue_label": "Continua su AION",
+    "working": "⏳ Ci sto lavorando, appena finisco ti scrivo…",
 }
 
 
@@ -128,6 +140,23 @@ def _turn_timeout_s() -> float:
         )
     except ValueError:
         return DEFAULT_TURN_TIMEOUT_S
+
+
+def _working_notice_s() -> float:
+    """Seconds into a turn before the "ci sto lavorando" notice; ``0`` disables it.
+
+    Read from ``AION_WHATSAPP_WORKING_NOTICE_S``. The notice is a safety net
+    for clients where the refreshed typing indicator does not show up.
+    """
+    try:
+        return max(
+            0.0,
+            float(
+                os.getenv("AION_WHATSAPP_WORKING_NOTICE_S") or DEFAULT_WORKING_NOTICE_S
+            ),
+        )
+    except ValueError:
+        return DEFAULT_WORKING_NOTICE_S
 
 
 def _chat_url() -> str:
@@ -246,13 +275,80 @@ class _Replier:
         except GraphError as e:
             logger.debug("WhatsApp read receipt failed: %s", e)
 
-    async def typing(self) -> None:
+    async def typing(self) -> bool:
+        """Blue ticks + "sta scrivendo…"; returns False when Meta rejected it."""
         try:
             await self.client.mark_read_typing(
                 self.cfg.phone_number_id or "", self.msg.wamid
             )
+            return True
         except GraphError as e:
             logger.debug("WhatsApp typing indicator failed: %s", e)
+            return False
+
+    @contextlib.asynccontextmanager
+    async def keep_typing(self) -> AsyncIterator[None]:
+        """Keep "sta scrivendo…" on screen while the wrapped block (the turn) runs.
+
+        Sends the indicator right away, then ``_typing_loop`` refreshes it in
+        the background. The loop is cancelled when the block exits (reply
+        ready, timeout or exception), so it never runs past the turn.
+        """
+        await self.typing()
+        task = asyncio.create_task(
+            self._typing_loop(), name=f"wa-typing:{self.msg.wamid[-12:]}"
+        )
+        try:
+            yield
+        finally:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
+    async def _typing_loop(self) -> None:
+        """Refresh the typing indicator every ``TYPING_REFRESH_S``; send the
+        "ci sto lavorando" notice once after ``_working_notice_s()``, or as
+        soon as Meta rejects a refresh (the user is then left without any
+        sign of activity, so waiting for the threshold makes no sense).
+
+        Meta only tells us whether it accepted the request, not whether the
+        indicator is shown on the phone: an accepted refresh is assumed to work.
+
+        Ends on its own only when there is nothing left to do (indicator given
+        up after ``TYPING_MAX_FAILURES`` and notice sent or disabled); otherwise
+        it runs until ``keep_typing`` cancels it.
+        """
+        loop = asyncio.get_running_loop()
+        notice_after = _working_notice_s()
+        notice_at = loop.time() + notice_after
+        notice_pending = notice_after > 0
+        failures = 0
+        while notice_pending or failures < TYPING_MAX_FAILURES:
+            # Wake up for the next refresh, or earlier if the notice is due first.
+            delay = TYPING_REFRESH_S
+            if notice_pending:
+                delay = min(delay, max(0.0, notice_at - loop.time()))
+            await asyncio.sleep(delay)
+
+            if notice_pending and loop.time() >= notice_at:
+                notice_pending = False
+                await self._send_working_notice()
+            # Also right after the notice: sending a message hides the indicator.
+            if failures < TYPING_MAX_FAILURES:
+                if await self.typing():
+                    failures = 0
+                else:
+                    failures += 1
+                    if notice_pending:
+                        notice_pending = False
+                        await self._send_working_notice()
+
+    async def _send_working_notice(self) -> None:
+        """Send the one-time "ci sto lavorando" message; errors are only logged."""
+        try:
+            await self.send(MESSAGES["working"])
+        except Exception:  # noqa: BLE001 - must never break the turn
+            logger.warning("WhatsApp working notice failed", exc_info=True)
 
 
 async def _process(tenant_id: str, msg: InboundMessage) -> None:
@@ -446,17 +542,18 @@ async def _handle_linked(
         await linking.update_identity(ident.id, pending_attachments_json=None)
     turn_attachments = [_attachment_ref(a) for a in pending]
 
-    await replier.typing()
-    result = await run_turn(
-        tenant_id=tenant_id,
-        cfg=cfg,
-        user=user,
-        conversation_id=conversation_id,
-        profile=profile,
-        text=text,
-        wamid=msg.wamid,
-        turn_attachments=turn_attachments,
-    )
+    # Meta's indicator lasts 25 s at most: keep it alive until the turn ends.
+    async with replier.keep_typing():
+        result = await run_turn(
+            tenant_id=tenant_id,
+            cfg=cfg,
+            user=user,
+            conversation_id=conversation_id,
+            profile=profile,
+            text=text,
+            wamid=msg.wamid,
+            turn_attachments=turn_attachments,
+        )
     replier.conversation_id = result.conversation_id
     conv_url = conversation_url(result.conversation_id)
     if result.timed_out:
