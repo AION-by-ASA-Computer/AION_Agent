@@ -25,6 +25,32 @@ class SystemChange:
     body: Optional[str] = None
 
 
+# Message types that carry a media object keyed by the type name
+# (``msg["image"]``, ``msg["document"]``, ...).
+MEDIA_TYPES = ("image", "document", "audio", "video", "sticker")
+# Media types whose ``caption`` doubles as the user's text for the turn.
+CAPTIONED_TYPES = ("image", "document", "video")
+
+
+@dataclass
+class InboundMedia:
+    """Media attached to an inbound message (Cloud API webhook ``messages[]``).
+
+    ``url`` is the direct download link Meta started adding to webhooks in
+    October 2025 (rolled out gradually, valid ~5 minutes): when it is missing
+    or expired the dispatcher falls back to ``GET /{media-id}``.
+    """
+
+    id: str
+    mime_type: Optional[str] = None
+    sha256: Optional[str] = None
+    caption: Optional[str] = None
+    filename: Optional[str] = None
+    url: Optional[str] = None
+    voice: bool = False
+    animated: bool = False
+
+
 @dataclass
 class InboundMessage:
     phone_number_id: str
@@ -36,6 +62,7 @@ class InboundMessage:
     text: Optional[str] = None
     timestamp: Optional[int] = None
     system: Optional[SystemChange] = None
+    media: Optional[InboundMedia] = None
 
     @property
     def sender_key(self) -> Optional[str]:
@@ -49,7 +76,13 @@ class InboundMessage:
     def from_dict(cls, data: Dict[str, Any]) -> "InboundMessage":
         data = dict(data)
         system = data.pop("system", None)
-        return cls(**data, system=SystemChange(**system) if system else None)
+        # ``media`` is absent from payloads queued before media support.
+        media = data.pop("media", None)
+        return cls(
+            **data,
+            system=SystemChange(**system) if system else None,
+            media=InboundMedia(**media) if media else None,
+        )
 
 
 @dataclass
@@ -100,6 +133,25 @@ def _contacts_by_key(contacts: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]
     return out
 
 
+def _parse_media(obj: Any) -> Optional[InboundMedia]:
+    """Media object of an inbound message; ``None`` without a media id."""
+    if not isinstance(obj, dict):
+        return None
+    media_id = _str(obj.get("id"))
+    if not media_id:
+        return None
+    return InboundMedia(
+        id=media_id,
+        mime_type=_str(obj.get("mime_type")),
+        sha256=_str(obj.get("sha256")),
+        caption=_str(obj.get("caption")),
+        filename=_str(obj.get("filename")),
+        url=_str(obj.get("url")),
+        voice=bool(obj.get("voice")),
+        animated=bool(obj.get("animated")),
+    )
+
+
 def _parse_message(
     msg: Dict[str, Any], phone_number_id: str, contacts: Dict[str, Dict[str, Any]]
 ) -> Optional[InboundMessage]:
@@ -116,6 +168,7 @@ def _parse_message(
 
     text: Optional[str] = None
     system: Optional[SystemChange] = None
+    media: Optional[InboundMedia] = None
     if mtype == "text":
         text = (msg.get("text") or {}).get("body")
     elif mtype == "button":
@@ -139,6 +192,10 @@ def _parse_message(
             new_phone=_str(sysd.get("wa_id")) or _str(sysd.get("new_wa_id")),
             body=_str(sysd.get("body")),
         )
+    elif mtype in MEDIA_TYPES:
+        media = _parse_media(msg.get(mtype))
+        if media and mtype in CAPTIONED_TYPES:
+            text = media.caption
     if isinstance(text, str):
         text = text.strip() or None
 
@@ -152,6 +209,7 @@ def _parse_message(
         text=text,
         timestamp=_int(msg.get("timestamp")),
         system=system,
+        media=media,
     )
 
 

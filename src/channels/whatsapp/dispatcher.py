@@ -8,7 +8,13 @@ mittente (i messaggi della stessa persona vanno in ordine):
 2. comandi ``/aiuto``, ``/nuova``, ``/scollega``;
 3. turno dell'agente con la stessa pipeline della chat-ui (profili, memoria,
    tool MCP), nella conversazione attiva (``metadata.source = "whatsapp"``);
-4. risposta convertita in formattazione WhatsApp e inviata a blocchi.
+4. risposta convertita in formattazione WhatsApp e inviata a blocchi, seguita
+   dai file generati dall'agente nel turno (``media.send_outputs``).
+
+Photos and documents are saved in the conversation (``media.ingest_inbound_media``):
+with a caption they start a turn right away, without one they are parked in
+``whatsapp_identities.pending_attachments_json`` and attached to the user's
+next text message (an album becomes a single turn).
 
 Il turno è registrato in ``_background_runs``: dalla chat-ui si può seguire
 dal vivo come quelli dei cron.
@@ -21,20 +27,20 @@ import json
 import logging
 import os
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional, Set
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 from src.data.engine import get_async_session_maker
 from src.data.models import Conversation, User, WhatsAppIdentity
 from src.identity import sanitize_user_id
 from src.runtime.redis_client import cache_get, cache_set
 
-from . import config_service, linking, store
+from . import config_service, linking, media, store
 from .config_service import ChannelConfig
 from .formatting import prepare_reply
-from .graph_client import GraphClient, GraphError
-from .payload import InboundMessage
+from .graph_client import GraphClient, GraphError, MediaTooLarge
+from .payload import MEDIA_TYPES, InboundMessage
 
 logger = logging.getLogger("aion.whatsapp.dispatcher")
 
@@ -43,6 +49,11 @@ DEFAULT_PROFILE_SLUG = "aion_std"
 UNLINKED_REPLY_TTL_S = 10 * 60
 RESUME_MAX_AGE = timedelta(hours=24)
 TEXT_TYPES = ("text", "button", "interactive")
+# Media received without a caption wait at most this long for the user's
+# follow-up text; older ones stay in the session as historical files only.
+PENDING_MEDIA_TTL = timedelta(hours=24)
+# Keys of the pending entries that are bookkeeping, not part of AttachmentRef.
+_PENDING_META_KEYS = ("added_at", "conversation_id")
 
 _TASKS: Set[asyncio.Task] = set()
 _LOCKS: Dict[str, asyncio.Lock] = {}
@@ -54,7 +65,9 @@ graph_client_factory = GraphClient
 MESSAGES = {
     "help": (
         "*AION su WhatsApp*\n"
-        "Scrivi la tua domanda e ti rispondo come nella chat di AION.\n\n"
+        "Scrivi la tua domanda e ti rispondo come nella chat di AION.\n"
+        "Puoi anche inviarmi foto e documenti (PDF, Word, Excel…): "
+        "aggiungi una didascalia o scrivimi dopo cosa vuoi che ne faccia.\n\n"
         "Comandi:\n"
         "• /nuova — inizia una nuova conversazione\n"
         "• /scollega — scollega questo WhatsApp dal tuo account\n"
@@ -80,6 +93,21 @@ MESSAGES = {
         "WhatsApp scollegato dal tuo account AION. Per ricollegarlo: {settings_url}"
     ),
     "text_only": "Per ora posso leggere solo messaggi di testo. Scrivimi la domanda 🙂",
+    "media_unsupported": (
+        "Per ora posso leggere testo, foto e documenti (PDF, Word, Excel, "
+        "PowerPoint…). Vocali, video e sticker non sono ancora supportati 🙂"
+    ),
+    "media_received": (
+        "📎 Ricevuto! Mandami altri file oppure scrivimi cosa vuoi che ne faccia."
+    ),
+    "media_too_large": (
+        "Il file è troppo grande per WhatsApp (max {max_mb} MB). Caricalo dalla "
+        "chat di AION: {chat_url}"
+    ),
+    "media_failed": (
+        "Non sono riuscito a scaricare il file da WhatsApp. Riprova a inviarlo tra poco."
+    ),
+    "more_files": "📁 Altri {count} file sono disponibili su AION: {conversation_url}",
     "timeout": (
         "Ci sto mettendo troppo a rispondere. Trovi la conversazione su AION: "
         "{conversation_url}"
@@ -189,6 +217,34 @@ class _Replier:
             bsuid=self.msg.sender_key,
             conversation_id=self.conversation_id,
         )
+
+    async def send_media(
+        self, kind: str, data: bytes, mime: str, filename: str
+    ) -> None:
+        """Upload ``data`` to Meta and send it as an ``image``/``document`` message."""
+        pnid = self.cfg.phone_number_id or ""
+        media_id = await self.client.upload_media(pnid, data, mime, filename)
+        out_wamid = await self.client.send_media(
+            pnid,
+            kind,
+            media_id,
+            filename=filename,
+            to=self.msg.phone,
+            recipient=self.msg.bsuid,
+        )
+        await store.record_outbound(
+            self.cfg.tenant_id,
+            out_wamid,
+            bsuid=self.msg.sender_key,
+            conversation_id=self.conversation_id,
+        )
+
+    async def mark_read(self) -> None:
+        """Blue ticks for messages we acknowledge without starting a turn."""
+        try:
+            await self.client.mark_read(self.cfg.phone_number_id or "", self.msg.wamid)
+        except GraphError as e:
+            logger.debug("WhatsApp read receipt failed: %s", e)
 
     async def typing(self) -> None:
         try:
@@ -314,38 +370,92 @@ async def _handle_linked(
     await linking.update_identity(ident.id, **updates)
 
     text = (msg.text or "").strip()
-    if msg.type not in TEXT_TYPES or not text:
-        await replier.send(MESSAGES["text_only"])
-        return
-
-    code = linking.parse_link_command(text)
-    if code:
-        await _try_link(tenant_id, msg, code, replier)
-        return
-
-    command = text.split()[0].lower() if text.startswith("/") else ""
-    if command in ("/aiuto", "/help"):
-        await replier.send(_help_text())
-        return
-    if command in ("/nuova", "/new"):
-        await linking.update_identity(ident.id, active_conversation_id=None)
-        await replier.send(MESSAGES["new_conversation"])
-        return
-    if command in ("/scollega", "/unlink"):
-        await linking.unlink(tenant_id, identity_id=ident.id)
+    is_media = (
+        msg.type in media.SUPPORTED_INBOUND_TYPES
+        and msg.media is not None
+        and media.media_enabled()
+    )
+    if not is_media and (msg.type not in TEXT_TYPES or not text):
+        if msg.type == "reaction":
+            return  # an emoji reaction needs no answer
+        unsupported = msg.type in MEDIA_TYPES and media.media_enabled()
         await replier.send(
-            MESSAGES["unlinked_done"].format(settings_url=settings_url())
+            MESSAGES["media_unsupported" if unsupported else "text_only"]
         )
         return
+
+    if not is_media:
+        code = linking.parse_link_command(text)
+        if code:
+            await _try_link(tenant_id, msg, code, replier)
+            return
+
+        command = text.split()[0].lower() if text.startswith("/") else ""
+        if command in ("/aiuto", "/help"):
+            await replier.send(_help_text())
+            return
+        if command in ("/nuova", "/new"):
+            # Files waiting for a follow-up belong to the old conversation.
+            await linking.update_identity(
+                ident.id, active_conversation_id=None, pending_attachments_json=None
+            )
+            await replier.send(MESSAGES["new_conversation"])
+            return
+        if command in ("/scollega", "/unlink"):
+            await linking.unlink(tenant_id, identity_id=ident.id)
+            await replier.send(
+                MESSAGES["unlinked_done"].format(settings_url=settings_url())
+            )
+            return
+
+    title_hint = text
+    if is_media and not title_hint:
+        title_hint = f"📎 {media.inbound_filename(msg.type, msg.media)}"
+    conversation_id, profile = await _resolve_conversation(
+        tenant_id=tenant_id, cfg=cfg, ident=ident, user=user, first_text=title_hint
+    )
+    replier.conversation_id = conversation_id
+    pending = _load_pending(ident, conversation_id)
+
+    if is_media:
+        attachment = await _ingest_media(tenant_id, cfg, msg, conversation_id, replier)
+        if attachment is None:
+            return
+        if not text:
+            # No caption: park the file until the user tells us what to do.
+            # One acknowledgement per burst (album), read receipts afterwards.
+            pending.append(
+                {
+                    **attachment,
+                    "added_at": datetime.now(timezone.utc).isoformat(),
+                    "conversation_id": conversation_id,
+                }
+            )
+            await linking.update_identity(
+                ident.id, pending_attachments_json=json.dumps(pending)
+            )
+            if len(pending) == 1:
+                await replier.send(MESSAGES["media_received"])
+            else:
+                await replier.mark_read()
+            return
+        pending.append(attachment)
+
+    if pending or ident.pending_attachments_json:
+        # Consumed by this turn (also drops expired/foreign entries).
+        await linking.update_identity(ident.id, pending_attachments_json=None)
+    turn_attachments = [_attachment_ref(a) for a in pending]
 
     await replier.typing()
     result = await run_turn(
         tenant_id=tenant_id,
         cfg=cfg,
-        ident=ident,
         user=user,
+        conversation_id=conversation_id,
+        profile=profile,
         text=text,
         wamid=msg.wamid,
+        turn_attachments=turn_attachments,
     )
     replier.conversation_id = result.conversation_id
     conv_url = conversation_url(result.conversation_id)
@@ -360,10 +470,86 @@ async def _handle_linked(
         continue_url=conv_url,
         continue_label=MESSAGES["continue_label"],
     )
-    if not chunks:
+    send_files = bool(result.files) and media.media_enabled()
+    if not chunks and not send_files:
         chunks = [MESSAGES["empty"].format(conversation_url=conv_url)]
     for chunk in chunks:
         await replier.send(chunk)
+    if send_files:
+        # Files after the text, so the answer explains what is being sent.
+        _sent, left_out = await media.send_outputs(
+            replier, result.conversation_id, result.files
+        )
+        if left_out:
+            await replier.send(
+                MESSAGES["more_files"].format(count=left_out, conversation_url=conv_url)
+            )
+
+
+async def _ingest_media(
+    tenant_id: str,
+    cfg: ChannelConfig,
+    msg: InboundMessage,
+    conversation_id: str,
+    replier: _Replier,
+) -> Optional[Dict[str, Any]]:
+    """Download and store the message's media; on failure reply and return None."""
+    assert msg.media is not None
+    try:
+        return await media.ingest_inbound_media(
+            replier.client,
+            tenant_id=tenant_id,
+            phone_number_id=cfg.phone_number_id,
+            conversation_id=conversation_id,
+            msg_type=msg.type,
+            media=msg.media,
+        )
+    except MediaTooLarge:
+        await replier.send(
+            MESSAGES["media_too_large"].format(
+                max_mb=media.max_inbound_bytes() // (1024 * 1024),
+                chat_url=conversation_url(conversation_id),
+            )
+        )
+    except media.MediaIngestError as e:
+        logger.warning("WhatsApp media %s not ingested: %s", msg.media.id, e)
+        await replier.send(MESSAGES["media_failed"])
+    return None
+
+
+def _load_pending(
+    ident: WhatsAppIdentity, conversation_id: str
+) -> List[Dict[str, Any]]:
+    """Pending (caption-less) media still usable in ``conversation_id``.
+
+    Entries from another conversation (archived or replaced meanwhile) or older
+    than ``PENDING_MEDIA_TTL`` are dropped: their files stay in that session.
+    """
+    try:
+        items = json.loads(ident.pending_attachments_json or "[]")
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(items, list):
+        return []
+    cutoff = datetime.now(timezone.utc) - PENDING_MEDIA_TTL
+    out: List[Dict[str, Any]] = []
+    for item in items:
+        if not isinstance(item, dict) or item.get("conversation_id") != conversation_id:
+            continue
+        try:
+            added = datetime.fromisoformat(str(item.get("added_at")))
+        except ValueError:
+            continue
+        if added.tzinfo is None:
+            added = added.replace(tzinfo=timezone.utc)
+        if added >= cutoff:
+            out.append(item)
+    return out
+
+
+def _attachment_ref(item: Dict[str, Any]) -> Dict[str, Any]:
+    """Upload metadata without the pending-queue bookkeeping keys."""
+    return {k: v for k, v in item.items() if k not in _PENDING_META_KEYS}
 
 
 # ---------------------------------------------------------------------------
@@ -377,6 +563,8 @@ class TurnResult:
     text: str = ""
     timed_out: bool = False
     error: Optional[str] = None
+    # Session-relative paths of the deliverables created during the turn.
+    files: List[str] = field(default_factory=list)
 
 
 async def _resolve_profile(user_row_id: str, preferred: Optional[str]) -> str:
@@ -500,16 +688,75 @@ async def _ensure_conversation(
         return new_id
 
 
-async def run_turn(
+async def _resolve_conversation(
     *,
     tenant_id: str,
     cfg: ChannelConfig,
     ident: WhatsAppIdentity,
     user: User,
+    first_text: str,
+) -> Tuple[str, str]:
+    """``(conversation_id, profile)`` for the user's next message.
+
+    Resolved before the turn because a caption-less media must be stored in a
+    conversation even when no turn runs. Persists the active conversation on
+    the identity when a new one is created.
+    """
+    uid = sanitize_user_id(user.identifier or user.id)
+    profile = await _resolve_profile(user.id, cfg.default_profile_slug)
+    conversation_id = await _ensure_conversation(
+        conversation_id=ident.active_conversation_id,
+        user_id=uid,
+        tenant_id=tenant_id,
+        profile_slug=profile,
+        first_text=first_text,
+    )
+    if conversation_id != ident.active_conversation_id:
+        await linking.update_identity(ident.id, active_conversation_id=conversation_id)
+    return conversation_id, profile
+
+
+def _session_attachments(
+    conversation_id: str, turn_attachments: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Every upload of the session, as chat-ui sends it in ``attachments``.
+
+    The pipeline lists them to the agent split into "new this turn" (the ones
+    in ``turn_attachments``) and "historical", so earlier photos/documents
+    stay reachable in follow-up questions.
+    """
+    from src.session_workspace import list_dir
+
+    turn_paths = {a.get("relative_path") for a in turn_attachments}
+    historical = [
+        {
+            "relative_path": f["relative_path"],
+            "original_name": f.get("name"),
+            "mime": f.get("mime"),
+        }
+        for f in list_dir(conversation_id, "uploads")
+        if f.get("relative_path") not in turn_paths
+    ]
+    return list(turn_attachments) + historical
+
+
+async def run_turn(
+    *,
+    tenant_id: str,
+    cfg: ChannelConfig,
+    user: User,
+    conversation_id: str,
+    profile: str,
     text: str,
     wamid: str,
+    turn_attachments: Optional[List[Dict[str, Any]]] = None,
 ) -> TurnResult:
-    """Un turno dell'agente, come ``cron_runner.execute_job`` ma per l'utente."""
+    """Un turno dell'agente, come ``cron_runner.execute_job`` ma per l'utente.
+
+    ``turn_attachments`` are the files sent with (or just before) this
+    message. The session output folders are snapshotted around the turn to
+    report the files the agent created in ``TurnResult.files``.
+    """
     from src.agent_pipeline import AgentPipeline
     from src.api.v1.chat import BackgroundChatRun, _background_runs, _clamped_runtime
     from src.main import get_agent, set_event_loop
@@ -520,16 +767,11 @@ async def run_turn(
     )
 
     uid = sanitize_user_id(user.identifier or user.id)
-    profile = await _resolve_profile(user.id, cfg.default_profile_slug)
-    conversation_id = await _ensure_conversation(
-        conversation_id=ident.active_conversation_id,
-        user_id=uid,
-        tenant_id=tenant_id,
-        profile_slug=profile,
-        first_text=text,
+    turn_attachments = list(turn_attachments or [])
+    attachments = await asyncio.to_thread(
+        _session_attachments, conversation_id, turn_attachments
     )
-    if conversation_id != ident.active_conversation_id:
-        await linking.update_identity(ident.id, active_conversation_id=conversation_id)
+    outputs_before = await asyncio.to_thread(media.snapshot_outputs, conversation_id)
 
     thinking_level = _resolve_thinking(cfg)
     await _sync_thinking_metadata(conversation_id, thinking_level)
@@ -567,6 +809,10 @@ async def run_turn(
         tokens: list[str] = []
         async for chunk in pipeline.run_stream(
             text,
+            attachments=attachments or None,
+            # Always a list (possibly empty): with ``None`` the pipeline would
+            # persist every historical upload as an attachment of this message.
+            turn_attachments=turn_attachments,
             # Thinking level configured for the channel (reasoning chunks are
             # not forwarded: only "token"/"final" reach the WhatsApp reply).
             reasoning_effort=thinking_level,
@@ -589,6 +835,8 @@ async def run_turn(
                 result.error = str(chunk.get("content") or "error")
         if not result.text:
             result.text = "".join(tokens).strip()
+        outputs_after = await asyncio.to_thread(media.snapshot_outputs, conversation_id)
+        result.files = media.collect_new_outputs(outputs_before, outputs_after)
 
     try:
         await asyncio.wait_for(_stream(), timeout=_turn_timeout_s())

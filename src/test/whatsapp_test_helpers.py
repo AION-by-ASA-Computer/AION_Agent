@@ -116,11 +116,23 @@ def signed_headers(raw: bytes, secret: str = APP_SECRET) -> Dict[str, str]:
 
 
 class FakeGraph:
-    """Sostituisce ``GraphClient`` nel dispatcher e registra gli invii."""
+    """Sostituisce ``GraphClient`` nel dispatcher e registra gli invii.
+
+    Media: ``media_bytes`` is what ``download_media`` returns (or
+    ``download_error`` is raised); uploads and media messages are recorded in
+    ``uploads`` / ``media_sent`` (media messages also land in ``sent`` with
+    ``body=None`` so the interleaving with text replies can be asserted).
+    """
 
     def __init__(self) -> None:
         self.sent: List[Dict[str, Any]] = []
         self.typing: List[str] = []
+        self.read: List[str] = []
+        self.uploads: List[Dict[str, Any]] = []
+        self.media_sent: List[Dict[str, Any]] = []
+        self.media_bytes = b"\x89PNG fake image"
+        self.download_error: Optional[Exception] = None
+        self.downloaded: List[str] = []
         self._n = 0
 
     def factory(self, token: str, *args: Any, **kwargs: Any) -> "FakeGraph":
@@ -134,6 +146,34 @@ class FakeGraph:
     async def mark_read_typing(self, phone_number_id, wamid) -> None:
         self.typing.append(wamid)
 
+    async def mark_read(self, phone_number_id, wamid) -> None:
+        self.read.append(wamid)
+
+    async def get_media(self, media_id, *, phone_number_id=None):
+        return {
+            "id": media_id,
+            "url": f"https://lookaside.fbsbx.com/whatsapp_business/attachments/?mid={media_id}",
+        }
+
+    async def download_media(self, url, *, max_bytes):
+        self.downloaded.append(url)
+        if self.download_error is not None:
+            raise self.download_error
+        return self.media_bytes
+
+    async def upload_media(self, phone_number_id, data, mime, filename):
+        self.uploads.append({"data": data, "mime": mime, "filename": filename})
+        return f"MEDIA-UP{len(self.uploads)}"
+
+    async def send_media(
+        self, phone_number_id, kind, media_id, *, to=None, recipient=None, **kwargs
+    ):
+        self._n += 1
+        entry = {"kind": kind, "media_id": media_id, "to": to, **kwargs}
+        self.media_sent.append(entry)
+        self.sent.append({"body": None, "media": entry, "to": to})
+        return f"wamid.OUT{self._n}"
+
     @property
     def bodies(self) -> List[str]:
-        return [s["body"] for s in self.sent]
+        return [s["body"] for s in self.sent if s["body"] is not None]

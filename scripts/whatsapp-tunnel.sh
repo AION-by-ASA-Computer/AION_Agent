@@ -3,7 +3,8 @@
 #
 # 1. apre un quick tunnel (https://<random>.trycloudflare.com) verso Caddy sulla porta HTTP locale;
 # 2. genera un override compose che punta gli URL pubblici del backend al tunnel
-#    (AION_PUBLIC_API_URL, AION_PUBLIC_CHAT_URL, AION_CHAT_URL) senza toccare .env;
+#    (AION_PUBLIC_API_URL, AION_OAUTH_REDIRECT_BASE_URL, AION_PUBLIC_CHAT_URL,
+#    AION_CHAT_URL) senza toccare .env;
 # 3. esegue `docker compose up -d --build`;
 # 4. stampa URL di callback per Meta e resta in primo piano: Ctrl+C chiude il tunnel.
 #
@@ -21,7 +22,7 @@ DOWN_ON_EXIT=0
 PORT=""
 
 usage() {
-  sed -n '2,11p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   cat <<'EOF'
 
 Opzioni:
@@ -128,6 +129,10 @@ services:
   backend:
     environment:
       AION_PUBLIC_API_URL: "$TUNNEL_URL/api"
+      # Va sovrascritto anche questo: _public_api_base_url() (usato per il webhook URL
+      # mostrato in admin-ui) lo legge PRIMA di AION_PUBLIC_API_URL, e il compose lo
+      # deriva dal .env (es. http://localhost:8001) se non è impostato esplicitamente.
+      AION_OAUTH_REDIRECT_BASE_URL: "$TUNNEL_URL/api"
       AION_PUBLIC_CHAT_URL: "$TUNNEL_URL"
       AION_CHAT_URL: "$TUNNEL_URL"
 EOF

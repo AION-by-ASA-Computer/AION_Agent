@@ -1067,9 +1067,7 @@ class WhatsAppChannel(Base):
     webhook_verified_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True)
     )
-    last_webhook_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True)
-    )
+    last_webhook_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
@@ -1100,9 +1098,10 @@ class WhatsAppIdentity(Base):
     linked_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    last_inbound_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True)
-    )
+    last_inbound_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    # JSON list of AttachmentRef dicts (+ ``added_at``) for media received
+    # without a caption: they are attached to the user's next text message.
+    pending_attachments_json: Mapped[Optional[str]] = mapped_column(Text)
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "bsuid", name="uq_whatsapp_identities_bsuid"),
@@ -1157,6 +1156,4 @@ class WhatsAppMessage(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
-    __table_args__ = (
-        Index("ix_whatsapp_messages_status", "direction", "status"),
-    )
+    __table_args__ = (Index("ix_whatsapp_messages_status", "direction", "status"),)

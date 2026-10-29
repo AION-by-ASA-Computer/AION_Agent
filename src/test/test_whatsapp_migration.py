@@ -24,13 +24,21 @@ def _load(rev="a9b0c1d029", filename="a9b0c1d029_whatsapp_channel.py"):
     return mod
 
 
-def _run(eng, fn_name, *, thinking_migration=False):
-    """Run a migration function; ``thinking_migration`` selects ``b0c1d2e030``."""
-    mod = (
-        _load("b0c1d2e030", "b0c1d2e030_whatsapp_thinking_level.py")
-        if thinking_migration
-        else _load()
-    )
+_PENDING_MEDIA = ("c1d2e3f031", "c1d2e3f031_whatsapp_pending_media.py")
+
+
+def _run(eng, fn_name, *, thinking_migration=False, migration=None):
+    """Run a migration function.
+
+    ``thinking_migration`` selects ``b0c1d2e030``; ``migration`` is an explicit
+    ``(revision, filename)`` pair for later revisions.
+    """
+    if migration is not None:
+        mod = _load(*migration)
+    elif thinking_migration:
+        mod = _load("b0c1d2e030", "b0c1d2e030_whatsapp_thinking_level.py")
+    else:
+        mod = _load()
     with eng.begin() as conn:
         with Operations.context(MigrationContext.configure(conn)):
             getattr(mod, fn_name)()
@@ -69,6 +77,7 @@ def test_migration_matches_models():
     _run(eng, "upgrade")
     # Columns added after the table-creation revision (default_thinking_level).
     _run(eng, "upgrade", thinking_migration=True)
+    _run(eng, "upgrade", migration=_PENDING_MEDIA)  # pending_attachments_json
     insp = inspect(eng)
     for table in TABLES:
         orm_cols = {c.name for c in Base.metadata.tables[table].columns}
@@ -105,3 +114,33 @@ def test_thinking_level_migration(tmp_path):
     _run(eng, "downgrade", thinking_migration=True)
     assert "default_thinking_level" not in cols()
     _run(eng, "downgrade", thinking_migration=True)  # idempotent
+
+
+def test_pending_media_migration(tmp_path):
+    """``c1d2e3f031`` adds ``pending_attachments_json``: idempotent and reversible."""
+    mod = _load(*_PENDING_MEDIA)
+    assert mod.down_revision == "b0c1d2e030"
+    eng = create_engine(f"sqlite:///{tmp_path}/p.db")
+
+    def cols():
+        return {c["name"] for c in inspect(eng).get_columns("whatsapp_identities")}
+
+    # No table yet: the migration is a no-op instead of failing.
+    _run(eng, "upgrade", migration=_PENDING_MEDIA)
+    assert "whatsapp_identities" not in inspect(eng).get_table_names()
+
+    # FK targets reflected by batch_alter_table on the SQLite drop.
+    with eng.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE tenants (id VARCHAR(64) PRIMARY KEY)")
+        conn.exec_driver_sql("CREATE TABLE users (id VARCHAR(64) PRIMARY KEY)")
+
+    _run(eng, "upgrade")
+    assert "pending_attachments_json" not in cols()
+
+    _run(eng, "upgrade", migration=_PENDING_MEDIA)
+    assert "pending_attachments_json" in cols()
+    _run(eng, "upgrade", migration=_PENDING_MEDIA)  # idempotent
+
+    _run(eng, "downgrade", migration=_PENDING_MEDIA)
+    assert "pending_attachments_json" not in cols()
+    _run(eng, "downgrade", migration=_PENDING_MEDIA)  # idempotent

@@ -393,7 +393,9 @@ e `.env.docker.example`:
 | `AION_WHATSAPP_MAX_CHUNKS` | `3` | Blocchi massimi per risposta |
 | `AION_WHATSAPP_TURN_TIMEOUT_S` | `600` | Timeout del turno |
 | `AION_WHATSAPP_UNLINKED_REPLY_COOLDOWN_S` | `600` | Anti-spam del messaggio di collegamento (Fase 1: fisso a 10 min) |
-| `AION_WHATSAPP_MEDIA` | `1` | Accetta media in ingresso (Fase 2) |
+| `AION_WHATSAPP_MEDIA` | `1` | Foto/documenti in ingresso e file generati in uscita (Fase 2) |
+| `AION_WHATSAPP_MAX_OUTBOUND_FILES` | `5` | File generati inviati per risposta (Fase 2) |
+| `AION_WHATSAPP_MAX_OUTBOUND_BYTES` | `104857600` | Dimensione massima di un file inviato (Fase 2) |
 
 ## 10. Fasi di rilascio
 
@@ -401,7 +403,7 @@ e `.env.docker.example`:
 |------|-----------|-------|
 | **0 — Prerequisiti** | Revisione legale (§2); app Meta di test con numero di test gratuito; tunnel (cloudflared/ngrok) per lo sviluppo locale; raccolta di payload reali come fixture. | 2–3 gg + tempi legali |
 | **1 — Solo testo** ✅ | Migrazione; `config_service`/`signature`/`payload`/`graph_client`; webhook + dedup + ripresa pendenti; collegamento con codice/QR dalla chat-ui; pagina admin con verifica e attivazione; dispatcher con conferma di lettura e "sta scrivendo"; formattazione e split; comandi base; kill switch; doc `docs/integrations/whatsapp.md`. | 8–10 gg |
-| **2 — Admin & media** | Pagina admin completa con test di connessione e identità; media in ingresso (immagini, PDF, documenti Office); media in uscita (grafici, file); webhook di stato e metriche; rate limit. | 6–8 gg |
+| **2 — Admin & media** (media ✅ parziale) | Pagina admin completa con test di connessione e identità; ✅ media in ingresso (immagini, PDF, documenti Office; senza didascalia restano in attesa del messaggio successivo); ✅ file generati in uscita (`workspace/`, `derived/`); grafici `charts` come PNG ancora da fare; webhook di stato e metriche; rate limit. Dettagli in `docs/integrations/whatsapp.md` § File e foto. | 6–8 gg |
 | **3 — UX avanzata** | Messaggi vocali tramite endpoint STT OpenAI-compatible (`AION_STT_API_URL`, es. Whisper su vLLM; oggi in AION non esiste STT); HITL con pulsanti; auto-match tramite numero; raggruppamento di messaggi ravvicinati. | 5–7 gg |
 | **4 — Distribuzione** | Messaggi proattivi tramite template utility (es. risultati dei job cron), fuori dalla finestra di 24h; AION-ASA come **Tech Provider** con **Embedded Signup** (onboarding con un clic dall'admin-ui, `override_callback_uri` per WABA verso il dominio del cliente). Richiede App Review e una nuova valutazione della policy AI Providers. | da stimare |
 

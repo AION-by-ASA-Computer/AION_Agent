@@ -12,8 +12,9 @@ pipeline della chat-ui: stessi profili, stessa memoria (STM/LTM), stessi tool
 MCP. Le conversazioni restano visibili anche nella chat-ui, con l'icona
 WhatsApp.
 
-Questa pagina copre la **Fase 1 (solo testo)**. Il piano completo, con le fasi
-successive (media, template, messaggi proattivi), è in
+Questa pagina copre la **Fase 1 (testo)** e la parte media della **Fase 2**
+(foto e documenti in ingresso, file generati dall'agente in uscita). Il piano
+completo, con le fasi successive (vocali, template, messaggi proattivi), è in
 [`docs/architecture/whatsapp-channel-plan.md`](../architecture/whatsapp-channel-plan.md).
 
 | Chi | Cosa fa | Dove | Quante volte |
@@ -86,9 +87,9 @@ il collegamento e solo dopo si **attiva** il canale.
    - si incollano URL e verify token e si preme **Verifica e salva**: Meta
      chiama subito AION, che registra "webhook verificato";
    - si sottoscrive il campo **`messages`**.
-10. Si aggiunge un **metodo di pagamento** al WABA e si mette l'app in
-    modalità **Live**. In modalità sviluppo Meta invia webhook solo per i
-    numeri di test.
+10. Si aggiunge un **metodo di pagamento** al WABA. La pubblicazione
+    dell'app (modalità **Live**) è **facoltativa**: il canale funziona già
+    con l'app "Non pubblicata".
 
 ### A4. Verifica e attivazione
 
@@ -157,7 +158,8 @@ Se l'utente AION viene cancellato, il collegamento sparisce con lui.
 | `/scollega` (`/unlink`) | Scollega questo WhatsApp dall'account |
 | `COLLEGA <codice>` | Collega (o ricollega) l'account |
 
-Tutto il resto è una domanda per l'agente.
+Tutto il resto è una domanda per l'agente. Foto e documenti sono descritti in
+[File e foto](#file-e-foto).
 
 ---
 
@@ -211,7 +213,9 @@ sequenceDiagram
    - conversazione attiva dell'utente, oppure una nuova con
      `metadata.source = "whatsapp"`;
    - il turno è registrato tra le run in background, quindi la chat-ui lo può
-     seguire dal vivo.
+     seguire dal vivo;
+   - foto e documenti ricevuti sono passati come allegati del turno, come gli
+     upload della chat-ui (vedi [File e foto](#file-e-foto)).
    - Timeout: `AION_WHATSAPP_TURN_TIMEOUT_S`. Allo scadere AION manda il link
      alla conversazione.
 5. **Risposta.** Il Markdown diventa formattazione WhatsApp:
@@ -221,9 +225,56 @@ sequenceDiagram
 
    Il testo è diviso in blocchi da 4096 caratteri. Oltre
    `AION_WHATSAPP_MAX_CHUNKS` blocchi viene troncato con "Continua su AION:
-   &lt;link&gt;".
+   &lt;link&gt;". Dopo il testo arrivano i file creati dall'agente nel turno.
 6. **Stati.** I webhook `sent`/`delivered`/`read`/`failed` aggiornano i
    messaggi in uscita e non tornano mai indietro di stato.
+
+---
+
+## File e foto
+
+Il dipendente può inviare **foto** (JPEG/PNG) e **documenti** (PDF, Word,
+Excel, PowerPoint, testo…) e riceve su WhatsApp i **file creati dall'agente**.
+Vocali, video e sticker ricevono un messaggio cortese di non supporto.
+
+### In ingresso
+
+| Cosa invia l'utente | Cosa fa AION |
+|---------------------|--------------|
+| Foto o documento **con didascalia** | Turno immediato: la didascalia è la domanda, il file è allegato |
+| Foto o documento **senza didascalia** | Salva il file e risponde "📎 Ricevuto!…" (una volta per raffica); i file successivi ricevono solo le spunte blu |
+| Testo dopo file senza didascalia | Turno con tutti i file in attesa come allegati |
+| `/nuova` | Scarta i file in attesa (restano nella vecchia conversazione) |
+
+- Il file è scaricato dalla Graph API (`GET /{media-id}` → URL valido 5 minuti,
+  `Authorization: Bearer`). Il token è inviato **solo** a host Meta
+  (`*.fbsbx.com`, `*.whatsapp.net`, `*.facebook.com`). Se l'URL è scaduto
+  (messaggio rimasto in coda, riavvio) viene rigenerato una volta.
+- Il salvataggio è identico all'upload della chat-ui: `uploads/` della
+  sessione, conversione Word legacy, auto-ingest dei PDF, copia sullo storage
+  backend. Il file è quindi visibile anche nella chat-ui.
+- Limite: `min(AION_UPLOAD_MAX_BYTES, 100 MB)`. Oltre, AION risponde con il link
+  alla chat-ui.
+- I file in attesa sono legati alla conversazione attiva
+  (`whatsapp_identities.pending_attachments_json`) e scadono dopo **24 ore**.
+- L'agente legge le immagini con i tool OCR/documenti, come per gli upload
+  della chat-ui (nessuna vision nativa con l'harness v2).
+
+### In uscita
+
+- Dopo il turno AION confronta `workspace/` e `derived/` della sessione prima e
+  dopo: i file nuovi o modificati sono inviati **dopo il testo**. Sono esclusi
+  i file interni (`.versions/`, `derived/tool_results/`, `derived/docs/`,
+  script `.py`/`.js`, `.json`, log…), con lo stesso filtro della chat-ui.
+- JPEG/PNG fino a 5 MB → immagine; oltre, PDF e Office → documento con il nome
+  originale; altri file di testo (CSV, Markdown, HTML…) → documento
+  `text/plain`. Altri tipi non sono inviati.
+- Al massimo `AION_WHATSAPP_MAX_OUTBOUND_FILES` file per risposta: quelli in
+  più, non supportati o rifiutati da Meta sono segnalati con "📁 Altri N file
+  sono disponibili su AION: &lt;link&gt;".
+- Ogni file è caricato con `POST /{phone_number_id}/media` e inviato per `id`.
+  Siamo sempre nella finestra di 24 ore, perché AION risponde subito a un
+  messaggio dell'utente.
 
 ---
 
@@ -257,6 +308,10 @@ collegamento, formattazione, dispatcher), `src/api/v1/whatsapp.py` e
 | `AION_WHATSAPP_GRAPH_VERSION` | `v26.0` | Versione Graph API |
 | `AION_WHATSAPP_TURN_TIMEOUT_S` | `600` | Timeout del turno (minimo 30) |
 | `AION_WHATSAPP_MAX_CHUNKS` | `3` | Messaggi massimi per risposta |
+| `AION_WHATSAPP_MEDIA` | `1` | `0` = solo testo (foto/documenti rifiutati, nessun file in uscita) |
+| `AION_WHATSAPP_MAX_OUTBOUND_FILES` | `5` | File generati inviati per risposta; gli altri con link |
+| `AION_WHATSAPP_MAX_OUTBOUND_BYTES` | `104857600` | Dimensione massima di un file inviato (tetto Meta 100 MB) |
+| `AION_UPLOAD_MAX_BYTES` | — | Limite degli upload, vale anche per i file ricevuti (max 100 MB) |
 
 Il backend deve girare con `--workers 1`: la coda e i lock sono in memoria.
 La ripresa all'avvio copre i riavvii.
@@ -270,10 +325,13 @@ La ripresa all'avvio copre i riavvii.
 | Meta: "Impossibile convalidare l'URL di callback" | URL non raggiungibile o non HTTPS, oppure verify token diverso | Controllare `AION_PUBLIC_API_URL`, il DNS e il certificato; ricopiare il token dalla pagina admin |
 | Checklist: `webhook_verified` ✗ | Handshake mai completato o token rigenerato | Ripetere "Verifica e salva" su Meta |
 | Log: `invalid signature` (403) | App secret sbagliato o di un'altra app | Reincollare l'App secret dell'app che ha il webhook |
-| Nessun messaggio in arrivo | Campo `messages` non sottoscritto, app non **Live** o canale non attivo | Sottoscrivere `messages`, mettere l'app Live, controllare "Ultimo webhook" nella pagina admin |
+| Nessun messaggio in arrivo | Campo `messages` non sottoscritto, canale non attivo | Sottoscrivere `messages`, controllare "Ultimo webhook" nella pagina admin |
 | `token_phone` ✗ con `[190]` | Token scaduto o revocato | Generare un token permanente dal System User |
 | `cloud_api_registered` ✗ | Numero su On-Premises o non registrato | Registrare il numero su Cloud API in WhatsApp Manager |
 | Errore `131047` sugli invii | Fuori dalla finestra di 24 ore | Normale per messaggi proattivi (Fase 2: template); in Fase 1 AION risponde solo a chi ha appena scritto |
+| Errore `131052` | File in ingresso oltre il limite di Meta (100 MB) | Inviare il file dalla chat-ui |
+| Errore `131053` | File in uscita con tipo o dimensione non accettati da Meta | Il file resta disponibile nella chat-ui (messaggio "Altri N file") |
+| "Non sono riuscito a scaricare il file" | URL scaduto anche dopo il refresh, token senza permessi o errore Meta | Controllare `last_error` e i log `aion.whatsapp.media` |
 | Errore `131026` | Destinatario non raggiungibile (WhatsApp vecchio, termini non accettati) | Chiedere al dipendente di aggiornare WhatsApp |
 | Emergenza (spam, token compromesso) | — | `AION_WHATSAPP_FORCE_DISABLE=1` e riavvio; poi ruotare token e app secret |
 
@@ -323,9 +381,11 @@ python -m pytest src/test/test_whatsapp_*.py src/test/test_admin_whatsapp.py -v
 La Graph API è simulata con `httpx.MockTransport`; le fixture dei webhook
 sono in `src/test/fixtures/whatsapp/`.
 
-## Fuori dalla Fase 1
+## Non ancora supportato
 
-- media in ingresso e in uscita, messaggi vocali;
+- messaggi vocali (trascrizione), video e sticker;
+- vision nativa sulle foto con l'harness v2 (oggi: tool OCR);
+- grafici della chat-ui (`charts`) come immagini;
 - template e messaggi proattivi (es. notifiche dei cron);
 - scelta del profilo e del livello di pensiero da WhatsApp (per utente);
 - Embedded Signup;

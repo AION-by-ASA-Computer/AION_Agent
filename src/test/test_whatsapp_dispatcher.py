@@ -203,13 +203,29 @@ async def test_commands(wa_db, graph, turns):
 
 @pytest.mark.anyio
 async def test_non_text_message(wa_db, graph, turns):
+    """Voice notes are declined politely; reactions get no answer at all."""
+    from src.channels.whatsapp.dispatcher import MESSAGES
+
     await configure_channel()
     await _link()
-    await _deliver(_msg(fixture="image"))
-    assert graph.bodies == [
-        "Per ora posso leggere solo messaggi di testo. Scrivimi la domanda 🙂"
-    ]
+    await _deliver(_msg(fixture="audio_voice"))
+    assert graph.bodies == [MESSAGES["media_unsupported"]]
+    await _deliver(_msg(fixture="audio_voice", type="reaction", media=None))
+    assert len(graph.bodies) == 1
     assert turns.calls == []
+
+
+@pytest.mark.anyio
+async def test_media_disabled_falls_back_to_text_only(wa_db, graph, turns, monkeypatch):
+    """``AION_WHATSAPP_MEDIA=0`` restores the phase-1 "text only" behaviour."""
+    from src.channels.whatsapp.dispatcher import MESSAGES
+
+    monkeypatch.setenv("AION_WHATSAPP_MEDIA", "0")
+    await configure_channel()
+    await _link()
+    await _deliver(_msg(fixture="image_no_caption"))
+    assert graph.bodies == [MESSAGES["text_only"]]
+    assert graph.downloaded == [] and turns.calls == []
 
 
 @pytest.mark.anyio
@@ -425,11 +441,21 @@ async def test_run_turn_streams_through_pipeline(wa_db, monkeypatch):
     async with get_async_session_maker()() as session:
         user = await session.get(User, "u1")
 
+    conversation_id, profile = await dispatcher._resolve_conversation(
+        tenant_id=TENANT, cfg=cfg, ident=ident, user=user, first_text="Quanti?"
+    )
     result = await dispatcher.run_turn(
-        tenant_id=TENANT, cfg=cfg, ident=ident, user=user, text="Quanti?", wamid="w1"
+        tenant_id=TENANT,
+        cfg=cfg,
+        user=user,
+        conversation_id=conversation_id,
+        profile=profile,
+        text="Quanti?",
+        wamid="w1",
     )
 
     assert result.text == "Ieri 12 ordini" and not result.timed_out
+    assert result.conversation_id == conversation_id and result.files == []
     profile, kwargs = seen["agent"]
     assert profile == "aion_std"
     assert kwargs["session_id"] == result.conversation_id
@@ -437,6 +463,10 @@ async def test_run_turn_streams_through_pipeline(wa_db, monkeypatch):
     text, stream_kwargs = seen["stream"]
     assert text == "Quanti?"
     assert stream_kwargs["metadata"] == {"channel": "whatsapp", "wamid": "w1"}
+    # No uploads: an explicit empty turn list keeps the pipeline from
+    # re-persisting ``attachments`` as this turn's user attachments.
+    assert stream_kwargs["attachments"] is None
+    assert stream_kwargs["turn_attachments"] == []
     assert result.conversation_id not in chat_mod._background_runs
     assert (
         await linking.get_identity(TENANT, BSUID)
@@ -510,8 +540,17 @@ async def test_run_turn_passes_thinking_level(wa_db, monkeypatch, level, expecte
     async with get_async_session_maker()() as session:
         user = await session.get(User, "u1")
 
+    conversation_id, profile = await dispatcher._resolve_conversation(
+        tenant_id=TENANT, cfg=cfg, ident=ident, user=user, first_text="Ciao"
+    )
     result = await dispatcher.run_turn(
-        tenant_id=TENANT, cfg=cfg, ident=ident, user=user, text="Ciao", wamid="w2"
+        tenant_id=TENANT,
+        cfg=cfg,
+        user=user,
+        conversation_id=conversation_id,
+        profile=profile,
+        text="Ciao",
+        wamid="w2",
     )
     assert seen["kwargs"]["reasoning_effort"] == expected
 
@@ -528,3 +567,206 @@ async def test_run_turn_passes_thinking_level(wa_db, monkeypatch, level, expecte
         assert "reasoning_effort" not in meta
     else:
         assert meta["reasoning_effort"] == level
+
+
+# ---------------------------------------------------------------------------
+# Media (images/documents in, generated files out)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def media_store(monkeypatch):
+    """No object-storage copy / PDF auto-ingest during dispatcher media tests.
+
+    Session files go to ``AION_DATA_DIR`` (a ``tmp_path``, see ``setup_db``).
+    """
+    from src.channels.whatsapp import media
+
+    class _Backend:
+        def put_bytes(self, key, data, mime):
+            pass
+
+    monkeypatch.setattr(media, "get_storage_backend", lambda: _Backend())
+    monkeypatch.setattr(media, "schedule_auto_ingest", lambda cid, meta: None)
+
+
+async def _identity():
+    from src.channels.whatsapp import linking
+
+    return await linking.get_identity(TENANT, BSUID)
+
+
+@pytest.mark.anyio
+async def test_captioned_image_runs_turn_with_attachment(
+    wa_db, graph, turns, media_store
+):
+    """A photo with a caption is stored in uploads/ and sent with the turn."""
+    from src.session_workspace import session_root
+
+    await configure_channel()
+    await _link()
+    row = await _deliver(_msg(fixture="image"))
+
+    assert row.status == "done"
+    (call,) = turns.calls
+    assert call["text"] == "scontrino"
+    (att,) = call["turn_attachments"]
+    assert att["relative_path"].startswith("uploads/")
+    assert att["original_name"].startswith("whatsapp_")
+    assert att["mime"] == "image/jpeg"
+    assert "added_at" not in att and "conversation_id" not in att
+    path = session_root(call["conversation_id"]) / att["relative_path"]
+    assert path.read_bytes() == graph.media_bytes
+    # The media id from the webhook (no url) is resolved via GET /{media-id}.
+    assert "mid=MEDIA1" in graph.downloaded[0]
+    assert graph.bodies[0].startswith("*Ieri 12 ordini*")
+
+
+@pytest.mark.anyio
+async def test_album_without_caption_waits_for_text(wa_db, graph, turns, media_store):
+    """Caption-less burst: one ack, then read receipts; the next text gets all files."""
+    from src.channels.whatsapp.dispatcher import MESSAGES
+
+    await configure_channel()
+    await _link()
+    await _deliver(_msg(fixture="image_no_caption"))
+    # A document without caption (``text`` is a positional arg of ``_msg``).
+    second = replace(_msg(fixture="document_pdf"), text=None)
+    await _deliver(second)
+
+    assert turns.calls == []
+    assert graph.bodies == [MESSAGES["media_received"]]
+    assert graph.read == [second.wamid]
+    pending = json.loads((await _identity()).pending_attachments_json)
+    assert [p["original_name"] for p in pending][1] == "Fattura marzo.pdf"
+
+    await _deliver(_msg("Riassumi tutto"))
+    (call,) = turns.calls
+    assert call["text"] == "Riassumi tutto"
+    assert len(call["turn_attachments"]) == 2
+    assert (await _identity()).pending_attachments_json is None
+
+
+@pytest.mark.anyio
+async def test_new_conversation_clears_pending(wa_db, graph, turns, media_store):
+    await configure_channel()
+    await _link()
+    await _deliver(_msg(fixture="image_no_caption"))
+    assert (await _identity()).pending_attachments_json
+
+    await _deliver(_msg("/nuova"))
+    ident = await _identity()
+    assert ident.pending_attachments_json is None
+    assert ident.active_conversation_id is None
+
+    await _deliver(_msg("Ciao"))
+    assert turns.calls[0]["turn_attachments"] == []
+
+
+@pytest.mark.anyio
+async def test_expired_pending_is_dropped(wa_db, graph, turns, media_store):
+    """Pending files older than 24h are not attached to the next message."""
+    await configure_channel()
+    ident = await _link()
+    await _deliver(_msg(fixture="image_no_caption"))
+    from src.channels.whatsapp import linking
+
+    stale = json.loads((await _identity()).pending_attachments_json)
+    stale[0]["added_at"] = (
+        datetime.now(timezone.utc) - timedelta(hours=25)
+    ).isoformat()
+    await linking.update_identity(ident.id, pending_attachments_json=json.dumps(stale))
+
+    await _deliver(_msg("E quindi?"))
+    assert turns.calls[0]["turn_attachments"] == []
+    assert (await _identity()).pending_attachments_json is None
+
+
+@pytest.mark.anyio
+async def test_media_too_large(wa_db, graph, turns, media_store):
+    from src.channels.whatsapp.graph_client import MediaTooLarge
+
+    await configure_channel()
+    await _link()
+    graph.download_error = MediaTooLarge("big")
+    await _deliver(_msg(fixture="image"))
+    assert turns.calls == []
+    (body,) = graph.bodies
+    assert "MB" in body and "https://aion.example.com/c/" in body
+
+
+@pytest.mark.anyio
+async def test_media_download_failure(wa_db, graph, turns, media_store):
+    from src.channels.whatsapp.dispatcher import MESSAGES
+    from src.channels.whatsapp.graph_client import GraphError
+
+    await configure_channel()
+    await _link()
+    graph.download_error = GraphError("boom", status=500)
+    row = await _deliver(_msg(fixture="document_pdf"))
+    assert row.status == "done"
+    assert graph.bodies == [MESSAGES["media_failed"]]
+    assert turns.calls == []
+
+
+def _write_outputs(conversation_id, *rels):
+    from src.session_workspace import session_root
+
+    root = session_root(conversation_id)
+    for rel in rels:
+        (root / rel).parent.mkdir(parents=True, exist_ok=True)
+        (root / rel).write_bytes(b"content")
+    return list(rels)
+
+
+@pytest.mark.anyio
+async def test_generated_files_sent_after_text(wa_db, graph, turns, media_store):
+    """Agent outputs are uploaded and sent as image/document after the answer."""
+    from src.channels.whatsapp import dispatcher
+
+    await configure_channel()
+    await _link()
+    files = _write_outputs("conv-1", "workspace/report.xlsx", "derived/grafico.png")
+    turns.reply = dispatcher.TurnResult(
+        conversation_id="conv-1", text="Ecco il report", files=files
+    )
+    await _deliver(_msg("Creami un excel"))
+
+    assert graph.sent[0]["body"].startswith("Ecco il report")
+    kinds = [(m["kind"], m.get("filename")) for m in graph.media_sent]
+    assert kinds == [("document", "report.xlsx"), ("image", "grafico.png")]
+    assert [u["filename"] for u in graph.uploads] == ["report.xlsx", "grafico.png"]
+    assert all(s["to"] == "393331112233" for s in graph.sent)
+
+
+@pytest.mark.anyio
+async def test_files_only_reply_skips_empty_message(wa_db, graph, turns, media_store):
+    """No text but a file: the file is the answer, no "empty reply" message."""
+    from src.channels.whatsapp import dispatcher
+
+    await configure_channel()
+    await _link()
+    files = _write_outputs("conv-1", "workspace/out.pdf")
+    turns.reply = dispatcher.TurnResult(conversation_id="conv-1", text="", files=files)
+    await _deliver(_msg("Fammi il pdf"))
+    assert graph.bodies == []
+    assert [m["kind"] for m in graph.media_sent] == ["document"]
+
+
+@pytest.mark.anyio
+async def test_extra_files_are_linked(wa_db, graph, turns, media_store, monkeypatch):
+    """Past ``AION_WHATSAPP_MAX_OUTBOUND_FILES`` the rest is linked to chat-ui."""
+    from src.channels.whatsapp import dispatcher
+
+    monkeypatch.setenv("AION_WHATSAPP_MAX_OUTBOUND_FILES", "1")
+    await configure_channel()
+    await _link()
+    files = _write_outputs("conv-1", "workspace/a.pdf", "workspace/b.pdf")
+    turns.reply = dispatcher.TurnResult(
+        conversation_id="conv-1", text="Ok", files=files
+    )
+    await _deliver(_msg("Due pdf"))
+    assert len(graph.media_sent) == 1
+    assert graph.bodies[-1] == dispatcher.MESSAGES["more_files"].format(
+        count=1, conversation_url="https://aion.example.com/c/conv-1"
+    )

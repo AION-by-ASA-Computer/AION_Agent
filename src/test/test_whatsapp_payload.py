@@ -60,14 +60,42 @@ def test_number_change():
     assert msg.system.new_phone == "393339998877"
 
 
-def test_image_has_no_text():
+def test_image_caption_becomes_text():
+    """The image object is kept as ``media`` and its caption is the turn text."""
     (msg,) = parse_webhook(load_fixture("image")).messages
     assert msg.type == "image"
+    assert msg.text == "scontrino"
+    assert msg.media is not None
+    assert (msg.media.id, msg.media.mime_type) == ("MEDIA1", "image/jpeg")
+    assert msg.media.sha256 == "abc"
+
+
+def test_image_without_caption():
+    """No caption -> no text; the webhook ``url`` (Oct 2025 rollout) is kept."""
+    (msg,) = parse_webhook(load_fixture("image_no_caption")).messages
     assert msg.text is None
+    assert msg.media.url.startswith("https://lookaside.fbsbx.com/")
+
+
+def test_document_keeps_filename_and_caption():
+    (msg,) = parse_webhook(load_fixture("document_pdf")).messages
+    assert msg.type == "document"
+    assert msg.text == "riassumi questa fattura"
+    assert msg.media.filename == "Fattura marzo.pdf"
+    assert msg.media.mime_type == "application/pdf"
+
+
+def test_voice_note_has_media_but_no_text():
+    """Audio has no caption: parsed as media so the dispatcher can decline it."""
+    (msg,) = parse_webhook(load_fixture("audio_voice")).messages
+    assert msg.type == "audio"
+    assert msg.text is None
+    assert msg.media.voice is True
 
 
 def test_roundtrip_dict():
-    for name in ("text_with_phone", "number_change"):
+    """``to_dict``/``from_dict`` (queued payload) preserve system and media data."""
+    for name in ("text_with_phone", "number_change", "image", "document_pdf"):
         (msg,) = parse_webhook(load_fixture(name)).messages
         assert InboundMessage.from_dict(msg.to_dict()) == msg
 
