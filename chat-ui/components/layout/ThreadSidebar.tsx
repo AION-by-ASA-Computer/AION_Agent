@@ -8,6 +8,7 @@ import {
   ChevronRight,
   Clock,
   Edit3,
+  MessageCircle,
   MessageSquare,
   MessageSquarePlus,
   MessageSquareQuote,
@@ -621,6 +622,11 @@ function ConversationRowInner({
       >
         {favorite ? (
           <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-hidden />
+        ) : null}
+        {conv.metadata?.source === "whatsapp" ? (
+          <span className="shrink-0" title={t("sidebar.from_whatsapp")}>
+            <MessageCircle className="h-3.5 w-3.5 text-emerald-500" aria-label={t("sidebar.from_whatsapp")} />
+          </span>
         ) : null}
         <span className="truncate transition-transform duration-200 group-hover:translate-x-0.5">{displayTitle}</span>
       </Link>

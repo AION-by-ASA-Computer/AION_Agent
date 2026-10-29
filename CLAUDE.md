@@ -372,10 +372,47 @@ Admin-toggled (`PUT /admin/auth/2fa`), applies only to the password login while 
 (`src/api/auth_mfa.py`, logic in `src/auth/mfa/totp.py`). Recovery: admin reset, `python -m src.auth.mfa reset <user>`
 or `AION_2FA_FORCE_DISABLE=1`. See `docs/security/two-factor-auth.md`.
 
+### WhatsApp channel
+
+Employees chat with AION from WhatsApp via Meta Cloud API (`src/channels/whatsapp/`,
+webhook + `/v1/me/whatsapp*` in `src/api/v1/whatsapp.py`, `/admin/whatsapp*` in
+`src/api/admin_whatsapp.py`); kill switch `AION_WHATSAPP_FORCE_DISABLE=1`.
+See `docs/integrations/whatsapp.md`.
+
 ### Documentation
 - Single source of truth: `docs/` directory
 - Rendered site: `website/` (Docusaurus)
 - Authoring guidelines: `docs/standard/authoring.md`
+
+## Code Comments (required)
+
+Code written in this repository must be **well commented**, so that a reviewer
+can understand the **purpose** of each piece of code without reverse-engineering
+it. Comments explain *why* the code exists and *what it is for*, not just
+*what* each line does.
+
+- **Module / file header**: every new file (Python module, TS/TSX component,
+  script, migration) starts with a short docstring/comment stating its purpose,
+  its role in the system and who uses it (e.g. "Webhook receiver for Meta Cloud
+  API: verifies signature, then hands messages to the dispatcher").
+- **Functions, classes, components, endpoints**: a docstring (Python) or JSDoc
+  (TS) describing the purpose, the meaning of non-obvious parameters and return
+  values, side effects (DB writes, network calls, cache invalidation, emitted
+  events) and when/by whom it is called.
+- **Non-trivial blocks**: before a multi-step block, a one-line comment stating
+  the intent of the step (e.g. "# Resolve the AION user linked to this phone
+  number before creating the conversation").
+- **Explain the why**: business rules, security decisions, workarounds,
+  edge cases, ordering constraints, magic values and thresholds always get a
+  comment with the reason (and a link to `docs/`, an issue or external docs
+  when relevant).
+- **No noise**: don't paraphrase obvious lines (`i += 1  # increment i`);
+  prefer clear names plus a comment on the intent.
+- **Keep them true**: when changing code, update or remove the comments that
+  describe it; a stale comment is worse than none.
+- **Language**: comments and docstrings in English, consistent with the rest
+  of the codebase.
+- Tests: each test (or test class) states which behaviour/scenario it covers.
 
 ## Known Conventions
 

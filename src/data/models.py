@@ -1033,3 +1033,127 @@ class AuthSettings(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class WhatsAppChannel(Base):
+    """Configurazione del canale WhatsApp (Cloud API) per tenant.
+
+    Una riga per tenant: il numero aziendale collegato all'app Meta del cliente.
+    Token, app secret e verify token sono cifrati con ``credential_store``.
+    """
+
+    __tablename__ = "whatsapp_channels"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tenants.id"), nullable=False, unique=True
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    waba_id: Mapped[Optional[str]] = mapped_column(String(64))
+    phone_number_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    display_phone_number: Mapped[Optional[str]] = mapped_column(String(32))
+    verified_name: Mapped[Optional[str]] = mapped_column(String(256))
+    access_token_encrypted: Mapped[Optional[str]] = mapped_column(Text)
+    app_secret_encrypted: Mapped[Optional[str]] = mapped_column(Text)
+    verify_token_encrypted: Mapped[Optional[str]] = mapped_column(Text)
+    default_profile_slug: Mapped[Optional[str]] = mapped_column(String(128))
+    validated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    validated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id", ondelete="SET NULL")
+    )
+    webhook_verified_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
+    last_webhook_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
+    last_error: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class WhatsAppIdentity(Base):
+    """Collegamento tra un utente WhatsApp (BSUID) e un utente AION."""
+
+    __tablename__ = "whatsapp_identities"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Business-scoped user ID di Meta; il numero puo' mancare (username WhatsApp).
+    bsuid: Mapped[str] = mapped_column(String(128), nullable=False)
+    phone_e164: Mapped[Optional[str]] = mapped_column(String(32))
+    wa_profile_name: Mapped[Optional[str]] = mapped_column(String(256))
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    active_conversation_id: Mapped[Optional[str]] = mapped_column(String(64))
+    linked_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    last_inbound_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "bsuid", name="uq_whatsapp_identities_bsuid"),
+        UniqueConstraint("tenant_id", "user_id", name="uq_whatsapp_identities_user"),
+    )
+
+
+class WhatsAppLinkCode(Base):
+    """Codici monouso ``COLLEGA <codice>`` generati dalla chat-ui."""
+
+    __tablename__ = "whatsapp_link_codes"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    user_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # SHA-256 hex del codice normalizzato (maiuscolo, senza spazi).
+    code_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    used_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class WhatsAppMessage(Base):
+    """Messaggi WhatsApp in entrata/uscita: dedup dei webhook e stato di consegna."""
+
+    __tablename__ = "whatsapp_messages"
+
+    wamid: Mapped[str] = mapped_column(String(256), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    # 'in' | 'out'
+    direction: Mapped[str] = mapped_column(String(8), nullable=False)
+    bsuid: Mapped[Optional[str]] = mapped_column(String(128))
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(64))
+    # in: received/processing/done/failed — out: sent/delivered/read/failed
+    status: Mapped[str] = mapped_column(String(16), nullable=False)
+    error_code: Mapped[Optional[str]] = mapped_column(String(32))
+    # Solo inbound, svuotato a fine elaborazione.
+    payload_json: Mapped[Optional[str]] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    __table_args__ = (
+        Index("ix_whatsapp_messages_status", "direction", "status"),
+    )

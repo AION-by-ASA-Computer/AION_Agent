@@ -31,7 +31,8 @@
       "platform": "Plataforma"
     },
     "theme_light": "Cambiar al tema claro",
-    "theme_dark": "Cambiar al tema oscuro"
+    "theme_dark": "Cambiar al tema oscuro",
+    "whatsapp": "WhatsApp"
   },
   "admin_dashboard": {
     "title": "Resumen",
@@ -1968,5 +1969,164 @@
     "few_ratings": "Menos de {{n}} valoraciones: muy pocas para juzgar",
     "footnote": "La aprobación solo se colorea a partir de {{n}} valoraciones. Para mejorar un perfil débil, ajusta su prompt o su modelo.",
     "open_profiles": "Abrir perfiles"
+  },
+  "admin_whatsapp": {
+    "page": {
+      "title": "WhatsApp",
+      "subtitle": "Connect your company’s WhatsApp Business number so colleagues can message the agent straight from WhatsApp.",
+      "config_title": "Configuration",
+      "config_desc": "Your Meta app credentials, the webhook and channel activation.",
+      "users_title": "Linked users",
+      "users_desc": "Colleagues who linked their WhatsApp from the chat settings."
+    },
+    "summary": {
+      "title": "How to connect WhatsApp",
+      "s1": "Create a **Business** type Meta app and add the **WhatsApp** product.",
+      "s2": "Register the company number in **WhatsApp Manager** and copy the **Phone Number ID** and **WABA ID**.",
+      "s3": "Generate a **permanent token** from a system user and copy the **App secret**.",
+      "s4": "Paste the values here, generate the **verify token**, save and set up the **webhook** on Meta.",
+      "s5": "Click **Verify** and, once every check is green, **enable the channel**.",
+      "open": "Open the guide",
+      "link": "Open Meta for Developers"
+    },
+    "guide": {
+      "dialog_title": "Connect WhatsApp Business, step by step",
+      "close": "Close",
+      "intro": "You need an admin account on the company’s Meta business portfolio and a phone number that is not already active on WhatsApp. It takes about 20 minutes, plus Meta’s verification times.",
+      "link_business": "Open Meta Business Suite",
+      "link_developers": "Open Meta for Developers",
+      "t1": "Prepare the business portfolio",
+      "b1": "Sign in to **business.facebook.com** with the company account and create or pick the company’s **business portfolio**. **Business verification** is not required to get started, but it is recommended: without it Meta applies lower limits on conversations and the display name.",
+      "t2": "Create the Meta app",
+      "b2": "On **developers.facebook.com/apps** click **Create app**, choose the **Business** type and link it to the portfolio from step 1. In the app dashboard add the **WhatsApp** product with **Set up**.",
+      "t3": "Add the company number",
+      "b3": "In **WhatsApp Manager** open **Phone numbers** and click **Add phone number**. Verify the number with the code you receive by **SMS** and choose the **display name** colleagues will see.",
+      "warn3": "The number must not already be active on WhatsApp, neither on the regular app nor on WhatsApp Business. If it is, delete that account from the phone first.",
+      "t4": "Copy the IDs",
+      "b4": "In the Meta app open **WhatsApp** > **API Setup**, select the company number and copy the **Phone Number ID** and the **WhatsApp Business Account ID** (WABA ID).",
+      "t5": "Generate a permanent token",
+      "b5": "In **Business settings** > **Users** > **System users** create a system user with the **Admin** role. With **Assign assets** give it the app from step 2 and the WhatsApp account from step 3. Then click **Generate token**, pick the app, expiry **Never** and the **whatsapp_business_messaging** and **whatsapp_business_management** permissions.",
+      "warn5": "Meta shows the token only once: copy it right away. Don’t use the temporary token on the API Setup page, it expires after 24 hours.",
+      "t6": "Copy the App secret",
+      "b6": "In the Meta app open **App settings** > **Basic**, click **Show** next to **App secret** and copy it. AION uses it to check the signature of every webhook.",
+      "t7": "Paste the values into AION",
+      "b7": "Come back to this page and fill in **WABA ID**, **Phone Number ID**, **Access token** and **App secret**. Click **Generate** next to **Verify token**, then **Save**.",
+      "t8": "Set up the webhook on Meta",
+      "b8": "In the Meta app open **WhatsApp** > **Configuration** and, in the **Webhook** section, click **Edit**. Paste the **Callback URL** and **Verify token** below, then click **Verify and save**. On the same page, under **Webhook fields**, subscribe to the **messages** field.",
+      "callback": "Callback URL",
+      "verify_token": "Verify token",
+      "no_token": "Generate the verify token from the panel first (step 7).",
+      "t9": "Payment, Live mode and activation",
+      "b9": "In **WhatsApp Manager** add a **payment method**: each number gets 1,000 free service messages per month, after that they are charged. Switch the app to **Live** mode with the toggle at the top of the dashboard. Finally come back to AION, click **Verify** and, once every check is green, **Enable channel**.",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
+    "fields": {
+      "title": "Meta credentials",
+      "desc": "Values from your Meta app and WhatsApp Manager. Secrets are stored encrypted and never shown again.",
+      "waba_id": "WABA ID",
+      "waba_ph": "e.g. 102290129340398",
+      "phone_id": "Phone Number ID",
+      "phone_ph": "e.g. 106540352242922",
+      "access_token": "Access token",
+      "access_token_ph": "System user’s permanent token",
+      "app_secret": "App secret",
+      "app_secret_ph": "Meta app secret",
+      "keep_ph": "•••••••• (leave empty to keep)",
+      "stored": "Stored: {{hint}}",
+      "not_stored": "Not set yet.",
+      "show": "Show",
+      "hide": "Hide",
+      "profile": "Default agent profile",
+      "profile_hint": "Profile used for WhatsApp conversations.",
+      "profile_none": "System default",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "WhatsApp configuration saved.",
+      "save_failed": "Could not save: {{error}}",
+      "required": "WABA ID and Phone Number ID are required."
+    },
+    "webhook": {
+      "title": "Webhook",
+      "desc": "Paste these into your Meta app, under WhatsApp > Configuration > Webhook.",
+      "url": "Callback URL",
+      "verify_token": "Verify token",
+      "verify_token_hint": "Meta sends it once to confirm the webhook. If you regenerate it, update it on Meta as well.",
+      "empty": "Not generated yet",
+      "generate": "Generate",
+      "regenerate": "Regenerate",
+      "generated": "Verify token generated.",
+      "generate_failed": "Could not generate: {{error}}",
+      "copy": "Copy {{what}}",
+      "copied": "Copied"
+    },
+    "verify": {
+      "title": "Verify and enable",
+      "desc": "Checks the token, the number and the webhook on Meta, then enable the channel.",
+      "run": "Verify",
+      "running": "Verifying…",
+      "ok": "All checks passed.",
+      "failed": "Some checks did not pass.",
+      "error": "Verification failed: {{error}}",
+      "save_first": "Save your changes before verifying.",
+      "not_configured": "Save the credentials to be able to verify.",
+      "checks": {
+        "token_phone": "Token and phone number",
+        "cloud_api_registered": "Number registered on Cloud API",
+        "app_subscribed": "App subscribed to the WhatsApp account",
+        "webhook_verified": "Webhook verified by Meta"
+      }
+    },
+    "status": {
+      "number": "Number",
+      "validated": "Last verified",
+      "webhook_verified": "Webhook verified",
+      "last_webhook": "Last webhook received",
+      "last_error": "Last error",
+      "never": "Never"
+    },
+    "enable": {
+      "label": "Enable channel",
+      "desc": "While enabled, linked colleagues can message the agent from WhatsApp.",
+      "needs_validation": "Available after a successful verification.",
+      "on": "WhatsApp channel enabled.",
+      "off": "WhatsApp channel disabled.",
+      "not_validated": "Run a successful verification first, then enable the channel.",
+      "force_disabled": "The channel is disabled on the server and cannot be enabled from here.",
+      "failed": "Could not change it: {{error}}"
+    },
+    "force_disabled": "The WhatsApp channel is force-disabled on the server (environment variable). You can edit the configuration, but you cannot enable it until the system administrator lifts the block.",
+    "load": {
+      "loading": "Loading WhatsApp configuration…",
+      "failed": "Could not load the WhatsApp configuration ({{error}}).",
+      "hint": "The backend may not support the WhatsApp channel yet, or it may be unreachable.",
+      "retry": "Retry"
+    },
+    "identities": {
+      "loading": "Loading linked users…",
+      "failed": "Could not load linked users ({{error}}).",
+      "empty": "No colleague has linked WhatsApp yet. They do it from the chat settings by scanning the QR code.",
+      "refresh": "Refresh",
+      "col": {
+        "user": "User",
+        "wa_name": "WhatsApp name",
+        "phone": "Number",
+        "linked": "Linked",
+        "last": "Last message",
+        "actions": "Actions"
+      },
+      "unlink": "Unlink",
+      "unlink_label": "Unlink {{name}}",
+      "unlinked": "WhatsApp unlinked for {{name}}.",
+      "unlink_failed": "Could not unlink: {{error}}",
+      "delete": {
+        "title": "Unlink WhatsApp?",
+        "body": "{{name}} will no longer be able to message the agent from WhatsApp until they link the number again from the chat settings.",
+        "confirm_label": "Type {{name}} to confirm",
+        "cancel": "Cancel",
+        "confirm": "Unlink",
+        "deleting": "Unlinking…"
+      }
+    }
   }
 }

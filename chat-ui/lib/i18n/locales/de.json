@@ -22,7 +22,8 @@
       "instructions": "Anweisungen",
       "tunings": "Tuning & Parameter",
       "runtime": "Runtime",
-      "presets": "Presets"
+      "presets": "Presets",
+      "whatsapp": "WhatsApp"
     },
     "runtime": {
       "loading": "Runtime-Einstellungen werden geladen…",
@@ -282,6 +283,49 @@
       "saved": "Änderungen gespeichert",
       "loading": "Einstellungen werden geladen…",
       "dismiss": "Schließen"
+    },
+    "whatsapp": {
+      "title": "WhatsApp",
+      "desc": "Link your WhatsApp to message the assistant straight from your phone.",
+      "loading": "Loading WhatsApp status…",
+      "retry": "Retry",
+      "disabled": "The WhatsApp channel is not active. Contact your administrator.",
+      "link_title": "Link your WhatsApp",
+      "link_desc": "One message to the company number is all it takes: nothing to install.",
+      "link_desc_number": "One message to the company number {{number}} is all it takes: nothing to install.",
+      "step_scan": "Scan the QR code with your phone, or tap “Open WhatsApp” if you are already on your phone.",
+      "step_send": "In WhatsApp, press Send without changing the pre-filled message.",
+      "step_done": "Done: this page updates by itself as soon as the link is confirmed.",
+      "link": "Link WhatsApp",
+      "qr_alt": "QR code to link WhatsApp",
+      "code_label": "Link code",
+      "open": "Open WhatsApp",
+      "waiting": "Waiting for your message…",
+      "expires_in": "Expires in {{time}}",
+      "expired": "This code has expired. Generate a new one to continue.",
+      "regenerate": "Generate new code",
+      "linked_title": "WhatsApp linked",
+      "linked_badge": "Active",
+      "profile_name": "Profile name",
+      "phone": "Number",
+      "linked_at": "Linked on",
+      "linked_hint": "Conversations started from WhatsApp appear in your chat list with the WhatsApp icon.",
+      "unlink": "Unlink",
+      "unlink_dialog": {
+        "title": "Unlink WhatsApp?",
+        "desc": "You won't be able to message the assistant from this number until you link it again. Existing conversations stay in your chat list.",
+        "cancel": "Cancel",
+        "confirm": "Unlink",
+        "unlinking": "Unlinking…"
+      },
+      "toast": {
+        "linked": "WhatsApp linked. You can now message the assistant from WhatsApp.",
+        "unlinked": "WhatsApp unlinked."
+      },
+      "err": {
+        "disabled": "The WhatsApp channel is not active. Contact your administrator.",
+        "generic": "Something went wrong. Please try again."
+      }
     }
   },
   "sidebar": {
@@ -320,7 +364,8 @@
     "remove_favorite": "Aus Favoriten entfernen",
     "rename": "Umbenennen",
     "search_placeholder": "Unterhaltungen suchen…",
-    "theme": "Design"
+    "theme": "Design",
+    "from_whatsapp": "Conversation from WhatsApp"
   },
   "schedulesPage": {
     "title": "Automationen",

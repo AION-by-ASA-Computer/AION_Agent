@@ -31,7 +31,8 @@
       "platform": "Piattaforma"
     },
     "theme_light": "Passa al tema chiaro",
-    "theme_dark": "Passa al tema scuro"
+    "theme_dark": "Passa al tema scuro",
+    "whatsapp": "WhatsApp"
   },
   "admin_dashboard": {
     "title": "Panoramica",
@@ -1968,5 +1969,164 @@
     "few_ratings": "Meno di {{n}} valutazioni: troppo poche per giudicare",
     "footnote": "Il gradimento è colorato solo da {{n}} valutazioni in su. Per intervenire su un profilo debole, modificane prompt o modello.",
     "open_profiles": "Apri profili"
+  },
+  "admin_whatsapp": {
+    "page": {
+      "title": "WhatsApp",
+      "subtitle": "Collega il numero WhatsApp Business dell’azienda: i colleghi potranno scrivere all’agente direttamente da WhatsApp.",
+      "config_title": "Configurazione",
+      "config_desc": "Credenziali della tua app Meta, webhook e attivazione del canale.",
+      "users_title": "Utenti collegati",
+      "users_desc": "Colleghi che hanno associato il proprio WhatsApp dalle impostazioni della chat."
+    },
+    "summary": {
+      "title": "Come collegare WhatsApp",
+      "s1": "Crea un’app Meta di tipo **Business** e aggiungi il prodotto **WhatsApp**.",
+      "s2": "Registra il numero aziendale in **WhatsApp Manager** e copia **Phone Number ID** e **WABA ID**.",
+      "s3": "Genera un **token permanente** da un utente di sistema e copia l’**App secret**.",
+      "s4": "Incolla i valori qui, genera il **verify token**, salva e configura il **webhook** su Meta.",
+      "s5": "Clicca **Verifica** e, se tutti i controlli sono verdi, **attiva il canale**.",
+      "open": "Apri la guida",
+      "link": "Apri Meta for Developers"
+    },
+    "guide": {
+      "dialog_title": "Collega WhatsApp Business, passo per passo",
+      "close": "Chiudi",
+      "intro": "Serve un account amministratore del portafoglio business Meta dell’azienda e un numero di telefono non ancora attivo su WhatsApp. La procedura richiede circa 20 minuti, più i tempi di verifica di Meta.",
+      "link_business": "Apri Meta Business Suite",
+      "link_developers": "Apri Meta for Developers",
+      "t1": "Prepara il portafoglio business",
+      "b1": "Accedi a **business.facebook.com** con l’account aziendale e crea o scegli il **portafoglio business** dell’azienda. La **verifica dell’azienda** non è obbligatoria per iniziare, ma è consigliata: senza verifica Meta applica limiti più bassi a conversazioni e nome visualizzato.",
+      "t2": "Crea l’app Meta",
+      "b2": "Su **developers.facebook.com/apps** clicca **Crea app**, scegli il tipo **Business** e collegala al portafoglio del passo 1. Nella dashboard dell’app aggiungi il prodotto **WhatsApp** con **Configura**.",
+      "t3": "Aggiungi il numero aziendale",
+      "b3": "In **WhatsApp Manager** apri **Numeri di telefono** e clicca **Aggiungi numero di telefono**. Verifica il numero con il codice ricevuto via **SMS** e scegli il **nome visualizzato** che vedranno i colleghi.",
+      "warn3": "Il numero non deve essere già attivo su WhatsApp, né sull’app normale né su WhatsApp Business. Se lo è, elimina prima quell’account dal telefono.",
+      "t4": "Copia gli ID",
+      "b4": "Nell’app Meta apri **WhatsApp** > **Configurazione API** (API Setup), seleziona il numero aziendale e copia **Phone Number ID** e **WhatsApp Business Account ID** (WABA ID).",
+      "t5": "Genera un token permanente",
+      "b5": "In **Impostazioni business** > **Utenti** > **Utenti di sistema** crea un utente di sistema con ruolo **Amministratore**. Con **Assegna risorse** dagli l’app del passo 2 e l’account WhatsApp del passo 3. Poi clicca **Genera token**, scegli l’app, scadenza **Mai** e i permessi **whatsapp_business_messaging** e **whatsapp_business_management**.",
+      "warn5": "Meta mostra il token una sola volta: copialo subito. Non usare il token temporaneo della pagina API Setup, scade dopo 24 ore.",
+      "t6": "Copia l’App secret",
+      "b6": "Nell’app Meta apri **Impostazioni app** > **Di base**, clicca **Mostra** accanto a **Chiave segreta** (App secret) e copiala. AION la usa per verificare la firma di ogni webhook.",
+      "t7": "Incolla i valori in AION",
+      "b7": "Torna su questa pagina e compila **WABA ID**, **Phone Number ID**, **Access token** e **App secret**. Clicca **Genera** accanto a **Verify token**, poi **Salva**.",
+      "t8": "Configura il webhook su Meta",
+      "b8": "Nell’app Meta apri **WhatsApp** > **Configurazione** e, nella sezione **Webhook**, clicca **Modifica**. Incolla l’**URL di callback** e il **token di verifica** qui sotto, poi clicca **Verifica e salva**. Nella stessa pagina, in **Campi webhook**, iscriviti al campo **messages**.",
+      "callback": "URL di callback",
+      "verify_token": "Token di verifica",
+      "no_token": "Genera prima il verify token dal pannello (passo 7).",
+      "t9": "Pagamento, modalità Live e attivazione",
+      "b9": "In **WhatsApp Manager** aggiungi un **metodo di pagamento**: ogni numero ha 1.000 messaggi di servizio gratuiti al mese, oltre vengono addebitati. Porta l’app in modalità **Live** con l’interruttore in alto nella dashboard. Infine torna su AION, clicca **Verifica** e, se tutti i controlli sono verdi, **Attiva canale**.",
+      "copy": "Copia",
+      "copied": "Copiato"
+    },
+    "fields": {
+      "title": "Credenziali Meta",
+      "desc": "Valori presi dall’app Meta e da WhatsApp Manager. I segreti sono salvati cifrati e non vengono mai mostrati.",
+      "waba_id": "WABA ID",
+      "waba_ph": "es. 102290129340398",
+      "phone_id": "Phone Number ID",
+      "phone_ph": "es. 106540352242922",
+      "access_token": "Access token",
+      "access_token_ph": "Token permanente dell’utente di sistema",
+      "app_secret": "App secret",
+      "app_secret_ph": "Chiave segreta dell’app Meta",
+      "keep_ph": "•••••••• (lascia vuoto per mantenere)",
+      "stored": "Salvato: {{hint}}",
+      "not_stored": "Non ancora impostato.",
+      "show": "Mostra",
+      "hide": "Nascondi",
+      "profile": "Profilo agente predefinito",
+      "profile_hint": "Profilo usato per le conversazioni WhatsApp.",
+      "profile_none": "Predefinito di sistema",
+      "save": "Salva",
+      "saving": "Salvataggio…",
+      "saved": "Configurazione WhatsApp salvata.",
+      "save_failed": "Salvataggio non riuscito: {{error}}",
+      "required": "WABA ID e Phone Number ID sono obbligatori."
+    },
+    "webhook": {
+      "title": "Webhook",
+      "desc": "Da incollare nell’app Meta, in WhatsApp > Configurazione > Webhook.",
+      "url": "URL di callback",
+      "verify_token": "Verify token",
+      "verify_token_hint": "Meta lo invia una volta per confermare il webhook. Rigenerarlo richiede di aggiornarlo anche su Meta.",
+      "empty": "Non ancora generato",
+      "generate": "Genera",
+      "regenerate": "Rigenera",
+      "generated": "Verify token generato.",
+      "generate_failed": "Generazione non riuscita: {{error}}",
+      "copy": "Copia {{what}}",
+      "copied": "Copiato"
+    },
+    "verify": {
+      "title": "Verifica e attivazione",
+      "desc": "Controlla token, numero e webhook su Meta, poi attiva il canale.",
+      "run": "Verifica",
+      "running": "Verifica in corso…",
+      "ok": "Tutti i controlli sono superati.",
+      "failed": "Alcuni controlli non sono superati.",
+      "error": "Verifica non riuscita: {{error}}",
+      "save_first": "Salva le modifiche prima di verificare.",
+      "not_configured": "Salva le credenziali per poter verificare.",
+      "checks": {
+        "token_phone": "Token e numero di telefono",
+        "cloud_api_registered": "Numero registrato su Cloud API",
+        "app_subscribed": "App iscritta all’account WhatsApp",
+        "webhook_verified": "Webhook verificato da Meta"
+      }
+    },
+    "status": {
+      "number": "Numero",
+      "validated": "Ultima verifica",
+      "webhook_verified": "Webhook verificato",
+      "last_webhook": "Ultimo webhook ricevuto",
+      "last_error": "Ultimo errore",
+      "never": "Mai"
+    },
+    "enable": {
+      "label": "Attiva canale",
+      "desc": "Quando è attivo, i colleghi collegati possono scrivere all’agente da WhatsApp.",
+      "needs_validation": "Disponibile dopo una verifica riuscita.",
+      "on": "Canale WhatsApp attivato.",
+      "off": "Canale WhatsApp disattivato.",
+      "not_validated": "Esegui prima una verifica riuscita, poi attiva il canale.",
+      "force_disabled": "Il canale è disattivato dal server e non può essere attivato da qui.",
+      "failed": "Modifica non riuscita: {{error}}"
+    },
+    "force_disabled": "Il canale WhatsApp è disattivato forzatamente dal server (variabile d’ambiente). Puoi modificare la configurazione, ma non attivarlo finché l’amministratore di sistema non rimuove il blocco.",
+    "load": {
+      "loading": "Caricamento configurazione WhatsApp…",
+      "failed": "Impossibile caricare la configurazione WhatsApp ({{error}}).",
+      "hint": "Il backend potrebbe non supportare ancora il canale WhatsApp o non essere raggiungibile.",
+      "retry": "Riprova"
+    },
+    "identities": {
+      "loading": "Caricamento utenti collegati…",
+      "failed": "Impossibile caricare gli utenti collegati ({{error}}).",
+      "empty": "Nessun collega ha ancora collegato WhatsApp. Lo fanno dalle impostazioni della chat, inquadrando il QR code.",
+      "refresh": "Aggiorna",
+      "col": {
+        "user": "Utente",
+        "wa_name": "Nome WhatsApp",
+        "phone": "Numero",
+        "linked": "Collegato",
+        "last": "Ultimo messaggio",
+        "actions": "Azioni"
+      },
+      "unlink": "Scollega",
+      "unlink_label": "Scollega {{name}}",
+      "unlinked": "WhatsApp scollegato per {{name}}.",
+      "unlink_failed": "Scollegamento non riuscito: {{error}}",
+      "delete": {
+        "title": "Scollegare WhatsApp?",
+        "body": "{{name}} non potrà più scrivere all’agente da WhatsApp finché non ricollega il numero dalle impostazioni della chat.",
+        "confirm_label": "Digita {{name}} per confermare",
+        "cancel": "Annulla",
+        "confirm": "Scollega",
+        "deleting": "Scollegamento…"
+      }
+    }
   }
 }
