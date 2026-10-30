@@ -302,4 +302,6 @@ evals/agent_smoke_tests/outputs/*
 .github/agents/
 .github/hooks/
 
+# Tunnel Cloudflare temporaneo (scripts/whatsapp-tunnel.sh)
+.aion-tunnel/
 aion-agent/

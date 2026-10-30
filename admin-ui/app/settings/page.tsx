@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Cpu, Globe, Loader2, Mail, RotateCcw, Save, ScanLine, ShieldCheck, Timer } from "lucide-react";
+import { AudioLines, Brain, Cpu, Globe, Loader2, Mail, RotateCcw, Save, ScanLine, ShieldCheck, Timer } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
-import { probeBaseUrlFromOcrServiceUrl } from "@/lib/llm-probe";
+import { probeBaseUrlFromOcrServiceUrl, probeBaseUrlFromSttServiceUrl } from "@/lib/llm-probe";
 import { PageToast, type ToastState } from "@/components/PageToast";
 import { RestartOverlay } from "@/components/RestartOverlay";
 import { outlineBtn, solidBtn } from "@/components/ui/classes";
@@ -15,6 +15,7 @@ import { MemorySection } from "@/components/settings/MemorySection";
 import { WebSection } from "@/components/settings/WebSection";
 import { OcrSection, clearedOcr, type OcrMode } from "@/components/settings/OcrSection";
 import { SandboxSection } from "@/components/settings/SandboxSection";
+import { SttSection, clearedStt, type SttMode } from "@/components/settings/SttSection";
 import { RetentionSection } from "@/components/settings/RetentionSection";
 import { SmtpSection } from "@/components/settings/SmtpSection";
 import { K, type Notify, type SectionCtx, type Settings } from "@/components/settings/types";
@@ -26,6 +27,7 @@ const SECTIONS = [
   { id: "memory", icon: Brain },
   { id: "web", icon: Globe },
   { id: "ocr", icon: ScanLine },
+  { id: "stt", icon: AudioLines },
   { id: "sandbox", icon: ShieldCheck },
   { id: "retention", icon: Timer },
   { id: "smtp", icon: Mail },
@@ -45,8 +47,9 @@ const positive = (v: string | undefined) => {
 export default function SettingsPage() {
   const t = useT();
   const [settings, setSettings] = useState<Settings>({});
-  const [baseline, setBaseline] = useState<{ settings: Settings; ocrMode: OcrMode } | null>(null);
+  const [baseline, setBaseline] = useState<{ settings: Settings; ocrMode: OcrMode; sttMode: SttMode } | null>(null);
   const [ocrMode, setOcrMode] = useState<OcrMode>("local");
+  const [sttMode, setSttMode] = useState<SttMode>("local");
   const [rev, setRev] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -64,9 +67,12 @@ export default function SettingsPage() {
       const data = await res.json();
       const s: Settings = data.settings || {};
       const mode: OcrMode = (s.AION_OCR_BASE_URL || "").trim() ? "remote" : "local";
+      // A configured transcription service URL means the remote STT engine is in use.
+      const stt: SttMode = (s.AION_STT_BASE_URL || "").trim() ? "remote" : "local";
       setSettings(s);
       setOcrMode(mode);
-      setBaseline({ settings: s, ocrMode: mode });
+      setSttMode(stt);
+      setBaseline({ settings: s, ocrMode: mode, sttMode: stt });
       setRev((r) => r + 1);
       setLoadFailed(false);
     } catch {
@@ -102,11 +108,11 @@ export default function SettingsPage() {
 
   const dirty = useMemo(() => {
     if (!baseline) return false;
-    if (ocrMode !== baseline.ocrMode) return true;
+    if (ocrMode !== baseline.ocrMode || sttMode !== baseline.sttMode) return true;
     const keys = new Set([...Object.keys(baseline.settings), ...Object.keys(settings)]);
     for (const key of keys) if ((baseline.settings[key] ?? "") !== (settings[key] ?? "")) return true;
     return false;
-  }, [baseline, settings, ocrMode]);
+  }, [baseline, settings, ocrMode, sttMode]);
 
   const onRestart = useCallback(() => {
     setRestarting(true);
@@ -123,6 +129,15 @@ export default function SettingsPage() {
       if (!positive(settings.AION_OCR_TIMEOUT)) return t(`${k}.page.v_ocr_timeout`);
       if (!positive(settings.AION_OCR_MAX_IMAGE_BYTES)) return t(`${k}.page.v_ocr_bytes`);
     }
+    if (sttMode === "remote") {
+      const url = (settings.AION_STT_BASE_URL || "").trim();
+      if (url) {
+        const base = probeBaseUrlFromSttServiceUrl(url);
+        if (!base || !/^https?:\/\//.test(base)) return t(`${k}.page.v_stt_url`);
+      }
+      if (!positive(settings.AION_STT_TIMEOUT)) return t(`${k}.page.v_stt_timeout`);
+      if (!positive(settings.AION_STT_CHUNK_SEC)) return t(`${k}.page.v_stt_chunk`);
+    }
     const emb = (settings.AION_EMBEDDING_URL || "").trim();
     if (emb && !/^https?:\/\//.test(emb)) return t(`${k}.page.v_emb_url`);
     if (!positive(settings.AION_WEB_FETCH_MAX_CHARS)) return t(`${k}.page.v_fetch_chars`);
@@ -135,7 +150,12 @@ export default function SettingsPage() {
     const problem = validate();
     if (problem) return notify(problem, "error");
     setSaving(true);
-    const payload = { ...settings, ...(ocrMode === "local" ? clearedOcr() : {}) };
+    // Local modes blank the remote endpoints so the backend falls back to the built-in engines.
+    const payload = {
+      ...settings,
+      ...(ocrMode === "local" ? clearedOcr() : {}),
+      ...(sttMode === "local" ? clearedStt() : {}),
+    };
     try {
       const res = await apiFetch(`${apiBase()}/admin/settings`, {
         method: "POST",
@@ -159,12 +179,13 @@ export default function SettingsPage() {
       setSaving(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings, ocrMode, fetchSettings, notify, onRestart, t]);
+  }, [settings, ocrMode, sttMode, fetchSettings, notify, onRestart, t]);
 
   const discard = () => {
     if (!baseline) return;
     setSettings(baseline.settings);
     setOcrMode(baseline.ocrMode);
+    setSttMode(baseline.sttMode);
     setRev((r) => r + 1);
   };
 
@@ -252,6 +273,7 @@ export default function SettingsPage() {
           <div hidden={active !== "memory"}><MemorySection key={`m${rev}`} {...ctx} /></div>
           <div hidden={active !== "web"}><WebSection {...ctx} /></div>
           <div hidden={active !== "ocr"}><OcrSection key={`o${rev}`} {...ctx} mode={ocrMode} setMode={setOcrMode} /></div>
+          <div hidden={active !== "stt"}><SttSection key={`s${rev}`} {...ctx} mode={sttMode} setMode={setSttMode} /></div>
           <div hidden={active !== "sandbox"}><SandboxSection t={t} notify={notify} onRestart={onRestart} /></div>
           <div hidden={active !== "retention"}><RetentionSection {...ctx} /></div>
           <div hidden={active !== "smtp"}><SmtpSection t={t} notify={notify} /></div>

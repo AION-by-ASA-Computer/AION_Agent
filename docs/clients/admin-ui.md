@@ -359,6 +359,7 @@ Admins cannot read users' chats. There is no conversation viewer in the admin UI
 - Automatic parameter validation (e.g. consistency between `AION_CHAT_MAX_TOKENS` and `AION_THINKING_TOKEN_BUDGET` for Anthropic models).
 - **LLM provider CRUD** with **connection probe**: test endpoint credentials, discover models via `GET /v1/models`, pick from list or enter model id manually (`admin-ui/lib/llm-probe.ts` → `POST /admin/llm-providers/probe`).
 - Same probe flow for **embeddings** and **remote OCR** (vision server) on the settings form.
+- **Audio** section: like OCR, choose between a **remote** OpenAI-compatible transcription service (`AION_STT_BASE_URL`, `AION_STT_API_KEY`, model picked via the same connection probe, `AION_STT_TIMEOUT` / `AION_STT_CHUNK_SEC` limits) and the **on-server** engine; in local mode, choose the speech-to-text model (`AION_STT_LOCAL_MODEL`), the default language (`AION_STT_LANGUAGE`) and the transcription accuracy (`AION_STT_LOCAL_BEAM_SIZE`), explained in plain language without showing variable names; models not yet on disk can be downloaded ahead of time (`GET /admin/stt/local-models`, `POST /admin/stt/local-models/{name}/download`). See [Speech-to-text MCP](../mcp/speech-to-text.md#configurazione-da-admin-ui).
 - Default provider save syncs `AION_CHAT_MAX_TOKENS` / `AION_THINKING_TOKEN_BUDGET` into `.env` and clears the agent cache.
 - Automatic restart of the Docker container in case of changes (if the environment runs under Docker).
 - **SMTP** (`/settings#smtp`): outgoing mail server used for invites, password

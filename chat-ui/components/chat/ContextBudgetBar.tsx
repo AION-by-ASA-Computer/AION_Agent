@@ -1,7 +1,14 @@
 "use client";
 
+/**
+ * Conversation-memory indicator for the composer: a quiet ring (gauge) plus a
+ * plain-language popover. The ring stays neutral until the conversation is
+ * genuinely filling up; technical breakdowns (token parts, tools, skills) live
+ * behind a "Details" disclosure so non-technical users see only the headline.
+ */
+
 import { useMemo, useState } from "react";
-import { BookOpen, CheckCircle2, Circle, XCircle, Zap, ChevronDown } from "lucide-react";
+import { BookOpen, CheckCircle2, Circle, XCircle, Zap, ChevronDown, ChevronRight } from "lucide-react";
 import type { ContextBudgetState } from "@/lib/sse/types";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
@@ -29,25 +36,16 @@ function formatSlug(slug: string): string {
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-const SKILL_STATE_CONFIG = {
-  loaded: {
-    icon: CheckCircle2,
-    iconClass: "text-emerald-500",
-    badgeClass: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-    badgeKey: "chat.capabilities.skill_loaded",
-  },
-  failed: {
-    icon: XCircle,
-    iconClass: "text-rose-500",
-    badgeClass: "bg-rose-500/15 text-rose-600 dark:text-rose-400",
-    badgeKey: "chat.capabilities.skill_failed",
-  },
-  pending: {
-    icon: Circle,
-    iconClass: "text-muted-foreground/40",
-    badgeClass: "bg-muted/60 text-muted-foreground/60",
-    badgeKey: "chat.capabilities.skill_pending",
-  },
+const SKILL_STATE_ICON = {
+  loaded: CheckCircle2,
+  failed: XCircle,
+  pending: Circle,
+} as const;
+
+/** i18n keys for the per-skill state label (used / failed). */
+const SKILL_STATE_LABEL = {
+  loaded: "chat.capabilities.skill_loaded",
+  failed: "chat.capabilities.skill_failed",
 } as const;
 
 function formatTokens(n: number): string {
@@ -61,11 +59,24 @@ function partLabel(t: (key: string, vars?: Record<string, string | number>) => s
   return label === path ? key : label;
 }
 
-function gaugeStrokeClass(pct: number, triggerPct: number): string {
-  if (pct >= triggerPct) return "stroke-destructive";
-  if (pct >= triggerPct * 0.85) return "stroke-amber-500";
-  return "stroke-emerald-500";
+/** Severity tier shared by ring and panel: calm until ~70%, warn near the compaction trigger. */
+type Tier = "ok" | "filling" | "full";
+function budgetTier(pct: number, triggerPct: number): Tier {
+  if (pct >= triggerPct) return "full";
+  if (pct >= Math.min(70, triggerPct * 0.85)) return "filling";
+  return "ok";
 }
+
+const TIER_STROKE: Record<Tier, string> = {
+  ok: "stroke-foreground/40",
+  filling: "stroke-amber-500",
+  full: "stroke-destructive",
+};
+const TIER_BAR: Record<Tier, string> = {
+  ok: "bg-primary/70",
+  filling: "bg-amber-500",
+  full: "bg-destructive",
+};
 
 type GaugeProps = {
   pct: number;
@@ -86,51 +97,39 @@ export function ContextBudgetGauge({
 }: GaugeProps) {
   const t = useT();
   const clamped = Math.min(100, Math.max(0, pct));
-  const size = 28;
-  const stroke = 2.5;
+  // Thin 18px ring inside a 28px hit target: present but not competing with the send button.
+  const size = 18;
+  const stroke = 2;
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const offset = circumference * (1 - clamped / 100);
-  const strokeClass = unavailable
-    ? "stroke-muted-foreground/35"
-    : gaugeStrokeClass(clamped, triggerPct);
+  const tier = budgetTier(clamped, triggerPct);
+  const label = unavailable
+    ? t("chat.context_budget.gauge_idle")
+    : t("chat.context_budget.gauge_aria", { pct: clamped.toFixed(0) });
 
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        "focus-ring inline-flex size-7 shrink-0 items-center justify-center rounded-full border transition-colors",
-        active
-          ? "border-primary/45 bg-primary/10"
-          : "border-border/80 bg-muted/25 hover:bg-muted/45",
+        "focus-ring inline-flex size-7 shrink-0 items-center justify-center rounded-full transition-colors",
+        active ? "bg-muted/70" : "hover:bg-muted/50",
+        // Calm tiers fade back so the ring only draws the eye when it matters.
+        tier === "ok" && !active && "opacity-60 hover:opacity-100",
         className,
       )}
-      aria-label={
-        unavailable
-          ? t("chat.context_budget.gauge_idle")
-          : t("chat.context_budget.gauge_aria", { pct: clamped.toFixed(0) })
-      }
+      aria-label={label}
       aria-expanded={active}
-      title={
-        unavailable
-          ? t("chat.context_budget.gauge_idle")
-          : t("chat.context_budget.gauge_aria", { pct: clamped.toFixed(0) })
-      }
+      title={label}
     >
-      <svg
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-        className="-rotate-90"
-        aria-hidden
-      >
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90" aria-hidden>
         <circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           fill="none"
-          className="stroke-muted-foreground/30"
+          className="stroke-foreground/15"
           strokeWidth={stroke}
         />
         <circle
@@ -138,7 +137,10 @@ export function ContextBudgetGauge({
           cy={size / 2}
           r={radius}
           fill="none"
-          className={cn(strokeClass, "transition-[stroke-dashoffset] duration-300")}
+          className={cn(
+            unavailable ? "stroke-transparent" : TIER_STROKE[tier],
+            "transition-[stroke-dashoffset,stroke] duration-500 ease-out",
+          )}
           strokeWidth={stroke}
           strokeLinecap="round"
           strokeDasharray={circumference}
@@ -176,185 +178,215 @@ export function ContextBudgetBar({
   );
 
   const totalTools = usedTools.length;
+  // All available skills are listed; those never loaded this turn were simply not needed, so they
+  // are shown dimmed (no state label) and sorted after the used ones.
   const loadedCount = skillStatuses.filter((s) => s.loadState === "loaded").length;
-  const failedCount = skillStatuses.filter((s) => s.loadState === "failed").length;
+  const sortedSkills = [...skillStatuses].sort(
+    (x, y) => Number(y.loadState !== "pending") - Number(x.loadState !== "pending"),
+  );
+
+  const tier = budgetTier(pct, triggerPct || 92);
+  const [detailsOpen, setDetailsOpen] = useState(false);
+  const hasExtras = totalTools > 0 || skillStatuses.length > 0;
 
   return (
     <div
       className={cn(
-        "rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5 text-[0.786em]",
+        "rounded-2xl border border-border/60 bg-card px-4 py-3.5 text-[0.857em] shadow-[0_6px_24px_-8px_rgb(0_0_0/0.18)]",
         className,
       )}
       role="status"
       aria-label={t("chat.context_budget.aria", { pct: pct.toFixed(0) })}
     >
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-        <span className="font-medium text-foreground">{t("chat.context_budget.title")}</span>
-        <span className="tabular-nums text-muted-foreground">
-          {formatTokens(budget.total)} / {formatTokens(budget.maxPrompt)} tok
-          <span className="ml-1.5 font-semibold text-foreground">{pct.toFixed(0)}%</span>
-        </span>
+      {/* Headline: plain-language status first, number second. */}
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="font-semibold text-foreground">{t(`chat.context_budget.status_${tier}`)}</span>
+        <span className="tabular-nums text-muted-foreground">{pct.toFixed(0)}%</span>
+      </div>
+      <p className="mt-0.5 text-muted-foreground">{t(`chat.context_budget.hint_${tier}`)}</p>
+
+      {/* One calm bar; per-part colours are reserved for the details view. */}
+      <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-foreground/10">
+        <div
+          className={cn("h-full rounded-full transition-[width] duration-500 ease-out", TIER_BAR[tier])}
+          style={{ width: `${pct}%` }}
+        />
       </div>
 
-      <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-background/80 ring-1 ring-border/40">
-        {triggerPct > 0 && triggerPct < 100 ? (
-          <div
-            className="pointer-events-none absolute inset-y-0 z-10 w-px bg-destructive/70"
-            style={{ left: `${triggerPct}%` }}
-            title={t("chat.context_budget.trigger", {
-              pct: triggerPct.toFixed(0),
-            })}
+      {parts.length > 0 || hasExtras ? (
+        <button
+          type="button"
+          onClick={() => setDetailsOpen((v) => !v)}
+          aria-expanded={detailsOpen}
+          className="focus-ring mt-3 inline-flex items-center gap-1 rounded-md text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {detailsOpen ? t("chat.context_budget.details_hide") : t("chat.context_budget.details_show")}
+          <ChevronDown
+            size={12}
+            className={cn("transition-transform duration-200", detailsOpen && "rotate-180")}
+            aria-hidden
           />
-        ) : null}
-        <div className="flex h-full min-w-0">
-          {parts.map((part) => {
-            const width = budget.maxPrompt > 0 ? (part.tokens / budget.maxPrompt) * 100 : 0;
-            if (width <= 0) return null;
-            const label = partLabel(t, part.key);
-            return (
+        </button>
+      ) : null}
+
+      {detailsOpen ? (
+        <div className="mt-3 border-t border-border/50 pt-3">
+          <div className="mb-2 flex items-center justify-between tabular-nums text-muted-foreground">
+            <span>
+              {formatTokens(budget.total)} / {formatTokens(budget.maxPrompt)} tok
+            </span>
+            {budget.messageCount > 0 ? (
+              <span>{t("chat.context_budget.messages", { count: budget.messageCount })}</span>
+            ) : null}
+          </div>
+          {/* One segmented bar (each segment = share of the whole window) + a dot legend that
+              names the segments; the tick marks where auto-summarization kicks in. */}
+          <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-foreground/10">
+            <div className="flex h-full min-w-0 gap-px">
+              {parts.map((part) => {
+                const width = budget.maxPrompt > 0 ? (part.tokens / budget.maxPrompt) * 100 : 0;
+                if (width <= 0) return null;
+                return (
+                  <div
+                    key={part.key}
+                    className={cn("h-full shrink-0 opacity-85", PART_COLORS[part.key] || PART_COLORS.other)}
+                    style={{ width: `${width}%` }}
+                    title={`${partLabel(t, part.key)}: ${formatTokens(part.tokens)} tok`}
+                  />
+                );
+              })}
+            </div>
+            {triggerPct > 0 && triggerPct < 100 ? (
               <div
-                key={part.key}
-                className={cn("h-full shrink-0", PART_COLORS[part.key] || PART_COLORS.other)}
-                style={{ width: `${width}%` }}
-                title={`${label}: ${formatTokens(part.tokens)} (${part.pct.toFixed(1)}%)`}
+                className="pointer-events-none absolute inset-y-0 z-10 w-px bg-foreground/50"
+                style={{ left: `${triggerPct}%` }}
+                title={t("chat.context_budget.trigger", { pct: triggerPct.toFixed(0) })}
               />
-            );
-          })}
-        </div>
-      </div>
+            ) : null}
+          </div>
+          <ul className="mt-3 grid grid-cols-2 gap-x-5 gap-y-1.5">
+            {parts.slice(0, 8).map((part) => (
+              <li key={part.key} className="flex min-w-0 items-center gap-2 text-xs">
+                <span
+                  className={cn("size-2 shrink-0 rounded-full", PART_COLORS[part.key] || PART_COLORS.other)}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1 truncate text-muted-foreground">{partLabel(t, part.key)}</span>
+                <span className="tabular-nums text-foreground/80">
+                  {part.pct < 1 ? "<1" : part.pct.toFixed(0)}%
+                </span>
+              </li>
+            ))}
+          </ul>
 
-      <ul className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.929em] text-muted-foreground">
-        {parts.slice(0, 8).map((part) => (
-          <li key={part.key} className="inline-flex items-center gap-1">
-            <span
-              className={cn(
-                "inline-block size-2 rounded-sm",
-                PART_COLORS[part.key] || PART_COLORS.other,
-              )}
-              aria-hidden
-            />
-            <span>{partLabel(t, part.key)}</span>
-            <span className="tabular-nums text-foreground/80">{part.pct.toFixed(0)}%</span>
-          </li>
-        ))}
-        {budget.messageCount > 0 ? (
-          <li className="text-muted-foreground/80">
-            {t("chat.context_budget.messages", { count: budget.messageCount })}
-          </li>
-        ) : null}
-      </ul>
-
-      {(totalTools > 0 || skillStatuses.length > 0) && (
-        <div className="mt-3 border-t border-border/40 pt-2 flex flex-col gap-2">
-          {/* ── Section: Tools actually used ── */}
+      {hasExtras && (
+        <div className="mt-3 flex flex-col gap-0.5 border-t border-border/50 pt-2">
+          {/* Tools actually used: same disclosure-row idiom as ReasoningDisclosure. */}
           {totalTools > 0 && (
-            <div className="rounded-lg border border-border/40 bg-muted/10 overflow-hidden">
+            <div>
               <button
                 type="button"
-                className="w-full flex items-center justify-between px-2.5 py-1.5 hover:bg-muted/40 transition-colors"
+                className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                aria-expanded={toolsOpen}
                 onClick={() => setToolsOpen(!toolsOpen)}
               >
-                <div className="flex items-center gap-1.5">
-                  <Zap size={11} className="text-violet-500 shrink-0" aria-hidden />
-                  <span className="text-[0.714em] font-bold uppercase tracking-wider text-violet-500">
-                    {t("chat.capabilities.tools_used")}
-                  </span>
-                  <span className="rounded-full bg-violet-500/15 px-1.5 py-0.5 text-[0.65em] font-bold tabular-nums text-violet-500">
-                    {totalTools}
-                  </span>
-                </div>
-                <ChevronDown size={12} className={cn("text-muted-foreground transition-transform duration-200", toolsOpen && "rotate-180")} aria-hidden />
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-violet-500/12 text-violet-500"><Zap size={12} aria-hidden /></span>
+                <span className="text-xs font-medium">{t("chat.capabilities.tools_used")}</span>
+                <span className="rounded-full bg-muted/60 px-1.5 text-[0.786em] tabular-nums">{totalTools}</span>
+                <ChevronRight
+                  size={14}
+                  className={cn("ml-auto shrink-0 opacity-70 transition-transform duration-200", toolsOpen && "rotate-90")}
+                  aria-hidden
+                />
               </button>
-
               {toolsOpen && (
-                <div className="px-2 pb-2 pt-1 border-t border-border/40">
-                  <ul className="space-y-0.5">
-                    {usedTools.map((tool) => (
-                      <li
-                        key={tool.name}
-                        className="flex items-center justify-between rounded-lg px-1.5 py-1 hover:bg-muted/40 transition-colors"
-                      >
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          {tool.hasError ? (
-                            <XCircle size={13} className="shrink-0 text-rose-500" aria-hidden />
-                          ) : (
-                            <CheckCircle2 size={13} className="shrink-0 text-emerald-500" aria-hidden />
+                <ul className="mt-1 rounded-lg bg-muted/35 px-2 py-1.5">
+                  {usedTools.map((tool) => (
+                    <li key={tool.name} className="flex items-center gap-2 px-1 py-1">
+                      {tool.hasError ? (
+                        <XCircle size={13} className="shrink-0 text-destructive" aria-hidden />
+                      ) : (
+                        <CheckCircle2 size={13} className="shrink-0 text-emerald-500" aria-hidden />
+                      )}
+                      <span className="min-w-0 flex-1 truncate text-xs text-foreground/90">
+                        {formatSlug(tool.name)}
+                      </span>
+                      {tool.callCount > 1 && (
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">×{tool.callCount}</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* Skills with load state. */}
+          {skillStatuses.length > 0 && (
+            <div>
+              <button
+                type="button"
+                className="focus-ring flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+                aria-expanded={skillsOpen}
+                onClick={() => setSkillsOpen(!skillsOpen)}
+              >
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-md bg-amber-500/12 text-amber-600 dark:text-amber-400"><BookOpen size={12} aria-hidden /></span>
+                <span className="text-xs font-medium">{t("chat.capabilities.skills")}</span>
+                <span className="rounded-full bg-muted/60 px-1.5 text-[0.786em] tabular-nums">
+                  {loadedCount}/{skillStatuses.length}
+                </span>
+                <ChevronRight
+                  size={14}
+                  className={cn("ml-auto shrink-0 opacity-70 transition-transform duration-200", skillsOpen && "rotate-90")}
+                  aria-hidden
+                />
+              </button>
+              {skillsOpen && (
+                <ul className="mt-1 rounded-lg bg-muted/35 px-2 py-1.5">
+                  {sortedSkills.map((skill) => {
+                    const Icon = SKILL_STATE_ICON[skill.loadState];
+                    return (
+                      <li key={skill.name} className="flex items-center gap-2 px-1 py-1">
+                        <Icon
+                          size={13}
+                          className={cn(
+                            "shrink-0",
+                            skill.loadState === "loaded" && "text-emerald-500",
+                            skill.loadState === "failed" && "text-destructive",
+                            skill.loadState === "pending" && "text-muted-foreground/35",
                           )}
-                          <span className="truncate text-[0.786em] font-medium text-foreground">
-                            {formatSlug(tool.name)}
-                          </span>
-                        </div>
-                        {tool.callCount > 1 && (
-                          <span className="ml-2 shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[0.65em] font-mono tabular-nums text-muted-foreground">
-                            ×{tool.callCount}
+                          aria-hidden
+                        />
+                        <span
+                          className={cn(
+                            "min-w-0 flex-1 truncate text-xs",
+                            skill.loadState === "pending" ? "text-muted-foreground/70" : "text-foreground/90",
+                          )}
+                        >
+                          {formatSlug(skill.name)}
+                        </span>
+                        {skill.loadState !== "pending" && (
+                          <span
+                            className={cn(
+                              "shrink-0 text-xs",
+                              skill.loadState === "loaded" && "text-emerald-600 dark:text-emerald-400",
+                              skill.loadState === "failed" && "text-destructive",
+                            )}
+                          >
+                            {t(SKILL_STATE_LABEL[skill.loadState])}
                           </span>
                         )}
                       </li>
-                    ))}
-                  </ul>
-                </div>
+                    );
+                  })}
+                </ul>
               )}
             </div>
-          )}
-
-          {/* ── Section: Skills with load state ── */}
-          {skillStatuses.length > 0 && (
-            <div className="rounded-lg border border-border/40 bg-muted/10 overflow-hidden">
-              <button
-                type="button"
-                className="w-full flex items-center justify-between px-2.5 py-1.5 hover:bg-muted/40 transition-colors"
-                onClick={() => setSkillsOpen(!skillsOpen)}
-              >
-                <div className="flex items-center gap-1.5">
-                  <BookOpen size={11} className="text-amber-500 shrink-0" aria-hidden />
-                  <span className="text-[0.714em] font-bold uppercase tracking-wider text-amber-500">
-                    {t("chat.capabilities.skills")}
-                  </span>
-                </div>
-                <ChevronDown size={12} className={cn("text-muted-foreground transition-transform duration-200", skillsOpen && "rotate-180")} aria-hidden />
-              </button>
-
-              {skillsOpen && (
-                <div className="px-2 pb-2 pt-1 border-t border-border/40">
-                  <ul className="space-y-0.5">
-                    {skillStatuses.map((skill) => {
-                      const cfg = SKILL_STATE_CONFIG[skill.loadState];
-                      const Icon = cfg.icon;
-                      return (
-                        <li
-                          key={skill.name}
-                          className="flex items-center justify-between rounded-lg px-1.5 py-1 hover:bg-muted/40 transition-colors"
-                        >
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <Icon size={13} className={cn("shrink-0", cfg.iconClass)} aria-hidden />
-                            <span
-                              className={cn(
-                                "truncate text-[0.786em] font-medium",
-                                skill.loadState === "pending"
-                                  ? "text-muted-foreground"
-                                  : "text-foreground",
-                              )}
-                            >
-                              {formatSlug(skill.name)}
-                            </span>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Footer ── */}
-          {totalTools > 0 && (
-            <p className="px-1 py-1 text-[0.68em] text-muted-foreground/50 select-none">
-              {t("chat.capabilities.realtime_hint")}
-            </p>
           )}
         </div>
       )}
+        </div>
+      ) : null}
     </div>
   );
 }

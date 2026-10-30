@@ -9,6 +9,7 @@ export type SettingsTab =
   | "appearance"
   | "security"
   | "api-keys"
+  | "whatsapp"
   | "instructions"
   | "tunings";
 

@@ -26,6 +26,7 @@ import { apiBase } from "@/lib/config";
 import type { ShellSection } from "@/lib/shell/use-conversation-threads";
 import { cn } from "@/lib/cn";
 import { ChatBrand } from "../brand/ChatBrand";
+import { WhatsAppIcon } from "../brand/WhatsAppIcon";
 import { SidebarProfileMenu } from "./SidebarProfileMenu";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { useT } from "@/lib/i18n/use-t";
@@ -629,6 +630,11 @@ function ConversationRowInner({
       >
         {favorite ? (
           <Star className="h-3.5 w-3.5 shrink-0 fill-amber-400 text-amber-400" aria-hidden />
+        ) : null}
+        {conv.metadata?.source === "whatsapp" ? (
+          <span className="shrink-0" title={t("sidebar.from_whatsapp")}>
+            <WhatsAppIcon label={t("sidebar.from_whatsapp")} />
+          </span>
         ) : null}
         <span className="truncate transition-transform duration-200 group-hover:translate-x-0.5">{displayTitle}</span>
       </Link>

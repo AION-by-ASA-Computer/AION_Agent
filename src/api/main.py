@@ -375,6 +375,14 @@ async def _lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("cron scheduler: %s", e)
 
+    try:
+        from src.channels.whatsapp.dispatcher import resume_pending
+
+        # Messaggi WhatsApp ricevuti ma non completati prima del riavvio.
+        await resume_pending()
+    except Exception as e:
+        logger.warning("whatsapp resume: %s", e)
+
     _offload_cleanup_task = None
     _session_cleanup_task = None
     _memory_maintenance_task = None

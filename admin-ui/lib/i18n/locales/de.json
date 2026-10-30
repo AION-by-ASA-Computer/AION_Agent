@@ -31,7 +31,8 @@
       "platform": "Plattform"
     },
     "theme_light": "Zum hellen Design wechseln",
-    "theme_dark": "Zum dunklen Design wechseln"
+    "theme_dark": "Zum dunklen Design wechseln",
+    "whatsapp": "WhatsApp"
   },
   "admin_dashboard": {
     "title": "Übersicht",
@@ -1444,6 +1445,7 @@
       "network_error": "Netzwerkfehler.",
       "retry": "Erneut versuchen",
       "shown": "{{shown}} von {{total}} angezeigt. Grenze die Suche ein.",
+      "act_temp": "Passwort erzeugen",
       "act_exempt": "Befreien",
       "act_reinstate": "Wiederaufnehmen",
       "act_unlink": "Trennen",
@@ -1452,6 +1454,10 @@
       "did_unlink": "SSO-Konto getrennt.",
       "failed": "Vorgang fehlgeschlagen.",
       "failed_code": "Vorgang fehlgeschlagen ({{code}}).",
+      "confirm_temp_title": "Temporäres Passwort erzeugen?",
+      "confirm_link_body_temp": "Für {{name}} wird ein temporäres Passwort erzeugt und nur einmal angezeigt, das du weitergibst; ein früherer Link wird ungültig. Nach der Anmeldung muss das Firmenkonto verknüpft werden.",
+      "confirm_unlink_body_temp": "{{name}} verliert die SSO-Verknüpfung. Ohne Passwort wird ein temporäres erzeugt und nur einmal angezeigt: Damit meldet sich die Person an und verknüpft das Firmenkonto erneut.",
+      "confirm_temp": "Passwort erzeugen",
       "confirm_unlink_title": "SSO-Konto trennen?",
       "confirm_unlink_body": "{{name}} verliert die SSO-Verknüpfung. Ohne Passwort erhält der Benutzer per E-Mail einen Link zum Festlegen, meldet sich damit an und verknüpft das Firmenkonto erneut.",
       "confirm_unlink": "Trennen",
@@ -1474,12 +1480,7 @@
       "links_sent_one": "E-Mail an {{email}} gesendet.",
       "links_sent": "E-Mails gesendet: {{count}}.",
       "links_failed": "Versand an {{names}} fehlgeschlagen ({{error}}).",
-      "links_missing_email": "Keine E-Mail-Adresse, kein Link gesendet: {{names}}.",
-      "act_temp": "Passwort erzeugen",
-      "confirm_temp_title": "Temporäres Passwort erzeugen?",
-      "confirm_link_body_temp": "Für {{name}} wird ein temporäres Passwort erzeugt und nur einmal angezeigt, das du weitergibst; ein früherer Link wird ungültig. Nach der Anmeldung muss das Firmenkonto verknüpft werden.",
-      "confirm_unlink_body_temp": "{{name}} verliert die SSO-Verknüpfung. Ohne Passwort wird ein temporäres erzeugt und nur einmal angezeigt: Damit meldet sich die Person an und verknüpft das Firmenkonto erneut.",
-      "confirm_temp": "Passwort erzeugen"
+      "links_missing_email": "Keine E-Mail-Adresse, kein Link gesendet: {{names}}."
     },
     "sso_guide": {
       "title": "So richten Sie Microsoft Entra ID ein",
@@ -1713,6 +1714,7 @@
       "memory": "Gedächtnis",
       "web": "Web",
       "ocr": "OCR",
+      "stt": "Audio",
       "sandbox": "Sandbox",
       "retention": "Aufbewahrung",
       "smtp": "E-Mail (SMTP)"
@@ -1740,6 +1742,9 @@
       "v_ocr_tokens": "Max. OCR-Tokens muss eine positive ganze Zahl sein.",
       "v_ocr_timeout": "Das OCR-Timeout muss eine positive ganze Zahl sein.",
       "v_ocr_bytes": "Die max. OCR-Bildgröße muss eine positive ganze Zahl sein.",
+      "v_stt_url": "Die URL des Transkriptionsdienstes muss mit http:// oder https:// beginnen.",
+      "v_stt_timeout": "Das Transkriptions-Timeout muss eine positive ganze Zahl sein.",
+      "v_stt_chunk": "Die Abschnittslänge der Transkription muss eine positive ganze Zahl sein.",
       "v_emb_url": "Die URL des Embedding-Dienstes muss mit http:// oder https:// beginnen.",
       "v_fetch_chars": "Max. Zeichen für Abrufe muss eine positive ganze Zahl sein.",
       "v_search_results": "Max. Suchergebnisse muss eine positive ganze Zahl sein.",
@@ -1874,6 +1879,124 @@
       "err_scheme": "Die URL muss mit http:// oder https:// beginnen.",
       "err_key": "API-Schlüssel vor dem Test eingeben.",
       "err_test": "Der Verbindungstest ist fehlgeschlagen."
+    },
+    "stt": {
+      "title": "Audiotranskription",
+      "description": "Wie im Chat hochgeladene Audiodateien (Meetings, Sprachnachrichten, Interviews) in Text umgewandelt werden.",
+      "mode": "Transkriptions-Engine",
+      "remote": "Entferntes Modell",
+      "remote_hint": "Ein Spracherkennungsdienst an einem OpenAI-kompatiblen Endpunkt (Whisper auf vLLM, OpenAI, …). Schnell und genau bei langen Aufnahmen, aber das Audio wird an diesen Dienst gesendet.",
+      "local": "Auf diesem Server",
+      "local_hint": "Läuft hier auf dem Prozessor, ohne Netzwerk: Audio verlässt den Server nie. Langsamer bei langen Aufnahmen.",
+      "endpoint": "Endpunkt",
+      "url": "Dienst-URL",
+      "url_hint": "Basisadresse; die App sendet Audio an /audio/transcriptions unter dieser Adresse.",
+      "token": "API-Schlüssel",
+      "test": "Verbindung testen",
+      "test_ok": "Verbunden in {{ms}} ms · {{count}} Modelle gefunden",
+      "test_ok_manual": "Verbunden in {{ms}} ms · keine Modelle aufgelistet",
+      "remote_model": "Transkriptionsmodell",
+      "remote_model_manual": "Name des Transkriptionsmodells",
+      "remote_model_before": "Testen Sie die Verbindung, um ein Modell zu wählen.",
+      "limits": "Limits",
+      "limits_hint": "Leer lassen, um die Standardwerte zu verwenden.",
+      "timeout": "Timeout pro Abschnitt (s)",
+      "chunk_sec": "Abschnittslänge (s)",
+      "chunk_sec_hint": "Audio wird in Stücken dieser Länge gesendet. Whisper auf vLLM akzeptiert höchstens 30 Sekunden.",
+      "err_url": "Geben Sie zuerst die Dienst-URL ein.",
+      "err_scheme": "Die URL muss mit http:// oder https:// beginnen.",
+      "err_key": "API-Schlüssel vor dem Test eingeben.",
+      "err_test": "Der Verbindungstest ist fehlgeschlagen.",
+      "recommended": "Empfohlen",
+      "model_title": "Spracherkennungsmodell",
+      "model_hint": "Das Modell läuft auf diesem Server: Audio wird nie nach außen gesendet. Größere Modelle verstehen Akzente, Fachbegriffe und verrauschtes Audio besser, sind aber langsamer und brauchen mehr Speicher.",
+      "models": {
+        "tiny": {
+          "title": "Minimal",
+          "description": "Etwa 75 MB. Sehr schnell, aber ungenau, vor allem auf Italienisch: nur für Tests oder Server mit sehr wenig Speicher."
+        },
+        "base": {
+          "title": "Leicht",
+          "description": "Etwa 145 MB. Schnell und genügsam: gut für kurze Sprachnachrichten und sauberes Audio, irrt sich aber öfter bei Namen und seltenen Wörtern."
+        },
+        "small": {
+          "title": "Standard",
+          "description": "Etwa 460 MB auf der Festplatte und 1 GB Arbeitsspeicher im Betrieb. Gute Balance zwischen Qualität und Geschwindigkeit auf Italienisch."
+        },
+        "medium": {
+          "title": "Erweitert",
+          "description": "Etwa 1,5 GB. Genauer bei Akzenten, Fachbegriffen und verrauschtem Audio, aber deutlich langsamer und speicherhungriger."
+        },
+        "large-v3-turbo": {
+          "title": "Groß, optimiert",
+          "description": "Etwa 1,6 GB. Qualität nahe am größten Modell bei kürzerer Laufzeit; braucht einen leistungsstarken Prozessor und einige GB Speicher."
+        },
+        "large-v3": {
+          "title": "Höchste Qualität",
+          "description": "Etwa 3 GB. Am genauesten, aber auf dem Prozessor sehr langsam: Lange Aufnahmen brauchen mehrere Durchgänge. Nur für dedizierte Server."
+        }
+      },
+      "custom_model": "Manuell in der Serverkonfiguration festgelegt.",
+      "installed": "Vorhanden",
+      "to_download": "Nicht heruntergeladen",
+      "downloading": "Wird heruntergeladen…",
+      "download": "Jetzt herunterladen",
+      "not_installed": "Dieses Modell ist noch nicht auf dem Server. Laden Sie es jetzt herunter: Sonst wird es bei der ersten Transkription geladen, die dann womöglich nicht rechtzeitig fertig wird.",
+      "downloading_hint": "Das Modell wird auf den Server heruntergeladen. Warten Sie vor dem Speichern, bis es fertig ist: Das Speichern kann den Dienst neu starten und den Download abbrechen.",
+      "download_done": "Modell „{{model}}“ heruntergeladen.",
+      "download_failed": "Download des Modells fehlgeschlagen.",
+      "download_busy": "Ein anderes Modell wird bereits heruntergeladen.",
+      "download_error": "Der letzte Download ist fehlgeschlagen: {{error}}",
+      "language_title": "Standardsprache",
+      "language_hint": "Die in den Aufnahmen gesprochene Sprache. Sie anzugeben ist schneller und genauer als sie erkennen zu lassen; der Agent kann für eine einzelne Datei trotzdem eine andere Sprache wählen.",
+      "language_label": "Sprache",
+      "language": {
+        "it": {
+          "title": "Italienisch",
+          "description": "Aufnahmen auf Italienisch."
+        },
+        "en": {
+          "title": "Englisch",
+          "description": "Aufnahmen auf Englisch."
+        },
+        "fr": {
+          "title": "Französisch",
+          "description": "Aufnahmen auf Französisch."
+        },
+        "de": {
+          "title": "Deutsch",
+          "description": "Aufnahmen auf Deutsch."
+        },
+        "es": {
+          "title": "Spanisch",
+          "description": "Aufnahmen auf Spanisch."
+        },
+        "auto": {
+          "title": "Automatisch erkennen",
+          "description": "Das Modell erkennt die Sprache jeder Datei. Nützlich bei gemischten Sprachen, etwas langsamer und bei kurzen Clips weniger zuverlässig."
+        },
+        "custom_title": "Benutzerdefiniert ({{code}})",
+        "custom_description": "Manuell in der Serverkonfiguration gesetzter Wert."
+      },
+      "beam_title": "Genauigkeit der Transkription",
+      "beam_hint": "Für jeden Satz wägt das Modell mehrere mögliche Textfassungen ab und wählt die wahrscheinlichste. Mehr Vergleiche helfen bei mehrdeutigen Wörtern und Eigennamen, verlangsamen aber die Transkription.",
+      "beam": {
+        "1": {
+          "title": "Schnell",
+          "description": "Wählt immer das wahrscheinlichste Wort, ohne Alternativen zu vergleichen. Am schnellsten, mit etwas mehr Fehlern bei ähnlichen oder undeutlichen Wörtern. Sinnvoll bei langsamen Prozessoren oder vielen gleichzeitigen Unterhaltungen."
+        },
+        "3": {
+          "title": "Ausgewogen",
+          "description": "Vergleicht 3 Textfassungen: ein Kompromiss zwischen Geschwindigkeit und Genauigkeit."
+        },
+        "5": {
+          "title": "Genau",
+          "description": "Vergleicht 5 Textfassungen, die Standardeinstellung des Modells. Am genauesten, aber die langsamste der drei Optionen."
+        },
+        "custom_title": "Benutzerdefiniert ({{n}} Fassungen)",
+        "custom_description": "Wert manuell in der Serverkonfiguration festgelegt."
+      },
+      "apply_note": "Änderungen gelten für Unterhaltungen, die nach dem Speichern beginnen. Jede Unterhaltung, die Audio transkribiert, lädt das Modell separat in den Speicher: Bei vielen gleichzeitigen Nutzern ist ein kleineres Modell sinnvoller."
     },
     "web": {
       "title": "Webzugriff",
@@ -2107,5 +2230,194 @@
     "retry_now": "Jetzt prüfen",
     "reload_page": "Seite neu laden",
     "dismiss": "Schließen"
+  },
+  "admin_whatsapp": {
+    "page": {
+      "title": "WhatsApp",
+      "subtitle": "Connect your company’s WhatsApp Business number so colleagues can message the agent straight from WhatsApp.",
+      "config_title": "Configuration",
+      "config_desc": "Your Meta app credentials, the webhook and channel activation.",
+      "users_title": "Linked users",
+      "users_desc": "Colleagues who linked their WhatsApp from the chat settings."
+    },
+    "summary": {
+      "title": "How to connect WhatsApp",
+      "s1": "Create a **Business** type Meta app and add the **WhatsApp** product.",
+      "s2": "Register the company number in **WhatsApp Manager** and copy the **Phone Number ID** and **WABA ID**.",
+      "s3": "Generate a **permanent token** from a system user and copy the **App secret**.",
+      "s4": "Paste the values here, generate the **verify token**, save and set up the **webhook** on Meta.",
+      "s5": "Click **Verify** and, once every check is green, **enable the channel**.",
+      "open": "Open the guide",
+      "link": "Open Meta for Developers"
+    },
+    "guide": {
+      "dialog_title": "Connect WhatsApp Business, step by step",
+      "close": "Close",
+      "intro": "You need an admin account on the company’s Meta business portfolio and a phone number that is not already active on WhatsApp. It takes about 20 minutes, plus Meta’s verification times.",
+      "link_business": "Open Meta Business Suite",
+      "link_developers": "Open Meta for Developers",
+      "t1": "Prepare the business portfolio",
+      "b1": "Sign in to **business.facebook.com** with the company account and create or pick the company’s **business portfolio**. **Business verification** is not required to get started, but it is recommended: without it Meta applies lower limits on conversations and the display name.",
+      "t2": "Create the Meta app",
+      "b2": "On **developers.facebook.com/apps** click **Create app**, enter a name and a contact email, choose the use case **Connect with customers through WhatsApp** and link the app to the business portfolio from step 1. Review the summary and click **Create app**.",
+      "t3": "Add the company number",
+      "b3": "In the app open **Use cases** and click **Customize** on the WhatsApp use case, then go to **Step 2. Production setup** and click **Add phone number**. Enter the **display name** colleagues will see and the business category, then the number, verify it with the code you receive by **SMS** and create the **Messaging account**.",
+      "warn3": "The number must not already be active on WhatsApp, neither on the regular app nor on WhatsApp Business. If it is, delete that account from the phone first.",
+      "t4": "Copy the IDs",
+      "b4": "Once the number is registered, **Step 2. Production setup** shows its **Phone number ID** and the **Messaging account ID** (WABA ID) right under it: copy both. They are also listed in **WhatsApp** > **API Setup**.",
+      "t5": "Generate a permanent token",
+      "b5": "In **Business settings** > **Users** > **System users** click **Add** and create a system user with the **Admin** role. With **Assign assets** give it the app from step 2 (full control, **Manage app**) and the WhatsApp account from step 3. Then click **Generate token**, pick the app, expiry **Never** and the **whatsapp_business_management** and **whatsapp_business_messaging** permissions.",
+      "warn5": "Meta shows the token only once: copy it right away. Don’t use the temporary token on the API Setup page, it expires after 24 hours.",
+      "t6": "Copy the App secret",
+      "b6": "In the Meta app open **App settings** > **Basic**, click **Show** next to **App secret** and copy it. AION uses it to check the signature of every webhook.",
+      "t7": "Paste the values into AION",
+      "b7": "Come back to this page and fill in **WABA ID**, **Phone Number ID**, **Access token** and **App secret**. Click **Generate** next to **Verify token**, then **Save**.",
+      "t8": "Set up the webhook on Meta",
+      "b8": "In the Meta app open **WhatsApp** > **Configuration** and, in the **Webhook** section, click **Edit**. Paste the **Callback URL** and **Verify token** below, then click **Verify and save**. On the same page, under **Webhook fields**, subscribe to the **messages** field.",
+      "callback": "Callback URL",
+      "verify_token": "Verify token",
+      "no_token": "Generate the verify token from the panel first (step 7).",
+      "t9": "Payment and activation",
+      "b9": "In **WhatsApp Manager** add a **payment method**: each number gets 1,000 free service messages per month, after that they are charged. **Publishing the app (Live mode) is optional**: the channel already works with the app showing **Not published** in the **Publish** item of the left menu, so you can skip it. Finally come back to AION, click **Verify** and, once every check is green, **Enable channel**.",
+      "copy": "Copy",
+      "copied": "Copied",
+      "shots_note": "Screenshots come from Meta’s Italian interface, with emails, phone numbers, IDs and tokens masked. Meta changes its interface often, so labels may look slightly different.",
+      "cap_app_details": "Enter the app name and the contact email, then click Next.",
+      "cap_app_use_case": "Under Business messaging, pick “Connect with customers through WhatsApp”.",
+      "cap_app_business_portfolio": "Link the app to the company’s business portfolio.",
+      "cap_app_review_create": "Review the summary and click Create app.",
+      "cap_use_cases_customize": "In the app’s Use cases, click Customize on the WhatsApp use case.",
+      "cap_add_phone_number": "Open Step 2. Production setup and click Add phone number.",
+      "cap_whatsapp_profile": "Enter the display name and pick the business category.",
+      "cap_phone_verify": "Choose SMS to receive the verification code.",
+      "cap_messaging_account": "Create the Messaging account that will hold the number.",
+      "cap_registered_ids": "The registered number shows its Messaging account ID (WABA ID) and Phone number ID: copy them.",
+      "cap_system_users": "In Business settings > Users > System users, click Add.",
+      "cap_system_user_create": "Name the system user and give it the Admin role.",
+      "cap_system_user_assign": "Select the new system user and click Assign assets.",
+      "cap_assign_assets_dialog": "Select the app and turn on Manage app (full access).",
+      "cap_assets_assigned": "With the app assigned, click Generate token.",
+      "cap_token_app": "Select the app.",
+      "cap_token_expiry": "Set the expiry to Never.",
+      "cap_token_permissions": "Tick whatsapp_business_management and whatsapp_business_messaging.",
+      "cap_token_created": "Copy the token now: Meta shows it only once.",
+      "cap_temp_token": "The token on the API Setup page is temporary and expires after 24 hours: don’t use it.",
+      "cap_app_secret": "In App settings > Basic, click Show next to App secret.",
+      "cap_app_unpublished": "The app can stay “Not published”: publishing is optional and the channel already works without it."
+    },
+    "fields": {
+      "title": "Meta credentials",
+      "desc": "Values from your Meta app and WhatsApp Manager. Secrets are stored encrypted and never shown again.",
+      "waba_id": "WABA ID",
+      "waba_ph": "e.g. 102290129340398",
+      "phone_id": "Phone Number ID",
+      "phone_ph": "e.g. 106540352242922",
+      "access_token": "Access token",
+      "access_token_ph": "System user’s permanent token",
+      "app_secret": "App secret",
+      "app_secret_ph": "Meta app secret",
+      "keep_ph": "•••••••• (leave empty to keep)",
+      "stored": "Stored: {{hint}}",
+      "not_stored": "Not set yet.",
+      "show": "Show",
+      "hide": "Hide",
+      "profile": "Default agent profile",
+      "profile_hint": "Profile used for WhatsApp conversations.",
+      "profile_none": "System default",
+      "thinking": "Default thinking level",
+      "thinking_hint": "Reasoning effort for WhatsApp replies. Higher levels are slower: replies may hit the WhatsApp turn timeout.",
+      "thinking_default": "System default",
+      "thinking_off": "Off",
+      "thinking_min": "Minimal",
+      "thinking_medium": "Medium",
+      "thinking_max": "Maximum",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "WhatsApp configuration saved.",
+      "save_failed": "Could not save: {{error}}",
+      "required": "WABA ID and Phone Number ID are required."
+    },
+    "webhook": {
+      "title": "Webhook",
+      "desc": "Paste these into your Meta app, under WhatsApp > Configuration > Webhook.",
+      "url": "Callback URL",
+      "verify_token": "Verify token",
+      "verify_token_hint": "Meta sends it once to confirm the webhook. If you regenerate it, update it on Meta as well.",
+      "empty": "Not generated yet",
+      "generate": "Generate",
+      "regenerate": "Regenerate",
+      "generated": "Verify token generated.",
+      "generate_failed": "Could not generate: {{error}}",
+      "copy": "Copy {{what}}",
+      "copied": "Copied"
+    },
+    "verify": {
+      "title": "Verify and enable",
+      "desc": "Checks the token, the number and the webhook on Meta, then enable the channel.",
+      "run": "Verify",
+      "running": "Verifying…",
+      "ok": "All checks passed.",
+      "failed": "Some checks did not pass.",
+      "error": "Verification failed: {{error}}",
+      "save_first": "Save your changes before verifying.",
+      "not_configured": "Save the credentials to be able to verify.",
+      "checks": {
+        "token_phone": "Token and phone number",
+        "cloud_api_registered": "Number registered on Cloud API",
+        "app_subscribed": "App subscribed to the WhatsApp account",
+        "webhook_verified": "Webhook verified by Meta"
+      }
+    },
+    "status": {
+      "number": "Number",
+      "validated": "Last verified",
+      "webhook_verified": "Webhook verified",
+      "last_webhook": "Last webhook received",
+      "last_error": "Last error",
+      "never": "Never"
+    },
+    "enable": {
+      "label": "Enable channel",
+      "desc": "While enabled, linked colleagues can message the agent from WhatsApp.",
+      "needs_validation": "Available after a successful verification.",
+      "on": "WhatsApp channel enabled.",
+      "off": "WhatsApp channel disabled.",
+      "not_validated": "Run a successful verification first, then enable the channel.",
+      "force_disabled": "The channel is disabled on the server and cannot be enabled from here.",
+      "failed": "Could not change it: {{error}}"
+    },
+    "force_disabled": "The WhatsApp channel is force-disabled on the server (environment variable). You can edit the configuration, but you cannot enable it until the system administrator lifts the block.",
+    "load": {
+      "loading": "Loading WhatsApp configuration…",
+      "failed": "Could not load the WhatsApp configuration ({{error}}).",
+      "hint": "The backend may not support the WhatsApp channel yet, or it may be unreachable.",
+      "retry": "Retry"
+    },
+    "identities": {
+      "loading": "Loading linked users…",
+      "failed": "Could not load linked users ({{error}}).",
+      "empty": "No colleague has linked WhatsApp yet. They do it from the chat settings by scanning the QR code.",
+      "refresh": "Refresh",
+      "col": {
+        "user": "User",
+        "wa_name": "WhatsApp name",
+        "phone": "Number",
+        "linked": "Linked",
+        "last": "Last message",
+        "actions": "Actions"
+      },
+      "unlink": "Unlink",
+      "unlink_label": "Unlink {{name}}",
+      "unlinked": "WhatsApp unlinked for {{name}}.",
+      "unlink_failed": "Could not unlink: {{error}}",
+      "delete": {
+        "title": "Unlink WhatsApp?",
+        "body": "{{name}} will no longer be able to message the agent from WhatsApp until they link the number again from the chat settings.",
+        "confirm_label": "Type {{name}} to confirm",
+        "cancel": "Cancel",
+        "confirm": "Unlink",
+        "deleting": "Unlinking…"
+      }
+    }
   }
 }

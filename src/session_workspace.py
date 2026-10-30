@@ -286,6 +286,58 @@ def _list_tool_results_files(session_id: str) -> List[Dict[str, Any]]:
     return out
 
 
+# Extensions of internal/runtime files never shown to the user as deliverables.
+# Mirrors ``EXCLUDED_EXTENSIONS`` in ``chat-ui/lib/session-file-paths.ts``:
+# keep the two lists in sync.
+_NON_USER_FACING_EXTENSIONS = frozenset(
+    {
+        "json",
+        "jsonl",
+        "py",
+        "pyc",
+        "pyo",
+        "pyd",
+        "js",
+        "mjs",
+        "cjs",
+        "ts",
+        "tsx",
+        "jsx",
+        "sh",
+        "bash",
+        "bat",
+        "cmd",
+        "ps1",
+        "tmp",
+        "temp",
+        "log",
+        "lock",
+        "pid",
+        "swp",
+    }
+)
+_PII_REVIEW_RE = re.compile(r"^pii_review\b", re.IGNORECASE)
+
+
+def is_user_facing_generated_file(relative_path: Optional[str]) -> bool:
+    """True when a session file is a deliverable worth showing to the user.
+
+    Python port of ``isUserFacingGeneratedFile`` (chat-ui): excludes offloaded
+    tool results, dotfiles, PII review payloads, files without extension and
+    scripts/runtime files. Used by channels (e.g. WhatsApp) that push the
+    files generated during a turn back to the user.
+    """
+    rel = (relative_path or "").replace("\\", "/").strip()
+    if not rel or rel.startswith("derived/tool_results/"):
+        return False
+    name = rel.rsplit("/", 1)[-1]
+    if not name or name.startswith(".") or _PII_REVIEW_RE.match(name):
+        return False
+    if "." not in name:
+        return False
+    return name.rsplit(".", 1)[-1].lower() not in _NON_USER_FACING_EXTENSIONS
+
+
 def save_upload(
     session_id: str,
     filename: str,

@@ -53,6 +53,7 @@ _KNOWN_COLD_TOOLS = {
     "doc_ingest": "ocr",
     "ocr_file": "ocr",
     "pdf_evidence_crop": "ocr",
+    "transcribe_audio": "stt",
     "geocode_place": "geocoding",
     "reverse_geocode": "geocoding",
     "session_search": "query_memory",

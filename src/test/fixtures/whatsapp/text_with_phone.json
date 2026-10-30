@@ -1,0 +1,37 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA1",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "390212345678",
+              "phone_number_id": "1234567890"
+            },
+            "contacts": [
+              {
+                "profile": { "name": "Mario Rossi" },
+                "wa_id": "393331112233",
+                "user_id": "IT.1111111111111111"
+              }
+            ],
+            "messages": [
+              {
+                "from": "393331112233",
+                "from_user_id": "IT.1111111111111111",
+                "id": "wamid.TEXT1",
+                "timestamp": "1761650000",
+                "type": "text",
+                "text": { "body": "Quanti ordini ieri?" }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

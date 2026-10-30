@@ -6,6 +6,7 @@ import {
   FlaskConical,
   HeartPulse,
   LayoutDashboard,
+  MessageCircle,
   Server,
   Settings,
   ShieldCheck,
@@ -75,7 +76,10 @@ export const ADMIN_NAV: AdminNavGroup[] = [
   {
     id: "platform",
     labelKey: "admin_nav.groups.platform",
-    items: [{ id: "settings", href: "/settings", icon: Settings, labelKey: "admin_nav.settings" }],
+    items: [
+      { id: "settings", href: "/settings", icon: Settings, labelKey: "admin_nav.settings" },
+      { id: "whatsapp", href: "/whatsapp", icon: MessageCircle, labelKey: "admin_nav.whatsapp" },
+    ],
   },
 ];
 

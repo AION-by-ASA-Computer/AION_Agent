@@ -46,6 +46,7 @@ mcp_servers:
 - query_memory
 - code
 - ocr
+- stt
 - session_sandbox
 - promo_render
 - skills_hub
