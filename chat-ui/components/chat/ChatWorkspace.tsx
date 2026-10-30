@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, memo } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -21,6 +21,7 @@ import { ChatEmptyState } from "@/components/chat/ChatEmptyState";
 import { CircularUploadProgress } from "@/components/chat/CircularUploadProgress";
 import { ComposerOptionRow } from "@/components/chat/ComposerOptionRow";
 import { ChatDragDrop } from "@/components/chat/ChatDragDrop";
+import { BranchNavigator } from "@/components/chat/BranchNavigator";
 import { mergeAttachmentRefs } from "@/lib/attachments";
 import { artifactLanguage } from "@/lib/artifacts";
 import {
@@ -54,6 +55,8 @@ import {
   saveChatMessage,
   fetchKhubFileContent,
   fetchPromptSnapshots,
+  forkConversation,
+  type MessageBranchInfo,
   type ChatHistoryArtifact,
   type ChatHistoryMessage,
   type ChatHistoryStep,
@@ -235,6 +238,7 @@ type ChatMessage = {
   completedAt?: string;
   durationMs?: number;
   generatedFiles?: { rp: string; label: string }[];
+  branches?: MessageBranchInfo;
 };
 
 function parseWebHostInput(raw: string): string | null {
@@ -323,6 +327,7 @@ function historyMessageFromApi(m: ChatHistoryMessage): ChatMessage {
     archived: Boolean(m.archived),
     createdAt: m.created_at,
     completedAt: m.role === "assistant" ? m.created_at : undefined,
+    branches: m.branches,
   };
 }
 
@@ -432,6 +437,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const shellActions = useShellActions();
   const sidebarOpen = useSidebarOpen();
   const [conversationId, setConversationId] = useState(initialConversationId);
+  const router = useRouter();
   const [currentUserDisplayName, setCurrentUserDisplayName] = useState<string>("");
 
   const {
@@ -1505,6 +1511,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   /** Bumped on each client-owned POST /chat/stream so recovery cannot wipe its turnVisual. */
   const clientStreamGenRef = useRef(0);
   const activeConversationRef = useRef(conversationId);
+  const skipResetForConvIdRef = useRef<string | null>(null);
+  const branchCacheRef = useRef<Record<string, ChatMessage[]>>({});
   const {
     historyLoadEpochRef,
     previousConversationIdRef,
@@ -1664,17 +1672,17 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         abortRef.current?.abort();
         void chatStop(prev, userId, token).catch(() => undefined);
         abortRef.current = null;
+        streamingRef.current = false;
+        markStreamConversation(null);
+        setStreaming(false);
+        setStreamRecovery(false);
+        streamRecoveryRef.current = false;
+        setRecoveryAssistantId(null);
+        setTurnVisual(null);
+        clearActiveStreamMarker(prev);
       }
       recoveryAbortRef.current?.abort();
       recoveryAbortRef.current = null;
-      streamingRef.current = false;
-      markStreamConversation(null);
-      setStreaming(false);
-      setStreamRecovery(false);
-      streamRecoveryRef.current = false;
-      setRecoveryAssistantId(null);
-      setTurnVisual(null);
-      clearActiveStreamMarker(prev);
     }
     previousConversationIdRef.current = conversationId;
   }, [conversationId, userId, token, markStreamConversation, streamingConversationIdRef]);
@@ -2037,6 +2045,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     async (
       message: string,
       opts?: {
+        conversationIdOverride?: string;
         message_source?: "user_input" | "internal_trigger";
         /** Post-approval execution must use normal mode (full tool list). */
         agentModeOverride?: AgentMode;
@@ -2051,11 +2060,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         userMessageIdOverride?: string;
       },
     ) => {
-      const marker = readActiveStreamMarker(conversationId);
+      const targetConvId = opts?.conversationIdOverride || conversationId;
+      const marker = readActiveStreamMarker(targetConvId);
       if (streamingRef.current || streamRecoveryRef.current || marker) {
         await stopActiveStream();
       } else {
-        const st = await fetchStreamStatus(conversationId, userId, token).catch(() => ({
+        const st = await fetchStreamStatus(targetConvId, userId, token).catch(() => ({
           active: false,
         }));
         if (st.active) {
@@ -2087,7 +2097,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       const hasNewUploads = uploads.length > 0;
       clearPendingUploads();
       void fetchSessionFiles();
-      const existing = hasNewUploads ? await listSessionUploads(conversationId, userId, token) : [];
+      const existing = hasNewUploads ? await listSessionUploads(targetConvId, userId, token) : [];
       const attachments = hasNewUploads ? mergeAttachmentRefs(uploads, existing) : [];
 
       const userArtifacts: ChatHistoryArtifact[] = uploads.map((a, i) => ({
@@ -2131,16 +2141,16 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       setStreamEpoch((e) => e + 1);
       setTurnVisual(state);
       streamingRef.current = true;
-      markStreamConversation(conversationId);
+      markStreamConversation(targetConvId);
       setStreaming(true);
       setStreamRecovery(false);
       streamRecoveryRef.current = false;
-      writeActiveStreamMarker(conversationId, {
+      writeActiveStreamMarker(targetConvId, {
         assistantMessageId: aid,
         userMessageId: uidMsg,
       });
       if ((opts?.message_source ?? "user_input") === "user_input" && opts?.showUserBubble !== false) {
-        void saveChatMessage(conversationId, uidMsg, "user", message, userId, token).catch((err) =>
+        void saveChatMessage(targetConvId, uidMsg, "user", message, userId, token).catch((err) =>
           console.error("[aion-chat-ui] early user save:", err),
         );
       }
@@ -2157,7 +2167,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         const stream = await postChatStream(
           {
             message,
-            session_id: conversationId,
+            session_id: targetConvId,
             profile: activeProfileSlug,
             user_id: userId,
             reasoning_effort: reasoningEffort,
@@ -2195,7 +2205,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           if (chunk.type === "turn_started") {
             const uid = String(chunk.user_message_id || uidMsg);
             const asst = String(chunk.assistant_message_id || aid);
-            writeActiveStreamMarker(conversationId, {
+            writeActiveStreamMarker(targetConvId, {
               assistantMessageId: asst,
               userMessageId: uid,
             });
@@ -2404,7 +2414,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
         {
           const persistedSegments = segmentsForPersist(state.segments);
-          if (activeConversationRef.current === conversationId) {
+          if (activeConversationRef.current === targetConvId) {
             setMessages((m) =>
               upsertChatMessage(m, {
                 id: aid,
@@ -2424,17 +2434,17 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           }
         }
 
-        if (activeConversationRef.current !== conversationId) {
+        if (activeConversationRef.current !== targetConvId) {
           await refreshThreads();
           return;
         }
 
-        const ch = await fetchSessionCharts(conversationId, userId, token);
+        const ch = await fetchSessionCharts(targetConvId, userId, token);
         setPostTurnCharts(ch);
 
         const newLinks: { rp: string; label: string }[] = [];
         for (const sub of ["workspace", "derived"] as const) {
-          const rows = await listSessionFilesSubdir(conversationId, userId, sub, token);
+          const rows = await listSessionFilesSubdir(targetConvId, userId, sub, token);
           for (const row of rows) {
             const rp = row.relative_path;
             if (!rp || seenFilesRef.current.has(rp) || !isUserFacingGeneratedFile(rp)) continue;
@@ -2460,16 +2470,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         }
         refreshMcpAlerts({ probe: false });
         try {
-          if (activeConversationRef.current !== conversationId) return;
-          const result = await fetchConversationHistory(conversationId, userId, token);
-          if (activeConversationRef.current !== conversationId) return;
+          if (activeConversationRef.current !== targetConvId) return;
+          const result = await fetchConversationHistory(targetConvId, userId, token);
+          if (activeConversationRef.current !== targetConvId) return;
           const mapped = result.messages.map(historyMessageFromApi);
+          if (result.ok) {
+            branchCacheRef.current[targetConvId] = mapped;
+          }
           setMessages((prev) => {
             const { next, error } = applyHistoryToMessages(
               prev,
               mapped,
               result,
-              conversationId,
+              targetConvId,
               transcriptStreaming,
               { source: "post-stream", mode: "merge" },
             );
@@ -2479,18 +2492,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           if (
             result.ok &&
             result.messages.length === 0 &&
-            activeConversationRef.current === conversationId
+            activeConversationRef.current === targetConvId
           ) {
-            const retry = await fetchConversationHistory(conversationId, userId, token);
-            if (activeConversationRef.current !== conversationId) return;
+            const retry = await fetchConversationHistory(targetConvId, userId, token);
+            if (activeConversationRef.current !== targetConvId) return;
             if (retry.ok && retry.messages.length > 0) {
               const retryMapped = retry.messages.map(historyMessageFromApi);
+              branchCacheRef.current[targetConvId] = retryMapped;
               setMessages((prev) =>
                 applyHistoryToMessages(
                   prev,
                   retryMapped,
                   retry,
-                  conversationId,
+                  targetConvId,
                   transcriptStreaming,
                   { source: "post-stream-retry", mode: "merge" },
                 ).next,
@@ -2507,7 +2521,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           (e instanceof Error && e.name === "AbortError");
         if (aborted) {
           const partialText = (state.assistantContent ?? "").trim();
-          if (partialText && activeConversationRef.current === conversationId) {
+          if (partialText && activeConversationRef.current === targetConvId) {
             const partialReasoning = state.reasoning?.trim() || undefined;
             const STOP_BADGE = `\n\n---\n*⚠️ ${t("chat.interrupted")}*`;
             const contentToSave = partialText + STOP_BADGE;
@@ -2544,7 +2558,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         setRecoveryAssistantId(null);
         setActiveMessageId(null);
         setTurnVisual(null);
-        clearActiveStreamMarker(conversationId);
+        clearActiveStreamMarker(targetConvId);
         abortRef.current = null;
       }
     },
@@ -2702,31 +2716,142 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
     setEditingMessageId(null);
 
-    try {
-      const res = await fetch(`${apiBase()}/chat-ui/conversations/${conversationId}/messages/${msgId}`, {
-        method: "DELETE",
-        headers: baseUserHeaders(userId, token),
-      });
-
-      if (!res.ok) {
-        throw new Error(`Failed to prune old turns: ${res.statusText}`);
+    // 1. Aggiornamento ottimistico a schermo (0ms): tronca i messaggi successivi e aggiorna il testo
+    const targetIdx = messages.findIndex((m) => m.id === msgId);
+    if (targetIdx !== -1) {
+      // Salva lo stato corrente del ramo originale in cache prima di forkare
+      if (conversationId && messages.length > 0) {
+        branchCacheRef.current[conversationId] = messages;
       }
 
       setMessages((prev) => {
-        const idx = prev.findIndex((msg) => msg.id === msgId);
-        if (idx === -1) return prev;
-        return prev.slice(0, idx);
+        const sliced = prev.slice(0, targetIdx + 1);
+        const currentMsg = sliced[targetIdx];
+        sliced[targetIdx] = {
+          ...currentMsg,
+          content: newText,
+          branches: currentMsg.branches
+            ? {
+                ...currentMsg.branches,
+                total: currentMsg.branches.total + 1,
+                current_index: currentMsg.branches.total + 1,
+                prev_branch_conversation_id: conversationId,
+                next_branch_conversation_id: null,
+              }
+            : {
+                total: 2,
+                current_index: 2,
+                prev_branch_conversation_id: conversationId,
+                next_branch_conversation_id: null,
+              },
+        };
+        return sliced;
+      });
+    }
+
+    setPostTurnCharts([]);
+    setPostTurnFiles([]);
+    setPlanChunk(null);
+
+    try {
+      // 2. Fork atomico nel backend (crea la riga Conversation e clona sandbox files)
+      const forkRes = await forkConversation(conversationId, msgId, newText, userId, token);
+      const newConvId = forkRes.conversation_id;
+
+      // 3. Evita lo svuotamento dei messaggi (zero flash / niente empty state)
+      skipResetForConvIdRef.current = newConvId;
+
+      // 4. Aggiorna l'ID del messaggio modificato con quello generato dal backend
+      setMessages((prev) => {
+        const next = prev.map((m) => (m.id === msgId ? { ...m, id: forkRes.message_id } : m));
+        branchCacheRef.current[newConvId] = next;
+        return next;
       });
 
-      setPostTurnCharts([]);
-      setPostTurnFiles([]);
-      setPlanChunk(null);
+      // Aggiorna anche la cache del ramo padre con il puntatore in avanti a newConvId
+      if (conversationId && branchCacheRef.current[conversationId]) {
+        branchCacheRef.current[conversationId] = branchCacheRef.current[conversationId].map((m) => {
+          if (m.id === msgId) {
+            const curBranches = m.branches;
+            return {
+              ...m,
+              branches: curBranches
+                ? {
+                    ...curBranches,
+                    total: curBranches.total + 1,
+                    next_branch_conversation_id: newConvId,
+                  }
+                : {
+                    total: 2,
+                    current_index: 1,
+                    prev_branch_conversation_id: null,
+                    next_branch_conversation_id: newConvId,
+                  },
+            };
+          }
+          return m;
+        });
+      }
 
-      await runChatRequest(newText);
+      // 5. Aggiorna l'URL nel browser senza reload di pagina
+      if (typeof window !== "undefined") {
+        window.history.pushState(null, "", `/c/${newConvId}`);
+      }
+
+      activeConversationRef.current = newConvId;
+      setConversationId(newConvId);
+
+      // 6. Avvia immediatamente la generazione in streaming della nuova risposta nel nuovo branch!
+      void runChatRequest(newText, {
+        showUserBubble: false,
+        conversationIdOverride: newConvId,
+        userMessageIdOverride: forkRes.message_id,
+      });
     } catch (err) {
-      console.error("Error editing message:", err);
+      console.error("Error branching conversation on message edit:", err);
     }
-  }, [conversationId, editInput, streaming, userId, token, runChatRequest, stopActiveStream]);
+  }, [conversationId, editInput, messages, streaming, userId, token, stopActiveStream, runChatRequest]);
+
+  const handleNavigateBranch = useCallback(
+    async (targetConvId: string) => {
+      if (!targetConvId || targetConvId === conversationId || streaming) return;
+
+      // Salva lo stato attuale nella cache in memoria dei branch
+      if (conversationId && messages.length > 0) {
+        branchCacheRef.current[conversationId] = messages;
+      }
+
+      // Imposta il ref per non azzerare i messaggi e non mostrare empty state
+      skipResetForConvIdRef.current = targetConvId;
+
+      // Se il ramo target è già in cache, applicalo istantaneamente a 0ms!
+      const cached = branchCacheRef.current[targetConvId];
+      if (cached && cached.length > 0) {
+        setMessages(cached);
+      }
+
+      // Aggiorna l'URL nel browser senza forzare reload Next.js
+      if (typeof window !== "undefined") {
+        window.history.pushState(null, "", `/c/${targetConvId}`);
+      }
+
+      activeConversationRef.current = targetConvId;
+      setConversationId(targetConvId);
+
+      // Ricarica/rinfresca in background i messaggi del target per sicurezza
+      try {
+        const res = await fetchConversationHistory(targetConvId, userId, token);
+        if (res.ok && activeConversationRef.current === targetConvId) {
+          const mapped = res.messages.map(historyMessageFromApi);
+          branchCacheRef.current[targetConvId] = mapped;
+          setMessages(mapped);
+        }
+      } catch (err) {
+        console.debug("Error loading branch history:", err);
+      }
+    },
+    [conversationId, messages, streaming, userId, token]
+  );
 
   const handleRegenerate = useCallback(async () => {
     if (!lastUserMessageId) return;
@@ -2900,22 +3025,27 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   useEffect(() => {
     if (!conversationId) return;
 
-    // Resetta immediatamente i messaggi e lo stato del dock per evitare la permanenza della vecchia chat
-    setMessages([]);
-    setHistoryError(null);
-    setStreamRecovery(false);
-    setRecoveryAssistantId(null);
-    streamRecoveryRef.current = false;
-    setTurnVisual(null);
-    setPostTurnFiles([]);
-    setChatView({ kind: "main" });
-    setPlanExecAdoptRunId(null);
-    setPlanExecAdoptPlanId(null);
-    planExecHandledRef.current = new Set();
-    planFinalSummaryHandledRef.current = new Set();
-    setPlanExecutionRehydrateReady(false);
-    setDockTab("none");
-    setPlanChunk(null);
+    if (skipResetForConvIdRef.current === conversationId) {
+      // È un cambio ramo o fork fluido: NON svuotare i messaggi e NON mostrare l'empty state!
+      skipResetForConvIdRef.current = null;
+    } else {
+      // Resetta immediatamente i messaggi solo per cambio chat completo da sidebar
+      setMessages([]);
+      setHistoryError(null);
+      setStreamRecovery(false);
+      setRecoveryAssistantId(null);
+      streamRecoveryRef.current = false;
+      setTurnVisual(null);
+      setPostTurnFiles([]);
+      setChatView({ kind: "main" });
+      setPlanExecAdoptRunId(null);
+      setPlanExecAdoptPlanId(null);
+      planExecHandledRef.current = new Set();
+      planFinalSummaryHandledRef.current = new Set();
+      setPlanExecutionRehydrateReady(false);
+      setDockTab("none");
+      setPlanChunk(null);
+    }
     // setDbTableHint(null);
 
     const cid = conversationId;
@@ -2988,6 +3118,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       .then((result) => {
         if (isStaleHistoryLoad(cid, loadEpoch)) return;
         const mapped = result.messages.map(historyMessageFromApi);
+        if (result.ok) {
+          branchCacheRef.current[cid] = mapped;
+        }
         setMessages((prev) => {
           const { next, error } = applyHistoryToMessages(
             prev,
@@ -5609,14 +5742,22 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                             <div
                               className={cn(
                                 "mt-1 flex items-center justify-end gap-2 pr-2 select-none transition-opacity duration-150",
-                                isLastUser
+                                isLastUser || (m.branches && m.branches.total > 1)
                                   ? "opacity-100"
                                   : "opacity-100 lg:opacity-0 lg:group-hover:opacity-100 lg:group-focus-within:opacity-100 focus-within:opacity-100"
                               )}
                             >
                               {!streaming ? (
-                                <div className="flex items-center gap-1">
-                                  {isLastUser && !m.archived ? (
+                                <div className="flex items-center gap-1.5">
+                                  {m.branches && m.branches.total > 1 ? (
+                                    <BranchNavigator
+                                      branches={m.branches}
+                                      onNavigateBranch={handleNavigateBranch}
+                                      disabled={streaming}
+                                      className="mr-0.5"
+                                    />
+                                  ) : null}
+                                  {!m.archived ? (
                                     <button
                                       type="button"
                                       onClick={() => handleStartEdit(m)}

@@ -1,4 +1,4 @@
-"""Migrazione ``a9b0c1d029``: crea le 4 tabelle (idempotente) e le rimuove."""
+"""Migrazione ``a9b0c1d029w``: crea le 4 tabelle (idempotente) e le rimuove."""
 
 import importlib.util
 from pathlib import Path
@@ -16,7 +16,7 @@ TABLES = {
 }
 
 
-def _load(rev="a9b0c1d029", filename="a9b0c1d029_whatsapp_channel.py"):
+def _load(rev="a9b0c1d029w", filename="a9b0c1d029w_whatsapp_channel.py"):
     path = _ROOT / "migrations/versions" / filename
     spec = importlib.util.spec_from_file_location(f"mig_{rev}", path)
     mod = importlib.util.module_from_spec(spec)
@@ -46,7 +46,7 @@ def _run(eng, fn_name, *, thinking_migration=False, migration=None):
 
 def test_upgrade_downgrade(tmp_path):
     mod = _load()
-    assert mod.down_revision == "z8a9b0c028"
+    assert mod.down_revision == "a9b0c1d029"
     eng = create_engine(f"sqlite:///{tmp_path}/m.db")
 
     _run(eng, "upgrade")
@@ -88,7 +88,7 @@ def test_migration_matches_models():
 def test_thinking_level_migration(tmp_path):
     """``b0c1d2e030`` adds ``default_thinking_level``: idempotent and reversible."""
     mod = _load("b0c1d2e030", "b0c1d2e030_whatsapp_thinking_level.py")
-    assert mod.down_revision == "a9b0c1d029"
+    assert mod.down_revision == "a9b0c1d029w"
     eng = create_engine(f"sqlite:///{tmp_path}/t.db")
 
     def cols():

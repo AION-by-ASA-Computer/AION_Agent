@@ -147,11 +147,11 @@ Fase 2.
 ### 3.2 Modello dati (migrazione Alembic)
 
 Nuova revisione in `migrations/versions/`, dopo l'head attuale `z8a9b0c028`.
-Il nome segue la convenzione, es. `a9b0c1d029_whatsapp_channel.py`.
+Il nome segue la convenzione, es. `a9b0c1d029w_whatsapp_channel.py`.
 
 | Tabella | Colonne principali | Note |
 |---------|--------------------|------|
-Tabelle effettive della Fase 1 (`a9b0c1d029_whatsapp_channel.py`):
+Tabelle effettive della Fase 1 (`a9b0c1d029w_whatsapp_channel.py`):
 
 | Tabella | Colonne principali | Note |
 |---------|--------------------|------|

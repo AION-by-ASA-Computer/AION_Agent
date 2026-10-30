@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AudioLines, Brain, Cpu, Globe, Loader2, RotateCcw, Save, ScanLine, ShieldCheck, Timer } from "lucide-react";
+import { AudioLines, Brain, Cpu, Globe, Loader2, Mail, RotateCcw, Save, ScanLine, ShieldCheck, Timer } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 import { probeBaseUrlFromOcrServiceUrl, probeBaseUrlFromSttServiceUrl } from "@/lib/llm-probe";
 import { PageToast, type ToastState } from "@/components/PageToast";
+import { RestartOverlay } from "@/components/RestartOverlay";
 import { outlineBtn, solidBtn } from "@/components/ui/classes";
 import { ModelsSection } from "@/components/settings/ModelsSection";
 import { MemorySection } from "@/components/settings/MemorySection";
@@ -16,6 +17,7 @@ import { OcrSection, clearedOcr, type OcrMode } from "@/components/settings/OcrS
 import { SandboxSection } from "@/components/settings/SandboxSection";
 import { SttSection, clearedStt, type SttMode } from "@/components/settings/SttSection";
 import { RetentionSection } from "@/components/settings/RetentionSection";
+import { SmtpSection } from "@/components/settings/SmtpSection";
 import { K, type Notify, type SectionCtx, type Settings } from "@/components/settings/types";
 
 const k = K;
@@ -28,11 +30,12 @@ const SECTIONS = [
   { id: "stt", icon: AudioLines },
   { id: "sandbox", icon: ShieldCheck },
   { id: "retention", icon: Timer },
+  { id: "smtp", icon: Mail },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
-// Models and Sandbox persist on their own; the rest saves through the page bar.
-const SELF_SAVING: SectionId[] = ["models", "sandbox"];
+// Models, Sandbox and SMTP persist on their own; the rest saves through the page bar.
+const SELF_SAVING: SectionId[] = ["models", "sandbox", "smtp"];
 
 const isSection = (v: string): v is SectionId => SECTIONS.some((s) => s.id === v);
 const positive = (v: string | undefined) => {
@@ -54,7 +57,6 @@ export default function SettingsPage() {
   const [restarting, setRestarting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const [active, setActive] = useState<SectionId>("models");
-  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const notify: Notify = useCallback((message, variant = "info") => setToast({ message, variant }), []);
 
@@ -83,9 +85,6 @@ export default function SettingsPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch on mount
     void fetchSettings();
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
   }, [fetchSettings]);
 
   // Section follows the URL hash so a link can open a given section.
@@ -115,37 +114,9 @@ export default function SettingsPage() {
     return false;
   }, [baseline, settings, ocrMode, sttMode]);
 
-  const pollHealth = useCallback(async () => {
-    const max = 30;
-    let attempt = 0;
-    await new Promise((r) => setTimeout(r, 2000));
-    pollRef.current = setInterval(async () => {
-      attempt++;
-      try {
-        const res = await fetch(`${apiBase()}/health`);
-        if (res.ok && (await res.json()).status === "ok") {
-          if (pollRef.current) clearInterval(pollRef.current);
-          setRestarting(false);
-          notify(t(`${k}.page.restarted`), "success");
-          void fetchSettings();
-          return;
-        }
-      } catch {
-        /* backend still coming back */
-      }
-      if (attempt >= max) {
-        if (pollRef.current) clearInterval(pollRef.current);
-        setRestarting(false);
-        notify(t(`${k}.page.restart_slow`), "error");
-        void fetchSettings();
-      }
-    }, 1500);
-  }, [fetchSettings, notify, t]);
-
   const onRestart = useCallback(() => {
     setRestarting(true);
-    void pollHealth();
-  }, [pollHealth]);
+  }, []);
 
   const validate = (): string | null => {
     if (ocrMode === "remote") {
@@ -305,6 +276,7 @@ export default function SettingsPage() {
           <div hidden={active !== "stt"}><SttSection key={`s${rev}`} {...ctx} mode={sttMode} setMode={setSttMode} /></div>
           <div hidden={active !== "sandbox"}><SandboxSection t={t} notify={notify} onRestart={onRestart} /></div>
           <div hidden={active !== "retention"}><RetentionSection {...ctx} /></div>
+          <div hidden={active !== "smtp"}><SmtpSection t={t} notify={notify} /></div>
         </div>
       </div>
 
@@ -324,13 +296,15 @@ export default function SettingsPage() {
       )}
 
       {restarting && (
-        <div role="alertdialog" aria-modal="true" aria-labelledby="restart-title" className="fixed inset-0 z-50 flex items-center justify-center bg-background/90 p-6">
-          <div className="flex max-w-sm flex-col items-center gap-3 text-center">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden />
-            <h2 id="restart-title" className="text-lg font-semibold">{t(`${k}.page.restarting`)}</h2>
-            <p className="text-sm text-muted-foreground">{t(`${k}.page.restarting_hint`)}</p>
-          </div>
-        </div>
+        <RestartOverlay
+          isOpen={restarting}
+          onSuccess={() => {
+            setRestarting(false);
+            notify(t(`${k}.page.restarted`), "success");
+            void fetchSettings();
+          }}
+          onDismiss={() => setRestarting(false)}
+        />
       )}
 
       <PageToast toast={toast} onDismiss={() => setToast(null)} />

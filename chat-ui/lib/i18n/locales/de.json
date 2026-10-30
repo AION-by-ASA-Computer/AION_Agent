@@ -165,13 +165,12 @@
       "new_password": "Neues Passwort",
       "password_desc": "Aktualisieren Sie Ihr Kontopasswort.",
       "password_error": "Passwort konnte nicht aktualisiert werden.",
-      "password_hint": "Mindestens 6 Zeichen.",
-      "password_min": "Das neue Passwort muss mindestens 6 Zeichen lang sein.",
       "password_mismatch": "Bestätigung stimmt nicht mit dem neuen Passwort überein.",
       "password_title": "Passwort",
       "password_updated": "Passwort erfolgreich aktualisiert.",
       "update_password": "Passwort aktualisieren",
-      "desc": "Schützen Sie Ihr Konto."
+      "desc": "Schützen Sie Ihr Konto.",
+      "password_policy": "Das neue Passwort erfüllt die Anforderungen nicht."
     },
     "api_keys": {
       "title": "API-Schlüssel",
@@ -345,7 +344,8 @@
       "theme_dark": "Dunkel",
       "language": "Sprache",
       "customize": "Anweisungen anpassen",
-      "logout": "Abmelden"
+      "logout": "Abmelden",
+      "admin_panel": "Admin-Bereich"
     },
     "add_favorite": "Zu Favoriten hinzufügen",
     "bucket_older": "Älter",
@@ -917,7 +917,7 @@
       "sso_domain_not_allowed": "Dieses Konto ist nicht für den Zugang freigeschaltet. Sie verwenden vermutlich das falsche Konto – melden Sie sich mit Ihrem Firmenkonto an.",
       "sso_required": "Für dieses Konto ist SSO-Anmeldung erforderlich.",
       "password_login_disabled": "Die Passwort-Anmeldung ist deaktiviert.",
-      "temp_password_expired": "Das temporäre Passwort ist abgelaufen. Kontaktieren Sie den Administrator.",
+      "temp_password_expired": "Ihr temporäres Passwort ist abgelaufen. Bitten Sie einen Administrator um ein neues.",
       "sso_failed": "SSO-Authentifizierung fehlgeschlagen.",
       "sso_start_failed": "SSO-Anmeldung konnte nicht gestartet werden.",
       "sso_token_invalid": "Ungültiges SSO-Token.",
@@ -934,11 +934,93 @@
       "user_not_found": "Benutzer nicht gefunden.",
       "sso_signup_closed": "Derzeit werden keine neuen Konten angenommen. Wenden Sie sich an Ihren Administrator, um Zugriff anzufordern.",
       "sso_signup_not_allowed": "Ihr Konto ist für diese Plattform noch nicht freigeschaltet. Wenden Sie sich an Ihren Administrator, um Zugriff anzufordern."
-    }
+    },
+    "forgot_password": "Passwort vergessen?"
   },
   "authgate": {
     "checking": "Zugang wird überprüft…",
     "redirecting": "Weiterleitung zum Login…"
+  },
+  "password_policy": {
+    "rules": {
+      "too_short": "Mindestens {{min}} Zeichen",
+      "too_long": "Höchstens {{max}} Zeichen",
+      "lowercase": "Ein Kleinbuchstabe",
+      "uppercase": "Ein Großbuchstabe",
+      "digit": "Eine Ziffer",
+      "symbol": "Ein Sonderzeichen (z. B. ! @ # -)",
+      "contains_username": "Enthält nicht Ihren Benutzernamen"
+    },
+    "met": "erfüllt",
+    "not_met": "nicht erfüllt",
+    "server_error": "Das Passwort erfüllt diese Anforderungen nicht: {{list}}.",
+    "server_error_generic": "Das Passwort erfüllt die Sicherheitsanforderungen nicht."
+  },
+  "set_password": {
+    "title_invite": "Passwort festlegen",
+    "title_reset": "Passwort zurücksetzen",
+    "title_migration": "Passwort festlegen",
+    "greeting": "Hallo {{name}}, wählen Sie ein Passwort für Ihr Konto.",
+    "migration_note": "Nach der Anmeldung werden Sie aufgefordert, Ihr Firmen-SSO-Konto zu verknüpfen.",
+    "username": "Benutzername",
+    "new_password": "Neues Passwort",
+    "confirm_password": "Passwort bestätigen",
+    "mismatch": "Die Passwörter stimmen nicht überein.",
+    "submit": "Passwort speichern",
+    "expires": "Dieser Link läuft am {{date}} ab.",
+    "checking": "Link wird überprüft…",
+    "success_title": "Passwort gespeichert",
+    "success_desc": "Sie können sich jetzt mit Ihrem neuen Passwort anmelden.",
+    "go_login": "Zur Anmeldung",
+    "go_admin": "Zum Admin-Bereich",
+    "request_new": "Neuen Link anfordern",
+    "back_login": "← Zurück zur Anmeldung",
+    "error_title": {
+      "token_invalid": "Link ungültig",
+      "token_expired": "Link abgelaufen",
+      "sso_user": "Mit SSO anmelden",
+      "rate_limited": "Zu viele Versuche",
+      "generic": "Etwas ist schiefgelaufen"
+    },
+    "error": {
+      "token_invalid": "Dieser Link ist ungültig oder wurde bereits verwendet. Fordern Sie einen neuen an, um fortzufahren.",
+      "token_expired": "Dieser Link ist abgelaufen. Fordern Sie einen neuen an, um fortzufahren.",
+      "sso_user": "Dieses Konto meldet sich über das Firmen-SSO an und benötigt daher kein Passwort.",
+      "rate_limited": "Zu viele Versuche. Bitte warten Sie einige Minuten und versuchen Sie es erneut.",
+      "generic": "Die Anfrage konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut.",
+      "network": "Server nicht erreichbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
+    }
+  },
+  "forgot_password": {
+    "title": "Passwort vergessen?",
+    "desc": "Geben Sie Ihren Benutzernamen oder Ihre E-Mail-Adresse ein. Wir senden Ihnen einen Link, mit dem Sie ein neues Passwort wählen können.",
+    "identifier": "Benutzername oder E-Mail",
+    "submit": "Link senden",
+    "sent_title": "Prüfen Sie Ihre E-Mails",
+    "sent_desc": "Falls ein Konto existiert, haben wir Ihnen eine E-Mail mit einem Link zum Festlegen eines neuen Passworts gesendet. Sehen Sie auch im Spam-Ordner nach.",
+    "try_again": "Anderen Benutzernamen oder andere E-Mail verwenden",
+    "back_login": "← Zurück zur Anmeldung",
+    "error": {
+      "rate_limited": "Zu viele Anfragen. Bitte warten Sie einige Minuten und versuchen Sie es erneut.",
+      "generic": "Die Anfrage konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
+      "network": "Server nicht erreichbar. Prüfen Sie Ihre Verbindung und versuchen Sie es erneut."
+    }
+  },
+  "change_password": {
+    "title_required": "Eigenes Passwort festlegen",
+    "desc_required": "Sie haben sich mit einem temporären Passwort angemeldet, das Ihnen ein Administrator gegeben hat. Wählen Sie ein neues Passwort, um fortzufahren.",
+    "current_temp": "Temporäres Passwort",
+    "title": "Passwort ändern",
+    "desc": "Sie verwenden ein temporäres Passwort. Aktualisieren Sie es jetzt oder lassen Sie sich morgen erinnern (24 Std. aufschiebbar).",
+    "current": "Aktuelles Passwort",
+    "new": "Neues Passwort",
+    "confirm": "Neues Passwort bestätigen",
+    "mismatch": "Die Passwörter stimmen nicht überein.",
+    "submit": "Passwort aktualisieren",
+    "skip": "Morgen erinnern",
+    "success": "Passwort aktualisiert. Weiterleitung…",
+    "session_expired": "Sitzung abgelaufen. Bitte melden Sie sich erneut an.",
+    "error": "Passwortänderung fehlgeschlagen."
   },
   "toast": {
     "username_empty": "Der Benutzername darf nicht leer sein.",

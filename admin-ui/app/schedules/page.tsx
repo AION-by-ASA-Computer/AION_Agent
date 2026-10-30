@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { useT } from "@/lib/i18n/use-t";
 import { getLocale } from "@/lib/i18n/i18n-store";
 import { PageToast, ToastState } from "@/components/PageToast";
+import { RestartOverlay } from "@/components/RestartOverlay";
 import { Dialog } from "@/components/profiles/Dialog";
 import { DeleteDialog } from "@/components/ui/ConfirmDialogs";
 import { Select } from "@/components/ui/Select";
@@ -318,27 +319,6 @@ export default function SchedulesPage() {
     fetchSetup();
   }, [reload, fetchSetup]);
 
-  const pollHealth = useCallback(async () => {
-    await new Promise((r) => setTimeout(r, 2000));
-    for (let attempt = 0; attempt < 30; attempt++) {
-      try {
-        const res = await fetch(`${apiBase()}/health`);
-        if (res.ok && (await res.json()).status === "ok") {
-          setRestarting(false);
-          setToast({ message: t(`${k}.restart.done`), variant: "success" });
-          reload();
-          return;
-        }
-      } catch {
-        // backend still coming back
-      }
-      await new Promise((r) => setTimeout(r, 1500));
-    }
-    setRestarting(false);
-    setToast({ message: t(`${k}.restart.slow`), variant: "error" });
-    reload();
-  }, [reload, t]);
-
   const applyGlobal = async (next: boolean) => {
     setUpdatingGlobal(true);
     try {
@@ -356,7 +336,6 @@ export default function SchedulesPage() {
       }
       if ((await res.json()).restarting) {
         setRestarting(true);
-        pollHealth();
       } else {
         setToast({ message: t(`${k}.scheduler.${next ? "toast_on" : "toast_off"}`), variant: "success" });
         reload();
@@ -772,17 +751,15 @@ export default function SchedulesPage() {
       )}
 
       {restarting && (
-        <div role="alertdialog" aria-live="polite" aria-labelledby="restart-title" className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4">
-          <div className="flex w-full max-w-sm flex-col items-center gap-4 rounded-3xl border border-border bg-card px-6 py-8 text-center shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)]">
-            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" aria-hidden />
-            <div>
-              <h2 id="restart-title" className="text-lg font-semibold tracking-[-0.015em]">
-                {t(`${k}.restart.working_title`)}
-              </h2>
-              <p className="mt-1.5 text-sm text-muted-foreground">{t(`${k}.restart.working_body`)}</p>
-            </div>
-          </div>
-        </div>
+        <RestartOverlay
+          isOpen={restarting}
+          onSuccess={() => {
+            setRestarting(false);
+            setToast({ message: t(`${k}.restart.done`), variant: "success" });
+            reload();
+          }}
+          onDismiss={() => setRestarting(false)}
+        />
       )}
     </div>
   );

@@ -5,7 +5,7 @@ NULL = default di sistema. Idempotente: salta se tabella/colonna già presente
 (es. DB creato con ``create_all`` dal modello aggiornato).
 
 Revision ID: b0c1d2e030
-Revises: a9b0c1d029
+Revises: a9b0c1d029w
 """
 
 from typing import Sequence, Union
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 
 revision: str = "b0c1d2e030"
-down_revision: Union[str, None] = "a9b0c1d029"
+down_revision: Union[str, None] = "a9b0c1d029w"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -1,8 +1,12 @@
 """Canale WhatsApp (Cloud API): whatsapp_channels, whatsapp_identities,
 whatsapp_link_codes, whatsapp_messages.
 
-Revision ID: a9b0c1d029
-Revises: z8a9b0c028
+Revision ID: a9b0c1d029w
+Revises: a9b0c1d029
+
+Originally ``a9b0c1d029`` revising ``z8a9b0c028``; renamed when merging main,
+which had already taken ``a9b0c1d029`` for the SMTP / password-setup migration.
+The WhatsApp chain now runs after it so the history stays linear.
 """
 
 from typing import Sequence, Union
@@ -11,8 +15,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "a9b0c1d029"
-down_revision: Union[str, None] = "z8a9b0c028"
+revision: str = "a9b0c1d029w"
+down_revision: Union[str, None] = "a9b0c1d029"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

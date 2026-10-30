@@ -98,6 +98,7 @@ export function ThreadSidebar({
   const [profileSubtitle, setProfileSubtitle] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
   const [profileColor, setProfileColor] = useState("violet");
+  const [isAdmin, setIsAdmin] = useState(false);
 
   const loadProfile = useCallback(() => {
     if (!token) return;
@@ -111,10 +112,15 @@ export function ThreadSidebar({
             display_name?: string;
             identifier?: string;
             email?: string;
+            roles?: string[];
             metadata?: { avatar_url?: string; profile_color?: string };
           } | null,
         ) => {
-          if (!data) return;
+          if (!data) {
+            setIsAdmin(false);
+            return;
+          }
+          setIsAdmin(Array.isArray(data.roles) && data.roles.includes("admin"));
           setProfileLabel(data.display_name || data.identifier || userId);
           setProfileSubtitle(data.email || data.identifier || "");
           setAvatarUrl(data.metadata?.avatar_url || "");
@@ -238,6 +244,7 @@ export function ThreadSidebar({
         avatarUrl={avatarUrl}
         profileColor={profileColor}
         isLoggedIn={isLoggedIn}
+        isAdmin={isAdmin}
         variant="expanded"
       />
     </div>
@@ -296,6 +303,7 @@ export function ThreadSidebar({
             avatarUrl={avatarUrl}
             profileColor={profileColor}
             isLoggedIn={isLoggedIn}
+            isAdmin={isAdmin}
             variant="collapsed"
           />
         </div>
