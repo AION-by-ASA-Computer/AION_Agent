@@ -65,6 +65,8 @@ import {
 } from "@/lib/api/aion";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
 import { usePendingSessionUploads } from "@/hooks/use-pending-session-uploads";
+import { useVoiceDictation } from "@/hooks/use-voice-dictation";
+import { VoiceInputButton } from "@/components/chat/VoiceInputButton";
 import { useT } from "@/lib/i18n/use-t";
 import {
   extractStreamingPlanMarkdown,
@@ -1461,6 +1463,29 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     maxHeight: composerTextMax,
     onMultiLineChange: setIsMultiLine,
   });
+  /** Dictated text goes where the caret was (or at the end), never sent automatically. */
+  const insertDictation = useCallback((text: string) => {
+    const el = composerTextareaRef.current;
+    setInput((prev) => {
+      const start = el ? Math.min(el.selectionStart ?? prev.length, prev.length) : prev.length;
+      const end = el ? Math.min(el.selectionEnd ?? start, prev.length) : start;
+      const before = prev.slice(0, start);
+      const after = prev.slice(end);
+      const lead = before && !/\s$/.test(before) ? " " : "";
+      const trail = after && !/^\s/.test(after) ? " " : "";
+      const next = before + lead + text + trail + after;
+      const caret = (before + lead + text).length;
+      requestAnimationFrame(() => {
+        const ta = composerTextareaRef.current;
+        if (!ta) return;
+        ta.focus();
+        ta.setSelectionRange(caret, caret);
+      });
+      return next;
+    });
+  }, []);
+  const voice = useVoiceDictation(userId, token, insertDictation);
+  const voiceBusy = voice.state !== "idle";
   const handleFilesDropped = useCallback((files: File[]) => {
     queuePendingUploads(files);
   }, [queuePendingUploads]);
@@ -4830,6 +4855,17 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           />
         )}
 
+        {voice.supported && (
+          <VoiceInputButton
+            state={voice.state}
+            elapsedSec={voice.elapsedSec}
+            disabled={streaming || isProjectRequiredButMissing}
+            onStart={() => void voice.start()}
+            onStop={voice.stop}
+            onCancel={voice.cancel}
+          />
+        )}
+
         {streaming ? (
           <button
             type="button"
@@ -4844,18 +4880,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             disabled={
               !input.trim() ||
               isProjectRequiredButMissing ||
-              sendBlockedByUploads
+              sendBlockedByUploads ||
+              voiceBusy
             }
             onClick={(e) => {
               e.preventDefault();
-              if (!sendBlockedByUploads) void send();
+              if (!sendBlockedByUploads && !voiceBusy) void send();
             }}
             title={
               sendBlockedByUploads ? t("chat.upload.send_blocked") : undefined
             }
             className={cn(
               "focus-ring inline-flex size-9 sm:size-9.5 items-center justify-center rounded-full transition-all duration-300 ease-out",
-              input.trim() && !isProjectRequiredButMissing && !sendBlockedByUploads
+              input.trim() && !isProjectRequiredButMissing && !sendBlockedByUploads && !voiceBusy
                 ? "bg-primary text-primary-foreground shadow-md shadow-primary/25 hover:scale-105 hover:bg-primary/95 active:scale-95 cursor-pointer"
                 : "bg-muted text-muted-foreground/40 opacity-40 cursor-not-allowed pointer-events-none scale-95"
             )}
@@ -4960,6 +4997,23 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           </div>
         )}
 
+        {voice.error && (
+          <div
+            role="alert"
+            className="mb-3 flex items-center justify-between gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
+          >
+            <span>{t(`chat.voice.error.${voice.error}`)}</span>
+            <button
+              type="button"
+              onClick={voice.clearError}
+              aria-label={t("chat.voice.dismiss")}
+              className="focus-ring inline-flex size-6 shrink-0 items-center justify-center rounded-full hover:bg-destructive/15 cursor-pointer"
+            >
+              <X size={12} aria-hidden />
+            </button>
+          </div>
+        )}
+
         {/* Composer Container: Single-line compact bar OR multi-line expanding box */}
         <div
           ref={composerContainerRef}
@@ -5024,7 +5078,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                     handleAgentModeChange(agentMode === "plan" ? "normal" : "plan");
                   } else if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
-                    if (!sendBlockedByUploads) void send();
+                    if (!sendBlockedByUploads && !voiceBusy) void send();
+                  } else if (e.key === "Escape" && voice.state === "recording") {
+                    e.preventDefault();
+                    voice.cancel();
                   }
                 }}
                 placeholder={isProjectRequiredButMissing ? t("chat.project_required.textarea_placeholder") : t("chat.composer_placeholder")}

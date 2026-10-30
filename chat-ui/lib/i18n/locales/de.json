@@ -855,6 +855,21 @@
       "retry": "Wiederholen",
       "send_blocked": "Warten Sie, bis die Datei-Uploads abgeschlossen sind",
       "uploading": "Wird hochgeladen… {{progress}}%"
+    },
+    "voice": {
+      "start": "Nachricht diktieren",
+      "stop": "Stoppen und transkribieren",
+      "cancel": "Aufnahme abbrechen (Esc)",
+      "transcribing": "Wird transkribiert…",
+      "dismiss": "Schließen",
+      "error": {
+        "permission_denied": "Mikrofonzugriff verweigert. Erlaube ihn in den Browsereinstellungen, um zu diktieren.",
+        "no_microphone": "Kein Mikrofon gefunden.",
+        "too_long": "Aufnahme zu lang: teile sie in kürzere Abschnitte.",
+        "too_large": "Aufnahme zu groß.",
+        "empty": "Keine Sprache erkannt: versuche es erneut.",
+        "failed": "Transkription fehlgeschlagen. Versuche es gleich noch einmal."
+      }
     }
   },
   "login": {

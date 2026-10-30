@@ -14,6 +14,7 @@ from . import (
     llm_providers,
     me_api_keys,
     whatsapp,
+    voice,
 )
 from src.api.cron_user import router as cron_user_router
 
@@ -32,3 +33,4 @@ api_v1_router.include_router(llm_providers.router)
 api_v1_router.include_router(cron_user_router, tags=["v1-cron-jobs"])
 api_v1_router.include_router(me_api_keys.router)
 api_v1_router.include_router(whatsapp.router)
+api_v1_router.include_router(voice.router)

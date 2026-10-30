@@ -35,12 +35,6 @@ DEFAULT_BUDGET_S = 180.0
 # ``[mm:ss] `` / ``[h:mm:ss] `` prefixes of the transcript lines.
 _TIMESTAMP_RE = re.compile(r"^\[\d+(?::\d{2}){1,2}\]\s*")
 
-# Same reason as ``_stt_lock`` in the stt MCP server: the local model is
-# CPU-bound and the remote service usually a single GPU, so one job at a time.
-# In-process is enough because the backend runs with ``--workers 1``.
-_stt_lock = asyncio.Lock()
-
-
 @dataclass
 class VoiceTranscript:
     """Outcome of a voice-note transcription.
@@ -94,6 +88,7 @@ async def transcribe_voice_note(
     usual STT artefacts under ``derived/audio/<slug>/`` of the conversation.
     """
     from src.tools.audio_transcribe import (
+        STT_JOB_LOCK,
         build_engine_from_env,
         probe_audio_duration,
         resolve_language,
@@ -118,7 +113,7 @@ async def transcribe_voice_note(
             return VoiceTranscript(error="too_long", duration_sec=duration)
 
         engine = build_engine_from_env()
-        async with _stt_lock:
+        async with STT_JOB_LOCK:
             manifest = await transcribe_audio_file(
                 path,
                 root,

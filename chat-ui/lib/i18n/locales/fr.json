@@ -855,6 +855,21 @@
       "retry": "Réessayer",
       "send_blocked": "Attendez la fin des téléversements de fichiers",
       "uploading": "Téléversement… {{progress}}%"
+    },
+    "voice": {
+      "start": "Dicter un message",
+      "stop": "Arrêter et transcrire",
+      "cancel": "Annuler l'enregistrement (Échap)",
+      "transcribing": "Transcription en cours…",
+      "dismiss": "Fermer",
+      "error": {
+        "permission_denied": "Accès au micro refusé. Autorisez-le dans les paramètres du navigateur pour dicter.",
+        "no_microphone": "Aucun micro trouvé.",
+        "too_long": "Enregistrement trop long : divisez-le en parties plus courtes.",
+        "too_large": "Enregistrement trop volumineux.",
+        "empty": "Aucune parole détectée : réessayez.",
+        "failed": "La transcription a échoué. Réessayez dans un instant."
+      }
     }
   },
   "login": {
