@@ -55,15 +55,14 @@
       "current_password": "Password attuale",
       "new_password": "Nuova password",
       "confirm_password": "Conferma password",
-      "password_hint": "Minimo 6 caratteri.",
-      "password_min": "La nuova password deve avere almeno 6 caratteri.",
       "password_mismatch": "La conferma non coincide con la nuova password.",
       "password_error": "Impossibile aggiornare la password.",
       "password_updated": "Password aggiornata con successo.",
       "update_password": "Aggiorna password",
       "must_change_title": "Password temporanea",
       "must_change_desc": "Per sicurezza, aggiorna la password prima di continuare.",
-      "desc": "Proteggi il tuo account."
+      "desc": "Proteggi il tuo account.",
+      "password_policy": "La nuova password non rispetta i requisiti."
     },
     "api_keys": {
       "title": "Chiavi API",
@@ -845,7 +844,7 @@
       "sso_domain_not_allowed": "Questo account non è abilitato all'accesso. Stai usando l'account sbagliato: accedi con quello aziendale.",
       "sso_required": "Per questo account è obbligatorio l'accesso SSO.",
       "password_login_disabled": "L'accesso con password è disabilitato.",
-      "temp_password_expired": "La password temporanea è scaduta. Contatta l'amministratore.",
+      "temp_password_expired": "La password temporanea è scaduta. Chiedi all'amministratore di fornirtene una nuova.",
       "sso_failed": "Autenticazione SSO non riuscita.",
       "sso_start_failed": "Impossibile avviare l'accesso SSO.",
       "sso_token_invalid": "Token SSO non valido.",
@@ -862,11 +861,93 @@
       "user_not_found": "Utente non trovato.",
       "sso_signup_closed": "Al momento non vengono accettati nuovi account. Contatta l'amministratore per richiedere l'accesso.",
       "sso_signup_not_allowed": "Il tuo account non è ancora abilitato a questa piattaforma. Contatta l'amministratore per richiedere l'accesso."
-    }
+    },
+    "forgot_password": "Password dimenticata?"
   },
   "authgate": {
     "checking": "Verifica accesso…",
     "redirecting": "Reindirizzamento al login…"
+  },
+  "password_policy": {
+    "rules": {
+      "too_short": "Almeno {{min}} caratteri",
+      "too_long": "Al massimo {{max}} caratteri",
+      "lowercase": "Una lettera minuscola",
+      "uppercase": "Una lettera maiuscola",
+      "digit": "Un numero",
+      "symbol": "Un simbolo (es. ! @ # -)",
+      "contains_username": "Non contiene il tuo username"
+    },
+    "met": "rispettato",
+    "not_met": "non rispettato",
+    "server_error": "La password non rispetta questi requisiti: {{list}}.",
+    "server_error_generic": "La password non rispetta i requisiti di sicurezza."
+  },
+  "set_password": {
+    "title_invite": "Imposta la tua password",
+    "title_reset": "Reimposta la password",
+    "title_migration": "Imposta la tua password",
+    "greeting": "Ciao {{name}}, scegli una password per il tuo account.",
+    "migration_note": "Dopo l'accesso ti verrà chiesto di collegare il tuo account SSO aziendale.",
+    "username": "Username",
+    "new_password": "Nuova password",
+    "confirm_password": "Conferma password",
+    "mismatch": "Le password non coincidono.",
+    "submit": "Salva password",
+    "expires": "Il link scade il {{date}}.",
+    "checking": "Verifica del link in corso…",
+    "success_title": "Password salvata",
+    "success_desc": "Ora puoi accedere con la nuova password.",
+    "go_login": "Vai al login",
+    "go_admin": "Vai al pannello admin",
+    "request_new": "Richiedi un nuovo link",
+    "back_login": "← Torna al login",
+    "error_title": {
+      "token_invalid": "Link non valido",
+      "token_expired": "Link scaduto",
+      "sso_user": "Accedi con SSO",
+      "rate_limited": "Troppi tentativi",
+      "generic": "Qualcosa è andato storto"
+    },
+    "error": {
+      "token_invalid": "Questo link non è valido o è già stato usato. Richiedine uno nuovo per continuare.",
+      "token_expired": "Questo link è scaduto. Richiedine uno nuovo per continuare.",
+      "sso_user": "Questo account accede con l'SSO aziendale, quindi non serve una password.",
+      "rate_limited": "Troppi tentativi. Attendi qualche minuto e riprova.",
+      "generic": "Non è stato possibile completare la richiesta. Riprova.",
+      "network": "Impossibile contattare il server. Controlla la connessione e riprova."
+    }
+  },
+  "forgot_password": {
+    "title": "Password dimenticata?",
+    "desc": "Inserisci il tuo username o la tua email: ti invieremo un link per scegliere una nuova password.",
+    "identifier": "Username o email",
+    "submit": "Invia link",
+    "sent_title": "Controlla la tua email",
+    "sent_desc": "Se l'account esiste, ti abbiamo inviato un'email con un link per impostare una nuova password. Controlla anche la cartella spam.",
+    "try_again": "Usa un altro username o email",
+    "back_login": "← Torna al login",
+    "error": {
+      "rate_limited": "Troppe richieste. Attendi qualche minuto e riprova.",
+      "generic": "Non è stato possibile inviare la richiesta. Riprova.",
+      "network": "Impossibile contattare il server. Controlla la connessione e riprova."
+    }
+  },
+  "change_password": {
+    "title_required": "Imposta la tua password",
+    "desc_required": "Hai effettuato l'accesso con una password temporanea fornita da un amministratore. Scegli una nuova password per continuare.",
+    "current_temp": "Password temporanea",
+    "title": "Cambia password",
+    "desc": "Stai usando una password temporanea. Aggiornala ora o ricordamelo domani (rinviabile per 24 ore).",
+    "current": "Password attuale",
+    "new": "Nuova password",
+    "confirm": "Conferma nuova password",
+    "mismatch": "Le password non coincidono.",
+    "submit": "Aggiorna password",
+    "skip": "Ricordamelo domani",
+    "success": "Password aggiornata. Reindirizzamento…",
+    "session_expired": "Sessione scaduta. Accedi di nuovo.",
+    "error": "Cambio password non riuscito."
   },
   "toast": {
     "username_empty": "Il Nome Utente non può essere vuoto.",

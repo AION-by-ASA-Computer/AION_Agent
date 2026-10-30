@@ -194,18 +194,26 @@ flowchart TD
   created at first SSO sign-in and the "Add user" button is replaced by a link
   to the new-account policy).
 - Modify user details (display name and email).
-- Update or reset user passwords.
+- Send a password **invite** or **reset link** by email (the admin never sees
+  or sets passwords; see [Password setup by email](../security/password-setup-email.md)).
 - Delete existing accounts (the user's API keys are deleted too).
 - Set the per-user **API key policy** (see below).
 
-**Password policy:** passwords set by an admin (`POST /admin/users`,
-`PUT /admin/users/{id}`) must have at least 8 characters, a lowercase and an
-uppercase letter, a digit and a symbol, and must not contain the username.
-The backend rejects weak passwords with `422`
-(`src/data/user_password.py::password_policy_violations`); the form mirrors the
-same rules (`admin-ui/lib/passwordPolicy.ts`) with a live checklist. The
-"New user" form is prefilled with a cryptographically random 16-character
-password that the admin can show, copy, regenerate or overwrite.
+**Passwords:** admins never see, choose or receive user passwords.
+`POST /admin/users` requires an email and sends an **invite** link; the response
+only says whether it was sent (`invite: {sent, expires_at}` or `{sent: false, error}`).
+The edit dialog shows the password state and a "Send reset link" / "Resend
+invite" button (`POST /admin/users/{id}/password-link`); the list shows
+"Invite pending", "Reset pending" and "Send failed" badges with a mail action.
+Without SMTP (Settings → SMTP) a banner links to the SMTP settings, the email
+becomes optional and creation or reset generates a **temporary password**
+shown once in a dialog (copy, CSV for batches): the user must change it at first
+sign-in before doing anything else ("Temporary password" badge in the list).
+The same dialog appears for SSO migration switches, setup links and unlinks.
+The user chooses the password on chat-ui `/set-password`, which
+enforces the policy (at least 8 characters, lowercase, uppercase, digit, symbol,
+not containing the username; `src/data/user_password.py::password_policy_violations`).
+See [Password setup by email](../security/password-setup-email.md).
 
 **New accounts (SSO):** in the *Sign-in* tab, with an SSO mode active, the
 *New accounts* section sets who can get an account at first SSO sign-in:
@@ -353,6 +361,10 @@ Admins cannot read users' chats. There is no conversation viewer in the admin UI
 - Same probe flow for **embeddings** and **remote OCR** (vision server) on the settings form.
 - Default provider save syncs `AION_CHAT_MAX_TOKENS` / `AION_THINKING_TOKEN_BUDGET` into `.env` and clears the agent cache.
 - Automatic restart of the Docker container in case of changes (if the environment runs under Docker).
+- **SMTP** (`/settings#smtp`): outgoing mail server used for invites, password
+  resets and SSO-migration links (host, port, STARTTLS/SSL/none, credentials,
+  sender, email language) with a "send test email" probe. The SMTP password is
+  write-only and stored encrypted (`GET/PUT /admin/smtp`, `POST /admin/smtp/test`).
 
 ### 14. First setup wizard
 

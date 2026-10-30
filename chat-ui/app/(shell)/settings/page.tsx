@@ -519,6 +519,7 @@ export default function SettingsPage() {
                   </Note>
                 ) : null}
                 <ChangePasswordSection
+                  identifier={accountBase.identifier}
                   onSuccess={(msg) => {
                     setMustChangePassword(false);
                     showToast(msg);

@@ -1,0 +1,3 @@
+Email di prova da $platform
+
+La configurazione SMTP di $platform funziona: questa email di prova è stata inviata correttamente.

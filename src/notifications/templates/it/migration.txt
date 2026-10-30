@@ -1,0 +1,9 @@
+Imposta la password per accedere a $platform
+
+Ciao $name,
+
+l'accesso a $platform (nome utente: $identifier) sta cambiando. Per continuare, imposta una password da questo link:
+$link
+
+Dopo il primo accesso ti verrà chiesto di collegare il tuo account aziendale (Single Sign-On), se previsto.
+Il link funziona una sola volta e scade il $expires.

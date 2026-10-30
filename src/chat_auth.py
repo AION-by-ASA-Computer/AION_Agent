@@ -102,6 +102,8 @@ def _user_to_auth_dict(u: User) -> Dict[str, Any]:
         "metadata": meta_out,
         "roles": get_roles(u),
         "must_change_password": bool(getattr(u, "must_change_password", False)),
+        # Password temporanea (emessa senza SMTP): va cambiata prima di proseguire.
+        "temp_password": u.temp_password_expires_at is not None,
         "has_password": bool(u.password_hash),
     }
 
