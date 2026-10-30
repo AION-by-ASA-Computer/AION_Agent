@@ -293,8 +293,12 @@ def test_format_attachments_block_transcribed_audio_points_at_transcript(
         json.dumps({"ok": True, "partial": False, "transcript_path": transcript_path})
     )
 
-    pipeline = AgentPipeline(agent=None, session_id="sess-voice", profile_name="aion_std")
-    att = [{"relative_path": f"uploads/{name}", "original_name": name, "mime": "audio/ogg"}]
+    pipeline = AgentPipeline(
+        agent=None, session_id="sess-voice", profile_name="aion_std"
+    )
+    att = [
+        {"relative_path": f"uploads/{name}", "original_name": name, "mime": "audio/ogg"}
+    ]
 
     block = pipeline._format_attachments_block(att, att)
 

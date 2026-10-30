@@ -139,7 +139,9 @@ async def voice_transcribe(
     if not result.get("ok"):
         code = str(result.get("error") or "transcribe_failed")
         logger.info(
-            "voice_transcribe_failed user=%s error=%s", auth.identifier or "anonymous", code
+            "voice_transcribe_failed user=%s error=%s",
+            auth.identifier or "anonymous",
+            code,
         )
         raise HTTPException(status_code=_ERROR_STATUS.get(code, 500), detail=code)
 

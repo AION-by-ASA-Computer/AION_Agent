@@ -39,7 +39,9 @@ def dirs(tmp_path, monkeypatch):
     monkeypatch.delenv("AION_STT_LOCAL_MODEL", raising=False)
     monkeypatch.delenv("AION_STT_BASE_URL", raising=False)
     monkeypatch.delenv("AION_STT_API_KEY", raising=False)
-    monkeypatch.setattr(admin_stt, "_download", {"model": None, "state": "idle", "error": None})
+    monkeypatch.setattr(
+        admin_stt, "_download", {"model": None, "state": "idle", "error": None}
+    )
     monkeypatch.setattr(admin_stt, "_download_task", None)
     return baked, download
 
@@ -98,7 +100,11 @@ def test_status_keeps_a_hand_set_model_as_custom(client, monkeypatch):
     monkeypatch.setenv("AION_STT_LOCAL_MODEL", "distil-large-v3")
     data = client.get("/admin/stt/local-models").json()
     assert data["current"] == "distil-large-v3"
-    assert data["models"][-1] == {"name": "distil-large-v3", "installed": False, "custom": True}
+    assert data["models"][-1] == {
+        "name": "distil-large-v3",
+        "installed": False,
+        "custom": True,
+    }
 
 
 def test_status_reports_remote_mode(client, monkeypatch):
@@ -117,7 +123,9 @@ def test_download_rejects_names_outside_the_curated_list(client):
     assert res.json()["detail"] == "unknown_model"
 
 
-def test_download_runs_in_background_and_marks_model_installed(client, dirs, monkeypatch):
+def test_download_runs_in_background_and_marks_model_installed(
+    client, dirs, monkeypatch
+):
     """POST starts the download; polling then sees it done and the model installed."""
     _, download = dirs
     calls: list[str] = []
@@ -152,7 +160,11 @@ def test_download_is_skipped_for_installed_models(client, dirs, monkeypatch):
     """Asking for a model already on disk does not start a download."""
     _, download = dirs
     _install(download, "small")
-    monkeypatch.setattr(admin_stt, "download_local_model", lambda name: pytest.fail("should not download"))
+    monkeypatch.setattr(
+        admin_stt,
+        "download_local_model",
+        lambda name: pytest.fail("should not download"),
+    )
     data = client.post("/admin/stt/local-models/small/download").json()
     assert data["download"]["state"] == "idle"
 

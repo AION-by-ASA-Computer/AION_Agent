@@ -775,7 +775,9 @@ def load_audio_manifest(session_root: Path, filename: str) -> Optional[dict]:
     the model an attachment is already transcribed (e.g. WhatsApp voice notes,
     transcribed before the turn) instead of asking it to call the tool again.
     """
-    path = session_root / AUDIO_SUBDIR / slugify_document_name(filename) / "manifest.json"
+    path = (
+        session_root / AUDIO_SUBDIR / slugify_document_name(filename) / "manifest.json"
+    )
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -811,7 +813,8 @@ async def transcribe_audio_to_text(
     limit = float(max_duration_sec or 0.0)
     if limit > 0 and duration is not None and duration > limit:
         return _error(
-            "too_long", f"{src_path.name} lasts {duration:.0f}s, above the {limit:.0f}s limit"
+            "too_long",
+            f"{src_path.name} lasts {duration:.0f}s, above the {limit:.0f}s limit",
         )
 
     end_sec = limit if limit > 0 else None
@@ -833,7 +836,9 @@ async def transcribe_audio_to_text(
             except Exception as exc:  # noqa: BLE001 - no partial text for dictation
                 logger.warning("Dictation STT failed: %s", exc)
                 return _error(
-                    "engine_failed", f"{engine.name} STT failed: {exc}", _engine_hint(engine)
+                    "engine_failed",
+                    f"{engine.name} STT failed: {exc}",
+                    _engine_hint(engine),
                 )
             parts.extend(text for _s, _e, text in result.segments if text)
             if result.language and not detected_language:

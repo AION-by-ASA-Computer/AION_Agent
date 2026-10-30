@@ -35,6 +35,7 @@ DEFAULT_BUDGET_S = 180.0
 # ``[mm:ss] `` / ``[h:mm:ss] `` prefixes of the transcript lines.
 _TIMESTAMP_RE = re.compile(r"^\[\d+(?::\d{2}){1,2}\]\s*")
 
+
 @dataclass
 class VoiceTranscript:
     """Outcome of a voice-note transcription.
