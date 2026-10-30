@@ -73,7 +73,7 @@ async def whatsapp_webhook_receive(request: Request):
             # Numero non configurato qui: 200 così Meta non ritenta all'infinito.
             continue
         if not verify_signature(raw, signature, cfg.app_secret):
-            logger.warning("WhatsApp webhook: invalid signature for %s", pnid)
+            logger.warning("WhatsApp webhook: invalid signature")
             raise HTTPException(403, detail="invalid_signature")
         await config_service.touch_webhook(cfg.tenant_id)
         if config_service.force_disabled() or not cfg.enabled:
