@@ -645,7 +645,15 @@
         "memory_injections": "Memory/LTM",
         "system_messages": "System msg",
         "other": "Other"
-      }
+      },
+      "status_ok": "Plenty of room",
+      "status_filling": "Getting full",
+      "status_full": "Almost full",
+      "hint_ok": "The assistant remembers this whole conversation.",
+      "hint_filling": "Long conversation: older messages will be summarized automatically.",
+      "hint_full": "Older messages are being summarized to make room. You can also start a new chat.",
+      "details_show": "Details",
+      "details_hide": "Hide details"
     },
     "generating": {
       "plan": "Generating plan…",

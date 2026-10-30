@@ -806,7 +806,15 @@
       },
       "title": "LLM-Kontext",
       "trigger": "Kompaktierungsschwelle {{pct}}%",
-      "unavailable": "Die Kontextübersicht ist verfügbar, während eine Nachricht verarbeitet wird."
+      "unavailable": "Die Kontextübersicht ist verfügbar, während eine Nachricht verarbeitet wird.",
+      "status_ok": "Viel Platz",
+      "status_filling": "Wird voll",
+      "status_full": "Fast voll",
+      "hint_ok": "Der Assistent erinnert sich an das gesamte Gespräch.",
+      "hint_filling": "Langes Gespräch: Ältere Nachrichten werden automatisch zusammengefasst.",
+      "hint_full": "Ältere Nachrichten werden zusammengefasst, um Platz zu schaffen. Du kannst auch einen neuen Chat starten.",
+      "details_show": "Details",
+      "details_hide": "Details ausblenden"
     },
     "empty": {
       "greeting_user": "Woran denkst du, {{name}}?",

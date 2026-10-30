@@ -806,7 +806,15 @@
       },
       "title": "Contexto LLM",
       "trigger": "Umbral de compactación {{pct}}%",
-      "unavailable": "El resumen del contexto está disponible mientras se procesa un mensaje."
+      "unavailable": "El resumen del contexto está disponible mientras se procesa un mensaje.",
+      "status_ok": "Mucho espacio",
+      "status_filling": "Se está llenando",
+      "status_full": "Casi lleno",
+      "hint_ok": "El asistente recuerda toda esta conversación.",
+      "hint_filling": "Conversación larga: los mensajes antiguos se resumirán automáticamente.",
+      "hint_full": "Los mensajes antiguos se están resumiendo para hacer espacio. También puedes empezar un chat nuevo.",
+      "details_show": "Detalles",
+      "details_hide": "Ocultar detalles"
     },
     "empty": {
       "greeting_user": "¿En qué piensas, {{name}}?",

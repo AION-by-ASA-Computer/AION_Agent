@@ -806,7 +806,15 @@
       },
       "title": "Contexte LLM",
       "trigger": "Seuil de compactage {{pct}}%",
-      "unavailable": "Le résumé du contexte est disponible pendant le traitement d'un message."
+      "unavailable": "Le résumé du contexte est disponible pendant le traitement d'un message.",
+      "status_ok": "Beaucoup de place",
+      "status_filling": "Se remplit",
+      "status_full": "Presque plein",
+      "hint_ok": "L'assistant se souvient de toute cette conversation.",
+      "hint_filling": "Longue conversation : les anciens messages seront résumés automatiquement.",
+      "hint_full": "Les anciens messages sont résumés pour faire de la place. Vous pouvez aussi démarrer un nouveau chat.",
+      "details_show": "Détails",
+      "details_hide": "Masquer les détails"
     },
     "empty": {
       "greeting_user": "À quoi pensez-vous, {{name}} ?",

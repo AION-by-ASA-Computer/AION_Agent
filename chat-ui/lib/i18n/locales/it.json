@@ -645,7 +645,15 @@
         "memory_injections": "Memoria/LTM",
         "system_messages": "System msg",
         "other": "Altro"
-      }
+      },
+      "status_ok": "Tanto spazio",
+      "status_filling": "Si sta riempiendo",
+      "status_full": "Quasi pieno",
+      "hint_ok": "L'assistente ricorda tutta questa conversazione.",
+      "hint_filling": "Conversazione lunga: i messaggi più vecchi verranno riassunti in automatico.",
+      "hint_full": "I messaggi più vecchi vengono riassunti per fare spazio. Puoi anche iniziare una nuova chat.",
+      "details_show": "Dettagli",
+      "details_hide": "Nascondi dettagli"
     },
     "generating": {
       "plan": "Generando piano…",
