@@ -217,6 +217,16 @@ def build_timeout_message(server_name: str, tool_name: str) -> str:
             "unchanged, and do NOT fall back to a custom extraction script."
         )
 
+    if base_tool == "transcribe_audio":
+        # Chunks finished before the timeout are already on disk, so a smaller
+        # budget resumes from them instead of starting the recording over.
+        return (
+            f"{head} Audio transcription did not finish within the bridge cap. Call "
+            "transcribe_audio again with the same relative_path and a smaller budget_sec "
+            "(e.g. 60): chunks already transcribed under derived/audio/<slug>/chunks/ are "
+            "skipped, and a partial result returns resume_from_sec to continue from."
+        )
+
     return (
         f"{head} The call exceeded the budget. Retry with a narrower scope "
         "(fewer items, a smaller range, or a more specific filter) rather than repeating "

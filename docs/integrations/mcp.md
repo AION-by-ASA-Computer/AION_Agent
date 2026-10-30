@@ -49,7 +49,7 @@ graph TD
 ### Struttura dei File di Configurazione
 
 1. **`config/mcp_registry.yaml` (Base)**:
-   - Contiene i server MCP built-in e standard (es. `session_sandbox`, `ocr`, `skills_hub`, `prometheus`, `grafana`, `query_memory`).
+   - Contiene i server MCP built-in e standard (es. `session_sandbox`, `ocr`, `stt`, `skills_hub`, `prometheus`, `grafana`, `query_memory`).
    - Il template di riferimento committed risiede in `config_std/mcp_registry.yaml`.
 
 2. **`config/mcp_registry.local.yaml` (Local Overlay Flat)**:
@@ -146,7 +146,7 @@ AION include un runtime avanzato per garantire latenze sub-millisecondo ed evita
 | Ambito | Configurazione / Trigger | Descrizione |
 |---|---|---|
 | **Global / Shared Pool** | Standard per tool stateless o a credenziale condivisa | I tool sono condivisi tra le sessioni per massimizzare il riuso della memoria |
-| **Session-Scoped** | `AION_MCP_SESSION_SCOPED_SERVERS` (es. `session_sandbox`, `ocr`, `promo_render`, `skills_hub`) | Un processo isolato viene istanziato specificamente per ciascun `session_id`. Ha accesso alla sandbox filesystem della sessione |
+| **Session-Scoped** | `AION_MCP_SESSION_SCOPED_SERVERS` (es. `session_sandbox`, `ocr`, `stt`, `promo_render`, `skills_hub`) | Un processo isolato viene istanziato specificamente per ciascun `session_id`. Ha accesso alla sandbox filesystem della sessione |
 | **User-Scoped Pool** | `AION_MCP_USER_POOL=1` | Pool indicizzato per `(user_id, tenant_id)`. Consente l'isolamento sicuro in ambienti multi-tenant quando gli utenti utilizzano proprie credenziali personali |
 
 ### 3. Rilevamento Compatibilità SDK MCP (`mcp<2` vs `mcp>=2`)

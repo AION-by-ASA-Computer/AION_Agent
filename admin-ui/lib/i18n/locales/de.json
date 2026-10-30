@@ -1659,6 +1659,7 @@
       "memory": "Gedächtnis",
       "web": "Web",
       "ocr": "OCR",
+      "stt": "Audio",
       "sandbox": "Sandbox",
       "retention": "Aufbewahrung"
     },
@@ -1685,6 +1686,9 @@
       "v_ocr_tokens": "Max. OCR-Tokens muss eine positive ganze Zahl sein.",
       "v_ocr_timeout": "Das OCR-Timeout muss eine positive ganze Zahl sein.",
       "v_ocr_bytes": "Die max. OCR-Bildgröße muss eine positive ganze Zahl sein.",
+      "v_stt_url": "Die URL des Transkriptionsdienstes muss mit http:// oder https:// beginnen.",
+      "v_stt_timeout": "Das Transkriptions-Timeout muss eine positive ganze Zahl sein.",
+      "v_stt_chunk": "Die Abschnittslänge der Transkription muss eine positive ganze Zahl sein.",
       "v_emb_url": "Die URL des Embedding-Dienstes muss mit http:// oder https:// beginnen.",
       "v_fetch_chars": "Max. Zeichen für Abrufe muss eine positive ganze Zahl sein.",
       "v_search_results": "Max. Suchergebnisse muss eine positive ganze Zahl sein.",
@@ -1819,6 +1823,124 @@
       "err_scheme": "Die URL muss mit http:// oder https:// beginnen.",
       "err_key": "API-Schlüssel vor dem Test eingeben.",
       "err_test": "Der Verbindungstest ist fehlgeschlagen."
+    },
+    "stt": {
+      "title": "Audiotranskription",
+      "description": "Wie im Chat hochgeladene Audiodateien (Meetings, Sprachnachrichten, Interviews) in Text umgewandelt werden.",
+      "mode": "Transkriptions-Engine",
+      "remote": "Entferntes Modell",
+      "remote_hint": "Ein Spracherkennungsdienst an einem OpenAI-kompatiblen Endpunkt (Whisper auf vLLM, OpenAI, …). Schnell und genau bei langen Aufnahmen, aber das Audio wird an diesen Dienst gesendet.",
+      "local": "Auf diesem Server",
+      "local_hint": "Läuft hier auf dem Prozessor, ohne Netzwerk: Audio verlässt den Server nie. Langsamer bei langen Aufnahmen.",
+      "endpoint": "Endpunkt",
+      "url": "Dienst-URL",
+      "url_hint": "Basisadresse; die App sendet Audio an /audio/transcriptions unter dieser Adresse.",
+      "token": "API-Schlüssel",
+      "test": "Verbindung testen",
+      "test_ok": "Verbunden in {{ms}} ms · {{count}} Modelle gefunden",
+      "test_ok_manual": "Verbunden in {{ms}} ms · keine Modelle aufgelistet",
+      "remote_model": "Transkriptionsmodell",
+      "remote_model_manual": "Name des Transkriptionsmodells",
+      "remote_model_before": "Testen Sie die Verbindung, um ein Modell zu wählen.",
+      "limits": "Limits",
+      "limits_hint": "Leer lassen, um die Standardwerte zu verwenden.",
+      "timeout": "Timeout pro Abschnitt (s)",
+      "chunk_sec": "Abschnittslänge (s)",
+      "chunk_sec_hint": "Audio wird in Stücken dieser Länge gesendet. Whisper auf vLLM akzeptiert höchstens 30 Sekunden.",
+      "err_url": "Geben Sie zuerst die Dienst-URL ein.",
+      "err_scheme": "Die URL muss mit http:// oder https:// beginnen.",
+      "err_key": "API-Schlüssel vor dem Test eingeben.",
+      "err_test": "Der Verbindungstest ist fehlgeschlagen.",
+      "recommended": "Empfohlen",
+      "model_title": "Spracherkennungsmodell",
+      "model_hint": "Das Modell läuft auf diesem Server: Audio wird nie nach außen gesendet. Größere Modelle verstehen Akzente, Fachbegriffe und verrauschtes Audio besser, sind aber langsamer und brauchen mehr Speicher.",
+      "models": {
+        "tiny": {
+          "title": "Minimal",
+          "description": "Etwa 75 MB. Sehr schnell, aber ungenau, vor allem auf Italienisch: nur für Tests oder Server mit sehr wenig Speicher."
+        },
+        "base": {
+          "title": "Leicht",
+          "description": "Etwa 145 MB. Schnell und genügsam: gut für kurze Sprachnachrichten und sauberes Audio, irrt sich aber öfter bei Namen und seltenen Wörtern."
+        },
+        "small": {
+          "title": "Standard",
+          "description": "Etwa 460 MB auf der Festplatte und 1 GB Arbeitsspeicher im Betrieb. Gute Balance zwischen Qualität und Geschwindigkeit auf Italienisch."
+        },
+        "medium": {
+          "title": "Erweitert",
+          "description": "Etwa 1,5 GB. Genauer bei Akzenten, Fachbegriffen und verrauschtem Audio, aber deutlich langsamer und speicherhungriger."
+        },
+        "large-v3-turbo": {
+          "title": "Groß, optimiert",
+          "description": "Etwa 1,6 GB. Qualität nahe am größten Modell bei kürzerer Laufzeit; braucht einen leistungsstarken Prozessor und einige GB Speicher."
+        },
+        "large-v3": {
+          "title": "Höchste Qualität",
+          "description": "Etwa 3 GB. Am genauesten, aber auf dem Prozessor sehr langsam: Lange Aufnahmen brauchen mehrere Durchgänge. Nur für dedizierte Server."
+        }
+      },
+      "custom_model": "Manuell in der Serverkonfiguration festgelegt.",
+      "installed": "Vorhanden",
+      "to_download": "Nicht heruntergeladen",
+      "downloading": "Wird heruntergeladen…",
+      "download": "Jetzt herunterladen",
+      "not_installed": "Dieses Modell ist noch nicht auf dem Server. Laden Sie es jetzt herunter: Sonst wird es bei der ersten Transkription geladen, die dann womöglich nicht rechtzeitig fertig wird.",
+      "downloading_hint": "Das Modell wird auf den Server heruntergeladen. Warten Sie vor dem Speichern, bis es fertig ist: Das Speichern kann den Dienst neu starten und den Download abbrechen.",
+      "download_done": "Modell „{{model}}“ heruntergeladen.",
+      "download_failed": "Download des Modells fehlgeschlagen.",
+      "download_busy": "Ein anderes Modell wird bereits heruntergeladen.",
+      "download_error": "Der letzte Download ist fehlgeschlagen: {{error}}",
+      "language_title": "Standardsprache",
+      "language_hint": "Die in den Aufnahmen gesprochene Sprache. Sie anzugeben ist schneller und genauer als sie erkennen zu lassen; der Agent kann für eine einzelne Datei trotzdem eine andere Sprache wählen.",
+      "language_label": "Sprache",
+      "language": {
+        "it": {
+          "title": "Italienisch",
+          "description": "Aufnahmen auf Italienisch."
+        },
+        "en": {
+          "title": "Englisch",
+          "description": "Aufnahmen auf Englisch."
+        },
+        "fr": {
+          "title": "Französisch",
+          "description": "Aufnahmen auf Französisch."
+        },
+        "de": {
+          "title": "Deutsch",
+          "description": "Aufnahmen auf Deutsch."
+        },
+        "es": {
+          "title": "Spanisch",
+          "description": "Aufnahmen auf Spanisch."
+        },
+        "auto": {
+          "title": "Automatisch erkennen",
+          "description": "Das Modell erkennt die Sprache jeder Datei. Nützlich bei gemischten Sprachen, etwas langsamer und bei kurzen Clips weniger zuverlässig."
+        },
+        "custom_title": "Benutzerdefiniert ({{code}})",
+        "custom_description": "Manuell in der Serverkonfiguration gesetzter Wert."
+      },
+      "beam_title": "Genauigkeit der Transkription",
+      "beam_hint": "Für jeden Satz wägt das Modell mehrere mögliche Textfassungen ab und wählt die wahrscheinlichste. Mehr Vergleiche helfen bei mehrdeutigen Wörtern und Eigennamen, verlangsamen aber die Transkription.",
+      "beam": {
+        "1": {
+          "title": "Schnell",
+          "description": "Wählt immer das wahrscheinlichste Wort, ohne Alternativen zu vergleichen. Am schnellsten, mit etwas mehr Fehlern bei ähnlichen oder undeutlichen Wörtern. Sinnvoll bei langsamen Prozessoren oder vielen gleichzeitigen Unterhaltungen."
+        },
+        "3": {
+          "title": "Ausgewogen",
+          "description": "Vergleicht 3 Textfassungen: ein Kompromiss zwischen Geschwindigkeit und Genauigkeit."
+        },
+        "5": {
+          "title": "Genau",
+          "description": "Vergleicht 5 Textfassungen, die Standardeinstellung des Modells. Am genauesten, aber die langsamste der drei Optionen."
+        },
+        "custom_title": "Benutzerdefiniert ({{n}} Fassungen)",
+        "custom_description": "Wert manuell in der Serverkonfiguration festgelegt."
+      },
+      "apply_note": "Änderungen gelten für Unterhaltungen, die nach dem Speichern beginnen. Jede Unterhaltung, die Audio transkribiert, lädt das Modell separat in den Speicher: Bei vielen gleichzeitigen Nutzern ist ein kleineres Modell sinnvoller."
     },
     "web": {
       "title": "Webzugriff",

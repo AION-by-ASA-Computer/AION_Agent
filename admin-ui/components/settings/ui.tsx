@@ -196,7 +196,8 @@ export function ChoiceList<V extends string>({
   value: V;
   onChange: (v: V) => void;
   label: string;
-  options: { value: V; title: string; description: ReactNode; badge?: string }[];
+  /** `extra` renders after the badge, e.g. a status chip. */
+  options: { value: V; title: string; description: ReactNode; badge?: string; extra?: ReactNode }[];
 }) {
   return (
     <div role="radiogroup" aria-label={label} className="divide-y divide-border/40">
@@ -224,6 +225,7 @@ export function ChoiceList<V extends string>({
               <span className="flex flex-wrap items-center gap-2 text-sm font-medium">
                 {o.title}
                 {o.badge && <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground">{o.badge}</span>}
+                {o.extra}
               </span>
               <span className="mt-0.5 block text-xs leading-relaxed text-muted-foreground">{o.description}</span>
             </span>

@@ -438,6 +438,22 @@ def _pdf_pages_as_image_contents(
     return out
 
 
+# Upload extensions that get the transcribe_audio hint even when the browser
+# sent a generic MIME type (e.g. application/octet-stream for .opus voice notes).
+_AUDIO_EXTENSIONS = (
+    ".mp3",
+    ".wav",
+    ".m4a",
+    ".ogg",
+    ".oga",
+    ".opus",
+    ".flac",
+    ".aac",
+    ".wma",
+    ".amr",
+)
+
+
 def _attachment_mime(path: Path, att: Dict[str, Any]) -> str:
     raw = (att.get("mime") or "").strip()
     if raw:
@@ -663,6 +679,16 @@ class AgentPipeline:
             for a in new_files:
                 rp = a.get("relative_path", "")
                 mime = (a.get("mime") or "").lower()
+                # Audio uploads: the stt server is cold (not in the initial tool
+                # list), so without this hint the model sees an mp3 but has no
+                # reason to look for a transcription tool.
+                if mime.startswith("audio/") or rp.lower().endswith(_AUDIO_EXTENSIONS):
+                    lines.append(
+                        f"\n### Audio file `{Path(rp).name}`: to read its content call "
+                        f"transcribe_audio(relative_path='{rp}'). If the result has "
+                        "partial=true, call it again with start_sec=resume_from_sec."
+                    )
+                    continue
                 if not mime.startswith("application/pdf") and not rp.lower().endswith(
                     ".pdf"
                 ):

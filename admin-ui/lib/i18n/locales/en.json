@@ -1659,6 +1659,7 @@
       "memory": "Memory",
       "web": "Web",
       "ocr": "OCR",
+      "stt": "Audio",
       "sandbox": "Sandbox",
       "retention": "Retention"
     },
@@ -1685,6 +1686,9 @@
       "v_ocr_tokens": "OCR max tokens must be a positive integer.",
       "v_ocr_timeout": "OCR timeout must be a positive integer.",
       "v_ocr_bytes": "OCR max image size must be a positive integer.",
+      "v_stt_url": "The transcription service URL must start with http:// or https://.",
+      "v_stt_timeout": "Transcription timeout must be a positive integer.",
+      "v_stt_chunk": "Transcription segment length must be a positive integer.",
       "v_emb_url": "The embeddings service URL must start with http:// or https://.",
       "v_fetch_chars": "Fetch max characters must be a positive integer.",
       "v_search_results": "Search max results must be a positive integer.",
@@ -1819,6 +1823,124 @@
       "err_scheme": "The URL must start with http:// or https://.",
       "err_key": "Enter the API key before testing.",
       "err_test": "The connection test failed."
+    },
+    "stt": {
+      "title": "Audio transcription",
+      "description": "How audio files uploaded to the chat (meetings, voice messages, interviews) are turned into text.",
+      "mode": "Transcription engine",
+      "remote": "Remote model",
+      "remote_hint": "A speech recognition service on an OpenAI-compatible endpoint (Whisper on vLLM, OpenAI, …). Fast and accurate on long recordings, but the audio is sent to that service.",
+      "local": "On this server",
+      "local_hint": "Runs here on the processor, no network needed: audio never leaves the server. Slower on long recordings.",
+      "endpoint": "Endpoint",
+      "url": "Service URL",
+      "url_hint": "Base address; the app sends audio to /audio/transcriptions on it.",
+      "token": "API key",
+      "test": "Test connection",
+      "test_ok": "Connected in {{ms}} ms · {{count}} models found",
+      "test_ok_manual": "Connected in {{ms}} ms · no models listed",
+      "remote_model": "Transcription model",
+      "remote_model_manual": "Transcription model name",
+      "remote_model_before": "Test the connection to choose a model.",
+      "limits": "Limits",
+      "limits_hint": "Leave empty to use the defaults.",
+      "timeout": "Timeout per segment (s)",
+      "chunk_sec": "Segment length (s)",
+      "chunk_sec_hint": "Audio is sent in pieces of this length. Whisper on vLLM accepts at most 30 seconds.",
+      "err_url": "Enter the service URL first.",
+      "err_scheme": "The URL must start with http:// or https://.",
+      "err_key": "Enter the API key before testing.",
+      "err_test": "The connection test failed.",
+      "recommended": "Recommended",
+      "model_title": "Speech recognition model",
+      "model_hint": "The model runs on this server: audio is never sent outside. Larger models handle accents, technical terms and noisy audio better, but they are slower and use more memory.",
+      "models": {
+        "tiny": {
+          "title": "Minimal",
+          "description": "About 75 MB. Very fast but inaccurate, especially in Italian: only for testing or servers with very little memory."
+        },
+        "base": {
+          "title": "Light",
+          "description": "About 145 MB. Fast and undemanding: fine for short voice messages and clean audio, but gets names and uncommon words wrong more often."
+        },
+        "small": {
+          "title": "Standard",
+          "description": "About 460 MB on disk and 1 GB of memory while in use. A good balance between quality and speed in Italian."
+        },
+        "medium": {
+          "title": "Advanced",
+          "description": "About 1.5 GB. More accurate on accents, technical terms and noisy audio, but clearly slower and uses more memory."
+        },
+        "large-v3-turbo": {
+          "title": "Large, optimized",
+          "description": "About 1.6 GB. Quality close to the largest model in less time; needs a powerful processor and a few GB of memory."
+        },
+        "large-v3": {
+          "title": "Highest quality",
+          "description": "About 3 GB. The most accurate, but very slow on a processor: long recordings need several passes. Only for dedicated servers."
+        }
+      },
+      "custom_model": "Set manually in the server configuration.",
+      "installed": "Available",
+      "to_download": "Not downloaded",
+      "downloading": "Downloading…",
+      "download": "Download now",
+      "not_installed": "This model is not on the server yet. Download it now: otherwise it will be downloaded during the first transcription, which may not finish in time.",
+      "downloading_hint": "The model is downloading to the server. Wait until it finishes before saving: saving may restart the service and interrupt the download.",
+      "download_done": "Model “{{model}}” downloaded.",
+      "download_failed": "Model download failed.",
+      "download_busy": "Another model is already downloading.",
+      "download_error": "The last download failed: {{error}}",
+      "language_title": "Default language",
+      "language_hint": "The language spoken in the recordings. Setting it is faster and more accurate than detecting it; the agent can still pick another language for a single file.",
+      "language_label": "Language",
+      "language": {
+        "it": {
+          "title": "Italian",
+          "description": "Recordings in Italian."
+        },
+        "en": {
+          "title": "English",
+          "description": "Recordings in English."
+        },
+        "fr": {
+          "title": "French",
+          "description": "Recordings in French."
+        },
+        "de": {
+          "title": "German",
+          "description": "Recordings in German."
+        },
+        "es": {
+          "title": "Spanish",
+          "description": "Recordings in Spanish."
+        },
+        "auto": {
+          "title": "Detect automatically",
+          "description": "The model guesses the language of each file. Useful with mixed languages, a little slower and less reliable on short clips."
+        },
+        "custom_title": "Custom ({{code}})",
+        "custom_description": "Value set manually in the server configuration."
+      },
+      "beam_title": "Transcription accuracy",
+      "beam_hint": "For each sentence the model weighs several possible versions of the text and picks the most likely one. Comparing more helps with ambiguous words and proper names, but slows transcription down.",
+      "beam": {
+        "1": {
+          "title": "Fast",
+          "description": "Always picks the most likely word without comparing alternatives. The quickest, with a few more mistakes on similar or unclear words. Useful with slow processors or many simultaneous conversations."
+        },
+        "3": {
+          "title": "Balanced",
+          "description": "Compares 3 versions of the text: a compromise between speed and accuracy."
+        },
+        "5": {
+          "title": "Accurate",
+          "description": "Compares 5 versions of the text, the model’s standard setting. The most accurate, but the slowest of the three."
+        },
+        "custom_title": "Custom ({{n}} versions)",
+        "custom_description": "Value set manually in the server configuration."
+      },
+      "apply_note": "Changes apply to conversations started after saving. Every conversation that transcribes audio loads its own copy of the model into memory: with many simultaneous users, prefer a smaller model."
     },
     "web": {
       "title": "Web access",

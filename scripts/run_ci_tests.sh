@@ -11,6 +11,8 @@ MODULES=(
   src/test/test_session_sandbox_escape.py
   src/test/test_mcp_catalog_install.py
   src/test/test_data_git_tracking.py
+  src/test/test_audio_transcribe.py
+  src/test/test_admin_stt.py
 )
 
 echo "==> CI pytest modules: ${#MODULES[@]}"

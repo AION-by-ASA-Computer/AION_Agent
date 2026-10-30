@@ -251,3 +251,22 @@ async def test_build_turn_context_compact_mode(monkeypatch):
         if layer["key"] == "compact_mode_instruction"
     )
     assert "COMPACT RESPONSE MODE GUIDELINES" in instruction_layer["text"]
+
+
+def test_format_attachments_block_audio_upload_hints_transcribe_audio():
+    """A newly uploaded audio file (even with a generic MIME) points the agent at the cold stt tool."""
+    from src.agent_pipeline import AgentPipeline
+
+    pipeline = AgentPipeline(agent=None, session_id="sess-1", profile_name="aion_std")
+    att = [
+        {
+            "relative_path": "uploads/3_nota.opus",
+            "original_name": "nota.opus",
+            "mime": "application/octet-stream",
+        }
+    ]
+
+    block = pipeline._format_attachments_block(att, att)
+
+    assert "transcribe_audio(relative_path='uploads/3_nota.opus')" in block
+    assert "doc_ingest" not in block
