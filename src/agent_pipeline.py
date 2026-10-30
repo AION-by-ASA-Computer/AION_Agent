@@ -669,6 +669,8 @@ class AgentPipeline:
                     "You MUST read, analyze, and consider this document to answer the current request."
                 )
 
+            from src.session_workspace import session_root
+            from src.tools.audio_transcribe import load_audio_manifest
             from src.tools.doc_auto_ingest import load_manifest
             from src.tools.doc_ingest import slugify_document_name
             from src.tools.office_auto_convert import (
@@ -683,6 +685,23 @@ class AgentPipeline:
                 # list), so without this hint the model sees an mp3 but has no
                 # reason to look for a transcription tool.
                 if mime.startswith("audio/") or rp.lower().endswith(_AUDIO_EXTENSIONS):
+                    # Already transcribed before the turn (WhatsApp voice notes):
+                    # point at the transcript instead of a redundant tool call.
+                    audio_manifest = load_audio_manifest(
+                        session_root(self.session_id), Path(rp).name
+                    )
+                    if (
+                        audio_manifest
+                        and audio_manifest.get("ok")
+                        and not audio_manifest.get("partial")
+                    ):
+                        lines.append(
+                            f"\n### Audio file `{Path(rp).name}`: already transcribed "
+                            "(a message starting with 🎤 contains its transcript). Full "
+                            f"text: `{audio_manifest.get('transcript_path')}`. Call "
+                            "transcribe_audio only if asked to re-check the recording."
+                        )
+                        continue
                     lines.append(
                         f"\n### Audio file `{Path(rp).name}`: to read its content call "
                         f"transcribe_audio(relative_path='{rp}'). If the result has "

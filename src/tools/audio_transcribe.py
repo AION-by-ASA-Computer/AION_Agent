@@ -51,6 +51,7 @@ __all__ = [
     "local_model_name",
     "probe_audio_duration",
     "iter_audio_chunks",
+    "load_audio_manifest",
     "resolve_language",
     "transcribe_audio_file",
 ]
@@ -757,6 +758,21 @@ async def transcribe_audio_file(
         encoding="utf-8",
     )
     return manifest
+
+
+def load_audio_manifest(session_root: Path, filename: str) -> Optional[dict]:
+    """Manifest of a previous transcription of ``filename``, ``None`` if absent.
+
+    Same slug as ``transcribe_audio_file``. Used by the agent pipeline to tell
+    the model an attachment is already transcribed (e.g. WhatsApp voice notes,
+    transcribed before the turn) instead of asking it to call the tool again.
+    """
+    path = session_root / AUDIO_SUBDIR / slugify_document_name(filename) / "manifest.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _engine_hint(engine: SttEngine) -> str:

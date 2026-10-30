@@ -51,6 +51,10 @@ def test_inbound_filename():
     assert media.inbound_filename("document", doc) == "b.xlsx"
     photo = media.inbound_filename("image", InboundMedia(id="1", mime_type="image/png"))
     assert photo.startswith("whatsapp_") and photo.endswith(".png")
+    # Voice notes: the codec parameter of the MIME type does not hide the extension.
+    note = InboundMedia(id="1", mime_type="audio/ogg; codecs=opus", voice=True)
+    name = media.inbound_filename("audio", note)
+    assert name.startswith("vocale_") and name.endswith(".ogg")
 
 
 def test_sha256_accepts_hex_and_base64():
@@ -111,7 +115,7 @@ async def test_ingest_errors(data_dir):
     kwargs = dict(tenant_id="default", phone_number_id=PNID, conversation_id=CID)
     with pytest.raises(media.UnsupportedMedia):
         await media.ingest_inbound_media(
-            graph, msg_type="audio", media=InboundMedia(id="A"), **kwargs
+            graph, msg_type="video", media=InboundMedia(id="A"), **kwargs
         )
     graph.download_error = MediaTooLarge("big")
     with pytest.raises(MediaTooLarge):

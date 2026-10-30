@@ -141,6 +141,14 @@ La lingua è modificabile solo in modalità locale ma non viene svuotata passand
 - Profili `aion_std`, `generic_assistant`, `document_extractor`: `stt` in `mcp_servers`.
 - [`src/runtime/tool_exposure.py`](../../src/runtime/tool_exposure.py): `transcribe_audio` → `stt` in `_KNOWN_COLD_TOOLS`.
 
-## Fuori ambito (fasi successive)
+## Uso fuori da MCP: vocali WhatsApp
 
-- Trascrizione dei vocali WhatsApp (oggi rifiutati dal dispatcher).
+Il canale WhatsApp trascrive i vocali **prima** del turno chiamando
+`transcribe_audio_file` direttamente nel processo backend
+([`src/channels/whatsapp/voice.py`](../../src/channels/whatsapp/voice.py)), con
+lo stesso motore e le stesse variabili `AION_STT_*` del server MCP. L'output va
+nella stessa cartella `derived/audio/<slug>/` della conversazione, quindi una
+successiva chiamata a `transcribe_audio` sullo stesso file riusa i chunk già
+scritti, e la pipeline (`load_audio_manifest`) segnala all'agente che l'audio è
+già trascritto. Dettagli in
+[Canale WhatsApp → Messaggi vocali](../integrations/whatsapp.md#messaggi-vocali).

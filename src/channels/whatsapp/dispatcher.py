@@ -17,6 +17,9 @@ Photos and documents are saved in the conversation (``media.ingest_inbound_media
 with a caption they start a turn right away, without one they are parked in
 ``whatsapp_identities.pending_attachments_json`` and attached to the user's
 next text message (an album becomes a single turn).
+Voice notes (``audio``) are saved the same way, transcribed with the STT engine
+(``voice.transcribe_voice_note``) and start a turn with ``🎤 <transcript>`` as
+the user's text and the audio file attached.
 
 Il turno è registrato in ``_background_runs``: dalla chat-ui si può seguire
 dal vivo come quelli dei cron.
@@ -39,7 +42,7 @@ from src.data.models import Conversation, User, WhatsAppIdentity
 from src.identity import sanitize_user_id
 from src.runtime.redis_client import cache_get, cache_set
 
-from . import config_service, linking, media, store
+from . import config_service, linking, media, store, voice
 from .config_service import ChannelConfig
 from .formatting import prepare_reply
 from .graph_client import GraphClient, GraphError, MediaTooLarge
@@ -55,11 +58,13 @@ TEXT_TYPES = ("text", "button", "interactive")
 # Media received without a caption wait at most this long for the user's
 # follow-up text; older ones stay in the session as historical files only.
 PENDING_MEDIA_TTL = timedelta(hours=24)
+# Title of a conversation started by a voice note until its transcript is ready.
+VOICE_TITLE_PLACEHOLDER = "🎤 Messaggio vocale"
 # Keys of the pending entries that are bookkeeping, not part of AttachmentRef.
 _PENDING_META_KEYS = ("added_at", "conversation_id")
 # Meta drops the "typing…" indicator after 25 s (or at our next message), so
 # during a turn it is re-sent a bit earlier than that to keep it on screen.
-TYPING_REFRESH_S = 20.0
+TYPING_REFRESH_S = 15.0
 # After this many refreshes in a row rejected by Meta (e.g. the inbound wamid is
 # no longer accepted) the keep-alive gives up instead of retrying for 10 minutes.
 TYPING_MAX_FAILURES = 3
@@ -77,8 +82,8 @@ MESSAGES = {
     "help": (
         "*AION su WhatsApp*\n"
         "Scrivi la tua domanda e ti rispondo come nella chat di AION.\n"
-        "Puoi anche inviarmi foto e documenti (PDF, Word, Excel…): "
-        "aggiungi una didascalia o scrivimi dopo cosa vuoi che ne faccia.\n\n"
+        "Puoi anche inviarmi messaggi vocali, foto e documenti (PDF, Word, "
+        "Excel…): aggiungi una didascalia o scrivimi dopo cosa vuoi che ne faccia.\n\n"
         "Comandi:\n"
         "• /nuova — inizia una nuova conversazione\n"
         "• /scollega — scollega questo WhatsApp dal tuo account\n"
@@ -105,8 +110,12 @@ MESSAGES = {
     ),
     "text_only": "Per ora posso leggere solo messaggi di testo. Scrivimi la domanda 🙂",
     "media_unsupported": (
-        "Per ora posso leggere testo, foto e documenti (PDF, Word, Excel, "
-        "PowerPoint…). Vocali, video e sticker non sono ancora supportati 🙂"
+        "Per ora posso leggere testo, vocali, foto e documenti (PDF, Word, Excel, "
+        "PowerPoint…). Video e sticker non sono ancora supportati 🙂"
+    ),
+    # Sent instead of ``media_unsupported`` while AION_WHATSAPP_VOICE=0.
+    "voice_disabled": (
+        "Per ora non posso ascoltare i messaggi vocali: scrivimi la domanda 🙂"
     ),
     "media_received": (
         "📎 Ricevuto! Mandami altri file oppure scrivimi cosa vuoi che ne faccia."
@@ -118,6 +127,17 @@ MESSAGES = {
     "media_failed": (
         "Non sono riuscito a scaricare il file da WhatsApp. Riprova a inviarlo tra poco."
     ),
+    "voice_too_long": (
+        "Il vocale è troppo lungo (max {max_min} minuti). Prova a dividerlo in "
+        "più messaggi o a scrivermi la domanda."
+    ),
+    "voice_empty": (
+        "Non sono riuscito a capire il vocale 🤔 Puoi ripeterlo o scrivermi la domanda?"
+    ),
+    "voice_failed": (
+        "Non sono riuscito a trascrivere il vocale. Riprova tra poco o scrivimi la domanda."
+    ),
+    "voice_partial": "(trascrizione parziale del vocale)",
     "more_files": "📁 Altri {count} file sono disponibili su AION: {conversation_url}",
     "timeout": (
         "Ci sto mettendo troppo a rispondere. Trovi la conversazione su AION: "
@@ -466,18 +486,22 @@ async def _handle_linked(
     await linking.update_identity(ident.id, **updates)
 
     text = (msg.text or "").strip()
+    is_voice = msg.type == "audio"
     is_media = (
         msg.type in media.SUPPORTED_INBOUND_TYPES
         and msg.media is not None
         and media.media_enabled()
+        and (not is_voice or voice.voice_enabled())
     )
     if not is_media and (msg.type not in TEXT_TYPES or not text):
         if msg.type == "reaction":
             return  # an emoji reaction needs no answer
         unsupported = msg.type in MEDIA_TYPES and media.media_enabled()
-        await replier.send(
-            MESSAGES["media_unsupported" if unsupported else "text_only"]
-        )
+        if unsupported and is_voice:
+            key = "voice_disabled"
+        else:
+            key = "media_unsupported" if unsupported else "text_only"
+        await replier.send(MESSAGES[key])
         return
 
     if not is_media:
@@ -505,7 +529,11 @@ async def _handle_linked(
             return
 
     title_hint = text
-    if is_media and not title_hint:
+    if is_voice:
+        # The transcript is not known yet (the audio must first be stored in
+        # the conversation): placeholder, replaced once transcribed.
+        title_hint = VOICE_TITLE_PLACEHOLDER
+    elif is_media and not title_hint:
         title_hint = f"📎 {media.inbound_filename(msg.type, msg.media)}"
     conversation_id, profile = await _resolve_conversation(
         tenant_id=tenant_id, cfg=cfg, ident=ident, user=user, first_text=title_hint
@@ -517,7 +545,9 @@ async def _handle_linked(
         attachment = await _ingest_media(tenant_id, cfg, msg, conversation_id, replier)
         if attachment is None:
             return
-        if not text:
+        # A voice note is a spoken text message: it never waits in the pending
+        # queue, and it takes along the files parked before it.
+        if not text and not is_voice:
             # No caption: park the file until the user tells us what to do.
             # One acknowledgement per burst (album), read receipts afterwards.
             pending.append(
@@ -537,13 +567,22 @@ async def _handle_linked(
             return
         pending.append(attachment)
 
-    if pending or ident.pending_attachments_json:
-        # Consumed by this turn (also drops expired/foreign entries).
-        await linking.update_identity(ident.id, pending_attachments_json=None)
-    turn_attachments = [_attachment_ref(a) for a in pending]
-
-    # Meta's indicator lasts 25 s at most: keep it alive until the turn ends.
+    # Meta's indicator lasts 25 s at most: keep it alive until the turn ends,
+    # including the transcription (tens of seconds with the local CPU model).
     async with replier.keep_typing():
+        if is_voice:
+            text = await _transcribe_voice(conversation_id, attachment, replier)
+            if text is None:
+                # Nothing to answer: the audio stays in the conversation and
+                # the files parked before it keep waiting for a usable message.
+                return
+            await _replace_placeholder_title(conversation_id, text)
+
+        if pending or ident.pending_attachments_json:
+            # Consumed by this turn (also drops expired/foreign entries).
+            await linking.update_identity(ident.id, pending_attachments_json=None)
+        turn_attachments = [_attachment_ref(a) for a in pending]
+
         result = await run_turn(
             tenant_id=tenant_id,
             cfg=cfg,
@@ -612,6 +651,44 @@ async def _ingest_media(
         logger.warning("WhatsApp media %s not ingested: %s", msg.media.id, e)
         await replier.send(MESSAGES["media_failed"])
     return None
+
+
+async def _transcribe_voice(
+    conversation_id: str, attachment: Dict[str, Any], replier: _Replier
+) -> Optional[str]:
+    """User text for a voice note (``🎤 <transcript>``); on failure reply and return None.
+
+    The microphone marker tells the agent (and the chat-ui reader) that the
+    text comes from speech recognition and may contain recognition errors.
+    """
+    result = await voice.transcribe_voice_note(conversation_id, attachment)
+    if result.error == "too_long":
+        max_min = max(1, int(voice.max_voice_duration_s() // 60))
+        await replier.send(MESSAGES["voice_too_long"].format(max_min=max_min))
+        return None
+    if result.error == "no_speech":
+        await replier.send(MESSAGES["voice_empty"])
+        return None
+    if result.error:
+        await replier.send(MESSAGES["voice_failed"])
+        return None
+    text = f"🎤 {result.text}"
+    if result.partial:
+        text += f"\n{MESSAGES['voice_partial']}"
+    return text
+
+
+async def _replace_placeholder_title(conversation_id: str, text: str) -> None:
+    """Title a conversation started by a voice note after its transcript.
+
+    Only the placeholder set by ``_handle_linked`` is replaced, so a title
+    chosen earlier (or renamed by the user) is never overwritten.
+    """
+    async with get_async_session_maker()() as session:
+        conv = await session.get(Conversation, conversation_id)
+        if conv is not None and conv.title == VOICE_TITLE_PLACEHOLDER:
+            conv.title = _conversation_title(text) or VOICE_TITLE_PLACEHOLDER
+            await session.commit()
 
 
 def _load_pending(
@@ -736,6 +813,14 @@ async def _sync_thinking_metadata(conversation_id: str, level: str) -> None:
         logger.warning("WhatsApp: thinking metadata sync failed", exc_info=True)
 
 
+def _conversation_title(text: str) -> str:
+    """Conversation title from the first message: one line, at most 60 chars."""
+    title = " ".join(text.split())
+    if len(title) > 60:
+        title = title[:57].rstrip() + "…"
+    return title
+
+
 async def _ensure_conversation(
     *,
     conversation_id: Optional[str],
@@ -766,16 +851,13 @@ async def _ensure_conversation(
         if marker is not None and sanitize_user_id(marker) != sanitize_user_id(user_id):
             raise PermissionError("session_not_owned")
         claim_session_owner_marker(new_id, sanitize_user_id(user_id))
-        title = " ".join(first_text.split())
-        if len(title) > 60:
-            title = title[:57].rstrip() + "…"
         session.add(
             Conversation(
                 id=new_id,
                 tenant_id=tenant_id,
                 user_id=user_id,
                 profile_slug=profile_slug,
-                title=title or "WhatsApp",
+                title=_conversation_title(first_text) or "WhatsApp",
                 message_count=0,
                 metadata_json=json.dumps({"source": "whatsapp"}),
                 updated_at=datetime.now(timezone.utc),

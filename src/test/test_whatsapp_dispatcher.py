@@ -314,12 +314,12 @@ async def test_commands(wa_db, graph, turns):
 
 @pytest.mark.anyio
 async def test_non_text_message(wa_db, graph, turns):
-    """Voice notes are declined politely; reactions get no answer at all."""
+    """Videos are declined politely; reactions get no answer at all."""
     from src.channels.whatsapp.dispatcher import MESSAGES
 
     await configure_channel()
     await _link()
-    await _deliver(_msg(fixture="audio_voice"))
+    await _deliver(_msg(fixture="audio_voice", type="video"))
     assert graph.bodies == [MESSAGES["media_unsupported"]]
     await _deliver(_msg(fixture="audio_voice", type="reaction", media=None))
     assert len(graph.bodies) == 1
@@ -881,3 +881,134 @@ async def test_extra_files_are_linked(wa_db, graph, turns, media_store, monkeypa
     assert graph.bodies[-1] == dispatcher.MESSAGES["more_files"].format(
         count=1, conversation_url="https://aion.example.com/c/conv-1"
     )
+
+
+# ---------------------------------------------------------------------------
+# Voice notes (audio in, transcript as the user's text)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def stt(monkeypatch):
+    """Replaces ``voice.transcribe_voice_note``: returns ``stt.result``, records calls."""
+    from src.channels.whatsapp import voice
+
+    class _Stt:
+        calls: list = []
+        result = voice.VoiceTranscript(text="Quanti ordini ieri?", duration_sec=3.0)
+
+    state = _Stt()
+    state.calls = []
+
+    async def fake_transcribe(conversation_id, attachment):
+        state.calls.append((conversation_id, attachment))
+        return state.result
+
+    monkeypatch.setattr(voice, "transcribe_voice_note", fake_transcribe)
+    return state
+
+
+async def _conversation(conversation_id):
+    from src.data.engine import get_async_session_maker
+    from src.data.models import Conversation
+
+    async with get_async_session_maker()() as session:
+        return await session.get(Conversation, conversation_id)
+
+
+@pytest.mark.anyio
+async def test_voice_note_runs_turn_with_transcript_and_audio(
+    wa_db, graph, turns, media_store, stt
+):
+    """The transcript (🎤-prefixed) is the turn text, the .ogg is attached, no echo."""
+    from src.channels.whatsapp.dispatcher import MESSAGES, VOICE_TITLE_PLACEHOLDER
+
+    await configure_channel()
+    await _link()
+    row = await _deliver(_msg(fixture="audio_voice"))
+
+    assert row.status == "done"
+    (call,) = turns.calls
+    assert call["text"] == "🎤 Quanti ordini ieri?"
+    (att,) = call["turn_attachments"]
+    assert att["original_name"].startswith("vocale_")
+    assert att["original_name"].endswith(".ogg")
+    assert stt.calls == [(call["conversation_id"], att)]
+    # Only the agent's answer is sent: no transcript echo, no "received" ack.
+    assert graph.bodies[0].startswith("*Ieri 12 ordini*")
+    assert MESSAGES["media_received"] not in graph.bodies
+    # The placeholder title of the new conversation is replaced by the transcript.
+    conv = await _conversation(call["conversation_id"])
+    assert conv.title == "🎤 Quanti ordini ieri?" != VOICE_TITLE_PLACEHOLDER
+
+
+@pytest.mark.anyio
+async def test_voice_note_consumes_pending_files(wa_db, graph, turns, media_store, stt):
+    """Photo without caption + voice note "cos'è?" = one turn with both files."""
+    await configure_channel()
+    await _link()
+    await _deliver(_msg(fixture="image_no_caption"))
+    await _deliver(_msg(fixture="audio_voice"))
+
+    (call,) = turns.calls
+    assert [a["original_name"][:7] for a in call["turn_attachments"]] == [
+        "whatsap",
+        "vocale_",
+    ]
+    assert (await _identity()).pending_attachments_json is None
+
+
+@pytest.mark.anyio
+async def test_partial_transcript_is_flagged(wa_db, graph, turns, media_store, stt):
+    from src.channels.whatsapp import voice
+    from src.channels.whatsapp.dispatcher import MESSAGES
+
+    stt.result = voice.VoiceTranscript(text="Prima parte", partial=True)
+    await configure_channel()
+    await _link()
+    await _deliver(_msg(fixture="audio_voice"))
+
+    assert turns.calls[0]["text"] == f"🎤 Prima parte\n{MESSAGES['voice_partial']}"
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "error, key",
+    [
+        ("too_long", "voice_too_long"),
+        ("no_speech", "voice_empty"),
+        ("engine_failed", "voice_failed"),
+    ],
+)
+async def test_voice_note_failures_reply_without_turn(
+    wa_db, graph, turns, media_store, stt, monkeypatch, error, key
+):
+    """A failed transcription is explained to the user; pending files keep waiting."""
+    from src.channels.whatsapp import voice
+    from src.channels.whatsapp.dispatcher import MESSAGES
+
+    monkeypatch.setenv("AION_WHATSAPP_VOICE_MAX_SEC", "300")
+    stt.result = voice.VoiceTranscript(error=error)
+    await configure_channel()
+    await _link()
+    await _deliver(_msg(fixture="image_no_caption"))
+    row = await _deliver(_msg(fixture="audio_voice"))
+
+    assert row.status == "done"
+    assert turns.calls == []
+    assert graph.bodies[-1] == MESSAGES[key].format(max_min=5)
+    assert len(json.loads((await _identity()).pending_attachments_json)) == 1
+
+
+@pytest.mark.anyio
+async def test_voice_disabled(wa_db, graph, turns, media_store, stt, monkeypatch):
+    """``AION_WHATSAPP_VOICE=0``: voice notes are declined without downloading them."""
+    from src.channels.whatsapp.dispatcher import MESSAGES
+
+    monkeypatch.setenv("AION_WHATSAPP_VOICE", "0")
+    await configure_channel()
+    await _link()
+    await _deliver(_msg(fixture="audio_voice"))
+
+    assert graph.bodies == [MESSAGES["voice_disabled"]]
+    assert graph.downloaded == [] and turns.calls == [] and stt.calls == []

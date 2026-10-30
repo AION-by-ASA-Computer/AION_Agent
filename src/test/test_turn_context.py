@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from types import SimpleNamespace
 from typing import Any, Dict, List
 from unittest.mock import AsyncMock, MagicMock
@@ -270,3 +271,33 @@ def test_format_attachments_block_audio_upload_hints_transcribe_audio():
 
     assert "transcribe_audio(relative_path='uploads/3_nota.opus')" in block
     assert "doc_ingest" not in block
+
+
+def test_format_attachments_block_transcribed_audio_points_at_transcript(
+    monkeypatch, tmp_path
+):
+    """An audio already transcribed before the turn (WhatsApp voice note) gets a
+    pointer to its transcript instead of a redundant transcribe_audio call."""
+    from src.agent_pipeline import AgentPipeline
+    from src.session_workspace import session_root
+    from src.tools.audio_transcribe import AUDIO_SUBDIR
+    from src.tools.doc_ingest import slugify_document_name
+
+    monkeypatch.setenv("AION_DATA_DIR", str(tmp_path / "data"))
+    name = "3a_vocale_20261030_101500.ogg"
+    slug = slugify_document_name(name)
+    manifest_dir = session_root("sess-voice") / AUDIO_SUBDIR / slug
+    manifest_dir.mkdir(parents=True)
+    transcript_path = f"{AUDIO_SUBDIR}/{slug}/transcript.txt"
+    (manifest_dir / "manifest.json").write_text(
+        json.dumps({"ok": True, "partial": False, "transcript_path": transcript_path})
+    )
+
+    pipeline = AgentPipeline(agent=None, session_id="sess-voice", profile_name="aion_std")
+    att = [{"relative_path": f"uploads/{name}", "original_name": name, "mime": "audio/ogg"}]
+
+    block = pipeline._format_attachments_block(att, att)
+
+    assert "already transcribed" in block
+    assert transcript_path in block
+    assert "transcribe_audio(relative_path=" not in block

@@ -1,9 +1,10 @@
 """Media handling for the WhatsApp channel (Cloud API).
 
-Inbound: downloads images/documents sent by the user from Meta and stores them
-in the conversation sandbox (``uploads/``) with the same post-processing as the
-chat-ui upload endpoint (``src/api/v1/files.py``), returning an
-``AttachmentRef``-shaped dict for ``AgentPipeline.run_stream``.
+Inbound: downloads images/documents/audio sent by the user from Meta and stores
+them in the conversation sandbox (``uploads/``) with the same post-processing as
+the chat-ui upload endpoint (``src/api/v1/files.py``), returning an
+``AttachmentRef``-shaped dict for ``AgentPipeline.run_stream``. Audio (voice
+notes) is then transcribed by ``voice.transcribe_voice_note``.
 
 Outbound: snapshots the session output folders around an agent turn, detects
 the deliverables the agent created and sends them back as WhatsApp
@@ -39,9 +40,10 @@ from .payload import InboundMedia
 
 logger = logging.getLogger("aion.whatsapp.media")
 
-# Message types we ingest; audio/video/sticker get a polite "not supported"
-# reply (voice notes need STT, planned for phase 3).
-SUPPORTED_INBOUND_TYPES = ("image", "document")
+# Message types we ingest; video/sticker get a polite "not supported" reply.
+# ``audio`` (voice notes and audio files) is gated by ``voice.voice_enabled()``
+# in the dispatcher, since it also needs the STT engine.
+SUPPORTED_INBOUND_TYPES = ("image", "document", "audio")
 
 # Meta caps inbound media at 100 MB (larger files arrive as error 131052) and
 # documents sent by us at 100 MB; images sent as ``image`` at 5 MB.
@@ -65,6 +67,13 @@ _EXT_BY_MIME = {
     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
     "application/vnd.ms-powerpoint": ".ppt",
     "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    # Audio formats accepted by the Cloud API; voice notes are
+    # ``audio/ogg; codecs=opus`` (the codec parameter is stripped).
+    "audio/ogg": ".ogg",
+    "audio/mpeg": ".mp3",
+    "audio/mp4": ".m4a",
+    "audio/aac": ".aac",
+    "audio/amr": ".amr",
 }
 
 # Outbound: images WhatsApp renders inline (``type: image``).
@@ -152,8 +161,8 @@ def inbound_filename(msg_type: str, media: InboundMedia) -> str:
     """Filename used to store an inbound media.
 
     Documents keep the user's filename (adding an extension when missing,
-    since ``save_upload`` derives the MIME from it); photos have no name in
-    WhatsApp, so they get a timestamped one.
+    since ``save_upload`` derives the MIME from it); photos and voice notes
+    have no name in WhatsApp, so they get a timestamped one.
     """
     ext = _extension_for(media.mime_type)
     if msg_type == "document" and media.filename:
@@ -162,7 +171,7 @@ def inbound_filename(msg_type: str, media: InboundMedia) -> str:
             name += ext
         return name
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
-    prefix = "whatsapp" if msg_type == "image" else "documento"
+    prefix = {"image": "whatsapp", "audio": "vocale"}.get(msg_type, "documento")
     return f"{prefix}_{stamp}{ext}"
 
 
@@ -222,7 +231,7 @@ async def ingest_inbound_media(
     msg_type: str,
     media: InboundMedia,
 ) -> Dict[str, Any]:
-    """Download an inbound image/document and store it in the conversation.
+    """Download an inbound image/document/audio and store it in the conversation.
 
     Mirrors ``POST /v1/conversations/{id}/files``: ``save_upload`` (uploads/),
     legacy Word conversion, PDF auto-ingest in background and a best-effort

@@ -12,9 +12,10 @@ pipeline della chat-ui: stessi profili, stessa memoria (STM/LTM), stessi tool
 MCP. Le conversazioni restano visibili anche nella chat-ui, con l'icona
 WhatsApp.
 
-Questa pagina copre la **Fase 1 (testo)** e la parte media della **Fase 2**
-(foto e documenti in ingresso, file generati dall'agente in uscita). Il piano
-completo, con le fasi successive (vocali, template, messaggi proattivi), è in
+Questa pagina copre la **Fase 1 (testo)**, la parte media della **Fase 2**
+(foto e documenti in ingresso, file generati dall'agente in uscita) e i
+**messaggi vocali** (trascritti con il motore speech-to-text). Il piano
+completo, con le fasi successive (template, messaggi proattivi), è in
 [`docs/architecture/whatsapp-channel-plan.md`](../architecture/whatsapp-channel-plan.md).
 
 | Chi | Cosa fa | Dove | Quante volte |
@@ -159,7 +160,8 @@ Se l'utente AION viene cancellato, il collegamento sparisce con lui.
 | `COLLEGA <codice>` | Collega (o ricollega) l'account |
 
 Tutto il resto è una domanda per l'agente. Foto e documenti sono descritti in
-[File e foto](#file-e-foto).
+[File e foto](#file-e-foto), i vocali in [Messaggi vocali](#messaggi-vocali).
+I comandi vanno scritti: un vocale non è mai interpretato come comando.
 
 ---
 
@@ -245,7 +247,8 @@ sequenceDiagram
 
 Il dipendente può inviare **foto** (JPEG/PNG) e **documenti** (PDF, Word,
 Excel, PowerPoint, testo…) e riceve su WhatsApp i **file creati dall'agente**.
-Vocali, video e sticker ricevono un messaggio cortese di non supporto.
+I vocali sono trascritti (vedi [Messaggi vocali](#messaggi-vocali)); video e
+sticker ricevono un messaggio cortese di non supporto.
 
 ### In ingresso
 
@@ -286,6 +289,40 @@ Vocali, video e sticker ricevono un messaggio cortese di non supporto.
   Siamo sempre nella finestra di 24 ore, perché AION risponde subito a un
   messaggio dell'utente.
 
+## Messaggi vocali
+
+Un vocale (o un file audio inoltrato) è trattato come un messaggio di testo
+pronunciato:
+
+1. il file è scaricato e salvato in `uploads/` come le foto
+   (`vocale_<data>.ogg`), quindi resta visibile nella chat-ui;
+2. con "sta scrivendo…" attivo, il backend lo trascrive con
+   `transcribe_audio_file` di
+   [`src/tools/audio_transcribe.py`](../../src/tools/audio_transcribe.py),
+   **la stessa funzione del server MCP `stt`**, chiamata in-process
+   ([`src/channels/whatsapp/voice.py`](../../src/channels/whatsapp/voice.py)):
+   stesso motore (servizio Whisper remoto o faster-whisper locale), stesse
+   impostazioni `AION_STT_*` di admin-ui → Impostazioni → Audio, lingua di
+   default `AION_STT_LANGUAGE`. Vedi [Speech-to-text](../mcp/speech-to-text.md);
+3. parte il turno con testo `🎤 <trascrizione>` e il file audio allegato.
+   L'utente riceve solo la risposta dell'agente (nessuna eco della
+   trascrizione). Il vocale porta con sé gli eventuali file in attesa (es. foto
+   senza didascalia + vocale "cos'è questo?").
+
+- La trascrizione è scritta in `derived/audio/<slug>/` della sessione: la
+  pipeline lo rileva e dice all'agente che l'audio è già trascritto, invece di
+  fargli richiamare `transcribe_audio`.
+- Una nuova conversazione aperta da un vocale prende come titolo la trascrizione.
+- Vocali oltre `AION_WHATSAPP_VOICE_MAX_SEC` (default 10 minuti) sono rifiutati
+  con un messaggio; un vocale senza parlato o una trascrizione fallita
+  ricevono un messaggio di errore e nessun turno parte (l'audio resta salvato,
+  i file in attesa restano in attesa).
+- Le trascrizioni sono eseguite una alla volta nel processo backend. Con il
+  motore locale il modello faster-whisper resta caricato in memoria anche nel
+  backend (circa 0,5 GB con `small`), oltre che nel server MCP.
+- `AION_WHATSAPP_VOICE=0` disattiva i vocali: l'utente riceve un invito a
+  scrivere la domanda.
+
 ---
 
 ## Endpoint
@@ -322,6 +359,9 @@ collegamento, formattazione, dispatcher), `src/api/v1/whatsapp.py` e
 | `AION_WHATSAPP_MEDIA` | `1` | `0` = solo testo (foto/documenti rifiutati, nessun file in uscita) |
 | `AION_WHATSAPP_MAX_OUTBOUND_FILES` | `5` | File generati inviati per risposta; gli altri con link |
 | `AION_WHATSAPP_MAX_OUTBOUND_BYTES` | `104857600` | Dimensione massima di un file inviato (tetto Meta 100 MB) |
+| `AION_WHATSAPP_VOICE` | `1` | `0` = vocali rifiutati (richiede anche `AION_WHATSAPP_MEDIA=1`) |
+| `AION_WHATSAPP_VOICE_MAX_SEC` | `600` | Durata massima di un vocale trascritto |
+| `AION_WHATSAPP_VOICE_BUDGET_SEC` | `180` | Tempo massimo della trascrizione; oltre, l'agente riceve la parte trascritta (segnalata come parziale) |
 | `AION_UPLOAD_MAX_BYTES` | — | Limite degli upload, vale anche per i file ricevuti (max 100 MB) |
 
 Il backend deve girare con `--workers 1`: la coda e i lock sono in memoria.
@@ -394,7 +434,7 @@ sono in `src/test/fixtures/whatsapp/`.
 
 ## Non ancora supportato
 
-- messaggi vocali (trascrizione), video e sticker;
+- video e sticker;
 - vision nativa sulle foto con l'harness v2 (oggi: tool OCR);
 - grafici della chat-ui (`charts`) come immagini;
 - template e messaggi proattivi (es. notifiche dei cron);
