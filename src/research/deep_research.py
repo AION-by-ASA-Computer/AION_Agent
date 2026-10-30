@@ -14,7 +14,11 @@ import re
 import time
 from typing import Callable, Dict, List, Optional, Set
 
-from src.research.research_utils import strip_thinking, is_low_quality
+from src.research.research_utils import (
+    strip_thinking,
+    is_low_quality,
+    is_reasoning_leakage,
+)
 from src.research.goal_based_extractor import EXTRACTOR_PROMPT
 from src.research.llm_bridge import complete_messages
 from src.research.search_bridge import fetch_webpage_content, search_web
@@ -372,6 +376,10 @@ class DeepResearcher:
 
         self.evolving_report = report  # preserve pre-synthesis report
         final = await self._final_report(question, report)
+        if not final or not final.strip():
+            final = report or (
+                self._fallback_report(question, findings) if findings else ""
+            )
         elapsed = time.time() - self._start_time
         logger.info(
             f"Research complete: {self.round_count} rounds, "
@@ -504,15 +512,32 @@ class DeepResearcher:
                 temperature=0.5,
                 max_tokens=4096,
             )
-            queries = self._parse_json_array(response)
+            clean_resp = strip_thinking(response) or response
+            queries = self._parse_json_array(clean_resp)
             # Deduplicate
             new_queries = [q for q in queries if q not in self.queries_used]
+
+            # Critical fallback for weaker models: if round 1 produced no queries,
+            # use the research question itself so search is never skipped.
+            if not new_queries and round_num == 1:
+                clean_q = question.strip()
+                if clean_q and clean_q not in self.queries_used:
+                    logger.warning(
+                        "Round 1: LLM failed to produce parseable queries; "
+                        "falling back to original research question as search query"
+                    )
+                    new_queries = [clean_q]
+
             self.queries_used.update(new_queries)
             logger.info(f"Round {round_num} queries: {new_queries}")
             return new_queries
         except Exception as e:
             logger.error(f"Query generation failed: {e}")
             self._emit(phase="warning", message=f"Query generation failed: {e}")
+            if round_num == 1 and question.strip():
+                clean_q = question.strip()
+                self.queries_used.add(clean_q)
+                return [clean_q]
             return []
 
     # ------------------------------------------------------------------
@@ -770,8 +795,35 @@ class DeepResearcher:
                 timeout=300,
             )
             clean_res = strip_thinking(res)
+            # Guard against reasoning leakage: if the synthesis output looks
+            # like raw LLM chain-of-thought rather than a report, keep the
+            # previous report rather than overwriting it with garbage.
+            if clean_res and is_reasoning_leakage(clean_res):
+                logger.warning(
+                    "_synthesize: detected reasoning leakage (%d words); "
+                    "keeping previous report.",
+                    len(clean_res.split()),
+                )
+                return current_report or findings_text
+
             if clean_res and clean_res.strip():
-                return clean_res.strip()
+                clean_stripped = clean_res.strip()
+                res_words = len(clean_stripped.split())
+                cur_words = len(current_report.split()) if current_report else 0
+                # Guard against degenerate short outputs from weak models:
+                # If the model returned an extremely brief response (< 50 words)
+                # while current_report already had substantive content (> 100 words),
+                # do NOT destroy the existing report!
+                if cur_words > 100 and res_words < 50:
+                    logger.warning(
+                        "_synthesize: output too brief (%d words vs %d existing); "
+                        "preserving existing report.",
+                        res_words,
+                        cur_words,
+                    )
+                    return current_report
+                return clean_stripped
+
             return current_report or findings_text
         except Exception as e:
             logger.error(f"Synthesis failed: {e}")
@@ -799,14 +851,22 @@ class DeepResearcher:
                 temperature=0.1,
                 max_tokens=128,
             )
-            # Reasoning models prepend a <think>...</think> block — strip it
-            # before checking for YES/NO, otherwise the answer always looks
-            # like it starts with "<THINK>" and the engine never stops.
             clean = strip_thinking(response).strip()
-            # Tolerate "**YES**", "Yes.", quotes, etc.
-            answer = re.sub(r'^[\s*_`"\'>#\-]+', "", clean).upper()
-            should_stop = answer.startswith("YES")
-            logger.info(f"Stop decision (round {round_num}): {clean[:120]}")
+            first_line = clean.splitlines()[0] if clean else ""
+            answer = re.sub(r'^[\s*_`"\'>#\-]+', "", first_line).upper()
+            if answer.startswith("YES"):
+                should_stop = True
+            elif answer.startswith("NO"):
+                should_stop = False
+            else:
+                # Weak models often include preamble (e.g. "Based on the report, YES, we have...")
+                has_yes = bool(re.search(r"\b(YES|SÌ|SI)\b", first_line, re.IGNORECASE))
+                has_no = bool(re.search(r"\bNO\b", first_line, re.IGNORECASE))
+                should_stop = has_yes and not has_no
+
+            logger.info(
+                f"Stop decision (round {round_num}): {clean[:120]} -> {should_stop}"
+            )
             return should_stop
         except Exception as e:
             logger.warning(f"Stop decision failed: {e}")
@@ -861,13 +921,91 @@ class DeepResearcher:
                 timeout=300,
             )
             clean_result = strip_thinking(result) or result
-            if clean_result and len(clean_result.split()) >= 30:
-                return clean_result
-            if report and len(report.split()) > len((clean_result or "").split()):
+
+            # Guard against reasoning leakage: if the output looks like raw LLM
+            # chain-of-thought (Qwen3/DeepSeek-R1/QwQ reasoning that escaped
+            # filtering) rather than a polished report, fall back to the
+            # evolving report accumulated during the research rounds.
+            if clean_result and is_reasoning_leakage(clean_result):
                 logger.warning(
-                    "Final report output too brief; falling back to synthesis report"
+                    "_final_report: detected reasoning leakage in LLM output (%d words); "
+                    "falling back to evolving report.",
+                    len(clean_result.split()),
+                )
+                clean_result = ""
+
+            # Expansion retry for weak/concise models:
+            # If the report is too brief (< 350 words) but non-empty, ask the LLM to expand it
+            result_words = len((clean_result or "").split())
+            if 0 < result_words < 350:
+                logger.info(
+                    f"Final report too brief ({result_words} words), requesting expansion"
+                )
+                self._emit(phase="writing", message="Expanding report...")
+                try:
+                    expand_prompt = (
+                        "This report is too brief. Please expand it significantly:\n"
+                        "- Add detailed paragraphs for each section (not just bullet points)\n"
+                        "- Include specific data, numbers, and comparisons from the evidence\n"
+                        "- Explain context and significance — don't just list facts\n"
+                        "- Use ## headings and ### subheadings\n"
+                        "- Target at least 800-1000 words\n"
+                        "Write the full expanded report now."
+                    )
+                    if self.language and self.language != "en":
+                        from src.runtime.user_language import LANG_DISPLAY_NAMES
+
+                        lang_name = LANG_DISPLAY_NAMES.get(
+                            self.language, self.language.title()
+                        )
+                        expand_prompt += (
+                            f"\n\nIMPORTANT: Write strictly in {lang_name}."
+                        )
+
+                    expand_messages = [
+                        {"role": "system", "content": system_msg},
+                        {"role": "user", "content": user_prompt},
+                        {"role": "assistant", "content": clean_result},
+                        {"role": "user", "content": expand_prompt},
+                    ]
+                    expanded = await self._llm(
+                        expand_messages,
+                        temperature=0.4,
+                        max_tokens=self.max_report_tokens,
+                        timeout=300,
+                    )
+                    clean_expanded = strip_thinking(expanded) or expanded
+                    if (
+                        clean_expanded
+                        and not is_reasoning_leakage(clean_expanded)
+                        and len(clean_expanded.split()) > result_words
+                    ):
+                        logger.info(
+                            f"Report expanded successfully: {result_words} -> "
+                            f"{len(clean_expanded.split())} words"
+                        )
+                        clean_result = clean_expanded
+                except Exception as ex:
+                    logger.warning(f"Report expansion retry failed: {ex}")
+
+            final_words = len((clean_result or "").split())
+            report_words = len((report or "").split())
+
+            # If clean_result has substantial substance (>= 250 words), return it
+            if final_words >= 250:
+                return clean_result
+
+            # If the evolving report is substantially more complete than the final output,
+            # fall back to the evolving report rather than returning a truncated stub
+            if report and report_words > final_words:
+                logger.warning(
+                    "Final report output too brief (%d words vs %d in evolving report); "
+                    "falling back to evolving report.",
+                    final_words,
+                    report_words,
                 )
                 return report
+
             return clean_result or report
         except Exception as e:
             logger.error(f"Final report generation failed: {e}")
@@ -955,6 +1093,30 @@ class DeepResearcher:
                     f"Repaired truncated JSON array: recovered {len(complete_items)} items"
                 )
                 return complete_items
+
+        # Fallback for models that do not output JSON syntax:
+        # extract numbered or bulleted list items (e.g. 1. query, - query)
+        fallback_items = []
+        for line in text.splitlines():
+            line = line.strip()
+            m = re.match(r"^(?:\d+[\.\)]|[\-*•])\s*[\"']?(.*?)[\"']?$", line)
+            if m:
+                item = m.group(1).strip()
+                item = re.sub(r"^[\-*•\s]+", "", item).strip()
+                item = re.sub(
+                    r"^(?:(?:search\s+)?query\s*(?:\d+:?|:)|ricerca\s*(?:\d+:?|:))\s*",
+                    "",
+                    item,
+                    flags=re.IGNORECASE,
+                ).strip()
+                item = item.strip("\"'")
+                if item and len(item) >= 3:
+                    fallback_items.append(item)
+        if fallback_items:
+            logger.info(
+                f"Recovered {len(fallback_items)} items from text list fallback: {fallback_items}"
+            )
+            return fallback_items
 
         logger.warning(f"Could not parse JSON array from: {text[:200]}")
         return []

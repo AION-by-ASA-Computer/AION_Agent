@@ -92,6 +92,7 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
         const me = (await r.json()) as {
           roles?: string[];
           must_change_password?: boolean;
+          password_change_required?: boolean;
           metadata?: { language?: string };
         };
         if (me.metadata?.language && isValidLocale(me.metadata.language)) {
@@ -102,7 +103,8 @@ export function AdminAuthGate({ children }: { children: React.ReactNode }) {
           setState("no_admin_role");
           return;
         }
-        if (me.must_change_password && !isChangePwSkipped()) {
+        // Temporary password: blocking, the 24h skip only applies to the default-password banner.
+        if (me.password_change_required || (me.must_change_password && !isChangePwSkipped())) {
           setState("must_change_password");
           router.replace("/change-password");
           return;

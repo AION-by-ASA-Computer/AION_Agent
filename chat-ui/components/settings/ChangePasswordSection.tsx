@@ -6,12 +6,17 @@ import { KeyRound, Loader2 } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { useT } from "@/lib/i18n/use-t";
+import { isPasswordValid, PASSWORD_MAX_LENGTH, policyViolationsFromDetail } from "@/lib/auth/passwordPolicy";
+import { PasswordChecklist, passwordPolicyErrorMessage } from "@/components/auth/PasswordChecklist";
 import { Field, FieldGrid, Group, Note, inputCls, solidBtn } from "./ui";
 
 export function ChangePasswordSection({
   onSuccess,
+  identifier = "",
 }: {
   onSuccess?: (message: string) => void;
+  /** Username corrente: abilita la regola "non contiene lo username". */
+  identifier?: string;
 }) {
   const t = useT();
   const token = useStoredToken();
@@ -24,8 +29,8 @@ export function ChangePasswordSection({
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr(null);
-    if (newPw.length < 6) {
-      setErr(t("settings.security.password_min"));
+    if (!isPasswordValid(newPw, identifier)) {
+      setErr(t("settings.security.password_policy"));
       return;
     }
     if (newPw !== confirmPw) {
@@ -46,9 +51,11 @@ export function ChangePasswordSection({
         },
         body: JSON.stringify({ old_password: oldPw, new_password: newPw }),
       });
-      const j = (await r.json().catch(() => ({}))) as { detail?: string };
+      const j = (await r.json().catch(() => ({}))) as { detail?: unknown };
       if (!r.ok) {
-        setErr(j?.detail || t("settings.security.password_error"));
+        const violations = r.status === 422 ? policyViolationsFromDetail(j.detail) : null;
+        if (violations) setErr(passwordPolicyErrorMessage(t, violations));
+        else setErr(typeof j.detail === "string" ? j.detail : t("settings.security.password_error"));
         return;
       }
       setOldPw("");
@@ -63,6 +70,7 @@ export function ChangePasswordSection({
   }
 
   const filled = oldPw.length > 0 && newPw.length > 0 && confirmPw.length > 0;
+  const valid = filled && isPasswordValid(newPw, identifier) && newPw === confirmPw;
 
   return (
     <form onSubmit={submit}>
@@ -70,7 +78,7 @@ export function ChangePasswordSection({
         title={t("settings.security.password_title")}
         description={t("settings.security.password_desc")}
         footer={
-          <button type="submit" disabled={loading || !filled} className={solidBtn}>
+          <button type="submit" disabled={loading || !valid} className={solidBtn}>
             {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <KeyRound className="h-3.5 w-3.5" aria-hidden />}
             {t("settings.security.update_password")}
           </button>
@@ -86,14 +94,15 @@ export function ChangePasswordSection({
               autoComplete="current-password"
             />
           </Field>
-          <Field label={t("settings.security.new_password")} hint={t("settings.security.password_hint")}>
+          <Field label={t("settings.security.new_password")}>
             <input
               type="password"
               className={inputCls}
               value={newPw}
               onChange={(e) => setNewPw(e.target.value)}
               autoComplete="new-password"
-              minLength={6}
+              maxLength={PASSWORD_MAX_LENGTH}
+              aria-describedby="settings-password-rules"
             />
           </Field>
           <Field label={t("settings.security.confirm_password")}>
@@ -105,6 +114,12 @@ export function ChangePasswordSection({
               autoComplete="new-password"
             />
           </Field>
+          <div className="md:col-span-2">
+            <PasswordChecklist id="settings-password-rules" password={newPw} identifier={identifier} />
+            {confirmPw.length > 0 && newPw !== confirmPw ? (
+              <p className="mt-1.5 text-xs text-destructive">{t("settings.security.password_mismatch")}</p>
+            ) : null}
+          </div>
           {err ? (
             <div className="md:col-span-2">
               <Note tone="error">{err}</Note>

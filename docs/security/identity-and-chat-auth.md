@@ -29,7 +29,7 @@ Regardless of `AION_CHAT_PASSWORD_AUTH`, `/admin` is **always protected** via `r
 2. Set `AION_CHAT_PASSWORD_AUTH=1` to require login on chat-ui.
 3. Create users in the `users` table:
    - Setup wizard: `scripts/setup-aion-env.sh` (prompts to bootstrap the initial user during setup).
-   - Admin UI or `POST /admin/users` (password mode only; with SSO active, accounts are created at first SSO sign-in — see [SSO migration](sso-migration.md#3-new-accounts-in-sso-mode))
+   - Admin UI or `POST /admin/users` (password mode only; with SSO active, accounts are created at first SSO sign-in — see [SSO migration](sso-migration.md#3-new-accounts-in-sso-mode)). The admin sets no password: the user receives an email invite and chooses it on `/set-password` — see [Password setup by email](password-setup-email.md). Users can also recover access with "Forgot password?" on the login page.
    - Password hash: `python -m src.chat_auth hash`
 4. `identifier` + `AION_DEFAULT_TENANT_ID` scope login; the same identifier is used as `user_id` toward `USER.md` and `/chat`.
 

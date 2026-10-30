@@ -159,6 +159,30 @@ def _skills_requirements_path() -> Path:
     return _SKILLS_REQUIREMENTS
 
 
+def _link_container_parent_site_packages(vdir: Path) -> None:
+    """
+    In sandbox container, link /opt/venv site-packages into the session venv
+    via a .pth file so preinstalled deps (python-docx, openpyxl, pandas, etc.)
+    are guaranteed accessible even if system site-packages isolation applies.
+    """
+    opt_venv_lib = Path("/opt/venv/lib")
+    if not opt_venv_lib.is_dir():
+        return
+    parent_sites = list(opt_venv_lib.glob("python*/site-packages"))
+    if not parent_sites:
+        return
+    parent_site_str = str(parent_sites[0].resolve())
+
+    session_sites = list((vdir / "lib").glob("python*/site-packages"))
+    for ssite in session_sites:
+        try:
+            ssite.mkdir(parents=True, exist_ok=True)
+            pth_file = ssite / "parent_opt_venv.pth"
+            pth_file.write_text(f"{parent_site_str}\n", encoding="utf-8")
+        except OSError as exc:
+            logger.warning("failed to write parent_opt_venv.pth in %s: %s", ssite, exc)
+
+
 def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
     """Seed session venv with office skill Python deps (idempotent via marker file)."""
     if not _venv_bootstrap_skills_enabled():
@@ -169,8 +193,10 @@ def _bootstrap_session_venv_skills(session_id: str, vdir: Path) -> None:
 
     # In sandbox container, the venv was created with --system-site-packages
     # and all skill requirements are already preinstalled in the container image.
+    # Link parent /opt/venv site-packages to ensure full inheritance.
     if _in_sandbox_container():
         try:
+            _link_container_parent_site_packages(vdir)
             _write_skills_bootstrap_marker(vdir)
         except OSError as exc:
             logger.warning("skills bootstrap marker write failed: %s", exc)

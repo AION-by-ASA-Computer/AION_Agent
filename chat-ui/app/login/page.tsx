@@ -31,6 +31,7 @@ export default function LoginPage() {
   const [ssoEnabled, setSsoEnabled] = useState<boolean>(false);
   const [ssoProvider, setSsoProvider] = useState<"microsoft" | "google" | null>(null);
   const [passwordVisible, setPasswordVisible] = useState<boolean>(true);
+  const [resetAvailable, setResetAvailable] = useState<boolean>(false);
   const [mfa, setMfa] = useState<MfaChallenge | null>(null);
 
   const ssoErrorMessage = useCallback(
@@ -50,6 +51,10 @@ export default function LoginPage() {
         setSsoEnabled(s.sso_enabled || false);
         setSsoProvider(s.sso_provider || null);
         setPasswordVisible(s.password_login_visible ?? true);
+        setResetAvailable(Boolean(s.password_reset_available));
+        // Prefill dopo /set-password (?username=...).
+        const prefill = new URLSearchParams(window.location.search).get("username");
+        if (prefill) setUsername((u) => u || prefill);
       }
     });
 
@@ -84,6 +89,7 @@ export default function LoginPage() {
       mfa_required?: boolean;
       mfa_stage?: "enroll" | "verify";
       mfa_token?: string;
+      password_change_required?: boolean;
     };
     try {
       j = raw ? (JSON.parse(raw) as typeof j) : {};
@@ -117,12 +123,13 @@ export default function LoginPage() {
     await completeLogin(j);
   }
 
-  async function completeLogin(j: { access_token?: string; user_id?: string }) {
+  async function completeLogin(j: { access_token?: string; user_id?: string; password_change_required?: boolean }) {
     if (j.access_token && j.user_id) {
       setStoredAuth(j.access_token, j.user_id);
       initLocaleFromStorage();
       await syncLanguagePreferenceToServer(j.access_token);
-      window.location.href = "/";
+      // Password temporanea: dritti al cambio obbligatorio (AuthGate farebbe comunque il redirect).
+      window.location.href = j.password_change_required ? "/change-password" : "/";
     }
   }
 
@@ -172,6 +179,14 @@ export default function LoginPage() {
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="current-password"
               />
+              {resetAvailable && (
+                <Link
+                  href="/forgot-password"
+                  className="focus-ring -mt-1 self-end rounded-md px-1 py-0.5 text-xs font-medium text-muted-foreground transition-colors duration-200 hover:text-foreground"
+                >
+                  {t("login.forgot_password")}
+                </Link>
+              )}
               {err && <AuthAlert>{err}</AuthAlert>}
               <button type="submit" className={cn(authPrimaryBtnCls, "mt-1")}>
                 {t("login.btn")}

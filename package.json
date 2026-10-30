@@ -15,7 +15,8 @@
       "serialize-javascript": "^7.0.3",
       "shell-quote": "^1.8.4",
       "algoliasearch": "5.59.0",
-      "postcss": "8.5.28"
+      "postcss": "8.5.28",
+      "katex": "^0.18.2"
     }
   }
 }
