@@ -830,6 +830,21 @@
       "retry": "Riprova",
       "send_blocked": "Attendi il termine del caricamento file"
     },
+    "voice": {
+      "start": "Detta un messaggio",
+      "stop": "Ferma e trascrivi",
+      "cancel": "Annulla registrazione (Esc)",
+      "transcribing": "Trascrizione in corso…",
+      "dismiss": "Chiudi",
+      "error": {
+        "permission_denied": "Accesso al microfono negato. Consentilo nelle impostazioni del browser per dettare.",
+        "no_microphone": "Nessun microfono trovato.",
+        "too_long": "Registrazione troppo lunga: dividila in più parti.",
+        "too_large": "Registrazione troppo grande.",
+        "empty": "Non ho sentito nessuna parola: riprova.",
+        "failed": "Trascrizione non riuscita. Riprova tra poco."
+      }
+    },
     "web_search": {
       "disabled": "Ricerca web disattivata",
       "restricted": "Controllata · {{count}} host",

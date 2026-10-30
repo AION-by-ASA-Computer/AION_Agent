@@ -1112,3 +1112,79 @@ export async function fetchPromptSnapshots(
   return r.json();
 }
 
+
+export type VoiceStatus = {
+  enabled: boolean;
+  mode?: "remote" | "local";
+  max_duration_sec: number;
+  max_bytes: number;
+};
+
+const VOICE_DISABLED: VoiceStatus = { enabled: false, max_duration_sec: 0, max_bytes: 0 };
+
+/** Una sola richiesta per pagina: cache module-level (come ``fetchAuthStatus``). */
+let cachedVoiceStatus: Promise<VoiceStatus> | null = null;
+
+/** Whether the backend can transcribe dictation (``GET /v1/voice/status``). */
+export function fetchVoiceStatus(userId: string, token?: string | null): Promise<VoiceStatus> {
+  if (cachedVoiceStatus) return cachedVoiceStatus;
+  const pending = (async () => {
+    try {
+      const r = await fetch(`${apiBase()}/v1/voice/status`, { headers: baseUserHeaders(userId, token) });
+      if (!r.ok) return VOICE_DISABLED;
+      const j = (await r.json()) as Partial<VoiceStatus>;
+      return {
+        enabled: Boolean(j.enabled),
+        mode: j.mode,
+        max_duration_sec: Number(j.max_duration_sec || 0),
+        max_bytes: Number(j.max_bytes || 0),
+      };
+    } catch {
+      return VOICE_DISABLED;
+    }
+  })();
+  cachedVoiceStatus = pending;
+  // A failed request (backend still starting, token not ready) is retried next time.
+  void pending.then((s) => {
+    if (!s.enabled && cachedVoiceStatus === pending) cachedVoiceStatus = null;
+  });
+  return pending;
+}
+
+/** Error raised by ``transcribeVoice``; ``code`` is the backend ``detail`` (e.g. ``too_long``). */
+export class VoiceTranscribeError extends Error {
+  constructor(public code: string, public status: number) {
+    super(code);
+  }
+}
+
+/** Send one dictation recording to ``POST /v1/voice/transcribe`` and return its text. */
+export async function transcribeVoice(
+  audio: Blob,
+  opts: { language?: string; signal?: AbortSignal },
+  userId: string,
+  token?: string | null,
+): Promise<string> {
+  const ext = audio.type.includes("mp4") ? "m4a" : audio.type.includes("ogg") ? "ogg" : "webm";
+  const fd = new FormData();
+  fd.append("file", audio, `dictation.${ext}`);
+  if (opts.language) fd.append("language", opts.language);
+  const r = await fetch(`${apiBase()}/v1/voice/transcribe`, {
+    method: "POST",
+    headers: baseUserHeaders(userId, token),
+    body: fd,
+    signal: opts.signal,
+  });
+  if (!r.ok) {
+    let code = "failed";
+    try {
+      const j = (await r.json()) as { detail?: unknown };
+      if (typeof j.detail === "string") code = j.detail;
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new VoiceTranscribeError(code, r.status);
+  }
+  const j = (await r.json()) as { text?: string };
+  return (j.text || "").trim();
+}

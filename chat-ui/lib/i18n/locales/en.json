@@ -830,6 +830,21 @@
       "retry": "Retry",
       "send_blocked": "Wait for file uploads to finish"
     },
+    "voice": {
+      "start": "Dictate a message",
+      "stop": "Stop and transcribe",
+      "cancel": "Cancel recording (Esc)",
+      "transcribing": "Transcribing…",
+      "dismiss": "Dismiss",
+      "error": {
+        "permission_denied": "Microphone access denied. Allow it in your browser settings to dictate.",
+        "no_microphone": "No microphone found.",
+        "too_long": "Recording too long: split it into shorter parts.",
+        "too_large": "Recording too large.",
+        "empty": "No speech detected: try again.",
+        "failed": "Transcription failed. Try again shortly."
+      }
+    },
     "web_search": {
       "disabled": "Web search disabled",
       "restricted": "Restricted · {{count}} hosts",

@@ -21,6 +21,7 @@ are skipped, and a run that hits ``budget_sec`` returns ``partial`` plus
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import logging
@@ -52,8 +53,10 @@ __all__ = [
     "probe_audio_duration",
     "iter_audio_chunks",
     "load_audio_manifest",
+    "STT_JOB_LOCK",
     "resolve_language",
     "transcribe_audio_file",
+    "transcribe_audio_to_text",
 ]
 
 logger = logging.getLogger("audio_transcribe")
@@ -288,6 +291,11 @@ def _pcm_to_wav_bytes(pcm: np.ndarray) -> bytes:
 # so it is cached for the lifetime of the (session-scoped) MCP worker.
 _LOCAL_MODEL_CACHE: dict[tuple[str, str, int, str], Any] = {}
 _LOCAL_MODEL_LOCK = threading.Lock()
+
+# One in-process STT job at a time (WhatsApp voice notes, chat dictation): the
+# local model above is shared and CPU-bound, the remote service usually a single
+# GPU. A plain asyncio lock is enough because the backend runs ``--workers 1``.
+STT_JOB_LOCK = asyncio.Lock()
 
 
 # Multilingual faster-whisper sizes offered in admin-ui, smallest first. The
@@ -773,6 +781,79 @@ def load_audio_manifest(session_root: Path, filename: str) -> Optional[dict]:
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
+
+
+async def transcribe_audio_to_text(
+    src_path: Path,
+    *,
+    engine: SttEngine,
+    language: Optional[str] = None,
+    max_duration_sec: float = 0.0,
+) -> dict:
+    """Transcribe a short clip straight to text, writing nothing to disk.
+
+    Meant for chat dictation (``POST /v1/voice/transcribe``): segments are joined
+    with spaces and carry no ``[mm:ss]`` prefix, and nothing lands in the session
+    workspace. ``max_duration_sec`` (0 = no limit) rejects longer clips with
+    ``too_long``; clips without a duration header (browser WebM recordings) are
+    decoded up to that limit and no further.
+    """
+    if not src_path.is_file():
+        return _error("not_a_file", f"{src_path.name} is not a readable file")
+
+    try:
+        duration = await asyncio.to_thread(probe_audio_duration, src_path)
+    except ImportError:
+        return _error("decoder_unavailable", "PyAV is not installed")
+    except Exception as exc:  # noqa: BLE001 - reported to the caller as JSON
+        return _error("not_audio", f"Cannot read audio from {src_path.name}: {exc}")
+
+    limit = float(max_duration_sec or 0.0)
+    if limit > 0 and duration is not None and duration > limit:
+        return _error(
+            "too_long", f"{src_path.name} lasts {duration:.0f}s, above the {limit:.0f}s limit"
+        )
+
+    end_sec = limit if limit > 0 else None
+    parts: list[str] = []
+    detected_language: Optional[str] = None
+    decoded_sec = 0.0
+    chunks = iter_audio_chunks(
+        src_path, start_sec=0.0, chunk_sec=engine.chunk_sec, end_sec=end_sec
+    )
+    try:
+        while True:
+            item = await asyncio.to_thread(next, chunks, None)
+            if item is None:
+                break
+            chunk_start, pcm = item
+            decoded_sec = chunk_start + pcm.size / SAMPLE_RATE
+            try:
+                result = await engine.transcribe_chunk(pcm, language)
+            except Exception as exc:  # noqa: BLE001 - no partial text for dictation
+                logger.warning("Dictation STT failed: %s", exc)
+                return _error(
+                    "engine_failed", f"{engine.name} STT failed: {exc}", _engine_hint(engine)
+                )
+            parts.extend(text for _s, _e, text in result.segments if text)
+            if result.language and not detected_language:
+                detected_language = result.language
+    except Exception as exc:  # noqa: BLE001 - corrupt stream mid-way
+        return _error("not_audio", f"Cannot decode {src_path.name}: {exc}")
+    finally:
+        chunks.close()
+
+    text = " ".join(parts).strip()
+    if not text:
+        return _error("empty", "No speech recognised in the recording.")
+    return {
+        "ok": True,
+        "text": text,
+        "language": language or detected_language,
+        "duration_sec": round(duration if duration is not None else decoded_sec, 2),
+        "engine": engine.name,
+        "model": engine.model,
+    }
 
 
 def _engine_hint(engine: SttEngine) -> str:

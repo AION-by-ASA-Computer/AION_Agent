@@ -855,6 +855,21 @@
       "retry": "Reintentar",
       "send_blocked": "Espera a que finalicen las cargas de archivos",
       "uploading": "Subiendo… {{progress}}%"
+    },
+    "voice": {
+      "start": "Dictar un mensaje",
+      "stop": "Detener y transcribir",
+      "cancel": "Cancelar grabación (Esc)",
+      "transcribing": "Transcribiendo…",
+      "dismiss": "Cerrar",
+      "error": {
+        "permission_denied": "Acceso al micrófono denegado. Permítelo en la configuración del navegador para dictar.",
+        "no_microphone": "No se encontró ningún micrófono.",
+        "too_long": "Grabación demasiado larga: divídela en partes más cortas.",
+        "too_large": "Grabación demasiado grande.",
+        "empty": "No se detectó voz: inténtalo de nuevo.",
+        "failed": "La transcripción falló. Inténtalo de nuevo en un momento."
+      }
     }
   },
   "login": {

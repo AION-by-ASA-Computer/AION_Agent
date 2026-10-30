@@ -14,6 +14,7 @@ MODULES=(
   src/test/test_audio_transcribe.py
   src/test/test_admin_stt.py
   src/test/test_whatsapp_voice.py
+  src/test/test_voice_input.py
 )
 
 echo "==> CI pytest modules: ${#MODULES[@]}"

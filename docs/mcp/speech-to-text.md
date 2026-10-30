@@ -135,6 +135,23 @@ La lingua è modificabile solo in modalità locale ma non viene svuotata passand
 - In Docker il salvataggio riavvia il container: conviene attendere la fine del download prima di salvare (i file già scaricati restano e un nuovo tentativo riprende da lì).
 - Se è configurato un servizio remoto, la sezione lo segnala: le scelte locali entrano in uso solo senza servizio remoto.
 
+## Dettatura da chat-ui
+
+Il pulsante microfono nel composer di chat-ui usa gli stessi motori (remoto o faster-whisper locale) ma **non passa dal tool MCP**: il backend chiama `transcribe_audio_to_text` di [`src/tools/audio_transcribe.py`](../../src/tools/audio_transcribe.py) in-process ([`src/api/v1/voice.py`](../../src/api/v1/voice.py)). Così il modello locale è caricato una volta sola per tutto il backend e il testo torna in pochi secondi, senza un turno dell'agente.
+
+- `GET /v1/voice/status` → `{enabled, mode, max_duration_sec, max_bytes}`. `enabled` è vero se `AION_CHAT_VOICE_INPUT` non è `0` **e** c'è un motore pronto: servizio remoto configurato, oppure faster-whisper installato con il modello locale già sul disco (altrimenti il pulsante resta nascosto: scaricalo da admin-ui → Impostazioni → Audio).
+- `POST /v1/voice/transcribe` (multipart `file`, `language` opzionale = lingua della chat-ui) → `{text, language, duration_sec}`. Errori: 413 `too_large`, 422 `too_long` / `not_audio` / `empty`, 503 `voice_input_disabled` / `engine_failed` / `decoder_unavailable`.
+- **Privacy:** la registrazione è scritta in una cartella temporanea eliminata subito dopo; non finisce in `uploads/` (quindi non viene allegata al messaggio) e il testo non viene loggato.
+- Il testo viene inserito nella textarea al posto del cursore: l'utente lo rilegge e lo invia. Esc annulla la registrazione.
+- Con il modello locale le dettature sono serializzate (una alla volta).
+- Il browser concede il microfono solo in contesto sicuro: HTTPS oppure `localhost`. Con lo stack Docker in HTTP (`DOMAIN=:80`) il pulsante funziona solo aprendo la chat su `localhost`.
+
+| Variabile | Default | Descrizione |
+|-----------|---------|-------------|
+| `AION_CHAT_VOICE_INPUT` | `1` | `0` nasconde il pulsante microfono |
+| `AION_STT_DICTATION_MAX_SEC` | `300` | Durata massima di una dettatura (la chat-ui si ferma un secondo prima) |
+| `AION_STT_DICTATION_MAX_BYTES` | `10485760` | Dimensione massima di una registrazione |
+
 ## Registrazione
 
 - [`config_std/mcp_registry.yaml`](../../config_std/mcp_registry.yaml): voce `stt` (`python -u stt_mcp/server.py`).
