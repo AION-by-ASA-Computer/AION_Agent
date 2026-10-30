@@ -870,6 +870,11 @@
         "empty": "Aucune parole détectée : réessayez.",
         "failed": "La transcription a échoué. Réessayez dans un instant."
       }
+    },
+    "project_menu": {
+      "label": "Projet",
+      "none": "Aucun projet disponible",
+      "open_panel": "Ouvrir le panneau mémoire"
     }
   },
   "login": {

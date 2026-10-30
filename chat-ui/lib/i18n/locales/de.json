@@ -870,6 +870,11 @@
         "empty": "Keine Sprache erkannt: versuche es erneut.",
         "failed": "Transkription fehlgeschlagen. Versuche es gleich noch einmal."
       }
+    },
+    "project_menu": {
+      "label": "Projekt",
+      "none": "Keine Projekte verfügbar",
+      "open_panel": "Gedächtnis-Panel öffnen"
     }
   },
   "login": {

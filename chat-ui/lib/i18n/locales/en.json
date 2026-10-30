@@ -870,6 +870,11 @@
       "no_domains_desc": "Add sources above to limit the search.",
       "clear_list": "Clear list",
       "save_preferences": "Save Preferences"
+    },
+    "project_menu": {
+      "label": "Project",
+      "none": "No projects available",
+      "open_panel": "Open memory panel"
     }
   },
   "login": {

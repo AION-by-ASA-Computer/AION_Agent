@@ -870,6 +870,11 @@
         "empty": "No se detectó voz: inténtalo de nuevo.",
         "failed": "La transcripción falló. Inténtalo de nuevo en un momento."
       }
+    },
+    "project_menu": {
+      "label": "Proyecto",
+      "none": "No hay proyectos disponibles",
+      "open_panel": "Abrir panel de memoria"
     }
   },
   "login": {

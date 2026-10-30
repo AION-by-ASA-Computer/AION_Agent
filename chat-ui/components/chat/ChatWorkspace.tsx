@@ -7,7 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
-import { Loader2, Send, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star, Search, Cpu, Bot, Shield, MessageSquareQuote, CornerUpLeft } from "lucide-react";
+import { Loader2, Send, FolderOpen, Square, Sparkles, Paperclip, Plus, ChevronRight, User, Check, ChevronDown, X, Wrench, Pencil, Globe, GlobeLock, Settings, Download, AlertCircle, FileText, AlertTriangle, MessageSquare, HelpCircle, Bug, Database, BookOpen, Brain, ThumbsDown, Star, Search, Cpu, Bot, Shield, MessageSquareQuote, CornerUpLeft } from "lucide-react";
 import { apiBase } from "@/lib/config";
 import {
   AION_CHAT_STREAM_DEBUG_ENABLED,
@@ -133,7 +133,6 @@ import { researchLog } from "@/lib/research-debug";
 import { ArtifactsPanel, type DockArtifactItem } from "@/components/dock/ArtifactsPanel";
 import { PromptDebugPanel, type PromptSnapshot } from "@/components/dock/PromptDebugPanel";
 import { MemoryDockPanel } from "@/components/memory/MemoryDockPanel";
-import { ProjectMemoryChip } from "@/components/memory/ProjectMemoryChip";
 import { readStoredSqlProject } from "@/components/memory/ProjectMemoryToolbar";
 import { ProjectCreateModal } from "@/components/memory/ProjectCreateModal";
 import { fetchSqlProjects, type SqlProject } from "@/lib/api/query-memory";
@@ -1129,6 +1128,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [isModelSubOpen, setIsModelSubOpen] = useState(false);
   const [isAgentModeSubOpen, setIsAgentModeSubOpen] = useState(false);
   const [isPiiTagsSubOpen, setIsPiiTagsSubOpen] = useState(false);
+  const [isProjectSubOpen, setIsProjectSubOpen] = useState(false);
 
   const closePlusSubMenus = useCallback(() => {
     setIsToolsViewSubOpen(false);
@@ -1137,6 +1137,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     setIsModelSubOpen(false);
     setIsAgentModeSubOpen(false);
     setIsPiiTagsSubOpen(false);
+    setIsProjectSubOpen(false);
   }, []);
 
   const [toolsView, setToolsView] = useState<"compact" | "hidden" | "partial" | "full">(() => {
@@ -4098,6 +4099,104 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               <span>{t("chat.upload.button")}</span>
             </button>
 
+            {/* Memory project picker: lives in the "+" menu (not as a composer chip) to keep the
+                composer uncluttered now that the dictation button shares that row. */}
+            {showProjectMemory ? (
+              <div className="relative" onMouseLeave={() => setIsProjectSubOpen(false)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsProjectSubOpen((prev) => !prev);
+                    setIsModelSubOpen(false);
+                    setIsAgentModeSubOpen(false);
+                    setIsToolsViewSubOpen(false);
+                    setIsWebSearchSubOpen(false);
+                    setIsThinkingSubOpen(false);
+                  }}
+                  onMouseEnter={() => {
+                    closePlusSubMenus();
+                    setIsProjectSubOpen(true);
+                  }}
+                  aria-haspopup="listbox"
+                  aria-expanded={isProjectSubOpen}
+                  className={cn(
+                    "flex w-full items-center justify-between rounded-xl px-3 py-2 text-xs font-medium transition-colors text-left",
+                    isProjectSubOpen
+                      ? "bg-primary/10 text-foreground dark:bg-white/10"
+                      : "text-muted-foreground hover:bg-primary/10 hover:text-foreground dark:hover:bg-white/10"
+                  )}
+                >
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <FolderOpen size={14} className="shrink-0 opacity-80" aria-hidden />
+                    <span className="truncate">
+                      {t("chat.project_menu.label")}
+                      {sqlQueryProject && sqlQueryProject !== "default"
+                        ? `: ${sqlProjects.find((p) => p.slug === sqlQueryProject)?.display_name ?? sqlQueryProject}`
+                        : ""}
+                    </span>
+                  </div>
+                  <ChevronRight size={13} className="shrink-0 opacity-60" aria-hidden />
+                </button>
+
+                {isProjectSubOpen && (
+                  <div className="absolute bottom-full left-0 z-50 pb-1.5 w-60 sm:bottom-0 sm:left-full sm:pb-0 sm:pl-1.5">
+                    <div
+                      onMouseEnter={() => setIsProjectSubOpen(true)}
+                      className="w-full rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground shadow-2xl ring-1 ring-border/50 animate-in fade-in-0 zoom-in-95 slide-in-from-bottom-2 duration-200 sm:slide-in-from-left-2"
+                    >
+                      <div className="space-y-0.5 max-h-60 overflow-y-auto custom-scrollbar" role="listbox">
+                        {sqlProjects.length === 0 ? (
+                          <div className="px-2.5 py-2 text-center text-[0.714em] text-muted-foreground">
+                            {t("chat.project_menu.none")}
+                          </div>
+                        ) : (
+                          sqlProjects.map((p) => {
+                            const isSelected = p.slug === sqlQueryProject;
+                            return (
+                              <button
+                                key={p.slug}
+                                type="button"
+                                role="option"
+                                aria-selected={isSelected}
+                                onClick={() => {
+                                  handleProjectChange(p.slug);
+                                  setIsPlusOpen(false);
+                                  closePlusSubMenus();
+                                }}
+                                className={cn(
+                                  "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium transition-colors text-left",
+                                  isSelected
+                                    ? "bg-primary/10 text-primary"
+                                    : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                                )}
+                              >
+                                <span className="truncate">{p.display_name}</span>
+                                {isSelected && <Check size={12} className="shrink-0 text-primary ml-2" />}
+                              </button>
+                            );
+                          })
+                        )}
+                      </div>
+                      <div className="mt-1 border-t border-border/45 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDockTab("memory");
+                            setIsPlusOpen(false);
+                            closePlusSubMenus();
+                          }}
+                          className="flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground text-left"
+                        >
+                          <span className="truncate">{t("chat.project_menu.open_panel")}</span>
+                          <ChevronRight size={12} className="shrink-0 opacity-60" aria-hidden />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
             <div className="my-1 border-t border-border/45" />
 
             <div className="relative" onMouseLeave={() => setIsModelSubOpen(false)}>
@@ -4809,19 +4908,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       </div>
     );
 
-    const projectMemoryNode = showProjectMemory ? (
-      <div className="shrink-0">
-        <ProjectMemoryChip
-          userId={userId}
-          token={token}
-          profileSlug={activeProfileSlug}
-          projectSlug={sqlQueryProject}
-          onChangeProject={handleProjectChange}
-          onOpenPanel={() => setDockTab("memory")}
-        />
-      </div>
-    ) : null;
-
     const sendButtonNode = (
       <div className="flex shrink-0 items-center gap-1.5">
         {mcpAlertCount > 0 && (
@@ -5096,7 +5182,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             </div>
             {!isMultiLine && (
               <div className="flex items-center gap-1.5 shrink-0 animate-in fade-in duration-150">
-                {projectMemoryNode}
                 {sendButtonNode}
               </div>
             )}
@@ -5107,7 +5192,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   {profileSelectorNode}
                 </div>
                 <div className="flex items-center gap-1.5">
-                  {projectMemoryNode}
                   {sendButtonNode}
                 </div>
               </div>
