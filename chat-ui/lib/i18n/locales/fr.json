@@ -301,7 +301,8 @@
       "theme_dark": "Sombre",
       "language": "Langue",
       "customize": "Personnaliser les instructions",
-      "logout": "Se déconnecter"
+      "logout": "Se déconnecter",
+      "admin_panel": "Panneau d'administration"
     },
     "add_favorite": "Ajouter aux favoris",
     "bucket_older": "Plus anciennes",

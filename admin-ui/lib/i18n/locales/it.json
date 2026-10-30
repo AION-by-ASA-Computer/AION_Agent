@@ -568,6 +568,8 @@
       "verified": "Verificato",
       "configure_url": "Imposta URL",
       "install": "Installa",
+      "installed": "Installato",
+      "uninstall": "Disinstalla",
       "community_title": "Community",
       "searching": "Ricerca nei registri…",
       "empty_title": "Nessun risultato",
@@ -1968,5 +1970,18 @@
     "few_ratings": "Meno di {{n}} valutazioni: troppo poche per giudicare",
     "footnote": "Il gradimento è colorato solo da {{n}} valutazioni in su. Per intervenire su un profilo debole, modificane prompt o modello.",
     "open_profiles": "Apri profili"
+  },
+  "restart_overlay": {
+    "title": "Riavvio dell'API in corso",
+    "hint_initial": "Applicazione della nuova configurazione e riavvio del container...",
+    "hint_slow": "Riavvio dei servizi e inizializzazione dei tool MCP in corso... Attendere...",
+    "success_title": "API riavviata con successo",
+    "success_body": "La nuova configurazione è attiva. Aggiornamento in corso...",
+    "timed_out_title": "Il server non risponde ancora",
+    "timed_out_body": "Il riavvio ha impiegato più tempo del previsto. Il container potrebbe essere ancora in fase di caricamento o potrebbe essersi verificato un errore.",
+    "continue_waiting": "Continua ad attendere (+90s)",
+    "retry_now": "Verifica adesso",
+    "reload_page": "Ricarica pagina",
+    "dismiss": "Chiudi finestra"
   }
 }

@@ -568,6 +568,8 @@
       "verified": "Vérifié",
       "configure_url": "Définir l'URL",
       "install": "Installer",
+      "installed": "Installé",
+      "uninstall": "Désinstaller",
       "community_title": "Communauté",
       "searching": "Recherche dans les registres…",
       "empty_title": "Aucun résultat",
@@ -1968,5 +1970,18 @@
     "few_ratings": "Moins de {{n}} évaluations : trop peu pour conclure",
     "footnote": "L'approbation n'est colorée qu'à partir de {{n}} évaluations. Pour améliorer un profil faible, ajustez son prompt ou son modèle.",
     "open_profiles": "Ouvrir les profils"
+  },
+  "restart_overlay": {
+    "title": "Redémarrage de l'API",
+    "hint_initial": "Application de la nouvelle configuration et redémarrage du conteneur...",
+    "hint_slow": "Démarrage des services et initialisation des outils MCP... Veuillez patienter...",
+    "success_title": "API redémarrée avec succès",
+    "success_body": "La nouvelle configuration est active. Actualisation...",
+    "timed_out_title": "Le serveur ne répond pas encore",
+    "timed_out_body": "Le redémarrage a pris plus de temps que prévu. Le conteneur démarre peut-être encore ou une erreur s'est produite.",
+    "continue_waiting": "Continuer d'attendre (+90s)",
+    "retry_now": "Vérifier maintenant",
+    "reload_page": "Recharger la page",
+    "dismiss": "Fermer"
   }
 }

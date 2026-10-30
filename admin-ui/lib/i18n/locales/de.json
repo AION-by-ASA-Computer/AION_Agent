@@ -568,6 +568,8 @@
       "verified": "Verifiziert",
       "configure_url": "URL festlegen",
       "install": "Installieren",
+      "installed": "Installiert",
+      "uninstall": "Deinstallieren",
       "community_title": "Community",
       "searching": "Register werden durchsucht…",
       "empty_title": "Nichts gefunden",
@@ -1968,5 +1970,18 @@
     "few_ratings": "Weniger als {{n}} Bewertungen: zu wenige für eine Aussage",
     "footnote": "Die Zustimmung wird erst ab {{n}} Bewertungen farbig markiert. Um ein schwaches Profil zu verbessern, passen Sie Prompt oder Modell an.",
     "open_profiles": "Profile öffnen"
+  },
+  "restart_overlay": {
+    "title": "API wird neu gestartet",
+    "hint_initial": "Neue Konfiguration wird angewendet und Container neu gestartet...",
+    "hint_slow": "Dienste und MCP-Tools werden initialisiert... Bitte warten...",
+    "success_title": "API erfolgreich neu gestartet",
+    "success_body": "Die neue Konfiguration ist aktiv. Daten werden aktualisiert...",
+    "timed_out_title": "Server antwortet noch nicht",
+    "timed_out_body": "Der Neustart hat länger als erwartet gedauert. Der Container startet möglicherweise noch oder es ist ein Fehler aufgetreten.",
+    "continue_waiting": "Weiter warten (+90s)",
+    "retry_now": "Jetzt prüfen",
+    "reload_page": "Seite neu laden",
+    "dismiss": "Schließen"
   }
 }

@@ -2947,6 +2947,27 @@ async def uninstall_zero_endpoint(server_slug: str):
 
     slug = server_slug.strip()
     mcp_manager.load_registry()
+    if slug in mcp_manager._registry_base:
+        raise HTTPException(
+            status_code=400, detail="Impossibile eliminare i moduli MCP di sistema."
+        )
+
+    from ..agent_profile import profile_manager
+
+    profile_manager.load_all()
+    referencing_profiles = [
+        p.name for p in profile_manager._profiles.values() if slug in p.mcp_servers
+    ]
+    if referencing_profiles:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "mcp_in_use",
+                "message": f"Impossibile eliminare il server MCP. È in uso nei seguenti profili: {', '.join(referencing_profiles)}",
+                "profiles": referencing_profiles,
+            },
+        )
+
     if slug in mcp_manager._registry_local:
         mcp_manager._registry_local.pop(slug, None)
         mcp_manager._rebuild_merged()
