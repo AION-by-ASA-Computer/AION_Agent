@@ -318,7 +318,8 @@
       "theme_dark": "Scuro",
       "language": "Lingua",
       "customize": "Personalizza istruzioni",
-      "logout": "Esci"
+      "logout": "Esci",
+      "admin_panel": "Pannello admin"
     }
   },
   "schedulesPage": {

@@ -318,7 +318,8 @@
       "theme_dark": "Dark",
       "language": "Language",
       "customize": "Customize instructions",
-      "logout": "Sign out"
+      "logout": "Sign out",
+      "admin_panel": "Admin panel"
     }
   },
   "schedulesPage": {

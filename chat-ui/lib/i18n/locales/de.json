@@ -300,7 +300,8 @@
       "theme_dark": "Dunkel",
       "language": "Sprache",
       "customize": "Anweisungen anpassen",
-      "logout": "Abmelden"
+      "logout": "Abmelden",
+      "admin_panel": "Admin-Bereich"
     },
     "add_favorite": "Zu Favoriten hinzufügen",
     "bucket_older": "Älter",

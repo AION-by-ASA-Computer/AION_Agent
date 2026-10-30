@@ -14,6 +14,7 @@ import { Summary } from "@/components/metrics/Summary";
 import { Panel, ProfilesTable, ToolsTable, UsersTable } from "@/components/metrics/Tables";
 import { ErrorsPanel, ModelsPanel } from "@/components/metrics/Panels";
 import { ObservabilityDialog } from "@/components/metrics/ObservabilityDialog";
+import { RestartOverlay } from "@/components/RestartOverlay";
 import { TIME_RANGES } from "@/components/metrics/types";
 
 const k = "admin_metrics";
@@ -165,19 +166,15 @@ export default function MetricsPage() {
       {obs.open && <ObservabilityDialog obs={obs} t={t} />}
 
       {obs.restarting && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 p-4" role="alertdialog" aria-modal="true" aria-labelledby="obs-restart-title" aria-describedby="obs-restart-body">
-          <div className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.45)]">
-            <div className="flex items-center gap-3">
-              <Loader2 className="h-5 w-5 shrink-0 animate-spin text-muted-foreground" aria-hidden />
-              <h2 id="obs-restart-title" className="text-lg font-semibold tracking-[-0.015em]">
-                {t(`${k}.restart.title`)}
-              </h2>
-            </div>
-            <p id="obs-restart-body" className="mt-2 text-sm text-muted-foreground">
-              {t(`${k}.restart.body`)}
-            </p>
-          </div>
-        </div>
+        <RestartOverlay
+          isOpen={obs.restarting}
+          onSuccess={() => {
+            obs.setRestarting(false);
+            obs.setNotice({ type: "success", text: t(`${k}.config.restarted`) });
+            obs.onApplied();
+          }}
+          onDismiss={() => obs.setRestarting(false)}
+        />
       )}
     </div>
   );

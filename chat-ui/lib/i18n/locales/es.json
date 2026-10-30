@@ -300,7 +300,8 @@
       "theme_dark": "Oscuro",
       "language": "Idioma",
       "customize": "Personalizar instrucciones",
-      "logout": "Cerrar sesión"
+      "logout": "Cerrar sesión",
+      "admin_panel": "Panel de administración"
     },
     "add_favorite": "Añadir a favoritos",
     "bucket_older": "Más antiguas",

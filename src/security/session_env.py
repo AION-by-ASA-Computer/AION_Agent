@@ -20,6 +20,7 @@ _DEFAULT_ALLOWLIST = frozenset(
         "VIRTUAL_ENV",
         "PIP_DISABLE_PIP_VERSION_CHECK",
         "NODE_PATH",
+        "NPM_CONFIG_CACHE",
         "PYTHONPATH",
         "PYTHONUNBUFFERED",
         "TZ",
@@ -132,6 +133,7 @@ def build_session_env(
     env["HOME"] = str(session_root_resolved)
     env.setdefault("PATH", os.environ.get("PATH", "/usr/bin:/bin"))
     env.setdefault("PYTHONUNBUFFERED", "1")
+    env.setdefault("NPM_CONFIG_CACHE", "/tmp/.npm-cache")
     # Prevent local script names from shadowing Python standard library modules (e.g. inspect.py, types.py)
     env["PYTHONSAFEPATH"] = "1"
     # Session-only data root — never forward host ``AION_DATA_DIR`` (/app/data).

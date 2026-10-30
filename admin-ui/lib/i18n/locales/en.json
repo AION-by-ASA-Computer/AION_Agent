@@ -568,6 +568,8 @@
       "verified": "Verified",
       "configure_url": "Set URL",
       "install": "Install",
+      "installed": "Installed",
+      "uninstall": "Uninstall",
       "community_title": "Community",
       "searching": "Searching registries…",
       "empty_title": "Nothing found",
@@ -2092,5 +2094,18 @@
     "few_ratings": "Fewer than {{n}} ratings: too few to judge",
     "footnote": "Approval is colored only from {{n}} ratings up. To act on a weak profile, adjust its prompt or model.",
     "open_profiles": "Open profiles"
+  },
+  "restart_overlay": {
+    "title": "Restarting the API",
+    "hint_initial": "Applying new configuration and restarting the container...",
+    "hint_slow": "Services restart and MCP tool handshake in progress... Please wait...",
+    "success_title": "API restarted successfully",
+    "success_body": "The new configuration is active. Refreshing data...",
+    "timed_out_title": "Server not responding yet",
+    "timed_out_body": "The restart took longer than expected. The container might still be booting or an error may have occurred.",
+    "continue_waiting": "Continue waiting (+90s)",
+    "retry_now": "Check now",
+    "reload_page": "Reload page",
+    "dismiss": "Dismiss"
   }
 }
