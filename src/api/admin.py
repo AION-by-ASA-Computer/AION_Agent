@@ -68,6 +68,8 @@ from .metrics_api import router as metrics_router
 from .version_check import router as version_check_router
 from .admin_diagnostics import router as diagnostics_router
 from .admin_sso import router as admin_sso_router
+from .admin_whatsapp import router as admin_whatsapp_router
+from .admin_stt import router as admin_stt_router
 from ..runtime.redis_client import redis_status
 from ..data.engine import get_async_session_maker
 from ..mcp_connector_catalog import (
@@ -290,6 +292,8 @@ router.include_router(metrics_router)
 router.include_router(version_check_router)
 router.include_router(diagnostics_router)
 router.include_router(admin_sso_router)
+router.include_router(admin_whatsapp_router)
+router.include_router(admin_stt_router)
 
 
 def _project_root() -> Path:

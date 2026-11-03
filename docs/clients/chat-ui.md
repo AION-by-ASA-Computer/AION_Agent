@@ -63,6 +63,7 @@ Backend (`.env`): `AION_CORS_ORIGINS` can list `http://localhost:8003`; default 
 - `GET|PUT /v1/runtime-settings` — allowlisted turn limits and generation kwargs (sidebar Tunings)
 - `POST|PATCH|DELETE /v1/runtime-settings/presets` — per-user named snapshots (max 20)
 - `GET|POST /v1/me/api-keys`, `DELETE /v1/me/api-keys/{id}` — personal API keys (Settings → API keys; see [API keys](../security/api-keys.md))
+- `GET /v1/voice/status`, `POST /v1/voice/transcribe` — voice dictation (microphone button; see [Speech-to-text](../mcp/speech-to-text.md#dettatura-da-chat-ui))
 
 ## Sidebar tunings (runtime + presets)
 
@@ -110,6 +111,7 @@ Path: `/integrations`. Panel for personal credentials on servers with `credentia
 | Plan recovery on network error / artifact fallback | Partial (not duplicated client-side) |
 | CoT messages auto-collapse | Partial |
 | Side threads (select a passage → child conversation in the dock) | Yes — see [Side threads](./side-threads.md) |
+| Voice dictation (microphone → text in the composer, Esc cancels) | Yes (`VoiceInputButton`, `hooks/use-voice-dictation.ts`); shown only when `/v1/voice/status` is enabled and the page is HTTPS or `localhost` |
 
 ## Tool and thinking visualization
 

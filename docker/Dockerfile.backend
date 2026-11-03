@@ -88,6 +88,17 @@ COPY --from=builder /opt/venv /opt/venv
 # Copia il binario uv/uvx per consentire all'agente di eseguire server MCP tramite uvx
 COPY --from=uv-bin /uv /uvx /usr/local/bin/
 
+# Local speech-to-text model for the stt MCP server (faster-whisper, CTranslate2).
+# Downloaded at build time into <AION_STT_LOCAL_MODEL_DIR>/<name>, the layout the
+# server looks up first, so the default model never needs network access at runtime.
+# Other models chosen later from admin-ui are downloaded into the aion_data volume
+# (<AION_DATA_DIR>/models/faster-whisper) and survive container recreation.
+# Override the baked size with --build-arg STT_LOCAL_MODEL=base (lighter) or
+# large-v3-turbo (heavier, slower on CPU) and set the same AION_STT_LOCAL_MODEL in .env.
+ARG STT_LOCAL_MODEL=small
+ENV AION_STT_LOCAL_MODEL_DIR=/opt/aion/models/faster-whisper
+RUN python -c "from faster_whisper import download_model; download_model('${STT_LOCAL_MODEL}', output_dir='/opt/aion/models/faster-whisper/${STT_LOCAL_MODEL}')"
+
 
 WORKDIR /app
 

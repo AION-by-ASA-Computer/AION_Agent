@@ -6,6 +6,7 @@ import {
   FileText,
   KeyRound,
   Loader2,
+  MessageCircle,
   Palette,
   Settings,
   ShieldCheck,
@@ -20,6 +21,7 @@ import { ProfileAvatarEditor } from "@/components/settings/ProfileAvatarEditor";
 import { SettingsNav, type SettingsTab } from "@/components/settings/SettingsNav";
 import { TuningsSettingsSection } from "@/components/settings/TuningsSettingsSection";
 import { UserMdSection } from "@/components/settings/UserMdSection";
+import { WhatsAppSection } from "@/components/settings/WhatsAppSection";
 import {
   Field,
   FieldGrid,
@@ -33,6 +35,7 @@ import {
 } from "@/components/settings/ui";
 import { ShellSectionHeader } from "@/components/layout/ShellSectionHeader";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
+import { getWhatsAppStatus } from "@/lib/api/whatsapp";
 import { apiBase } from "@/lib/config";
 import { cn } from "@/lib/cn";
 import { detectBrowserLocale, setLocale, type Locale } from "@/lib/i18n/i18n-store";
@@ -86,6 +89,7 @@ function tabFromSearchParam(tab: string | null): SettingsTab {
   if (tab === "appearance") return "appearance";
   if (tab === "security") return "security";
   if (tab === "api-keys" || tab === "api_keys" || tab === "apikeys") return "api-keys";
+  if (tab === "whatsapp") return "whatsapp";
   if (tab === "tunings" || tab === "tuning" || tab === "runtime" || tab === "presets") return "tunings";
   return "profile";
 }
@@ -120,6 +124,8 @@ export default function SettingsPage() {
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  // The WhatsApp tab shows only once the backend confirms the channel is on (404 = not deployed).
+  const [whatsappEnabled, setWhatsappEnabled] = useState(false);
 
   const navItems = useMemo(
     () => [
@@ -129,10 +135,13 @@ export default function SettingsPage() {
       ...(currentToken
         ? [{ id: "api-keys" as const, label: t("settings.tab.api_keys"), icon: KeyRound }]
         : []),
+      ...(currentToken && whatsappEnabled
+        ? [{ id: "whatsapp" as const, label: t("settings.tab.whatsapp"), icon: MessageCircle }]
+        : []),
       { id: "instructions" as const, label: t("settings.tab.instructions"), icon: FileText },
       { id: "tunings" as const, label: t("settings.tab.tunings"), icon: SlidersHorizontal },
     ],
-    [t, currentToken],
+    [t, currentToken, whatsappEnabled],
   );
 
   const showToast = useCallback((message: string, variant: "success" | "error" = "success") => {
@@ -205,6 +214,26 @@ export default function SettingsPage() {
     }
     void reloadUser();
   }, [mounted, reloadUser]);
+
+  useEffect(() => {
+    if (!mounted || !currentToken) return;
+    let cancelled = false;
+    // A `?tab=whatsapp` deep link falls back to the profile when the channel is unavailable.
+    const hide = () => setActiveTab((tab) => (tab === "whatsapp" ? "profile" : tab));
+    getWhatsAppStatus(currentUserId, currentToken)
+      .then((data) => {
+        if (cancelled) return;
+        setWhatsappEnabled(data.channel_enabled);
+        if (!data.channel_enabled) hide();
+      })
+      .catch(() => {
+        // Endpoint missing (404) or unreachable: keep the tab hidden.
+        if (!cancelled) hide();
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, currentToken, currentUserId]);
 
   useEffect(() => {
     if (!mounted) return;
@@ -529,6 +558,10 @@ export default function SettingsPage() {
             ) : null}
 
             {activeTab === "api-keys" && currentToken ? <ApiKeysSection onToast={showToast} /> : null}
+
+            {activeTab === "whatsapp" && currentToken && whatsappEnabled ? (
+              <WhatsAppSection onToast={showToast} />
+            ) : null}
 
             {activeTab === "instructions" ? (
               <UserMdSection

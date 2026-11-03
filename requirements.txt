@@ -40,6 +40,8 @@ pymupdf
 pdf2image
 Pillow>=13.0.0
 pytesseract
+# Local speech-to-text for the stt MCP server (also pulls PyAV with bundled FFmpeg libs)
+faster-whisper>=1.2.1,<2
 playwright>=1.49.0
 beautifulsoup4>=4.12.0
 trafilatura>=2.0.0
