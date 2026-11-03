@@ -337,3 +337,41 @@ def test_tool_search_unknown_lists_names_without_publishing():
     finally:
         clear_turn_runtime(sid)
         clear_deferred_tools(sid)
+
+
+def test_tool_search_group_names_tools_beyond_limit(monkeypatch):
+    names = [
+        "list_hosts",
+        "get_os_info",
+        "get_package_version",
+        "list_listening_ports",
+        "get_health",
+        "list_pending_updates",
+        "get_reboot_status",
+    ]
+
+    async def _fake_mcp(_server_name, *_args, **_kwargs):
+        return [_Tool(n) for n in names]
+
+    monkeypatch.setattr("src.runtime.tool_exposure._mcp_group_tools", _fake_mcp)
+    monkeypatch.setattr(
+        "src.runtime.tool_exposure.publish_tools",
+        lambda tools, session_id="": list(tools),
+    )
+    sid = "search-group-rest"
+    profile = SimpleNamespace(
+        slug="sre_ssh",
+        mcp_servers=["skills_hub", "session_sandbox", "aion_sre_ssh"],
+        native_tool_groups=[],
+    )
+    tool = make_tool_search_tool(
+        session_id=sid, user_id="default", tenant_id="default", profile=profile
+    )
+    try:
+        message = tool.function("aion_sre_ssh")
+        assert "Loaded 5 tool(s)" in message
+        assert "not loaded yet: list_pending_updates, get_reboot_status" in message
+        follow_up = tool.function("list_pending_updates")
+        assert "Loaded 1 tool(s): list_pending_updates" in follow_up
+    finally:
+        clear_deferred_tools(sid)

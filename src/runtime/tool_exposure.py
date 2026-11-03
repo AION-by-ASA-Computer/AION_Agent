@@ -437,6 +437,7 @@ def make_tool_search_tool(
             _tool_name(top).lower() == q.lower()
             or _norm_query(_tool_name(top)) == _norm_query(q)
         )
+        not_loaded: List[str] = []
         if strong:
             chosen = [
                 t for t in matches if _norm_query(_tool_name(t)) == _norm_query(q)
@@ -456,6 +457,13 @@ def make_tool_search_tool(
                 ranked = rank_tools(q, loaded)
                 if _norm_query(q) == _norm_query(group) or not ranked:
                     chosen = list(loaded[:_SEARCH_LIMIT])
+                    # Without the rest of the group the model assumes those
+                    # tools do not exist instead of loading them by name.
+                    not_loaded = [
+                        n
+                        for n in (_tool_name(t) for t in loaded[_SEARCH_LIMIT:])
+                        if n and n not in already
+                    ]
                 else:
                     chosen = ranked
             elif matches:
@@ -472,10 +480,17 @@ def make_tool_search_tool(
             )
         attached = publish_tools(chosen[:_SEARCH_LIMIT], session_id=session_id)
         names = ", ".join(_tool_name(t) for t in attached if _tool_name(t))
-        return (
+        message = (
             f"Loaded {len(attached)} tool(s): {names}. "
             "You can call them on the next step."
         )
+        if not_loaded:
+            message += (
+                f" Also available in '{q}', not loaded yet: "
+                + ", ".join(not_loaded)
+                + ". Load each one with tool_search(\"<exact name>\")."
+            )
+        return message
 
     return Tool(
         name="tool_search",

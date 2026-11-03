@@ -145,6 +145,52 @@ def append_ledger_entry(session_id: str, entry: LedgerEntry) -> None:
         logger.debug("ledger append failed session=%s: %s", sid[:8], exc)
 
 
+def prune_ledger_since(session_id: str, cutoff_ts: float) -> int:
+    """Drop ledger rows with ``ts >= cutoff_ts`` and their offloaded files.
+
+    Called when a turn is deleted (regenerate / edit): without this the next
+    turn's tool trace would list calls the user no longer sees. Returns the
+    number of rows removed.
+    """
+    sid = (session_id or "").strip()
+    if not sid:
+        return 0
+    entries = _read_entries(sid)
+    if not entries:
+        return 0
+    keep: List[Dict[str, Any]] = []
+    dropped: List[Dict[str, Any]] = []
+    for row in entries:
+        try:
+            ts = float(row.get("ts") or 0.0)
+        except (TypeError, ValueError):
+            ts = 0.0
+        (dropped if ts >= cutoff_ts else keep).append(row)
+    if not dropped:
+        return 0
+    kept_paths = {str(r.get("path")) for r in keep if r.get("path")}
+    for row in dropped:
+        rel = str(row.get("path") or "")
+        if not rel.startswith(f"{TOOL_RESULTS_REL}/") or rel in kept_paths:
+            continue
+        try:
+            safe_resolve(sid, rel).unlink(missing_ok=True)
+        except (OSError, ValueError) as exc:
+            logger.debug("ledger prune unlink failed session=%s: %s", sid[:8], exc)
+    try:
+        path = ledger_path(sid)
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(
+            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in keep),
+            encoding="utf-8",
+        )
+        tmp.replace(path)
+    except OSError as exc:
+        logger.warning("ledger prune failed session=%s: %s", sid[:8], exc)
+        return 0
+    return len(dropped)
+
+
 def _format_chars(n: int) -> str:
     if n >= 1000:
         return f"{n / 1000:.1f}k"

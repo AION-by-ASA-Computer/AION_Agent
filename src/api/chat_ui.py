@@ -843,6 +843,7 @@ async def delete_turn_chat_ui(
 
         if msg_to_delete.role != "user":
             raise HTTPException(400, "Only user messages can trigger turn deletion")
+        deleted_at = msg_to_delete.created_at
 
         # Verify if this is the last user message in the conversation
         q_later_user = select(Message).where(
@@ -880,12 +881,25 @@ async def delete_turn_chat_ui(
 
         session.add(r)
         await session.commit()
+        message_count = r.message_count
 
-        return {
-            "success": True,
-            "message_id": message_id,
-            "message_count": r.message_count,
-        }
+    # Tool calls of the deleted turns stay in the session ledger otherwise,
+    # and the next turn's tool trace shows calls the user can no longer see.
+    if deleted_at is not None:
+        if deleted_at.tzinfo is None:
+            deleted_at = deleted_at.replace(tzinfo=timezone.utc)
+        from src.runtime.tool_ledger import prune_ledger_since
+
+        try:
+            prune_ledger_since(conv_id, deleted_at.timestamp())
+        except Exception as exc:
+            logger.warning("ledger prune after turn delete failed: %s", exc)
+
+    return {
+        "success": True,
+        "message_id": message_id,
+        "message_count": message_count,
+    }
 
 
 # ──────────────────────────────────────────────────────────────────────────────
