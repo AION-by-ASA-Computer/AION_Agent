@@ -134,6 +134,8 @@ Hard limits on the single turn to avoid LLM runaway loops:
 |-----------|---------|-------------|
 | `AION_REASONING_MAX_CHARS` | `0` | Max characters of streamed reasoning (0 = no cap; recommended for SQL) |
 | `AION_REASONING_MAX_EVENTS` | `0` | Max reasoning events per turn (0 = no cap) |
+| `AION_REASONING_REPLAY` | `1` | Replay the model's own reasoning from earlier steps of the current turn on assistant messages (interleaved thinking). `0` disables. Skipped for Anthropic/Google |
+| `AION_REASONING_REPLAY_FIELDS` | `reasoning_content,reasoning` | Assistant-message fields carrying the replayed reasoning (vLLM reads `reasoning`, llama.cpp/SGLang read `reasoning_content`) |
 | `AION_TOOL_CALLS_MAX_PER_TURN` | `24` | Hard cap on tool calls |
 | `AION_TOOL_EVENTS_MAX_PER_TURN` | `60` | Hard cap on emitted tool events |
 | `AION_TOOL_DEDUPE_ENABLED` | `1` | Deduplicates identical tool calls close in time (loop guard) |
