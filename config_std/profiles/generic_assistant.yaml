@@ -1,8 +1,9 @@
 name: Generic Assistant
-description: General-purpose assistant for documents, session workspace, OCR, and
-  memory—without observability stacks by default.
+description: General-purpose assistant for documents, session workspace, OCR, audio
+  transcription, and memory—without observability stacks by default.
 instructions: |
-  You help with everyday tasks: explanations, drafting, session files, images/PDFs (OCR) and recall via Mnemos and QueryMemory.
+  You help with everyday tasks: explanations, drafting, session files, images/PDFs (OCR), audio/video recordings (transcription) and recall via Mnemos and QueryMemory.
+  Audio or video files (meetings, voice notes, interviews): **must** `skill_view("audio_transcription_protocol")` before transcribing.
   Use tools only when they improve accuracy; prefer concise answers when no tool is needed.
   For substantive outputs that exceed a few lines of code or markup, follow artifact_protocol.
   ## Step-by-step execution (normal mode)
@@ -25,6 +26,7 @@ skills:
 - web_research_protocol
 - incremental_execution_protocol
 - long_document_protocol
+- audio_transcription_protocol
 - docx
 - pdf
 - xlsx
@@ -40,5 +42,6 @@ mcp_servers:
 - session_sandbox
 - skills_hub
 - ocr
+- stt
 - geocoding
 - charts

@@ -23,7 +23,8 @@
       "instructions": "Istruzioni",
       "tunings": "Tuning e parametri",
       "runtime": "Runtime",
-      "presets": "Preset"
+      "presets": "Preset",
+      "whatsapp": "WhatsApp"
     },
     "profile": {
       "title": "Profilo",
@@ -281,6 +282,49 @@
       "saved": "Modifiche salvate",
       "loading": "Caricamento impostazioni…",
       "dismiss": "Chiudi"
+    },
+    "whatsapp": {
+      "title": "WhatsApp",
+      "desc": "Collega il tuo WhatsApp per scrivere all'assistente direttamente dal telefono.",
+      "loading": "Caricamento stato WhatsApp…",
+      "retry": "Riprova",
+      "disabled": "Il canale WhatsApp non è attivo. Contatta l'amministratore.",
+      "link_title": "Collega il tuo WhatsApp",
+      "link_desc": "Basta un messaggio al numero aziendale: niente da installare.",
+      "link_desc_number": "Basta un messaggio al numero aziendale {{number}}: niente da installare.",
+      "step_scan": "Inquadra il QR con il telefono, oppure tocca «Apri WhatsApp» se sei già sul telefono.",
+      "step_send": "In WhatsApp premi Invia senza modificare il messaggio precompilato.",
+      "step_done": "Fatto: questa pagina si aggiorna da sola appena il collegamento è confermato.",
+      "link": "Collega WhatsApp",
+      "qr_alt": "QR code per collegare WhatsApp",
+      "code_label": "Codice di collegamento",
+      "open": "Apri WhatsApp",
+      "waiting": "In attesa del messaggio…",
+      "expires_in": "Scade tra {{time}}",
+      "expired": "Il codice è scaduto. Generane uno nuovo per continuare.",
+      "regenerate": "Genera nuovo codice",
+      "linked_title": "WhatsApp collegato",
+      "linked_badge": "Attivo",
+      "profile_name": "Nome profilo",
+      "phone": "Numero",
+      "linked_at": "Collegato il",
+      "linked_hint": "Le conversazioni avviate da WhatsApp compaiono nella lista chat con il simbolo WhatsApp.",
+      "unlink": "Scollega",
+      "unlink_dialog": {
+        "title": "Scollegare WhatsApp?",
+        "desc": "Non potrai più scrivere all'assistente da questo numero finché non lo ricolleghi. Le conversazioni esistenti restano nella lista chat.",
+        "cancel": "Annulla",
+        "confirm": "Scollega",
+        "unlinking": "Scollegamento…"
+      },
+      "toast": {
+        "linked": "WhatsApp collegato. Ora puoi scrivere all'assistente da WhatsApp.",
+        "unlinked": "WhatsApp scollegato."
+      },
+      "err": {
+        "disabled": "Il canale WhatsApp non è attivo. Contatta l'amministratore.",
+        "generic": "Qualcosa è andato storto. Riprova."
+      }
     }
   },
   "sidebar": {
@@ -320,7 +364,8 @@
       "customize": "Personalizza istruzioni",
       "logout": "Esci",
       "admin_panel": "Pannello admin"
-    }
+    },
+    "from_whatsapp": "Conversazione da WhatsApp"
   },
   "schedulesPage": {
     "title": "Automazioni",
@@ -600,7 +645,15 @@
         "memory_injections": "Memoria/LTM",
         "system_messages": "System msg",
         "other": "Altro"
-      }
+      },
+      "status_ok": "Tanto spazio",
+      "status_filling": "Si sta riempiendo",
+      "status_full": "Quasi pieno",
+      "hint_ok": "L'assistente ricorda tutta questa conversazione.",
+      "hint_filling": "Conversazione lunga: i messaggi più vecchi verranno riassunti in automatico.",
+      "hint_full": "I messaggi più vecchi vengono riassunti per fare spazio. Puoi anche iniziare una nuova chat.",
+      "details_show": "Dettagli",
+      "details_hide": "Nascondi dettagli"
     },
     "generating": {
       "plan": "Generando piano…",
@@ -785,6 +838,21 @@
       "retry": "Riprova",
       "send_blocked": "Attendi il termine del caricamento file"
     },
+    "voice": {
+      "start": "Detta un messaggio",
+      "stop": "Ferma e trascrivi",
+      "cancel": "Annulla registrazione (Esc)",
+      "transcribing": "Trascrizione in corso…",
+      "dismiss": "Chiudi",
+      "error": {
+        "permission_denied": "Accesso al microfono negato. Consentilo nelle impostazioni del browser per dettare.",
+        "no_microphone": "Nessun microfono trovato.",
+        "too_long": "Registrazione troppo lunga: dividila in più parti.",
+        "too_large": "Registrazione troppo grande.",
+        "empty": "Non ho sentito nessuna parola: riprova.",
+        "failed": "Trascrizione non riuscita. Riprova tra poco."
+      }
+    },
     "web_search": {
       "disabled": "Ricerca web disattivata",
       "restricted": "Controllata · {{count}} host",
@@ -810,6 +878,11 @@
       "no_domains_desc": "Aggiungi fonti qui sopra per limitare la ricerca.",
       "clear_list": "Svuota lista",
       "save_preferences": "Salva Preferenze"
+    },
+    "project_menu": {
+      "label": "Progetto",
+      "none": "Nessun progetto disponibile",
+      "open_panel": "Apri pannello memoria"
     }
   },
   "login": {

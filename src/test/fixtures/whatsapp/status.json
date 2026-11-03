@@ -1,0 +1,42 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA1",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "390212345678",
+              "phone_number_id": "1234567890"
+            },
+            "statuses": [
+              {
+                "id": "wamid.OUT1",
+                "status": "delivered",
+                "timestamp": "1761650200",
+                "recipient_id": "393331112233",
+                "recipient_user_id": "IT.1111111111111111"
+              },
+              {
+                "id": "wamid.OUT2",
+                "status": "failed",
+                "timestamp": "1761650201",
+                "recipient_user_id": "IT.1111111111111111",
+                "errors": [
+                  {
+                    "code": 131047,
+                    "title": "Re-engagement message",
+                    "message": "Re-engagement message"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
