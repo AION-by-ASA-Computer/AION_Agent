@@ -18,8 +18,8 @@ import { SsoLinkModal } from "./SsoLinkModal";
  * Client guard: se il backend ha `AION_CHAT_PASSWORD_AUTH=1`, redirige a
  * `/login` quando manca un token valido. Altrimenti e' un no-op.
  *
- * Vive sotto il RootLayout: avvolge tutte le pagine tranne /login (skip via
- * pathname). Il check e' idempotente e caching-friendly (vedi
+ * Vive sotto il RootLayout: avvolge tutte le pagine tranne quelle pubbliche
+ * (/login, /change-password, /set-password, /forgot-password: skip via pathname). Il check e' idempotente e caching-friendly (vedi
  * `fetchAuthStatus`).
  */
 export function AuthGate({ children }: { children: React.ReactNode }) {
@@ -37,7 +37,11 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
       pathname === "/login" ||
       pathname?.startsWith("/login/") ||
       pathname === "/change-password" ||
-      pathname?.startsWith("/change-password/");
+      pathname?.startsWith("/change-password/") ||
+      pathname === "/set-password" ||
+      pathname?.startsWith("/set-password/") ||
+      pathname === "/forgot-password" ||
+      pathname?.startsWith("/forgot-password/");
     if (skip) {
       setState("ok");
       return;
@@ -72,6 +76,7 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         }
         const me = (await r.json().catch(() => ({}))) as {
           must_change_password?: boolean;
+          password_change_required?: boolean;
           sso_link_required?: boolean;
           sso_provider?: string;
           mfa_enrollment_required?: boolean;
@@ -89,6 +94,15 @@ export function AuthGate({ children }: { children: React.ReactNode }) {
         if (me.sso_link_required && me.sso_provider) {
           setSsoProvider(me.sso_provider);
           setState("sso_link");
+          return;
+        }
+
+        if (me.password_change_required) {
+          // Password temporanea data dall'admin: cambio obbligatorio, lo skip
+          // 24h non vale (il backend risponde 403 password_change_required
+          // su tutte le API chat finche' non viene cambiata).
+          setState("redirecting");
+          router.replace("/change-password");
           return;
         }
 

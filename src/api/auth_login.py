@@ -251,6 +251,9 @@ def build_login_response(
     uid = sanitize_user_id(str(row["identifier"]))
     roles = list(row.get("roles") or [])
     must_change = bool(row.get("must_change_password", False))
+    # In migrazione SSO la password temporanea serve solo a collegare l'account
+    # (al collegamento viene rimossa): il cambio non e' richiesto.
+    change_required = bool(row.get("temp_password")) and not sso_link_required
     tok = issue_chat_token(
         user_row_id=user_id_raw,
         user_identifier=str(row["identifier"]),
@@ -263,7 +266,8 @@ def build_login_response(
         "identifier": row["identifier"],
         "display_name": row.get("display_name") or row["identifier"],
         "roles": roles,
-        "must_change_password": must_change,
+        "must_change_password": must_change or change_required,
+        "password_change_required": change_required,
         "sso_link_required": sso_link_required,
     }
 
@@ -311,6 +315,7 @@ async def me(authorization: Optional[str] = Header(None)):
                 "metadata": {},
                 "roles": parsed.get("roles", []),
                 "must_change_password": False,
+                "password_change_required": False,
                 "sso_link_required": sso_link_required,
                 "sso_linked": sso_linked,
                 "sso_provider": sso_provider_name,
@@ -338,6 +343,10 @@ async def me(authorization: Optional[str] = Header(None)):
             "roles": get_roles(u),
             "must_change_password": bool(getattr(u, "must_change_password", False))
             and not sso_linked,
+            # Password temporanea: cambio obbligatorio, non rimandabile
+            # (gate ``password_change_required`` in ``_resolve_chat_identity``).
+            "password_change_required": u.temp_password_expires_at is not None
+            and not sso_link_required,
             "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
             "sso_link_required": sso_link_required,
             "sso_linked": sso_linked,
@@ -496,6 +505,14 @@ async def auth_status():
             logger.warning("auth_status admin password check failed: %s", _e)
             admin_password_login = True
 
+    try:
+        from src.api.auth_password_setup import password_reset_available
+
+        reset_available = await password_reset_available(tenant)
+    except Exception as _e:
+        logger.warning("auth_status password reset check failed: %s", _e)
+        reset_available = False
+
     # AION_SSO_FORCE_PASSWORD: bypass di emergenza (vedi §5)
     if sso_force_password():
         admin_password_login = True
@@ -517,6 +534,8 @@ async def auth_status():
         "sso_enabled": sso_enabled,
         "sso_provider": sso_provider,
         "two_factor_required": two_factor_required,
+        # "Password dimenticata?": SMTP configurato e form password visibile
+        "password_reset_available": reset_available,
         "login_endpoint": "/auth/login",
         "token_ttl_seconds": _TOKEN_TTL_SEC,
         "first_setup_complete": os.getenv("AION_FIRST_SETUP_COMPLETE") == "1",
@@ -739,6 +758,24 @@ async def _resolve_chat_identity(
         except Exception as _e:
             logger.warning("SSO link check failed in require_chat_auth: %s", _e)
 
+        # Password temporanea (emessa senza SMTP): finche' l'utente non la
+        # cambia (POST /auth/change-password) puo' usare solo gli endpoint /auth.
+        try:
+            from src.data.engine import get_async_session_maker
+            from src.data.models import User
+
+            async with get_async_session_maker()() as session:
+                u = await session.get(User, user_row_id)
+            if u is not None and u.temp_password_expires_at is not None:
+                raise HTTPException(
+                    403,
+                    detail={"code": "password_change_required"},
+                )
+        except HTTPException:
+            raise
+        except Exception as _e:
+            logger.warning("Temp password check failed in require_chat_auth: %s", _e)
+
         # 2FA obbligatorio ma non ancora configurato (token pre-attivazione
         # o utente resettato dall'admin): serve un nuovo login con enrollment.
         try:
@@ -840,7 +877,7 @@ async def require_admin_role(
 
 class ChangePasswordBody(BaseModel):
     old_password: str = Field(..., min_length=1)
-    new_password: str = Field(..., min_length=6, max_length=512)
+    new_password: str = Field(..., min_length=1, max_length=512)
 
 
 @router.post("/change-password")
@@ -864,7 +901,11 @@ async def change_password(
 
     from src.data.engine import get_async_session_maker
     from src.data.models import User
-    from src.data.user_password import hash_password, verify_password
+    from src.data.user_password import (
+        hash_password,
+        password_policy_violations,
+        verify_password,
+    )
 
     async with get_async_session_maker()() as session:
         u = await session.get(User, user_row_id)
@@ -874,6 +915,13 @@ async def change_password(
             raise HTTPException(401, detail="Old password is wrong")
         if body.new_password == body.old_password:
             raise HTTPException(400, detail="New password must differ from the old one")
+        # Stessa policy della pagina /set-password (src/data/user_password.py).
+        violations = password_policy_violations(body.new_password, u.identifier)
+        if violations:
+            raise HTTPException(
+                422,
+                detail={"code": "password_policy", "violations": violations},
+            )
         u.password_hash = hash_password(body.new_password)
         u.must_change_password = False
         # La password scelta dall'utente non e' piu' "temporanea": niente scadenza.

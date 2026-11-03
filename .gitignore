@@ -301,3 +301,5 @@ evals/agent_smoke_tests/outputs/*
 .github/skills/
 .github/agents/
 .github/hooks/
+
+aion-agent/

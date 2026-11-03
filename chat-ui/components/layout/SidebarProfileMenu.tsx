@@ -13,10 +13,12 @@ import {
   LogOut,
   Moon,
   Settings,
+  ShieldCheck,
   Sun,
 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
+import { adminUiBase } from "@/lib/config";
 import { setStoredAuth } from "@/lib/auth/storage";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
 import { getLocale, setLocale, subscribe, type Locale } from "@/lib/i18n/i18n-store";
@@ -32,6 +34,7 @@ export function SidebarProfileMenu({
   avatarUrl,
   profileColor,
   isLoggedIn,
+  isAdmin = false,
   variant = "expanded",
 }: {
   profileLabel: string;
@@ -39,6 +42,8 @@ export function SidebarProfileMenu({
   avatarUrl?: string;
   profileColor?: string;
   isLoggedIn: boolean;
+  /** Ruolo `admin` da `/auth/me`; solo UX: l'accesso reale è imposto dal backend e dall'admin-ui. */
+  isAdmin?: boolean;
   variant?: "expanded" | "collapsed";
 }) {
   const t = useT();
@@ -215,6 +220,19 @@ export function SidebarProfileMenu({
           <Settings className="h-4 w-4 shrink-0" aria-hidden />
           <span className="font-medium">{t("sidebar.settings")}</span>
         </Link>
+        {isAdmin ? (
+          <a
+            href={adminUiBase()}
+            target="_blank"
+            rel="noopener noreferrer"
+            role="menuitem"
+            className="focus-ring flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground transition hover:bg-muted/55 hover:text-foreground"
+            onClick={() => setOpen(false)}
+          >
+            <ShieldCheck className="h-4 w-4 shrink-0" aria-hidden />
+            <span className="font-medium">{t("sidebar.profile_menu.admin_panel")}</span>
+          </a>
+        ) : null}
         <button
           type="button"
           role="menuitem"

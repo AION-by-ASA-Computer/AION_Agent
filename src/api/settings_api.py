@@ -141,8 +141,16 @@ async def get_settings():
     }
 
 
+def _is_container_env() -> bool:
+    return (
+        os.path.exists("/.dockerenv")
+        or os.path.exists("/run/.containerenv")
+        or os.environ.get("AION_CONTAINER") == "1"
+    )
+
+
 async def _deferred_exit():
-    await asyncio.sleep(1.0)
+    await asyncio.sleep(1.5)
     logger.info("Exiting process to trigger container restart...")
     os._exit(0)
 
@@ -232,9 +240,11 @@ async def update_settings(update: SettingsUpdate):
         _reload_env()
 
         restarting = False
-        if os.path.exists("/.dockerenv"):
+        if _is_container_env():
             restarting = True
-            logger.info("Docker environment detected. Scheduling container restart...")
+            logger.info(
+                "Container environment detected. Scheduling container restart..."
+            )
             asyncio.create_task(_deferred_exit())
         elif _telegram_changed(existing_env, merged):
             # Fuori da Docker il processo resta su: il gateway riparte con i nuovi valori.
@@ -336,9 +346,11 @@ async def update_fs_policy(body: FSPolicyUpdate):
         _reload_env()
 
         restarting = False
-        if os.path.exists("/.dockerenv"):
+        if _is_container_env():
             restarting = True
-            logger.info("Docker environment detected. Scheduling container restart...")
+            logger.info(
+                "Container environment detected. Scheduling container restart..."
+            )
             asyncio.create_task(_deferred_exit())
 
         return {

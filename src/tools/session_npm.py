@@ -105,7 +105,7 @@ def install_npm_packages(
     if init_if_missing and not pkg_json.is_file():
         init = run_session_subprocess(
             session_id,
-            [npm_exe, "init", "-y"],
+            [npm_exe, "init", "-y", "--cache", "/tmp/.npm-cache"],
             cwd=str(ws),
             env=env,
             timeout=min(120.0, _npm_timeout()),
@@ -117,7 +117,7 @@ def install_npm_packages(
             tail = "\n".join(x for x in (init.stderr, init.stdout) if x).strip()[-1500:]
             return f"Error: npm init failed (exit {init.returncode}):\n{tail}"
 
-    cmd = [npm_exe, "install", *pkgs]
+    cmd = [npm_exe, "install", "--cache", "/tmp/.npm-cache", *pkgs]
     timeout = _npm_timeout()
     logger.info("npm install session=%s packages=%r cwd=%s", session_id[:8], pkgs, ws)
     try:

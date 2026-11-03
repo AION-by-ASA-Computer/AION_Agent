@@ -1,5 +1,5 @@
-"""/admin/users: guard sul ruolo admin, sulla password degli utenti SSO e sulla
-creazione di utenti con SSO attivo; /admin/auth/signup-policy."""
+"""/admin/users: guard sul ruolo admin, sul link password degli utenti SSO e
+sulla creazione di utenti con SSO attivo; /admin/auth/signup-policy."""
 
 from __future__ import annotations
 
@@ -33,6 +33,12 @@ async def _setup(monkeypatch, tmp_path):
                 User(id=uid, tenant_id="default", identifier=uid, roles_json=roles)
             )
         await session.commit()
+    from src.notifications import smtp_settings
+    from src.test.smtp_fakes import configure_smtp, install_fake_smtp
+
+    smtp_settings._CACHE.clear()
+    install_fake_smtp(monkeypatch)
+    await configure_smtp()
     return get_async_session_maker()
 
 
@@ -78,11 +84,11 @@ async def test_cannot_demote_self_or_last_admin(monkeypatch, tmp_path):
 
 
 @pytest.mark.anyio
-async def test_password_rejected_for_sso_user(monkeypatch, tmp_path):
+async def test_password_link_rejected_for_sso_user(monkeypatch, tmp_path):
     db = await _setup(monkeypatch, tmp_path)
-    from src.api.admin import UserUpdate, update_user
+    from src.api.admin import send_password_link
     from src.auth.sso import login_mode
-    from src.data.models import UserSsoIdentity
+    from src.data.models import User, UserSsoIdentity
 
     async def fake_settings(_tenant):
         return {
@@ -92,9 +98,13 @@ async def test_password_rejected_for_sso_user(monkeypatch, tmp_path):
         }
 
     monkeypatch.setattr(login_mode, "get_login_settings", fake_settings)
+    async with db() as session:
+        (await session.get(User, "u1")).email = "u1@x.io"
+        await session.commit()
 
-    # Senza identita' confermata la password si puo' ancora impostare.
-    await update_user("u1", UserUpdate(password="Secret-123"), auth=_auth())
+    # Senza identita' confermata il link si puo' ancora inviare.
+    res = await send_password_link("u1", request=None, auth=_auth())
+    assert (res["purpose"], res["sent"]) == ("migration", True)
 
     async with db() as session:
         session.add(
@@ -110,25 +120,16 @@ async def test_password_rejected_for_sso_user(monkeypatch, tmp_path):
         await session.commit()
 
     with pytest.raises(HTTPException) as e:
-        await update_user("u1", UserUpdate(password="Secret-123"), auth=_auth())
-    assert e.value.status_code == 400
+        await send_password_link("u1", request=None, auth=_auth())
+    assert e.value.status_code == 409
+    assert e.value.detail == {"code": "password_set_for_sso_user"}
 
 
-@pytest.mark.anyio
-async def test_weak_password_rejected(monkeypatch, tmp_path):
-    await _setup(monkeypatch, tmp_path)
-    from src.api.admin import UserCreate, UserUpdate, create_user, update_user
+def test_admin_cannot_set_passwords():
+    from src.api.admin import UserCreate, UserUpdate
 
-    with pytest.raises(HTTPException) as e:
-        await create_user(UserCreate(identifier="mario", password="secret123"))
-    assert e.value.status_code == 422
-
-    with pytest.raises(HTTPException) as e:
-        await update_user("u1", UserUpdate(password="short"), auth=_auth())
-    assert e.value.status_code == 422
-
-    res = await create_user(UserCreate(identifier="mario", password="Str0ng!pw"))
-    assert res["status"] == "success"
+    assert "password" not in UserCreate.model_fields
+    assert "password" not in UserUpdate.model_fields
 
 
 @pytest.mark.anyio
@@ -145,11 +146,13 @@ async def test_api_key_policy_fields(monkeypatch, tmp_path):
     res = await create_user(
         UserCreate(
             identifier="mario",
-            password="Str0ng!pw",
+            email="mario@x.io",
             can_create_api_keys=True,
             max_api_keys=3,
             api_key_max_ttl_days=10,
-        )
+        ),
+        request=None,
+        auth=_auth(),
     )
     async with sm() as session:
         u = (
@@ -196,7 +199,11 @@ async def test_create_user_blocked_when_sso_active(monkeypatch, tmp_path):
 
     await _set_login_mode(sm, "microsoft")
     with pytest.raises(HTTPException) as e:
-        await create_user(UserCreate(identifier="mario", password="Str0ng!pw"))
+        await create_user(
+            UserCreate(identifier="mario", email="mario@x.io"),
+            request=None,
+            auth=_auth(),
+        )
     assert e.value.status_code == 409
     assert e.value.detail == {"code": "sso_active_user_creation_disabled"}
 

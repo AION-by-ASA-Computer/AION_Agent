@@ -98,6 +98,13 @@ AION_REUSE_DATA=1 AION_CREDENTIAL_ENCRYPTION_KEY="<your_old_key>" curl -fsSL htt
 ```
 
 For more options, run `bash -s -- --help`.
+
+**Test the installer with your local code** (from a clone): `--local` copies the stack files from the clone and builds the backend, chat-ui, admin-ui, website and sandbox images from it, tagged `ghcr.io/aion-by-asa-computer/<image>:local`, instead of pulling a release:
+```bash
+bash ./scripts/install.sh --local
+```
+`upgrade` refuses an installation with `AION_VERSION=local`: pull the new code and rerun with `--local --force` (plus `AION_REUSE_DATA=1` and the existing `AION_CREDENTIAL_ENCRYPTION_KEY` to keep the data volume).
+
 See [docs/opensource/releases.md](docs/opensource/releases.md) for version information.
 
 **Upgrade an existing GHCR installation** (run from the installation directory):

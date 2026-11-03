@@ -666,13 +666,12 @@ async def _oauth_post_client_registration(
                 headers={"Content-Type": "application/json"},
             )
             if reg_resp.status_code not in (200, 201):
+                # redirect_uri e' gia' loggato da oauth_start (riga "redirect_uri raw=... resolved=...").
                 logger.warning(
-                    "oauth_start: dynamic registration HTTP %s slug=%s endpoint=%s "
-                    "redirect_uri=%r body=%s",
+                    "oauth_start: dynamic registration HTTP %s slug=%s endpoint=%s body=%s",
                     reg_resp.status_code,
                     server_slug,
                     reg_endpoint,
-                    redirect_uri,
                     reg_resp.text[:300],
                 )
                 return None

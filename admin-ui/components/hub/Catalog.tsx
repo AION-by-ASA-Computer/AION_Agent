@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Download, ExternalLink, Globe, Loader2, Search, ShieldCheck, Sparkles } from "lucide-react";
+import { Box, Check, Download, ExternalLink, Globe, Loader2, Search, ShieldCheck, Sparkles, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Select } from "@/components/ui/Select";
 import { inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
@@ -96,6 +96,28 @@ export function Catalog({ hub }: { hub: Hub }) {
   const k = "admin_hub.catalog";
   const busyInstall = hub.installingId !== null || hub.marketLoading;
 
+  /** Replaces the install button once the server is in the registry; uninstall reuses the in-use-by-profile checks. */
+  const installedAction = (match: { slug: string; isBase: boolean }) => (
+    <div className="flex items-center gap-1.5">
+      <span className="inline-flex items-center gap-1.5 rounded-lg bg-success/12 px-3 py-1.5 text-[13px] font-medium text-success" role="status">
+        <Check className="h-3.5 w-3.5" aria-hidden />
+        {t(`${k}.installed`)}
+      </span>
+      {!match.isBase && (
+        <button
+          type="button"
+          className={cn(outlineBtn, "hover:text-destructive")}
+          disabled={hub.busy}
+          title={t(`${k}.uninstall`)}
+          aria-label={`${t(`${k}.uninstall`)} ${match.slug}`}
+          onClick={() => void hub.startDelete(match.slug)}
+        >
+          <Trash2 className="h-3.5 w-3.5" aria-hidden />
+        </button>
+      )}
+    </div>
+  );
+
   return (
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-3">
@@ -170,6 +192,7 @@ export function Catalog({ hub }: { hub: Hub }) {
               const id = String(c.id || "");
               const doc = String(c.official_doc_url || c.remote_url || c.homepage || "").trim() || undefined;
               const installing = hub.installingId === `catalog:${id}`;
+              const installedMatch = hub.findInstalledCatalog(c);
               return (
                 <CardShell
                   key={id}
@@ -185,7 +208,9 @@ export function Catalog({ hub }: { hub: Hub }) {
                     </>
                   }
                   action={
-                    c.remote_url_template ? (
+                    installedMatch ? (
+                      installedAction(installedMatch)
+                    ) : c.remote_url_template ? (
                       <button
                         type="button"
                         className={outlineBtn}
@@ -230,6 +255,7 @@ export function Catalog({ hub }: { hub: Hub }) {
             <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {hub.communityShown.map((item: any) => {
                 const doc = docUrlFor(item);
+                const installedMatch = hub.findInstalledMarket(item);
                 const thirdPartyOAuth = item.install_type === "remote" && item.source !== "Smithery";
                 const catalogOnly = item.source === "Smithery" && (item.catalog_only || !(doc && isAllowedGithubUrl(doc)));
                 const icon = item.icon_url ? (
@@ -264,7 +290,9 @@ export function Catalog({ hub }: { hub: Hub }) {
                       )
                     }
                     action={
-                      catalogOnly ? (
+                      installedMatch ? (
+                        installedAction(installedMatch)
+                      ) : catalogOnly ? (
                         doc ? (
                           <a href={doc} target="_blank" rel="noopener noreferrer" className={outlineBtn}>
                             <ExternalLink className="h-3.5 w-3.5" aria-hidden />

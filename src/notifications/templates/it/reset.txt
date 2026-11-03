@@ -1,0 +1,11 @@
+Reimposta la password di $platform
+
+Ciao $name,
+
+è stata richiesta la reimpostazione della password dell'account $identifier su $platform.
+
+Scegli una nuova password da questo link:
+$link
+
+Il link funziona una sola volta e scade il $expires.
+Se non hai richiesto tu il cambio, ignora questa email: la password attuale resta valida.

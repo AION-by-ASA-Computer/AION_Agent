@@ -4,8 +4,8 @@ Tabelle del modulo src/channels/telegram (DeclarativeBase separato). FK verso
 users.id con ON DELETE CASCADE: eliminando un utente spariscono collegamenti e
 codici (create_table supporta le FK anche su SQLite, a differenza di ADD CONSTRAINT).
 
-Revision ID: a9b0c1d029
-Revises: z8a9b0c028
+Revision ID: t0g1l2k029
+Revises: a9b0c1d029
 """
 
 from typing import Sequence, Union
@@ -14,8 +14,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "a9b0c1d029"
-down_revision: Union[str, None] = "z8a9b0c028"
+revision: str = "t0g1l2k029"
+down_revision: Union[str, None] = "a9b0c1d029"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

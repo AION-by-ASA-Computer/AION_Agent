@@ -84,28 +84,6 @@ export function useObservability(onApplied: () => void, msg: { restarted: string
     }
   };
 
-  const waitForBackend = () => {
-    let attempt = 0;
-    timers.current.wait = setTimeout(() => {
-      timers.current.poll = setInterval(async () => {
-        attempt++;
-        let back = false;
-        try {
-          const res = await fetch(`${apiBase()}/health`);
-          back = res.ok && (await res.json()).status === "ok";
-        } catch {
-          /* still down */
-        }
-        if (back || attempt >= 30) {
-          clearInterval(timers.current.poll);
-          setRestarting(false);
-          setNotice({ type: back ? "success" : "error", text: back ? msg.restarted : msg.timeout });
-          onApplied();
-        }
-      }, 1500);
-    }, 2000);
-  };
-
   const save = async () => {
     setSaving(true);
     setNotice(null);
@@ -119,7 +97,6 @@ export function useObservability(onApplied: () => void, msg: { restarted: string
       if (d.restarting) {
         setRestarting(true);
         setOpen(false);
-        waitForBackend();
       } else {
         setNotice({ type: "success", text: d.message || msg.saved });
         onApplied();
@@ -131,5 +108,5 @@ export function useObservability(onApplied: () => void, msg: { restarted: string
     }
   };
 
-  return { open, close: () => setOpen(false), show, settings, set, loading, saving, notice, probing, probes, probe, save, restarting };
+  return { open, close: () => setOpen(false), show, settings, set, loading, saving, notice, setNotice, probing, probes, probe, save, restarting, setRestarting, onApplied };
 }

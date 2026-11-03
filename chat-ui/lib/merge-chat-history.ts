@@ -17,6 +17,7 @@ export type MergeableChatMessage = {
   completedAt?: string;
   durationMs?: number;
   generatedFiles?: { rp: string; label: string }[];
+  branches?: unknown;
 };
 
 function textLen(m: MergeableChatMessage): number {
@@ -27,9 +28,11 @@ function textLen(m: MergeableChatMessage): number {
 export function preferRicherMessage<T extends MergeableChatMessage>(local: T, server: T): T {
   const localText = textLen(local);
   const serverText = textLen(server);
+  const branches = (server as any).branches ?? (local as any).branches;
   if (serverText > 0 && localText === 0) {
     return {
       ...server,
+      branches,
       createdAt: local.createdAt || server.createdAt,
       completedAt: local.completedAt || server.completedAt,
       durationMs: local.durationMs ?? server.durationMs,
@@ -46,6 +49,7 @@ export function preferRicherMessage<T extends MergeableChatMessage>(local: T, se
   if (!localRicher) {
     return {
       ...server,
+      branches,
       createdAt: local.createdAt || server.createdAt,
       completedAt: local.completedAt || server.completedAt,
       durationMs: local.durationMs ?? server.durationMs,
@@ -55,6 +59,7 @@ export function preferRicherMessage<T extends MergeableChatMessage>(local: T, se
 
   return {
     ...server,
+    branches,
     content: local.content || server.content,
     reasoning: local.reasoning ?? server.reasoning,
     steps: local.steps?.length ? local.steps : server.steps,

@@ -74,6 +74,35 @@ export function serverStatus(row: McpItemRow): ServerStatus {
   return "active";
 }
 
+const normKey = (v: unknown): string =>
+  String(v ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^@/, "")
+    .replace(/\/+$/, "");
+
+const slugKey = (v: unknown): string =>
+  String(v ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+/** Identifiers under which an installed registry entry can be recognised in the marketplace. */
+function installedKeys(name: string, cfg: any): Set<string> {
+  const keys = new Set<string>([normKey(name), slugKey(name)]);
+  const add = (v: unknown) => {
+    const n = normKey(v);
+    if (n) keys.add(n);
+  };
+  add(cfg?.aion_connector_id);
+  add(cfg?.zero_package);
+  add(cfg?.remote_url);
+  add(cfg?.url);
+  for (const r of Array.isArray(cfg?.remotes) ? cfg.remotes : []) add(r?.url);
+  return keys;
+}
+
 export const STATUS_RANK: Record<ServerStatus, number> = { attention: 0, oauth: 1, disabled: 2, active: 3, system: 4 };
 
 export function useHub() {
@@ -315,6 +344,47 @@ export function useHub() {
       return true;
     });
   }, [marketItems, marketSource, marketCategory]);
+
+  const installedIndex = useMemo(
+    () => Object.entries(installed).map(([name, cfg]) => ({ name, keys: installedKeys(name, cfg), isBase: Boolean(cfg?.is_base) })),
+    [installed],
+  );
+
+  /** Slug of the installed server matching a marketplace/catalog entry, or null. */
+  const findInstalled = useCallback(
+    (candidates: unknown[]): { slug: string; isBase: boolean } | null => {
+      const wanted = new Set<string>();
+      for (const c of candidates) {
+        const n = normKey(c);
+        const s = slugKey(c);
+        if (n) wanted.add(n);
+        if (s) wanted.add(s);
+      }
+      if (wanted.size === 0) return null;
+      const hit = installedIndex.find((row) => [...wanted].some((w) => row.keys.has(w)));
+      return hit ? { slug: hit.name, isBase: hit.isBase } : null;
+    },
+    [installedIndex],
+  );
+
+  const findInstalledCatalog = useCallback(
+    (c: any) => (installedLoaded ? findInstalled([c.id, ...(Array.isArray(c.mcp_name_hints) ? c.mcp_name_hints.slice(0, 1) : [])]) : null),
+    [findInstalled, installedLoaded],
+  );
+
+  const findInstalledMarket = useCallback(
+    (item: any) =>
+      installedLoaded
+        ? findInstalled([
+            item.qualified_name,
+            item.id?.startsWith?.("smithery:") ? item.id.replace("smithery:", "") : item.id,
+            item.name,
+            item.deployment_url,
+            item.url && /^https?:\/\/.+/.test(item.url) && !/github\.com|smithery\.ai/.test(item.url) ? item.url : "",
+          ])
+        : null,
+    [findInstalled, installedLoaded],
+  );
 
   const formContext = useMemo(() => {
     if (!editing) return { matched: null as Record<string, unknown> | null, fields: [] as ReturnType<typeof buildCredentialFields>, knownKeys: new Set<string>() };
@@ -772,6 +842,8 @@ export function useHub() {
     featuredShown,
     communityShown,
     installingId,
+    findInstalledCatalog,
+    findInstalledMarket,
     installFromCatalog,
     openWizardForMarket,
     // dialogs

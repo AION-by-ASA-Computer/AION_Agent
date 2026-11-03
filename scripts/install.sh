@@ -15,6 +15,8 @@ AION_SKIP_PODMAN="${AION_SKIP_PODMAN:-0}"
 FORCE=0
 USE_LOCAL=0
 AION_YES=0
+# Radice del clone, risolta prima di qualsiasi cd (serve a --local).
+LOCAL_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd || true)"
 
 # --- Sottocomando posizionale: upgrade ---
 # Invocazione: install.sh upgrade [--version X.Y.Z] [--yes]
@@ -43,7 +45,8 @@ Options:
   --no-start         Do not start the stack after installation
   --no-podman        Skip Podman rootless setup (session sandbox falls back to subprocess)
   --force            Overwrite existing .env if present
-  --local            Use local repository files instead of downloading from GitHub (for testing)
+  --local            Use the local clone: copy its files and build the images from it
+                     (tagged ghcr.io/...:local) instead of downloading from GitHub/GHCR
   --yes|-y           Skip interactive confirmations (upgrade mode)
   --help             Show this message
 EOF
@@ -256,6 +259,12 @@ except: print('')
         exit 1
     fi
     echo "[info] Versione installata: $CURRENT_VERSION"
+    if [ "$CURRENT_VERSION" = "local" ]; then
+        # Senza semver il calcolo degli hop partirebbe da 0.0.0.
+        echo "[error] Installazione costruita dal clone (--local): upgrade non supportato."
+        echo "        Aggiornare il codice e rieseguire: bash ./scripts/install.sh --local --force"
+        exit 1
+    fi
 
     # ------------------------------------------------------------------
     # 3. Elenco release GitHub (ordinate per semver crescente)
@@ -628,10 +637,22 @@ if ! docker info >/dev/null 2>&1; then
     echo "[error] Docker daemon is not running or not accessible."
     exit 1
 fi
+if [ "$USE_LOCAL" -eq 1 ] && [ ! -f "$LOCAL_REPO_DIR/docker/Dockerfile.backend" ]; then
+    echo "[error] --local: docker/Dockerfile.backend non trovato in '$LOCAL_REPO_DIR'."
+    echo "        Eseguire lo script dal clone del repository (es. bash ./scripts/install.sh --local)."
+    exit 1
+fi
 echo "[ok] Preflight checks passed."
 
 # --- Step 0.5: Resolve 'latest' to specific version ---
-if [ "${AION_VERSION}" = "latest" ]; then
+if [ "$USE_LOCAL" -eq 1 ]; then
+    # Le immagini vengono costruite dal clone (Step 2.5): niente release GHCR.
+    if [ "$AION_VERSION" != "latest" ] && [ "$AION_VERSION" != "local" ]; then
+        echo "[warning] --local ignora --version $AION_VERSION: le immagini saranno taggate 'local'."
+    fi
+    export AION_VERSION="local"
+    echo "--- Step 0.5: Local build, version 'local' ---"
+elif [ "${AION_VERSION}" = "latest" ]; then
     echo "--- Step 0.5: Resolving 'latest' version ---"
     LATEST_TAG=$(curl -fsSL --retry 3 --max-time 15 \
         -H "Accept: application/vnd.github+json" \
@@ -668,8 +689,9 @@ fetch() {
     local dest="$2"
     if [ "$USE_LOCAL" -eq 1 ]; then
         # When running with --local, we assume the script is executed from the local clone.
-        # Determine repo root relative to the script path.
-        local repo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+        # LOCAL_REPO_DIR is resolved at startup: after `cd "$AION_INSTALL_DIR"` a relative
+        # BASH_SOURCE (e.g. ./scripts/install.sh) would point inside the install dir.
+        local repo_dir="$LOCAL_REPO_DIR"
         echo "Copying local $src..."
         # Create destination directory if it doesn't exist
         mkdir -p "$(dirname "$dest")"
@@ -696,6 +718,40 @@ fetch "scripts/setup_podman_sandbox.py" "scripts/setup_podman_sandbox.py"
 chmod +x scripts/setup-podman-sandbox.sh
 
 echo "[ok] Files downloaded."
+
+# --- Step 2.5: Build local images (--local) ---
+# Stessi Dockerfile e build-arg di .github/workflows/release-images.yml, con i
+# nomi delle immagini GHCR: docker-compose.ghcr.yml le usa senza modifiche.
+build_local_images() {
+    local spec name file args
+    local specs=(
+        "aion-backend|docker/Dockerfile.backend|"
+        "aion-chat-ui|docker/Dockerfile.chat-ui|NEXT_PUBLIC_AION_API_URL=/api NEXT_PUBLIC_AION_ADMIN_UI_URL=/admin"
+        "aion-admin-ui|docker/Dockerfile.admin-ui|NEXT_PUBLIC_AION_API_URL=/api"
+        "aion-website|docker/Dockerfile.website|DOCUSAURUS_BASE_URL=/docs/"
+        "aion-sandbox|docker/Dockerfile.sandbox|"
+    )
+    for spec in "${specs[@]}"; do
+        IFS='|' read -r name file args <<<"$spec"
+        local image="ghcr.io/aion-by-asa-computer/${name}:${AION_VERSION}"
+        local cmd=(docker build -f "$LOCAL_REPO_DIR/$file" -t "$image")
+        for a in $args; do
+            cmd+=(--build-arg "$a")
+        done
+        cmd+=("$LOCAL_REPO_DIR")
+        echo "Building $image..."
+        "${cmd[@]}" || {
+            echo "[error] Build fallita per $image"
+            exit 1
+        }
+    done
+}
+
+if [ "$USE_LOCAL" -eq 1 ]; then
+    echo "--- Step 2.5: Building Local Images ---"
+    build_local_images
+    echo "[ok] Local images built (tag: $AION_VERSION)."
+fi
 
 # --- Step 3: Generate .env ---
 echo "--- Step 3: Generating .env ---"
@@ -924,7 +980,12 @@ echo "[ok] Wrote .aion-install.json"
 
 if [ "$AION_SKIP_START" -eq 0 ]; then
     echo "--- Step 6: Starting Stack ---"
-    docker compose -f docker-compose.ghcr.yml pull
+    if [ "$USE_LOCAL" -eq 1 ]; then
+        # Immagini AION costruite allo Step 2.5; caddy/redis vengono scaricate da `up` se mancano.
+        echo "[info] --local: pull saltato."
+    else
+        docker compose -f docker-compose.ghcr.yml pull
+    fi
     docker compose -f docker-compose.ghcr.yml up -d --no-build --remove-orphans
     
     echo "Waiting for backend to be healthy..."

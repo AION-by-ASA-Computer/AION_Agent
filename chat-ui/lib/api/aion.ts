@@ -568,6 +568,20 @@ export type ChatHistoryArtifact = {
 /** API/history timeline — same discriminated union as live SSE segments (`lib/sse/types`). */
 export type TimelineSegment = TurnSegment;
 
+export interface MessageBranchVariant {
+  conversation_id: string;
+  message_id: string;
+  index: number;
+}
+
+export interface MessageBranchInfo {
+  total: number;
+  current_index: number;
+  prev_branch_conversation_id: string | null;
+  next_branch_conversation_id: string | null;
+  variants?: MessageBranchVariant[];
+}
+
 export type ChatHistoryMessage = {
   id: string;
   role: string;
@@ -590,7 +604,43 @@ export type ChatHistoryMessage = {
   /** True when message was archived by STM compaction (still shown in full transcript). */
   archived?: boolean;
   archived_reason?: string | null;
+  branches?: MessageBranchInfo;
 };
+
+export async function forkConversation(
+  conversationId: string,
+  sourceMessageId: string,
+  newContent: string,
+  userId: string,
+  token?: string | null,
+): Promise<{
+  conversation_id: string;
+  message_id: string;
+  root_conversation_id: string;
+  fork_seq: number;
+}> {
+  const r = await fetch(
+    `${apiBase()}/chat-ui/conversations/${encodeURIComponent(conversationId)}/fork`,
+    {
+      method: "POST",
+      headers: jsonHeaders(userId, token),
+      body: JSON.stringify({
+        source_message_id: sourceMessageId,
+        new_content: newContent,
+      }),
+    },
+  );
+  if (!r.ok) {
+    const errText = await r.text();
+    throw new Error(`Failed to fork conversation: ${r.status} ${errText}`);
+  }
+  return (await r.json()) as {
+    conversation_id: string;
+    message_id: string;
+    root_conversation_id: string;
+    fork_seq: number;
+  };
+}
 
 export type StreamStatusResponse = {
   active: boolean;

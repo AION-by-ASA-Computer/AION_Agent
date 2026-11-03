@@ -41,7 +41,7 @@ aiogram[proxy]>=3.31.0,<4.0.0
 pdfplumber>=0.11.10
 pymupdf
 pdf2image
-Pillow>=12.3.0
+Pillow>=13.0.0
 pytesseract
 playwright>=1.49.0
 beautifulsoup4>=4.12.0

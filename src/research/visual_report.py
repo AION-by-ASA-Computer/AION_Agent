@@ -1719,6 +1719,23 @@ def generate_visual_report(
             report_markdown,
             flags=re.MULTILINE,
         )
+    # Promote numbered sections (e.g. "1. Introduction" or "Section 1: Overview")
+    # if no markdown headings exist (common in weaker/simpler models)
+    if not re.search(r"^#{2,3}\s+", report_markdown, re.MULTILINE):
+        report_markdown = re.sub(
+            r"^(?:[0-9]+\.|\bSection\s+[0-9]+:?)\s+([A-ZÀ-Úa-z][^\n]{2,80})\s*$",
+            lambda m: f"## {m.group(1).strip()}",
+            report_markdown,
+            flags=re.MULTILINE,
+        )
+    # Promote standalone title lines ending with a colon if still no headings
+    if not re.search(r"^#{2,3}\s+", report_markdown, re.MULTILINE):
+        report_markdown = re.sub(
+            r"^([A-ZÀ-Ú][A-Za-z0-9\s—–-]{2,50}):\s*$",
+            lambda m: f"## {m.group(1).strip()}",
+            report_markdown,
+            flags=re.MULTILINE,
+        )
 
     report_html = _md_to_html(report_markdown)
 

@@ -248,7 +248,7 @@ export function UserAccountSettings({ tab }: { tab: SettingsTab }) {
             </div>
           ) : null}
           <SettingsCard title={t("settings.security.password_title")} className={compactCard}>
-            <ChangePasswordSection onSuccess={(msg) => { setMustChangePassword(false); showToast(msg); }} />
+            <ChangePasswordSection identifier={backendIdentifier} onSuccess={(msg) => { setMustChangePassword(false); showToast(msg); }} />
           </SettingsCard>
           <button
             type="button"

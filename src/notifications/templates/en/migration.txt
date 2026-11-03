@@ -1,0 +1,9 @@
+Set a password to keep using $platform
+
+Hi $name,
+
+the way you sign in to $platform (username: $identifier) is changing. To continue, set a password using this link:
+$link
+
+After your first sign-in you'll be asked to link your company account (Single Sign-On), if required.
+The link works only once and expires on $expires.

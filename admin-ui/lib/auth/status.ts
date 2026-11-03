@@ -10,6 +10,8 @@ export type AuthStatus = {
   sso_provider: string | null;
   /** In SSO: almeno un admin ha ancora una password (form di login necessario). */
   admin_password_login: boolean;
+  /** SMTP pronto e login a password attivo: si puo' mostrare "Password dimenticata?". */
+  password_reset_available: boolean;
 };
 
 const DEFAULT_STATUS: AuthStatus = {
@@ -22,6 +24,7 @@ const DEFAULT_STATUS: AuthStatus = {
   sso_enabled: false,
   sso_provider: null,
   admin_password_login: true,
+  password_reset_available: false,
 };
 
 let cachedStatus: Promise<AuthStatus> | null = null;
@@ -46,6 +49,7 @@ export function fetchAuthStatus(force = false): Promise<AuthStatus> {
         sso_provider: j.sso_provider || null,
         admin_password_login:
           j.admin_password_login === undefined ? true : Boolean(j.admin_password_login),
+        password_reset_available: Boolean(j.password_reset_available),
       };
     } catch {
       return DEFAULT_STATUS;

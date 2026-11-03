@@ -152,6 +152,10 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
             ("parent_conversation_id", "parent_conversation_id VARCHAR(64)"),
             ("parent_message_id", "parent_message_id VARCHAR(64)"),
             ("anchor_json", "anchor_json TEXT NOT NULL DEFAULT '{}'"),
+            ("root_conversation_id", "root_conversation_id VARCHAR(64)"),
+            ("forked_from_id", "forked_from_id VARCHAR(64)"),
+            ("forked_at_message_id", "forked_at_message_id VARCHAR(64)"),
+            ("fork_seq", "fork_seq INTEGER"),
         ):
             await _sqlite_add_column_if_missing(conn, "conversations", col, ddl)
         await _sqlite_create_index_if_missing(
@@ -159,6 +163,18 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
             "ix_conversations_parent_conversation_id",
             "CREATE INDEX IF NOT EXISTS ix_conversations_parent_conversation_id "
             "ON conversations(parent_conversation_id)",
+        )
+        await _sqlite_create_index_if_missing(
+            conn,
+            "ix_conversations_root_conversation_id",
+            "CREATE INDEX IF NOT EXISTS ix_conversations_root_conversation_id "
+            "ON conversations(root_conversation_id)",
+        )
+        await _sqlite_create_index_if_missing(
+            conn,
+            "ix_conversations_forked_from_id",
+            "CREATE INDEX IF NOT EXISTS ix_conversations_forked_from_id "
+            "ON conversations(forked_from_id)",
         )
 
     # Observability + timeline columns (migrate_v3 / g3h4i5j6k007). Skipped when
@@ -173,10 +189,21 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
         await _sqlite_add_column_if_missing(
             conn, "messages", "metadata_json", "metadata_json TEXT"
         )
+        await _sqlite_add_column_if_missing(
+            conn,
+            "messages",
+            "forked_from_message_id",
+            "forked_from_message_id VARCHAR(64)",
+        )
         await _sqlite_create_index_if_missing(
             conn,
             "idx_messages_trace",
             "CREATE INDEX IF NOT EXISTS idx_messages_trace ON messages(trace_id)",
+        )
+        await _sqlite_create_index_if_missing(
+            conn,
+            "idx_messages_forked_from",
+            "CREATE INDEX IF NOT EXISTS idx_messages_forked_from ON messages(forked_from_message_id)",
         )
     if await _sqlite_table_exists(conn, "steps"):
         await _sqlite_add_column_if_missing(
@@ -195,6 +222,16 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
             conn,
             "idx_audit_log_trace",
             "CREATE INDEX IF NOT EXISTS idx_audit_log_trace ON audit_log(trace_id)",
+        )
+
+    # Esito dell'invio del link password (a9b0c1d029): la tabella puo' esistere gia'
+    # da create_all senza queste colonne.
+    if await _sqlite_table_exists(conn, "password_setup_tokens"):
+        await _sqlite_add_column_if_missing(
+            conn, "password_setup_tokens", "sent_at", "sent_at DATETIME"
+        )
+        await _sqlite_add_column_if_missing(
+            conn, "password_setup_tokens", "send_error", "send_error VARCHAR(64)"
         )
 
     # scheduled_jobs.sql_query_project (m4n5o6p014). create_all() does not ALTER

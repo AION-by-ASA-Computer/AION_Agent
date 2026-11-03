@@ -1,0 +1,3 @@
+Test email from $platform
+
+The SMTP configuration of $platform works: this test email was delivered successfully.

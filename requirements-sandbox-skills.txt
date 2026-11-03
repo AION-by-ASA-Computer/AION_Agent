@@ -10,4 +10,4 @@ matplotlib>=3.8.0
 pypdf>=6.13.3
 pdfplumber>=0.11.10
 pdf2image>=1.17.0
-Pillow>=12.3.0
+Pillow>=13.0.0

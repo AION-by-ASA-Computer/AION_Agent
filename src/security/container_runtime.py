@@ -95,8 +95,20 @@ def prepare_session_host_mount(session_path: Path) -> None:
             logger.warning("session_mount_chown failed path=%s: %s", path, exc)
 
     _fix_dir(root)
-    for name in ("uploads", "derived", "workspace"):
+    for name in ("uploads", "derived", "workspace", ".npm", ".venv"):
         _fix_dir(root / name)
+
+    npm_dir = root / ".npm"
+    if npm_dir.is_dir():
+        for dirpath, _, filenames in os.walk(npm_dir):
+            _fix_dir(Path(dirpath))
+            for f in filenames:
+                try:
+                    fpath = Path(dirpath) / f
+                    os.chown(fpath, uid, gid)
+                    fpath.chmod(0o664)
+                except OSError:
+                    pass
 
 
 class ContainerRuntime:

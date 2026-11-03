@@ -11,6 +11,7 @@ export type AuthStatus = {
   sso_migration_active?: boolean;
   password_login_visible?: boolean;
   two_factor_required?: boolean;
+  password_reset_available?: boolean;
 };
 
 const DEFAULT_STATUS: AuthStatus = {
@@ -23,6 +24,7 @@ const DEFAULT_STATUS: AuthStatus = {
   sso_origin: null,
   sso_migration_active: false,
   password_login_visible: true,
+  password_reset_available: false,
 };
 
 /** Una sola richiesta per pagina: cache module-level. */
@@ -45,6 +47,7 @@ export function fetchAuthStatus(force = false): Promise<AuthStatus> {
         sso_origin: j.sso_origin as "first_setup" | "migration" | null | undefined,
         sso_migration_active: Boolean(j.sso_migration_active),
         password_login_visible: j.password_login_visible !== undefined ? Boolean(j.password_login_visible) : true,
+        password_reset_available: Boolean(j.password_reset_available),
       };
     } catch {
       return DEFAULT_STATUS;

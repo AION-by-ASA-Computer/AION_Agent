@@ -12,7 +12,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 
 from src.data.engine import get_async_session_maker
 from src.data.models import AuthSettings, SsoProvider, User, UserSsoIdentity
@@ -199,8 +199,11 @@ def signup_denied_reason(
 
 
 async def pending_users_count(tenant_id: str, provider: str) -> int:
-    """Conta gli utenti con password che non hanno ancora un'identità SSO
-    per il provider attivo e non sono esonerati. Cache di 15s."""
+    """Conta gli utenti con password (o con un link email per impostarla
+    ancora valido) che non hanno ancora un'identità SSO per il provider attivo
+    e non sono esonerati. Cache di 15s."""
+    from src.auth.password_setup import active_setup_link_exists
+
     cache_key = f"{tenant_id}:{provider}"
     now = time.time()
     cached = _PENDING_CACHE.get(cache_key)
@@ -209,14 +212,16 @@ async def pending_users_count(tenant_id: str, provider: str) -> int:
 
     since = (await get_login_settings(tenant_id))["migration_started_at"]
     async with get_async_session_maker()() as session:
-        # Utenti con password, non esonerati, senza identità confermata per
-        # questo provider nella migrazione corrente
+        # Utenti con password o link attivo, non esonerati, senza identità
+        # confermata per questo provider nella migrazione corrente. Senza il
+        # link nel conteggio la migrazione si chiuderebbe (e il form password
+        # sparirebbe) prima che l'utente abbia impostato la password.
         stmt = (
             select(func.count())
             .select_from(User)
             .where(
                 User.tenant_id == tenant_id,
-                User.password_hash.is_not(None),
+                or_(User.password_hash.is_not(None), active_setup_link_exists()),
                 User.sso_migration_exempt == False,  # noqa: E712
             )
             .where(~confirmed_identity_exists(tenant_id, provider, since))
@@ -378,7 +383,7 @@ async def _check_migration_completion(tenant_id: str, provider: str) -> None:
 
 async def reopen_migration(tenant_id: str) -> None:
     """Riapre la migrazione quando un utente torna a doversi collegare (es. dopo
-    lo scollegamento dell'identita' SSO e l'emissione di una password temporanea).
+    lo scollegamento dell'identita' SSO e l'invio del link per la password).
 
     Senza riapertura il form password resta nascosto (``first_setup``) e un
     login SSO diretto finirebbe nell'auto-provisioning invece che in
@@ -407,14 +412,17 @@ async def set_login_mode(
     actor_user_id: str,
     provider_validated_at: Optional[datetime] = None,
     revalidation_window_minutes: int = 30,
+    base_url: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Cambia la modalità di login. Vedi §3.2.
 
-    Restituisce il dizionario con le impostazioni aggiornate.
-    Può contenere 'temp_passwords' se il cambio richiede password temporanee.
+    Restituisce il dizionario con le impostazioni aggiornate. Se il cambio
+    lascia utenti senza modo di accedere, ricevono via email un link per
+    impostare la password: l'esito è in 'setup_links' (mai password o token).
+    Senza SMTP ricevono invece una password temporanea, presente solo in
+    'temp_passwords'; 'delivery' indica quale dei due canali è stato usato.
     """
     from src.auth.sso.config_service import enable_provider, get_provider
-    from src.data.user_password import hash_password
 
     if mode not in ("password", "microsoft", "google"):
         raise ValueError("invalid_mode")
@@ -426,7 +434,7 @@ async def set_login_mode(
         current_row = await session.get(AuthSettings, tenant_id)
         current_mode = current_row.login_mode if current_row else "password"
 
-        temp_passwords_out: List[Dict] = []
+        link_user_ids: List[str] = []
 
         if mode != "password":
             # Verifica che il provider esista e sia validato
@@ -532,12 +540,9 @@ async def set_login_mode(
                     )
                 )
 
-            # Step 4-bis: cambio da SSO a SSO — genera password temporanee
-            # per chi non ha password e non ha identità per il nuovo provider
+            # Step 4-bis: cambio da SSO a SSO — link email per impostare la
+            # password a chi non ce l'ha e non ha identità per il nuovo provider
             if current_mode in ("microsoft", "google") and current_mode != mode:
-                ttl_days = int(os.getenv("AION_SSO_TEMP_PASSWORD_TTL_DAYS", "7"))
-                temp_expires = now + timedelta(days=ttl_days)
-
                 users_without_pw = (
                     (
                         await session.execute(
@@ -566,26 +571,10 @@ async def set_login_mode(
                     .all()
                 )
 
-                for u in users_without_pw:
-                    plain = secrets.token_urlsafe(12)
-                    u.password_hash = hash_password(plain)
-                    u.temp_password_expires_at = temp_expires
-                    temp_passwords_out.append(
-                        {
-                            "user_id": u.id,
-                            "identifier": u.identifier,
-                            "email": u.email,
-                            "password": plain,
-                            "expires_at": temp_expires.isoformat(),
-                        }
-                    )
+                link_user_ids = [u.id for u in users_without_pw]
 
         else:
-            # Ritorno a "Normale"
-            # Genera password temporanee per chi non ha password
-            ttl_days = int(os.getenv("AION_SSO_TEMP_PASSWORD_TTL_DAYS", "7"))
-            temp_expires = now + timedelta(days=ttl_days)
-
+            # Ritorno a "Normale": link email a chi non ha password
             users_without_pw = (
                 (
                     await session.execute(
@@ -600,20 +589,7 @@ async def set_login_mode(
                 .all()
             )
 
-            for u in users_without_pw:
-                plain = secrets.token_urlsafe(12)
-                u.password_hash = hash_password(plain)
-                u.temp_password_expires_at = temp_expires
-                u.must_change_password = True
-                temp_passwords_out.append(
-                    {
-                        "user_id": u.id,
-                        "identifier": u.identifier,
-                        "email": u.email,
-                        "password": plain,
-                        "expires_at": temp_expires.isoformat(),
-                    }
-                )
+            link_user_ids = [u.id for u in users_without_pw]
 
             if current_row:
                 current_row.login_mode = "password"
@@ -634,6 +610,15 @@ async def set_login_mode(
                 )
 
         await session.commit()
+
+    # Link (o password temporanee) prima del controllo di completamento: chi
+    # ha un link attivo o una password conta come "in attesa"
+    # (pending_users_count).
+    delivered: Optional[Dict[str, Any]] = None
+    if link_user_ids:
+        delivered = await _deliver(
+            tenant_id, link_user_ids, actor_user_id=actor_user_id, base_url=base_url
+        )
 
     # Step 4: enable/disable provider (fuori dalla transazione principale per semplicità)
     if mode != "password":
@@ -664,34 +649,47 @@ async def set_login_mode(
 
     settings = await get_login_settings(tenant_id)
     result = dict(settings)
-    if temp_passwords_out:
-        result["temp_passwords"] = temp_passwords_out
+    if delivered is not None:
+        result.update(delivered)
     return result
 
 
-async def generate_temp_passwords(
+async def _deliver(
+    tenant_id: str,
+    user_ids: List[str],
+    *,
+    actor_user_id: Optional[str],
+    base_url: Optional[str],
+) -> Dict[str, Any]:
+    from src.api.public_urls import chat_base_url
+    from src.auth.password_setup import deliver_password_setup
+
+    return await deliver_password_setup(
+        tenant_id,
+        user_ids,
+        "migration",
+        actor_user_id=actor_user_id,
+        base_url=base_url or chat_base_url(),
+    )
+
+
+async def send_migration_links(
     tenant_id: str,
     user_ids: List[str],
     active_provider: str,
-) -> List[Dict]:
-    """Genera (o rigenera) password temporanee per gli utenti indicati.
+    *,
+    actor_user_id: Optional[str],
+    base_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Invia (o reinvia) via email il link per impostare la password agli
+    utenti indicati, che poi collegheranno l'account SSO. Senza SMTP emette
+    password temporanee (vedi ``deliver_password_setup``).
 
-    Usato da POST /admin/auth/temp-passwords.
+    Usato da POST /admin/auth/setup-links e dallo scollegamento di un'identita'.
+    ``ValueError("user_already_linked:<id>")`` per chi e' gia' collegato.
     """
-    from src.data.user_password import hash_password
-
-    ttl_days = int(os.getenv("AION_SSO_TEMP_PASSWORD_TTL_DAYS", "7"))
-    now = datetime.now(timezone.utc)
-    temp_expires = now + timedelta(days=ttl_days)
-    results = []
-
     async with get_async_session_maker()() as session:
         for uid in user_ids:
-            user = await session.get(User, uid)
-            if not user or user.tenant_id != tenant_id:
-                continue
-
-            # Non generare per chi è già collegato
             already_linked = (
                 (
                     await session.execute(
@@ -708,25 +706,12 @@ async def generate_temp_passwords(
             if already_linked:
                 raise ValueError(f"user_already_linked:{uid}")
 
-            plain = secrets.token_urlsafe(12)
-            user.password_hash = hash_password(plain)
-            user.temp_password_expires_at = temp_expires
-
-            results.append(
-                {
-                    "user_id": uid,
-                    "identifier": user.identifier,
-                    "email": user.email,
-                    "password": plain,
-                    "expires_at": temp_expires.isoformat(),
-                }
-            )
-
-        await session.commit()
-
-    _invalidate_cache(tenant_id)
-    # Chi riceve una password temporanea deve (ri)collegarsi: serve il form
+    result = await _deliver(
+        tenant_id, user_ids, actor_user_id=actor_user_id, base_url=base_url
+    )
+    # Chi riceve il link o la password deve (ri)collegarsi: serve il form
     # password e la migrazione deve risultare in corso.
-    if results:
+    links = result.get("setup_links") or {}
+    if result.get("temp_passwords") or links.get("sent") or links.get("failed"):
         await reopen_migration(tenant_id)
-    return results
+    return result

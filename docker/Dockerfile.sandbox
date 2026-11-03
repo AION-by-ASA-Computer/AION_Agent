@@ -35,15 +35,25 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/opt/venv/bin:$PATH" \
     AION_DATA_DIR=/session \
     AION_SANDBOX_IN_CONTAINER=1 \
-    AION_SANDBOX_FLAT_SESSION_ROOT=1
+    AION_SANDBOX_FLAT_SESSION_ROOT=1 \
+    NODE_PATH="/usr/local/lib/node_modules:/usr/lib/node_modules" \
+    NPM_CONFIG_CACHE="/tmp/.npm-cache"
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends tini nodejs npm poppler-utils \
  && rm -rf /var/lib/apt/lists/* \
+ && npm config set cache /tmp/.npm-cache --global \
+ && npm install -g docx \
  && groupadd --gid 10001 sandbox \
  && useradd --uid 10001 --gid sandbox --create-home --shell /usr/sbin/nologin sandbox
 
 COPY --from=builder /opt/venv /opt/venv
+
+# Link /opt/venv site-packages to system python so any venv created with --system-site-packages inherits preinstalled packages
+RUN python3 -c "import site, pathlib; p = list(pathlib.Path('/opt/venv/lib').glob('python*/site-packages')); print(p[0]) if p else exit(1)" > /tmp/opt_sitepkg \
+ && python3 -c "import site; print(site.getsitepackages()[0])" > /tmp/sys_sitepkg \
+ && cat /tmp/opt_sitepkg > "$(cat /tmp/sys_sitepkg)/opt_venv.pth" \
+ && rm -f /tmp/opt_sitepkg /tmp/sys_sitepkg
 
 WORKDIR /app
 COPY src/ ./src/

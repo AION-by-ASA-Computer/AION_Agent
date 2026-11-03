@@ -4,7 +4,7 @@
 ``migrations/env.py`` (``include_object``) non tocca queste tabelle in autogenerate.
 
 Due vie di creazione, stesso schema:
-- installazioni esistenti: migrazioni ``a9b0c1d029_telegram_links`` e successive;
+- installazioni esistenti: migrazioni ``t0g1l2k029_telegram_links`` e successive;
 - DB nuovi: AION fa ``create_all`` del core e poi ``alembic stamp head`` (le
   migrazioni non girano), quindi ``ensure_schema`` crea le tabelle mancanti
   all'avvio del canale.

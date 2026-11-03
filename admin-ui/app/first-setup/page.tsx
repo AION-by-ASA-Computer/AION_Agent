@@ -15,6 +15,7 @@ import {
   Check,
   Loader2,
   KeyRound,
+  FastForward,
 } from "lucide-react";
 import { apiBase } from "@/lib/api";
 import { apiFetch } from "@/lib/api/headers";
@@ -23,6 +24,7 @@ import { cn } from "@/lib/cn";
 import { SsoConfigPanel } from "@/components/sso/SsoConfigPanel";
 import { AdminBrand } from "@/components/brand/AdminBrand";
 import { AuthAlert, AuthHeading, AuthShell, SsoProviderIcon } from "@/components/auth/AuthShell";
+import { RestartOverlay } from "@/components/RestartOverlay";
 import { inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
 import { Select } from "@/components/ui/Select";
 import { ChoiceList, Field, Group, ModelField, Mono, Note, ProbeBar, Switch } from "@/components/settings/ui";
@@ -58,6 +60,7 @@ export default function FirstSetupPage() {
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [restarting, setRestarting] = useState(false);
+  const [showSkipConfirm, setShowSkipConfirm] = useState(false);
 
   // --- Step SSO State ---
   // "none" = SSO disattivato; altrimenti provider scelto (va verificato prima di procedere)
@@ -420,32 +423,40 @@ export default function FirstSetupPage() {
     }
   };
 
-  // --- Sequential Saving Flow ---
-  const handleSave = async () => {
+  // --- Sequential Saving Flow (supports standard save or skipping with placeholders) ---
+  const executeSave = async (isSkip = false) => {
     setLoading(true);
     setError(null);
     try {
       // 1. Save LLM Provider
-      const llmRes = await apiFetch(`${apiBase()}/admin/llm-providers`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          slug: llmForm.slug,
-          display_name: llmForm.display_name,
-          provider: llmForm.provider,
-          model_name: llmForm.model_name,
-          api_base_url: llmForm.api_base_url || null,
-          api_key: llmForm.api_key || null,
-          timeout: llmForm.timeout,
-          max_chat_tokens: llmForm.max_chat_tokens || null,
-          thinking_token_budget: llmForm.thinking_token_budget || null,
-          enabled: true,
-          is_default: true,
-        }),
-      });
+      const targetSlug = (isSkip ? (llmForm.slug.trim() || "default-llm") : llmForm.slug.trim()) || "default-llm";
+      const defaultLlmBody: Record<string, unknown> = {
+        slug: targetSlug,
+        display_name: isSkip ? (llmForm.display_name.trim() || "Default LLM") : llmForm.display_name,
+        provider: isSkip ? (llmForm.provider || "openai") : llmForm.provider,
+        model_name: isSkip ? (llmForm.model_name.trim() || "gpt-4o") : llmForm.model_name,
+        api_base_url: isSkip ? (llmForm.api_base_url.trim() || null) : (llmForm.api_base_url || null),
+        api_key: isSkip ? (llmForm.api_key.trim() || "sk-placeholder") : (llmForm.api_key || null),
+        timeout: llmForm.timeout || 120,
+        max_chat_tokens: llmForm.max_chat_tokens || 8192,
+        thinking_token_budget: llmForm.thinking_token_budget ?? 0,
+        enabled: true,
+        is_default: true,
+      };
+
+      const checkRes = await apiFetch(`${apiBase()}/admin/llm-providers/${targetSlug}`);
+      const isExisting = checkRes.ok;
+      const llmRes = await apiFetch(
+        isExisting ? `${apiBase()}/admin/llm-providers/${targetSlug}` : `${apiBase()}/admin/llm-providers`,
+        {
+          method: isExisting ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(defaultLlmBody),
+        }
+      );
 
       if (!llmRes.ok) {
-        const errData = await llmRes.json();
+        const errData = await llmRes.json().catch(() => ({}));
         throw new Error(`LLM Provider Save Failed: ${errData.detail || "Unknown error"}`);
       }
 
@@ -454,13 +465,13 @@ export default function FirstSetupPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          yaml_content: policyYaml,
+          yaml_content: policyYaml || devTemplateYaml || "",
           enabled: policyEnabled,
         }),
       });
 
       if (!policyRes.ok) {
-        const errData = await policyRes.json();
+        const errData = await policyRes.json().catch(() => ({}));
         throw new Error(`Filesystem Policy Save Failed: ${errData.detail || "Unknown error"}`);
       }
 
@@ -468,40 +479,39 @@ export default function FirstSetupPage() {
       const settingsPayload = {
         settings: {
           // Embeddings
-          AION_EMBEDDINGS_PROVIDER: embForm.provider,
-          AION_EMBEDDING_MODEL: embForm.model,
-          AION_EMBEDDING_URL: embForm.url,
-          AION_EMBEDDINGS_API_KEY: embForm.api_key,
+          AION_EMBEDDINGS_PROVIDER: isSkip ? (embForm.provider || "openai") : embForm.provider,
+          AION_EMBEDDING_MODEL: isSkip ? (embForm.model.trim() || "text-embedding-3-small") : embForm.model,
+          AION_EMBEDDING_URL: isSkip ? (embForm.url.trim() || "https://api.openai.com/v1") : embForm.url,
+          AION_EMBEDDINGS_API_KEY: isSkip ? (embForm.api_key.trim() || "sk-placeholder") : embForm.api_key,
           // OCR — remote vision server only; local mode clears env (MCP uses pymupdf/tesseract)
-          AION_OCR_BASE_URL: ocrMode === "remote" ? ocrForm.base_url : "",
-          AION_OCR_MODEL: ocrMode === "remote" ? ocrForm.model : "",
-          AION_OCR_API_KEY: ocrMode === "remote" ? ocrForm.api_key : "",
-          AION_OCR_MAX_TOKENS: ocrMode === "remote" ? String(ocrForm.max_tokens) : "",
-          AION_OCR_TIMEOUT: ocrMode === "remote" ? String(ocrForm.timeout) : "",
-          AION_OCR_MAX_IMAGE_BYTES: ocrMode === "remote" ? String(ocrForm.max_image_bytes) : "",
+          AION_OCR_BASE_URL: ocrMode === "remote" ? (isSkip ? (ocrForm.base_url.trim() || "http://localhost:8080/v1") : ocrForm.base_url) : "",
+          AION_OCR_MODEL: ocrMode === "remote" ? (isSkip ? (ocrForm.model.trim() || "default") : ocrForm.model) : "",
+          AION_OCR_API_KEY: ocrMode === "remote" ? (isSkip ? (ocrForm.api_key.trim() || "placeholder") : ocrForm.api_key) : "",
+          AION_OCR_MAX_TOKENS: ocrMode === "remote" ? String(ocrForm.max_tokens || 8192) : "",
+          AION_OCR_TIMEOUT: ocrMode === "remote" ? String(ocrForm.timeout || 120) : "",
+          AION_OCR_MAX_IMAGE_BYTES: ocrMode === "remote" ? String(ocrForm.max_image_bytes || 20971520) : "",
           // Web Search
           AION_WEB_SEARCH_TAVILY_ENABLED: searchForm.tavily_enabled ? "1" : "0",
-          AION_TAVILY_API_KEY: searchForm.tavily_key,
+          AION_TAVILY_API_KEY: searchForm.tavily_key.trim() || "",
           AION_WEB_SEARCH_BRAVE_ENABLED: searchForm.brave_enabled ? "1" : "0",
-          AION_BRAVE_SEARCH_API_KEY: searchForm.brave_key,
+          AION_BRAVE_SEARCH_API_KEY: searchForm.brave_key.trim() || "",
           AION_WEB_SEARCH_SEARXNG_ENABLED: searchForm.searxng_enabled ? "1" : "0",
-          AION_SEARXNG_BASE_URL: searchForm.searxng_url,
-          AION_WEB_SEARCH_DEFAULT_PROVIDER: searchForm.default_provider,
-          AION_WEB_SEARCH_FALLBACK_ORDER: searchForm.fallback_order,
+          AION_SEARXNG_BASE_URL: searchForm.searxng_url.trim() || "",
+          AION_WEB_SEARCH_DEFAULT_PROVIDER: searchForm.default_provider || "tavily",
+          AION_WEB_SEARCH_FALLBACK_ORDER: searchForm.fallback_order || "brave,searxng",
           // LLM Limits
-          AION_CHAT_MAX_TOKENS: String(llmForm.max_chat_tokens),
-          AION_THINKING_TOKEN_BUDGET: String(llmForm.thinking_token_budget),
+          AION_CHAT_MAX_TOKENS: String(defaultLlmBody.max_chat_tokens),
+          AION_THINKING_TOKEN_BUDGET: String(defaultLlmBody.thinking_token_budget),
           // Setup Completion Flag
           AION_FIRST_SETUP_COMPLETE: "1",
-          ...(ssoStatus.enabled && ssoStatus.validated ? { AION_CHAT_PASSWORD_AUTH: "1" } : {})
+          ...(!isSkip && ssoStatus.enabled && ssoStatus.validated ? { AION_CHAT_PASSWORD_AUTH: "1" } : {})
         },
       };
 
-      if (ssoStatus.enabled && ssoStatus.validated) {
+      if (!isSkip && ssoStatus.enabled && ssoStatus.validated) {
         const provRes = await apiFetch(`${apiBase()}/admin/sso/providers`);
         if (provRes.ok) {
           const provData = await provRes.json();
-          // Provider scelto nello step SSO (deve essere validato, altrimenti il backend rifiuta con 409)
           const active = provData.find((p: any) => p.provider === ssoProvider);
           if (active && active.provider) {
              const modeRes = await apiFetch(`${apiBase()}/admin/auth/login-mode`, {
@@ -525,17 +535,16 @@ export default function FirstSetupPage() {
       });
 
       if (!settingsRes.ok) {
-        const errData = await settingsRes.json();
+        const errData = await settingsRes.json().catch(() => ({}));
         throw new Error(`Settings Save Failed: ${errData.detail || "Unknown error"}`);
       }
 
       const settingsData = await settingsRes.json();
       if (settingsData.restarting) {
         setRestarting(true);
-        pollHealth();
       } else {
-        setSuccessMsg("Configuration saved successfully!");
-        await fetchAuthStatus(true); // force reload
+        setSuccessMsg(isSkip ? "Setup iniziale completato con valori standard!" : "Configurazione salvata con successo!");
+        await fetchAuthStatus(true);
         setTimeout(() => router.replace("/"), 1000);
       }
     } catch (err: any) {
@@ -544,39 +553,8 @@ export default function FirstSetupPage() {
     }
   };
 
-  const pollHealth = async () => {
-    const maxAttempts = 30;
-    let attempt = 0;
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    const interval = setInterval(async () => {
-      attempt++;
-      try {
-        const res = await fetch(`${apiBase()}/health`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.status === "ok") {
-            clearInterval(interval);
-            setRestarting(false);
-            setSuccessMsg("System initialized successfully! Redirecting...");
-            await fetchAuthStatus(true); // reload auth status cache
-            setTimeout(() => {
-              window.location.replace("/");
-            }, 1000);
-          }
-        }
-      } catch (err) {
-        console.log("Waiting for AION kernel to restart...", err);
-      }
-
-      if (attempt >= maxAttempts) {
-        clearInterval(interval);
-        setRestarting(false);
-        setError("AION kernel took too long to restart. Please refresh the page manually.");
-        setLoading(false);
-      }
-    }, 1500);
-  };
+  const handleSave = () => executeSave(false);
+  const handleSkip = () => executeSave(true);
 
   const stepsOrder: Step[] = ["llm", "embeddings", "ocr", "search", "policy", "sso", "review"];
 
@@ -702,21 +680,6 @@ export default function FirstSetupPage() {
     setCurrentStep(stepsOrder[idx + 1]);
   };
 
-  // --- Render Steps ---
-  if (restarting) {
-    return (
-      <AuthShell>
-        <div role="status">
-          <AuthHeading
-            icon={<Loader2 className="h-5 w-5 animate-spin" aria-hidden />}
-            title="Restarting AION Kernel"
-            description="Applying your environment configurations and booting up the agent ecosystem. This will take a few seconds..."
-          />
-        </div>
-      </AuthShell>
-    );
-  }
-
   const currIdx = stepsOrder.indexOf(currentStep);
 
   return (
@@ -736,6 +699,15 @@ export default function FirstSetupPage() {
               Initialize your local environment parameters to activate your autonomous coding agent.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowSkipConfirm(true)}
+            disabled={loading || restarting}
+            className="inline-flex items-center gap-2 rounded-xl border border-dashed border-border px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:border-foreground/30 hover:bg-secondary/60 hover:text-foreground"
+          >
+            <FastForward className="h-3.5 w-3.5 text-primary" aria-hidden />
+            Salta setup (popola con valori standard e placeholder)
+          </button>
         </header>
 
         {/* Stepper Progress */}
@@ -1503,7 +1475,7 @@ export default function FirstSetupPage() {
         </section>
 
         {/* Footer Controls */}
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           {currentStep !== "llm" ? (
             <button
               type="button"
@@ -1520,17 +1492,89 @@ export default function FirstSetupPage() {
             <div />
           )}
 
-          {currentStep !== "review" ? (
-            <button type="button" onClick={handleNext} className={cn(solidBtn, "h-10 px-5")}>
-              Next <ChevronRight className="h-4 w-4" aria-hidden />
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={() => setShowSkipConfirm(true)}
+              disabled={loading || restarting}
+              className={cn(outlineBtn, "h-10 px-3.5 text-xs sm:text-sm text-muted-foreground hover:text-foreground")}
+              title="Salta il setup iniziale impostando valori standard"
+            >
+              <FastForward className="h-4 w-4" aria-hidden /> Salta setup
             </button>
-          ) : (
-            <button type="button" onClick={handleSave} disabled={loading} className={cn(solidBtn, "h-10 px-5")}>
-              {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
-              Initialize AION Kernel
-            </button>
-          )}
+
+            {currentStep !== "review" ? (
+              <button type="button" onClick={handleNext} className={cn(solidBtn, "h-10 px-5")}>
+                Next <ChevronRight className="h-4 w-4" aria-hidden />
+              </button>
+            ) : (
+              <button type="button" onClick={handleSave} disabled={loading} className={cn(solidBtn, "h-10 px-5")}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : <Check className="h-4 w-4" aria-hidden />}
+                Initialize AION Kernel
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Skip Confirmation Dialog */}
+        {showSkipConfirm && (
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          >
+            <div className="flex w-full max-w-md flex-col gap-4 rounded-3xl border border-border bg-card p-6 shadow-2xl">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                  <FastForward className="h-5 w-5" aria-hidden />
+                </div>
+                <h2 className="text-lg font-semibold tracking-tight">Salta setup iniziale?</h2>
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Verranno applicate le impostazioni predefinite con valori standard e placeholder. In questo modo potrai accedere subito al pannello di amministrazione e configurare i tuoi modelli reali in qualsiasi momento dalla sezione Impostazioni.
+              </p>
+              <div className="mt-2 flex items-center justify-end gap-3">
+                <button
+                  type="button"
+                  className={outlineBtn}
+                  onClick={() => setShowSkipConfirm(false)}
+                  disabled={loading}
+                >
+                  Annulla
+                </button>
+                <button
+                  type="button"
+                  className={solidBtn}
+                  onClick={() => {
+                    setShowSkipConfirm(false);
+                    void handleSkip();
+                  }}
+                  disabled={loading}
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
+                  Conferma e Salta
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Restart Overlay */}
+        {restarting && (
+          <RestartOverlay
+            isOpen={restarting}
+            title="Riavvio del Kernel AION in corso"
+            onSuccess={async () => {
+              setRestarting(false);
+              setSuccessMsg("Sistema inizializzato con successo! Reindirizzamento...");
+              await fetchAuthStatus(true);
+              setTimeout(() => {
+                window.location.replace("/");
+              }, 600);
+            }}
+            onDismiss={() => setRestarting(false)}
+          />
+        )}
       </div>
     </div>
   );

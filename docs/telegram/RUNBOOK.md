@@ -159,7 +159,7 @@ Regole:
   l'utente su Telegram). L'effetto è immediato: il collegamento viene riletto a ogni messaggio.
 - **Utente eliminato.** Se l'admin elimina un utente AION, collegamento e codici spariscono (FK `ON DELETE CASCADE`).
 - **Audit.** Ogni azione (codice creato, collegato, scollegato) è registrata in `tg_audit`.
-- **Tabelle.** `tg_links`, `tg_pairing_codes` e `tg_audit` vengono create dalla migrazione `a9b0c1d029`
+- **Tabelle.** `tg_links`, `tg_pairing_codes` e `tg_audit` vengono create dalla migrazione `t0g1l2k029`
   sulle installazioni esistenti, oppure all'avvio del canale sui DB nuovi.
 
 ## Ruoli: bot manager e assistenti personali

@@ -9,6 +9,7 @@ import { setStoredAuth } from "@/lib/auth/storage";
 import { fetchAuthStatus, resetAuthStatusCache } from "@/lib/auth/status";
 import { TwoFactorStep, type MfaChallenge, type MfaLoginResult } from "@/components/auth/TwoFactorStep";
 import { cn } from "@/lib/cn";
+import { chatUrl } from "@/lib/paths";
 import {
   AuthAlert,
   AuthDivider,
@@ -23,7 +24,7 @@ import {
 const codeCls = "rounded-md border border-border/60 bg-muted px-1.5 py-0.5 font-mono text-[0.95em] text-foreground";
 
 const LOGIN_ERRORS: Record<string, string> = {
-  temp_password_expired: "La password temporanea è scaduta. Chiedi a un amministratore di rigenerarla.",
+  temp_password_expired: "La password temporanea è scaduta. Chiedi a un amministratore una nuova password temporanea o un nuovo link.",
   sso_required: "Questo account accede tramite SSO: usa il pulsante SSO.",
   password_login_disabled: "L'accesso con password non è disponibile per questo account.",
   not_admin: "Questo account non ha il ruolo 'admin'.",
@@ -55,6 +56,7 @@ export default function AdminLoginPage() {
   // (migrazione in corso o recupero con ``python -m src.auth.recover``).
   // null finche' /auth/status non risponde: niente form "lampeggiante".
   const [showPasswordForm, setShowPasswordForm] = useState<boolean | null>(null);
+  const [resetAvailable, setResetAvailable] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,6 +65,7 @@ export default function AdminLoginPage() {
       setSsoProvider(s.sso_enabled ? s.sso_provider : null);
       setShowPasswordForm(!s.sso_enabled || s.admin_password_login);
       setShowDefaultHint(!s.sso_enabled);
+      setResetAvailable(s.password_reset_available);
     });
     const code = params.get("error");
     if (code) setErr(LOGIN_ERRORS[code] ?? `Accesso negato (${code})`);
@@ -219,6 +222,14 @@ export default function AdminLoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="current-password"
                   />
+                  {resetAvailable && (
+                    <a
+                      href={chatUrl("/forgot-password")}
+                      className="focus-ring -mt-1 self-end rounded text-xs font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                    >
+                      Password dimenticata?
+                    </a>
+                  )}
                   {err && <AuthAlert>{err}</AuthAlert>}
                   <button type="submit" disabled={loading} className={cn(authPrimaryBtnCls, "mt-1")}>
                     {loading ? <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> : null}
