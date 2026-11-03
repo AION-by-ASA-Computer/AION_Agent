@@ -317,6 +317,7 @@ python -m src.mcp_import -i claude_desktop_config.json -o config/mcp_registry.lo
 | `code` | `mcp_servers/code_executor/` | Execute code in sandbox |
 | `session_sandbox` | `mcp_servers/session_sandbox/` | Session workspace operations |
 | `ocr` | `mcp_servers/ocr_mcp/` | OCR + document ingest (`doc_ingest`, `ocr_file`, **`pdf_evidence_crop`**) |
+| `stt` | `mcp_servers/stt_mcp/` | Speech-to-text of session audio (`transcribe_audio`), remote Whisper or local faster-whisper — see [Speech-to-text](speech-to-text.md) |
 | `geocoding` | `mcp_servers/geocoding/` | Forward/reverse geocode via OpenStreetMap Nominatim (`geocode_place`, `reverse_geocode`) |
 | `promo_render` | `mcp_servers/promo_render/` | Promotional graphics React/HTML → PNG |
 | `agent_db` | `mcp_servers/agent_db/` | Agent SQLite database for structured memory |
@@ -436,7 +437,7 @@ custom_server:
 | `AION_MCP_POOL` | `1` | Pool stdio persistente (obbligatorio per warm) |
 | `AION_MCP_USER_POOL` | `1` | Worker condivisi per utente/tenant tra chat |
 | `AION_MCP_SESSION_ENV_INJECT` | `0` (code) / `1` (env) | Inietta sessione/profilo a ogni `call_tool` |
-| `AION_MCP_SESSION_SCOPED_SERVERS` | `session_sandbox,promo_render,ocr_mcp,skills_hub,aion_subagents` | Server con pool per chat session (sandbox isolati anche con `AION_MCP_USER_POOL=1`) |
+| `AION_MCP_SESSION_SCOPED_SERVERS` | `session_sandbox,promo_render,ocr_mcp,stt,skills_hub,aion_subagents` | Server con pool per chat session (sandbox isolati anche con `AION_MCP_USER_POOL=1`) |
 | `AION_MCP_STARTUP_WARM` | `1` | Warm MCP al boot API |
 | `AION_MCP_STARTUP_WARM_ASYNC` | `0` | `1` = warm in background (healthcheck prima del warm) |
 | `AION_MCP_STARTUP_WARM_PROFILES` | `aion_std,generic_assistant` | CSV profili, o `*` = tutti |

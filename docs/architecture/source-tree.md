@@ -183,6 +183,7 @@ Below is the list of standard submodules ready for use:
 12. **`query_memory/`**: Maintains the semantic index of successful queries and enables their inter-session retrieval.
 13. **`session_sandbox/`**: Controls secure access and filesystem isolation for each chat.
 14. **`skills_hub/`**: Manages the alignment of loaded skills in the agent's active profile.
+15. **`stt_mcp/`**: Transcribes session audio files (speech-to-text) via a remote OpenAI-compatible Whisper service or local faster-whisper; logic in `src/tools/audio_transcribe.py`.
 
 ---
 
@@ -217,7 +218,7 @@ When starting in Docker mode, the installation script copies `.env.example` dire
 ### `docker/` structure
 
 The directory [docker/](docker/) collects deployment assets:
-- **`Dockerfile.backend`**: Builds the Python 3.13 image with pre-installed system tools like Tesseract (OCR) and Poppler.
+- **`Dockerfile.backend`**: Builds the Python 3.13 image with pre-installed system tools like Tesseract (OCR) and Poppler, plus the faster-whisper speech-to-text model downloaded at build time (`ARG STT_LOCAL_MODEL`).
 - **`Dockerfile.chat-ui`** and **`Dockerfile.admin-ui`**: Generate the standalone Next.js images.
 - **`Dockerfile.website`**: Generates the static Nginx image to serve Docusaurus.
 - **`Caddyfile`**: Reverse proxy with path-based balancing (`/admin`, `/api`) and automatic SSL certificate generation.

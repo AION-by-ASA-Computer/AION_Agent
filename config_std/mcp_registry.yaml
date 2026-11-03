@@ -43,6 +43,11 @@ ocr:
   args: ["-u", "ocr_mcp/server.py"]
   description: "OCR immagini/PDF tramite servizio dedicato (GLM-OCR)"
 
+stt:
+  command: "python"
+  args: ["-u", "stt_mcp/server.py"]
+  description: "Trascrizione audio (speech-to-text): servizio Whisper OpenAI-compatibile o faster-whisper locale"
+
 geocoding:
   command: "python"
   args: ["-u", "geocoding/server.py"]

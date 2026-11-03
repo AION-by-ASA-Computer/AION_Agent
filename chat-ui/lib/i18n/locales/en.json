@@ -23,7 +23,8 @@
       "instructions": "Instructions",
       "tunings": "Tuning & Parameters",
       "runtime": "Runtime",
-      "presets": "Presets"
+      "presets": "Presets",
+      "whatsapp": "WhatsApp"
     },
     "profile": {
       "title": "Profile",
@@ -281,6 +282,49 @@
       "saved": "Changes saved",
       "loading": "Loading settings…",
       "dismiss": "Dismiss"
+    },
+    "whatsapp": {
+      "title": "WhatsApp",
+      "desc": "Link your WhatsApp to message the assistant straight from your phone.",
+      "loading": "Loading WhatsApp status…",
+      "retry": "Retry",
+      "disabled": "The WhatsApp channel is not active. Contact your administrator.",
+      "link_title": "Link your WhatsApp",
+      "link_desc": "One message to the company number is all it takes: nothing to install.",
+      "link_desc_number": "One message to the company number {{number}} is all it takes: nothing to install.",
+      "step_scan": "Scan the QR code with your phone, or tap “Open WhatsApp” if you are already on your phone.",
+      "step_send": "In WhatsApp, press Send without changing the pre-filled message.",
+      "step_done": "Done: this page updates by itself as soon as the link is confirmed.",
+      "link": "Link WhatsApp",
+      "qr_alt": "QR code to link WhatsApp",
+      "code_label": "Link code",
+      "open": "Open WhatsApp",
+      "waiting": "Waiting for your message…",
+      "expires_in": "Expires in {{time}}",
+      "expired": "This code has expired. Generate a new one to continue.",
+      "regenerate": "Generate new code",
+      "linked_title": "WhatsApp linked",
+      "linked_badge": "Active",
+      "profile_name": "Profile name",
+      "phone": "Number",
+      "linked_at": "Linked on",
+      "linked_hint": "Conversations started from WhatsApp appear in your chat list with the WhatsApp icon.",
+      "unlink": "Unlink",
+      "unlink_dialog": {
+        "title": "Unlink WhatsApp?",
+        "desc": "You won't be able to message the assistant from this number until you link it again. Existing conversations stay in your chat list.",
+        "cancel": "Cancel",
+        "confirm": "Unlink",
+        "unlinking": "Unlinking…"
+      },
+      "toast": {
+        "linked": "WhatsApp linked. You can now message the assistant from WhatsApp.",
+        "unlinked": "WhatsApp unlinked."
+      },
+      "err": {
+        "disabled": "The WhatsApp channel is not active. Contact your administrator.",
+        "generic": "Something went wrong. Please try again."
+      }
     }
   },
   "sidebar": {
@@ -320,7 +364,8 @@
       "customize": "Customize instructions",
       "logout": "Sign out",
       "admin_panel": "Admin panel"
-    }
+    },
+    "from_whatsapp": "Conversation from WhatsApp"
   },
   "schedulesPage": {
     "title": "Automations",
@@ -600,7 +645,15 @@
         "memory_injections": "Memory/LTM",
         "system_messages": "System msg",
         "other": "Other"
-      }
+      },
+      "status_ok": "Plenty of room",
+      "status_filling": "Getting full",
+      "status_full": "Almost full",
+      "hint_ok": "The assistant remembers this whole conversation.",
+      "hint_filling": "Long conversation: older messages will be summarized automatically.",
+      "hint_full": "Older messages are being summarized to make room. You can also start a new chat.",
+      "details_show": "Details",
+      "details_hide": "Hide details"
     },
     "generating": {
       "plan": "Generating plan…",
@@ -785,6 +838,21 @@
       "retry": "Retry",
       "send_blocked": "Wait for file uploads to finish"
     },
+    "voice": {
+      "start": "Dictate a message",
+      "stop": "Stop and transcribe",
+      "cancel": "Cancel recording (Esc)",
+      "transcribing": "Transcribing…",
+      "dismiss": "Dismiss",
+      "error": {
+        "permission_denied": "Microphone access denied. Allow it in your browser settings to dictate.",
+        "no_microphone": "No microphone found.",
+        "too_long": "Recording too long: split it into shorter parts.",
+        "too_large": "Recording too large.",
+        "empty": "No speech detected: try again.",
+        "failed": "Transcription failed. Try again shortly."
+      }
+    },
     "web_search": {
       "disabled": "Web search disabled",
       "restricted": "Restricted · {{count}} hosts",
@@ -810,6 +878,11 @@
       "no_domains_desc": "Add sources above to limit the search.",
       "clear_list": "Clear list",
       "save_preferences": "Save Preferences"
+    },
+    "project_menu": {
+      "label": "Project",
+      "none": "No projects available",
+      "open_panel": "Open memory panel"
     }
   },
   "login": {

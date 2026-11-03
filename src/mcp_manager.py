@@ -85,6 +85,7 @@ _DEFAULT_SESSION_SCOPED_SERVERS = frozenset(
         "promo_render",
         "ocr",  # registry slug in config/mcp_registry.yaml (folder: ocr_mcp/)
         "ocr_mcp",  # legacy alias
+        "stt",  # registry slug (folder: stt_mcp/); writes derived/audio/ in the session
         "skills_hub",
         "query_memory",
         "aion_subagents",
