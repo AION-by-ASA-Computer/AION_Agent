@@ -29,17 +29,26 @@ def _put(payload):
 
     with (
         patch("src.api.admin.mcp_manager._registry", REGISTRY),
-        patch("src.api.admin.mcp_manager.get_server_config", return_value=REGISTRY["broker"]),
-        patch("src.api.admin.mcp_manager.update_server_config", side_effect=lambda n, d: d) as upd,
+        patch(
+            "src.api.admin.mcp_manager.get_server_config",
+            return_value=REGISTRY["broker"],
+        ),
+        patch(
+            "src.api.admin.mcp_manager.update_server_config", side_effect=lambda n, d: d
+        ) as upd,
         patch("src.api.admin.get_async_session_maker", return_value=lambda: ctx),
-        patch("src.mcp_integration_sync.sync_mcp_server_config_from_registry", AsyncMock()),
+        patch(
+            "src.mcp_integration_sync.sync_mcp_server_config_from_registry", AsyncMock()
+        ),
     ):
         asyncio.run(update_mcp_config("broker", MCPUpdate(**payload)))
     return upd.call_args.args[1]
 
 
 def test_switch_to_org_shared_keeps_header():
-    saved = _put({"args": ARGS, "env": {"API_KEY": "tok"}, "credential_mode": "org_shared"})
+    saved = _put(
+        {"args": ARGS, "env": {"API_KEY": "tok"}, "credential_mode": "org_shared"}
+    )
     assert saved["args"] == ARGS
     assert saved["env"] == {"API_KEY": "tok"}
     assert "credential_mode" not in saved

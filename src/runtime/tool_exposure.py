@@ -536,7 +536,7 @@ def make_tool_search_tool(
             message += (
                 f" Also available in '{q}', not loaded yet: "
                 + ", ".join(not_loaded)
-                + ". Load each one with tool_search(\"<exact name>\")."
+                + '. Load each one with tool_search("<exact name>").'
             )
         return message
 

@@ -28,7 +28,9 @@ def _wrapper(model: str = "vllm/AIONQ35-35-Q8B") -> adapter.LiteLLMChatGenerator
 
 def _assistant_with_reasoning() -> ChatMessage:
     return ChatMessage.from_assistant(
-        tool_calls=[ToolCall(tool_name="ssh_exec", arguments={"cmd": "uptime"}, id="c1")],
+        tool_calls=[
+            ToolCall(tool_name="ssh_exec", arguments={"cmd": "uptime"}, id="c1")
+        ],
         reasoning=ReasoningContent(reasoning_text="Controllo prima il load average."),
     )
 
@@ -92,7 +94,9 @@ def test_wire_carries_reasoning_fields(monkeypatch):
 
 def test_stm_messages_have_no_reasoning_fields(monkeypatch):
     monkeypatch.delenv("AION_REASONING_REPLAY", raising=False)
-    wire = _wire_messages(_wrapper(), [ChatMessage.from_assistant("risposta precedente")])
+    wire = _wire_messages(
+        _wrapper(), [ChatMessage.from_assistant("risposta precedente")]
+    )
     assert "reasoning_content" not in wire[0]
     assert "reasoning" not in wire[0]
 
@@ -168,7 +172,9 @@ def test_agent_loop_replays_reasoning_on_second_call(monkeypatch):
                 "tool_calls",
             )
         return _response(
-            SimpleNamespace(content="Host ok.", reasoning_content="Fatto.", tool_calls=None),
+            SimpleNamespace(
+                content="Host ok.", reasoning_content="Fatto.", tool_calls=None
+            ),
             "stop",
         )
 

@@ -122,7 +122,9 @@ def test_prune_ledger_since_drops_rows_and_offload_files(session_id, monkeypatch
         p.write_text("x", encoding="utf-8")
         append_ledger_entry(
             session_id,
-            LedgerEntry(seq=seq, ts=ts, tool="t", target="h", ok=True, chars=1, path=rel),
+            LedgerEntry(
+                seq=seq, ts=ts, tool="t", target="h", ok=True, chars=1, path=rel
+            ),
         )
 
     assert prune_ledger_since(session_id, 150.0) == 1

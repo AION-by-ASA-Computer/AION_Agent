@@ -470,12 +470,20 @@ def test_delete_turn_prunes_tool_ledger_of_deleted_turns(monkeypatch, tmp_path):
         monkeypatch.setenv("AION_DATA_DIR", str(tmp_path))
         monkeypatch.setenv("AION_TOOL_LEDGER_ENABLED", "1")
         bridge = UnifiedHistoryBridge()
-        await bridge.add_message("conv-l", "user", "turno 1", user_id="u1", message_id="u-1")
-        await bridge.add_message("conv-l", "assistant", "ok", user_id="u1", message_id="a-1")
-        await bridge.add_message("conv-l", "user", "turno 2", user_id="u1", message_id="u-2")
+        await bridge.add_message(
+            "conv-l", "user", "turno 1", user_id="u1", message_id="u-1"
+        )
+        await bridge.add_message(
+            "conv-l", "assistant", "ok", user_id="u1", message_id="a-1"
+        )
+        await bridge.add_message(
+            "conv-l", "user", "turno 2", user_id="u1", message_id="u-2"
+        )
         append_ledger_entry(
             "conv-l",
-            LedgerEntry(seq=1, ts=1.0, tool="list_hosts", target="{}", ok=True, chars=1),
+            LedgerEntry(
+                seq=1, ts=1.0, tool="list_hosts", target="{}", ok=True, chars=1
+            ),
         )
         append_ledger_entry(
             "conv-l",
