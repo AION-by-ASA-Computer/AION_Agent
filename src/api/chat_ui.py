@@ -110,9 +110,18 @@ async def list_conversations_chat_ui(
     include_threads: bool = Query(
         False, description="Include side threads (child conversations) in the list"
     ),
+    exclude_telegram: bool = Query(
+        True,
+        description="Hide conversations started from Telegram (listed in Settings → Telegram)",
+    ),
     user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     _require_unified()
+    hidden_sources = set()
+    if exclude_scheduled:
+        hidden_sources.add("scheduled_job")
+    if exclude_telegram:
+        hidden_sources.add("telegram")
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
         conds = [
@@ -126,7 +135,7 @@ async def list_conversations_chat_ui(
             select(Conversation)
             .where(*conds)
             .order_by(Conversation.updated_at.desc())
-            .limit(limit * 4 if exclude_scheduled else limit)
+            .limit(limit * 4 if hidden_sources else limit)
         )
         rows = (await session.execute(q)).scalars().all()
         thread_counts = await _thread_counts(
@@ -135,7 +144,7 @@ async def list_conversations_chat_ui(
     data = []
     for r in rows:
         meta = json.loads(r.metadata_json or "{}")
-        if exclude_scheduled and meta.get("source") == "scheduled_job":
+        if meta.get("source") in hidden_sources:
             continue
         data.append(
             {

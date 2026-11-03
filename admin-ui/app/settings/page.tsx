@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Brain, Cpu, Globe, Loader2, RotateCcw, Save, ScanLine, ShieldCheck, Timer } from "lucide-react";
+import { Brain, Cpu, Globe, Loader2, RotateCcw, Save, ScanLine, Send, ShieldCheck, Timer } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -15,6 +15,7 @@ import { WebSection } from "@/components/settings/WebSection";
 import { OcrSection, clearedOcr, type OcrMode } from "@/components/settings/OcrSection";
 import { SandboxSection } from "@/components/settings/SandboxSection";
 import { RetentionSection } from "@/components/settings/RetentionSection";
+import { TELEGRAM_NON_NEGATIVE_KEYS, TELEGRAM_POSITIVE_KEYS, TelegramSection } from "@/components/settings/TelegramSection";
 import { K, type Notify, type SectionCtx, type Settings } from "@/components/settings/types";
 
 const k = K;
@@ -26,6 +27,7 @@ const SECTIONS = [
   { id: "ocr", icon: ScanLine },
   { id: "sandbox", icon: ShieldCheck },
   { id: "retention", icon: Timer },
+  { id: "telegram", icon: Send },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
@@ -33,6 +35,7 @@ type SectionId = (typeof SECTIONS)[number]["id"];
 const SELF_SAVING: SectionId[] = ["models", "sandbox"];
 
 const isSection = (v: string): v is SectionId => SECTIONS.some((s) => s.id === v);
+const nonNegative = (v: string | undefined) => !v || /^\d+$/.test(v.trim());
 const positive = (v: string | undefined) => {
   if (!v) return true;
   const n = parseInt(v, 10);
@@ -157,6 +160,10 @@ export default function SettingsPage() {
     if (!positive(settings.AION_WEB_FETCH_MAX_CHARS)) return t(`${k}.page.v_fetch_chars`);
     if (!positive(settings.AION_WEB_SEARCH_MAX_RESULTS)) return t(`${k}.page.v_search_results`);
     if (!positive(settings.AION_WEB_SEARCH_TIMEOUT_SEC)) return t(`${k}.page.v_search_timeout`);
+    for (const key of TELEGRAM_POSITIVE_KEYS) if (!positive(settings[key])) return t(`${k}.page.v_tg_number`, { key });
+    for (const key of TELEGRAM_NON_NEGATIVE_KEYS) if (!nonNegative(settings[key])) return t(`${k}.page.v_tg_non_negative`, { key });
+    const proxy = (settings.AION_TELEGRAM_PROXY_URL || "").trim();
+    if (proxy && !/^(https?|socks[45]h?):\/\//.test(proxy)) return t(`${k}.page.v_tg_proxy`);
     return null;
   };
 
@@ -283,6 +290,7 @@ export default function SettingsPage() {
           <div hidden={active !== "ocr"}><OcrSection key={`o${rev}`} {...ctx} mode={ocrMode} setMode={setOcrMode} /></div>
           <div hidden={active !== "sandbox"}><SandboxSection t={t} notify={notify} onRestart={onRestart} /></div>
           <div hidden={active !== "retention"}><RetentionSection {...ctx} /></div>
+          <div hidden={active !== "telegram"}><TelegramSection key={`t${rev}`} {...ctx} /></div>
         </div>
       </div>
 

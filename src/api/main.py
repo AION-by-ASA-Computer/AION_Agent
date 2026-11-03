@@ -444,9 +444,29 @@ async def _lifespan(app: FastAPI):
     except Exception as e:
         logger.warning("MCP integration sync on startup failed: %s", e)
 
+    _telegram_gateway = None
+    try:
+        from src.channels.telegram import start_gateway_if_enabled
+
+        _telegram_gateway = await start_gateway_if_enabled()
+    except Exception as e:
+        logger.warning("telegram gateway: %s", e)
+
     logger.info("Application startup sequence complete.")
     yield
     logger.info("Shutting down application...")
+    # Il gateway può essere stato riavviato dalle impostazioni admin: si ferma quello attivo.
+    try:
+        from src.channels.telegram import runtime as _tg_runtime
+
+        _telegram_gateway = _tg_runtime.get_gateway() or _telegram_gateway
+    except Exception:
+        pass
+    if _telegram_gateway is not None:
+        try:
+            await _telegram_gateway.stop()
+        except Exception as e:
+            logger.warning("telegram gateway shutdown: %s", e)
     _cleanup_orphaned_mcp_remotes()
     _cleanup_orphaned_mcp_remotes()
     if _offload_cleanup_task is not None:

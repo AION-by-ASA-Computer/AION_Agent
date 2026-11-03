@@ -7,6 +7,7 @@ import {
   KeyRound,
   Loader2,
   Palette,
+  Send,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -18,6 +19,7 @@ import { AppearanceSection } from "@/components/settings/AppearanceSection";
 import { ChangePasswordSection } from "@/components/settings/ChangePasswordSection";
 import { ProfileAvatarEditor } from "@/components/settings/ProfileAvatarEditor";
 import { SettingsNav, type SettingsTab } from "@/components/settings/SettingsNav";
+import { TelegramSection } from "@/components/settings/TelegramSection";
 import { TuningsSettingsSection } from "@/components/settings/TuningsSettingsSection";
 import { UserMdSection } from "@/components/settings/UserMdSection";
 import {
@@ -86,6 +88,7 @@ function tabFromSearchParam(tab: string | null): SettingsTab {
   if (tab === "appearance") return "appearance";
   if (tab === "security") return "security";
   if (tab === "api-keys" || tab === "api_keys" || tab === "apikeys") return "api-keys";
+  if (tab === "telegram") return "telegram";
   if (tab === "tunings" || tab === "tuning" || tab === "runtime" || tab === "presets") return "tunings";
   return "profile";
 }
@@ -127,7 +130,10 @@ export default function SettingsPage() {
       { id: "appearance" as const, label: t("settings.tab.appearance"), icon: Palette },
       { id: "security" as const, label: t("settings.tab.security"), icon: ShieldCheck },
       ...(currentToken
-        ? [{ id: "api-keys" as const, label: t("settings.tab.api_keys"), icon: KeyRound }]
+        ? [
+            { id: "api-keys" as const, label: t("settings.tab.api_keys"), icon: KeyRound },
+            { id: "telegram" as const, label: t("settings.tab.telegram"), icon: Send },
+          ]
         : []),
       { id: "instructions" as const, label: t("settings.tab.instructions"), icon: FileText },
       { id: "tunings" as const, label: t("settings.tab.tunings"), icon: SlidersHorizontal },
@@ -528,6 +534,8 @@ export default function SettingsPage() {
             ) : null}
 
             {activeTab === "api-keys" && currentToken ? <ApiKeysSection onToast={showToast} /> : null}
+
+            {activeTab === "telegram" && currentToken ? <TelegramSection onToast={showToast} /> : null}
 
             {activeTab === "instructions" ? (
               <UserMdSection

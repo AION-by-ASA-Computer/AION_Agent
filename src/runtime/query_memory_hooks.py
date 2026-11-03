@@ -14,6 +14,8 @@ from src.runtime.hooks import HookContext, hook_registry
 from src.runtime.sql_query_memory_gate import extract_schemas_from_sql_text
 from src.runtime.sql_query_memory_tools import profile_wants_sql_query_memory
 
+from src.runtime.project_access_delegation import project_user
+
 logger = logging.getLogger("aion.sql_qm.hooks")
 
 _SQL_QUERY_TOOL_NAMES = frozenset(
@@ -121,7 +123,9 @@ async def _run_pre_turn_sql_query_memory(ctx: HookContext) -> None:
             user_input=user_input,
             project=project,
             tenant_id=ctx.tenant_id,
-            user_id=ctx.user_id or "default",
+            user_id=project_user(
+                ctx.conversation_id, ctx.user_id or "default", project
+            ),
             profile=profile,
         )
     except Exception as exc:
@@ -279,7 +283,9 @@ async def _post_tool_sql_auto_learn(ctx: HookContext) -> None:
             sql_text=sql_to_store,
             project_slug=project,
             tenant_id=ctx.tenant_id,
-            user_id=ctx.user_id or "default",
+            user_id=project_user(
+                ctx.conversation_id, ctx.user_id or "default", project
+            ),
             profile_slug=profile,
             is_verified=False,
         )

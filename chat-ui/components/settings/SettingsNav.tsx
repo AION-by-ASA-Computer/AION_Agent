@@ -9,6 +9,7 @@ export type SettingsTab =
   | "appearance"
   | "security"
   | "api-keys"
+  | "telegram"
   | "instructions"
   | "tunings";
 

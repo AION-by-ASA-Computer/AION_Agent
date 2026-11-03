@@ -19,6 +19,7 @@
       "appearance": "Erscheinungsbild",
       "security": "Sicherheit",
       "api_keys": "API-Schlüssel",
+      "telegram": "Telegram",
       "instructions": "Anweisungen",
       "tunings": "Tuning & Parameter",
       "runtime": "Runtime",
@@ -267,6 +268,74 @@
         "generic": "Etwas ist schiefgelaufen. Bitte versuche es erneut."
       },
       "list_title": "Ihre Schlüssel"
+    },
+    "telegram": {
+      "title": "Telegram",
+      "desc": "Verknüpfe dein Telegram-Konto, um AION vom Smartphone aus zu nutzen. Auf Telegram begonnene Chats bleiben von den Chats der Chat UI getrennt.",
+      "loading": "Telegram-Status wird geladen…",
+      "retry": "Erneut versuchen",
+      "disabled": "Die Telegram-Integration ist auf diesem Server nicht aktiviert. Wende dich an deinen Administrator.",
+      "status": {
+        "linked": "Verknüpft",
+        "not_linked": "Nicht verknüpft"
+      },
+      "link_title": "Konto verknüpfen",
+      "link_desc": "Jeder AION-Benutzer kann genau ein Telegram-Konto verknüpfen.",
+      "step1": "Klicke auf „Telegram verknüpfen“, um einen Einmal-Link zu erzeugen.",
+      "step2": "Öffne den Link (oder scanne den QR-Code) auf dem Smartphone: Der Chat mit {{bot}} öffnet sich.",
+      "step3": "Tippe in Telegram auf „Starten“: Die Verknüpfung erfolgt sofort.",
+      "link_button": "Telegram verknüpfen",
+      "pairing_hint": "Scanne den QR-Code mit dem Smartphone oder öffne den Link auf dem Gerät, auf dem du Telegram nutzt, und tippe auf „Starten“.",
+      "open_telegram": "In Telegram öffnen",
+      "copy_link": "Link kopieren",
+      "copied": "Kopiert",
+      "waiting": "Warte auf die Bestätigung von Telegram… Der Link läuft um {{time}} ab.",
+      "expired": "Der Link ist ungenutzt abgelaufen. Erzeuge einen neuen.",
+      "regenerate": "Neuen Link erzeugen",
+      "qr_alt": "QR-Code des Telegram-Verknüpfungslinks",
+      "linked_title": "Verknüpftes Konto",
+      "account": "Telegram-Konto",
+      "user_id": "Telegram user id",
+      "linked_at": "Verknüpft am",
+      "last_seen": "Letzte Aktivität",
+      "never": "Nie",
+      "open_bot": "{{bot}} in Telegram öffnen",
+      "unlink": "Trennen",
+      "cancel": "Abbrechen",
+      "unlink_dialog": {
+        "title": "Telegram trennen?",
+        "desc": "Du kannst AION erst wieder über Telegram nutzen, wenn du das Konto erneut verknüpfst. Bestehende Chats bleiben gespeichert.",
+        "confirm": "Trennen"
+      },
+      "chats_title": "Telegram-Chats",
+      "chats_desc": "Auf Telegram begonnene Unterhaltungen, getrennt von den Chats der Chat UI.",
+      "chats_empty": "Noch keine Chats aus Telegram. Schreib einem deiner Assistenten, um einen zu beginnen.",
+      "chat_untitled": "Telegram-Chat",
+      "chat_meta": "{{count}} Nachrichten · {{date}}",
+      "bots_title": "Deine Assistenten",
+      "bots_desc": "Persönliche Assistenten, erstellt über {{bot}} mit /newbot: jeder hat sein eigenes Profil und Projekt und antwortet nur dir.",
+      "bots_empty": "Noch keine Assistenten. Wenn du möchtest, sende /newbot an {{bot}}, um einen zu erstellen.",
+      "bot_open": "Öffnen",
+      "bot_profile": "Profil: {{profile}}",
+      "bot_project": "Projekt: {{project}}",
+      "bot_status_provisioning": "Wird eingerichtet",
+      "bot_status_active": "Aktiv",
+      "bot_status_suspended": "Pausiert",
+      "bot_status_error": "Fehler",
+      "chat_via_manager": "Verwaltungsbot",
+      "bot_mode_personal": "Persönlich",
+      "bot_mode_shared": "Geteilt",
+      "chat_in_group": "Gruppe {{chat}}",
+      "toast": {
+        "linked": "Telegram-Konto verknüpft",
+        "unlinked": "Telegram-Konto getrennt"
+      },
+      "err": {
+        "unavailable": "Der Telegram-Bot ist noch nicht verbunden. Versuche es in ein paar Sekunden erneut.",
+        "user_token_required": "Melde dich mit deinem Konto an, um die Telegram-Verknüpfung zu verwalten.",
+        "not_linked": "Kein Telegram-Konto verknüpft.",
+        "generic": "Der Vorgang ist fehlgeschlagen. Versuche es erneut."
+      }
     },
     "subtitle": "Verwalten Sie Profil, Erscheinungsbild, Sicherheit und benutzerdefinierte Anweisungen.",
     "tunings": {
@@ -793,6 +862,7 @@
       "streaming": "Schlussfolgerung läuft…"
     },
     "session_preparing": "Integrationen und Tools werden vorbereitet…",
+    "telegram_read_only": "Auf Telegram begonnener Chat: hier schreibgeschützt, setze ihn auf Telegram fort.",
     "sql_project": {
       "hint": "Aktives SQL-/Navigationsprojekt (Klicken zum Öffnen). Neue Nachrichten verwenden dieses Projekt."
     },
