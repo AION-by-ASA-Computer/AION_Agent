@@ -219,6 +219,50 @@ def test_publish_tools_injects_cached_agent_tools_into_current_run():
         clear_turn_runtime(sid)
 
 
+def test_publish_tools_keeps_resident_set_on_real_haystack_context():
+    """Haystack's _ExecutionContext has no ``tools``: loading must not drop tool_search."""
+    from haystack.components.agents.agent import _ExecutionContext
+    from haystack.components.agents.state import State
+
+    from src.runtime.turn_compaction import (
+        clear_turn_runtime,
+        set_agent_execution_context,
+        set_turn_runtime,
+    )
+
+    resident = [_Tool("tool_search"), _Tool("skill_view")]
+    ctx = _ExecutionContext(
+        state=State(schema={}),
+        component_visits={},
+        chat_generator_inputs={"tools": resident},
+        tool_invoker_inputs={"tools": resident},
+    )
+
+    class _Agent:
+        def __init__(self):
+            self.tools = list(resident)
+            self.max_agent_steps = 5
+
+    sid = "publish-real-haystack-ctx"
+    set_turn_runtime(
+        session_id=sid,
+        loop=None,
+        queue=None,
+        stop_event=None,
+        agent=_Agent(),
+        profile_name="sre",
+        user_id="admin",
+    )
+    try:
+        set_agent_execution_context(ctx)
+        publish_tools([_Tool("list_hosts")], session_id=sid)
+        expected = ["tool_search", "skill_view", "list_hosts"]
+        assert [t.name for t in ctx.chat_generator_inputs["tools"]] == expected
+        assert [t.name for t in ctx.tool_invoker_inputs["tools"]] == expected
+    finally:
+        clear_turn_runtime(sid)
+
+
 def test_tool_search_publishes_named_sandbox_tool():
     from src.runtime.turn_compaction import (
         clear_turn_runtime,
@@ -337,3 +381,150 @@ def test_tool_search_unknown_lists_names_without_publishing():
     finally:
         clear_turn_runtime(sid)
         clear_deferred_tools(sid)
+
+
+def test_tool_search_group_names_tools_beyond_limit(monkeypatch):
+    names = [
+        "list_hosts",
+        "get_os_info",
+        "get_package_version",
+        "list_listening_ports",
+        "get_health",
+        "list_pending_updates",
+        "get_reboot_status",
+    ]
+
+    async def _fake_mcp(_server_name, *_args, **_kwargs):
+        return [_Tool(n) for n in names]
+
+    monkeypatch.setattr("src.runtime.tool_exposure._mcp_group_tools", _fake_mcp)
+    monkeypatch.setattr(
+        "src.runtime.tool_exposure.publish_tools",
+        lambda tools, session_id="": list(tools),
+    )
+    sid = "search-group-rest"
+    profile = SimpleNamespace(
+        slug="sre_ssh",
+        mcp_servers=["skills_hub", "session_sandbox", "aion_sre_ssh"],
+        native_tool_groups=[],
+    )
+    tool = make_tool_search_tool(
+        session_id=sid, user_id="default", tenant_id="default", profile=profile
+    )
+    try:
+        message = tool.function("aion_sre_ssh")
+        assert "Loaded 5 tool(s)" in message
+        assert "not loaded yet: list_pending_updates, get_reboot_status" in message
+        follow_up = tool.function("list_pending_updates")
+        assert "Loaded 1 tool(s): list_pending_updates" in follow_up
+    finally:
+        clear_deferred_tools(sid)
+
+
+def test_tool_search_emits_tool_events(monkeypatch):
+    events = []
+    monkeypatch.setattr(
+        "src.runtime.native_tool_events.emit_native_tool_event",
+        lambda session_id, payload: events.append((session_id, payload)),
+    )
+
+    async def _fake_mcp(_server_name, *_args, **_kwargs):
+        return [_Tool("list_hosts")]
+
+    monkeypatch.setattr("src.runtime.tool_exposure._mcp_group_tools", _fake_mcp)
+    monkeypatch.setattr(
+        "src.runtime.tool_exposure.publish_tools",
+        lambda tools, session_id="": list(tools),
+    )
+    sid = "search-events"
+    profile = SimpleNamespace(
+        slug="sre_ssh",
+        mcp_servers=["skills_hub", "session_sandbox", "aion_sre_ssh"],
+        native_tool_groups=[],
+    )
+    tool = make_tool_search_tool(
+        session_id=sid, user_id="default", tenant_id="default", profile=profile
+    )
+    try:
+        message = tool.function("list_hosts")
+    finally:
+        clear_deferred_tools(sid)
+    assert "list_hosts" in message
+    types = [(p["type"], p["name"]) for _, p in events]
+    assert types == [("tool_start", "tool_search"), ("tool_end", "tool_search")]
+    start, end = events[0][1], events[1][1]
+    assert start["input"] == {"query": "list_hosts"}
+    assert start["id"] == end["id"]
+    assert all(s == sid for s, _ in events)
+
+
+def test_tool_search_same_step_name_waits_for_group(monkeypatch):
+    """tool_search("aion_sre_ssh") and tool_search("<tool>") in one step run in parallel."""
+    import asyncio
+    import time
+    from concurrent.futures import ThreadPoolExecutor
+
+    async def _slow_mcp(_server_name, *_args, **_kwargs):
+        await asyncio.sleep(0.3)
+        return [_Tool(n) for n in ("list_hosts", "get_reboot_status")]
+
+    monkeypatch.setattr("src.runtime.tool_exposure._mcp_group_tools", _slow_mcp)
+    monkeypatch.setattr(
+        "src.runtime.tool_exposure.publish_tools",
+        lambda tools, session_id="": list(tools),
+    )
+    sid = "search-same-step"
+    profile = SimpleNamespace(
+        slug="sre_ssh",
+        mcp_servers=["skills_hub", "session_sandbox", "aion_sre_ssh"],
+        native_tool_groups=[],
+    )
+    tool = make_tool_search_tool(
+        session_id=sid, user_id="default", tenant_id="default", profile=profile
+    )
+    try:
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            group = pool.submit(tool.function, "aion_sre_ssh")
+            time.sleep(0.05)
+            by_name = pool.submit(tool.function, "get_reboot_status")
+            assert "Loaded 2 tool(s)" in group.result()
+            assert by_name.result() == (
+                "Loaded 1 tool(s): get_reboot_status. You can call them on the next step."
+            )
+    finally:
+        clear_deferred_tools(sid)
+
+
+def test_tool_search_loads_cold_server_from_learned_tool_name(monkeypatch):
+    """A server built once in this process resolves its tool names in a new chat."""
+    from src.runtime import tool_exposure
+
+    loaded_groups = []
+
+    async def _fake_mcp(server_name, *_args, **_kwargs):
+        loaded_groups.append(server_name)
+        return [_Tool(n) for n in ("list_hosts", "list_pending_updates")]
+
+    monkeypatch.setattr("src.runtime.tool_exposure._mcp_group_tools", _fake_mcp)
+    monkeypatch.setattr(
+        "src.runtime.tool_exposure.publish_tools",
+        lambda tools, session_id="": list(tools),
+    )
+    monkeypatch.setitem(
+        tool_exposure._LEARNED_COLD_TOOLS, "list_pending_updates", "aion_sre_ssh"
+    )
+    sid = "search-learned-name"
+    profile = SimpleNamespace(
+        slug="sre_ssh",
+        mcp_servers=["skills_hub", "session_sandbox", "aion_sre_ssh"],
+        native_tool_groups=[],
+    )
+    tool = make_tool_search_tool(
+        session_id=sid, user_id="default", tenant_id="default", profile=profile
+    )
+    try:
+        message = tool.function("list_pending_updates")
+    finally:
+        clear_deferred_tools(sid)
+    assert loaded_groups == ["aion_sre_ssh"]
+    assert message.startswith("Loaded 1 tool(s): list_pending_updates.")

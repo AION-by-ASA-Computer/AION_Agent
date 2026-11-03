@@ -33,6 +33,34 @@ async def allowed_profile_slugs(user_row_id: Optional[str]) -> List[str]:
         return [r[0] for r in rows.all()]
 
 
+async def user_row_id_for(
+    user_id: Optional[str], tenant_id: str = "default"
+) -> Optional[str]:
+    """``users.id`` dall'identificativo usato in chat (o dall'id stesso)."""
+    key = (user_id or "").strip()
+    if not key or key == "default":
+        return None
+    from sqlalchemy import func, or_, select
+
+    from src.data.engine import get_async_session_maker
+    from src.data.models import User
+
+    tenant = (tenant_id or "default").strip() or "default"
+    async with get_async_session_maker()() as session:
+        for cond in (
+            or_(User.identifier == key, User.id == key),
+            func.lower(User.identifier) == key.lower(),
+        ):
+            row = (
+                await session.execute(
+                    select(User.id).where(User.tenant_id == tenant, cond).limit(1)
+                )
+            ).first()
+            if row:
+                return row[0]
+    return None
+
+
 async def enforce_profile_access(user_row_id: Optional[str], profile_name: str) -> str:
     """Profilo da usare per la richiesta; 403 ``profile_not_allowed`` se vietato."""
     allowed = await allowed_profile_slugs(user_row_id)

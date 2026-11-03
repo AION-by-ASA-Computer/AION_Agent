@@ -13,7 +13,11 @@ from src.agent_pipeline import AgentPipeline
 from src.identity import sanitize_user_id
 from src.main import get_agent, set_event_loop
 from src.runtime import cron_db
-from src.runtime.redis_client import redis_set_stream_active, redis_clear_stream_active
+from src.runtime.redis_client import (
+    redis_clear_stream_active,
+    redis_clear_stream_cancel,
+    redis_set_stream_active,
+)
 
 
 logger = logging.getLogger("aion.cron_runner")
@@ -172,28 +176,30 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
         if trigger != "scheduler":
             prompt = f"[Manual cron trigger ({trigger})]\n\n{prompt}"
 
-        # ---------------------------------------------------------
-        # 1. CREAZIONE ID MESSAGGI
-        # ---------------------------------------------------------
+        # I messaggi (prompt e risposta) li salva ``run_stream``.
         user_message_id = str(uuid.uuid4())
         assistant_message_id = str(uuid.uuid4())
 
-        # 2. SALVATAGGIO PROMPT UTENTE (Così la UI vede la domanda del CRON)
-        # Sostituisci con la tua funzione effettiva di salvataggio a DB
-        # await save_chat_message(conversation_id, user_message_id, "user", prompt, user_id)
+        from src.api.v1.chat import (
+            BackgroundChatRun,
+            _background_runs,
+            _stop_background_run,
+        )
 
-        # 3. ATTIVAZIONE STREAM REDIS (Innesca il polling nella UI)
+        # Un turno alla volta per conversazione: ferma quello in corso e azzera
+        # il flag di cancel che resterebbe attivo per il nuovo turno.
+        await _stop_background_run(conversation_id, timeout=45.0)
+        await redis_clear_stream_cancel(conversation_id)
+
+        # Stream attivo: chat-ui segue il turno con stream-status / reconnect.
         await redis_set_stream_active(
             conversation_id,
             assistant_message_id=assistant_message_id,
             user_message_id=user_message_id,
             profile_name=profile,
         )
-        from src.api.v1.chat import _background_runs, BackgroundChatRun
-
         run = BackgroundChatRun(conversation_id)
         _background_runs[conversation_id] = run
-        # ---------------------------------------------------------
 
         assistant_text = ""
         err_msg: Optional[str] = None
@@ -216,7 +222,7 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
                 agent_mode=job.get("agent_mode") or "normal",
             )
             parts: list[str] = []
-            chunk_count = 0
+            final_text: Optional[str] = None
             async for chunk in pipeline.run_stream(
                 prompt,
                 user_message_id=user_message_id,
@@ -231,22 +237,17 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
                 ctype = str(chunk.get("type") or "")
                 if ctype == "token":
                     parts.append(str(chunk.get("content") or ""))
+                elif ctype == "final":
+                    final_text = str(chunk.get("text") or "")
                 elif ctype == "error":
                     err_msg = str(chunk.get("content") or "error")
                     status = "error"
                     break
 
-                # ---------------------------------------------------------
-                # 4. SALVATAGGIO INTERMEDIO (Per il Live View)
-                # Ogni N chunk salviamo lo stato parziale sul DB per il polling
-                # ---------------------------------------------------------
-                chunk_count += 1
-                if chunk_count % 8 == 0:
-                    "".join(parts).strip()
-                    # Salva il messaggio parziale (Sostituisci con la tua funzione DB)
-                    # await save_assistant_message(conversation_id, assistant_message_id, partial_text, user_id=user_id)
-
-            assistant_text = "".join(parts).strip()
+            # Anteprima = testo finale salvato; i token solo come ripiego.
+            assistant_text = (
+                final_text if final_text is not None else "".join(parts)
+            ).strip()
             if not assistant_text and not err_msg:
                 assistant_text = "(no text output)"
         except Exception as e:
@@ -264,10 +265,6 @@ async def execute_job(job_id: str, *, trigger: str = "scheduler") -> Dict[str, A
             for q in list(run.queues):
                 await q.put(None)
             _background_runs.pop(conversation_id, None)
-            # ---------------------------------------------------------
-            # 6. PULIZIA REDIS
-            # Diciamo alla UI che lo stream è finito e può smettere di fare polling
-            # ---------------------------------------------------------
             await redis_clear_stream_active(conversation_id)
 
             preview = assistant_text[: _preview_max()] if assistant_text else None

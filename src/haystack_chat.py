@@ -25,3 +25,10 @@ def chat_message_text(m: ChatMessage) -> str:
             return "\n".join(parts)
     legacy = getattr(m, "content", None)
     return str(legacy) if legacy is not None else ""
+
+
+def chat_message_reasoning_text(m: ChatMessage) -> str:
+    """Reasoning allegato al messaggio (rimandato al modello nel turno corrente), o stringa vuota."""
+    rc = getattr(m, "reasoning", None)
+    text = getattr(rc, "reasoning_text", None) if rc is not None else None
+    return str(text) if text else ""

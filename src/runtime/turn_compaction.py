@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Optional
 
 from haystack.dataclasses import ChatMessage
 
-from src.haystack_chat import chat_message_text
+from src.haystack_chat import chat_message_reasoning_text, chat_message_text
 from src.memory.context_compressor import (
     count_tokens,
     estimate_agent_overhead_tokens,
@@ -627,7 +627,14 @@ def _estimate_prompt_total(
     agent: Any, messages: List[ChatMessage], extra: int = 0
 ) -> Dict[str, int]:
     overhead = estimate_agent_overhead_tokens(agent)
-    msg_tokens = sum(count_tokens(chat_message_text(m)) for m in messages) + extra
+    msg_tokens = (
+        sum(
+            count_tokens(chat_message_text(m))
+            + count_tokens(chat_message_reasoning_text(m))
+            for m in messages
+        )
+        + extra
+    )
     comp = get_default_compressor()
     total = msg_tokens + overhead
     return {

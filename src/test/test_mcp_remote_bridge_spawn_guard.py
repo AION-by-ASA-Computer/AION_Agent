@@ -203,3 +203,32 @@ def test_startup_preload_skips_servers_without_credentials(
     monkeypatch.setattr(main_mod, "build_mcp_tools", fake_build)
     asyncio.run(warm._preload_shared_tool_catalog(["default"]))
     assert built == []
+
+
+ORG_SHARED_CFG: Dict[str, Any] = {
+    "type": "remote-bridge",
+    "command": "node",
+    "args": [
+        "node_modules/mcp-remote/dist/proxy.js",
+        "http://broker:8080/mcp",
+        "--header",
+        "Authorization: Bearer ${API_KEY}",
+    ],
+    "env": {"API_KEY": "${API_KEY}"},
+    "auth_env_var": "API_KEY",
+}
+
+
+def test_org_shared_bridge_starts_with_org_token() -> None:
+    assert (
+        _remote_bridge_auth_missing("broker", ORG_SHARED_CFG, {"API_KEY": "t"}) is None
+    )
+    assert _remote_bridge_auth_missing("broker", ORG_SHARED_CFG, {}) is not None
+    assert not _server_needs_user_credentials(ORG_SHARED_CFG)
+
+
+def test_legacy_org_shared_entry_uses_header_token() -> None:
+    """Voci installate prima della correzione: auth_env_var per-utente, header org."""
+    legacy = {**ORG_SHARED_CFG, "auth_env_var": "AION_USER_BROKER__API_KEY"}
+    assert _remote_bridge_auth_missing("broker", legacy, {"API_KEY": "t"}) is None
+    assert not _server_needs_user_credentials(legacy)

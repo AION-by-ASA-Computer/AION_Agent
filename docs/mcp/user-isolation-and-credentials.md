@@ -19,6 +19,8 @@ In deployment multi-utente, i processi MCP non devono condividere la stessa `$HO
 | `AION_MCP_USER_CREDENTIALS` | `0` | Abilita lettura/scrittura credenziali per-utente e API `/v1/integrations`. |
 | `AION_CREDENTIAL_ENCRYPTION_KEY` | — | Chiave hex (32 byte = 64 caratteri) per AES-GCM. Obbligatoria in produzione se `AION_MCP_USER_CREDENTIALS=1`. |
 | `AION_DEFAULT_TENANT_ID` | `default` | Tenant usato per le righe credenziali. |
+| `AION_MCP_ENV_SCRUB` | `1` | I server del repository (`mcp_servers/`, `-m src.*`) ereditano l'env del backend senza i segreti di firma (`AION_CHAT_AUTH_SECRET`, `AION_CHAT_UI_INTERNAL_SECRET`, `AION_ORCHESTRATION_INTERNAL_SECRET`, `AION_API_KEY_BOOTSTRAP`, `AION_SETUP_*`); quelli di terze parti (`npx`, `node`, `mcp-remote`, script esterni) ricevono solo PATH/HOME/locale/proxy/certificati più l'`env:` del registry. `0` = env completo a tutti. |
+| `AION_MCP_ENV_ALLOWLIST` | — | Variabili extra (CSV) passate anche ai server di terze parti. |
 
 Generazione chiave:
 

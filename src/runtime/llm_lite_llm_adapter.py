@@ -74,6 +74,118 @@ except Exception as e:
     )
 
 
+# --- Reasoning replay (interleaved thinking) -------------------------------
+# Il reasoning prodotto dal modello a ogni step del loop tool viene salvato come
+# ReasoningContent sul ChatMessage assistente e rimandato al server allo step
+# successivo (campi `reasoning_content` / `reasoning`, come i local carriers di
+# Hermes). I messaggi ricostruiti da STM/cronologia sono solo testo, quindi il
+# replay resta confinato al turno corrente.
+
+_REPLAY_SKIP_PROVIDERS = ("anthropic", "google", "gemini", "vertex_ai", "bedrock")
+
+
+def reasoning_replay_enabled() -> bool:
+    import os
+
+    raw = os.environ.get("AION_REASONING_REPLAY", "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def reasoning_replay_fields() -> List[str]:
+    import os
+
+    raw = os.environ.get("AION_REASONING_REPLAY_FIELDS", "reasoning_content,reasoning")
+    return [f.strip() for f in raw.split(",") if f.strip()]
+
+
+def _reasoning_from_message_obj(message: Any) -> str:
+    for key in ("reasoning_content", "reasoning"):
+        val = getattr(message, key, None)
+        if not val and isinstance(message, dict):
+            val = message.get(key)
+        if isinstance(val, str) and val.strip():
+            return val
+    return ""
+
+
+def _with_reasoning(msg: ChatMessage, reasoning_text: str) -> ChatMessage:
+    if not reasoning_text or getattr(msg, "reasoning", None) is not None:
+        return msg
+    # Un assistente con solo reasoning non è serializzabile in formato OpenAI
+    # (to_openai_dict_format richiede testo o tool call): lo lasciamo com'era.
+    if not msg.text and not msg.tool_calls:
+        return msg
+    from haystack.dataclasses import ReasoningContent
+
+    return ChatMessage.from_assistant(
+        text=msg.text,
+        tool_calls=msg.tool_calls,
+        meta=msg.meta,
+        name=msg.name,
+        reasoning=ReasoningContent(reasoning_text=reasoning_text),
+    )
+
+
+try:
+    import haystack_integrations.components.generators.litellm.chat.chat_generator as litellm_chat_mod
+    from haystack_integrations.components.generators.litellm import (
+        LiteLLMChatGenerator as _LiteLLMChatGenerator,
+    )
+
+    _original_build_chat_message = litellm_chat_mod._build_chat_message
+    _original_streaming_to_message = (
+        litellm_chat_mod._convert_streaming_chunks_to_chat_message
+    )
+    _original_build_litellm_kwargs = _LiteLLMChatGenerator._build_litellm_kwargs
+
+    def _patched_build_chat_message(response, choice):
+        msg = _original_build_chat_message(response, choice)
+        return _with_reasoning(
+            msg, _reasoning_from_message_obj(getattr(choice, "message", None))
+        )
+
+    def _patched_streaming_to_message(chunks):
+        msg = _original_streaming_to_message(chunks=chunks)
+        # La patch sui chunk mette il reasoning solo in meta (non in chunk.reasoning,
+        # per non duplicare l'emissione verso la UI): lo riaggreghiamo qui.
+        parts = [
+            str((c.meta or {}).get("reasoning") or "")
+            for c in chunks
+            if c.reasoning is None
+        ]
+        return _with_reasoning(msg, "".join(parts))
+
+    def _patched_build_litellm_kwargs(
+        self, messages, streaming_callback, generation_kwargs, tools
+    ):
+        kwargs = _original_build_litellm_kwargs(
+            self, messages, streaming_callback, generation_kwargs, tools
+        )
+        provider = str(getattr(self, "model", "") or "").split("/", 1)[0].lower()
+        if not reasoning_replay_enabled() or provider in _REPLAY_SKIP_PROVIDERS:
+            return kwargs
+        fields = reasoning_replay_fields()
+        wire = kwargs.get("messages") or []
+        if not fields or len(wire) != len(messages):
+            return kwargs
+        for hm, om in zip(messages, wire):
+            rc = getattr(hm, "reasoning", None)
+            text = getattr(rc, "reasoning_text", None) if rc is not None else None
+            if not text or not isinstance(om, dict) or om.get("role") != "assistant":
+                continue
+            for field in fields:
+                om.setdefault(field, text)
+        return kwargs
+
+    litellm_chat_mod._build_chat_message = _patched_build_chat_message
+    litellm_chat_mod._convert_streaming_chunks_to_chat_message = (
+        _patched_streaming_to_message
+    )
+    _LiteLLMChatGenerator._build_litellm_kwargs = _patched_build_litellm_kwargs
+except Exception as e:
+    logger.warning("Failed to apply monkeypatch for LiteLLM reasoning replay: %s", e)
+
+
 def _sanitize_messages_for_litellm(messages: List[ChatMessage]) -> List[ChatMessage]:
     """Ensure all ChatMessage instances contain at least one content item so to_openai_dict_format doesn't crash."""
     if not messages:
