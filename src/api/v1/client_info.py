@@ -40,7 +40,7 @@ async def client_info() -> Dict[str, Any]:
         "login_url": f"{base}/login" if base else None,
         "features": {
             "llm_proxy": True,
-            "client_bootstrap": False,
+            "client_bootstrap": True,
             "desktop_login": True,
         },
     }

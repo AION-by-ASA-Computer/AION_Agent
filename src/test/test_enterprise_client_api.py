@@ -114,7 +114,7 @@ async def test_client_info(al):
     assert info["min_client_version"] == "1.0.0"
     assert info["features"] == {
         "llm_proxy": True,
-        "client_bootstrap": False,
+        "client_bootstrap": True,
         "desktop_login": True,
     }
     assert info["login_url"] is None or info["login_url"].endswith("/login")
