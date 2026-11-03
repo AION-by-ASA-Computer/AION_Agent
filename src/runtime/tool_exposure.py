@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from haystack.tools import Tool
@@ -64,8 +65,23 @@ _KNOWN_COLD_TOOLS = {
     "list_sql_projects": "query_memory",
 }
 
+# Tool name -> MCP server, learned each time a server's tools are built. Lets
+# tool_search("<tool>") load a cold server that a skill names only by tool.
+_LEARNED_COLD_TOOLS: Dict[str, str] = {}
+
 _SEARCH_LIMIT = 5
 _DEFERRED_BY_SESSION: Dict[str, List[Any]] = {}
+
+# Haystack runs the tool calls of one step in a thread pool. tool_search calls
+# of one session take turns, so tool_search("list_pending_updates") sees the
+# tools of tool_search("aion_sre_ssh") sent before it in the same step.
+_SEARCH_LOCKS: Dict[str, threading.Lock] = {}
+_SEARCH_LOCKS_GUARD = threading.Lock()
+
+
+def _search_lock(session_id: str) -> threading.Lock:
+    with _SEARCH_LOCKS_GUARD:
+        return _SEARCH_LOCKS.setdefault(session_id or "", threading.Lock())
 
 
 def _run_on_agent_loop(coro: Any) -> Any:
@@ -164,8 +180,12 @@ def deferred_tools_for(session_id: str) -> List[Any]:
 def clear_deferred_tools(session_id: str = "") -> None:
     if session_id:
         _DEFERRED_BY_SESSION.pop(session_id, None)
+        with _SEARCH_LOCKS_GUARD:
+            _SEARCH_LOCKS.pop(session_id, None)
     else:
         _DEFERRED_BY_SESSION.clear()
+        with _SEARCH_LOCKS_GUARD:
+            _SEARCH_LOCKS.clear()
 
 
 def attach_deferred_pool(agent: Any, tools: Sequence[Any]) -> None:
@@ -325,7 +345,7 @@ def _already_loaded_names(session_id: str) -> set[str]:
         exec_ctx = _agent_exec_ctx.get()
     for source in (
         getattr(agent, "tools", None) if agent is not None else None,
-        getattr(exec_ctx, "tools", None) if exec_ctx is not None else None,
+        _live_tools(exec_ctx) if exec_ctx is not None else None,
     ):
         for tool in _as_tool_list(source):
             name = _tool_name(tool)
@@ -359,7 +379,11 @@ def _group_for_query(query: str, profile: Any) -> Optional[str]:
     for name in groups:
         if name.lower() == q.lower() or _norm_query(name) == qn:
             return name
-    server = _KNOWN_COLD_TOOLS.get(q) or _KNOWN_COLD_TOOLS.get(q.lower())
+    server = (
+        _KNOWN_COLD_TOOLS.get(q)
+        or _KNOWN_COLD_TOOLS.get(q.lower())
+        or _LEARNED_COLD_TOOLS.get(q)
+    )
     if server and server in groups:
         return server
     if len(qn) < 4:
@@ -417,6 +441,29 @@ def make_tool_search_tool(
     profile: Any,
 ) -> Tool:
     def tool_search(query: str) -> str:
+        # Emit like the other native tools so tool_search shows up in the
+        # chat timeline, the steps table and the session ledger.
+        from src.runtime.native_tool_events import (
+            emit_tool_end,
+            emit_tool_error,
+            emit_tool_start,
+        )
+        from src.runtime.turn_compaction import maybe_compact_after_tool
+
+        inp = {"query": query}
+        call_id = emit_tool_start(session_id, "tool_search", inp)
+        try:
+            with _search_lock(session_id):
+                out = _search(query)
+        except Exception as exc:
+            emit_tool_error(session_id, "tool_search", call_id, str(exc))
+            raise
+        emit_tool_end(session_id, "tool_search", call_id, out)
+        return maybe_compact_after_tool(
+            tool_name="tool_search", result=out, arguments=inp
+        )
+
+    def _search(query: str) -> str:
         q = (query or "").strip()
         pool = _pool_for(session_id)
         catalog = sorted({_tool_name(t) for t in pool if _tool_name(t)})
@@ -617,6 +664,9 @@ async def _mcp_group_tools(
         tenant_id=tenant_id,
     )
     built = await build_mcp_tools(server_name, cfg, session_id, user_id=user_id)
+    for tool in built or []:
+        if _tool_name(tool):
+            _LEARNED_COLD_TOOLS.setdefault(_tool_name(tool), server_name)
     return list(built or [])
 
 
@@ -652,14 +702,39 @@ def _extend_tool_collection(
     return current, added
 
 
+_LIVE_TOOL_INPUTS = (
+    "chat_generator_inputs",
+    "tool_execution_inputs",
+    "tool_invoker_inputs",
+)
+
+
+def _live_tools(exec_ctx: Any) -> Any:
+    """Tool set of the running Haystack turn.
+
+    Haystack 2.30 has no ``exe_context.tools``: every step passes the runtime
+    ``tool_invoker_inputs["tools"]`` / ``chat_generator_inputs["tools"]``. Starting
+    from ``None`` there would replace the whole set (``tool_search`` included)
+    with the tools just loaded.
+    """
+    tools = getattr(exec_ctx, "tools", None)
+    if tools is not None:
+        return tools
+    for attr in _LIVE_TOOL_INPUTS:
+        payload = getattr(exec_ctx, attr, None)
+        if isinstance(payload, dict) and payload.get("tools") is not None:
+            return payload["tools"]
+    return None
+
+
 def publish_tools(extra: Iterable[Any], *, session_id: str = "") -> List[Any]:
     """Append tools to the cached agent and to the live Haystack run.
 
-    Haystack 2.x re-reads ``exe_context.tools`` on every step and injects that
-    snapshot into the chat generator and the tool executor. Writing only
-    ``agent.tools`` or ``chat_generator_inputs["tools"]`` leaves the current
-    turn on the resident set, so ``activate_tool_group`` looks successful
-    while ``clickup_*`` / Outlook tools stay ``not found``.
+    Haystack passes ``chat_generator_inputs`` and ``tool_invoker_inputs`` to
+    the generator and the tool invoker on every step. Writing only
+    ``agent.tools`` leaves the current turn on the resident set, so
+    ``activate_tool_group`` looks successful while ``clickup_*`` / Outlook
+    tools stay ``not found``.
     """
     from src.runtime.turn_compaction import _agent_exec_ctx, resolve_turn_runtime
 
@@ -680,9 +755,7 @@ def publish_tools(extra: Iterable[Any], *, session_id: str = "") -> List[Any]:
 
     live_added: List[Any] = incoming
     if exec_ctx is not None:
-        live, live_added = _extend_tool_collection(
-            getattr(exec_ctx, "tools", None), incoming
-        )
+        live, live_added = _extend_tool_collection(_live_tools(exec_ctx), incoming)
         exec_ctx.tools = live
         state = getattr(exec_ctx, "state", None)
         if state is not None and hasattr(state, "set"):
@@ -692,13 +765,8 @@ def publish_tools(extra: Iterable[Any], *, session_id: str = "") -> List[Any]:
                 logger.debug(
                     "publish_tools: could not write state.tools", exc_info=True
                 )
-        # Haystack injects tools from exe_context.tools each step; keep these
-        # in sync for older snapshots / tests that still read the dicts.
-        for attr in (
-            "chat_generator_inputs",
-            "tool_execution_inputs",
-            "tool_invoker_inputs",
-        ):
+        # Haystack reads the tools from these dicts on every step.
+        for attr in _LIVE_TOOL_INPUTS:
             payload = getattr(exec_ctx, attr, None)
             if isinstance(payload, dict):
                 payload["tools"] = live
