@@ -434,7 +434,7 @@ In `/newbot`, dopo il nome, si sceglie la **modalità** (cambiabile poi da `/myb
 
 Prerequisito: `docker compose up -d --build backend chat-ui`; account Telegram già collegato (Fase 2).
 
-1. [ ] Nei log del backend: `gateway avviato`, nessun errore di migrazione (`b0c1d2e030`).
+1. [ ] Nei log del backend: `gateway avviato`, nessun errore di migrazione (`t1s2e3s030`).
 2. [ ] Toccando `/` nel bot il menu mostra new, profile, project, stop, start, help, me, unlink, whoami.
 3. [ ] Scrivi una domanda lunga (es. "spiegami in 10 punti come funziona un database relazionale"):
        compare "Sto pensando…"/"sta scrivendo…", il testo cresce progressivamente, poi resta il messaggio finale formattato.

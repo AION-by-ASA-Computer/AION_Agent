@@ -438,6 +438,22 @@ def _pdf_pages_as_image_contents(
     return out
 
 
+# Upload extensions that get the transcribe_audio hint even when the browser
+# sent a generic MIME type (e.g. application/octet-stream for .opus voice notes).
+_AUDIO_EXTENSIONS = (
+    ".mp3",
+    ".wav",
+    ".m4a",
+    ".ogg",
+    ".oga",
+    ".opus",
+    ".flac",
+    ".aac",
+    ".wma",
+    ".amr",
+)
+
+
 def _attachment_mime(path: Path, att: Dict[str, Any]) -> str:
     raw = (att.get("mime") or "").strip()
     if raw:
@@ -653,6 +669,8 @@ class AgentPipeline:
                     "You MUST read, analyze, and consider this document to answer the current request."
                 )
 
+            from src.session_workspace import session_root
+            from src.tools.audio_transcribe import load_audio_manifest
             from src.tools.doc_auto_ingest import load_manifest
             from src.tools.doc_ingest import slugify_document_name
             from src.tools.office_auto_convert import (
@@ -663,6 +681,33 @@ class AgentPipeline:
             for a in new_files:
                 rp = a.get("relative_path", "")
                 mime = (a.get("mime") or "").lower()
+                # Audio uploads: the stt server is cold (not in the initial tool
+                # list), so without this hint the model sees an mp3 but has no
+                # reason to look for a transcription tool.
+                if mime.startswith("audio/") or rp.lower().endswith(_AUDIO_EXTENSIONS):
+                    # Already transcribed before the turn (WhatsApp voice notes):
+                    # point at the transcript instead of a redundant tool call.
+                    audio_manifest = load_audio_manifest(
+                        session_root(self.session_id), Path(rp).name
+                    )
+                    if (
+                        audio_manifest
+                        and audio_manifest.get("ok")
+                        and not audio_manifest.get("partial")
+                    ):
+                        lines.append(
+                            f"\n### Audio file `{Path(rp).name}`: already transcribed "
+                            "(a message starting with 🎤 contains its transcript). Full "
+                            f"text: `{audio_manifest.get('transcript_path')}`. Call "
+                            "transcribe_audio only if asked to re-check the recording."
+                        )
+                        continue
+                    lines.append(
+                        f"\n### Audio file `{Path(rp).name}`: to read its content call "
+                        f"transcribe_audio(relative_path='{rp}'). If the result has "
+                        "partial=true, call it again with start_sec=resume_from_sec."
+                    )
+                    continue
                 if not mime.startswith("application/pdf") and not rp.lower().endswith(
                     ".pdf"
                 ):

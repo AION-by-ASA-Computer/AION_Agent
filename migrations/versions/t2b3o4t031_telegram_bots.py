@@ -1,7 +1,7 @@
 """Canale Telegram: tg_bots (bot personali creati dal manager) e tg_pending_creations.
 
-Revision ID: c1d2e3f031
-Revises: b0c1d2e030
+Revision ID: t2b3o4t031
+Revises: t1s2e3s030
 """
 
 from typing import Sequence, Union
@@ -10,8 +10,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "c1d2e3f031"
-down_revision: Union[str, None] = "b0c1d2e030"
+revision: str = "t2b3o4t031"
+down_revision: Union[str, None] = "t1s2e3s030"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

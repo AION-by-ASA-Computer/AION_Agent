@@ -1,0 +1,34 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA1",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "390212345678",
+              "phone_number_id": "1234567890"
+            },
+            "messages": [
+              {
+                "from": "393331112233",
+                "from_user_id": "IT.1111111111111111",
+                "id": "wamid.SYS1",
+                "timestamp": "1761650300",
+                "type": "system",
+                "system": {
+                  "body": "Mario changed from +39 333 111 2233 to +39 333 999 8877",
+                  "wa_id": "393339998877",
+                  "type": "user_changed_number"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

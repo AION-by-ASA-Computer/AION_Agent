@@ -1,0 +1,35 @@
+{
+  "object": "whatsapp_business_account",
+  "entry": [
+    {
+      "id": "WABA1",
+      "changes": [
+        {
+          "field": "messages",
+          "value": {
+            "messaging_product": "whatsapp",
+            "metadata": {
+              "display_phone_number": "390212345678",
+              "phone_number_id": "1234567890"
+            },
+            "contacts": [
+              {
+                "profile": { "name": "Giulia" },
+                "user_id": "IT.2222222222222222"
+              }
+            ],
+            "messages": [
+              {
+                "from_user_id": "IT.2222222222222222",
+                "id": "wamid.BSUID1",
+                "timestamp": "1761650100",
+                "type": "text",
+                "text": { "body": "  ciao  " }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

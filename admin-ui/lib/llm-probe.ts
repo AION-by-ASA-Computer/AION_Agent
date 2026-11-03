@@ -21,10 +21,12 @@ export type LlmProbeResponse = {
   };
 };
 
-export type ModelProbeKind = "chat" | "embedding" | "ocr";
+export type ModelProbeKind = "chat" | "embedding" | "ocr" | "stt";
 
 const EMBEDDING_MODEL_RE = /embed/i;
 const OCR_MODEL_RE = /ocr|glm-ocr|vision|pixtral|qwen.*vl|llava/i;
+// Speech-to-text families commonly served behind /audio/transcriptions.
+const STT_MODEL_RE = /whisper|stt|speech|transcri|voxtral|parakeet|canary/i;
 
 export function modelIdsFromProbe(result: LlmProbeResponse): string[] {
   return (result.models?.data ?? []).map((m) => m.id).filter(Boolean);
@@ -38,6 +40,10 @@ export function filterModelsForKind(ids: string[], kind: ModelProbeKind): string
   if (kind === "ocr") {
     const ocr = ids.filter((id) => OCR_MODEL_RE.test(id));
     return ocr.length ? ocr : ids;
+  }
+  if (kind === "stt") {
+    const stt = ids.filter((id) => STT_MODEL_RE.test(id));
+    return stt.length ? stt : ids;
   }
   const chat = ids.filter((id) => !EMBEDDING_MODEL_RE.test(id));
   return chat.length ? chat : ids;
@@ -169,6 +175,16 @@ export function probeBaseUrlFromOcrServiceUrl(serviceUrl: string): string {
   const trimmed = (serviceUrl || "").trim().replace(/\/$/, "");
   if (!trimmed) return "";
   return trimmed.replace(/\/chat\/completions$/i, "");
+}
+
+/**
+ * Strip /audio/transcriptions suffix for STT OpenAI-compatible bases: the
+ * backend engine appends it to AION_STT_BASE_URL on every request.
+ */
+export function probeBaseUrlFromSttServiceUrl(serviceUrl: string): string {
+  const trimmed = (serviceUrl || "").trim().replace(/\/$/, "");
+  if (!trimmed) return "";
+  return trimmed.replace(/\/audio\/transcriptions$/i, "");
 }
 
 /** Normalize stored AION_EMBEDDING_URL (POST target). */

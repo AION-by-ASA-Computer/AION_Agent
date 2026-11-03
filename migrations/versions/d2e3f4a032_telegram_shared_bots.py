@@ -1,7 +1,7 @@
 """Canale Telegram: modalità dei bot (personale/condiviso) e registro dei gruppi.
 
 Revision ID: d2e3f4a032
-Revises: c1d2e3f031
+Revises: t2b3o4t031
 """
 
 from typing import Sequence, Union
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 
 revision: str = "d2e3f4a032"
-down_revision: Union[str, None] = "c1d2e3f031"
+down_revision: Union[str, None] = "t2b3o4t031"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

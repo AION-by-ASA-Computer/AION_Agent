@@ -1,6 +1,6 @@
 """Canale Telegram: tg_sessions (chat Telegram → conversazione AION corrente).
 
-Revision ID: b0c1d2e030
+Revision ID: t1s2e3s030
 Revises: t0g1l2k029
 """
 
@@ -10,7 +10,7 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "b0c1d2e030"
+revision: str = "t1s2e3s030"
 down_revision: Union[str, None] = "t0g1l2k029"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None

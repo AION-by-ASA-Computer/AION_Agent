@@ -1,1 +1,1 @@
-"""External messaging channels (Telegram, ...) bridged to the AION agent."""
+"""Canali di messaggistica esterni (Telegram, WhatsApp, ...) collegati all'agente AION."""

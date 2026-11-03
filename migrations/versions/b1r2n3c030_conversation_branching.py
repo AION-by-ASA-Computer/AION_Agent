@@ -1,7 +1,12 @@
 """Conversation branching: root_conversation_id / forked_from_id / forked_at_message_id / fork_seq.
 
-Revision ID: x6y7z8a026
-Revises: w5x6y7z025
+Revision ID: b1r2n3c030
+Revises: c1d2e3f031
+
+Originariamente dichiarata come x6y7z8a026 (ID duplicato con
+encrypt_mcp_oauth_client_secret): spostata in coda alla catena, dopo le migration
+WhatsApp. E' idempotente (colonne/indici gia' presenti vengono saltati), quindi
+gira senza errori anche sui DB che l'avevano gia' applicata con l'ID vecchio.
 """
 
 from typing import Sequence, Union
@@ -10,8 +15,8 @@ from alembic import op
 import sqlalchemy as sa
 
 
-revision: str = "x6y7z8a026"
-down_revision: Union[str, None] = "w5x6y7z025"
+revision: str = "b1r2n3c030"
+down_revision: Union[str, None] = "c1d2e3f031"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

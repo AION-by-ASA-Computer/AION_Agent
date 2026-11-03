@@ -5,7 +5,7 @@ users.id con ON DELETE CASCADE: eliminando un utente spariscono collegamenti e
 codici (create_table supporta le FK anche su SQLite, a differenza di ADD CONSTRAINT).
 
 Revision ID: t0g1l2k029
-Revises: a9b0c1d029
+Revises: b1r2n3c030
 """
 
 from typing import Sequence, Union
@@ -15,7 +15,7 @@ import sqlalchemy as sa
 
 
 revision: str = "t0g1l2k029"
-down_revision: Union[str, None] = "a9b0c1d029"
+down_revision: Union[str, None] = "b1r2n3c030"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

@@ -459,6 +459,17 @@ Downloads of files associated with the session do **not** go through the `/v1/co
 **Query Parameters:**
 - `relative_path`: The relative path of the file (e.g. `uploads/01907a5e_log.txt` or `workspace/report.md`).
 
+### Voice dictation
+Used by the chat-ui microphone button. The recording is transcribed in-process and discarded; it never becomes a session file.
+
+`GET /v1/voice/status` (Requires Chat Auth or `chat` scope) → `{"enabled": true, "mode": "local", "max_duration_sec": 300, "max_bytes": 10485760}`
+
+`POST /v1/voice/transcribe` (Requires Chat Auth or `chat` scope), multipart:
+- `file`: the recording (webm/ogg/mp4/wav/mp3);
+- `language` (optional): ISO code, empty = `AION_STT_LANGUAGE`, `auto` = detect.
+
+Returns `{"text": "...", "language": "it", "duration_sec": 4.2}`. Errors: `413 too_large`, `422 too_long|not_audio|empty`, `503 voice_input_disabled|engine_failed|decoder_unavailable`. See [Speech-to-text](../mcp/speech-to-text.md#dettatura-da-chat-ui).
+
 ---
 
 ## User API keys
